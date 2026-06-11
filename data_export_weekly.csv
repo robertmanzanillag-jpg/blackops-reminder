@@ -1,0 +1,4 @@
+id,user_id,week_start,title,completed,is_recurring,created_at
+6b53264d-1239-4d99-b9cc-fb2699b37fc8,mock-user-123,2025-12-08 05:00:00,1 resumen de libro a la semana,f,t,2025-12-11 10:54:52.482
+c2035698-5efd-4f02-aa34-e5f56160a86f,mock-user-123,2025-12-08 05:00:00,100 flexiones 4 veces a la semana,f,t,2025-12-11 10:55:18.959
+be03521d-1fd9-4865-b374-8ce1040331b3,mock-user-123,2025-12-08 05:00:00,Escribirle a mis abuelos,f,t,2025-12-11 11:39:50.759

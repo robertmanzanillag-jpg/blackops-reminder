@@ -1,0 +1,607 @@
+import type { Express, Request, Response } from "express";
+import { GoogleGenAI } from "@google/genai";
+import { storage } from "./storage";
+import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
+import { es } from "date-fns/locale";
+import { updateCalendarEventDescription, createCalendarEvent } from "./google-calendar";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+  },
+});
+
+const MOCK_USER_ID = "mock-user-123";
+
+async function getUserProfileContext(): Promise<string> {
+  const profileData = await storage.getUserProfileData(MOCK_USER_ID);
+  
+  if (profileData.length === 0) {
+    return `\n## Información sobre el usuario:\nNo tengo información guardada sobre ti todavía. ¡Me encantaría conocerte mejor!\n`;
+  }
+
+  const byCategory: Record<string, typeof profileData> = {};
+  for (const item of profileData) {
+    if (!byCategory[item.category]) byCategory[item.category] = [];
+    byCategory[item.category].push(item);
+  }
+
+  let context = `\n## Lo que sé sobre ti:\n`;
+  for (const [category, items] of Object.entries(byCategory)) {
+    context += `\n### ${category.charAt(0).toUpperCase() + category.slice(1)}:\n`;
+    for (const item of items) {
+      context += `- ${item.key}: ${item.value}\n`;
+    }
+  }
+  
+  return context;
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+}
+
+function isAllDayEvent(startDate: Date, endDate: Date | null): boolean {
+  if (!endDate) return false;
+  const hours = differenceInHours(new Date(endDate), new Date(startDate));
+  return hours >= 23 && hours <= 25;
+}
+
+async function getCalendarContext(): Promise<string> {
+  const tasks = await storage.getTasks(MOCK_USER_ID);
+  const weeklyTasks = await storage.getWeeklyTasks(MOCK_USER_ID, startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const monthlyGoals = await storage.getMonthlyGoals(MOCK_USER_ID, startOfMonth(new Date()));
+  const yearlyGoals = await storage.getYearlyGoals(MOCK_USER_ID, new Date().getFullYear().toString());
+
+  const now = new Date();
+  const twelveMonthsFromNow = addMonths(now, 12);
+
+  const upcomingTasks = tasks
+    .filter(t => new Date(t.date) >= now && new Date(t.date) <= twelveMonthsFromNow)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const tasksByDay: Record<string, typeof tasks> = {};
+  for (const task of upcomingTasks) {
+    const dayKey = format(new Date(task.date), "yyyy-MM-dd");
+    if (!tasksByDay[dayKey]) tasksByDay[dayKey] = [];
+    tasksByDay[dayKey].push(task);
+  }
+
+  let context = `## Contexto del calendario del usuario\n\nFecha actual: ${format(now, "EEEE d 'de' MMMM yyyy", { locale: es })}\n\n`;
+
+  // Add Radio events summary at the top for quick reference
+  const radioEvents = upcomingTasks.filter(t => t.title === "Radio" && t.externalSource === "google");
+  if (radioEvents.length > 0) {
+    context += `### RESUMEN DE EVENTOS RADIO (próximos 12 meses):\n`;
+    for (const radio of radioEvents) {
+      const radioDate = new Date(radio.date);
+      const dateStr = format(radioDate, "EEEE d 'de' MMMM", { locale: es });
+      const desc = radio.description ? stripHtml(radio.description).replace(/\n/g, " | ") : "Sin DJs programados";
+      context += `- ${dateStr} (eventId: ${radio.externalId}): ${desc}\n`;
+    }
+    context += `\n`;
+  }
+
+  context += `### Tareas y eventos de los próximos 12 meses:\n`;
+  for (const [day, dayTasks] of Object.entries(tasksByDay)) {
+    const date = new Date(day);
+    context += `\n**${format(date, "EEEE d 'de' MMMM", { locale: es })}:**\n`;
+    for (const task of dayTasks) {
+      const taskDate = new Date(task.date);
+      const isAllDay = isAllDayEvent(taskDate, task.endDate);
+      const time = isAllDay ? "Todo el día" : format(taskDate, "HH:mm");
+      const status = task.completed ? "✓" : "○";
+      const source = task.externalSource ? ` [${task.externalSource}]` : "";
+      const eventId = task.externalId ? ` (eventId: ${task.externalId})` : "";
+      let descText = "";
+      if (task.description) {
+        const cleaned = stripHtml(task.description);
+        descText = ` - Detalles: ${cleaned.substring(0, 300)}`;
+      }
+      context += `- ${status} ${time} - ${task.title}${source}${eventId}${descText}\n`;
+    }
+  }
+
+  context += `\n### Tareas semanales:\n`;
+  for (const task of weeklyTasks) {
+    context += `- ${task.completed ? "✓" : "○"} ${task.title}\n`;
+  }
+
+  context += `\n### Metas del mes:\n`;
+  for (const goal of monthlyGoals) {
+    context += `- ${goal.completed ? "✓" : "○"} ${goal.title}\n`;
+  }
+
+  context += `\n### Metas del año:\n`;
+  for (const goal of yearlyGoals) {
+    context += `- ${goal.completed ? "✓" : "○"} ${goal.title}\n`;
+  }
+
+  return context;
+}
+
+async function getPortfolioContext(): Promise<string> {
+  const investments = await storage.getInvestments(MOCK_USER_ID);
+  
+  if (investments.length === 0) {
+    return `\n## Portafolio de Inversiones:\nNo tienes inversiones registradas.\n`;
+  }
+
+  const byType: Record<string, typeof investments> = {};
+  let totalValue = 0;
+  
+  for (const inv of investments) {
+    if (!byType[inv.type]) byType[inv.type] = [];
+    byType[inv.type].push(inv);
+    totalValue += parseFloat(inv.quantity) * parseFloat(inv.avgBuyPrice);
+  }
+
+  let context = `\n## Portafolio de Inversiones (${investments.length} activos, valor total: $${totalValue.toFixed(2)}):\n`;
+  
+  const typeNames: Record<string, string> = {
+    stock: "Acciones",
+    etf: "ETFs",
+    crypto: "Criptomonedas",
+    bond: "Bonos",
+    fund: "Fondos"
+  };
+  
+  for (const [type, invs] of Object.entries(byType)) {
+    const typeTotal = invs.reduce((sum, inv) => sum + parseFloat(inv.quantity) * parseFloat(inv.avgBuyPrice), 0);
+    context += `\n### ${typeNames[type] || type} ($${typeTotal.toFixed(2)}):\n`;
+    for (const inv of invs) {
+      const value = parseFloat(inv.quantity) * parseFloat(inv.avgBuyPrice);
+      context += `- ${inv.symbol} (${inv.name}): ${inv.quantity} unidades @ $${inv.avgBuyPrice} = $${value.toFixed(2)}\n`;
+    }
+  }
+  
+  return context;
+}
+
+const SYSTEM_PROMPT = `Eres BlackOps Assistant, un asistente personal inteligente que conoce a su usuario y gestiona tareas/calendario.
+
+## TU PERSONALIDAD:
+- Eres amable, curioso y genuinamente interesado en conocer al usuario
+- Recuerdas TODO lo que te cuenta y lo usas en futuras conversaciones
+- Haces preguntas personales naturalmente cuando es apropiado (no fuerces, sé natural)
+- Usas la información que conoces para dar respuestas más personalizadas
+
+## APRENDER SOBRE EL USUARIO:
+Cuando el usuario comparta información personal, GUÁRDALA usando este formato:
+[GUARDAR_INFO: {"category": "CATEGORIA", "key": "CLAVE", "value": "VALOR"}]
+
+Categorías válidas:
+- "personal": nombre, apodo, cumpleaños, edad, ciudad, país
+- "trabajo": profesión, empresa, proyectos, horario laboral
+- "familia": pareja, hijos, padres, hermanos, mascotas
+- "preferencias": comida favorita, música, hobbies, deportes
+- "metas": objetivos personales, sueños, planes a futuro
+- "estilo": cómo le gusta comunicarse, horarios preferidos
+
+Ejemplos de extracción:
+- Usuario dice "me llamo Roberto" → [GUARDAR_INFO: {"category": "personal", "key": "nombre", "value": "Roberto"}]
+- Usuario dice "trabajo en una startup de fintech" → [GUARDAR_INFO: {"category": "trabajo", "key": "empresa", "value": "startup de fintech"}]
+- Usuario dice "mi novia se llama Ana" → [GUARDAR_INFO: {"category": "familia", "key": "pareja", "value": "Ana"}]
+- Usuario dice "me encanta el techno" → [GUARDAR_INFO: {"category": "preferencias", "key": "música favorita", "value": "techno"}]
+
+IMPORTANTE: 
+- Extrae información de manera natural de la conversación
+- Puedes guardar MÚLTIPLES datos en una respuesta si el usuario comparte varios
+- Si ya conoces algo y el usuario lo actualiza, guárdalo de nuevo (se actualizará)
+
+## HACER PREGUNTAS PARA CONOCER MEJOR:
+Si no tienes mucha información sobre el usuario, de vez en cuando (no siempre) puedes hacer una pregunta casual como:
+- "Por cierto, ¿cómo prefieres que te llame?"
+- "¿Trabajas en algo relacionado con X que mencionaste?"
+- "¿Tienes algún proyecto personal interesante en este momento?"
+
+## GESTIÓN DE CALENDARIO:
+
+INSTRUCCIONES CRÍTICAS:
+1. El contexto del calendario contiene TODOS los eventos y tareas para los próximos 12 meses
+2. Cuando pregunten por un día específico, BUSCA ese día y lista TODOS los eventos
+3. Los eventos aparecen con formato: "- ○ HORA - TÍTULO [fuente] (eventId: xxx)"
+
+EVENTOS DE RADIO (Black Room Radio):
+- Son eventos de "Todo el día" con DJs programados por hora (7pm, 8pm, 9pm)
+- La descripción muestra: "7: nombre_dj" = DJ a las 7pm
+- Cada Radio tiene un eventId único para modificarlo
+
+COMANDOS DISPONIBLES:
+- [CREAR_TAREA: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "priority": "normal|high|low"}]
+- [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
+- [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
+- [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
+- [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock|etf|crypto|bond|fund", "quantity": "10", "avgBuyPrice": "150.50"}]
+- [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
+- [ELIMINAR_INVERSION: {"symbol": "AAPL"}]
+- [CREAR_RECORDATORIO: {"message": "Mensaje a enviar", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]}]
+- [ELIMINAR_RECORDATORIO: {"id": "reminder-id"}]
+- [LISTAR_RECORDATORIOS: {}]
+
+## RECORDATORIOS PROGRAMADOS:
+Puedes crear recordatorios que se envían automáticamente por Telegram.
+- hour: hora del día (0-23)
+- minute: minuto (0-59), por defecto 0
+- daysOfWeek: array de días ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+  - Si está vacío o no se proporciona, se envía TODOS los días
+  - Ejemplo: ["monday", "wednesday", "friday"] = lunes, miércoles y viernes
+
+Ejemplos de uso:
+- "Mándame un mensaje todos los días a las 8am recordándome tomar agua" → CREAR_RECORDATORIO con hour:8, daysOfWeek:[]
+- "Recuérdame los lunes a las 9pm revisar mi portafolio" → CREAR_RECORDATORIO con hour:21, daysOfWeek:["monday"]
+- "Quiero un recordatorio de lunes a viernes a las 7:30am" → CREAR_RECORDATORIO con hour:7, minute:30, daysOfWeek:["monday","tuesday","wednesday","thursday","friday"]
+
+## ANÁLISIS DE IMÁGENES DE BROKER/CARTERA:
+Cuando el usuario envíe una imagen de su broker, app de trading, o captura de cartera:
+1. Analiza cuidadosamente la imagen para extraer información de inversiones
+2. Identifica: símbolo/ticker, nombre de la empresa, cantidad de acciones/unidades, precio de compra promedio, precio actual, ganancia/pérdida
+3. Para cada inversión detectada, usa el comando apropiado:
+   - Si es nueva: AGREGAR_INVERSION
+   - Si ya existe en el portafolio: ACTUALIZAR_INVERSION
+4. Muestra un resumen claro de lo que encontraste y las acciones que tomaste
+5. Si hay información de ganancia/pérdida, calcula y muéstrala
+
+IMPORTANTE para análisis de imágenes:
+- Los símbolos de acciones suelen ser 1-5 letras mayúsculas (AAPL, MSFT, TSLA)
+- Las criptomonedas pueden ser símbolos como BTC, ETH, SOL
+- Si no puedes identificar el tipo, pregunta al usuario
+- Si la imagen no es clara, pide una mejor captura
+
+## GESTIÓN DE PORTAFOLIO:
+Tienes acceso al portafolio de inversiones del usuario y puedes:
+- Agregar nuevas inversiones cuando el usuario te lo indique
+- Actualizar cantidad o precio promedio de inversiones existentes
+- Eliminar inversiones del portafolio
+- Responder preguntas sobre el estado del portafolio
+
+Tipos de inversión válidos: stock (acciones), etf, crypto (criptomonedas), bond (bonos), fund (fondos)
+
+Cuando el usuario te diga algo como:
+- "Compré 10 acciones de Apple a $150" → Usa AGREGAR_INVERSION
+- "Vendí todas mis acciones de Tesla" → Usa ELIMINAR_INVERSION
+- "Actualiza mi cantidad de Bitcoin a 0.5" → Usa ACTUALIZAR_INVERSION
+
+REGLAS:
+- Responde SIEMPRE en español
+- Sé preciso con las fechas
+- Usa la información personal que conoces para personalizar tus respuestas
+- Si el usuario te cuenta algo personal, agradece y recuerda guardarlo`;
+
+export function registerAssistantRoutes(app: Express): void {
+  app.post("/api/assistant/chat", async (req: Request, res: Response) => {
+    try {
+      const { message, conversationHistory = [], images } = req.body;
+      
+      console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
+
+      if (!message && (!images || images.length === 0)) {
+        return res.status(400).json({ error: "Message or images are required" });
+      }
+
+      const calendarContext = await getCalendarContext();
+      const userProfileContext = await getUserProfileContext();
+      const portfolioContext = await getPortfolioContext();
+
+      // Build user message parts
+      const userMessageParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+      
+      // Add all images if present (max 6MB total for safety with 8MB API limit)
+      const MAX_TOTAL_SIZE = 6 * 1024 * 1024; // 6MB
+      let totalImageSize = 0;
+      
+      if (images && Array.isArray(images)) {
+        for (const image of images) {
+          // Extract base64 data and mime type from data URL
+          const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            
+            // Calculate image size (base64 is ~33% larger than original)
+            const imageSize = (base64Data.length * 3) / 4;
+            
+            if (totalImageSize + imageSize > MAX_TOTAL_SIZE) {
+              console.warn(`Skipping image - total size would exceed ${MAX_TOTAL_SIZE / (1024 * 1024)}MB limit`);
+              continue;
+            }
+            
+            totalImageSize += imageSize;
+            userMessageParts.push({
+              inlineData: {
+                mimeType,
+                data: base64Data
+              }
+            });
+          }
+        }
+        
+        console.log(`Processing ${userMessageParts.length} images, total size: ${(totalImageSize / (1024 * 1024)).toFixed(2)}MB`);
+      }
+      
+      // Add text message
+      if (message) {
+        userMessageParts.push({ text: message });
+      } else if (images && images.length > 0) {
+        const imageCount = images.length;
+        userMessageParts.push({ 
+          text: imageCount > 1 
+            ? `Analiza estas ${imageCount} imágenes de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio.`
+            : "Analiza esta imagen de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio." 
+        });
+      }
+
+      const contents = [
+        {
+          role: "user" as const,
+          parts: [{ text: `${SYSTEM_PROMPT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}` }],
+        },
+        {
+          role: "model" as const,
+          parts: [{ text: "Entendido. Soy tu asistente personal BlackOps. Te conozco y recuerdo todo lo que me cuentas. Tengo acceso a tu calendario, puedo analizar imágenes de tu broker/cartera, y ayudarte con tareas, agenda y más. ¿En qué puedo ayudarte?" }],
+        },
+        ...conversationHistory.map((msg: { role: string; content: string }) => ({
+          role: msg.role === "assistant" ? "model" as const : "user" as const,
+          parts: [{ text: msg.content }],
+        })),
+        {
+          role: "user" as const,
+          parts: userMessageParts,
+        },
+      ];
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const stream = await ai.models.generateContentStream({
+        model: "gemini-2.5-flash",
+        contents,
+      });
+
+      let fullResponse = "";
+
+      for await (const chunk of stream) {
+        const content = chunk.text || "";
+        if (content) {
+          fullResponse += content;
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+
+      const taskMatch = fullResponse.match(/\[CREAR_TAREA:\s*(\{[^}]+\})\]/);
+      if (taskMatch) {
+        try {
+          const taskData = JSON.parse(taskMatch[1]);
+          const newTask = await storage.createTask(MOCK_USER_ID, {
+            title: taskData.title,
+            date: new Date(taskData.date),
+            priority: taskData.priority || "normal",
+            type: "task",
+            completed: false,
+          });
+          res.write(`data: ${JSON.stringify({ taskCreated: newTask })}\n\n`);
+        } catch (e) {
+          console.error("Error creating task from assistant:", e);
+        }
+      }
+
+      const radioMatch = fullResponse.match(/\[MODIFICAR_RADIO:\s*(\{[^}]+\})\]/);
+      if (radioMatch) {
+        try {
+          const radioData = JSON.parse(radioMatch[1]);
+          await updateCalendarEventDescription(radioData.eventId, radioData.description);
+          
+          const tasks = await storage.getTasks(MOCK_USER_ID);
+          const taskToUpdate = tasks.find(t => t.externalId === radioData.eventId);
+          if (taskToUpdate) {
+            await storage.updateTask(taskToUpdate.id, { description: radioData.description });
+          }
+          
+          res.write(`data: ${JSON.stringify({ radioUpdated: true, eventId: radioData.eventId })}\n\n`);
+        } catch (e) {
+          console.error("Error updating radio from assistant:", e);
+          res.write(`data: ${JSON.stringify({ radioError: "No se pudo actualizar el evento de Radio" })}\n\n`);
+        }
+      }
+
+      const googleEventMatch = fullResponse.match(/\[CREAR_EVENTO_GOOGLE:\s*(\{[^}]+\})\]/);
+      if (googleEventMatch) {
+        try {
+          const eventData = JSON.parse(googleEventMatch[1]);
+          const eventId = await createCalendarEvent({
+            title: eventData.title,
+            date: eventData.date,
+            endDate: eventData.endDate,
+            description: eventData.description,
+          });
+          res.write(`data: ${JSON.stringify({ googleEventCreated: true, eventId, title: eventData.title })}\n\n`);
+        } catch (e) {
+          console.error("Error creating Google Calendar event from assistant:", e);
+          res.write(`data: ${JSON.stringify({ googleEventError: "No se pudo crear el evento en Google Calendar" })}\n\n`);
+        }
+      }
+
+      // Process multiple GUARDAR_INFO commands
+      const infoRegex = /\[GUARDAR_INFO:\s*(\{[^}]+\})\]/g;
+      let infoMatch;
+      while ((infoMatch = infoRegex.exec(fullResponse)) !== null) {
+        try {
+          const infoData = JSON.parse(infoMatch[1]);
+          await storage.saveUserProfileData(MOCK_USER_ID, {
+            userId: MOCK_USER_ID,
+            category: infoData.category,
+            key: infoData.key,
+            value: infoData.value,
+            confidence: "confirmed",
+            source: "conversation",
+          });
+          res.write(`data: ${JSON.stringify({ infoSaved: true, key: infoData.key })}\n\n`);
+        } catch (e) {
+          console.error("Error saving user info from assistant:", e);
+        }
+      }
+
+      // Process multiple AGREGAR_INVERSION commands
+      const addInvestmentRegex = /\[AGREGAR_INVERSION:\s*(\{[^}]+\})\]/g;
+      let addInvMatch;
+      while ((addInvMatch = addInvestmentRegex.exec(fullResponse)) !== null) {
+        try {
+          const invData = JSON.parse(addInvMatch[1]);
+          if (!invData.symbol || !invData.name || !invData.type || !invData.quantity || !invData.avgBuyPrice) {
+            res.write(`data: ${JSON.stringify({ investmentError: "Faltan campos requeridos para agregar inversión" })}\n\n`);
+            continue;
+          }
+          const validTypes = ["stock", "etf", "crypto", "bond", "fund"];
+          if (!validTypes.includes(invData.type)) {
+            res.write(`data: ${JSON.stringify({ investmentError: `Tipo inválido: ${invData.type}. Usa: ${validTypes.join(", ")}` })}\n\n`);
+            continue;
+          }
+          await storage.createInvestment(MOCK_USER_ID, {
+            symbol: invData.symbol.toUpperCase(),
+            name: invData.name,
+            type: invData.type,
+            quantity: String(invData.quantity),
+            avgBuyPrice: String(invData.avgBuyPrice),
+            currency: "USD",
+          });
+          res.write(`data: ${JSON.stringify({ investmentCreated: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+        } catch (e) {
+          console.error("Error creating investment from assistant:", e);
+          res.write(`data: ${JSON.stringify({ investmentError: "No se pudo agregar la inversión" })}\n\n`);
+        }
+      }
+
+      // Process multiple ACTUALIZAR_INVERSION commands
+      const updateInvestmentRegex = /\[ACTUALIZAR_INVERSION:\s*(\{[^}]+\})\]/g;
+      let updateInvMatch;
+      const investmentsCache = await storage.getInvestments(MOCK_USER_ID);
+      while ((updateInvMatch = updateInvestmentRegex.exec(fullResponse)) !== null) {
+        try {
+          const invData = JSON.parse(updateInvMatch[1]);
+          if (!invData.symbol) {
+            res.write(`data: ${JSON.stringify({ investmentError: "Se requiere el símbolo para actualizar" })}\n\n`);
+            continue;
+          }
+          const existing = investmentsCache.find(i => i.symbol.toUpperCase() === invData.symbol.toUpperCase());
+          if (existing) {
+            const updates: { quantity?: string; avgBuyPrice?: string } = {};
+            if (invData.quantity !== undefined) updates.quantity = String(invData.quantity);
+            if (invData.avgBuyPrice !== undefined) updates.avgBuyPrice = String(invData.avgBuyPrice);
+            await storage.updateInvestment(existing.id, updates);
+            res.write(`data: ${JSON.stringify({ investmentUpdated: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ investmentError: `No se encontró inversión con símbolo ${invData.symbol}` })}\n\n`);
+          }
+        } catch (e) {
+          console.error("Error updating investment from assistant:", e);
+          res.write(`data: ${JSON.stringify({ investmentError: "No se pudo actualizar la inversión" })}\n\n`);
+        }
+      }
+
+      // Process multiple ELIMINAR_INVERSION commands
+      const deleteInvestmentRegex = /\[ELIMINAR_INVERSION:\s*(\{[^}]+\})\]/g;
+      let deleteInvMatch;
+      while ((deleteInvMatch = deleteInvestmentRegex.exec(fullResponse)) !== null) {
+        try {
+          const invData = JSON.parse(deleteInvMatch[1]);
+          if (!invData.symbol) {
+            res.write(`data: ${JSON.stringify({ investmentError: "Se requiere el símbolo para eliminar" })}\n\n`);
+            continue;
+          }
+          const existing = investmentsCache.find(i => i.symbol.toUpperCase() === invData.symbol.toUpperCase());
+          if (existing) {
+            await storage.deleteInvestment(existing.id);
+            res.write(`data: ${JSON.stringify({ investmentDeleted: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ investmentError: `No se encontró inversión con símbolo ${invData.symbol}` })}\n\n`);
+          }
+        } catch (e) {
+          console.error("Error deleting investment from assistant:", e);
+          res.write(`data: ${JSON.stringify({ investmentError: "No se pudo eliminar la inversión" })}\n\n`);
+        }
+      }
+
+      // Process CREAR_RECORDATORIO commands
+      const createReminderRegex = /\[CREAR_RECORDATORIO:\s*(\{[^}]+\})\]/g;
+      let createReminderMatch;
+      while ((createReminderMatch = createReminderRegex.exec(fullResponse)) !== null) {
+        try {
+          const reminderData = JSON.parse(createReminderMatch[1]);
+          if (!reminderData.message || reminderData.hour === undefined) {
+            res.write(`data: ${JSON.stringify({ reminderError: "Se requiere mensaje y hora para el recordatorio" })}\n\n`);
+            continue;
+          }
+          const hour = parseInt(reminderData.hour);
+          const minute = parseInt(reminderData.minute || 0);
+          if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            res.write(`data: ${JSON.stringify({ reminderError: "Hora inválida. Usa formato 24h (0-23)" })}\n\n`);
+            continue;
+          }
+          await storage.createScheduledReminder(MOCK_USER_ID, {
+            message: reminderData.message,
+            hour,
+            minute,
+            daysOfWeek: reminderData.daysOfWeek || null,
+            isActive: true,
+          });
+          const daysText = reminderData.daysOfWeek?.length > 0 
+            ? reminderData.daysOfWeek.join(", ") 
+            : "todos los días";
+          res.write(`data: ${JSON.stringify({ reminderCreated: true, message: reminderData.message, time: `${hour}:${String(minute).padStart(2, '0')}`, days: daysText })}\n\n`);
+        } catch (e) {
+          console.error("Error creating reminder from assistant:", e);
+          res.write(`data: ${JSON.stringify({ reminderError: "No se pudo crear el recordatorio" })}\n\n`);
+        }
+      }
+
+      // Process ELIMINAR_RECORDATORIO commands
+      const deleteReminderRegex = /\[ELIMINAR_RECORDATORIO:\s*(\{[^}]+\})\]/g;
+      let deleteReminderMatch;
+      while ((deleteReminderMatch = deleteReminderRegex.exec(fullResponse)) !== null) {
+        try {
+          const reminderData = JSON.parse(deleteReminderMatch[1]);
+          if (!reminderData.id) {
+            res.write(`data: ${JSON.stringify({ reminderError: "Se requiere el ID del recordatorio" })}\n\n`);
+            continue;
+          }
+          await storage.deleteScheduledReminder(reminderData.id);
+          res.write(`data: ${JSON.stringify({ reminderDeleted: true, id: reminderData.id })}\n\n`);
+        } catch (e) {
+          console.error("Error deleting reminder from assistant:", e);
+          res.write(`data: ${JSON.stringify({ reminderError: "No se pudo eliminar el recordatorio" })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Error in assistant chat:", errorMessage, error);
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: `Error: ${errorMessage}` })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: errorMessage });
+      }
+    }
+  });
+
+  app.get("/api/assistant/context", async (req: Request, res: Response) => {
+    try {
+      const context = await getCalendarContext();
+      res.json({ context });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get context" });
+    }
+  });
+}
