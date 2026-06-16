@@ -267,7 +267,7 @@ export default function Portfolio() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">Portfolio</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-zinc-950 to-zinc-900 bg-clip-text text-transparent">Portfolio</h1>
             <p className="text-xs text-zinc-600">Gestiona tus inversiones</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -323,10 +323,10 @@ export default function Portfolio() {
 
         <Tabs defaultValue="portfolio" className="space-y-6">
           <TabsList className="bg-zinc-950 border border-zinc-800/50 p-1 rounded-xl w-full flex flex-wrap gap-1 h-auto">
-            <TabsTrigger value="portfolio" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Portafolio</TabsTrigger>
-            <TabsTrigger value="analytics" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Analytics</TabsTrigger>
-            <TabsTrigger value="market" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Mercado</TabsTrigger>
-            <TabsTrigger value="watchlist" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Watchlist</TabsTrigger>
+            <TabsTrigger value="portfolio" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Portafolio</TabsTrigger>
+            <TabsTrigger value="analytics" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Analytics</TabsTrigger>
+            <TabsTrigger value="market" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Mercado</TabsTrigger>
+            <TabsTrigger value="watchlist" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white rounded-lg flex-1 min-w-[70px] text-xs sm:text-sm">Watchlist</TabsTrigger>
           </TabsList>
 
           <TabsContent value="portfolio" className="space-y-6">
@@ -337,7 +337,7 @@ export default function Portfolio() {
               </div>
               <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                  <Button size="sm" className="bg-zinc-800 hover:bg-zinc-800">
                     <Plus className="h-4 w-4 mr-1" /> Agregar
                   </Button>
                 </DialogTrigger>
@@ -436,7 +436,7 @@ export default function Portfolio() {
                       </div>
                     </div>
                     <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      className="w-full bg-zinc-800 hover:bg-zinc-800"
                       onClick={() => createInvestment.mutate(newInvestment)}
                       disabled={!newInvestment.symbol || !newInvestment.quantity || !newInvestment.avgBuyPrice}
                     >
@@ -472,17 +472,17 @@ export default function Portfolio() {
                           <Link href={`/portfolio/${inv.symbol}`} className="flex items-center gap-3 sm:gap-4 flex-1" data-testid={`link-investment-${inv.symbol}`}>
                             <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 flex-shrink-0 ${
                               inv.type === "crypto" 
-                                ? "bg-gradient-to-br from-orange-500/20 to-orange-600/10 border border-orange-500/20" 
+                                ? "bg-gradient-to-br from-zinc-950/20 to-zinc-900/10 border border-white/10"
                                 : inv.type === "etf"
-                                ? "bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/20"
-                                : "bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/20"
+                                ? "bg-gradient-to-br from-zinc-950/20 to-zinc-900/10 border border-white/10"
+                                : "bg-gradient-to-br from-zinc-950/20 to-zinc-900/10 border border-white/10"
                             }`}>
                               {inv.type === "crypto" ? (
-                                <Bitcoin className="h-5 w-5 sm:h-6 sm:w-6 text-orange-500" />
+                                <Bitcoin className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-400" />
                               ) : inv.type === "etf" ? (
-                                <PieChart className="h-5 w-5 sm:h-6 sm:w-6 text-purple-500" />
+                                <PieChart className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-400" />
                               ) : (
-                                <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
+                                <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-400" />
                               )}
                             </div>
                             <div className="min-w-0">
@@ -502,7 +502,7 @@ export default function Portfolio() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0"
+                              className="text-zinc-600 hover:text-white hover:bg-zinc-800/10 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -530,7 +530,7 @@ export default function Portfolio() {
               <Button
                 size="sm"
                 variant="outline"
-                className="border-emerald-600/50 text-emerald-500 hover:bg-emerald-600/10 bg-emerald-600/5"
+                className="border-white/10 text-zinc-400 hover:bg-zinc-800/10 bg-zinc-900/5"
                 onClick={() => sendTestNotification.mutate()}
                 disabled={sendTestNotification.isPending}
               >
@@ -543,7 +543,7 @@ export default function Portfolio() {
               <Card className="bg-gradient-to-br from-zinc-950 to-zinc-900 border-zinc-800/30 shadow-xl shadow-black/20">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2 text-zinc-300">
-                    <PieChart className="h-4 w-4 text-emerald-500" /> Distribución del Portafolio
+                    <PieChart className="h-4 w-4 text-zinc-400" /> Distribución del Portafolio
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -551,11 +551,11 @@ export default function Portfolio() {
                     <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                       {(() => {
                         const segments = [
-                          { key: "stock", label: "Acciones", color: "#3b82f6", percent: distribution.stocks.percent },
-                          { key: "etf", label: "ETFs", color: "#8b5cf6", percent: distribution.etfs.percent },
-                          { key: "crypto", label: "Crypto", color: "#f59e0b", percent: distribution.crypto.percent },
-                          { key: "bond", label: "Bonos", color: "#10b981", percent: distribution.bonds.percent },
-                          { key: "fund", label: "Fondos", color: "#ec4899", percent: distribution.funds.percent },
+                          { key: "stock", label: "Acciones", color: "#f4f4f5", percent: distribution.stocks.percent },
+                          { key: "etf", label: "ETFs", color: "#d4d4d8", percent: distribution.etfs.percent },
+                          { key: "crypto", label: "Crypto", color: "#a1a1aa", percent: distribution.crypto.percent },
+                          { key: "bond", label: "Bonos", color: "#71717a", percent: distribution.bonds.percent },
+                          { key: "fund", label: "Fondos", color: "#52525b", percent: distribution.funds.percent },
                         ].filter(s => s.percent > 0);
                         
                         let offset = 0;
@@ -595,12 +595,12 @@ export default function Portfolio() {
                   <div className="space-y-2">
                     {distribution.stocks.percent > 0 && (
                       <button 
-                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "stock" ? "bg-blue-500/20 border border-blue-500/30" : "hover:bg-zinc-800"}`}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "stock" ? "bg-zinc-900/20 border border-white/10" : "hover:bg-zinc-800"}`}
                         onClick={() => setSelectedType(selectedType === "stock" ? "all" : "stock")}
                         data-testid="filter-stocks"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                          <div className="w-3 h-3 rounded-full bg-zinc-800" />
                           <span className="text-sm">Acciones</span>
                         </div>
                         <div className="text-sm">
@@ -611,12 +611,12 @@ export default function Portfolio() {
                     )}
                     {distribution.etfs.percent > 0 && (
                       <button 
-                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "etf" ? "bg-violet-500/20 border border-violet-500/30" : "hover:bg-zinc-800"}`}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "etf" ? "bg-zinc-900/20 border border-white/10" : "hover:bg-zinc-800"}`}
                         onClick={() => setSelectedType(selectedType === "etf" ? "all" : "etf")}
                         data-testid="filter-etfs"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-violet-500" />
+                          <div className="w-3 h-3 rounded-full bg-zinc-800" />
                           <span className="text-sm">ETFs</span>
                         </div>
                         <div className="text-sm">
@@ -627,12 +627,12 @@ export default function Portfolio() {
                     )}
                     {distribution.crypto.percent > 0 && (
                       <button 
-                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "crypto" ? "bg-amber-500/20 border border-amber-500/30" : "hover:bg-zinc-800"}`}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "crypto" ? "bg-zinc-900/20 border border-white/10" : "hover:bg-zinc-800"}`}
                         onClick={() => setSelectedType(selectedType === "crypto" ? "all" : "crypto")}
                         data-testid="filter-crypto"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-amber-500" />
+                          <div className="w-3 h-3 rounded-full bg-zinc-800" />
                           <span className="text-sm">Crypto</span>
                         </div>
                         <div className="text-sm">
@@ -643,12 +643,12 @@ export default function Portfolio() {
                     )}
                     {distribution.bonds.percent > 0 && (
                       <button 
-                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "bond" ? "bg-emerald-500/20 border border-emerald-500/30" : "hover:bg-zinc-800"}`}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "bond" ? "bg-zinc-900/20 border border-white/10" : "hover:bg-zinc-800"}`}
                         onClick={() => setSelectedType(selectedType === "bond" ? "all" : "bond")}
                         data-testid="filter-bonds"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                          <div className="w-3 h-3 rounded-full bg-zinc-800" />
                           <span className="text-sm">Bonos</span>
                         </div>
                         <div className="text-sm">
@@ -659,12 +659,12 @@ export default function Portfolio() {
                     )}
                     {distribution.funds.percent > 0 && (
                       <button 
-                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "fund" ? "bg-pink-500/20 border border-pink-500/30" : "hover:bg-zinc-800"}`}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedType === "fund" ? "bg-zinc-900/20 border border-white/10" : "hover:bg-zinc-800"}`}
                         onClick={() => setSelectedType(selectedType === "fund" ? "all" : "fund")}
                         data-testid="filter-funds"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-pink-500" />
+                          <div className="w-3 h-3 rounded-full bg-zinc-800" />
                           <span className="text-sm">Fondos</span>
                         </div>
                         <div className="text-sm">
@@ -695,14 +695,14 @@ export default function Portfolio() {
                           >
                             <div className="flex items-center gap-2">
                               <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                                inv.type === "crypto" ? "bg-orange-500/20" : inv.type === "etf" ? "bg-purple-500/20" : "bg-blue-500/20"
+                                inv.type === "crypto" ? "bg-zinc-900/20" : inv.type === "etf" ? "bg-zinc-900/20" : "bg-zinc-900/20"
                               }`}>
                                 {inv.type === "crypto" ? (
-                                  <Bitcoin className="h-4 w-4 text-orange-500" />
+                                  <Bitcoin className="h-4 w-4 text-zinc-400" />
                                 ) : inv.type === "etf" ? (
-                                  <PieChart className="h-4 w-4 text-purple-500" />
+                                  <PieChart className="h-4 w-4 text-zinc-400" />
                                 ) : (
-                                  <BarChart3 className="h-4 w-4 text-blue-500" />
+                                  <BarChart3 className="h-4 w-4 text-zinc-400" />
                                 )}
                               </div>
                               <div>
@@ -729,7 +729,7 @@ export default function Portfolio() {
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <LineChart className="h-4 w-4 text-cyan-500" /> Rendimiento Histórico
+                    <LineChart className="h-4 w-4 text-zinc-400" /> Rendimiento Histórico
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -754,15 +754,15 @@ export default function Portfolio() {
                             <>
                               <defs>
                                 <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                                  <stop offset="0%" stopColor="#d4d4d8" stopOpacity="0.3" />
+                                  <stop offset="100%" stopColor="#d4d4d8" stopOpacity="0" />
                                 </linearGradient>
                               </defs>
                               <polygon points={areaPoints} fill="url(#chartGradient)" />
                               <polyline
                                 points={points}
                                 fill="none"
-                                stroke="#10b981"
+                                stroke="#d4d4d8"
                                 strokeWidth="2"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -805,7 +805,7 @@ export default function Portfolio() {
                       onClick={() => setGainPeriod(period.key)}
                       className={`px-3 py-1 text-xs rounded-full transition-all ${
                         gainPeriod === period.key
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                          ? "bg-zinc-900/20 text-zinc-400 border border-white/10"
                           : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                       }`}
                       data-testid={`period-${period.key}`}
@@ -817,7 +817,7 @@ export default function Portfolio() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2 text-emerald-500">
+                      <CardTitle className="text-sm flex items-center gap-2 text-zinc-400">
                         <TrendingUp className="h-4 w-4" /> Mayores Ganancias
                       </CardTitle>
                     </CardHeader>
@@ -827,7 +827,7 @@ export default function Portfolio() {
                           portfolioSummary.topGainers.map((g) => (
                             <div key={g.symbol} className="flex items-center justify-between">
                               <span className="font-medium">{g.symbol}</span>
-                              <span className="text-emerald-500">+{g.gainPercent?.toFixed(2) ?? '0.00'}%</span>
+                              <span className="text-zinc-400">+{g.gainPercent?.toFixed(2) ?? '0.00'}%</span>
                             </div>
                           ))
                         ) : (
@@ -838,7 +838,7 @@ export default function Portfolio() {
                           portfolioSummary.topDailyGainers.filter(g => g.dailyChange > 0).map((g) => (
                             <div key={g.symbol} className="flex items-center justify-between">
                               <span className="font-medium">{g.symbol}</span>
-                              <span className="text-emerald-500">+{g.dailyChange?.toFixed(2) ?? '0.00'}%</span>
+                              <span className="text-zinc-400">+{g.dailyChange?.toFixed(2) ?? '0.00'}%</span>
                             </div>
                           ))
                         ) : (
@@ -850,7 +850,7 @@ export default function Portfolio() {
                         periodGains.topGainers.map((g) => (
                           <div key={g.symbol} className="flex items-center justify-between">
                             <span className="font-medium">{g.symbol}</span>
-                            <span className="text-emerald-500">+{g.changePercent?.toFixed(2) ?? '0.00'}%</span>
+                            <span className="text-zinc-400">+{g.changePercent?.toFixed(2) ?? '0.00'}%</span>
                           </div>
                         ))
                       ) : (
@@ -860,7 +860,7 @@ export default function Portfolio() {
                   </Card>
                   <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2 text-red-500">
+                      <CardTitle className="text-sm flex items-center gap-2 text-zinc-400">
                         <TrendingDown className="h-4 w-4" /> Mayores Pérdidas
                       </CardTitle>
                     </CardHeader>
@@ -870,7 +870,7 @@ export default function Portfolio() {
                           portfolioSummary.topLosers.map((l) => (
                             <div key={l.symbol} className="flex items-center justify-between">
                               <span className="font-medium">{l.symbol}</span>
-                              <span className="text-red-500">{l.gainPercent?.toFixed(2) ?? '0.00'}%</span>
+                              <span className="text-zinc-400">{l.gainPercent?.toFixed(2) ?? '0.00'}%</span>
                             </div>
                           ))
                         ) : (
@@ -881,7 +881,7 @@ export default function Portfolio() {
                           portfolioSummary.topDailyLosers.filter(l => l.dailyChange < 0).map((l) => (
                             <div key={l.symbol} className="flex items-center justify-between">
                               <span className="font-medium">{l.symbol}</span>
-                              <span className="text-red-500">{l.dailyChange?.toFixed(2) ?? '0.00'}%</span>
+                              <span className="text-zinc-400">{l.dailyChange?.toFixed(2) ?? '0.00'}%</span>
                             </div>
                           ))
                         ) : (
@@ -893,7 +893,7 @@ export default function Portfolio() {
                         periodGains.topLosers.map((l) => (
                           <div key={l.symbol} className="flex items-center justify-between">
                             <span className="font-medium">{l.symbol}</span>
-                            <span className="text-red-500">{l.changePercent?.toFixed(2) ?? '0.00'}%</span>
+                            <span className="text-zinc-400">{l.changePercent?.toFixed(2) ?? '0.00'}%</span>
                           </div>
                         ))
                       ) : (
@@ -908,13 +908,13 @@ export default function Portfolio() {
             <Card className="bg-gradient-to-br from-zinc-950 to-zinc-900 border-zinc-800/30 shadow-xl shadow-black/20">
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2 text-zinc-300">
-                  <Newspaper className="h-4 w-4 text-blue-500" /> Noticias de tu Portafolio
+                  <Newspaper className="h-4 w-4 text-zinc-400" /> Noticias de tu Portafolio
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {newsLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <RefreshCw className="h-5 w-5 animate-spin text-blue-500" />
+                    <RefreshCw className="h-5 w-5 animate-spin text-zinc-400" />
                     <span className="ml-2 text-zinc-500">Cargando noticias...</span>
                   </div>
                 ) : portfolioNews.length === 0 ? (
@@ -944,7 +944,7 @@ export default function Portfolio() {
                             />
                           )}
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm text-white group-hover:text-blue-400 transition-colors line-clamp-2">
+                            <h4 className="font-medium text-sm text-white group-hover:text-white transition-colors line-clamp-2">
                               {news.headline}
                             </h4>
                             <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{news.summary}</p>
@@ -972,7 +972,7 @@ export default function Portfolio() {
             </div>
             {marketLoading ? (
               <div className="text-center py-12 text-zinc-500">
-                <RefreshCw className="h-6 w-6 mx-auto mb-3 animate-spin text-emerald-500" />
+                <RefreshCw className="h-6 w-6 mx-auto mb-3 animate-spin text-zinc-400" />
                 <p>Cargando datos del mercado...</p>
               </div>
             ) : (
@@ -980,7 +980,7 @@ export default function Portfolio() {
                 <Card className="bg-gradient-to-br from-zinc-950 to-zinc-900 border-zinc-800/30 shadow-xl shadow-black/20">
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2 text-zinc-300">
-                      <BarChart3 className="h-4 w-4 text-blue-500" /> Acciones Populares
+                      <BarChart3 className="h-4 w-4 text-zinc-400" /> Acciones Populares
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-1">
@@ -992,8 +992,8 @@ export default function Portfolio() {
                         data-testid={`link-market-${stock.symbol}`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                            <BarChart3 className="h-4 w-4 text-blue-500" />
+                          <div className="h-8 w-8 rounded-lg bg-zinc-900/10 border border-white/10 flex items-center justify-center">
+                            <BarChart3 className="h-4 w-4 text-zinc-400" />
                           </div>
                           <div>
                             <div className="font-bold text-white">{stock.symbol}</div>
@@ -1002,7 +1002,7 @@ export default function Portfolio() {
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-white">{formatCurrency(stock.price)}</div>
-                          <div className={`text-xs flex items-center justify-end gap-1 ${stock.change >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          <div className={`text-xs flex items-center justify-end gap-1 ${stock.change >= 0 ? "text-zinc-400" : "text-zinc-400"}`}>
                             {stock.change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                             {formatPercent(stock.change)}
                           </div>
@@ -1015,7 +1015,7 @@ export default function Portfolio() {
                 <Card className="bg-gradient-to-br from-zinc-950 to-zinc-900 border-zinc-800/30 shadow-xl shadow-black/20">
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2 text-zinc-300">
-                      <Bitcoin className="h-4 w-4 text-orange-500" /> Criptomonedas
+                      <Bitcoin className="h-4 w-4 text-zinc-400" /> Criptomonedas
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-1">
@@ -1027,8 +1027,8 @@ export default function Portfolio() {
                         data-testid={`link-market-${coin.symbol}`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
-                            <Bitcoin className="h-4 w-4 text-orange-500" />
+                          <div className="h-8 w-8 rounded-lg bg-zinc-900/10 border border-white/10 flex items-center justify-center">
+                            <Bitcoin className="h-4 w-4 text-zinc-400" />
                           </div>
                           <div>
                             <div className="font-bold text-white">{coin.symbol}</div>
@@ -1037,7 +1037,7 @@ export default function Portfolio() {
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-white">{formatCurrency(coin.price)}</div>
-                          <div className={`text-xs flex items-center justify-end gap-1 ${coin.change >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          <div className={`text-xs flex items-center justify-end gap-1 ${coin.change >= 0 ? "text-zinc-400" : "text-zinc-400"}`}>
                             {coin.change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                             {formatPercent(coin.change)}
                           </div>
@@ -1074,13 +1074,13 @@ export default function Portfolio() {
                         <Link href={`/portfolio/${item.symbol}`} className="flex items-center gap-4 flex-1" data-testid={`link-watchlist-${item.symbol}`}>
                           <div className={`h-12 w-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 ${
                             item.type === "crypto"
-                              ? "bg-gradient-to-br from-orange-500/20 to-orange-600/10 border border-orange-500/20"
-                              : "bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/20"
+                              ? "bg-gradient-to-br from-zinc-950/20 to-zinc-900/10 border border-white/10"
+                              : "bg-gradient-to-br from-zinc-950/20 to-zinc-900/10 border border-white/10"
                           }`}>
                             {item.type === "crypto" ? (
-                              <Bitcoin className="h-6 w-6 text-orange-500" />
+                              <Bitcoin className="h-6 w-6 text-zinc-400" />
                             ) : (
-                              <BarChart3 className="h-6 w-6 text-blue-500" />
+                              <BarChart3 className="h-6 w-6 text-zinc-400" />
                             )}
                           </div>
                           <div>
@@ -1091,7 +1091,7 @@ export default function Portfolio() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-zinc-600 hover:text-white hover:bg-zinc-800/10 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();

@@ -6,8 +6,6 @@ const ZOHO_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN;
 
 const ZOHO_ACCOUNTS_URL = "https://accounts.zoho.com";
 const ZOHO_CALENDAR_URL = "https://calendar.zoho.com/api/v1";
-const MOCK_USER_ID = "mock-user-123";
-
 interface ZohoTokenResponse {
   access_token: string;
   token_type: string;
@@ -143,7 +141,7 @@ function parseZohoDate(dateStr: string, isAllDay: boolean): Date {
   return new Date(`${year}-${month}-${day}T${hour}:${min}:${sec}Z`);
 }
 
-export async function syncZohoCalendar(): Promise<{ synced: number; errors: string[] }> {
+export async function syncZohoCalendar(userId: string): Promise<{ synced: number; errors: string[] }> {
   const errors: string[] = [];
   let synced = 0;
 
@@ -191,7 +189,7 @@ export async function syncZohoCalendar(): Promise<{ synced: number; errors: stri
         for (const event of events) {
           try {
             const externalId = `zoho_${event.uid}`;
-            const existingTasks = await storage.getTasks(MOCK_USER_ID);
+            const existingTasks = await storage.getTasks(userId);
             const existing = existingTasks.find(t => t.externalId === externalId);
 
             const isAllDay = event.isalldayevent || false;
@@ -225,7 +223,7 @@ export async function syncZohoCalendar(): Promise<{ synced: number; errors: stri
             if (existing) {
               await storage.updateTask(existing.id, taskData);
             } else {
-              await storage.createTask(MOCK_USER_ID, taskData);
+              await storage.createTask(userId, taskData);
             }
             synced++;
           } catch (eventError) {

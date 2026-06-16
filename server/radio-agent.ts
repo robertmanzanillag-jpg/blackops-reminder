@@ -1,10 +1,9 @@
 import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
-import { format, addDays, startOfMonth, endOfMonth, isAfter } from "date-fns";
+import { format, addDays, endOfMonth, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Task, DjContact } from "@shared/schema";
-
-const MOCK_USER_ID = "mock-user-123";
+import { getSystemUserId } from "./user-context";
 
 export interface RadioSlot {
   eventId: string;
@@ -14,6 +13,11 @@ export interface RadioSlot {
   slot8: string | null;
   slot9: string | null;
   emptySlots: number[];
+  rawDescription?: string | null;
+  eventTitle?: string;
+  weekday?: string;
+  dayNumber?: number;
+  ordinalDay?: string;
 }
 
 export interface RadioAnalysis {
@@ -23,52 +27,120 @@ export interface RadioAnalysis {
   upcomingEvents: RadioSlot[];
 }
 
+function isRadioEventTitle(title: string): boolean {
+  const normalized = title.toLowerCase();
+  return normalized.includes("radio") || normalized.includes("black room");
+}
+
+function decodeDescription(description: string): string {
+  return description
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"');
+}
+
+function cleanDjName(value: string): string | null {
+  const cleaned = value
+    .replace(/^[-–—:.\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || /^(tba|open|empty|vacio|vacío|pending|pendiente)$/i.test(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
+
 function parseRadioDescription(description: string | null): { slot7: string | null; slot8: string | null; slot9: string | null } {
   if (!description) {
     return { slot7: null, slot8: null, slot9: null };
   }
 
-  const cleanDesc = description
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&nbsp;/g, ' ');
-
-  const lines = cleanDesc.split('\n');
+  const cleanDesc = decodeDescription(description);
+  const lines = cleanDesc.split(/\r?\n/);
   let slot7: string | null = null;
   let slot8: string | null = null;
   let slot9: string | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const slot7Pattern = /^7(?:\s*pm)?[:.]?\s*/i;
-    const slot8Pattern = /^8(?:\s*pm)?[:.]?\s*/i;
-    const slot9Pattern = /^9(?:\s*pm)?[:.]?\s*/i;
-    
-    if (trimmed.match(slot7Pattern)) {
-      const djName = trimmed.replace(slot7Pattern, '').trim();
-      slot7 = djName.length > 0 ? djName : null;
-    } else if (trimmed.match(slot8Pattern)) {
-      const djName = trimmed.replace(slot8Pattern, '').trim();
-      slot8 = djName.length > 0 ? djName : null;
-    } else if (trimmed.match(slot9Pattern)) {
-      const djName = trimmed.replace(slot9Pattern, '').trim();
-      slot9 = djName.length > 0 ? djName : null;
+    const match = trimmed.match(/^\s*([789])(?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*(.*)$/i);
+    if (!match) continue;
+
+    const hour = Number(match[1]);
+    const djName = cleanDjName(match[2] || "");
+
+    if (hour === 7) {
+      slot7 = djName;
+    } else if (hour === 8) {
+      slot8 = djName;
+    } else if (hour === 9) {
+      slot9 = djName;
     }
   }
 
   return { slot7, slot8, slot9 };
 }
 
-export async function analyzeRadioEvents(): Promise<RadioAnalysis> {
-  const tasks = await storage.getTasks(MOCK_USER_ID);
+function getOrdinalDay(day: number): string {
+  const lastTwo = day % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${day}TH`;
+
+  switch (day % 10) {
+    case 1:
+      return `${day}ST`;
+    case 2:
+      return `${day}ND`;
+    case 3:
+      return `${day}RD`;
+    default:
+      return `${day}TH`;
+  }
+}
+
+function buildRadioSlot(event: Task): RadioSlot {
+  const eventDate = new Date(event.date);
+  const { slot7, slot8, slot9 } = parseRadioDescription(event.description);
+  const emptySlots: number[] = [];
+
+  if (!slot7) emptySlots.push(7);
+  if (!slot8) emptySlots.push(8);
+  if (!slot9) emptySlots.push(9);
+
+  const dateStr = format(eventDate, "EEEE d 'de' MMMM", { locale: es });
+  const weekday = format(eventDate, "EEEE").toUpperCase();
+  const dayNumber = eventDate.getDate();
+
+  return {
+    eventId: event.externalId || event.id,
+    date: eventDate,
+    dateStr,
+    slot7,
+    slot8,
+    slot9,
+    emptySlots,
+    rawDescription: event.description,
+    eventTitle: event.title,
+    weekday,
+    dayNumber,
+    ordinalDay: getOrdinalDay(dayNumber),
+  };
+}
+
+export async function analyzeRadioEvents(userId = getSystemUserId()): Promise<RadioAnalysis> {
+  const tasks = await storage.getTasks(userId);
   const now = new Date();
   const monthEnd = endOfMonth(addDays(now, 60));
 
   const radioEvents = tasks
-    .filter(t => t.title === "Radio" && t.externalSource === "google" && isAfter(new Date(t.date), now))
+    .filter(t => isRadioEventTitle(t.title) && t.externalSource === "google" && isAfter(new Date(t.date), now))
     .filter(t => isAfter(monthEnd, new Date(t.date)))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -76,30 +148,14 @@ export async function analyzeRadioEvents(): Promise<RadioAnalysis> {
   const slotsToFill: { eventId: string; date: string; slots: number[] }[] = [];
 
   for (const event of radioEvents) {
-    const { slot7, slot8, slot9 } = parseRadioDescription(event.description);
-    const emptySlots: number[] = [];
-    
-    if (!slot7) emptySlots.push(7);
-    if (!slot8) emptySlots.push(8);
-    if (!slot9) emptySlots.push(9);
+    const radioSlot = buildRadioSlot(event);
+    upcomingEvents.push(radioSlot);
 
-    const dateStr = format(new Date(event.date), "EEEE d 'de' MMMM", { locale: es });
-    
-    upcomingEvents.push({
-      eventId: event.externalId || "",
-      date: new Date(event.date),
-      dateStr,
-      slot7,
-      slot8,
-      slot9,
-      emptySlots,
-    });
-
-    if (emptySlots.length > 0 && event.externalId) {
+    if (radioSlot.emptySlots.length > 0 && event.externalId) {
       slotsToFill.push({
         eventId: event.externalId,
-        date: dateStr,
-        slots: emptySlots,
+        date: radioSlot.dateStr,
+        slots: radioSlot.emptySlots,
       });
     }
   }
@@ -112,8 +168,8 @@ export async function analyzeRadioEvents(): Promise<RadioAnalysis> {
   };
 }
 
-export async function generateDjSuggestions(slotsNeeded: number): Promise<DjContact[]> {
-  const availableDjs = await storage.getAvailableDjContacts(MOCK_USER_ID);
+export async function generateDjSuggestions(slotsNeeded: number, userId = getSystemUserId()): Promise<DjContact[]> {
+  const availableDjs = await storage.getAvailableDjContacts(userId);
   
   const sortedDjs = availableDjs.sort((a, b) => {
     const aScore = (a.rating || 3) + (a.lastContacted ? -1 : 1);
@@ -124,8 +180,8 @@ export async function generateDjSuggestions(slotsNeeded: number): Promise<DjCont
   return sortedDjs.slice(0, slotsNeeded);
 }
 
-export async function generateDjMessage(dj: DjContact, eventDate: string, slot: number): Promise<string> {
-  const template = await storage.getDefaultDjMessageTemplate(MOCK_USER_ID);
+export async function generateDjMessage(dj: DjContact, eventDate: string, slot: number, userId = getSystemUserId()): Promise<string> {
+  const template = await storage.getDefaultDjMessageTemplate(userId);
   
   const defaultTemplate = `Hola {{nombre}}! 👋
 
@@ -144,13 +200,13 @@ Avísame si te interesa!`;
     .replace(/\{\{instagram\}\}/g, dj.instagramHandle || "");
 }
 
-export async function createVideoEditTask(eventDate: Date): Promise<void> {
+export async function createVideoEditTask(eventDate: Date, userId = getSystemUserId()): Promise<void> {
   const dayAfter = addDays(eventDate, 1);
   dayAfter.setHours(10, 0, 0, 0);
   
   const dateStr = format(eventDate, "d 'de' MMMM", { locale: es });
   
-  await storage.createTask(MOCK_USER_ID, {
+  await storage.createTask(userId, {
     title: `Editar videos Radio ${dateStr}`,
     date: dayAfter,
     priority: "high",
@@ -159,13 +215,13 @@ export async function createVideoEditTask(eventDate: Date): Promise<void> {
   });
 }
 
-export async function sendRadioSlotsSummary(): Promise<{ sent: boolean; message: string }> {
-  const config = await storage.getTelegramConfig(MOCK_USER_ID);
+export async function sendRadioSlotsSummary(userId = getSystemUserId()): Promise<{ sent: boolean; message: string }> {
+  const config = await storage.getTelegramConfig(userId);
   if (!config || !config.enabled) {
     return { sent: false, message: "Telegram not configured" };
   }
 
-  const analysis = await analyzeRadioEvents();
+  const analysis = await analyzeRadioEvents(userId);
   
   if (analysis.eventsWithEmptySlots === 0) {
     return { sent: false, message: "No empty slots found" };
@@ -180,7 +236,7 @@ export async function sendRadioSlotsSummary(): Promise<{ sent: boolean; message:
     message += `   Slots vacíos: ${slotsStr}\n\n`;
   }
 
-  const suggestedDjs = await generateDjSuggestions(3);
+  const suggestedDjs = await generateDjSuggestions(3, userId);
   if (suggestedDjs.length > 0) {
     message += `\n🎧 *DJs disponibles para contactar:*\n`;
     for (const dj of suggestedDjs) {
@@ -199,35 +255,24 @@ export async function sendRadioSlotsSummary(): Promise<{ sent: boolean; message:
   return { sent: true, message: `Sent summary with ${analysis.eventsWithEmptySlots} events with empty slots` };
 }
 
-export async function getRadioSlotsForMonth(): Promise<RadioSlot[]> {
-  const analysis = await analyzeRadioEvents();
+export async function getRadioSlotsForMonth(userId = getSystemUserId()): Promise<RadioSlot[]> {
+  const analysis = await analyzeRadioEvents(userId);
   return analysis.upcomingEvents;
 }
 
-export async function extractDjsFromRadioEvents(): Promise<{ name: string; instagram?: string }[]> {
-  const tasks = await storage.getTasks(MOCK_USER_ID);
-  const radioEvents = tasks.filter(t => t.title === "Radio" && t.externalSource === "google");
+export async function extractDjsFromRadioEvents(userId = getSystemUserId()): Promise<{ name: string; instagram?: string }[]> {
+  const tasks = await storage.getTasks(userId);
+  const radioEvents = tasks.filter(t => isRadioEventTitle(t.title) && t.externalSource === "google");
   
   const djSet = new Map<string, { name: string; instagram?: string }>();
 
   for (const event of radioEvents) {
     if (!event.description) continue;
-    
-    const cleanDesc = event.description
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
 
-    const lines = cleanDesc.split('\n');
-    
-    for (const line of lines) {
-      const match = line.match(/^[789][:.]?\s*(.+)/i);
-      if (match) {
-        let djInfo = match[1].trim();
-        if (djInfo.length === 0) continue;
-        
+    const parsed = parseRadioDescription(event.description);
+    const names = [parsed.slot7, parsed.slot8, parsed.slot9].filter(Boolean) as string[];
+
+    for (const djInfo of names) {
         const instagramMatch = djInfo.match(/@(\w+)/);
         const instagram = instagramMatch ? instagramMatch[1] : undefined;
         
@@ -243,16 +288,15 @@ export async function extractDjsFromRadioEvents(): Promise<{ name: string; insta
             djSet.set(key, { name, instagram });
           }
         }
-      }
     }
   }
 
   return Array.from(djSet.values());
 }
 
-export async function importDjsFromRadioHistory(): Promise<{ imported: number; skipped: number }> {
-  const extractedDjs = await extractDjsFromRadioEvents();
-  const existingDjs = await storage.getDjContacts(MOCK_USER_ID);
+export async function importDjsFromRadioHistory(userId = getSystemUserId()): Promise<{ imported: number; skipped: number }> {
+  const extractedDjs = await extractDjsFromRadioEvents(userId);
+  const existingDjs = await storage.getDjContacts(userId);
   const existingNames = new Set(existingDjs.map(d => d.name.toLowerCase()));
 
   let imported = 0;
@@ -264,7 +308,7 @@ export async function importDjsFromRadioHistory(): Promise<{ imported: number; s
       continue;
     }
 
-    await storage.createDjContact(MOCK_USER_ID, {
+    await storage.createDjContact(userId, {
       name: dj.name,
       instagramHandle: dj.instagram || null,
       status: "available",

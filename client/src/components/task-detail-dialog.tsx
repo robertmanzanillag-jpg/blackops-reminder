@@ -50,10 +50,10 @@ export function TaskDetailDialog({
   
   const getSourceInfo = () => {
     if (task.externalSource === 'google') {
-      return { name: 'Google Calendar', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: '📅' };
+      return { name: 'Google Calendar', color: 'bg-zinc-900/20 text-zinc-400 border-white/10', icon: '📅' };
     }
     if (task.externalSource === 'zoho') {
-      return { name: 'Zoho Calendar', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', icon: '📆' };
+      return { name: 'Zoho Calendar', color: 'bg-zinc-900/20 text-zinc-400 border-white/10', icon: '📆' };
     }
     return null;
   };
@@ -63,9 +63,9 @@ export function TaskDetailDialog({
   const getPriorityInfo = () => {
     switch (task.priority) {
       case 'high':
-        return { label: 'Alta', color: 'bg-red-500/20 text-red-400 border-red-500/30' };
+        return { label: 'Alta', color: 'bg-zinc-900/20 text-zinc-400 border-white/10' };
       case 'medium':
-        return { label: 'Media', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
+        return { label: 'Media', color: 'bg-zinc-900/20 text-zinc-400 border-white/10' };
       default:
         return { label: 'Normal', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' };
     }
@@ -108,12 +108,12 @@ export function TaskDetailDialog({
                   Prioridad: {priorityInfo.label}
                 </Badge>
                 {task.type === 'event' && (
-                  <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
+                  <Badge variant="outline" className="text-xs bg-zinc-900/20 text-zinc-400 border-white/10">
                     Evento
                   </Badge>
                 )}
                 {task.completed && (
-                  <Badge variant="outline" className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                  <Badge variant="outline" className="text-xs bg-zinc-900/20 text-zinc-400 border-white/10">
                     Completado
                   </Badge>
                 )}
@@ -191,7 +191,7 @@ export function TaskDetailDialog({
               "flex-1 gap-2",
               task.completed 
                 ? "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700"
-                : "bg-emerald-500/20 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30"
+                : "bg-zinc-900/20 border-white/10 text-zinc-400 hover:bg-zinc-800/30"
             )}
             data-testid="toggle-task-btn"
           >
@@ -218,7 +218,7 @@ export function TaskDetailDialog({
               onDelete(task.id);
               onOpenChange(false);
             }}
-            className="gap-2 bg-red-500/20 border-red-500/30 text-red-400 hover:bg-red-500/30"
+            className="gap-2 bg-zinc-900/20 border-white/10 text-zinc-400 hover:bg-zinc-800/30"
             data-testid="delete-task-btn"
           >
             <Trash2 className="w-4 h-4" />

@@ -1,9 +1,9 @@
 import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
+import { sendPushNotification } from "./push-notifications";
 import type { MonitoredProject } from "@shared/schema";
 
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
-const MOCK_USER_ID = "mock-user-123";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 interface HealthCheckResult {
@@ -78,7 +78,7 @@ async function handleStatusChange(
       });
       
       // Send Telegram notification
-      const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
+      const telegramConfig = await storage.getTelegramConfig(project.userId);
       if (telegramConfig?.enabled) {
         const message = `🔴 *ALERTA: Proyecto Caído*\n\n` +
           `📦 *${project.name}*\n` +
@@ -88,6 +88,13 @@ async function handleStatusChange(
         
         await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
       }
+
+      await sendPushNotification(project.userId, {
+        title: "Proyecto caido",
+        body: `${project.name} no responde. ${result.errorMessage || "Sin respuesta"}`,
+        url: "/projects",
+        tag: `project-down-${project.id}`,
+      });
     }
   }
   
@@ -99,7 +106,7 @@ async function handleStatusChange(
       const resolved = await storage.resolveIncident(activeIncident.id);
       
       // Send recovery notification
-      const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
+      const telegramConfig = await storage.getTelegramConfig(project.userId);
       if (telegramConfig?.enabled) {
         const durationMinutes = Math.floor((resolved.duration || 0) / 60);
         const durationSeconds = (resolved.duration || 0) % 60;
@@ -116,6 +123,13 @@ async function handleStatusChange(
         
         await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
       }
+
+      await sendPushNotification(project.userId, {
+        title: "Proyecto recuperado",
+        body: `${project.name} volvio online en ${result.responseTime}ms.`,
+        url: "/projects",
+        tag: `project-recovered-${project.id}`,
+      });
     }
   }
 }

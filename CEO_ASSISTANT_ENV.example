@@ -1,0 +1,41 @@
+# BlackOps CEO Assistant production env example
+
+# Core app/database
+NODE_ENV=production
+PORT=5000
+HOST=0.0.0.0
+DATABASE_URL=postgres://user:password@host:5432/blackops
+
+# Auth/user context
+SESSION_SECRET=replace-with-long-random-secret
+LOCAL_AUTH_ENABLED=true
+ALLOW_LOCAL_AUTH_REGISTRATION=false
+ALLOW_DEV_USER_FALLBACK=false
+DEFAULT_USER_ID=replace-after-running-auth-create-user
+
+# AI
+AI_INTEGRATIONS_GEMINI_API_KEY=replace-with-gemini-api-key
+# AI_INTEGRATIONS_GEMINI_BASE_URL=
+
+# Telegram CEO channel
+TELEGRAM_BOT_TOKEN=replace-with-botfather-token
+PUBLIC_APP_URL=https://your-domain.example
+# TELEGRAM_WEBHOOK_URL=https://your-domain.example/api/telegram/webhook
+TELEGRAM_WEBHOOK_SECRET=replace-with-telegram-webhook-secret
+
+# Scheduler
+SCHEDULER_TIMEZONE=America/New_York
+CEO_BRIEF_HOUR=7
+CEO_BRIEF_MINUTE=0
+INSIGHTS_HOUR=8
+NEWS_DIGEST_HOUR=9
+EVENING_REVIEW_HOUR=21
+
+# Optional integrations
+# FINNHUB_API_KEY=
+# ZOHO_CLIENT_ID=
+# ZOHO_CLIENT_SECRET=
+# ZOHO_REFRESH_TOKEN=
+# VAPID_PUBLIC_KEY=
+# VAPID_PRIVATE_KEY=
+# VAPID_SUBJECT=mailto:blackops@reminder.app

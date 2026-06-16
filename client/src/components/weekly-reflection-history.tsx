@@ -36,10 +36,10 @@ export function WeeklyReflectionHistory({ onSelectWeek, onNewReflection }: Weekl
   });
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-400";
-    if (score >= 60) return "text-yellow-400";
-    if (score >= 40) return "text-orange-400";
-    return "text-red-400";
+    if (score >= 80) return "text-zinc-400";
+    if (score >= 60) return "text-zinc-400";
+    if (score >= 40) return "text-zinc-400";
+    return "text-zinc-400";
   };
 
   const calculateScore = (summary: WeeklySummary): number => {
@@ -88,12 +88,12 @@ export function WeeklyReflectionHistory({ onSelectWeek, onNewReflection }: Weekl
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-purple-400" />
+          <Sparkles className="w-5 h-5 text-zinc-400" />
           Historial de Reflexiones
         </h3>
         <Button
           onClick={onNewReflection}
-          className="bg-purple-600 hover:bg-purple-700"
+          className="bg-zinc-800 hover:bg-zinc-800"
           size="sm"
           data-testid="button-new-reflection"
         >
@@ -110,7 +110,7 @@ export function WeeklyReflectionHistory({ onSelectWeek, onNewReflection }: Weekl
           </p>
           <Button
             onClick={onNewReflection}
-            className="bg-purple-600 hover:bg-purple-700"
+            className="bg-zinc-800 hover:bg-zinc-800"
             data-testid="button-start-first-reflection"
           >
             Comenzar tu primera reflexión
@@ -152,35 +152,35 @@ export function WeeklyReflectionHistory({ onSelectWeek, onNewReflection }: Weekl
                           
                           <div className="flex flex-wrap gap-2">
                             {summary.completedAllTasks ? (
-                              <Badge variant="secondary" className="bg-green-900/30 text-green-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <CheckCircle2 className="w-3 h-3 mr-1" /> Tareas
                               </Badge>
                             ) : (
-                              <Badge variant="secondary" className="bg-red-900/30 text-red-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <XCircle className="w-3 h-3 mr-1" /> Tareas
                               </Badge>
                             )}
                             
                             {summary.talkedToFamily && (
-                              <Badge variant="secondary" className="bg-blue-900/30 text-blue-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <Users className="w-3 h-3 mr-1" /> Familia
                               </Badge>
                             )}
                             
                             {summary.exercisedThreePlus && (
-                              <Badge variant="secondary" className="bg-orange-900/30 text-orange-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <Dumbbell className="w-3 h-3 mr-1" /> Ejercicio
                               </Badge>
                             )}
                             
                             {summary.helpedSomeone && (
-                              <Badge variant="secondary" className="bg-pink-900/30 text-pink-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <Heart className="w-3 h-3 mr-1" /> Ayuda
                               </Badge>
                             )}
                             
                             {summary.learnedThisWeek && (
-                              <Badge variant="secondary" className="bg-purple-900/30 text-purple-400 text-xs">
+                              <Badge variant="secondary" className="bg-zinc-900/30 text-zinc-400 text-xs">
                                 <BookOpen className="w-3 h-3 mr-1" /> Aprendió
                               </Badge>
                             )}
@@ -188,7 +188,7 @@ export function WeeklyReflectionHistory({ onSelectWeek, onNewReflection }: Weekl
                           
                           {summary.nextWeekGoal && (
                             <div className="mt-2 flex items-start gap-2 text-sm text-zinc-400">
-                              <Target className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                              <Target className="w-4 h-4 text-zinc-400 mt-0.5 flex-shrink-0" />
                               <span className="line-clamp-1">{summary.nextWeekGoal}</span>
                             </div>
                           )}

@@ -1,4 +1,5 @@
 // Telegram Bot Integration for Reminders and Chat
+import { timingSafeEqual } from "node:crypto";
 
 const TELEGRAM_API = "https://api.telegram.org/bot";
 
@@ -62,6 +63,96 @@ export async function sendTelegramMessage(
   }
 }
 
+export function escapeTelegramHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function isTelegramWebhookSecretValid(expectedSecret?: string, providedSecret?: string | null): boolean {
+  if (!expectedSecret) return true;
+  if (!providedSecret) return false;
+
+  const expected = Buffer.from(expectedSecret);
+  const provided = Buffer.from(providedSecret);
+
+  if (expected.length !== provided.length) return false;
+  return timingSafeEqual(expected, provided);
+}
+
+export async function sendTelegramPlainMessage(
+  botToken: string,
+  chatId: string,
+  text: string
+): Promise<boolean> {
+  return sendTelegramMessage(botToken, chatId, escapeTelegramHtml(text));
+}
+
+export function splitTelegramText(text: string, maxLength: number): string[] {
+  if (text.length <= maxLength) return [text];
+
+  const chunks: string[] = [];
+  const paragraphs = text.split(/\n{2,}/);
+  let current = "";
+
+  for (const paragraph of paragraphs) {
+    const block = current ? `\n\n${paragraph}` : paragraph;
+    if ((current + block).length <= maxLength) {
+      current += block;
+      continue;
+    }
+
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+
+    if (paragraph.length <= maxLength) {
+      current = paragraph;
+      continue;
+    }
+
+    const lines = paragraph.split("\n");
+    for (const line of lines) {
+      const lineBlock = current ? `\n${line}` : line;
+      if ((current + lineBlock).length <= maxLength) {
+        current += lineBlock;
+        continue;
+      }
+
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+
+      for (let i = 0; i < line.length; i += maxLength) {
+        chunks.push(line.slice(i, i + maxLength));
+      }
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+export async function sendTelegramPlainMessageChunks(
+  botToken: string,
+  chatId: string,
+  text: string,
+  maxLength = 3800
+): Promise<boolean> {
+  const chunks = splitTelegramText(text, maxLength);
+  let allSent = true;
+
+  for (const chunk of chunks) {
+    const sent = await sendTelegramPlainMessage(botToken, chatId, chunk);
+    allSent = allSent && sent;
+  }
+
+  return allSent;
+}
+
 export async function getTelegramUpdates(botToken: string): Promise<any[]> {
   try {
     const response = await fetch(`${TELEGRAM_API}${botToken}/getUpdates`);
@@ -89,12 +180,17 @@ export async function validateTelegramBot(botToken: string): Promise<{ valid: bo
   }
 }
 
-export async function setTelegramWebhook(botToken: string, webhookUrl: string): Promise<boolean> {
+export async function setTelegramWebhook(botToken: string, webhookUrl: string, secretToken?: string): Promise<boolean> {
   try {
+    const payload: { url: string; secret_token?: string } = { url: webhookUrl };
+    if (secretToken) {
+      payload.secret_token = secretToken;
+    }
+
     const response = await fetch(`${TELEGRAM_API}${botToken}/setWebhook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: webhookUrl }),
+      body: JSON.stringify(payload),
     });
     const result = await response.json();
     console.log("[Telegram] Webhook set result:", result);

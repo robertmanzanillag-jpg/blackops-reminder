@@ -7,6 +7,9 @@ import { startHealthCheckScheduler } from "./health-check";
 import { startMarketNewsScheduler } from "./market-news";
 import { setupTelegramWebhook } from "./telegram-chat";
 import { storage } from "./storage";
+import { getSystemUserId, requireAppUser } from "./user-context";
+import { registerLocalAuthRoutes } from "./local-auth";
+import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 
 const app = express();
 const httpServer = createServer(app);
@@ -27,6 +30,17 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+const sessionSettings = resolveSessionRuntimeSettings();
+const sessionMiddleware = createSessionMiddleware(sessionSettings);
+if (sessionMiddleware) {
+  app.use(sessionMiddleware);
+  log(`Session auth enabled with ${sessionSettings.storeKind} store`, "auth");
+} else {
+  log("SESSION_SECRET not configured; local session auth is disabled", "auth");
+}
+
+app.use(requireAppUser);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -66,6 +80,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  registerLocalAuthRoutes(app);
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -91,19 +106,20 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.HOST || "0.0.0.0";
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
+      reusePort: host === "0.0.0.0",
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`serving on ${host}:${port}`);
       startReminderScheduler();
       startHealthCheckScheduler();
       startMarketNewsScheduler();
       
-      storage.deduplicateRecurringTasks("mock-user-123").then(removed => {
+      storage.deduplicateRecurringTasks(getSystemUserId()).then(removed => {
         if (removed > 0) {
           log(`Cleaned up ${removed} duplicate weekly tasks`, "weekly-tasks");
         }
@@ -111,7 +127,7 @@ app.use((req, res, next) => {
         log(`Failed to deduplicate weekly tasks: ${err.message}`, "weekly-tasks");
       });
 
-      storage.deduplicateMainTasks("mock-user-123").then(removed => {
+      storage.deduplicateMainTasks(getSystemUserId()).then(removed => {
         if (removed > 0) {
           log(`Cleaned up ${removed} duplicate main tasks`, "tasks");
         }

@@ -93,7 +93,7 @@ export function SwipeableTaskCard({
         className="absolute inset-y-0 left-0 flex items-center justify-start pl-4 pointer-events-none"
         style={{ opacity: deleteOpacity }}
       >
-        <div className="flex items-center gap-2 text-blue-400">
+        <div className="flex items-center gap-2 text-zinc-400">
           <Edit2 className="w-5 h-5" />
           <span className="text-sm font-medium">Editar</span>
         </div>
@@ -103,7 +103,7 @@ export function SwipeableTaskCard({
         className="absolute inset-y-0 right-0 flex items-center justify-end pr-4 pointer-events-none"
         style={{ opacity: editOpacity }}
       >
-        <div className="flex items-center gap-2 text-red-400">
+        <div className="flex items-center gap-2 text-zinc-400">
           <span className="text-sm font-medium">Borrar</span>
           <Trash2 className="w-5 h-5" />
         </div>

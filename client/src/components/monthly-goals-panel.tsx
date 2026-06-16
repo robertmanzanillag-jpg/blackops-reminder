@@ -100,7 +100,7 @@ export function MonthlyGoalsPanel() {
   return (
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-4">
-        <Target className="w-5 h-5 text-green-400" />
+        <Target className="w-5 h-5 text-zinc-400" />
         <h3 className="text-lg font-medium text-white">Metas Mensuales</h3>
       </div>
 
@@ -139,7 +139,7 @@ export function MonthlyGoalsPanel() {
                         className={cn(
                           "group flex items-center gap-3 p-2.5 rounded-lg border transition-all",
                           goal.completed
-                            ? "bg-green-950/10 border-green-900/20"
+                            ? "bg-zinc-900/10 border-white/10"
                             : "bg-zinc-800/30 border-zinc-800"
                         )}
                       >
@@ -148,8 +148,8 @@ export function MonthlyGoalsPanel() {
                           className={cn(
                             "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0",
                             goal.completed
-                              ? "bg-green-700/60 border-green-700/60 text-white"
-                              : "border-zinc-700 hover:border-green-600"
+                              ? "bg-zinc-900/60 border-white/10 text-white"
+                              : "border-zinc-700 hover:border-zinc-700"
                           )}
                           data-testid={`button-toggle-goal-${goal.id}`}
                         >
@@ -167,7 +167,7 @@ export function MonthlyGoalsPanel() {
 
                         <button
                           onClick={() => deleteMutation.mutate(goal.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-red-400/60 hover:text-red-400 rounded transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400/60 hover:text-white rounded transition-all"
                           data-testid={`button-delete-goal-${goal.id}`}
                         >
                           <Trash2 className="w-3 h-3" />
@@ -189,7 +189,7 @@ export function MonthlyGoalsPanel() {
           {/* Current month — always rendered, always interactive */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold capitalize text-green-400">
+              <span className="text-sm font-semibold capitalize text-zinc-400">
                 {format(currentMonth, "MMMM yyyy", { locale: es })}
               </span>
               {currentGoals.length > 0 && (
@@ -213,7 +213,7 @@ export function MonthlyGoalsPanel() {
                       className={cn(
                         "group flex items-center gap-3 p-2.5 rounded-lg border transition-all",
                         goal.completed
-                          ? "bg-green-950/20 border-green-900/30"
+                          ? "bg-zinc-900/20 border-white/10"
                           : "bg-zinc-800/50 border-zinc-700 hover:border-zinc-600"
                       )}
                     >
@@ -222,8 +222,8 @@ export function MonthlyGoalsPanel() {
                         className={cn(
                           "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0",
                           goal.completed
-                            ? "bg-green-500 border-green-500 text-white"
-                            : "border-zinc-600 hover:border-green-500"
+                            ? "bg-zinc-800 border-zinc-700 text-white"
+                            : "border-zinc-600 hover:border-zinc-700"
                         )}
                         data-testid={`button-toggle-goal-${goal.id}`}
                       >
@@ -241,7 +241,7 @@ export function MonthlyGoalsPanel() {
 
                       <button
                         onClick={() => deleteMutation.mutate(goal.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/10 rounded transition-all"
                         data-testid={`button-delete-goal-${goal.id}`}
                       >
                         <Trash2 className="w-3 h-3" />
@@ -257,7 +257,7 @@ export function MonthlyGoalsPanel() {
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${currentProgress}%` }}
-                  className="h-full bg-gradient-to-r from-green-600 to-green-400"
+                  className="h-full bg-gradient-to-r from-zinc-950 to-zinc-900"
                 />
               </div>
             )}
@@ -276,7 +276,7 @@ export function MonthlyGoalsPanel() {
                 type="submit"
                 size="sm"
                 disabled={!newGoal.trim() || createMutation.isPending}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-zinc-800 hover:bg-zinc-800"
                 data-testid="button-add-goal"
               >
                 <Plus className="w-4 h-4" />

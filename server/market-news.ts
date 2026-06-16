@@ -3,8 +3,6 @@ import { sendTelegramMessage } from "./telegram";
 import { getStockPrice, getCryptoPrice } from "./finance";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const MOCK_USER_ID = "mock-user-123";
-
 interface PortfolioSummary {
   totalValue: number;
   dailyChange: number;
@@ -16,8 +14,8 @@ interface PortfolioSummary {
   topLosers: { symbol: string; change: number }[];
 }
 
-async function calculatePortfolioSummary(): Promise<PortfolioSummary> {
-  const investments = await storage.getInvestments(MOCK_USER_ID);
+async function calculatePortfolioSummary(userId: string): Promise<PortfolioSummary> {
+  const investments = await storage.getInvestments(userId);
   
   let stocksValue = 0;
   let etfsValue = 0;
@@ -62,7 +60,7 @@ async function calculatePortfolioSummary(): Promise<PortfolioSummary> {
   const topGainers = sortedChanges.slice(0, 3).filter(c => c.change > 0);
   const topLosers = sortedChanges.slice(-3).reverse().filter(c => c.change < 0);
 
-  const lastSnapshot = await storage.getLatestPortfolioSnapshot(MOCK_USER_ID);
+  const lastSnapshot = await storage.getLatestPortfolioSnapshot(userId);
   const previousValue = lastSnapshot ? parseFloat(lastSnapshot.totalValue) : totalValue;
   const dailyChange = totalValue - previousValue;
   const dailyChangePercent = previousValue > 0 ? (dailyChange / previousValue) * 100 : 0;
@@ -79,9 +77,8 @@ async function calculatePortfolioSummary(): Promise<PortfolioSummary> {
   };
 }
 
-async function savePortfolioSnapshot(summary: PortfolioSummary): Promise<void> {
-  await storage.createPortfolioSnapshot(MOCK_USER_ID, {
-    userId: MOCK_USER_ID,
+async function savePortfolioSnapshot(userId: string, summary: PortfolioSummary): Promise<void> {
+  await storage.createPortfolioSnapshot(userId, {
     date: new Date(),
     totalValue: summary.totalValue.toFixed(2),
     stocksValue: summary.stocksValue.toFixed(2),
@@ -92,53 +89,65 @@ async function savePortfolioSnapshot(summary: PortfolioSummary): Promise<void> {
   });
 }
 
+async function sendDailyMarketUpdateForUser(userId: string): Promise<boolean> {
+  const telegramConfig = await storage.getTelegramConfig(userId);
+  if (!telegramConfig?.enabled) {
+    console.log(`[Market] Telegram not configured or disabled for ${userId}, skipping market update`);
+    return false;
+  }
+
+  const summary = await calculatePortfolioSummary(userId);
+  await savePortfolioSnapshot(userId, summary);
+
+  const changeEmoji = summary.dailyChange >= 0 ? "📈" : "📉";
+  const changeSign = summary.dailyChange >= 0 ? "+" : "";
+
+  let message = `📊 *RESUMEN DIARIO DE MERCADO*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  message += `💰 *Tu Portafolio*\n`;
+  message += `Total: *$${summary.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n`;
+  message += `${changeEmoji} Cambio: ${changeSign}$${summary.dailyChange.toFixed(2)} (${changeSign}${summary.dailyChangePercent.toFixed(2)}%)\n\n`;
+
+  message += `📊 *Distribución*\n`;
+  message += `• Acciones: $${summary.stocksValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n`;
+  message += `• ETFs: $${summary.etfsValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n`;
+  message += `• Crypto: $${summary.cryptoValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n\n`;
+
+  if (summary.topGainers.length > 0) {
+    message += `🟢 *Top Ganadores*\n`;
+    summary.topGainers.forEach(g => {
+      message += `• ${g.symbol}: +${g.change.toFixed(2)}%\n`;
+    });
+    message += `\n`;
+  }
+
+  if (summary.topLosers.length > 0) {
+    message += `🔴 *Top Perdedores*\n`;
+    summary.topLosers.forEach(l => {
+      message += `• ${l.symbol}: ${l.change.toFixed(2)}%\n`;
+    });
+    message += `\n`;
+  }
+
+  message += `⏰ ${new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "short" })}`;
+
+  await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+  console.log(`[Market] Daily market update sent successfully for ${userId}`);
+  return true;
+}
+
 async function sendDailyMarketUpdate(): Promise<void> {
   try {
-    const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
-    if (!telegramConfig?.enabled) {
-      console.log("Telegram not configured or disabled, skipping market update");
+    const telegramConfigs = await storage.getEnabledTelegramConfigs();
+    const userIds = Array.from(new Set(telegramConfigs.map((config) => config.userId)));
+    if (userIds.length === 0) {
+      console.log("[Market] No enabled Telegram users, skipping market update");
       return;
     }
 
-    const summary = await calculatePortfolioSummary();
-    
-    await savePortfolioSnapshot(summary);
-
-    const changeEmoji = summary.dailyChange >= 0 ? "📈" : "📉";
-    const changeSign = summary.dailyChange >= 0 ? "+" : "";
-
-    let message = `📊 *RESUMEN DIARIO DE MERCADO*\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
-    message += `💰 *Tu Portafolio*\n`;
-    message += `Total: *$${summary.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n`;
-    message += `${changeEmoji} Cambio: ${changeSign}$${summary.dailyChange.toFixed(2)} (${changeSign}${summary.dailyChangePercent.toFixed(2)}%)\n\n`;
-
-    message += `📊 *Distribución*\n`;
-    message += `• Acciones: $${summary.stocksValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n`;
-    message += `• ETFs: $${summary.etfsValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n`;
-    message += `• Crypto: $${summary.cryptoValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n\n`;
-
-    if (summary.topGainers.length > 0) {
-      message += `🟢 *Top Ganadores*\n`;
-      summary.topGainers.forEach(g => {
-        message += `• ${g.symbol}: +${g.change.toFixed(2)}%\n`;
-      });
-      message += `\n`;
-    }
-
-    if (summary.topLosers.length > 0) {
-      message += `🔴 *Top Perdedores*\n`;
-      summary.topLosers.forEach(l => {
-        message += `• ${l.symbol}: ${l.change.toFixed(2)}%\n`;
-      });
-      message += `\n`;
-    }
-
-    message += `⏰ ${new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "short" })}`;
-
-    await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
-    console.log("Daily market update sent successfully");
+    const results = await Promise.all(userIds.map((userId) => sendDailyMarketUpdateForUser(userId)));
+    console.log(`[Market] Daily market update processed for ${userIds.length} user(s), sent ${results.filter(Boolean).length}`);
   } catch (error) {
     console.error("Error sending daily market update:", error);
   }
@@ -168,4 +177,4 @@ export function startMarketNewsScheduler(): void {
   scheduleAt(12, 0, sendDailyMarketUpdate);
 }
 
-export { sendDailyMarketUpdate, calculatePortfolioSummary };
+export { sendDailyMarketUpdate, sendDailyMarketUpdateForUser, calculatePortfolioSummary };

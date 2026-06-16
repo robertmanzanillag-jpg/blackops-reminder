@@ -147,7 +147,7 @@ export function TaskEditDialog({
               id="isRecurring"
               checked={isRecurring}
               onCheckedChange={(v) => setIsRecurring(v === true)}
-              className="border-zinc-600 data-[state=checked]:bg-blue-600"
+              className="border-zinc-600 data-[state=checked]:bg-zinc-800"
               data-testid="checkbox-task-recurring"
             />
             <label htmlFor="isRecurring" className="text-sm text-zinc-400 cursor-pointer flex items-center gap-1">

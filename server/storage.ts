@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type AgentAction, type InsertAgentAction, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
+import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, agentActions as agentActionsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
+import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
 import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -28,12 +28,14 @@ export interface IStorage {
   // Monthly Goals operations
   getMonthlyGoals(userId: string, month: Date): Promise<MonthlyGoal[]>;
   getAllMonthlyGoals(userId: string): Promise<MonthlyGoal[]>;
+  getMonthlyGoal(id: string): Promise<MonthlyGoal | undefined>;
   createMonthlyGoal(userId: string, goal: InsertMonthlyGoal): Promise<MonthlyGoal>;
   updateMonthlyGoal(id: string, updates: Partial<InsertMonthlyGoal>): Promise<MonthlyGoal>;
   deleteMonthlyGoal(id: string): Promise<void>;
 
   // Yearly Goals operations
   getYearlyGoals(userId: string, year: string): Promise<YearlyGoal[]>;
+  getYearlyGoal(id: string): Promise<YearlyGoal | undefined>;
   createYearlyGoal(userId: string, goal: InsertYearlyGoal): Promise<YearlyGoal>;
   updateYearlyGoal(id: string, updates: Partial<InsertYearlyGoal>): Promise<YearlyGoal>;
   deleteYearlyGoal(id: string): Promise<void>;
@@ -56,6 +58,8 @@ export interface IStorage {
 
   // Telegram Config operations
   getTelegramConfig(userId: string): Promise<TelegramConfig | undefined>;
+  getTelegramConfigByChatId(chatId: string): Promise<TelegramConfig | undefined>;
+  getEnabledTelegramConfigs(): Promise<TelegramConfig[]>;
   saveTelegramConfig(userId: string, chatId: string): Promise<TelegramConfig>;
   updateTelegramConfig(userId: string, enabled: boolean): Promise<TelegramConfig | undefined>;
   deleteTelegramConfig(userId: string): Promise<void>;
@@ -77,11 +81,13 @@ export interface IStorage {
 
   // Watchlist operations
   getWatchlist(userId: string): Promise<WatchlistItem[]>;
+  getWatchlistItem(id: string): Promise<WatchlistItem | undefined>;
   addToWatchlist(userId: string, item: InsertWatchlistItem): Promise<WatchlistItem>;
   removeFromWatchlist(id: string): Promise<void>;
 
   // Price Alert operations
   getPriceAlerts(userId: string): Promise<PriceAlert[]>;
+  getPriceAlert(id: string): Promise<PriceAlert | undefined>;
   createPriceAlert(userId: string, alert: InsertPriceAlert): Promise<PriceAlert>;
   updatePriceAlert(id: string, updates: Partial<InsertPriceAlert>): Promise<PriceAlert>;
   deletePriceAlert(id: string): Promise<void>;
@@ -112,6 +118,24 @@ export interface IStorage {
   createIncident(incident: InsertIncident): Promise<Incident>;
   resolveIncident(id: string): Promise<Incident>;
 
+  // Developer Health Center operations
+  getAppProjects(userId: string): Promise<AppProject[]>;
+  getAppProject(id: string): Promise<AppProject | undefined>;
+  createAppProject(userId: string, project: InsertAppProject): Promise<AppProject>;
+  updateAppProject(id: string, updates: Partial<AppProject>): Promise<AppProject>;
+  getAppHealthChecks(appProjectId: string, limit?: number): Promise<AppHealthCheck[]>;
+  createAppHealthCheck(check: InsertAppHealthCheck): Promise<AppHealthCheck>;
+  getAppIncidents(userId: string, status?: string): Promise<AppIncident[]>;
+  getAppIncidentsForProject(appProjectId: string): Promise<AppIncident[]>;
+  getAppIncident(id: string): Promise<AppIncident | undefined>;
+  createAppIncident(incident: InsertAppIncident): Promise<AppIncident>;
+  updateAppIncident(id: string, updates: Partial<AppIncident>): Promise<AppIncident>;
+  getAppErrorEvents(appProjectId: string, limit?: number): Promise<AppErrorEvent[]>;
+  getAppErrorEventsForIncident(incidentId: string): Promise<AppErrorEvent[]>;
+  createAppErrorEvent(event: InsertAppErrorEvent): Promise<AppErrorEvent>;
+  getAppDailyReports(appProjectId: string, limit?: number): Promise<AppDailyReport[]>;
+  createAppDailyReport(report: InsertAppDailyReport): Promise<AppDailyReport>;
+
   // Portfolio History operations
   getPortfolioHistory(userId: string, days?: number): Promise<PortfolioHistory[]>;
   createPortfolioSnapshot(userId: string, snapshot: InsertPortfolioHistory): Promise<PortfolioHistory>;
@@ -130,6 +154,27 @@ export interface IStorage {
   getPendingAgentActions(userId: string): Promise<AgentAction[]>;
   createAgentAction(userId: string, action: InsertAgentAction): Promise<AgentAction>;
   updateAgentAction(id: string, updates: Partial<AgentAction>): Promise<AgentAction>;
+
+  // Trust & Control operations
+  getAuditLogs(userId: string, limit?: number): Promise<AuditLog[]>;
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getPendingActions(userId: string): Promise<PendingAction[]>;
+  getPendingAction(id: string): Promise<PendingAction | undefined>;
+  createPendingAction(userId: string, action: InsertPendingAction): Promise<PendingAction>;
+  updatePendingAction(id: string, updates: Partial<PendingAction>): Promise<PendingAction>;
+  getPendingActionEvents(pendingActionId: string): Promise<PendingActionEvent[]>;
+  getApprovalHistory(userId: string, limit?: number): Promise<PendingActionEvent[]>;
+  createPendingActionEvent(event: InsertPendingActionEvent): Promise<PendingActionEvent>;
+  getAssistantPermissions(userId: string): Promise<AssistantPermission[]>;
+  upsertAssistantPermission(userId: string, permission: InsertAssistantPermission): Promise<AssistantPermission>;
+
+  // Automation Manager operations
+  getAutomationDefinitions(userId: string): Promise<AutomationDefinition[]>;
+  getAutomationDefinition(id: string): Promise<AutomationDefinition | undefined>;
+  createAutomationDefinition(userId: string, automation: InsertAutomationDefinition): Promise<AutomationDefinition>;
+  updateAutomationDefinition(id: string, updates: Partial<AutomationDefinition>): Promise<AutomationDefinition>;
+  getAutomationRuns(userId: string, automationId?: string, limit?: number): Promise<AutomationRun[]>;
+  createAutomationRun(run: InsertAutomationRun): Promise<AutomationRun>;
 
   // DJ Message Template operations
   getDjMessageTemplates(userId: string): Promise<DjMessageTemplate[]>;
@@ -381,6 +426,15 @@ export class DatabaseStorage implements IStorage {
     return newGoal;
   }
 
+  async getMonthlyGoal(id: string): Promise<MonthlyGoal | undefined> {
+    const result = await db
+      .select()
+      .from(monthlyGoalsTable)
+      .where(eq(monthlyGoalsTable.id, id))
+      .limit(1);
+    return result[0];
+  }
+
   async updateMonthlyGoal(id: string, updates: Partial<InsertMonthlyGoal>): Promise<MonthlyGoal> {
     await db
       .update(monthlyGoalsTable)
@@ -426,6 +480,15 @@ export class DatabaseStorage implements IStorage {
     };
     await db.insert(yearlyGoalsTable).values(newGoal);
     return newGoal;
+  }
+
+  async getYearlyGoal(id: string): Promise<YearlyGoal | undefined> {
+    const result = await db
+      .select()
+      .from(yearlyGoalsTable)
+      .where(eq(yearlyGoalsTable.id, id))
+      .limit(1);
+    return result[0];
   }
 
   async updateYearlyGoal(id: string, updates: Partial<InsertYearlyGoal>): Promise<YearlyGoal> {
@@ -617,7 +680,28 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getTelegramConfigByChatId(chatId: string): Promise<TelegramConfig | undefined> {
+    const result = await db
+      .select()
+      .from(telegramConfigTable)
+      .where(eq(telegramConfigTable.chatId, chatId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getEnabledTelegramConfigs(): Promise<TelegramConfig[]> {
+    return db
+      .select()
+      .from(telegramConfigTable)
+      .where(eq(telegramConfigTable.enabled, true));
+  }
+
   async saveTelegramConfig(userId: string, chatId: string): Promise<TelegramConfig> {
+    const existingForChat = await this.getTelegramConfigByChatId(chatId);
+    if (existingForChat && existingForChat.userId !== userId) {
+      await db.delete(telegramConfigTable).where(eq(telegramConfigTable.userId, existingForChat.userId));
+    }
+
     const existing = await this.getTelegramConfig(userId);
     if (existing) {
       const [updated] = await db
@@ -799,6 +883,15 @@ export class DatabaseStorage implements IStorage {
     return newItem as WatchlistItem;
   }
 
+  async getWatchlistItem(id: string): Promise<WatchlistItem | undefined> {
+    const result = await db
+      .select()
+      .from(watchlistTable)
+      .where(eq(watchlistTable.id, id))
+      .limit(1);
+    return result[0];
+  }
+
   async removeFromWatchlist(id: string): Promise<void> {
     await db.delete(watchlistTable).where(eq(watchlistTable.id, id));
   }
@@ -829,6 +922,15 @@ export class DatabaseStorage implements IStorage {
     };
     await db.insert(priceAlertsTable).values(newAlert);
     return newAlert as PriceAlert;
+  }
+
+  async getPriceAlert(id: string): Promise<PriceAlert | undefined> {
+    const result = await db
+      .select()
+      .from(priceAlertsTable)
+      .where(eq(priceAlertsTable.id, id))
+      .limit(1);
+    return result[0];
   }
 
   async updatePriceAlert(id: string, updates: Partial<InsertPriceAlert>): Promise<PriceAlert> {
@@ -1065,6 +1167,190 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // ==================== DEVELOPER HEALTH CENTER ====================
+
+  async getAppProjects(userId: string): Promise<AppProject[]> {
+    return await db
+      .select()
+      .from(appProjectsTable)
+      .where(eq(appProjectsTable.userId, userId))
+      .orderBy(desc(appProjectsTable.updatedAt));
+  }
+
+  async getAppProject(id: string): Promise<AppProject | undefined> {
+    const [result] = await db.select().from(appProjectsTable).where(eq(appProjectsTable.id, id)).limit(1);
+    return result;
+  }
+
+  async createAppProject(userId: string, project: InsertAppProject): Promise<AppProject> {
+    const id = randomUUID();
+    const now = new Date();
+    const newProject = {
+      ...project,
+      id,
+      userId,
+      description: project.description || null,
+      publicUrl: project.publicUrl || null,
+      healthUrl: project.healthUrl || null,
+      repoOwner: project.repoOwner || null,
+      repoName: project.repoName || null,
+      githubRepo: project.githubRepo || null,
+      deploymentProvider: project.deploymentProvider || null,
+      deploymentId: project.deploymentId || null,
+      sentryProjectId: project.sentryProjectId || null,
+      stripeAccountId: project.stripeAccountId || null,
+      stripeWebhookEndpointId: project.stripeWebhookEndpointId || null,
+      logSource: project.logSource || null,
+      status: "unknown" as const,
+      priority: project.priority || "normal",
+      ownerLabel: project.ownerLabel || null,
+      tags: project.tags || null,
+      lastSeenAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(appProjectsTable).values(newProject);
+    return newProject as AppProject;
+  }
+
+  async updateAppProject(id: string, updates: Partial<AppProject>): Promise<AppProject> {
+    const [updated] = await db
+      .update(appProjectsTable)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(appProjectsTable.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getAppHealthChecks(appProjectId: string, limit = 100): Promise<AppHealthCheck[]> {
+    return await db
+      .select()
+      .from(appHealthChecksTable)
+      .where(eq(appHealthChecksTable.appProjectId, appProjectId))
+      .orderBy(desc(appHealthChecksTable.checkedAt))
+      .limit(limit);
+  }
+
+  async createAppHealthCheck(check: InsertAppHealthCheck): Promise<AppHealthCheck> {
+    const id = randomUUID();
+    const newCheck = { ...check, id, checkedAt: new Date() };
+    await db.insert(appHealthChecksTable).values(newCheck);
+    return newCheck as AppHealthCheck;
+  }
+
+  async getAppIncidents(userId: string, status?: string): Promise<AppIncident[]> {
+    const projects = await this.getAppProjects(userId);
+    const projectIds = new Set(projects.map((project) => project.id));
+    const incidents = await db.select().from(appIncidentsTable).orderBy(desc(appIncidentsTable.lastSeenAt));
+    return incidents.filter((incident) => projectIds.has(incident.appProjectId) && (!status || incident.status === status));
+  }
+
+  async getAppIncidentsForProject(appProjectId: string): Promise<AppIncident[]> {
+    return await db
+      .select()
+      .from(appIncidentsTable)
+      .where(eq(appIncidentsTable.appProjectId, appProjectId))
+      .orderBy(desc(appIncidentsTable.lastSeenAt));
+  }
+
+  async getAppIncident(id: string): Promise<AppIncident | undefined> {
+    const [result] = await db.select().from(appIncidentsTable).where(eq(appIncidentsTable.id, id)).limit(1);
+    return result;
+  }
+
+  async createAppIncident(incident: InsertAppIncident): Promise<AppIncident> {
+    const id = randomUUID();
+    const now = new Date();
+    const newIncident = {
+      ...incident,
+      id,
+      summary: incident.summary || null,
+      fingerprint: incident.fingerprint || null,
+      resolvedAt: null,
+      durationSeconds: null,
+      relatedErrorEventId: incident.relatedErrorEventId || null,
+      relatedPendingActionId: incident.relatedPendingActionId || null,
+      relatedPrUrl: incident.relatedPrUrl || null,
+      metadata: incident.metadata || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(appIncidentsTable).values(newIncident);
+    return newIncident as AppIncident;
+  }
+
+  async updateAppIncident(id: string, updates: Partial<AppIncident>): Promise<AppIncident> {
+    const [updated] = await db
+      .update(appIncidentsTable)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(appIncidentsTable.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getAppErrorEvents(appProjectId: string, limit = 100): Promise<AppErrorEvent[]> {
+    return await db
+      .select()
+      .from(appErrorEventsTable)
+      .where(eq(appErrorEventsTable.appProjectId, appProjectId))
+      .orderBy(desc(appErrorEventsTable.lastSeenAt))
+      .limit(limit);
+  }
+
+  async getAppErrorEventsForIncident(incidentId: string): Promise<AppErrorEvent[]> {
+    return await db
+      .select()
+      .from(appErrorEventsTable)
+      .where(eq(appErrorEventsTable.incidentId, incidentId))
+      .orderBy(desc(appErrorEventsTable.lastSeenAt));
+  }
+
+  async createAppErrorEvent(event: InsertAppErrorEvent): Promise<AppErrorEvent> {
+    const id = randomUUID();
+    const newEvent = {
+      ...event,
+      id,
+      incidentId: event.incidentId || null,
+      eventKey: event.eventKey || null,
+      fingerprint: event.fingerprint || null,
+      message: event.message || null,
+      stacktrace: event.stacktrace || null,
+      requestMethod: event.requestMethod || null,
+      requestPath: event.requestPath || null,
+      statusCode: event.statusCode || null,
+      userImpact: event.userImpact || null,
+      metadata: event.metadata || null,
+      createdAt: new Date(),
+    };
+    await db.insert(appErrorEventsTable).values(newEvent);
+    return newEvent as AppErrorEvent;
+  }
+
+  async getAppDailyReports(appProjectId: string, limit = 30): Promise<AppDailyReport[]> {
+    return await db
+      .select()
+      .from(appDailyReportsTable)
+      .where(eq(appDailyReportsTable.appProjectId, appProjectId))
+      .orderBy(desc(appDailyReportsTable.reportDate))
+      .limit(limit);
+  }
+
+  async createAppDailyReport(report: InsertAppDailyReport): Promise<AppDailyReport> {
+    const id = randomUUID();
+    const now = new Date();
+    const newReport = {
+      ...report,
+      id,
+      uptimePercentage: report.uptimePercentage || null,
+      summary: report.summary || null,
+      recommendations: report.recommendations || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(appDailyReportsTable).values(newReport);
+    return newReport as AppDailyReport;
+  }
+
   async getPortfolioHistory(userId: string, days: number = 30): Promise<PortfolioHistory[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -1186,6 +1472,258 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(agentActionsTable).where(eq(agentActionsTable.id, id)).limit(1);
     if (!result[0]) throw new Error("Agent Action not found");
     return result[0];
+  }
+
+  // Trust & Control operations
+  async getAuditLogs(userId: string, limit = 100): Promise<AuditLog[]> {
+    return db
+      .select()
+      .from(auditLogsTable)
+      .where(eq(auditLogsTable.userId, userId))
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(limit);
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const id = randomUUID();
+    const newLog = {
+      ...log,
+      id,
+      actorId: log.actorId || null,
+      resourceType: log.resourceType || null,
+      resourceId: log.resourceId || null,
+      requestId: log.requestId || null,
+      pendingActionId: log.pendingActionId || null,
+      metadata: log.metadata || null,
+      errorMessage: log.errorMessage || null,
+      createdAt: new Date(),
+    };
+    await db.insert(auditLogsTable).values(newLog);
+    return newLog as AuditLog;
+  }
+
+  async getPendingActions(userId: string): Promise<PendingAction[]> {
+    return db
+      .select()
+      .from(pendingActionsTable)
+      .where(eq(pendingActionsTable.userId, userId))
+      .orderBy(desc(pendingActionsTable.createdAt));
+  }
+
+  async getPendingAction(id: string): Promise<PendingAction | undefined> {
+    const result = await db.select().from(pendingActionsTable).where(eq(pendingActionsTable.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createPendingAction(userId: string, action: InsertPendingAction): Promise<PendingAction> {
+    const id = randomUUID();
+    const newAction = {
+      ...action,
+      id,
+      userId,
+      createdByActorId: action.createdByActorId || null,
+      resourceId: action.resourceId || null,
+      riskLevel: action.riskLevel || "medium",
+      permissionLevelRequired: action.permissionLevelRequired || "execute_after_approval",
+      status: "pending" as const,
+      input: action.input || null,
+      proposedChanges: action.proposedChanges || null,
+      editedInput: null,
+      executionResult: null,
+      approvalReason: null,
+      rejectionReason: null,
+      snoozedUntil: null,
+      expiresAt: action.expiresAt || null,
+      approvedBy: null,
+      approvedAt: null,
+      executedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.insert(pendingActionsTable).values(newAction);
+    await db.insert(pendingActionEventsTable).values({
+      id: randomUUID(),
+      pendingActionId: id,
+      userId,
+      actorType: action.createdByActorType,
+      actorId: action.createdByActorId || null,
+      eventType: "created",
+      previousStatus: null,
+      nextStatus: "pending",
+      note: null,
+      metadata: {
+        actionType: action.actionType,
+        resourceType: action.resourceType,
+        resourceId: action.resourceId || null,
+        riskLevel: newAction.riskLevel,
+        permissionLevelRequired: newAction.permissionLevelRequired,
+      },
+      createdAt: new Date(),
+    });
+    return newAction as PendingAction;
+  }
+
+  async updatePendingAction(id: string, updates: Partial<PendingAction>): Promise<PendingAction> {
+    await db.update(pendingActionsTable).set({ ...updates, updatedAt: new Date() }).where(eq(pendingActionsTable.id, id));
+    const result = await db.select().from(pendingActionsTable).where(eq(pendingActionsTable.id, id)).limit(1);
+    if (!result[0]) throw new Error("Pending Action not found");
+    return result[0];
+  }
+
+  async getPendingActionEvents(pendingActionId: string): Promise<PendingActionEvent[]> {
+    return db
+      .select()
+      .from(pendingActionEventsTable)
+      .where(eq(pendingActionEventsTable.pendingActionId, pendingActionId))
+      .orderBy(desc(pendingActionEventsTable.createdAt));
+  }
+
+  async getApprovalHistory(userId: string, limit = 100): Promise<PendingActionEvent[]> {
+    return db
+      .select()
+      .from(pendingActionEventsTable)
+      .where(eq(pendingActionEventsTable.userId, userId))
+      .orderBy(desc(pendingActionEventsTable.createdAt))
+      .limit(limit);
+  }
+
+  async createPendingActionEvent(event: InsertPendingActionEvent): Promise<PendingActionEvent> {
+    const id = randomUUID();
+    const newEvent = {
+      ...event,
+      id,
+      actorId: event.actorId || null,
+      previousStatus: event.previousStatus || null,
+      nextStatus: event.nextStatus || null,
+      note: event.note || null,
+      metadata: event.metadata || null,
+      createdAt: new Date(),
+    };
+    await db.insert(pendingActionEventsTable).values(newEvent);
+    return newEvent as PendingActionEvent;
+  }
+
+  async getAssistantPermissions(userId: string): Promise<AssistantPermission[]> {
+    return db.select().from(assistantPermissionsTable).where(eq(assistantPermissionsTable.userId, userId));
+  }
+
+  async upsertAssistantPermission(userId: string, permission: InsertAssistantPermission): Promise<AssistantPermission> {
+    const existing = await db
+      .select()
+      .from(assistantPermissionsTable)
+      .where(and(eq(assistantPermissionsTable.userId, userId), eq(assistantPermissionsTable.scope, permission.scope)))
+      .limit(1);
+
+    if (existing[0]) {
+      await db
+        .update(assistantPermissionsTable)
+        .set({ ...permission, updatedAt: new Date() })
+        .where(eq(assistantPermissionsTable.id, existing[0].id));
+      const result = await db.select().from(assistantPermissionsTable).where(eq(assistantPermissionsTable.id, existing[0].id)).limit(1);
+      return result[0];
+    }
+
+    const id = randomUUID();
+    const newPermission = {
+      ...permission,
+      id,
+      userId,
+      permissionLevel: permission.permissionLevel || "execute_after_approval",
+      riskLimit: permission.riskLimit || "medium",
+      enabled: permission.enabled ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.insert(assistantPermissionsTable).values(newPermission);
+    return newPermission as AssistantPermission;
+  }
+
+  // Automation Manager operations
+  async getAutomationDefinitions(userId: string): Promise<AutomationDefinition[]> {
+    return db
+      .select()
+      .from(automationDefinitionsTable)
+      .where(eq(automationDefinitionsTable.ownerUserId, userId))
+      .orderBy(desc(automationDefinitionsTable.updatedAt));
+  }
+
+  async getAutomationDefinition(id: string): Promise<AutomationDefinition | undefined> {
+    const result = await db.select().from(automationDefinitionsTable).where(eq(automationDefinitionsTable.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createAutomationDefinition(userId: string, automation: InsertAutomationDefinition): Promise<AutomationDefinition> {
+    const id = randomUUID();
+    const newAutomation = {
+      ...automation,
+      id,
+      ownerUserId: userId,
+      description: automation.description || null,
+      assignedAgentId: automation.assignedAgentId || null,
+      schedule: automation.schedule || null,
+      timezone: automation.timezone || "America/New_York",
+      status: automation.status || "active",
+      permissionLevel: automation.permissionLevel || "execute_after_approval",
+      requiresApproval: automation.requiresApproval ?? false,
+      nextRunAt: automation.nextRunAt || null,
+      lastRunAt: null,
+      lastStatus: null,
+      failureCount: 0,
+      costEstimate: automation.costEstimate || null,
+      metadata: automation.metadata || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.insert(automationDefinitionsTable).values(newAutomation);
+    return newAutomation as AutomationDefinition;
+  }
+
+  async updateAutomationDefinition(id: string, updates: Partial<AutomationDefinition>): Promise<AutomationDefinition> {
+    await db.update(automationDefinitionsTable).set({ ...updates, updatedAt: new Date() }).where(eq(automationDefinitionsTable.id, id));
+    const result = await db.select().from(automationDefinitionsTable).where(eq(automationDefinitionsTable.id, id)).limit(1);
+    if (!result[0]) throw new Error("Automation definition not found");
+    return result[0];
+  }
+
+  async getAutomationRuns(userId: string, automationId?: string, limit = 100): Promise<AutomationRun[]> {
+    const whereClause = automationId
+      ? and(eq(automationRunsTable.ownerUserId, userId), eq(automationRunsTable.automationId, automationId))
+      : eq(automationRunsTable.ownerUserId, userId);
+
+    return db
+      .select()
+      .from(automationRunsTable)
+      .where(whereClause)
+      .orderBy(desc(automationRunsTable.startedAt))
+      .limit(limit);
+  }
+
+  async createAutomationRun(run: InsertAutomationRun): Promise<AutomationRun> {
+    const id = randomUUID();
+    const newRun = {
+      ...run,
+      id,
+      finishedAt: run.finishedAt || null,
+      resultSummary: run.resultSummary || null,
+      errorMessage: run.errorMessage || null,
+      costEstimate: run.costEstimate || null,
+      pendingActionId: run.pendingActionId || null,
+      auditLogId: run.auditLogId || null,
+      metadata: run.metadata || null,
+      createdAt: new Date(),
+    };
+    await db.insert(automationRunsTable).values(newRun);
+
+    await db.update(automationDefinitionsTable)
+      .set({
+        lastRunAt: run.startedAt,
+        lastStatus: run.status,
+        failureCount: run.status === "failed" ? sql`${automationDefinitionsTable.failureCount} + 1` : 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(automationDefinitionsTable.id, run.automationId));
+
+    return newRun as AutomationRun;
   }
 
   // DJ Message Template operations

@@ -1,8 +1,24 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bot, Send, Loader2, Sparkles, MessageSquare, Trash2, ImagePlus, X, ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  ImagePlus,
+  Loader2,
+  MessageSquare,
+  Plus,
+  Send,
+  Sparkles,
+  Trash2,
+  Upload,
+  Wallet,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -14,13 +30,33 @@ interface Message {
   images?: string[];
 }
 
-const SUGGESTIONS = [
-  "¿Qué tengo hoy?",
-  "Cuéntame qué sabes de mí",
-  "Analiza mi portafolio",
-  "¿Qué jueves tengo libre?",
-  "¿Cómo va mi cartera?",
-  "Resumen de la semana",
+const QUICK_ACTIONS = [
+  { label: "Que tengo hoy", prompt: "Que tengo hoy?", icon: CalendarDays },
+  { label: "Crear tarea", prompt: "Ayudame a crear una tarea para hoy", icon: Plus },
+  { label: "Resumen semanal", prompt: "Hazme un resumen de mi semana", icon: CheckCircle2 },
+  { label: "Portafolio", prompt: "Como va mi cartera?", icon: Wallet },
+  { label: "Subir imagen", prompt: "", icon: Upload, upload: true },
+];
+
+const CONTEXT_CARDS = [
+  {
+    icon: CalendarDays,
+    label: "Agenda",
+    value: "Calendario y tareas",
+    detail: "Pregunta por huecos, eventos o pendientes.",
+  },
+  {
+    icon: Brain,
+    label: "Memoria",
+    value: "Datos personales",
+    detail: "Recuerda preferencias, metas y contexto.",
+  },
+  {
+    icon: Wallet,
+    label: "Finanzas",
+    value: "Portafolio",
+    detail: "Analiza posiciones, capturas y movimientos.",
+  },
 ];
 
 export default function AssistantPage() {
@@ -33,16 +69,18 @@ export default function AssistantPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, isLoading]);
 
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+    inputRef.current.style.height = "0px";
+    inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 160)}px`;
+  }, [input]);
 
   const clearChat = () => {
     setMessages([]);
@@ -55,32 +93,31 @@ export default function AssistantPage() {
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          const canvas = document.createElement('canvas');
+          const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          
+
           if (width > maxWidth) {
             height = (height * maxWidth) / width;
             width = maxWidth;
           }
-          
+
           canvas.width = width;
           canvas.height = height;
-          
-          const ctx = canvas.getContext('2d');
+
+          const ctx = canvas.getContext("2d");
           if (!ctx) {
-            reject(new Error('Could not get canvas context'));
+            reject(new Error("Could not get canvas context"));
             return;
           }
-          
+
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-          resolve(compressedDataUrl);
+          resolve(canvas.toDataURL("image/jpeg", quality));
         };
-        img.onerror = () => reject(new Error('Failed to load image'));
+        img.onerror = () => reject(new Error("Failed to load image"));
         img.src = e.target?.result as string;
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsDataURL(file);
     });
   };
@@ -91,39 +128,29 @@ export default function AssistantPage() {
 
     const validFiles = Array.from(files).filter((file) => {
       if (file.size > 20 * 1024 * 1024) {
-        alert(`La imagen ${file.name} es muy grande. Máximo 20MB.`);
+        alert(`La imagen ${file.name} es muy grande. Maximo 20MB.`);
         return false;
       }
       return true;
     });
 
-    if (validFiles.length === 0) {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
     const newImages: string[] = [];
-    
     for (const file of validFiles) {
       try {
-        const compressed = await compressImage(file);
-        newImages.push(compressed);
+        newImages.push(await compressImage(file));
       } catch (err) {
-        console.error('Error compressing image:', err);
+        console.error("Error compressing image:", err);
       }
     }
-    
+
     if (newImages.length > 0) {
-      setSelectedImages(prev => [...prev, ...newImages]);
+      setSelectedImages((prev) => [...prev, ...newImages]);
     }
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removeImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const sendMessage = async (messageText?: string) => {
@@ -134,30 +161,37 @@ export default function AssistantPage() {
     const currentImages = [...selectedImages];
     setInput("");
     setSelectedImages([]);
-    
-    const imageCountText = currentImages.length > 1 
-      ? `📷 ${currentImages.length} imágenes adjuntas` 
-      : currentImages.length === 1 ? "📷 Imagen adjunta" : "";
-    
-    setMessages((prev) => [...prev, { 
-      role: "user", 
-      content: userMessage || imageCountText || "📷 Analiza estas imágenes", 
-      timestamp: new Date(),
-      images: currentImages.length > 0 ? currentImages : undefined
-    }]);
+
+    const imageCountText =
+      currentImages.length > 1
+        ? `${currentImages.length} imagenes adjuntas`
+        : currentImages.length === 1
+          ? "Imagen adjunta"
+          : "";
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: userMessage || imageCountText || "Analiza estas imagenes",
+        timestamp: new Date(),
+        images: currentImages.length > 0 ? currentImages : undefined,
+      },
+    ]);
     setIsLoading(true);
 
     try {
-      const defaultMessage = currentImages.length > 1 
-        ? `Analiza estas ${currentImages.length} imágenes de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio.`
-        : "Analiza esta imagen de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio.";
-      
+      const defaultMessage =
+        currentImages.length > 1
+          ? `Analiza estas ${currentImages.length} imagenes de mi broker/cartera y extrae la informacion de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agregalas a mi portafolio.`
+          : "Analiza esta imagen de mi broker/cartera y extrae la informacion de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agregalas a mi portafolio.";
+
       const response = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage || defaultMessage,
-          conversationHistory: historyBeforeSend.map(m => ({ role: m.role, content: m.content })),
+          conversationHistory: historyBeforeSend.map((m) => ({ role: m.role, content: m.content })),
           images: currentImages.length > 0 ? currentImages : undefined,
         }),
       });
@@ -195,9 +229,28 @@ export default function AssistantPage() {
                   return updated;
                 });
               }
-              if (data.taskCreated || data.radioUpdated || data.googleEventCreated || data.investmentCreated || data.investmentUpdated) {
+              if (
+                data.taskCreated ||
+                data.radioUpdated ||
+                data.googleEventCreated ||
+                data.investmentCreated ||
+                data.investmentUpdated
+              ) {
                 queryClient.invalidateQueries({ queryKey: ["tasks"] });
                 queryClient.invalidateQueries({ queryKey: ["investments"] });
+              }
+              if (data.approvalRequired && data.pendingAction) {
+                assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Revisa approvals para aprobarlo o ejecutarlo.`;
+                queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
               }
             } catch (e) {}
           }
@@ -207,7 +260,11 @@ export default function AssistantPage() {
       console.error("Error sending message:", error);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Error al procesar tu mensaje. Intenta de nuevo.", timestamp: new Date() },
+        {
+          role: "assistant",
+          content: "No pude procesar eso ahora mismo. Revisa la conexion o intenta enviarlo otra vez en unos segundos.",
+          timestamp: new Date(),
+        },
       ]);
     } finally {
       setIsLoading(false);
@@ -227,233 +284,278 @@ export default function AssistantPage() {
 
   const formatContent = (content: string) => {
     return content
-      .replace(/\[CREAR_TAREA:.*?\]/g, "✅ Tarea creada")
-      .replace(/\[MODIFICAR_RADIO:.*?\]/g, "✅ Radio actualizado")
-      .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "✅ Evento creado en Google Calendar")
-      .replace(/\[AGREGAR_INVERSION:.*?\]/g, "✅ Inversión agregada")
-      .replace(/\[ACTUALIZAR_INVERSION:.*?\]/g, "✅ Inversión actualizada")
-      .replace(/\[ELIMINAR_INVERSION:.*?\]/g, "✅ Inversión eliminada")
-      .replace(/\[GUARDAR_INFO:.*?\]/g, "");
+      .replace(/\[CREAR_TAREA:.*?\]/g, "Tarea creada")
+      .replace(/\[MODIFICAR_RADIO:.*?\]/g, "Radio actualizado")
+      .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "Evento creado en Google Calendar")
+      .replace(/\[AGREGAR_INVERSION:.*?\]/g, "Inversion agregada")
+      .replace(/\[ACTUALIZAR_INVERSION:.*?\]/g, "Inversion actualizada")
+      .replace(/\[ELIMINAR_INVERSION:.*?\]/g, "Inversion eliminada")
+      .replace(/\[CREAR_RECORDATORIO:.*?\]/g, "Recordatorio creado")
+      .replace(/\[ELIMINAR_RECORDATORIO:.*?\]/g, "Recordatorio eliminado")
+      .replace(/\[LISTAR_RECORDATORIOS:.*?\]/g, "")
+      .replace(/\[GUARDAR_INFO:.*?\]/g, "")
+      .trim();
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
-      <header className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-emerald-950/30 border-b border-zinc-800/50 px-4 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-white" data-testid="button-back">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
+    <div className="min-h-screen bg-background text-zinc-100">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <aside className="border-b border-white/10 bg-black/50 px-4 py-4 backdrop-blur lg:w-80 lg:border-b-0 lg:border-r lg:px-5">
+          <div className="flex items-center justify-between gap-3 lg:block">
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                  <Sparkles className="h-5 w-5 text-white" />
-                </div>
-                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-emerald-400 rounded-full border-2 border-zinc-900" />
-              </div>
+              <Link href="/">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-white" data-testid="button-back">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
               <div>
-                <h1 className="font-semibold text-white text-lg">BlackOps Assistant</h1>
-                <p className="text-xs text-emerald-400/80">Powered by Gemini</p>
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">BlackOps</p>
+                <h1 className="text-xl font-semibold text-white">Centro de mando</h1>
               </div>
+            </div>
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearChat}
+                className="text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 lg:mt-6"
+                data-testid="button-clear-chat"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          <div className="mt-5 hidden lg:block">
+            <div className="rounded-lg border border-white/15 bg-zinc-950/80 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-100">
+                <Sparkles className="h-4 w-4" />
+                Asistente activo
+              </div>
+              <p className="text-sm leading-6 text-zinc-300">
+                Puedo ayudarte con agenda, tareas, recordatorios, portafolio, radio y lo que voy aprendiendo de ti.
+              </p>
             </div>
           </div>
-          {messages.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearChat}
-              className="text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
-              data-testid="button-clear-chat"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Limpiar
-            </Button>
-          )}
-        </div>
-      </header>
 
-      <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="max-w-4xl mx-auto p-4">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center py-16">
-              <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center mb-6 shadow-inner">
-                <MessageSquare className="h-10 w-10 text-zinc-600" />
+          <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+            {CONTEXT_CARDS.map((card) => (
+              <div key={card.label} className="rounded-lg border border-white/10 bg-zinc-950/70 p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <card.icon className="h-4 w-4 text-zinc-300" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">{card.label}</span>
+                </div>
+                <div className="text-sm font-medium text-white">{card.value}</div>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{card.detail}</p>
               </div>
-              <h2 className="text-2xl font-medium text-zinc-300 mb-3">¿En qué puedo ayudarte?</h2>
-              <p className="text-zinc-500 max-w-md mb-8">
-                Pregunta sobre tu calendario, analiza tu portafolio, sube capturas de tu broker, o crea tareas con lenguaje natural.
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-w-lg">
-                {SUGGESTIONS.map((suggestion, i) => (
-                  <button
-                    key={i}
-                    onClick={() => sendMessage(suggestion)}
-                    className="text-left text-sm px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 hover:border-emerald-500/50 text-zinc-400 hover:text-zinc-200 transition-all"
-                    data-testid={`suggestion-${i}`}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+            ))}
+          </div>
+
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">Acciones rapidas</p>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+              {QUICK_ACTIONS.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={() => (action.upload ? fileInputRef.current?.click() : sendMessage(action.prompt))}
+                  className="flex min-h-12 items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-left text-sm text-zinc-300 transition hover:border-white/25 hover:bg-zinc-900 hover:text-white"
+                  data-testid={`quick-action-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <action.icon className="h-4 w-4 text-zinc-300" />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex min-h-screen flex-1 flex-col">
+          <header className="border-b border-white/10 bg-black/35 px-4 py-4 backdrop-blur">
+            <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
+                  <Bot className="h-5 w-5 text-zinc-100" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-white">Tu asistente personal</h2>
+                  <p className="text-xs text-zinc-500">Chat, contexto y acciones en un solo lugar</p>
+                </div>
+              </div>
+              <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-400 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-zinc-300" />
+                Listo para trabajar
               </div>
             </div>
-          ) : (
-            <div className="space-y-6 pb-4">
-              {messages.map((msg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className={cn(
-                    "flex gap-4",
-                    msg.role === "user" ? "flex-row-reverse" : "flex-row"
-                  )}
-                >
-                  <div className={cn(
-                    "flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center",
-                    msg.role === "user" 
-                      ? "bg-gradient-to-br from-blue-500 to-blue-700" 
-                      : "bg-gradient-to-br from-emerald-500 to-emerald-700"
-                  )}>
-                    {msg.role === "user" ? (
-                      <span className="text-sm font-bold text-white">TÚ</span>
-                    ) : (
-                      <Bot className="h-5 w-5 text-white" />
-                    )}
+          </header>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
+            <div className="mx-auto max-w-5xl">
+              {messages.length === 0 ? (
+                <div className="flex min-h-[58vh] flex-col justify-center">
+                  <div className="max-w-2xl">
+                    <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-zinc-950 px-3 py-1 text-xs font-medium text-zinc-300">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Conversacion nueva
+                    </div>
+                    <h3 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
+                      Dime que necesitas resolver hoy.
+                    </h3>
+                    <p className="mt-4 max-w-xl text-sm leading-7 text-zinc-400">
+                      Puedes hablar natural: revisar tu dia, crear una tarea, analizar tu cartera o subir una captura para que la procese.
+                    </p>
                   </div>
-                  <div className={cn(
-                    "flex flex-col max-w-[75%]",
-                    msg.role === "user" ? "items-end" : "items-start"
-                  )}>
-                    <div
-                      className={cn(
-                        "rounded-2xl px-5 py-3 text-sm shadow-sm",
-                        msg.role === "user"
-                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-br-md"
-                          : "bg-zinc-800/80 text-zinc-100 border border-zinc-700/50 rounded-bl-md"
-                      )}
-                      data-testid={`message-${msg.role}-${i}`}
+                  <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {QUICK_ACTIONS.filter((action) => !action.upload).map((action) => (
+                      <button
+                        key={action.label}
+                        onClick={() => sendMessage(action.prompt)}
+                        className="rounded-lg border border-white/10 bg-zinc-950/70 p-4 text-left transition hover:border-white/25 hover:bg-zinc-900"
+                        data-testid={`suggestion-${action.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <action.icon className="mb-4 h-5 w-5 text-zinc-300" />
+                        <div className="text-sm font-medium text-white">{action.label}</div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{action.prompt}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5 pb-4">
+                  {messages.map((msg, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
                     >
-                      {msg.images && msg.images.length > 0 && (
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {msg.images.map((img, imgIdx) => (
-                            <img 
-                              key={imgIdx}
-                              src={img} 
-                              alt={`Imagen adjunta ${imgIdx + 1}`} 
-                              className="max-w-[120px] max-h-32 rounded-lg border border-white/20 object-cover"
-                              data-testid={`image-${msg.role}-${i}-${imgIdx}`}
-                            />
-                          ))}
+                      {msg.role === "assistant" && (
+                        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
+                          <Bot className="h-4 w-4 text-zinc-100" />
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap leading-relaxed">{formatContent(msg.content)}</p>
-                    </div>
-                    <span className="text-xs text-zinc-600 mt-1.5 px-1">
-                      {formatTime(msg.timestamp)}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-              {isLoading && messages[messages.length - 1]?.role === "user" && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4"
-                >
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
-                    <Bot className="h-5 w-5 text-white" />
-                  </div>
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-zinc-800/80 border border-zinc-700/50 px-5 py-4">
-                    <div className="flex gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-
-      <div className="border-t border-zinc-800/50 bg-zinc-900/80 backdrop-blur-sm p-4">
-        <div className="max-w-4xl mx-auto">
-          {selectedImages.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {selectedImages.map((img, idx) => (
-                <div key={idx} className="relative inline-block">
-                  <img 
-                    src={img} 
-                    alt={`Preview ${idx + 1}`} 
-                    className="h-20 w-20 object-cover rounded-lg border border-zinc-700"
-                    data-testid={`image-preview-${idx}`}
-                  />
-                  <button
-                    onClick={() => removeImage(idx)}
-                    className="absolute -top-2 -right-2 h-5 w-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg"
-                    data-testid={`button-remove-image-${idx}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                      <div className={cn("max-w-[88%] md:max-w-[72%]", msg.role === "user" && "flex flex-col items-end")}>
+                        <div
+                          className={cn(
+                            "rounded-lg px-4 py-3 text-sm leading-7 shadow-sm",
+                            msg.role === "user"
+                              ? "bg-zinc-100 text-zinc-950"
+                              : "border border-white/10 bg-zinc-950/85 text-zinc-100"
+                          )}
+                          data-testid={`message-${msg.role}-${i}`}
+                        >
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="mb-3 flex flex-wrap gap-2">
+                              {msg.images.map((img, imgIdx) => (
+                                <img
+                                  key={imgIdx}
+                                  src={img}
+                                  alt={`Imagen adjunta ${imgIdx + 1}`}
+                                  className="h-28 w-28 rounded-md border border-white/20 object-cover"
+                                  data-testid={`image-${msg.role}-${i}-${imgIdx}`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <p className="whitespace-pre-wrap">{formatContent(msg.content) || "Listo."}</p>
+                        </div>
+                        <span className="mt-1 block px-1 text-[11px] text-zinc-600">{formatTime(msg.timestamp)}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {isLoading && messages[messages.length - 1]?.role === "user" && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
+                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
+                        <Bot className="h-4 w-4 text-zinc-100" />
+                      </div>
+                      <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-400">
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
+                        Pensando y revisando tu contexto...
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
-              ))}
-              <span className="text-xs text-zinc-500 self-end mb-1">{selectedImages.length} {selectedImages.length === 1 ? 'imagen' : 'imágenes'}</span>
-            </div>
-          )}
-          <div className="flex gap-3 items-end">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageSelect}
-              accept="image/*"
-              multiple
-              className="hidden"
-              data-testid="input-image-file"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="h-12 w-12 rounded-xl bg-zinc-800/50 border border-zinc-700/50 hover:bg-zinc-700/50 hover:border-emerald-500/50 transition-all flex-shrink-0"
-              title="Subir imagen de broker/cartera"
-              data-testid="button-upload-image"
-            >
-              <ImagePlus className="h-5 w-5 text-zinc-400" />
-            </Button>
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={selectedImages.length > 0 ? "Describe qué quieres analizar..." : "Escribe tu mensaje..."}
-                rows={1}
-                className="w-full resize-none bg-zinc-800/50 border border-zinc-700/50 rounded-xl px-4 py-3.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-                disabled={isLoading}
-                data-testid="input-assistant-message"
-                style={{ maxHeight: "120px" }}
-              />
-            </div>
-            <Button
-              onClick={() => sendMessage()}
-              disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
-              size="icon"
-              className="h-12 w-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:shadow-none transition-all flex-shrink-0"
-              data-testid="button-send-message"
-            >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Send className="h-5 w-5" />
               )}
-            </Button>
+            </div>
           </div>
-        </div>
+
+          <div className="border-t border-white/10 bg-black/55 px-4 py-4 backdrop-blur">
+            <div className="mx-auto max-w-5xl">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageSelect}
+                accept="image/*"
+                multiple
+                className="hidden"
+                data-testid="input-image-file"
+              />
+
+              {selectedImages.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {selectedImages.map((img, idx) => (
+                    <div key={idx} className="relative">
+                      <img
+                        src={img}
+                        alt={`Preview ${idx + 1}`}
+                        className="h-16 w-16 rounded-md border border-white/10 object-cover"
+                        data-testid={`image-preview-${idx}`}
+                      />
+                      <button
+                        onClick={() => removeImage(idx)}
+                        className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-zinc-950 text-zinc-200 shadow-lg hover:bg-zinc-900 hover:text-white"
+                        data-testid={`button-remove-image-${idx}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <span className="self-end pb-1 text-xs text-zinc-500">
+                    {selectedImages.length} {selectedImages.length === 1 ? "imagen" : "imagenes"} listas
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-end gap-2 rounded-lg border border-white/10 bg-zinc-950 p-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="h-10 w-10 shrink-0 rounded-md text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                  title="Subir imagen de broker/cartera"
+                  data-testid="button-upload-image"
+                >
+                  <ImagePlus className="h-5 w-5" />
+                </Button>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={selectedImages.length > 0 ? "Describe que quieres analizar..." : "Escribele a tu asistente..."}
+                  rows={1}
+                  className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                  disabled={isLoading}
+                  data-testid="input-assistant-message"
+                />
+                <Button
+                  onClick={() => sendMessage()}
+                  disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
+                  size="icon"
+                  className="h-10 w-10 shrink-0 rounded-md bg-zinc-100 text-zinc-950 hover:bg-white disabled:opacity-50"
+                  data-testid="button-send-message"
+                >
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </Button>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
+                <Clock3 className="h-3.5 w-3.5" />
+                Enter envia, Shift + Enter crea una nueva linea.
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

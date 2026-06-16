@@ -1,0 +1,358 @@
+import { storage } from "./storage";
+import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
+import type { AutomationDefinition, AutomationRun, InsertAutomationDefinition } from "@shared/schema";
+
+type AutomationSeed = InsertAutomationDefinition & {
+  key: string;
+};
+
+const DEFAULT_TIMEZONE = "America/New_York";
+
+export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
+  {
+    key: "morning-reminder",
+    name: "Morning task reminder",
+    description: "Sends Robert a morning summary of pending tasks.",
+    type: "reminder",
+    assignedAgentId: "blackops-scheduler",
+    schedule: { kind: "daily_time", hour: 7, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "0",
+    metadata: { source: "server/reminder-scheduler.ts", function: "sendMorningReminder" },
+  },
+  {
+    key: "evening-reminder",
+    name: "Evening task review",
+    description: "Sends Robert an evening reminder for incomplete tasks.",
+    type: "reminder",
+    assignedAgentId: "blackops-scheduler",
+    schedule: { kind: "daily_time", hour: 21, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "0",
+    metadata: { source: "server/reminder-scheduler.ts", function: "sendEveningReminder" },
+  },
+  {
+    key: "weekly-reminder",
+    name: "Weekly task reminder",
+    description: "Sends a Sunday weekly task reminder.",
+    type: "reminder",
+    assignedAgentId: "blackops-scheduler",
+    schedule: { kind: "weekly_time", dayOfWeek: 0, hour: 18, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "0",
+    metadata: { source: "server/reminder-scheduler.ts", function: "sendWeeklyReminder" },
+  },
+  {
+    key: "proactive-insights",
+    name: "Proactive insights",
+    description: "Analyzes tasks, goals, radio schedule, and portfolio context for useful nudges.",
+    type: "proactive_insight",
+    assignedAgentId: "blackops-assistant",
+    schedule: { kind: "daily_time", hour: 8, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "execute_after_approval",
+    requiresApproval: false,
+    costEstimate: "low",
+    metadata: { source: "server/proactive-insights.ts", function: "sendProactiveInsights" },
+  },
+  {
+    key: "portfolio-news-digest",
+    name: "Portfolio news digest",
+    description: "Sends daily news related to holdings.",
+    type: "market_news",
+    assignedAgentId: "portfolio-agent",
+    schedule: { kind: "daily_time", hour: 9, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "low",
+    metadata: { source: "server/reminder-scheduler.ts", function: "sendDailyNewsDigest" },
+  },
+  {
+    key: "daily-market-update",
+    name: "Daily market update",
+    description: "Calculates portfolio summary, saves snapshot, and sends Telegram update.",
+    type: "portfolio_check",
+    assignedAgentId: "portfolio-agent",
+    schedule: { kind: "daily_time", hour: 12, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "low",
+    metadata: { source: "server/market-news.ts", function: "sendDailyMarketUpdate" },
+  },
+  {
+    key: "health-checks",
+    name: "Project health checks",
+    description: "Checks monitored projects every minute and sends alerts on incidents.",
+    type: "health_check",
+    assignedAgentId: "monitor-agent",
+    schedule: { kind: "interval", everyMinutes: 1 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
+    costEstimate: "0",
+    metadata: { source: "server/health-check.ts", function: "checkAllProjects" },
+  },
+  {
+    key: "radio-slot-check",
+    name: "Radio scheduling check",
+    description: "Checks upcoming Radio slots and notifies missing DJs.",
+    type: "radio_check",
+    assignedAgentId: "radio-agent",
+    schedule: { kind: "weekly_time", dayOfWeek: 1, hour: 8, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "execute_after_approval",
+    requiresApproval: false,
+    costEstimate: "low",
+    metadata: { source: "server/agent-actions.ts", actionId: "radio_notify_slots" },
+  },
+  {
+    key: "portfolio-weekly-report",
+    name: "Portfolio weekly report",
+    description: "Generates and sends a weekly portfolio report.",
+    type: "report",
+    assignedAgentId: "portfolio-agent",
+    schedule: { kind: "weekly_time", dayOfWeek: 0, hour: 10, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "execute_after_approval",
+    requiresApproval: true,
+    costEstimate: "low",
+    metadata: { source: "server/agent-actions.ts", actionId: "portfolio_weekly_report" },
+  },
+  {
+    key: "video-edit-task-check",
+    name: "Video edit task check",
+    description: "Creates video edit tasks after Radio events.",
+    type: "agent_run",
+    assignedAgentId: "blackops-scheduler",
+    schedule: { kind: "weekly_time", dayOfWeek: 5, hour: 10, minute: 0 },
+    timezone: DEFAULT_TIMEZONE,
+    status: "active",
+    permissionLevel: "execute_after_approval",
+    requiresApproval: true,
+    costEstimate: "0",
+    metadata: { source: "server/agent-actions.ts", actionId: "create_video_edit_task" },
+  },
+  {
+    key: "calendar-sync",
+    name: "Calendar sync",
+    description: "Manual sync of Google/Zoho calendar into local tasks.",
+    type: "calendar_sync",
+    assignedAgentId: "calendar-agent",
+    schedule: { kind: "manual" },
+    timezone: DEFAULT_TIMEZONE,
+    status: "paused",
+    permissionLevel: "execute_after_approval",
+    requiresApproval: true,
+    costEstimate: "0",
+    metadata: { source: "server/routes.ts", endpoints: ["/api/calendar/sync", "/api/calendar/zoho/sync"] },
+  },
+  {
+    key: "flyer-generation",
+    name: "Flyer generation",
+    description: "Future automation slot for generating flyers after Radio schedule updates.",
+    type: "flyer",
+    assignedAgentId: "creative-agent",
+    schedule: { kind: "manual" },
+    timezone: DEFAULT_TIMEZONE,
+    status: "disabled",
+    permissionLevel: "draft_only",
+    requiresApproval: true,
+    costEstimate: "medium",
+    metadata: { future: true },
+  },
+  {
+    key: "clip-generation",
+    name: "Clip generation",
+    description: "Future automation slot for creating clips from content/media.",
+    type: "clip",
+    assignedAgentId: "creative-agent",
+    schedule: { kind: "manual" },
+    timezone: DEFAULT_TIMEZONE,
+    status: "disabled",
+    permissionLevel: "draft_only",
+    requiresApproval: true,
+    costEstimate: "medium",
+    metadata: { future: true },
+  },
+  {
+    key: "post-publishing",
+    name: "Post publishing",
+    description: "Future automation slot for posts. Disabled until content approval flow is designed.",
+    type: "post",
+    assignedAgentId: "marketing-agent",
+    schedule: { kind: "manual" },
+    timezone: DEFAULT_TIMEZONE,
+    status: "disabled",
+    permissionLevel: "draft_only",
+    requiresApproval: true,
+    costEstimate: "medium",
+    metadata: { future: true },
+  },
+];
+
+export async function ensureDefaultAutomations(userId: string): Promise<AutomationDefinition[]> {
+  const existing = await storage.getAutomationDefinitions(userId);
+  const existingKeys = new Set(existing.map((automation) => (automation.metadata as any)?.key).filter(Boolean));
+
+  for (const seed of DEFAULT_AUTOMATIONS) {
+    if (existingKeys.has(seed.key)) continue;
+    const { key, ...automation } = seed;
+    await storage.createAutomationDefinition(userId, {
+      ...automation,
+      nextRunAt: getNextRunAt(automation.schedule),
+      metadata: { ...(automation.metadata as object), key },
+    });
+  }
+
+  return storage.getAutomationDefinitions(userId);
+}
+
+export function getNextRunAt(schedule: unknown): Date | null {
+  if (!schedule || typeof schedule !== "object") return null;
+  const data = schedule as Record<string, any>;
+  const now = new Date();
+
+  if (data.kind === "interval" && Number(data.everyMinutes) > 0) {
+    return new Date(now.getTime() + Number(data.everyMinutes) * 60 * 1000);
+  }
+
+  if (data.kind === "daily_time") {
+    const target = new Date(now);
+    target.setHours(Number(data.hour || 0), Number(data.minute || 0), 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    return target;
+  }
+
+  if (data.kind === "weekly_time") {
+    const target = new Date(now);
+    const targetDay = Number(data.dayOfWeek || 0);
+    const daysUntil = (targetDay - target.getDay() + 7) % 7;
+    target.setDate(target.getDate() + daysUntil);
+    target.setHours(Number(data.hour || 0), Number(data.minute || 0), 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 7);
+    return target;
+  }
+
+  return null;
+}
+
+export async function recordManualAutomationRun(
+  automation: AutomationDefinition,
+  actorId: string
+): Promise<AutomationRun> {
+  const startedAt = new Date();
+  const isRunnable = automation.status === "active" || automation.status === "paused";
+
+  if (!isRunnable) {
+    const audit = await writeAuditLog({
+      userId: automation.ownerUserId,
+      actorType: "user",
+      actorId,
+      origin: "web",
+      actionType: "automation.manual_run",
+      resourceType: "automation",
+      resourceId: automation.id,
+      metadata: { status: automation.status },
+      status: "blocked",
+      executionMode: "user_requested",
+      errorMessage: "Automation is disabled or failed",
+    });
+
+    return storage.createAutomationRun({
+      automationId: automation.id,
+      ownerUserId: automation.ownerUserId,
+      startedAt,
+      finishedAt: new Date(),
+      status: "skipped",
+      triggeredBy: "user",
+      resultSummary: "Automation is not runnable in its current status.",
+      errorMessage: "Automation is disabled or failed",
+      costEstimate: automation.costEstimate,
+      auditLogId: audit.id,
+      metadata: { automationStatus: automation.status },
+    });
+  }
+
+  if (automation.requiresApproval || automation.permissionLevel !== "autonomous") {
+    const pendingAction = await createPendingActionForApproval({
+      userId: automation.ownerUserId,
+      actorType: "user",
+      actorId,
+      origin: "web",
+      executionMode: "user_requested",
+      actionType: "automation.manual_run",
+      resourceType: "automation",
+      resourceId: automation.id,
+      title: `Run automation: ${automation.name}`,
+      description: automation.description || "Manual automation run requires approval.",
+      input: {
+        automationId: automation.id,
+        automationName: automation.name,
+        type: automation.type,
+      },
+      proposedChanges: {
+        run: true,
+        schedule: automation.schedule,
+      },
+      metadata: { automationType: automation.type },
+      scope: "system",
+    });
+
+    return storage.createAutomationRun({
+      automationId: automation.id,
+      ownerUserId: automation.ownerUserId,
+      startedAt,
+      finishedAt: new Date(),
+      status: "pending_approval",
+      triggeredBy: "user",
+      resultSummary: "Manual run queued for approval.",
+      costEstimate: automation.costEstimate,
+      pendingActionId: pendingAction.id,
+      metadata: { automationType: automation.type },
+    });
+  }
+
+  const audit = await writeAuditLog({
+    userId: automation.ownerUserId,
+    actorType: "user",
+    actorId,
+    origin: "web",
+    actionType: "automation.manual_run",
+    resourceType: "automation",
+    resourceId: automation.id,
+    metadata: { automationType: automation.type },
+    status: "queued",
+    executionMode: "user_requested",
+  });
+
+  return storage.createAutomationRun({
+    automationId: automation.id,
+    ownerUserId: automation.ownerUserId,
+    startedAt,
+    finishedAt: new Date(),
+    status: "skipped",
+    triggeredBy: "user",
+    resultSummary: "Manual run recorded. Direct execution will be wired in the scheduler integration phase.",
+    costEstimate: automation.costEstimate,
+    auditLogId: audit.id,
+    metadata: { automationType: automation.type, directExecutionWired: false },
+  });
+}
+

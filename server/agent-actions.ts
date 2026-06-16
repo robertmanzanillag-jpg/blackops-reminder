@@ -5,8 +5,7 @@ import { getPortfolioSummary, analyzeRebalancing, checkPriceOpportunities, sendW
 import { getPrice } from "./finance";
 import { format, addDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
-
-const MOCK_USER_ID = "mock-user-123";
+import { getSystemUserId } from "./user-context";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 export interface AgentAction {
@@ -14,7 +13,7 @@ export interface AgentAction {
   name: string;
   description: string;
   category: "radio" | "portfolio" | "tasks" | "notifications" | "system";
-  execute: () => Promise<AgentActionResult>;
+  execute: (userId: string) => Promise<AgentActionResult>;
 }
 
 export interface AgentActionResult {
@@ -31,8 +30,8 @@ export interface ScheduledAction {
   nextRun?: Date;
 }
 
-async function sendNotification(message: string): Promise<boolean> {
-  const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
+async function sendNotification(userId: string, message: string): Promise<boolean> {
+  const telegramConfig = await storage.getTelegramConfig(userId);
   if (!telegramConfig || !telegramConfig.chatId || !TELEGRAM_BOT_TOKEN) {
     console.log("Telegram not configured for notifications");
     return false;
@@ -46,8 +45,8 @@ export const availableActions: AgentAction[] = [
     name: "Analizar eventos de Radio",
     description: "Detecta slots vacíos en los próximos eventos de Radio",
     category: "radio",
-    execute: async () => {
-      const analysis = await analyzeRadioEvents();
+    execute: async (userId) => {
+      const analysis = await analyzeRadioEvents(userId);
       const emptyCount = analysis.slotsToFill.reduce((acc, e) => acc + e.slots.length, 0);
       return {
         success: true,
@@ -61,8 +60,8 @@ export const availableActions: AgentAction[] = [
     name: "Notificar slots vacíos",
     description: "Envía un resumen de slots vacíos por Telegram",
     category: "radio",
-    execute: async () => {
-      const result = await sendRadioSlotsSummary();
+    execute: async (userId) => {
+      const result = await sendRadioSlotsSummary(userId);
       return {
         success: result.sent,
         message: result.message,
@@ -75,8 +74,8 @@ export const availableActions: AgentAction[] = [
     name: "Importar DJs del historial",
     description: "Importa DJs que han participado en eventos anteriores",
     category: "radio",
-    execute: async () => {
-      const result = await importDjsFromRadioHistory();
+    execute: async (userId) => {
+      const result = await importDjsFromRadioHistory(userId);
       return {
         success: true,
         message: `Importados ${result.imported} DJs nuevos, ${result.skipped} ya existían`,
@@ -89,8 +88,8 @@ export const availableActions: AgentAction[] = [
     name: "Resumen del portfolio",
     description: "Obtiene el resumen actual del portfolio con precios en tiempo real",
     category: "portfolio",
-    execute: async () => {
-      const summary = await getPortfolioSummary();
+    execute: async (userId) => {
+      const summary = await getPortfolioSummary(userId);
       return {
         success: true,
         message: `Portfolio: $${summary.totalValue.toFixed(2)} (${summary.gainPercent >= 0 ? "+" : ""}${summary.gainPercent.toFixed(2)}%)`,
@@ -103,8 +102,8 @@ export const availableActions: AgentAction[] = [
     name: "Analizar rebalanceo",
     description: "Sugiere rebalanceo del portfolio basado en distribución ideal",
     category: "portfolio",
-    execute: async () => {
-      const recommendations = await analyzeRebalancing();
+    execute: async (userId) => {
+      const recommendations = await analyzeRebalancing(userId);
       const highPriority = recommendations.filter(r => r.priority === "high");
       return {
         success: true,
@@ -118,8 +117,8 @@ export const availableActions: AgentAction[] = [
     name: "Detectar oportunidades",
     description: "Revisa watchlist y alertas para detectar oportunidades de mercado",
     category: "portfolio",
-    execute: async () => {
-      const opportunities = await checkPriceOpportunities();
+    execute: async (userId) => {
+      const opportunities = await checkPriceOpportunities(userId);
       return {
         success: true,
         message: `${opportunities.length} oportunidades detectadas`,
@@ -132,8 +131,8 @@ export const availableActions: AgentAction[] = [
     name: "Enviar reporte semanal",
     description: "Genera y envía el reporte semanal del portfolio por Telegram",
     category: "portfolio",
-    execute: async () => {
-      const result = await sendWeeklyPortfolioReport();
+    execute: async (userId) => {
+      const result = await sendWeeklyPortfolioReport(userId);
       return {
         success: result.sent,
         message: result.message,
@@ -146,8 +145,8 @@ export const availableActions: AgentAction[] = [
     name: "Resumen de tareas de hoy",
     description: "Lista las tareas pendientes para hoy",
     category: "tasks",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
@@ -169,8 +168,8 @@ export const availableActions: AgentAction[] = [
     name: "Detectar tareas atrasadas",
     description: "Lista tareas que ya pasaron su fecha y no se completaron",
     category: "tasks",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const today = startOfDay(new Date());
       
       const overdue = tasks.filter(t => {
@@ -183,7 +182,7 @@ export const availableActions: AgentAction[] = [
           overdue.slice(0, 5).map(t => 
             `• ${t.title} (${format(new Date(t.date), "d MMM", { locale: es })})`
           ).join("\n");
-        await sendNotification(message);
+        await sendNotification(userId, message);
       }
       
       return {
@@ -198,8 +197,8 @@ export const availableActions: AgentAction[] = [
     name: "Resumen de la semana",
     description: "Lista tareas para los próximos 7 días",
     category: "tasks",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const today = startOfDay(new Date());
       const weekEnd = addDays(today, 7);
       
@@ -220,8 +219,8 @@ export const availableActions: AgentAction[] = [
     name: "Crear tarea de edición de video",
     description: "Crea automáticamente una tarea de edición de video después de un evento de Radio",
     category: "tasks",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const yesterday = addDays(new Date(), -1);
       const yesterdayStart = startOfDay(yesterday);
       const yesterdayEnd = endOfDay(yesterday);
@@ -242,7 +241,7 @@ export const availableActions: AgentAction[] = [
         
         if (!existingEditTask) {
           const dueDate = addDays(new Date(event.date), 3);
-          await storage.createTask(MOCK_USER_ID, {
+          await storage.createTask(userId, {
             title: `Editar video Radio - ${format(new Date(event.date), "d MMM")}`,
             date: dueDate,
             priority: "medium",
@@ -264,8 +263,8 @@ export const availableActions: AgentAction[] = [
     name: "Actualizar precios de inversiones",
     description: "Actualiza los precios actuales de todas las inversiones",
     category: "portfolio",
-    execute: async () => {
-      const investments = await storage.getInvestments(MOCK_USER_ID);
+    execute: async (userId) => {
+      const investments = await storage.getInvestments(userId);
       let updated = 0;
       let errors = 0;
       
@@ -292,8 +291,8 @@ export const availableActions: AgentAction[] = [
     name: "Briefing matutino",
     description: "Envía un resumen matutino con tareas del día y estado del portfolio",
     category: "notifications",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
@@ -319,13 +318,13 @@ export const availableActions: AgentAction[] = [
       }
       
       try {
-        const portfolio = await getPortfolioSummary();
+        const portfolio = await getPortfolioSummary(userId);
         message += `\n💰 *Portfolio*: $${portfolio.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
         message += ` (${portfolio.gainPercent >= 0 ? "+" : ""}${portfolio.gainPercent.toFixed(2)}%)\n`;
       } catch (e) {
       }
       
-      const sent = await sendNotification(message);
+      const sent = await sendNotification(userId, message);
       return {
         success: sent,
         message: sent ? "Briefing matutino enviado" : "No se pudo enviar el briefing",
@@ -337,8 +336,8 @@ export const availableActions: AgentAction[] = [
     name: "Revisión vespertina",
     description: "Envía resumen de tareas incompletas del día",
     category: "notifications",
-    execute: async () => {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+    execute: async (userId) => {
+      const tasks = await storage.getTasks(userId);
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
@@ -350,7 +349,7 @@ export const availableActions: AgentAction[] = [
       
       if (incompleteTasks.length === 0) {
         const message = `🌙 *Excelente día!*\nCompletaste todas las tareas de hoy. Descansa bien.`;
-        const sent = await sendNotification(message);
+        const sent = await sendNotification(userId, message);
         return { success: sent, message: "Felicitación enviada" };
       }
       
@@ -361,7 +360,7 @@ export const availableActions: AgentAction[] = [
       }
       message += `\n_Puedes completarlas mañana o marcarlas como hechas._`;
       
-      const sent = await sendNotification(message);
+      const sent = await sendNotification(userId, message);
       return {
         success: sent,
         message: sent ? "Revisión vespertina enviada" : "No se pudo enviar",
@@ -378,7 +377,7 @@ export function getActionsByCategory(category: string): AgentAction[] {
   return availableActions.filter(a => a.category === category);
 }
 
-export async function executeAction(actionId: string): Promise<AgentActionResult> {
+export async function executeAction(actionId: string, userId = getSystemUserId()): Promise<AgentActionResult> {
   const action = getActionById(actionId);
   if (!action) {
     return { success: false, message: `Acción "${actionId}" no encontrada` };
@@ -386,9 +385,9 @@ export async function executeAction(actionId: string): Promise<AgentActionResult
   
   try {
     console.log(`Executing action: ${action.name}`);
-    const result = await action.execute();
+    const result = await action.execute(userId);
     
-    const agentAction = await storage.createAgentAction(MOCK_USER_ID, {
+    const agentAction = await storage.createAgentAction(userId, {
       type: action.category === "radio" ? "radio_dj_search" : 
             action.category === "portfolio" ? "portfolio_analysis" : 
             action.category === "notifications" ? "task_reminder" : "weekly_report",
@@ -406,7 +405,7 @@ export async function executeAction(actionId: string): Promise<AgentActionResult
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error(`Action ${actionId} failed:`, error);
     
-    const agentAction = await storage.createAgentAction(MOCK_USER_ID, {
+    const agentAction = await storage.createAgentAction(userId, {
       type: "task_reminder",
       description: `${actionId} failed: ${errorMessage}`,
     });
@@ -420,10 +419,10 @@ export async function executeAction(actionId: string): Promise<AgentActionResult
   }
 }
 
-export async function executeMultipleActions(actionIds: string[]): Promise<AgentActionResult[]> {
+export async function executeMultipleActions(actionIds: string[], userId = getSystemUserId()): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = [];
   for (const actionId of actionIds) {
-    const result = await executeAction(actionId);
+    const result = await executeAction(actionId, userId);
     results.push(result);
   }
   return results;

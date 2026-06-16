@@ -115,7 +115,7 @@ export function WeeklyReflectionForm({ weekStart, existingSummary, onClose, onSa
       >
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-purple-400" />
+            <Sparkles className="w-5 h-5 text-zinc-400" />
             <h2 className="text-lg font-semibold text-white">
               Reflexión Semanal
             </h2>
@@ -139,7 +139,7 @@ export function WeeklyReflectionForm({ weekStart, existingSummary, onClose, onSa
         <ScrollArea className="h-[calc(90vh-140px)]">
           <div className="p-6 space-y-6">
             <Card className="bg-zinc-800/50 border-zinc-700 p-4">
-              <Label className="text-purple-300 font-medium mb-3 block">
+              <Label className="text-zinc-400 font-medium mb-3 block">
                 🙏 ¿Por qué estás agradecido esta semana? (mínimo 3)
               </Label>
               <div className="space-y-2">
@@ -157,7 +157,7 @@ export function WeeklyReflectionForm({ weekStart, existingSummary, onClose, onSa
                         variant="ghost"
                         size="icon"
                         onClick={() => removeGratitudeItem(index)}
-                        className="text-zinc-500 hover:text-red-400"
+                        className="text-zinc-500 hover:text-white"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -326,8 +326,8 @@ export function WeeklyReflectionForm({ weekStart, existingSummary, onClose, onSa
               />
             </Card>
 
-            <Card className="bg-green-900/30 border-green-700/50 p-4">
-              <Label className="text-green-300 mb-2 block">
+            <Card className="bg-zinc-900/30 border-white/10 p-4">
+              <Label className="text-zinc-400 mb-2 block">
                 🎯 ¿Cuál será tu objetivo principal para la próxima semana?
               </Label>
               <Textarea
@@ -354,7 +354,7 @@ export function WeeklyReflectionForm({ weekStart, existingSummary, onClose, onSa
           <Button
             onClick={handleSave}
             disabled={saveMutation.isPending || gratitude.filter(g => g.trim()).length < 3}
-            className="bg-purple-600 hover:bg-purple-700"
+            className="bg-zinc-800 hover:bg-zinc-800"
             data-testid="button-save-reflection"
           >
             <Save className="w-4 h-4 mr-2" />

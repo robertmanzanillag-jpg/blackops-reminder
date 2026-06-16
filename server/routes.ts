@@ -5,13 +5,13 @@ import { insertTaskSchema, insertWeeklySummarySchema, insertMonthlyGoalSchema, i
 import { z } from "zod";
 import { getCalendarEvents, isGoogleCalendarConnected } from "./google-calendar";
 import { syncZohoCalendar, checkZohoConnection, getZohoAuthUrl, exchangeZohoCode } from "./zoho-calendar";
-import { getVapidPublicKey, sendPushNotification, sendNotificationToAll } from "./push-notifications";
-import { testMorningReminder, testEveningReminder, testWeeklyReminder, testProactiveInsights, testNewsDigest } from "./reminder-scheduler";
+import { getVapidPublicKey, sendPushNotification } from "./push-notifications";
+import { testMorningReminder, testEveningReminder, testWeeklyReminder, testProactiveInsights, testNewsDigest, testCeoMorningBrief, getReminderSchedulerConfig } from "./reminder-scheduler";
 import { registerAssistantRoutes } from "./assistant";
-import { sendTelegramMessage, validateTelegramBot, getTelegramUpdates, setTelegramWebhook, getWebhookInfo } from "./telegram";
-import { handleTelegramMessage, setupTelegramWebhook, getTelegramWebhookStatus } from "./telegram-chat";
+import { sendTelegramMessage, getTelegramUpdates, isTelegramWebhookSecretValid } from "./telegram";
+import { handleTelegramMessage, setupTelegramWebhook, getTelegramWebhookStatus, resolveTelegramWebhookUrl } from "./telegram-chat";
 import { getPrice, getMarketOverview, searchSymbol, getBatchCryptoPrices, getHistoricalData, getPortfolioNews, getMarketNews, getCompanyNews } from "./finance";
-import { insertInvestmentSchema, insertTransactionSchema, insertWatchlistSchema, insertPriceAlertSchema, insertMonitoredProjectSchema } from "@shared/schema";
+import { insertInvestmentSchema, insertTransactionSchema, insertWatchlistSchema, insertPriceAlertSchema, insertMonitoredProjectSchema, insertAppProjectSchema, insertAutomationDefinitionSchema } from "@shared/schema";
 import { checkSingleProject } from "./health-check";
 import { sendDailyMarketUpdate, calculatePortfolioSummary } from "./market-news";
 import { insertPortfolioHistorySchema, insertDjContactSchema } from "@shared/schema";
@@ -20,19 +20,34 @@ import { getPortfolioSummary, analyzeRebalancing, checkPriceOpportunities, gener
 import { listAllActions, executeAction, executeMultipleActions, getActionsByCategory } from "./agent-actions";
 import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTableSchema, executeQuery, getProjectStructure, addColumnToTable, createTable, getTableInfo } from "./code-agent";
 import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
-import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected } from "./github-client";
+import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview } from "./github-client";
+import { getCurrentUserId } from "./user-context";
+import { executeApprovedPendingAction } from "./trust-executor";
+import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
+import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
+import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
+import { buildCeoReadinessReport } from "./ceo-readiness";
+import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
+import { getCeoConversationMessages } from "./ceo-conversation-history";
+import { resolveSessionRuntimeSettings } from "./session-config-core";
+import { createInMemoryRateLimiter } from "./rate-limit";
+import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Mock user ID - in production this would come from authentication
-  const MOCK_USER_ID = "mock-user-123";
+  const telegramWebhookRateLimit = createInMemoryRateLimiter({
+    scope: "telegram-webhook",
+    limit: 180,
+    windowMs: 60 * 1000,
+  });
+  const telegramUpdateDeduper = createTelegramUpdateDeduper();
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {
     try {
-      const tasks = await storage.getTasks(MOCK_USER_ID);
+      const tasks = await storage.getTasks(getCurrentUserId(req));
       res.json(tasks);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tasks" });
@@ -42,8 +57,9 @@ export async function registerRoutes(
   // GET single task
   app.get("/api/tasks/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
       const task = await storage.getTask(req.params.id);
-      if (!task) {
+      if (!task || task.userId !== userId) {
         return res.status(404).json({ error: "Task not found" });
       }
       res.json(task);
@@ -61,7 +77,7 @@ export async function registerRoutes(
         date: typeof req.body.date === "string" ? new Date(req.body.date) : req.body.date,
       };
       const validated = insertTaskSchema.parse(body);
-      const task = await storage.createTask(MOCK_USER_ID, validated);
+      const task = await storage.createTask(getCurrentUserId(req), validated);
       res.status(201).json(task);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -74,6 +90,12 @@ export async function registerRoutes(
   // PATCH update task
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getTask(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
       // Convert date strings to Date objects if needed
       const body = {
         ...req.body,
@@ -90,6 +112,12 @@ export async function registerRoutes(
   // DELETE task
   app.delete("/api/tasks/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getTask(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
       await storage.deleteTask(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -100,7 +128,7 @@ export async function registerRoutes(
   // POST deduplicate main tasks (one-time cleanup)
   app.post("/api/tasks/deduplicate", async (req, res) => {
     try {
-      const removed = await storage.deduplicateMainTasks(MOCK_USER_ID);
+      const removed = await storage.deduplicateMainTasks(getCurrentUserId(req));
       res.json({ removed });
     } catch (error) {
       res.status(500).json({ error: "Failed to deduplicate tasks" });
@@ -111,7 +139,7 @@ export async function registerRoutes(
   app.delete("/api/tasks/by-title/:title", async (req, res) => {
     try {
       const title = decodeURIComponent(req.params.title);
-      const deleted = await storage.deleteTasksByTitle(MOCK_USER_ID, title);
+      const deleted = await storage.deleteTasksByTitle(getCurrentUserId(req), title);
       res.json({ deleted });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete tasks" });
@@ -132,7 +160,7 @@ export async function registerRoutes(
   // POST Zoho Calendar sync
   app.post("/api/calendar/zoho/sync", async (req, res) => {
     try {
-      const result = await syncZohoCalendar();
+      const result = await syncZohoCalendar(getCurrentUserId(req));
       res.json({ success: true, synced: result.synced, errors: result.errors });
     } catch (error: any) {
       console.error('Zoho sync error:', error);
@@ -217,15 +245,23 @@ export async function registerRoutes(
       
       const events = await getCalendarEvents(weekStart, twelveMonthsAhead);
       
-      // Sync events to local tasks
+      // Sync events to local tasks. Existing Google events must be updated so flyer data
+      // stays fresh when calendar descriptions change.
+      const userId = getCurrentUserId(req);
+      const existingTasks = await storage.getTasks(userId);
+      const existingByGoogleId = new Map(
+        existingTasks
+          .filter(t => t.externalId && t.externalSource === "google")
+          .map(t => [t.externalId, t])
+      );
+
       let synced = 0;
+      let updated = 0;
       for (const event of events) {
-        // Check if we already have this event
-        const existingTasks = await storage.getTasks(MOCK_USER_ID);
-        const exists = existingTasks.some(t => t.externalId === event.id && t.externalSource === 'google');
+        const existing = existingByGoogleId.get(event.id);
         
-        if (!exists) {
-          await storage.createTask(MOCK_USER_ID, {
+        if (!existing) {
+          await storage.createTask(userId, {
             title: event.title,
             description: event.description || null,
             date: event.date,
@@ -237,10 +273,35 @@ export async function registerRoutes(
             externalSource: "google",
           });
           synced++;
+          continue;
+        }
+
+        const nextDescription = event.description || null;
+        const nextEndDate = event.endDate || null;
+        const changed =
+          existing.title !== event.title ||
+          (existing.description || null) !== nextDescription ||
+          new Date(existing.date).getTime() !== new Date(event.date).getTime() ||
+          ((existing.endDate && new Date(existing.endDate).getTime()) || null) !== ((nextEndDate && new Date(nextEndDate).getTime()) || null) ||
+          existing.type !== "event";
+
+        if (changed) {
+          await storage.updateTask(existing.id, {
+            title: event.title,
+            description: nextDescription,
+            date: event.date,
+            endDate: nextEndDate,
+            priority: existing.priority || "normal",
+            completed: existing.completed,
+            type: "event",
+            externalId: event.id,
+            externalSource: "google",
+          });
+          updated++;
         }
       }
       
-      res.json({ success: true, synced, total: events.length });
+      res.json({ success: true, synced, updated, total: events.length });
     } catch (error: any) {
       console.error('Calendar sync error:', error);
       res.status(500).json({ error: error.message || "Failed to sync calendar" });
@@ -269,7 +330,7 @@ export async function registerRoutes(
   // GET all weekly summaries
   app.get("/api/weekly-summaries", async (req, res) => {
     try {
-      const summaries = await storage.getWeeklySummaries(MOCK_USER_ID);
+      const summaries = await storage.getWeeklySummaries(getCurrentUserId(req));
       res.json(summaries);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch weekly summaries" });
@@ -280,7 +341,7 @@ export async function registerRoutes(
   app.get("/api/weekly-summaries/:weekStart", async (req, res) => {
     try {
       const weekStart = new Date(req.params.weekStart);
-      const summary = await storage.getWeeklySummary(MOCK_USER_ID, weekStart);
+      const summary = await storage.getWeeklySummary(getCurrentUserId(req), weekStart);
       if (!summary) {
         return res.status(404).json({ error: "Weekly summary not found" });
       }
@@ -300,14 +361,14 @@ export async function registerRoutes(
       const validated = insertWeeklySummarySchema.parse(body);
       
       // Check if summary already exists for this week
-      const existing = await storage.getWeeklySummary(MOCK_USER_ID, validated.weekStart);
+      const existing = await storage.getWeeklySummary(getCurrentUserId(req), validated.weekStart);
       if (existing) {
         // Update instead of create
         const updated = await storage.updateWeeklySummary(existing.id, validated);
         return res.json(updated);
       }
       
-      const summary = await storage.createWeeklySummary(MOCK_USER_ID, validated);
+      const summary = await storage.createWeeklySummary(getCurrentUserId(req), validated);
       res.status(201).json(summary);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -336,7 +397,7 @@ export async function registerRoutes(
   // GET all monthly goals across all months (for history view)
   app.get("/api/monthly-goals/all", async (req, res) => {
     try {
-      const goals = await storage.getAllMonthlyGoals(MOCK_USER_ID);
+      const goals = await storage.getAllMonthlyGoals(getCurrentUserId(req));
       res.json(goals);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch all monthly goals" });
@@ -348,7 +409,7 @@ export async function registerRoutes(
     try {
       const monthParam = req.query.month as string;
       const month = monthParam ? new Date(monthParam) : new Date();
-      const goals = await storage.getMonthlyGoals(MOCK_USER_ID, month);
+      const goals = await storage.getMonthlyGoals(getCurrentUserId(req), month);
       res.json(goals);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch monthly goals" });
@@ -363,7 +424,7 @@ export async function registerRoutes(
         month: typeof req.body.month === "string" ? new Date(req.body.month) : req.body.month,
       };
       const validated = insertMonthlyGoalSchema.parse(body);
-      const goal = await storage.createMonthlyGoal(MOCK_USER_ID, validated);
+      const goal = await storage.createMonthlyGoal(getCurrentUserId(req), validated);
       res.status(201).json(goal);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -376,6 +437,12 @@ export async function registerRoutes(
   // PATCH update monthly goal
   app.patch("/api/monthly-goals/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getMonthlyGoal(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Monthly goal not found" });
+      }
+
       const goal = await storage.updateMonthlyGoal(req.params.id, req.body);
       res.json(goal);
     } catch (error) {
@@ -386,6 +453,12 @@ export async function registerRoutes(
   // DELETE monthly goal
   app.delete("/api/monthly-goals/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getMonthlyGoal(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Monthly goal not found" });
+      }
+
       await storage.deleteMonthlyGoal(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -399,7 +472,7 @@ export async function registerRoutes(
   app.get("/api/yearly-goals", async (req, res) => {
     try {
       const year = (req.query.year as string) || new Date().getFullYear().toString();
-      const goals = await storage.getYearlyGoals(MOCK_USER_ID, year);
+      const goals = await storage.getYearlyGoals(getCurrentUserId(req), year);
       res.json(goals);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch yearly goals" });
@@ -410,7 +483,7 @@ export async function registerRoutes(
   app.post("/api/yearly-goals", async (req, res) => {
     try {
       const validated = insertYearlyGoalSchema.parse(req.body);
-      const goal = await storage.createYearlyGoal(MOCK_USER_ID, validated);
+      const goal = await storage.createYearlyGoal(getCurrentUserId(req), validated);
       res.status(201).json(goal);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -423,6 +496,12 @@ export async function registerRoutes(
   // PATCH update yearly goal
   app.patch("/api/yearly-goals/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getYearlyGoal(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Yearly goal not found" });
+      }
+
       const goal = await storage.updateYearlyGoal(req.params.id, req.body);
       res.json(goal);
     } catch (error) {
@@ -433,6 +512,12 @@ export async function registerRoutes(
   // DELETE yearly goal
   app.delete("/api/yearly-goals/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getYearlyGoal(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Yearly goal not found" });
+      }
+
       await storage.deleteYearlyGoal(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -451,7 +536,7 @@ export async function registerRoutes(
     try {
       // One-time deduplication of recurring tasks on first request
       if (!hasDeduplicatedRecurringTasks) {
-        const removed = await storage.deduplicateRecurringTasks(MOCK_USER_ID);
+        const removed = await storage.deduplicateRecurringTasks(getCurrentUserId(req));
         if (removed > 0) {
           console.log(`[weekly-tasks] Cleaned up ${removed} duplicate recurring tasks`);
         }
@@ -462,10 +547,10 @@ export async function registerRoutes(
       const weekStart = weekStartParam ? new Date(weekStartParam) : getWeekStart(new Date());
       
       // Get existing tasks for this week
-      let tasks = await storage.getWeeklyTasks(MOCK_USER_ID, weekStart);
+      let tasks = await storage.getWeeklyTasks(getCurrentUserId(req), weekStart);
       
       // Get all recurring tasks (displayed globally, not duplicated per week)
-      const recurringTasks = await storage.getRecurringTasks(MOCK_USER_ID);
+      const recurringTasks = await storage.getRecurringTasks(getCurrentUserId(req));
       
       // Merge recurring tasks that aren't already in this week's list
       const existingTitles = new Set(tasks.map(t => t.title));
@@ -488,10 +573,10 @@ export async function registerRoutes(
       }
       
       // Carry over incomplete NON-recurring tasks from the previous week
-      const prevIncompleteTasks = await storage.getPreviousWeekIncompleteTasks(MOCK_USER_ID, weekStart);
+      const prevIncompleteTasks = await storage.getPreviousWeekIncompleteTasks(getCurrentUserId(req), weekStart);
       for (const pt of prevIncompleteTasks) {
         if (!existingTitles.has(pt.title)) {
-          const carriedTask = await storage.createWeeklyTask(MOCK_USER_ID, {
+          const carriedTask = await storage.createWeeklyTask(getCurrentUserId(req), {
             title: pt.title,
             weekStart: weekStart,
             completed: false,
@@ -517,7 +602,7 @@ export async function registerRoutes(
         weekStart: typeof req.body.weekStart === "string" ? new Date(req.body.weekStart) : req.body.weekStart,
       };
       const validated = insertWeeklyTaskSchema.parse(body);
-      const task = await storage.createWeeklyTask(MOCK_USER_ID, validated);
+      const task = await storage.createWeeklyTask(getCurrentUserId(req), validated);
       res.status(201).json(task);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -530,7 +615,12 @@ export async function registerRoutes(
   // PATCH update weekly task
   app.patch("/api/weekly-tasks/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
       const existing = await storage.getWeeklyTaskById(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Weekly task not found" });
+      }
+
       let updates = { ...req.body };
       
       // When toggling completion on a recurring task, also stamp the current weekStart
@@ -549,6 +639,12 @@ export async function registerRoutes(
   // DELETE weekly task
   app.delete("/api/weekly-tasks/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getWeeklyTaskById(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Weekly task not found" });
+      }
+
       await storage.deleteWeeklyTask(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -572,11 +668,11 @@ export async function registerRoutes(
       }
       
       // Check if already subscribed
-      const existing = await storage.getPushSubscriptions(MOCK_USER_ID);
+      const existing = await storage.getPushSubscriptions(getCurrentUserId(req));
       const alreadyExists = existing.some(s => s.endpoint === endpoint);
       
       if (!alreadyExists) {
-        await storage.createPushSubscription(MOCK_USER_ID, {
+        await storage.createPushSubscription(getCurrentUserId(req), {
           endpoint,
           p256dh: keys.p256dh,
           auth: keys.auth,
@@ -605,10 +701,11 @@ export async function registerRoutes(
   // POST test notification (for debugging)
   app.post("/api/push/test", async (req, res) => {
     try {
-      const result = await sendNotificationToAll({
-        title: "BlackOps Reminder",
-        body: "Notificaciones activadas correctamente!",
-        url: "/",
+      const result = await sendPushNotification(getCurrentUserId(req), {
+        title: "BlackOps en tu telefono",
+        body: "Listo, Robert. Este dispositivo recibira alertas de tus proyectos.",
+        url: "/projects",
+        tag: "blackops-phone-test",
       });
       res.json(result);
     } catch (error) {
@@ -619,7 +716,7 @@ export async function registerRoutes(
   // POST test morning reminder
   app.post("/api/push/test-morning", async (req, res) => {
     try {
-      const result = await testMorningReminder();
+      const result = await testMorningReminder(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send morning reminder" });
@@ -629,7 +726,7 @@ export async function registerRoutes(
   // POST test evening reminder
   app.post("/api/push/test-evening", async (req, res) => {
     try {
-      const result = await testEveningReminder();
+      const result = await testEveningReminder(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send evening reminder" });
@@ -639,7 +736,7 @@ export async function registerRoutes(
   // POST test weekly reminder
   app.post("/api/push/test-weekly", async (req, res) => {
     try {
-      const result = await testWeeklyReminder();
+      const result = await testWeeklyReminder(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send weekly reminder" });
@@ -649,7 +746,7 @@ export async function registerRoutes(
   // POST test proactive insights
   app.post("/api/push/test-insights", async (req, res) => {
     try {
-      const result = await testProactiveInsights();
+      const result = await testProactiveInsights(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send proactive insights" });
@@ -659,7 +756,7 @@ export async function registerRoutes(
   // POST test news digest
   app.post("/api/push/test-news", async (req, res) => {
     try {
-      const result = await testNewsDigest();
+      const result = await testNewsDigest(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send news digest" });
@@ -671,7 +768,7 @@ export async function registerRoutes(
   // GET telegram status
   app.get("/api/telegram/status", async (req, res) => {
     try {
-      const config = await storage.getTelegramConfig(MOCK_USER_ID);
+      const config = await storage.getTelegramConfig(getCurrentUserId(req));
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       
       if (!botToken) {
@@ -689,6 +786,107 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to get telegram status" });
+    }
+  });
+
+  app.get("/api/telegram/health", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      const aiConfigured = Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
+      const config = await storage.getTelegramConfig(userId);
+      const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
+      const expectedWebhookUrl = resolveTelegramWebhookUrl();
+
+      res.json({
+        tokenConfigured: Boolean(botToken),
+        aiConfigured,
+        webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+        webhookUrlConfigured: Boolean(expectedWebhookUrl),
+        chatConfigured: Boolean(config?.chatId),
+        enabled: Boolean(config?.enabled),
+        chatId: config?.chatId || null,
+        webhookUrl: webhook?.url || null,
+        expectedWebhookUrl,
+        webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
+        pendingUpdates: webhook?.pending_update_count || 0,
+        lastWebhookError: webhook?.last_error_message || null,
+        readyForBriefs: Boolean(botToken && config?.chatId && config?.enabled),
+        readyForChat: Boolean(aiConfigured && botToken && config?.chatId && config?.enabled && webhook?.url),
+        scheduler: getReminderSchedulerConfig(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get Telegram health" });
+    }
+  });
+
+  app.get("/api/ceo/readiness", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      const config = await storage.getTelegramConfig(userId);
+      const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
+      const expectedWebhookUrl = resolveTelegramWebhookUrl();
+      const scheduler = getReminderSchedulerConfig();
+      const sessionSettings = resolveSessionRuntimeSettings();
+
+      res.json(buildCeoReadinessReport({
+        auth: {
+          userId,
+          devFallbackAllowed: allowsDevUserFallback(),
+          usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
+          defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
+          sessionSecretConfigured: Boolean(process.env.SESSION_SECRET),
+          sessionStoreKind: sessionSettings.storeKind,
+        },
+        assistant: {
+          aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
+        },
+        telegram: {
+          tokenConfigured: Boolean(botToken),
+          chatConfigured: Boolean(config?.chatId),
+          enabled: Boolean(config?.enabled),
+          webhookUrlConfigured: Boolean(expectedWebhookUrl),
+          webhookRegistered: Boolean(webhook?.url),
+          webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
+          webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+          lastWebhookError: webhook?.last_error_message || null,
+        },
+        scheduler: {
+          timezone: scheduler.timezone,
+          ceoBriefHour: scheduler.ceoBriefHour,
+          ceoBriefMinute: scheduler.ceoBriefMinute,
+        },
+      }));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get CEO readiness" });
+    }
+  });
+
+  app.get("/api/ceo/conversation-history", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const limit = Math.min(Number(req.query.limit || 12) || 12, 50);
+      const messages = await getCeoConversationMessages(userId, limit);
+      res.json({
+        messages: messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          createdAt: message.createdAt,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get CEO conversation history" });
+    }
+  });
+
+  app.post("/api/telegram/test-ceo-brief", async (req, res) => {
+    try {
+      const result = await testCeoMorningBrief(getCurrentUserId(req));
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send CEO brief" });
     }
   });
 
@@ -723,7 +921,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Could not find chat ID" });
       }
 
-      const config = await storage.saveTelegramConfig(MOCK_USER_ID, chatId);
+      const config = await storage.saveTelegramConfig(getCurrentUserId(req), chatId);
       
       // Send confirmation message
       await sendTelegramMessage(botToken, chatId, "✅ BlackOps Reminder conectado! Recibirás notificaciones aquí.");
@@ -738,7 +936,7 @@ export async function registerRoutes(
   app.post("/api/telegram/toggle", async (req, res) => {
     try {
       const { enabled } = req.body;
-      const config = await storage.updateTelegramConfig(MOCK_USER_ID, enabled);
+      const config = await storage.updateTelegramConfig(getCurrentUserId(req), enabled);
       
       if (!config) {
         return res.status(404).json({ error: "Telegram not configured" });
@@ -758,7 +956,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "TELEGRAM_BOT_TOKEN not configured" });
       }
 
-      const config = await storage.getTelegramConfig(MOCK_USER_ID);
+      const config = await storage.getTelegramConfig(getCurrentUserId(req));
       if (!config) {
         return res.status(400).json({ error: "Telegram not configured. Send /start to your bot first." });
       }
@@ -782,7 +980,7 @@ export async function registerRoutes(
   // DELETE disconnect telegram
   app.delete("/api/telegram/disconnect", async (req, res) => {
     try {
-      await storage.deleteTelegramConfig(MOCK_USER_ID);
+      await storage.deleteTelegramConfig(getCurrentUserId(req));
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to disconnect telegram" });
@@ -790,10 +988,21 @@ export async function registerRoutes(
   });
 
   // POST telegram webhook (receives messages from Telegram)
-  app.post("/api/telegram/webhook", async (req, res) => {
+  app.post("/api/telegram/webhook", telegramWebhookRateLimit, async (req, res) => {
     try {
+      const providedSecret = req.header("x-telegram-bot-api-secret-token");
+      if (!isTelegramWebhookSecretValid(process.env.TELEGRAM_WEBHOOK_SECRET, providedSecret)) {
+        console.warn("[Telegram Webhook] Rejected update with invalid secret token");
+        return res.status(401).json({ ok: false });
+      }
+
       const update = req.body;
       console.log("[Telegram Webhook] Received update:", JSON.stringify(update).slice(0, 200));
+
+      if (!telegramUpdateDeduper.shouldProcess(update)) {
+        console.log(`[Telegram Webhook] Duplicate update skipped: ${update.update_id}`);
+        return res.status(200).json({ ok: true, duplicate: true });
+      }
       
       // Process message asynchronously
       handleTelegramMessage(update).catch(err => {
@@ -888,7 +1097,7 @@ export async function registerRoutes(
   // GET portfolio news (news for all user investments)
   app.get("/api/finance/news", async (req, res) => {
     try {
-      const investments = await storage.getInvestments(MOCK_USER_ID);
+      const investments = await storage.getInvestments(getCurrentUserId(req));
       const symbols = investments.map(inv => inv.symbol);
       const news = await getPortfolioNews(symbols);
       res.json(news);
@@ -922,7 +1131,7 @@ export async function registerRoutes(
   // GET user investments
   app.get("/api/investments", async (req, res) => {
     try {
-      const investments = await storage.getInvestments(MOCK_USER_ID);
+      const investments = await storage.getInvestments(getCurrentUserId(req));
       res.json(investments);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch investments" });
@@ -933,7 +1142,7 @@ export async function registerRoutes(
   app.post("/api/investments", async (req, res) => {
     try {
       const validated = insertInvestmentSchema.parse(req.body);
-      const investment = await storage.createInvestment(MOCK_USER_ID, validated);
+      const investment = await storage.createInvestment(getCurrentUserId(req), validated);
       res.status(201).json(investment);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -946,6 +1155,12 @@ export async function registerRoutes(
   // PATCH update investment
   app.patch("/api/investments/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getInvestment(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Investment not found" });
+      }
+
       const investment = await storage.updateInvestment(req.params.id, req.body);
       res.json(investment);
     } catch (error) {
@@ -956,6 +1171,12 @@ export async function registerRoutes(
   // DELETE investment
   app.delete("/api/investments/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getInvestment(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Investment not found" });
+      }
+
       await storage.deleteInvestment(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -967,7 +1188,7 @@ export async function registerRoutes(
   app.get("/api/portfolio/history", async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
-      const history = await storage.getPortfolioHistory(MOCK_USER_ID, days);
+      const history = await storage.getPortfolioHistory(getCurrentUserId(req), days);
       res.json(history);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch portfolio history" });
@@ -987,7 +1208,7 @@ export async function registerRoutes(
   // GET transactions
   app.get("/api/transactions", async (req, res) => {
     try {
-      const transactions = await storage.getTransactions(MOCK_USER_ID);
+      const transactions = await storage.getTransactions(getCurrentUserId(req));
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
@@ -1002,7 +1223,7 @@ export async function registerRoutes(
         date: typeof req.body.date === "string" ? new Date(req.body.date) : req.body.date,
       };
       const validated = insertTransactionSchema.parse(body);
-      const transaction = await storage.createTransaction(MOCK_USER_ID, validated);
+      const transaction = await storage.createTransaction(getCurrentUserId(req), validated);
       res.status(201).json(transaction);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1015,7 +1236,7 @@ export async function registerRoutes(
   // GET watchlist
   app.get("/api/watchlist", async (req, res) => {
     try {
-      const watchlist = await storage.getWatchlist(MOCK_USER_ID);
+      const watchlist = await storage.getWatchlist(getCurrentUserId(req));
       res.json(watchlist);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch watchlist" });
@@ -1026,7 +1247,7 @@ export async function registerRoutes(
   app.post("/api/watchlist", async (req, res) => {
     try {
       const validated = insertWatchlistSchema.parse(req.body);
-      const item = await storage.addToWatchlist(MOCK_USER_ID, validated);
+      const item = await storage.addToWatchlist(getCurrentUserId(req), validated);
       res.status(201).json(item);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1039,6 +1260,12 @@ export async function registerRoutes(
   // DELETE from watchlist
   app.delete("/api/watchlist/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getWatchlistItem(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Watchlist item not found" });
+      }
+
       await storage.removeFromWatchlist(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1049,7 +1276,7 @@ export async function registerRoutes(
   // GET price alerts
   app.get("/api/price-alerts", async (req, res) => {
     try {
-      const alerts = await storage.getPriceAlerts(MOCK_USER_ID);
+      const alerts = await storage.getPriceAlerts(getCurrentUserId(req));
       res.json(alerts);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch alerts" });
@@ -1060,7 +1287,7 @@ export async function registerRoutes(
   app.post("/api/price-alerts", async (req, res) => {
     try {
       const validated = insertPriceAlertSchema.parse(req.body);
-      const alert = await storage.createPriceAlert(MOCK_USER_ID, validated);
+      const alert = await storage.createPriceAlert(getCurrentUserId(req), validated);
       res.status(201).json(alert);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1073,6 +1300,12 @@ export async function registerRoutes(
   // PATCH update price alert
   app.patch("/api/price-alerts/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getPriceAlert(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Price alert not found" });
+      }
+
       const alert = await storage.updatePriceAlert(req.params.id, req.body);
       res.json(alert);
     } catch (error) {
@@ -1083,6 +1316,12 @@ export async function registerRoutes(
   // DELETE price alert
   app.delete("/api/price-alerts/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getPriceAlert(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Price alert not found" });
+      }
+
       await storage.deletePriceAlert(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1095,7 +1334,7 @@ export async function registerRoutes(
   // GET radio slots analysis
   app.get("/api/radio/slots", async (req, res) => {
     try {
-      const slots = await getRadioSlotsForMonth();
+      const slots = await getRadioSlotsForMonth(getCurrentUserId(req));
       res.json(slots);
     } catch (error) {
       res.status(500).json({ error: "Failed to analyze radio slots" });
@@ -1105,7 +1344,7 @@ export async function registerRoutes(
   // GET radio analysis summary
   app.get("/api/radio/analysis", async (req, res) => {
     try {
-      const analysis = await analyzeRadioEvents();
+      const analysis = await analyzeRadioEvents(getCurrentUserId(req));
       res.json(analysis);
     } catch (error) {
       res.status(500).json({ error: "Failed to analyze radio events" });
@@ -1125,7 +1364,7 @@ export async function registerRoutes(
   // POST import DJs from radio history
   app.post("/api/radio/import-djs", async (req, res) => {
     try {
-      const result = await importDjsFromRadioHistory();
+      const result = await importDjsFromRadioHistory(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to import DJs" });
@@ -1135,7 +1374,7 @@ export async function registerRoutes(
   // GET all DJ contacts
   app.get("/api/djs", async (req, res) => {
     try {
-      const djs = await storage.getDjContacts(MOCK_USER_ID);
+      const djs = await storage.getDjContacts(getCurrentUserId(req));
       res.json(djs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch DJs" });
@@ -1146,7 +1385,7 @@ export async function registerRoutes(
   app.post("/api/djs", async (req, res) => {
     try {
       const parsed = insertDjContactSchema.parse(req.body);
-      const dj = await storage.createDjContact(MOCK_USER_ID, parsed);
+      const dj = await storage.createDjContact(getCurrentUserId(req), parsed);
       res.json(dj);
     } catch (error) {
       res.status(500).json({ error: "Failed to create DJ contact" });
@@ -1215,7 +1454,7 @@ export async function registerRoutes(
   // GET portfolio margin config
   app.get("/api/portfolio/margin", async (req, res) => {
     try {
-      const config = await storage.getPortfolioConfig("mock-user-123");
+      const config = await storage.getPortfolioConfig(getCurrentUserId(req));
       res.json(config || { marginUsed: "0", marginTotal: "0" });
     } catch (error) {
       res.status(500).json({ error: "Failed to get margin config" });
@@ -1227,7 +1466,7 @@ export async function registerRoutes(
     try {
       const { marginUsed, marginTotal } = req.body;
       await storage.updatePortfolioConfig(
-        "mock-user-123",
+        getCurrentUserId(req),
         String(marginUsed || "0"),
         String(marginTotal || "0")
       );
@@ -1277,6 +1516,1416 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== TRUST & CONTROL ====================
+
+  app.get("/api/audit-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getAuditLogs(getCurrentUserId(req), limit);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
+  app.get("/api/pending-actions", async (req, res) => {
+    try {
+      const actions = await storage.getPendingActions(getCurrentUserId(req));
+      res.json(actions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pending actions" });
+    }
+  });
+
+  app.get("/api/pending-actions/:id", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      if (!action || action.userId !== getCurrentUserId(req)) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      res.json(action);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pending action" });
+    }
+  });
+
+  app.get("/api/pending-actions/:id/events", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      if (!action || action.userId !== getCurrentUserId(req)) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      const events = await storage.getPendingActionEvents(action.id);
+      res.json(events);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pending action history" });
+    }
+  });
+
+  app.get("/api/approval-history", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const history = await storage.getApprovalHistory(getCurrentUserId(req), limit);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch approval history" });
+    }
+  });
+
+  app.patch("/api/pending-actions/:id/edit", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      if (!["pending", "edited", "snoozed"].includes(action.status)) {
+        return res.status(400).json({ error: "Only pending actions can be edited" });
+      }
+      const updated = await storage.updatePendingAction(action.id, {
+        status: "edited",
+        editedInput: req.body.editedInput,
+      });
+      await storage.createPendingActionEvent({
+        pendingActionId: action.id,
+        userId,
+        actorType: "user",
+        actorId: userId,
+        eventType: "edited",
+        previousStatus: action.status,
+        nextStatus: "edited",
+        note: req.body.note || null,
+        metadata: { editedInput: req.body.editedInput },
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "pending_action.edit",
+        resourceType: "pending_action",
+        resourceId: action.id,
+        pendingActionId: action.id,
+        metadata: { editedInput: req.body.editedInput },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to edit pending action" });
+    }
+  });
+
+  app.post("/api/pending-actions/:id/approve", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      if (!["pending", "edited", "snoozed"].includes(action.status)) {
+        return res.status(400).json({ error: "Only pending actions can be approved" });
+      }
+      const updated = await storage.updatePendingAction(action.id, {
+        status: "approved",
+        approvedBy: userId,
+        approvedAt: new Date(),
+        approvalReason: req.body.reason || null,
+      });
+      await storage.createPendingActionEvent({
+        pendingActionId: action.id,
+        userId,
+        actorType: "user",
+        actorId: userId,
+        eventType: "approved",
+        previousStatus: action.status,
+        nextStatus: "approved",
+        note: req.body.reason || null,
+        metadata: null,
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "pending_action.approve",
+        resourceType: "pending_action",
+        resourceId: action.id,
+        pendingActionId: action.id,
+        metadata: { reason: req.body.reason || null },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to approve pending action" });
+    }
+  });
+
+  app.post("/api/pending-actions/:id/reject", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      const updated = await storage.updatePendingAction(action.id, {
+        status: "rejected",
+        rejectionReason: req.body.reason || null,
+      });
+      await storage.createPendingActionEvent({
+        pendingActionId: action.id,
+        userId,
+        actorType: "user",
+        actorId: userId,
+        eventType: "rejected",
+        previousStatus: action.status,
+        nextStatus: "rejected",
+        note: req.body.reason || null,
+        metadata: null,
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "pending_action.reject",
+        resourceType: "pending_action",
+        resourceId: action.id,
+        pendingActionId: action.id,
+        metadata: { reason: req.body.reason || null },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reject pending action" });
+    }
+  });
+
+  app.post("/api/pending-actions/:id/snooze", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      const snoozedUntil = req.body.snoozedUntil ? new Date(req.body.snoozedUntil) : new Date(Date.now() + 60 * 60 * 1000);
+      const updated = await storage.updatePendingAction(action.id, {
+        status: "snoozed",
+        snoozedUntil,
+      });
+      await storage.createPendingActionEvent({
+        pendingActionId: action.id,
+        userId,
+        actorType: "user",
+        actorId: userId,
+        eventType: "snoozed",
+        previousStatus: action.status,
+        nextStatus: "snoozed",
+        note: req.body.reason || null,
+        metadata: { snoozedUntil },
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "pending_action.snooze",
+        resourceType: "pending_action",
+        resourceId: action.id,
+        pendingActionId: action.id,
+        metadata: { snoozedUntil },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to snooze pending action" });
+    }
+  });
+
+  app.post("/api/pending-actions/:id/cancel", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      if (["executing", "executed", "completed", "failed", "cancelled"].includes(action.status)) {
+        return res.status(400).json({ error: "This action can no longer be cancelled" });
+      }
+      const updated = await storage.updatePendingAction(action.id, {
+        status: "cancelled",
+        rejectionReason: req.body.reason || null,
+      });
+      await storage.createPendingActionEvent({
+        pendingActionId: action.id,
+        userId,
+        actorType: "user",
+        actorId: userId,
+        eventType: "cancelled",
+        previousStatus: action.status,
+        nextStatus: "cancelled",
+        note: req.body.reason || null,
+        metadata: null,
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "pending_action.cancel",
+        resourceType: "pending_action",
+        resourceId: action.id,
+        pendingActionId: action.id,
+        metadata: { reason: req.body.reason || null },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel pending action" });
+    }
+  });
+
+  app.post("/api/pending-actions/:id/execute", async (req, res) => {
+    try {
+      const action = await storage.getPendingAction(req.params.id);
+      const userId = getCurrentUserId(req);
+      if (!action || action.userId !== userId) {
+        return res.status(404).json({ error: "Pending action not found" });
+      }
+      const result = await executeApprovedPendingAction(action, userId);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to execute pending action" });
+    }
+  });
+
+  app.get("/api/assistant/permissions", async (req, res) => {
+    try {
+      const permissions = await storage.getAssistantPermissions(getCurrentUserId(req));
+      res.json(permissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch assistant permissions" });
+    }
+  });
+
+  app.patch("/api/assistant/permissions/:scope", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const permission = await storage.upsertAssistantPermission(userId, {
+        scope: req.params.scope,
+        permissionLevel: req.body.permissionLevel,
+        riskLimit: req.body.riskLimit || "medium",
+        enabled: req.body.enabled ?? true,
+      });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "permission.update",
+        resourceType: "assistant_permission",
+        resourceId: permission.id,
+        metadata: permission,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(permission);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update assistant permission" });
+    }
+  });
+
+  // ==================== AUTOMATION MANAGER ====================
+
+  app.get("/api/automations", async (req, res) => {
+    try {
+      const automations = await ensureDefaultAutomations(getCurrentUserId(req));
+      res.json(automations);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch automations" });
+    }
+  });
+
+  app.get("/api/automations/:id", async (req, res) => {
+    try {
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== getCurrentUserId(req)) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      res.json(automation);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch automation" });
+    }
+  });
+
+  app.post("/api/automations", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = insertAutomationDefinitionSchema.parse(req.body);
+      const automation = await storage.createAutomationDefinition(userId, validated);
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "automation.create",
+        resourceType: "automation",
+        resourceId: automation.id,
+        metadata: automation,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.status(201).json(automation);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create automation" });
+    }
+  });
+
+  app.patch("/api/automations/:id", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== userId) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      const updated = await storage.updateAutomationDefinition(automation.id, req.body);
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "automation.update",
+        resourceType: "automation",
+        resourceId: automation.id,
+        metadata: { before: automation, after: updated },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update automation" });
+    }
+  });
+
+  app.post("/api/automations/:id/pause", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== userId) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      const updated = await storage.updateAutomationDefinition(automation.id, { status: "paused" });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "automation.pause",
+        resourceType: "automation",
+        resourceId: automation.id,
+        metadata: { previousStatus: automation.status },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to pause automation" });
+    }
+  });
+
+  app.post("/api/automations/:id/resume", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== userId) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      const updated = await storage.updateAutomationDefinition(automation.id, { status: "active" });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "automation.resume",
+        resourceType: "automation",
+        resourceId: automation.id,
+        metadata: { previousStatus: automation.status },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to resume automation" });
+    }
+  });
+
+  app.post("/api/automations/:id/run", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== userId) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      const run = await recordManualAutomationRun(automation, userId);
+      res.status(201).json(run);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to trigger automation" });
+    }
+  });
+
+  app.get("/api/automations/:id/runs", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automation = await storage.getAutomationDefinition(req.params.id);
+      if (!automation || automation.ownerUserId !== userId) {
+        return res.status(404).json({ error: "Automation not found" });
+      }
+      const limit = parseInt(req.query.limit as string) || 50;
+      const runs = await storage.getAutomationRuns(userId, automation.id, limit);
+      res.json(runs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch automation runs" });
+    }
+  });
+
+  app.get("/api/automation-runs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const runs = await storage.getAutomationRuns(getCurrentUserId(req), undefined, limit);
+      res.json(runs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch automation runs" });
+    }
+  });
+
+  app.get("/api/automation-manager/summary", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automations = await ensureDefaultAutomations(userId);
+      const runs = await storage.getAutomationRuns(userId, undefined, 25);
+      const active = automations.filter((automation) => automation.status === "active");
+      const paused = automations.filter((automation) => automation.status === "paused");
+      const failed = automations.filter((automation) => automation.status === "failed");
+      const pendingApproval = runs.filter((run) => run.status === "pending_approval");
+      res.json({
+        totals: automations.length,
+        active: active.length,
+        paused: paused.length,
+        failed: failed.length,
+        pendingApproval: pendingApproval.length,
+        estimatedDailyCost: automations.reduce((sum, automation) => sum + (Number(automation.costEstimate) || 0), 0),
+        recentRuns: runs.slice(0, 10),
+        failureAlerts: [
+          ...failed.map((automation) => ({ type: "definition", automation })),
+          ...runs.filter((run) => run.status === "failed").slice(0, 5).map((run) => ({ type: "run", run })),
+        ],
+        nextRuns: automations
+          .filter((automation) => automation.nextRunAt)
+          .sort((a, b) => new Date(a.nextRunAt!).getTime() - new Date(b.nextRunAt!).getTime())
+          .slice(0, 10),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch automation summary" });
+    }
+  });
+
+  const createFollowUpSchema = z.object({
+    person: z.string().trim().min(1),
+    topic: z.string().trim().min(1),
+    dueAt: z.string().trim().optional(),
+    channel: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+    priority: z.enum(["low", "normal", "medium", "high"]).default("normal"),
+  });
+
+  const createDecisionSchema = z.object({
+    title: z.string().trim().min(1),
+    decision: z.string().trim().min(1),
+    context: z.string().trim().optional(),
+  });
+
+  const createPersonSchema = z.object({
+    name: z.string().trim().min(1),
+    role: z.string().trim().optional(),
+    company: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+  });
+
+  const createCommitmentSchema = z.object({
+    owner: z.string().trim().min(1),
+    commitment: z.string().trim().min(1),
+    dueAt: z.string().trim().optional(),
+    context: z.string().trim().optional(),
+  });
+
+  const createCommunicationDraftSchema = z.object({
+    recipient: z.string().trim().min(1),
+    channel: z.string().trim().min(1),
+    subject: z.string().trim().optional(),
+    message: z.string().trim().min(1),
+    context: z.string().trim().optional(),
+  });
+
+  app.get("/api/ceo/decisions", async (req, res) => {
+    try {
+      const decisions = await storage.getUserProfileDataByCategory(getCurrentUserId(req), "decision");
+      res.json(decisions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch decisions" });
+    }
+  });
+
+  app.post("/api/ceo/decisions", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = createDecisionSchema.parse(req.body);
+      const value = validated.context ? `${validated.decision}\nContext: ${validated.context}` : validated.decision;
+      const decision = await storage.saveUserProfileData(userId, {
+        userId,
+        category: "decision",
+        key: validated.title,
+        value,
+        confidence: "confirmed",
+        source: "ceo-dashboard",
+      });
+
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "decision.save",
+        resourceType: "user_profile_data",
+        resourceId: decision.id,
+        metadata: validated,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+
+      res.status(201).json(decision);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to save decision" });
+    }
+  });
+
+  async function deleteCeoMemoryItem(req: any, res: any, category: "decision" | "person" | "commitment") {
+    const userId = getCurrentUserId(req);
+    const items = await storage.getUserProfileDataByCategory(userId, category);
+    const item = items.find((entry) => entry.id === req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: "Memory item not found" });
+    }
+
+    await storage.deleteUserProfileData(item.id);
+    await writeAuditLog({
+      userId,
+      actorType: "user",
+      actorId: userId,
+      origin: "web",
+      actionType: `${category}.delete`,
+      resourceType: "user_profile_data",
+      resourceId: item.id,
+      metadata: { key: item.key, category },
+      status: "succeeded",
+      executionMode: "user_requested",
+    });
+
+    return res.json({ success: true });
+  }
+
+  const updateMemorySchema = z.object({
+    title: z.string().trim().min(1).optional(),
+    key: z.string().trim().min(1).optional(),
+    value: z.string().trim().min(1),
+  });
+
+  async function updateCeoMemoryItem(req: any, res: any, category: "decision" | "person" | "commitment") {
+    const userId = getCurrentUserId(req);
+    const items = await storage.getUserProfileDataByCategory(userId, category);
+    const item = items.find((entry) => entry.id === req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: "Memory item not found" });
+    }
+
+    const validated = updateMemorySchema.parse(req.body);
+    const updated = await storage.updateUserProfileData(item.id, {
+      category,
+      key: validated.key || validated.title || item.key,
+      value: validated.value,
+      confidence: item.confidence || "confirmed",
+      source: item.source || "ceo-dashboard",
+    });
+
+    await writeAuditLog({
+      userId,
+      actorType: "user",
+      actorId: userId,
+      origin: "web",
+      actionType: `${category}.edit`,
+      resourceType: "user_profile_data",
+      resourceId: item.id,
+      metadata: { before: { key: item.key, value: item.value }, after: validated },
+      status: "succeeded",
+      executionMode: "user_requested",
+    });
+
+    return res.json(updated);
+  }
+
+  app.patch("/api/ceo/decisions/:id", async (req, res) => {
+    try {
+      await updateCeoMemoryItem(req, res, "decision");
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to edit decision" });
+    }
+  });
+
+  app.delete("/api/ceo/decisions/:id", async (req, res) => {
+    try {
+      await deleteCeoMemoryItem(req, res, "decision");
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete decision" });
+    }
+  });
+
+  app.get("/api/ceo/people", async (req, res) => {
+    try {
+      const people = await storage.getUserProfileDataByCategory(getCurrentUserId(req), "person");
+      res.json(people);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch people" });
+    }
+  });
+
+  app.post("/api/ceo/people", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = createPersonSchema.parse(req.body);
+      const value = [
+        validated.role ? `Role: ${validated.role}` : null,
+        validated.company ? `Company: ${validated.company}` : null,
+        validated.notes ? `Notes: ${validated.notes}` : null,
+      ].filter(Boolean).join("\n") || "Key person";
+
+      const person = await storage.saveUserProfileData(userId, {
+        userId,
+        category: "person",
+        key: validated.name,
+        value,
+        confidence: "confirmed",
+        source: "ceo-dashboard",
+      });
+
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "person.save",
+        resourceType: "user_profile_data",
+        resourceId: person.id,
+        metadata: validated,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+
+      res.status(201).json(person);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to save person" });
+    }
+  });
+
+  app.delete("/api/ceo/people/:id", async (req, res) => {
+    try {
+      await deleteCeoMemoryItem(req, res, "person");
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete person" });
+    }
+  });
+
+  app.patch("/api/ceo/people/:id", async (req, res) => {
+    try {
+      await updateCeoMemoryItem(req, res, "person");
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to edit person" });
+    }
+  });
+
+  app.get("/api/ceo/commitments", async (req, res) => {
+    try {
+      const commitments = await storage.getUserProfileDataByCategory(getCurrentUserId(req), "commitment");
+      res.json(commitments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch commitments" });
+    }
+  });
+
+  app.post("/api/ceo/commitments", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = createCommitmentSchema.parse(req.body);
+      const value = [
+        validated.commitment,
+        validated.dueAt ? `Due: ${validated.dueAt}` : null,
+        validated.context ? `Context: ${validated.context}` : null,
+      ].filter(Boolean).join("\n");
+
+      const commitment = await storage.saveUserProfileData(userId, {
+        userId,
+        category: "commitment",
+        key: validated.owner,
+        value,
+        confidence: "confirmed",
+        source: "ceo-dashboard",
+      });
+
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "commitment.save",
+        resourceType: "user_profile_data",
+        resourceId: commitment.id,
+        metadata: validated,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+
+      res.status(201).json(commitment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to save commitment" });
+    }
+  });
+
+  app.post("/api/ceo/communication-drafts", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = createCommunicationDraftSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "communications.send",
+        resourceType: "communication_draft",
+        title: `Borrador para ${validated.recipient}`,
+        description: `Enviar por ${validated.channel}${validated.subject ? `: ${validated.subject}` : ""}`,
+        input: validated,
+        proposedChanges: {
+          recipient: validated.recipient,
+          channel: validated.channel,
+          subject: validated.subject,
+          message: validated.message,
+        },
+      });
+
+      res.status(201).json(pendingAction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create communication draft" });
+    }
+  });
+
+  app.delete("/api/ceo/commitments/:id", async (req, res) => {
+    try {
+      await deleteCeoMemoryItem(req, res, "commitment");
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete commitment" });
+    }
+  });
+
+  app.patch("/api/ceo/commitments/:id", async (req, res) => {
+    try {
+      await updateCeoMemoryItem(req, res, "commitment");
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to edit commitment" });
+    }
+  });
+
+  app.post("/api/ceo/follow-ups", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const validated = createFollowUpSchema.parse(req.body);
+      const dueAt = validated.dueAt ? new Date(validated.dueAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const description = [
+        `Owner: ${validated.person}`,
+        validated.channel ? `Channel: ${validated.channel}` : null,
+        validated.notes ? `Notes: ${validated.notes}` : null,
+      ].filter(Boolean).join("\n");
+
+      const task = await storage.createTask(userId, {
+        title: `Follow-up: ${validated.person} - ${validated.topic}`,
+        description,
+        date: dueAt,
+        priority: validated.priority,
+        completed: false,
+        type: "follow_up",
+      });
+
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "follow_up.create",
+        resourceType: "task",
+        resourceId: task.id,
+        metadata: validated,
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+
+      res.status(201).json(task);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create follow-up" });
+    }
+  });
+
+  app.post("/api/ceo/follow-ups/:id/complete", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const task = await storage.getTask(req.params.id);
+      if (!task || task.userId !== userId || task.type !== "follow_up") {
+        return res.status(404).json({ error: "Follow-up not found" });
+      }
+
+      const updated = await storage.updateTask(task.id, { completed: true });
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "follow_up.complete",
+        resourceType: "task",
+        resourceId: task.id,
+        metadata: { title: task.title },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to complete follow-up" });
+    }
+  });
+
+  app.get("/api/ceo/meetings/prep", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const preps = await getUpcomingMeetingPreps(userId, 8);
+      res.json(preps);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to build meeting prep" });
+    }
+  });
+
+  app.get("/api/ceo/meetings/:id/prep", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const prep = await getMeetingPrepById(userId, req.params.id);
+      if (!prep) {
+        return res.status(404).json({ error: "Meeting prep not found" });
+      }
+      res.json(prep);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to build meeting prep" });
+    }
+  });
+
+  app.get("/api/ceo-dashboard", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+      const safe = async <T,>(promise: Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await promise;
+        } catch (error) {
+          console.warn("[ceo-dashboard] partial data unavailable:", error);
+          return fallback;
+        }
+      };
+
+      const [
+        tasks,
+        pendingActions,
+        projects,
+        priceAlerts,
+        auditLogs,
+        permissions,
+        agentActions,
+        scheduledReminders,
+        djContacts,
+        automations,
+        automationRuns,
+        meetingPreps,
+        decisions,
+        people,
+        commitments,
+      ] = await Promise.all([
+        safe(storage.getTasks(userId), []),
+        safe(storage.getPendingActions(userId), []),
+        safe(storage.getMonitoredProjects(userId), []),
+        safe(storage.getPriceAlerts(userId), []),
+        safe(storage.getAuditLogs(userId, 25), []),
+        safe(storage.getAssistantPermissions(userId), []),
+        safe(storage.getAgentActions(userId), []),
+        safe(storage.getScheduledReminders(userId), []),
+        safe(storage.getDjContacts(userId), []),
+        safe(ensureDefaultAutomations(userId), []),
+        safe(storage.getAutomationRuns(userId, undefined, 25), []),
+        safe(getUpcomingMeetingPreps(userId, 5), []),
+        safe(storage.getUserProfileDataByCategory(userId, "decision"), []),
+        safe(storage.getUserProfileDataByCategory(userId, "person"), []),
+        safe(storage.getUserProfileDataByCategory(userId, "commitment"), []),
+      ]);
+
+      const todaysTasks = tasks
+        .filter((task) => {
+          const date = new Date(task.date);
+          return date >= todayStart && date <= todayEnd && !task.completed;
+        })
+        .sort((a, b) => {
+          if (a.priority === "high" && b.priority !== "high") return -1;
+          if (b.priority === "high" && a.priority !== "high") return 1;
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+
+      const overdueTasks = tasks.filter((task) => new Date(task.date) < todayStart && !task.completed);
+      const activeApprovals = pendingActions.filter((action) => ["pending", "edited", "snoozed", "approved"].includes(action.status));
+      const offlineProjects = projects.filter((project) => project.status === "offline" || project.status === "degraded");
+      const failedAudit = auditLogs.filter((log) => log.status === "failed").slice(0, 5);
+      const failedAgentActions = agentActions.filter((action) => action.status === "failed").slice(0, 5);
+      const failedAutomations = automations.filter((automation) => automation.status === "failed");
+      const failedAutomationRuns = automationRuns.filter((run) => run.status === "failed");
+      const pendingAutomationRuns = automationRuns.filter((run) => run.status === "pending_approval");
+      const triggeredFinanceAlerts = priceAlerts.filter((alert) => alert.enabled && alert.triggered);
+      const radioTasks = tasks
+        .filter((task) => {
+          const text = `${task.title} ${task.description || ""}`.toLowerCase();
+          return text.includes("radio") || text.includes("black room");
+        })
+        .filter((task) => new Date(task.date) >= todayStart)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
+      const marketingTasks = tasks
+        .filter((task) => {
+          const text = `${task.title} ${task.description || ""}`.toLowerCase();
+          return text.includes("marketing") || text.includes("content") || text.includes("contenido") || text.includes("post");
+        })
+        .filter((task) => !task.completed)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
+      const followUpsDue = tasks
+        .filter((task) => {
+          const text = `${task.title} ${task.description || ""}`.toLowerCase();
+          const isFollowUp = text.includes("follow") || text.includes("llamar") || text.includes("mensaje") || text.includes("responder") || text.includes("contactar");
+          return (task.type === "follow_up" || isFollowUp) && !task.completed && new Date(task.date) <= todayEnd;
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 8);
+      const kongDropkitProjects = projects.filter((project) => {
+        const text = `${project.name} ${project.description || ""} ${project.githubRepo || ""}`.toLowerCase();
+        return text.includes("kong") || text.includes("dropkit");
+      });
+
+      const googleConnected = await isGoogleCalendarConnected().catch(() => false);
+      const githubConnected = await isGitHubConnected().catch(() => false);
+
+      const agenda = todaysTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        type: task.type,
+        priority: task.priority,
+        startsAt: task.date,
+        endsAt: task.endDate,
+        source: task.externalSource || "blackops",
+      }));
+      const todayPriorities = [
+        ...todaysTasks.slice(0, 6).map((task) => ({
+          id: task.id,
+          type: "task",
+          title: task.title,
+          priority: task.priority,
+          dueAt: task.date,
+        })),
+        ...activeApprovals.slice(0, 3).map((action) => ({
+          id: action.id,
+          type: "approval",
+          title: action.title,
+          priority: action.riskLevel,
+          dueAt: action.expiresAt || action.createdAt,
+        })),
+      ];
+      const criticalRisks = [
+        ...offlineProjects.map((project) => ({
+          type: "project_health",
+          severity: project.status === "offline" ? "critical" : "medium",
+          title: `${project.name} esta ${project.status}`,
+          resourceId: project.id,
+        })),
+        ...overdueTasks.slice(0, 5).map((task) => ({
+          type: "overdue_task",
+          severity: task.priority === "high" ? "high" : "medium",
+          title: task.title,
+          resourceId: task.id,
+        })),
+        ...failedAudit.map((log) => ({
+          type: "failed_action",
+          severity: "high",
+          title: log.actionType,
+          resourceId: log.id,
+          error: log.errorMessage,
+        })),
+      ];
+
+      res.json({
+        agenda,
+        topPriorities: todayPriorities.slice(0, 3),
+        todayPriorities,
+        pendingApprovals: activeApprovals,
+        criticalRisks,
+        appHealth: {
+          projects: {
+            total: projects.length,
+            online: projects.filter((project) => project.status === "online").length,
+            offline: projects.filter((project) => project.status === "offline").length,
+            degraded: projects.filter((project) => project.status === "degraded").length,
+            items: projects.slice(0, 8),
+          },
+          integrations: {
+            googleCalendar: googleConnected,
+            github: githubConnected,
+          },
+          trust: {
+            pendingApprovals: activeApprovals.length,
+            permissionsConfigured: permissions.length,
+            recentFailures: failedAudit.length,
+          },
+          automations: {
+            total: automations.length,
+            active: automations.filter((automation) => automation.status === "active").length,
+            paused: automations.filter((automation) => automation.status === "paused").length,
+            failed: failedAutomations.length,
+            pendingApproval: pendingAutomationRuns.length,
+          },
+        },
+        financeAlerts: triggeredFinanceAlerts.map((alert) => ({
+          id: alert.id,
+          symbol: alert.symbol,
+          condition: alert.condition,
+          targetPrice: alert.targetPrice,
+          triggeredAt: alert.triggeredAt,
+        })),
+        marketingContentStatus: {
+          openItems: marketingTasks,
+          needsDataModel: true,
+        },
+        marketingContentAlerts: marketingTasks,
+        blackRoomEvents: {
+          upcoming: radioTasks,
+          djContacts: djContacts.length,
+        },
+        kongDropkitStatus: {
+          projects: kongDropkitProjects,
+          connectedToGithub: githubConnected,
+          needsBusinessUnitModel: kongDropkitProjects.length === 0,
+        },
+        automationFailures: [
+          ...failedAutomations.map((automation) => ({
+            id: automation.id,
+            source: "automation",
+            title: automation.name,
+            error: automation.description,
+            createdAt: automation.updatedAt,
+          })),
+          ...failedAutomationRuns.map((run) => ({
+            id: run.id,
+            source: "automation_run",
+            title: run.resultSummary || "Automation run failed",
+            error: run.errorMessage,
+            createdAt: run.createdAt,
+          })),
+          ...failedAudit.map((log) => ({
+            id: log.id,
+            source: "audit",
+            title: log.actionType,
+            error: log.errorMessage,
+            createdAt: log.createdAt,
+          })),
+          ...failedAgentActions.map((action) => ({
+            id: action.id,
+            source: "agent",
+            title: action.description,
+            error: null,
+            createdAt: action.createdAt,
+          })),
+        ],
+        followUpsDue,
+        reminders: scheduledReminders
+          .filter((reminder) => reminder.isActive)
+          .slice(0, 8),
+        meetingPreps,
+        decisions: decisions.slice(0, 6).map((decision) => ({
+          id: decision.id,
+          title: decision.key,
+          description: decision.value,
+          createdAt: decision.createdAt,
+          type: "decision",
+        })),
+        people: people.slice(0, 6).map((person) => ({
+          id: person.id,
+          title: person.key,
+          description: person.value,
+          createdAt: person.createdAt,
+          type: "person",
+        })),
+        commitments: commitments.slice(0, 8).map((commitment) => ({
+          id: commitment.id,
+          title: commitment.key,
+          description: commitment.value,
+          createdAt: commitment.createdAt,
+          type: "commitment",
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to build CEO dashboard" });
+    }
+  });
+
+  // ==================== DEVELOPER HEALTH CENTER ====================
+
+  app.get("/api/developer-health/apps", async (req, res) => {
+    try {
+      const apps = await storage.getAppProjects(getCurrentUserId(req));
+      res.json(apps);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch app projects" });
+    }
+  });
+
+  app.post("/api/developer-health/apps", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const body = {
+        ...req.body,
+        slug: req.body.slug || String(req.body.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+      };
+      const validated = insertAppProjectSchema.parse(body);
+      const appProject = await storage.createAppProject(userId, validated);
+      await writeAuditLog({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        actionType: "developer_health.app_project.create",
+        resourceType: "app_project",
+        resourceId: appProject.id,
+        metadata: { name: appProject.name, slug: appProject.slug },
+        status: "succeeded",
+        executionMode: "user_requested",
+      });
+      res.status(201).json(appProject);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create app project" });
+    }
+  });
+
+  app.get("/api/developer-health/dashboard", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const apps = await storage.getAppProjects(userId);
+      const incidents = await storage.getAppIncidents(userId);
+      const openIncidents = incidents.filter((incident) => ["open", "investigating", "pending_action"].includes(incident.status));
+
+      const appCards = await Promise.all(apps.map(async (appProject) => {
+        const [checks, errors, reports] = await Promise.all([
+          storage.getAppHealthChecks(appProject.id, 10),
+          storage.getAppErrorEvents(appProject.id, 10),
+          storage.getAppDailyReports(appProject.id, 1),
+        ]);
+        return {
+          ...appProject,
+          recentChecks: checks,
+          recentErrors: errors,
+          latestReport: reports[0] || null,
+          openIncidents: openIncidents.filter((incident) => incident.appProjectId === appProject.id),
+        };
+      }));
+
+      res.json({
+        apps: appCards,
+        summary: {
+          totalApps: apps.length,
+          healthy: apps.filter((appProject) => appProject.status === "healthy").length,
+          degraded: apps.filter((appProject) => appProject.status === "degraded").length,
+          down: apps.filter((appProject) => appProject.status === "down").length,
+          unknown: apps.filter((appProject) => appProject.status === "unknown").length,
+          openIncidents: openIncidents.length,
+          criticalIncidents: openIncidents.filter((incident) => incident.severity === "critical").length,
+        },
+        openIncidents,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch developer health dashboard" });
+    }
+  });
+
+  app.get("/api/developer-health/apps/:id/overview", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const appProject = await storage.getAppProject(req.params.id);
+      if (!appProject || appProject.userId !== userId) {
+        return res.status(404).json({ error: "App project not found" });
+      }
+      const [checks, incidents, errors, reports] = await Promise.all([
+        storage.getAppHealthChecks(appProject.id, 50),
+        storage.getAppIncidentsForProject(appProject.id),
+        storage.getAppErrorEvents(appProject.id, 50),
+        storage.getAppDailyReports(appProject.id, 7),
+      ]);
+      res.json({ app: appProject, checks, incidents, errors, reports });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch app overview" });
+    }
+  });
+
+  app.get("/api/developer-health/apps/:id/timeline", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const appProject = await storage.getAppProject(req.params.id);
+      if (!appProject || appProject.userId !== userId) {
+        return res.status(404).json({ error: "App project not found" });
+      }
+      const [checks, incidents, errors] = await Promise.all([
+        storage.getAppHealthChecks(appProject.id, 100),
+        storage.getAppIncidentsForProject(appProject.id),
+        storage.getAppErrorEvents(appProject.id, 100),
+      ]);
+      const timeline = [
+        ...checks.map((check) => ({ type: "check", at: check.checkedAt, item: check })),
+        ...incidents.map((incident) => ({ type: "incident", at: incident.lastSeenAt, item: incident })),
+        ...errors.map((errorEvent) => ({ type: "error", at: errorEvent.lastSeenAt, item: errorEvent })),
+      ].sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+      res.json(timeline);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch app timeline" });
+    }
+  });
+
+  app.get("/api/developer-health/incidents", async (req, res) => {
+    try {
+      const incidents = await storage.getAppIncidents(getCurrentUserId(req), req.query.status as string | undefined);
+      res.json(incidents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch developer incidents" });
+    }
+  });
+
+  app.get("/api/developer-health/incidents/:id", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const incident = await storage.getAppIncident(req.params.id);
+      if (!incident) {
+        return res.status(404).json({ error: "Incident not found" });
+      }
+      const appProject = await storage.getAppProject(incident.appProjectId);
+      if (!appProject || appProject.userId !== userId) {
+        return res.status(404).json({ error: "Incident not found" });
+      }
+      const errors = await storage.getAppErrorEventsForIncident(incident.id);
+      res.json({ incident, app: appProject, errors });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch developer incident" });
+    }
+  });
+
+  app.post("/api/developer-health/incidents/:id/investigate", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const incident = await storage.getAppIncident(req.params.id);
+      if (!incident) {
+        return res.status(404).json({ error: "Incident not found" });
+      }
+      const appProject = await storage.getAppProject(incident.appProjectId);
+      if (!appProject || appProject.userId !== userId) {
+        return res.status(404).json({ error: "Incident not found" });
+      }
+      const pendingAction = await createPendingActionForApproval({
+        userId,
+        actorType: "user",
+        actorId: userId,
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "developer_agent.investigate_incident",
+        resourceType: "app_incident",
+        resourceId: incident.id,
+        title: `Investigate ${appProject.name}: ${incident.title}`,
+        description: "Developer Agent may inspect only incident-related files, logs, stack traces, linked PRs, and deployment metadata before proposing a fix.",
+        input: {
+          incidentId: incident.id,
+          appProjectId: appProject.id,
+          githubRepo: appProject.githubRepo,
+          fingerprint: incident.fingerprint,
+          source: incident.source,
+          severity: incident.severity,
+        },
+        proposedChanges: {
+          mode: "investigation_only",
+          allowedScope: "related_files_only",
+        },
+        metadata: { appName: appProject.name, incidentTitle: incident.title },
+        scope: "code",
+      });
+      await storage.updateAppIncident(incident.id, {
+        status: "pending_action",
+        relatedPendingActionId: pendingAction.id,
+      });
+      res.status(201).json({ pendingAction });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create investigation pending action" });
+    }
+  });
+
   // ==================== AGENT ACTIONS ====================
 
   // GET list all available actions
@@ -1302,7 +2951,7 @@ export async function registerRoutes(
   // POST execute a single action
   app.post("/api/agent/execute/:actionId", async (req, res) => {
     try {
-      const result = await executeAction(req.params.actionId);
+      const result = await executeAction(req.params.actionId, getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to execute action" });
@@ -1316,7 +2965,7 @@ export async function registerRoutes(
       if (!Array.isArray(actionIds)) {
         return res.status(400).json({ error: "actionIds must be an array" });
       }
-      const results = await executeMultipleActions(actionIds);
+      const results = await executeMultipleActions(actionIds, getCurrentUserId(req));
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: "Failed to execute actions" });
@@ -1326,7 +2975,7 @@ export async function registerRoutes(
   // GET agent action history
   app.get("/api/agent/history", async (req, res) => {
     try {
-      const actions = await storage.getAgentActions(MOCK_USER_ID);
+      const actions = await storage.getAgentActions(getCurrentUserId(req));
       res.json(actions);
     } catch (error) {
       res.status(500).json({ error: "Failed to get action history" });
@@ -1338,10 +2987,66 @@ export async function registerRoutes(
   // GET all monitored projects
   app.get("/api/projects", async (req, res) => {
     try {
-      const projects = await storage.getMonitoredProjects(MOCK_USER_ID);
+      const projects = await storage.getMonitoredProjects(getCurrentUserId(req));
       res.json(projects);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch projects" });
+    }
+  });
+
+  app.get("/api/projects/github-overview", async (req, res) => {
+    try {
+      const projects = await storage.getMonitoredProjects(getCurrentUserId(req));
+      const repos = Array.from(new Set(projects.map((project) => project.githubRepo).filter(Boolean))) as string[];
+      const entries = await Promise.all(
+        repos.map(async (fullName) => {
+          const [owner, repo] = fullName.split("/");
+          if (!owner || !repo) return [fullName, { error: "Repo invalido" }];
+          try {
+            return [fullName, await getRepositoryOverview(owner, repo)];
+          } catch (error: any) {
+            return [fullName, { error: error.message || "No se pudo leer GitHub" }];
+          }
+        })
+      );
+      res.json(Object.fromEntries(entries));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch GitHub project overview" });
+    }
+  });
+
+  app.post("/api/projects/import-github", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const [repos, existingProjects] = await Promise.all([
+        listRepositories(),
+        storage.getMonitoredProjects(userId),
+      ]);
+      const existingRepos = new Set(existingProjects.map((project) => project.githubRepo).filter(Boolean));
+      let imported = 0;
+      let skipped = 0;
+      const projects = [];
+
+      for (const repo of repos) {
+        if (existingRepos.has(repo.full_name)) {
+          skipped++;
+          continue;
+        }
+
+        const project = await storage.createMonitoredProject(userId, {
+          name: repo.name,
+          url: repo.homepage?.trim() || repo.html_url,
+          description: repo.description || `Repositorio GitHub: ${repo.full_name}`,
+          githubRepo: repo.full_name,
+          notifyOnDown: true,
+        });
+        imported++;
+        projects.push(project);
+      }
+
+      res.status(201).json({ imported, skipped, total: repos.length, projects });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to import GitHub projects" });
     }
   });
 
@@ -1362,7 +3067,7 @@ export async function registerRoutes(
   app.post("/api/projects", async (req, res) => {
     try {
       const validated = insertMonitoredProjectSchema.parse(req.body);
-      const project = await storage.createMonitoredProject(MOCK_USER_ID, validated);
+      const project = await storage.createMonitoredProject(getCurrentUserId(req), validated);
       res.status(201).json(project);
     } catch (error) {
       if (error instanceof z.ZodError) {

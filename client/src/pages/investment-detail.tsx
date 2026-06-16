@@ -190,9 +190,9 @@ export default function InvestmentDetail() {
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
               {investmentType === "crypto" ? (
-                <Bitcoin className="h-5 w-5 text-orange-500" />
+                <Bitcoin className="h-5 w-5 text-zinc-400" />
               ) : (
-                <BarChart3 className="h-5 w-5 text-blue-500" />
+                <BarChart3 className="h-5 w-5 text-zinc-400" />
               )}
             </div>
             <div>
@@ -228,7 +228,7 @@ export default function InvestmentDetail() {
                 </span>
                 <span
                   className={`text-lg font-medium flex items-center gap-1 ${
-                    isPositive ? "text-emerald-500" : "text-red-500"
+                    isPositive ? "text-zinc-400" : "text-zinc-400"
                   }`}
                   data-testid="text-change-percent"
                 >
@@ -251,7 +251,7 @@ export default function InvestmentDetail() {
                       variant={selectedPeriod === period ? "default" : "ghost"}
                       className={
                         selectedPeriod === period
-                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          ? "bg-zinc-800 hover:bg-zinc-800"
                           : "text-zinc-400 hover:text-zinc-100"
                       }
                       onClick={() => setSelectedPeriod(period)}
@@ -273,12 +273,12 @@ export default function InvestmentDetail() {
                         <linearGradient id={`gradient-${symbol}`} x1="0" y1="0" x2="0" y2="1">
                           <stop
                             offset="0%"
-                            stopColor={chartData.gradient ? "#10b981" : "#ef4444"}
+                            stopColor={chartData.gradient ? "#d4d4d8" : "#71717a"}
                             stopOpacity="0.3"
                           />
                           <stop
                             offset="100%"
-                            stopColor={chartData.gradient ? "#10b981" : "#ef4444"}
+                            stopColor={chartData.gradient ? "#d4d4d8" : "#71717a"}
                             stopOpacity="0"
                           />
                         </linearGradient>
@@ -290,7 +290,7 @@ export default function InvestmentDetail() {
                       <path
                         d={chartData.path}
                         fill="none"
-                        stroke={chartData.gradient ? "#10b981" : "#ef4444"}
+                        stroke={chartData.gradient ? "#d4d4d8" : "#71717a"}
                         strokeWidth="0.8"
                         vectorEffect="non-scaling-stroke"
                       />
@@ -300,7 +300,7 @@ export default function InvestmentDetail() {
                           y1={chartData.buyPriceY}
                           x2="95"
                           y2={chartData.buyPriceY}
-                          stroke="#fbbf24"
+                          stroke="#a1a1aa"
                           strokeWidth="0.5"
                           strokeDasharray="2,2"
                           vectorEffect="non-scaling-stroke"
@@ -315,7 +315,7 @@ export default function InvestmentDetail() {
                     </div>
                     {chartData.buyPriceY !== null && chartData.avgBuyPrice && (
                       <div 
-                        className="absolute right-2 text-xs text-yellow-500 font-medium bg-zinc-900/80 px-1 rounded"
+                        className="absolute right-2 text-xs text-zinc-400 font-medium bg-zinc-900/80 px-1 rounded"
                         style={{ top: `${(chartData.buyPriceY / 100) * 100}%`, transform: 'translateY(-50%)' }}
                       >
                         Compra: {formatCurrency(chartData.avgBuyPrice)}
@@ -327,11 +327,11 @@ export default function InvestmentDetail() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <p className="text-zinc-500">Máximo 24h</p>
-                    <p className="font-medium text-emerald-500">{formatCurrency(displayHigh)}</p>
+                    <p className="font-medium text-zinc-400">{formatCurrency(displayHigh)}</p>
                   </div>
                   <div>
                     <p className="text-zinc-500">Mínimo 24h</p>
-                    <p className="font-medium text-red-500">{formatCurrency(displayLow)}</p>
+                    <p className="font-medium text-zinc-400">{formatCurrency(displayLow)}</p>
                   </div>
                   <div>
                     <p className="text-zinc-500">Volumen 24h</p>
@@ -349,7 +349,7 @@ export default function InvestmentDetail() {
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-emerald-500" /> Tu Posición
+                    <DollarSign className="h-4 w-4 text-zinc-400" /> Tu Posición
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -379,21 +379,21 @@ export default function InvestmentDetail() {
 
                   <div
                     className={`p-4 rounded-lg ${
-                      pnl.gain >= 0 ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-red-500/10 border border-red-500/30"
+                      pnl.gain >= 0 ? "bg-zinc-900/10 border border-white/10" : "bg-zinc-900/10 border border-white/10"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-zinc-400">Ganancia / Pérdida</p>
                         <p
-                          className={`text-2xl font-bold ${pnl.gain >= 0 ? "text-emerald-500" : "text-red-500"}`}
+                          className={`text-2xl font-bold ${pnl.gain >= 0 ? "text-zinc-400" : "text-zinc-400"}`}
                           data-testid="text-pnl-value"
                         >
                           {formatCurrency(pnl.gain)}
                         </p>
                       </div>
                       <div
-                        className={`text-right ${pnl.gain >= 0 ? "text-emerald-500" : "text-red-500"}`}
+                        className={`text-right ${pnl.gain >= 0 ? "text-zinc-400" : "text-zinc-400"}`}
                       >
                         {pnl.gainPercent >= 0 ? (
                           <TrendingUp className="h-8 w-8 mb-1" />
@@ -413,7 +413,7 @@ export default function InvestmentDetail() {
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-blue-500" /> Estadísticas
+                  <Activity className="h-4 w-4 text-zinc-400" /> Estadísticas
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -438,7 +438,7 @@ export default function InvestmentDetail() {
                   </div>
                   <div>
                     <p className="text-zinc-500">Cambio 24h</p>
-                    <p className={`font-medium ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
+                    <p className={`font-medium ${isPositive ? "text-zinc-400" : "text-zinc-400"}`}>
                       {formatCurrency(displayChange)}
                     </p>
                   </div>

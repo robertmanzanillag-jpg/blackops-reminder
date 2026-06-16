@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCalendarStatus, syncCalendar, syncZohoCalendar } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Check, X, Calendar, Loader2 } from "lucide-react";
+import { RefreshCw, Check, X, Calendar, Loader2, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -77,6 +78,28 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         <div className="space-y-6">
           <div>
             <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-4">
+              Agentes
+            </h3>
+            <Link href="/agents-office">
+              <Button
+                variant="outline"
+                className="h-auto w-full justify-start gap-3 rounded-lg border-zinc-700/50 bg-zinc-800/50 p-4 text-left text-white hover:bg-zinc-800 hover:text-white"
+                onClick={onClose}
+                data-testid="button-settings-agents-office"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black">
+                  <Building2 className="h-5 w-5 text-zinc-300" />
+                </div>
+                <div>
+                  <div className="font-medium">Sala de agentes</div>
+                  <div className="text-sm font-normal text-zinc-400">Ver oficina, cubiculos y agentes conectados.</div>
+                </div>
+              </Button>
+            </Link>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-4">
               Calendarios Conectados
             </h3>
 
@@ -85,7 +108,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-blue-500" />
+                    <Calendar className="w-6 h-6 text-zinc-400" />
                   </div>
                   <div>
                     <div className="font-medium text-white">Google Calendar</div>
@@ -99,7 +122,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
                   ) : calendarStatus?.google ? (
                     <>
-                      <Check className="w-5 h-5 text-green-500" />
+                      <Check className="w-5 h-5 text-zinc-400" />
                       <Button
                         size="sm"
                         variant="ghost"
@@ -124,8 +147,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               {/* Zoho Calendar */}
               <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-orange-500" />
+                  <div className="w-10 h-10 bg-zinc-900/20 rounded-lg flex items-center justify-center">
+                    <Calendar className="w-6 h-6 text-zinc-400" />
                   </div>
                   <div>
                     <div className="font-medium text-white">Zoho Calendar</div>
@@ -139,7 +162,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
                   ) : calendarStatus?.zoho ? (
                     <>
-                      <Check className="w-5 h-5 text-green-500" />
+                      <Check className="w-5 h-5 text-zinc-400" />
                       <Button
                         size="sm"
                         variant="ghost"
@@ -161,7 +184,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                       variant="ghost"
                       onClick={() => zohoSyncMutation.mutate()}
                       disabled={zohoSyncMutation.isPending}
-                      className="text-orange-400 hover:text-orange-300"
+                      className="text-zinc-400 hover:text-white"
                       data-testid="button-sync-zoho"
                     >
                       {zohoSyncMutation.isPending ? (
@@ -183,8 +206,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             <div className={cn(
               "p-3 rounded-lg text-sm",
               syncMessage.startsWith("Error") 
-                ? "bg-red-500/10 border border-red-500/20 text-red-400"
-                : "bg-green-500/10 border border-green-500/20 text-green-400"
+                ? "bg-zinc-900/10 border border-white/10 text-zinc-400"
+                : "bg-zinc-900/10 border border-white/10 text-zinc-400"
             )}>
               {syncMessage}
             </div>

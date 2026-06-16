@@ -440,6 +440,172 @@ export const insertIncidentSchema = createInsertSchema(incidents).omit({
 export type Incident = typeof incidents.$inferSelect;
 export type InsertIncident = z.infer<typeof insertIncidentSchema>;
 
+// ==================== DEVELOPER HEALTH CENTER ====================
+
+export type AppEnvironment = "production" | "staging" | "dev";
+export type AppProjectStatus = "healthy" | "degraded" | "down" | "unknown";
+export type AppPriority = "low" | "normal" | "high" | "critical";
+export type AppHealthCheckType = "uptime" | "health_endpoint" | "api_probe" | "webhook_probe";
+export type AppHealthCheckStatus = "ok" | "degraded" | "failed";
+export type AppIncidentSource = "uptime" | "sentry" | "logs" | "stripe" | "github" | "deploy" | "api";
+export type AppIncidentSeverity = "info" | "warning" | "high" | "critical";
+export type AppIncidentStatus = "open" | "investigating" | "pending_action" | "resolved" | "ignored";
+export type AppErrorEventSource = "sentry" | "server_log" | "failed_api" | "stripe_webhook" | "github" | "deploy";
+export type AppErrorEventLevel = "debug" | "info" | "warning" | "error" | "fatal";
+
+export const appProjects = pgTable("app_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  environment: text("environment").notNull().default("production").$type<AppEnvironment>(),
+  publicUrl: text("public_url"),
+  healthUrl: text("health_url"),
+  repoOwner: text("repo_owner"),
+  repoName: text("repo_name"),
+  githubRepo: text("github_repo"),
+  deploymentProvider: text("deployment_provider"),
+  deploymentId: text("deployment_id"),
+  sentryProjectId: text("sentry_project_id"),
+  stripeAccountId: text("stripe_account_id"),
+  stripeWebhookEndpointId: text("stripe_webhook_endpoint_id"),
+  logSource: text("log_source"),
+  status: text("status").notNull().default("unknown").$type<AppProjectStatus>(),
+  priority: text("priority").notNull().default("normal").$type<AppPriority>(),
+  ownerLabel: text("owner_label"),
+  tags: jsonb("tags"),
+  lastSeenAt: timestamp("last_seen_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAppProjectSchema = createInsertSchema(appProjects).omit({
+  id: true,
+  userId: true,
+  status: true,
+  lastSeenAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AppProject = typeof appProjects.$inferSelect;
+export type InsertAppProject = z.infer<typeof insertAppProjectSchema>;
+
+export const appHealthChecks = pgTable("app_health_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  appProjectId: varchar("app_project_id").notNull().references(() => appProjects.id, { onDelete: "cascade" }),
+  checkType: text("check_type").notNull().$type<AppHealthCheckType>(),
+  status: text("status").notNull().$type<AppHealthCheckStatus>(),
+  responseTimeMs: integer("response_time_ms"),
+  statusCode: integer("status_code"),
+  checkedUrl: text("checked_url"),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+  checkedAt: timestamp("checked_at").defaultNow(),
+});
+
+export const insertAppHealthCheckSchema = createInsertSchema(appHealthChecks).omit({
+  id: true,
+  checkedAt: true,
+});
+
+export type AppHealthCheck = typeof appHealthChecks.$inferSelect;
+export type InsertAppHealthCheck = z.infer<typeof insertAppHealthCheckSchema>;
+
+export const appIncidents = pgTable("app_incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  appProjectId: varchar("app_project_id").notNull().references(() => appProjects.id, { onDelete: "cascade" }),
+  source: text("source").notNull().$type<AppIncidentSource>(),
+  severity: text("severity").notNull().default("warning").$type<AppIncidentSeverity>(),
+  status: text("status").notNull().default("open").$type<AppIncidentStatus>(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  fingerprint: text("fingerprint"),
+  firstSeenAt: timestamp("first_seen_at").notNull(),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  durationSeconds: integer("duration_seconds"),
+  relatedErrorEventId: varchar("related_error_event_id"),
+  relatedPendingActionId: varchar("related_pending_action_id"),
+  relatedPrUrl: text("related_pr_url"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAppIncidentSchema = createInsertSchema(appIncidents).omit({
+  id: true,
+  resolvedAt: true,
+  durationSeconds: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AppIncident = typeof appIncidents.$inferSelect;
+export type InsertAppIncident = z.infer<typeof insertAppIncidentSchema>;
+
+export const appErrorEvents = pgTable("app_error_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  appProjectId: varchar("app_project_id").notNull().references(() => appProjects.id, { onDelete: "cascade" }),
+  incidentId: varchar("incident_id").references(() => appIncidents.id, { onDelete: "set null" }),
+  source: text("source").notNull().$type<AppErrorEventSource>(),
+  level: text("level").notNull().default("error").$type<AppErrorEventLevel>(),
+  eventKey: text("event_key"),
+  fingerprint: text("fingerprint"),
+  title: text("title").notNull(),
+  message: text("message"),
+  stacktrace: text("stacktrace"),
+  requestMethod: text("request_method"),
+  requestPath: text("request_path"),
+  statusCode: integer("status_code"),
+  userImpact: text("user_impact"),
+  count: integer("count").notNull().default(1),
+  firstSeenAt: timestamp("first_seen_at").notNull(),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAppErrorEventSchema = createInsertSchema(appErrorEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AppErrorEvent = typeof appErrorEvents.$inferSelect;
+export type InsertAppErrorEvent = z.infer<typeof insertAppErrorEventSchema>;
+
+export const appDailyReports = pgTable("app_daily_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  appProjectId: varchar("app_project_id").notNull().references(() => appProjects.id, { onDelete: "cascade" }),
+  reportDate: timestamp("report_date").notNull(),
+  uptimePercentage: text("uptime_percentage"),
+  checksTotal: integer("checks_total").notNull().default(0),
+  checksFailed: integer("checks_failed").notNull().default(0),
+  incidentsOpened: integer("incidents_opened").notNull().default(0),
+  incidentsResolved: integer("incidents_resolved").notNull().default(0),
+  sentryErrors: integer("sentry_errors").notNull().default(0),
+  failedApiRequests: integer("failed_api_requests").notNull().default(0),
+  stripeWebhookFailures: integer("stripe_webhook_failures").notNull().default(0),
+  githubOpenIssues: integer("github_open_issues").notNull().default(0),
+  githubOpenPrs: integer("github_open_prs").notNull().default(0),
+  deploymentsCount: integer("deployments_count").notNull().default(0),
+  deploymentFailures: integer("deployment_failures").notNull().default(0),
+  summary: text("summary"),
+  recommendations: jsonb("recommendations"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAppDailyReportSchema = createInsertSchema(appDailyReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AppDailyReport = typeof appDailyReports.$inferSelect;
+export type InsertAppDailyReport = z.infer<typeof insertAppDailyReportSchema>;
+
 // GitHub connection info (for when user connects later)
 export const githubConnections = pgTable("github_connections", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -511,6 +677,240 @@ export const insertAgentActionSchema = createInsertSchema(agentActions).omit({
 
 export type AgentAction = typeof agentActions.$inferSelect;
 export type InsertAgentAction = z.infer<typeof insertAgentActionSchema>;
+
+// ==================== TRUST & CONTROL LAYER ====================
+
+export type TrustActorType = "user" | "assistant" | "system" | "scheduler" | "webhook";
+export type TrustOrigin = "web" | "telegram" | "scheduler" | "api" | "github" | "system";
+export type TrustExecutionMode = "user_requested" | "automated" | "scheduled" | "webhook";
+export type AuditStatus =
+  | "started"
+  | "completed"
+  | "failed"
+  | "pending_approval"
+  | "attempted"
+  | "succeeded"
+  | "blocked"
+  | "queued";
+export type PermissionLevel = "read_only" | "draft_only" | "execute_after_approval" | "autonomous";
+export type PendingActionStatus =
+  | "draft"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "edited"
+  | "snoozed"
+  | "executing"
+  | "completed"
+  | "executed"
+  | "failed"
+  | "cancelled"
+  | "expired";
+export type RiskLevel = "low" | "medium" | "high" | "critical";
+export type PendingActionEventType =
+  | "created"
+  | "approved"
+  | "rejected"
+  | "edited"
+  | "snoozed"
+  | "executing"
+  | "executed"
+  | "failed"
+  | "cancelled";
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  actorType: text("actor_type").notNull().$type<TrustActorType>(),
+  actorId: text("actor_id"),
+  origin: text("origin").notNull().$type<TrustOrigin>(),
+  actionType: text("action_type").notNull(),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  requestId: text("request_id"),
+  pendingActionId: varchar("pending_action_id"),
+  metadata: jsonb("metadata"),
+  status: text("status").notNull().$type<AuditStatus>(),
+  executionMode: text("execution_mode").notNull().$type<TrustExecutionMode>(),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+
+export const pendingActions = pgTable("pending_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  createdByActorType: text("created_by_actor_type").notNull().$type<TrustActorType>(),
+  createdByActorId: text("created_by_actor_id"),
+  origin: text("origin").notNull().$type<TrustOrigin>(),
+  actionType: text("action_type").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  riskLevel: text("risk_level").notNull().default("medium").$type<RiskLevel>(),
+  permissionLevelRequired: text("permission_level_required").notNull().default("execute_after_approval").$type<PermissionLevel>(),
+  status: text("status").notNull().default("pending").$type<PendingActionStatus>(),
+  input: jsonb("input"),
+  proposedChanges: jsonb("proposed_changes"),
+  editedInput: jsonb("edited_input"),
+  executionResult: jsonb("execution_result"),
+  approvalReason: text("approval_reason"),
+  rejectionReason: text("rejection_reason"),
+  snoozedUntil: timestamp("snoozed_until"),
+  expiresAt: timestamp("expires_at"),
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  executedAt: timestamp("executed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPendingActionSchema = createInsertSchema(pendingActions).omit({
+  id: true,
+  status: true,
+  editedInput: true,
+  executionResult: true,
+  approvalReason: true,
+  rejectionReason: true,
+  snoozedUntil: true,
+  approvedBy: true,
+  approvedAt: true,
+  executedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PendingAction = typeof pendingActions.$inferSelect;
+export type InsertPendingAction = z.infer<typeof insertPendingActionSchema>;
+
+export const pendingActionEvents = pgTable("pending_action_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pendingActionId: varchar("pending_action_id").notNull().references(() => pendingActions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  actorType: text("actor_type").notNull().$type<TrustActorType>(),
+  actorId: text("actor_id"),
+  eventType: text("event_type").notNull().$type<PendingActionEventType>(),
+  previousStatus: text("previous_status").$type<PendingActionStatus>(),
+  nextStatus: text("next_status").$type<PendingActionStatus>(),
+  note: text("note"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPendingActionEventSchema = createInsertSchema(pendingActionEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type PendingActionEvent = typeof pendingActionEvents.$inferSelect;
+export type InsertPendingActionEvent = z.infer<typeof insertPendingActionEventSchema>;
+
+export const assistantPermissions = pgTable("assistant_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  scope: text("scope").notNull(),
+  permissionLevel: text("permission_level").notNull().default("execute_after_approval").$type<PermissionLevel>(),
+  riskLimit: text("risk_limit").notNull().default("medium").$type<RiskLevel>(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssistantPermissionSchema = createInsertSchema(assistantPermissions).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AssistantPermission = typeof assistantPermissions.$inferSelect;
+export type InsertAssistantPermission = z.infer<typeof insertAssistantPermissionSchema>;
+
+// ==================== AUTOMATION MANAGER ====================
+
+export type AutomationType =
+  | "reminder"
+  | "health_check"
+  | "market_news"
+  | "proactive_insight"
+  | "flyer"
+  | "clip"
+  | "post"
+  | "report"
+  | "calendar_sync"
+  | "portfolio_check"
+  | "radio_check"
+  | "agent_run";
+export type AutomationStatus = "active" | "paused" | "failed" | "disabled";
+export type AutomationRunStatus = "success" | "failed" | "skipped" | "pending_approval";
+
+export const automationDefinitions = pgTable("automation_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull().$type<AutomationType>(),
+  ownerUserId: varchar("owner_user_id").notNull(),
+  assignedAgentId: text("assigned_agent_id"),
+  schedule: jsonb("schedule"),
+  timezone: text("timezone").notNull().default("America/New_York"),
+  status: text("status").notNull().default("active").$type<AutomationStatus>(),
+  permissionLevel: text("permission_level").notNull().default("execute_after_approval").$type<PermissionLevel>(),
+  requiresApproval: boolean("requires_approval").notNull().default(false),
+  nextRunAt: timestamp("next_run_at"),
+  lastRunAt: timestamp("last_run_at"),
+  lastStatus: text("last_status").$type<AutomationRunStatus>(),
+  failureCount: integer("failure_count").notNull().default(0),
+  costEstimate: text("cost_estimate"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAutomationDefinitionSchema = createInsertSchema(automationDefinitions).omit({
+  id: true,
+  ownerUserId: true,
+  lastRunAt: true,
+  lastStatus: true,
+  failureCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AutomationDefinition = typeof automationDefinitions.$inferSelect;
+export type InsertAutomationDefinition = z.infer<typeof insertAutomationDefinitionSchema>;
+
+export const automationRuns = pgTable("automation_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  automationId: varchar("automation_id").notNull().references(() => automationDefinitions.id, { onDelete: "cascade" }),
+  ownerUserId: varchar("owner_user_id").notNull(),
+  startedAt: timestamp("started_at").notNull(),
+  finishedAt: timestamp("finished_at"),
+  status: text("status").notNull().$type<AutomationRunStatus>(),
+  triggeredBy: text("triggered_by").notNull().$type<TrustActorType>(),
+  resultSummary: text("result_summary"),
+  errorMessage: text("error_message"),
+  costEstimate: text("cost_estimate"),
+  pendingActionId: varchar("pending_action_id"),
+  auditLogId: varchar("audit_log_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAutomationRunSchema = createInsertSchema(automationRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AutomationRun = typeof automationRuns.$inferSelect;
+export type InsertAutomationRun = z.infer<typeof insertAutomationRunSchema>;
 
 // ==================== DJ MESSAGE TEMPLATES ====================
 

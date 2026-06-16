@@ -142,7 +142,7 @@ export function TaskForm({ onAddTask }: TaskFormProps) {
     <form onSubmit={handleSubmit} className="space-y-3 bg-zinc-900/50 p-6 rounded-xl border border-zinc-800/50 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-          <Zap className="w-4 h-4 text-yellow-500" />
+          <Zap className="w-4 h-4 text-zinc-400" />
           Lenguaje Natural
         </h3>
         <span className="text-xs text-zinc-600">ej: "Reunión el jueves a las 5"</span>
@@ -170,11 +170,11 @@ export function TaskForm({ onAddTask }: TaskFormProps) {
           id="form-isRecurring"
           checked={isRecurring}
           onCheckedChange={(v) => setIsRecurring(v === true)}
-          className="border-zinc-600 data-[state=checked]:bg-purple-600"
+          className="border-zinc-600 data-[state=checked]:bg-zinc-800"
           data-testid="checkbox-form-recurring"
         />
         <label htmlFor="form-isRecurring" className="text-xs text-zinc-500 cursor-pointer flex items-center gap-1">
-          <Repeat className="w-3 h-3 text-purple-400" />
+          <Repeat className="w-3 h-3 text-zinc-400" />
           Tarea semanal (no se reagenda automáticamente)
         </label>
       </div>

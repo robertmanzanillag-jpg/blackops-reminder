@@ -125,9 +125,9 @@ export function MonthView({ tasks, onTaskClick, onEditTask, onDeleteTask, onView
                       task.completed
                         ? "bg-zinc-900/50 text-zinc-600"
                         : task.externalSource === 'google'
-                        ? "bg-blue-500/20 text-blue-300"
+                        ? "bg-zinc-900/20 text-zinc-400"
                         : task.priority === "high"
-                        ? "bg-red-500/20 text-red-300 font-semibold"
+                        ? "bg-zinc-900/20 text-zinc-400 font-semibold"
                         : "bg-zinc-800/50 text-zinc-300"
                     }`}
                     whileHover={{ scale: 1.05 }}
@@ -136,7 +136,7 @@ export function MonthView({ tasks, onTaskClick, onEditTask, onDeleteTask, onView
                       onClick={() => onTaskClick(task.id)}
                       className="cursor-pointer flex items-center gap-0.5"
                     >
-                      {task.externalSource === 'google' && <span className="text-blue-400">📅</span>}
+                      {task.externalSource === 'google' && <span className="text-zinc-400">📅</span>}
                       {task.title}
                     </div>
                     <div className="absolute right-0 top-0 opacity-0 group-hover/item:opacity-100 transition-opacity flex gap-0.5 -mr-1 -mt-1">
@@ -154,7 +154,7 @@ export function MonthView({ tasks, onTaskClick, onEditTask, onDeleteTask, onView
                           e.stopPropagation();
                           onDeleteTask(task.id);
                         }}
-                        className="p-0.5 bg-red-500/20 rounded text-[8px] text-red-400"
+                        className="p-0.5 bg-zinc-900/20 rounded text-[8px] text-zinc-400"
                       >
                         ✕
                       </button>

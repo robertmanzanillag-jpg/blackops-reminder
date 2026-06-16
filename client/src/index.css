@@ -46,24 +46,24 @@
 }
 
 :root {
-  /* Forced Dark Theme for "Clean Black" Look */
-  --background: 0 0% 3.9%; /* #0a0a0a */
+  /* Premium dark theme */
+  --background: 0 0% 4%;
   --foreground: 0 0% 98%;
 
-  --card: 0 0% 3.9%;
+  --card: 0 0% 6%;
   --card-foreground: 0 0% 98%;
 
-  --popover: 0 0% 3.9%;
+  --popover: 0 0% 6%;
   --popover-foreground: 0 0% 98%;
 
   --primary: 0 0% 98%;
   --primary-foreground: 0 0% 9%;
 
-  --secondary: 0 0% 14.9%;
+  --secondary: 0 0% 12%;
   --secondary-foreground: 0 0% 98%;
 
-  --muted: 0 0% 14.9%;
-  --muted-foreground: 0 0% 63.9%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 64%;
 
   --accent: 0 0% 14.9%;
   --accent-foreground: 0 0% 98%;
@@ -71,8 +71,8 @@
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 0 0% 14.9%;
-  --input: 0 0% 14.9%;
+  --border: 0 0% 16%;
+  --input: 0 0% 14%;
   --ring: 0 0% 83.1%;
 
   --radius: 0.5rem;
@@ -99,15 +99,16 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    /* Subtle noise texture or gradient if desired, but user asked for clean black */
-    background-image: radial-gradient(circle at top center, hsl(0 0% 10%), hsl(0 0% 3.9%));
+    background:
+      radial-gradient(circle at 50% -20%, hsl(0 0% 15% / 0.7), transparent 34rem),
+      linear-gradient(180deg, hsl(0 0% 6%), hsl(0 0% 3%));
     min-height: 100vh;
   }
 }
 
 @layer utilities {
   .glass-panel {
-    @apply bg-black/40 backdrop-blur-md border border-white/5;
+    @apply bg-black/45 backdrop-blur-md border border-white/10;
   }
   
   .text-glow {

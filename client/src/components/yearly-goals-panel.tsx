@@ -79,7 +79,7 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Rocket className="w-5 h-5 text-amber-400" />
+          <Rocket className="w-5 h-5 text-zinc-400" />
           <h3 className="text-lg font-medium text-white">
             Metas {year}
           </h3>
@@ -103,7 +103,7 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
           type="submit"
           size="sm"
           disabled={!newGoal.trim() || createMutation.isPending}
-          className="bg-amber-600 hover:bg-amber-700"
+          className="bg-zinc-800 hover:bg-zinc-800"
           data-testid="button-add-yearly-goal"
         >
           <Plus className="w-4 h-4" />
@@ -128,7 +128,7 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
                 className={cn(
                   "group flex items-center gap-3 p-3 rounded-lg border transition-all",
                   goal.completed
-                    ? "bg-amber-950/20 border-amber-900/30"
+                    ? "bg-zinc-900/20 border-white/10"
                     : "bg-zinc-800/50 border-zinc-700 hover:border-zinc-600"
                 )}
               >
@@ -137,8 +137,8 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
                   className={cn(
                     "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0",
                     goal.completed
-                      ? "bg-amber-500 border-amber-500 text-white"
-                      : "border-zinc-600 hover:border-amber-500"
+                      ? "bg-zinc-800 border-zinc-700 text-white"
+                      : "border-zinc-600 hover:border-zinc-700"
                   )}
                   data-testid={`button-toggle-yearly-goal-${goal.id}`}
                 >
@@ -158,7 +158,7 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
 
                 <button
                   onClick={() => deleteMutation.mutate(goal.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/10 rounded transition-all"
                   data-testid={`button-delete-yearly-goal-${goal.id}`}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function YearlyGoalsPanel({ year = "2026" }: YearlyGoalsPanelProps) {
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
-            className="h-full bg-gradient-to-r from-amber-600 to-amber-400"
+            className="h-full bg-gradient-to-r from-zinc-950 to-zinc-900"
           />
         </div>
       )}

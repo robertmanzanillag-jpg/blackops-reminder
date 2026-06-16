@@ -3,8 +3,7 @@ import { sendTelegramMessage } from "./telegram";
 import { getPrice, getBatchCryptoPrices, getStockHistoricalData, getCryptoHistoricalData } from "./finance";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-
-const MOCK_USER_ID = "mock-user-123";
+import { getSystemUserId } from "./user-context";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 interface PortfolioSummary {
@@ -52,8 +51,8 @@ export interface PeriodGains {
   topLosers: { symbol: string; changePercent: number }[];
 }
 
-export async function getGainsByPeriod(period: string): Promise<PeriodGains> {
-  const investments = await storage.getInvestments(MOCK_USER_ID);
+export async function getGainsByPeriod(period: string, userId = getSystemUserId()): Promise<PeriodGains> {
+  const investments = await storage.getInvestments(userId);
   const gains: { symbol: string; changePercent: number }[] = [];
   const yahooFormat = periodToYahooFormat[period] || "1M";
 
@@ -87,8 +86,8 @@ export async function getGainsByPeriod(period: string): Promise<PeriodGains> {
   return { topGainers, topLosers };
 }
 
-export async function getPortfolioSummary(): Promise<PortfolioSummary> {
-  const investments = await storage.getInvestments(MOCK_USER_ID);
+export async function getPortfolioSummary(userId = getSystemUserId()): Promise<PortfolioSummary> {
+  const investments = await storage.getInvestments(userId);
   
   let totalValue = 0;
   let totalCost = 0;
@@ -158,7 +157,7 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   const topDailyLosers = sortedByDaily.slice(-3).reverse();
 
   // Get margin configuration
-  const portfolioConfig = await storage.getPortfolioConfig(MOCK_USER_ID);
+  const portfolioConfig = await storage.getPortfolioConfig(userId);
   const marginUsed = portfolioConfig ? parseFloat(portfolioConfig.marginUsed) : 0;
   const marginTotal = portfolioConfig ? parseFloat(portfolioConfig.marginTotal) : 0;
   
@@ -180,8 +179,8 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   };
 }
 
-export async function analyzeRebalancing(): Promise<RebalanceRecommendation[]> {
-  const investments = await storage.getInvestments(MOCK_USER_ID);
+export async function analyzeRebalancing(userId = getSystemUserId()): Promise<RebalanceRecommendation[]> {
+  const investments = await storage.getInvestments(userId);
   const recommendations: RebalanceRecommendation[] = [];
 
   if (investments.length === 0) {
@@ -277,9 +276,9 @@ export async function analyzeRebalancing(): Promise<RebalanceRecommendation[]> {
   });
 }
 
-export async function checkPriceOpportunities(): Promise<PriceOpportunity[]> {
-  const watchlist = await storage.getWatchlist(MOCK_USER_ID);
-  const alerts = await storage.getPriceAlerts(MOCK_USER_ID);
+export async function checkPriceOpportunities(userId = getSystemUserId()): Promise<PriceOpportunity[]> {
+  const watchlist = await storage.getWatchlist(userId);
+  const alerts = await storage.getPriceAlerts(userId);
   const opportunities: PriceOpportunity[] = [];
 
   for (const item of watchlist) {
@@ -342,10 +341,10 @@ export async function checkPriceOpportunities(): Promise<PriceOpportunity[]> {
   return opportunities;
 }
 
-export async function generateWeeklyReport(): Promise<string> {
-  const summary = await getPortfolioSummary();
-  const recommendations = await analyzeRebalancing();
-  const opportunities = await checkPriceOpportunities();
+export async function generateWeeklyReport(userId = getSystemUserId()): Promise<string> {
+  const summary = await getPortfolioSummary(userId);
+  const recommendations = await analyzeRebalancing(userId);
+  const opportunities = await checkPriceOpportunities(userId);
 
   const dateStr = format(new Date(), "d 'de' MMMM", { locale: es });
 
@@ -402,14 +401,14 @@ export async function generateWeeklyReport(): Promise<string> {
   return report;
 }
 
-export async function sendWeeklyPortfolioReport(): Promise<{ sent: boolean; message: string }> {
+export async function sendWeeklyPortfolioReport(userId = getSystemUserId()): Promise<{ sent: boolean; message: string }> {
   try {
-    const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
+    const telegramConfig = await storage.getTelegramConfig(userId);
     if (!telegramConfig || !telegramConfig.chatId || !TELEGRAM_BOT_TOKEN) {
       return { sent: false, message: "Telegram no configurado" };
     }
 
-    const report = await generateWeeklyReport();
+    const report = await generateWeeklyReport(userId);
     const sent = await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, report);
     return { sent, message: sent ? "Reporte semanal enviado" : "No se pudo enviar el reporte" };
   } catch (error) {

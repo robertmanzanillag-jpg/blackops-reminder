@@ -310,7 +310,7 @@ export default function GitHubAgentPage() {
   if (isConnected === null) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
       </div>
     );
   }
@@ -378,7 +378,7 @@ export default function GitHubAgentPage() {
                 </div>
                 {loadingRepos ? (
                   <div className="flex justify-center py-8">
-                    <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                    <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
                   </div>
                 ) : repos.length === 0 ? (
                   <div className="text-center py-8 px-4">
@@ -396,7 +396,7 @@ export default function GitHubAgentPage() {
                     data-testid={`repo-${repo.name}`}
                   >
                     <div className="flex items-center gap-2">
-                      <Folder className="w-4 h-4 text-violet-400" />
+                      <Folder className="w-4 h-4 text-zinc-400" />
                       <span className="text-sm text-white font-medium truncate">{repo.name}</span>
                       {repo.private && <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">Private</span>}
                     </div>
@@ -415,7 +415,7 @@ export default function GitHubAgentPage() {
               <div className="p-2">
                 <button
                   onClick={() => { setSelectedRepo(null); setFiles([]); setSelectedFile(null); }}
-                  className="flex items-center gap-2 px-2 py-1 mb-2 text-xs text-violet-400 hover:text-violet-300"
+                  className="flex items-center gap-2 px-2 py-1 mb-2 text-xs text-zinc-400 hover:text-white"
                   data-testid="back-to-repos"
                 >
                   <ArrowLeft className="w-3 h-3" />
@@ -437,7 +437,7 @@ export default function GitHubAgentPage() {
                 )}
                 {loadingFiles ? (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                    <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
                   </div>
                 ) : (
                   files.map(file => (
@@ -446,12 +446,12 @@ export default function GitHubAgentPage() {
                       onClick={() => openFile(file)}
                       className={cn(
                         "w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-900 transition-colors",
-                        selectedFile?.path === file.path && "bg-violet-500/20"
+                        selectedFile?.path === file.path && "bg-zinc-900/20"
                       )}
                       data-testid={`file-${file.name}`}
                     >
                       {file.type === 'dir' ? (
-                        <Folder className="w-4 h-4 text-violet-400" />
+                        <Folder className="w-4 h-4 text-zinc-400" />
                       ) : (
                         <FileCode className="w-4 h-4 text-zinc-400" />
                       )}
@@ -497,17 +497,17 @@ export default function GitHubAgentPage() {
                       className={cn(
                         "p-4 rounded-xl",
                         message.role === "user"
-                          ? "bg-violet-500/10 border border-violet-500/20 ml-12"
+                          ? "bg-zinc-900/10 border border-white/10 ml-12"
                           : "bg-zinc-900 border border-zinc-800 mr-12"
                       )}
                     >
                       <div className="flex items-start gap-3">
                         <div className={cn(
                           "p-1.5 rounded-lg flex-shrink-0",
-                          message.role === "user" ? "bg-violet-500/20" : "bg-zinc-800"
+                          message.role === "user" ? "bg-zinc-900/20" : "bg-zinc-800"
                         )}>
                           {message.role === "user" ? (
-                            <Sparkles className="w-4 h-4 text-violet-400" />
+                            <Sparkles className="w-4 h-4 text-zinc-400" />
                           ) : (
                             <Github className="w-4 h-4 text-white" />
                           )}
@@ -549,7 +549,7 @@ export default function GitHubAgentPage() {
                     <Button
                       onClick={applyEdit}
                       disabled={isLoading}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-zinc-800 hover:bg-zinc-800"
                       data-testid="apply-changes"
                     >
                       <GitCommit className="w-4 h-4 mr-2" />
@@ -570,7 +570,7 @@ export default function GitHubAgentPage() {
 
                 {isLoading && (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+                    <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
                   </div>
                 )}
               </div>
@@ -587,7 +587,7 @@ export default function GitHubAgentPage() {
                   onKeyDown={handleKeyDown}
                   placeholder={selectedFile ? `Describe qué cambios quieres en ${selectedFile.path}...` : "Selecciona un archivo primero..."}
                   disabled={!selectedFile || isLoading}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 disabled:opacity-50"
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-zinc-500/50 disabled:opacity-50"
                   rows={2}
                   data-testid="input-prompt"
                 />

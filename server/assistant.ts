@@ -3,7 +3,10 @@ import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { updateCalendarEventDescription, createCalendarEvent } from "./google-calendar";
+import { getCurrentUserId } from "./user-context";
+import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
+import { generateTelegramAssistantContext } from "./ceo-briefing";
+import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
@@ -13,10 +16,8 @@ const ai = new GoogleGenAI({
   },
 });
 
-const MOCK_USER_ID = "mock-user-123";
-
-async function getUserProfileContext(): Promise<string> {
-  const profileData = await storage.getUserProfileData(MOCK_USER_ID);
+async function getUserProfileContext(userId: string): Promise<string> {
+  const profileData = await storage.getUserProfileData(userId);
   
   if (profileData.length === 0) {
     return `\n## Información sobre el usuario:\nNo tengo información guardada sobre ti todavía. ¡Me encantaría conocerte mejor!\n`;
@@ -56,11 +57,11 @@ function isAllDayEvent(startDate: Date, endDate: Date | null): boolean {
   return hours >= 23 && hours <= 25;
 }
 
-async function getCalendarContext(): Promise<string> {
-  const tasks = await storage.getTasks(MOCK_USER_ID);
-  const weeklyTasks = await storage.getWeeklyTasks(MOCK_USER_ID, startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const monthlyGoals = await storage.getMonthlyGoals(MOCK_USER_ID, startOfMonth(new Date()));
-  const yearlyGoals = await storage.getYearlyGoals(MOCK_USER_ID, new Date().getFullYear().toString());
+async function getCalendarContext(userId: string): Promise<string> {
+  const tasks = await storage.getTasks(userId);
+  const weeklyTasks = await storage.getWeeklyTasks(userId, startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const monthlyGoals = await storage.getMonthlyGoals(userId, startOfMonth(new Date()));
+  const yearlyGoals = await storage.getYearlyGoals(userId, new Date().getFullYear().toString());
 
   const now = new Date();
   const twelveMonthsFromNow = addMonths(now, 12);
@@ -129,8 +130,8 @@ async function getCalendarContext(): Promise<string> {
   return context;
 }
 
-async function getPortfolioContext(): Promise<string> {
-  const investments = await storage.getInvestments(MOCK_USER_ID);
+async function getPortfolioContext(userId: string): Promise<string> {
+  const investments = await storage.getInvestments(userId);
   
   if (investments.length === 0) {
     return `\n## Portafolio de Inversiones:\nNo tienes inversiones registradas.\n`;
@@ -218,6 +219,11 @@ EVENTOS DE RADIO (Black Room Radio):
 
 COMANDOS DISPONIBLES:
 - [CREAR_TAREA: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "priority": "normal|high|low"}]
+- [CREAR_FOLLOWUP: {"person": "...", "topic": "...", "date": "YYYY-MM-DDTHH:mm:ss", "channel": "telegram|email|call|whatsapp", "notes": "...", "priority": "normal|high|low"}]
+- [GUARDAR_DECISION: {"title": "...", "decision": "...", "context": "..."}]
+- [GUARDAR_PERSONA: {"name": "...", "role": "...", "company": "...", "notes": "..."}]
+- [GUARDAR_COMPROMISO: {"owner": "...", "commitment": "...", "dueAt": "YYYY-MM-DDTHH:mm:ss", "context": "..."}]
+- [CREAR_BORRADOR_COMUNICACION: {"recipient": "...", "channel": "email|telegram|whatsapp|slack|sms", "subject": "...", "message": "...", "context": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
@@ -279,7 +285,10 @@ REGLAS:
 
 export function registerAssistantRoutes(app: Express): void {
   app.post("/api/assistant/chat", async (req: Request, res: Response) => {
+    let requestUserId: string | null = null;
     try {
+      const userId = getCurrentUserId(req);
+      requestUserId = userId;
       const { message, conversationHistory = [], images } = req.body;
       
       console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
@@ -288,9 +297,21 @@ export function registerAssistantRoutes(app: Express): void {
         return res.status(400).json({ error: "Message or images are required" });
       }
 
-      const calendarContext = await getCalendarContext();
-      const userProfileContext = await getUserProfileContext();
-      const portfolioContext = await getPortfolioContext();
+      const calendarContext = await getCalendarContext(userId);
+      const userProfileContext = await getUserProfileContext(userId);
+      const portfolioContext = await getPortfolioContext(userId);
+      const ceoContext = await generateTelegramAssistantContext(userId);
+      const sharedConversationHistory = await getCeoConversationHistory(
+        userId,
+        12,
+        message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
+      );
+
+      if (message) {
+        await saveCeoConversationMessage(userId, "user", message);
+      } else if (images?.length) {
+        await saveCeoConversationMessage(userId, "user", "[Imagen enviada desde el app]");
+      }
 
       // Build user message parts
       const userMessageParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
@@ -343,7 +364,7 @@ export function registerAssistantRoutes(app: Express): void {
       const contents = [
         {
           role: "user" as const,
-          parts: [{ text: `${SYSTEM_PROMPT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}` }],
+          parts: [{ text: `${SYSTEM_PROMPT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}` }],
         },
         {
           role: "model" as const,
@@ -382,12 +403,24 @@ export function registerAssistantRoutes(app: Express): void {
       if (taskMatch) {
         try {
           const taskData = JSON.parse(taskMatch[1]);
-          const newTask = await storage.createTask(MOCK_USER_ID, {
+          const newTask = await storage.createTask(userId, {
             title: taskData.title,
             date: new Date(taskData.date),
             priority: taskData.priority || "normal",
             type: "task",
             completed: false,
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            actionType: "task.create",
+            resourceType: "task",
+            resourceId: newTask.id,
+            metadata: taskData,
+            status: "succeeded",
+            executionMode: "user_requested",
           });
           res.write(`data: ${JSON.stringify({ taskCreated: newTask })}\n\n`);
         } catch (e) {
@@ -395,19 +428,62 @@ export function registerAssistantRoutes(app: Express): void {
         }
       }
 
+      const followUpRegex = /\[CREAR_FOLLOWUP:\s*(\{[^}]+\})\]/g;
+      let followUpMatch;
+      while ((followUpMatch = followUpRegex.exec(fullResponse)) !== null) {
+        try {
+          const followUpData = JSON.parse(followUpMatch[1]);
+          const date = followUpData.date ? new Date(followUpData.date) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const description = [
+            `Owner: ${followUpData.person}`,
+            followUpData.channel ? `Channel: ${followUpData.channel}` : null,
+            followUpData.notes ? `Notes: ${followUpData.notes}` : null,
+          ].filter(Boolean).join("\n");
+          const newTask = await storage.createTask(userId, {
+            title: `Follow-up: ${followUpData.person} - ${followUpData.topic}`,
+            description,
+            date,
+            priority: followUpData.priority || "normal",
+            type: "follow_up",
+            completed: false,
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            actionType: "follow_up.create",
+            resourceType: "task",
+            resourceId: newTask.id,
+            metadata: followUpData,
+            status: "succeeded",
+            executionMode: "user_requested",
+          });
+          res.write(`data: ${JSON.stringify({ followUpCreated: newTask })}\n\n`);
+        } catch (e) {
+          console.error("Error creating follow-up from assistant:", e);
+        }
+      }
+
       const radioMatch = fullResponse.match(/\[MODIFICAR_RADIO:\s*(\{[^}]+\})\]/);
       if (radioMatch) {
         try {
           const radioData = JSON.parse(radioMatch[1]);
-          await updateCalendarEventDescription(radioData.eventId, radioData.description);
-          
-          const tasks = await storage.getTasks(MOCK_USER_ID);
-          const taskToUpdate = tasks.find(t => t.externalId === radioData.eventId);
-          if (taskToUpdate) {
-            await storage.updateTask(taskToUpdate.id, { description: radioData.description });
-          }
-          
-          res.write(`data: ${JSON.stringify({ radioUpdated: true, eventId: radioData.eventId })}\n\n`);
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "calendar.modify_radio",
+            resourceType: "calendar_event",
+            resourceId: radioData.eventId,
+            title: "Modificar evento de Radio",
+            description: "El asistente quiere actualizar DJs/slots en un evento de Google Calendar.",
+            input: radioData,
+            proposedChanges: { description: radioData.description },
+          });
+          res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
         } catch (e) {
           console.error("Error updating radio from assistant:", e);
           res.write(`data: ${JSON.stringify({ radioError: "No se pudo actualizar el evento de Radio" })}\n\n`);
@@ -418,16 +494,156 @@ export function registerAssistantRoutes(app: Express): void {
       if (googleEventMatch) {
         try {
           const eventData = JSON.parse(googleEventMatch[1]);
-          const eventId = await createCalendarEvent({
-            title: eventData.title,
-            date: eventData.date,
-            endDate: eventData.endDate,
-            description: eventData.description,
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "calendar.create_event",
+            resourceType: "calendar_event",
+            title: `Crear evento: ${eventData.title}`,
+            description: "El asistente quiere crear un evento en Google Calendar.",
+            input: eventData,
+            proposedChanges: eventData,
           });
-          res.write(`data: ${JSON.stringify({ googleEventCreated: true, eventId, title: eventData.title })}\n\n`);
+          res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
         } catch (e) {
           console.error("Error creating Google Calendar event from assistant:", e);
           res.write(`data: ${JSON.stringify({ googleEventError: "No se pudo crear el evento en Google Calendar" })}\n\n`);
+        }
+      }
+
+      const decisionRegex = /\[GUARDAR_DECISION:\s*(\{[^}]+\})\]/g;
+      let decisionMatch;
+      while ((decisionMatch = decisionRegex.exec(fullResponse)) !== null) {
+        try {
+          const decisionData = JSON.parse(decisionMatch[1]);
+          const value = decisionData.context ? `${decisionData.decision}\nContext: ${decisionData.context}` : decisionData.decision;
+          const decision = await storage.saveUserProfileData(userId, {
+            userId,
+            category: "decision",
+            key: decisionData.title,
+            value,
+            confidence: "confirmed",
+            source: "web-assistant",
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            actionType: "decision.save",
+            resourceType: "user_profile_data",
+            resourceId: decision.id,
+            metadata: decisionData,
+            status: "succeeded",
+            executionMode: "user_requested",
+          });
+          res.write(`data: ${JSON.stringify({ decisionSaved: true, title: decisionData.title })}\n\n`);
+        } catch (e) {
+          console.error("Error saving decision from assistant:", e);
+        }
+      }
+
+      const personRegex = /\[GUARDAR_PERSONA:\s*(\{[^}]+\})\]/g;
+      let personMatch;
+      while ((personMatch = personRegex.exec(fullResponse)) !== null) {
+        try {
+          const personData = JSON.parse(personMatch[1]);
+          const value = [
+            personData.role ? `Role: ${personData.role}` : null,
+            personData.company ? `Company: ${personData.company}` : null,
+            personData.notes ? `Notes: ${personData.notes}` : null,
+          ].filter(Boolean).join("\n") || "Key person";
+          const person = await storage.saveUserProfileData(userId, {
+            userId,
+            category: "person",
+            key: personData.name,
+            value,
+            confidence: "confirmed",
+            source: "web-assistant",
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            actionType: "person.save",
+            resourceType: "user_profile_data",
+            resourceId: person.id,
+            metadata: personData,
+            status: "succeeded",
+            executionMode: "user_requested",
+          });
+          res.write(`data: ${JSON.stringify({ personSaved: true, name: personData.name })}\n\n`);
+        } catch (e) {
+          console.error("Error saving person from assistant:", e);
+        }
+      }
+
+      const commitmentRegex = /\[GUARDAR_COMPROMISO:\s*(\{[^}]+\})\]/g;
+      let commitmentMatch;
+      while ((commitmentMatch = commitmentRegex.exec(fullResponse)) !== null) {
+        try {
+          const commitmentData = JSON.parse(commitmentMatch[1]);
+          const value = [
+            commitmentData.commitment,
+            commitmentData.dueAt ? `Due: ${commitmentData.dueAt}` : null,
+            commitmentData.context ? `Context: ${commitmentData.context}` : null,
+          ].filter(Boolean).join("\n");
+          const commitment = await storage.saveUserProfileData(userId, {
+            userId,
+            category: "commitment",
+            key: commitmentData.owner,
+            value,
+            confidence: "confirmed",
+            source: "web-assistant",
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            actionType: "commitment.save",
+            resourceType: "user_profile_data",
+            resourceId: commitment.id,
+            metadata: commitmentData,
+            status: "succeeded",
+            executionMode: "user_requested",
+          });
+          res.write(`data: ${JSON.stringify({ commitmentSaved: true, owner: commitmentData.owner })}\n\n`);
+        } catch (e) {
+          console.error("Error saving commitment from assistant:", e);
+        }
+      }
+
+      const communicationDraftRegex = /\[CREAR_BORRADOR_COMUNICACION:\s*(\{[^}]+\})\]/g;
+      let communicationDraftMatch;
+      while ((communicationDraftMatch = communicationDraftRegex.exec(fullResponse)) !== null) {
+        try {
+          const draftData = JSON.parse(communicationDraftMatch[1]);
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "communications.send",
+            resourceType: "communication_draft",
+            title: `Borrador para ${draftData.recipient}`,
+            description: `Enviar por ${draftData.channel}${draftData.subject ? `: ${draftData.subject}` : ""}`,
+            input: draftData,
+            proposedChanges: {
+              recipient: draftData.recipient,
+              channel: draftData.channel,
+              subject: draftData.subject,
+              message: draftData.message,
+            },
+          });
+          res.write(`data: ${JSON.stringify({ communicationDraftCreated: true, pendingActionId: pendingAction.id })}\n\n`);
+        } catch (e) {
+          console.error("Error creating communication draft from assistant:", e);
         }
       }
 
@@ -437,13 +653,24 @@ export function registerAssistantRoutes(app: Express): void {
       while ((infoMatch = infoRegex.exec(fullResponse)) !== null) {
         try {
           const infoData = JSON.parse(infoMatch[1]);
-          await storage.saveUserProfileData(MOCK_USER_ID, {
-            userId: MOCK_USER_ID,
+          await storage.saveUserProfileData(userId, {
+            userId,
             category: infoData.category,
             key: infoData.key,
             value: infoData.value,
             confidence: "confirmed",
             source: "conversation",
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            actionType: "memory.save",
+            resourceType: "user_profile_data",
+            metadata: infoData,
+            status: "succeeded",
+            executionMode: "user_requested",
           });
           res.write(`data: ${JSON.stringify({ infoSaved: true, key: infoData.key })}\n\n`);
         } catch (e) {
@@ -466,15 +693,27 @@ export function registerAssistantRoutes(app: Express): void {
             res.write(`data: ${JSON.stringify({ investmentError: `Tipo inválido: ${invData.type}. Usa: ${validTypes.join(", ")}` })}\n\n`);
             continue;
           }
-          await storage.createInvestment(MOCK_USER_ID, {
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "finance.create_investment",
+            resourceType: "investment",
+            title: `Agregar inversión: ${String(invData.symbol).toUpperCase()}`,
+            description: "El asistente quiere agregar una inversión al portafolio.",
+            input: {
             symbol: invData.symbol.toUpperCase(),
             name: invData.name,
             type: invData.type,
             quantity: String(invData.quantity),
             avgBuyPrice: String(invData.avgBuyPrice),
             currency: "USD",
+            },
+            proposedChanges: invData,
           });
-          res.write(`data: ${JSON.stringify({ investmentCreated: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+          res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
         } catch (e) {
           console.error("Error creating investment from assistant:", e);
           res.write(`data: ${JSON.stringify({ investmentError: "No se pudo agregar la inversión" })}\n\n`);
@@ -484,7 +723,7 @@ export function registerAssistantRoutes(app: Express): void {
       // Process multiple ACTUALIZAR_INVERSION commands
       const updateInvestmentRegex = /\[ACTUALIZAR_INVERSION:\s*(\{[^}]+\})\]/g;
       let updateInvMatch;
-      const investmentsCache = await storage.getInvestments(MOCK_USER_ID);
+      const investmentsCache = await storage.getInvestments(userId);
       while ((updateInvMatch = updateInvestmentRegex.exec(fullResponse)) !== null) {
         try {
           const invData = JSON.parse(updateInvMatch[1]);
@@ -497,8 +736,21 @@ export function registerAssistantRoutes(app: Express): void {
             const updates: { quantity?: string; avgBuyPrice?: string } = {};
             if (invData.quantity !== undefined) updates.quantity = String(invData.quantity);
             if (invData.avgBuyPrice !== undefined) updates.avgBuyPrice = String(invData.avgBuyPrice);
-            await storage.updateInvestment(existing.id, updates);
-            res.write(`data: ${JSON.stringify({ investmentUpdated: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+            const pendingAction = await createPendingActionForApproval({
+              userId,
+              actorType: "assistant",
+              actorId: "blackops-assistant",
+              origin: "web",
+              executionMode: "user_requested",
+              actionType: "finance.update_investment",
+              resourceType: "investment",
+              resourceId: existing.id,
+              title: `Actualizar inversión: ${invData.symbol.toUpperCase()}`,
+              description: "El asistente quiere modificar datos del portafolio.",
+              input: { symbol: invData.symbol.toUpperCase(), ...updates },
+              proposedChanges: updates,
+            });
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
           } else {
             res.write(`data: ${JSON.stringify({ investmentError: `No se encontró inversión con símbolo ${invData.symbol}` })}\n\n`);
           }
@@ -520,8 +772,21 @@ export function registerAssistantRoutes(app: Express): void {
           }
           const existing = investmentsCache.find(i => i.symbol.toUpperCase() === invData.symbol.toUpperCase());
           if (existing) {
-            await storage.deleteInvestment(existing.id);
-            res.write(`data: ${JSON.stringify({ investmentDeleted: true, symbol: invData.symbol.toUpperCase() })}\n\n`);
+            const pendingAction = await createPendingActionForApproval({
+              userId,
+              actorType: "assistant",
+              actorId: "blackops-assistant",
+              origin: "web",
+              executionMode: "user_requested",
+              actionType: "finance.delete_investment",
+              resourceType: "investment",
+              resourceId: existing.id,
+              title: `Eliminar inversión: ${invData.symbol.toUpperCase()}`,
+              description: "El asistente quiere eliminar una inversión del portafolio.",
+              input: { symbol: invData.symbol.toUpperCase() },
+              proposedChanges: { delete: true, symbol: invData.symbol.toUpperCase() },
+            });
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
           } else {
             res.write(`data: ${JSON.stringify({ investmentError: `No se encontró inversión con símbolo ${invData.symbol}` })}\n\n`);
           }
@@ -547,12 +812,24 @@ export function registerAssistantRoutes(app: Express): void {
             res.write(`data: ${JSON.stringify({ reminderError: "Hora inválida. Usa formato 24h (0-23)" })}\n\n`);
             continue;
           }
-          await storage.createScheduledReminder(MOCK_USER_ID, {
+          const reminder = await storage.createScheduledReminder(userId, {
             message: reminderData.message,
             hour,
             minute,
             daysOfWeek: reminderData.daysOfWeek || null,
             isActive: true,
+          });
+          await writeAuditLog({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            actionType: "reminder.create",
+            resourceType: "scheduled_reminder",
+            resourceId: reminder.id,
+            metadata: reminderData,
+            status: "succeeded",
+            executionMode: "user_requested",
           });
           const daysText = reminderData.daysOfWeek?.length > 0 
             ? reminderData.daysOfWeek.join(", ") 
@@ -582,13 +859,26 @@ export function registerAssistantRoutes(app: Express): void {
         }
       }
 
+      if (!fullResponse.trim()) {
+        fullResponse = "No pude generar una respuesta útil esta vez. Intenta reformularlo en una frase más concreta.";
+        res.write(`data: ${JSON.stringify({ content: fullResponse })}\n\n`);
+      }
+
+      await saveCeoConversationMessage(userId, "assistant", fullResponse);
+
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("Error in assistant chat:", errorMessage, error);
+      const userFacingError = `Error: ${errorMessage}`;
+      if (requestUserId) {
+        await saveCeoConversationMessage(requestUserId, "assistant", userFacingError).catch((historyError) => {
+          console.error("Error saving assistant failure to shared history:", historyError);
+        });
+      }
       if (res.headersSent) {
-        res.write(`data: ${JSON.stringify({ error: `Error: ${errorMessage}` })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: userFacingError })}\n\n`);
         res.end();
       } else {
         res.status(500).json({ error: errorMessage });
@@ -598,7 +888,7 @@ export function registerAssistantRoutes(app: Express): void {
 
   app.get("/api/assistant/context", async (req: Request, res: Response) => {
     try {
-      const context = await getCalendarContext();
+      const context = await getCalendarContext(getCurrentUserId(req));
       res.json({ context });
     } catch (error) {
       res.status(500).json({ error: "Failed to get context" });

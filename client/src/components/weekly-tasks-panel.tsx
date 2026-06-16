@@ -85,7 +85,7 @@ export function WeeklyTasksPanel() {
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-blue-400" />
+          <CalendarDays className="w-5 h-5 text-zinc-400" />
           <h3 className="text-lg font-medium text-white">
             Esta Semana
           </h3>
@@ -114,7 +114,7 @@ export function WeeklyTasksPanel() {
             type="submit"
             size="sm"
             disabled={!newTask.trim() || createMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-zinc-800 hover:bg-zinc-800"
             data-testid="button-add-weekly-task"
           >
             <Plus className="w-4 h-4" />
@@ -125,7 +125,7 @@ export function WeeklyTasksPanel() {
             id="recurring"
             checked={isRecurring}
             onCheckedChange={(checked) => setIsRecurring(checked === true)}
-            className="border-zinc-600 data-[state=checked]:bg-blue-600"
+            className="border-zinc-600 data-[state=checked]:bg-zinc-800"
             data-testid="checkbox-recurring"
           />
           <label htmlFor="recurring" className="text-xs text-zinc-400 cursor-pointer flex items-center gap-1">
@@ -153,7 +153,7 @@ export function WeeklyTasksPanel() {
                 className={cn(
                   "group flex items-center gap-3 p-3 rounded-lg border transition-all",
                   task.completed
-                    ? "bg-blue-950/20 border-blue-900/30"
+                    ? "bg-zinc-900/20 border-white/10"
                     : "bg-zinc-800/50 border-zinc-700 hover:border-zinc-600"
                 )}
               >
@@ -162,8 +162,8 @@ export function WeeklyTasksPanel() {
                   className={cn(
                     "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0",
                     task.completed
-                      ? "bg-blue-500 border-blue-500 text-white"
-                      : "border-zinc-600 hover:border-blue-500"
+                      ? "bg-zinc-800 border-zinc-700 text-white"
+                      : "border-zinc-600 hover:border-zinc-700"
                   )}
                   data-testid={`button-toggle-weekly-task-${task.id}`}
                 >
@@ -180,10 +180,10 @@ export function WeeklyTasksPanel() {
                 >
                   {task.title}
                   {task.isRecurring && (
-                    <Repeat className="w-3 h-3 text-blue-400" />
+                    <Repeat className="w-3 h-3 text-zinc-400" />
                   )}
                   {task.carriedOver && (
-                    <span className="flex items-center gap-1 text-xs text-amber-400">
+                    <span className="flex items-center gap-1 text-xs text-zinc-400">
                       <ArrowRight className="w-3 h-3" />
                     </span>
                   )}
@@ -191,7 +191,7 @@ export function WeeklyTasksPanel() {
 
                 <button
                   onClick={() => deleteMutation.mutate(task.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/10 rounded transition-all"
                   data-testid={`button-delete-weekly-task-${task.id}`}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -207,7 +207,7 @@ export function WeeklyTasksPanel() {
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
-            className="h-full bg-gradient-to-r from-blue-600 to-blue-400"
+            className="h-full bg-gradient-to-r from-zinc-950 to-zinc-900"
           />
         </div>
       )}

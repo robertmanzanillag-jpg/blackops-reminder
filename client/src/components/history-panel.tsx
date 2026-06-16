@@ -58,7 +58,7 @@ export function HistoryPanel({ tasks, onDeleteTask, onEditTask }: HistoryPanelPr
               {format(new Date(task.date), "PPP", { locale: es })}
             </span>
             {task.priority === "high" && (
-              <span className="text-xs px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded">
+              <span className="text-xs px-1.5 py-0.5 bg-zinc-900/20 text-zinc-400 rounded">
                 Urgente
               </span>
             )}
@@ -78,7 +78,7 @@ export function HistoryPanel({ tasks, onDeleteTask, onEditTask }: HistoryPanelPr
             variant="ghost"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
-            className="text-zinc-600 hover:text-red-400 hover:bg-red-500/10"
+            className="text-zinc-600 hover:text-white hover:bg-zinc-800/10"
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -109,7 +109,7 @@ export function HistoryPanel({ tasks, onDeleteTask, onEditTask }: HistoryPanelPr
             value="overdue"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-white data-[state=active]:bg-transparent"
           >
-            <span className="w-2 h-2 bg-red-500 rounded-full mr-2" />
+            <span className="w-2 h-2 bg-zinc-800 rounded-full mr-2" />
             Pendientes
           </TabsTrigger>
         </TabsList>

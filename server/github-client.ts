@@ -57,10 +57,47 @@ export async function listRepositories() {
     description: repo.description,
     private: repo.private,
     html_url: repo.html_url,
+    homepage: repo.homepage,
     default_branch: repo.default_branch,
     updated_at: repo.updated_at,
     language: repo.language
   }));
+}
+
+export async function getRepositoryOverview(owner: string, repo: string) {
+  const octokit = await getGitHubClient();
+  const [{ data }, issues, prs] = await Promise.all([
+    octokit.repos.get({ owner, repo }),
+    octokit.search.issuesAndPullRequests({
+      q: `repo:${owner}/${repo} is:issue is:open`,
+      per_page: 1,
+    }).catch(() => ({ data: { total_count: null } })),
+    octokit.search.issuesAndPullRequests({
+      q: `repo:${owner}/${repo} is:pr is:open`,
+      per_page: 1,
+    }).catch(() => ({ data: { total_count: null } })),
+  ]);
+
+  return {
+    id: data.id,
+    name: data.name,
+    full_name: data.full_name,
+    description: data.description,
+    private: data.private,
+    archived: data.archived,
+    disabled: data.disabled,
+    html_url: data.html_url,
+    homepage: data.homepage,
+    default_branch: data.default_branch,
+    language: data.language,
+    pushed_at: data.pushed_at,
+    updated_at: data.updated_at,
+    stargazers_count: data.stargazers_count,
+    forks_count: data.forks_count,
+    open_issues_count: data.open_issues_count,
+    open_issues: issues.data.total_count,
+    open_prs: prs.data.total_count,
+  };
 }
 
 // Get repository contents (files/folders)

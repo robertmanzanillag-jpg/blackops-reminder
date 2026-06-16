@@ -79,7 +79,7 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-7 gap-4 min-h-[400px]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-7 md:gap-0 md:border-y md:border-white/10 min-h-[400px]">
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, new Date());
           const todayStart = startOfDay(new Date());
@@ -141,11 +141,11 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               className={cn(
-                "flex flex-col gap-3 p-3 rounded-lg border min-h-[150px] md:min-h-[400px] transition-colors",
+                "flex flex-col gap-3 p-3 min-h-[150px] md:min-h-[400px] transition-colors md:border-r md:border-white/10 last:border-r-0",
                 isToday 
-                  ? "bg-zinc-900/80 border-zinc-700 ring-1 ring-zinc-700" 
-                  : "bg-zinc-950/30 border-zinc-900 hover:border-zinc-800",
-                dragOverDay === i && "ring-2 ring-blue-500 border-blue-500 bg-blue-950/20"
+                  ? "bg-zinc-800/[0.04]"
+                  : "bg-transparent hover:bg-white/[0.02]",
+                dragOverDay === i && "bg-zinc-900/20"
               )}
               data-testid={`day-column-${i}`}
             >
@@ -179,13 +179,13 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
                           task.completed
                             ? "bg-zinc-900/50 border-zinc-900 text-zinc-600"
                             : task.isWeeklyRollover
-                              ? "bg-red-900/50 border-red-700 text-red-100"
+                              ? "bg-zinc-900/50 border-zinc-700 text-zinc-400"
                               : task.isOverdue
-                                ? "bg-red-950/30 border-red-900/50 text-red-200"
+                                ? "bg-zinc-900/30 border-white/10 text-zinc-400"
                                 : task.externalSource === 'google' 
-                                  ? "bg-blue-950/30 border-blue-900/50 text-blue-200"
+                                  ? "bg-zinc-900/30 border-white/10 text-zinc-400"
                                   : "bg-zinc-900 border-zinc-800 text-zinc-300",
-                          task.priority === 'high' && !task.completed && !task.isOverdue && !task.isWeeklyRollover && "border-l-2 border-l-red-500"
+                          task.priority === 'high' && !task.completed && !task.isOverdue && !task.isWeeklyRollover && "border-l-2 border-l-zinc-500"
                         )}
                         data-testid={`task-card-${task.id}`}
                       >
@@ -193,17 +193,17 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
                           <div className="flex-1 min-w-0">
                             <div className="font-medium leading-tight flex items-start gap-1">
                               {task.isWeeklyRollover && (
-                                <AlertTriangle className="w-3 h-3 text-red-300 flex-shrink-0 mt-0.5" />
+                                <AlertTriangle className="w-3 h-3 text-zinc-400 flex-shrink-0 mt-0.5" />
                               )}
                               {task.isOverdue && !task.isWeeklyRollover && (
-                                <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                                <AlertCircle className="w-3 h-3 text-zinc-400 flex-shrink-0 mt-0.5" />
                               )}
                               {task.externalSource === 'google' && !task.isOverdue && !task.isWeeklyRollover && (
-                                <Calendar className="w-3 h-3 text-blue-400 flex-shrink-0 mt-0.5" />
+                                <Calendar className="w-3 h-3 text-zinc-400 flex-shrink-0 mt-0.5" />
                               )}
                               {task.isRecurring && !task.isOverdue && !task.isWeeklyRollover && (
                                 <span title="Tarea semanal">
-                                  <Repeat className="w-3 h-3 text-purple-400 flex-shrink-0 mt-0.5" />
+                                  <Repeat className="w-3 h-3 text-zinc-400 flex-shrink-0 mt-0.5" />
                                 </span>
                               )}
                               <span className="break-words hyphens-auto">{task.title}</span>
@@ -217,7 +217,7 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
                                 : task.priority}
                             </div>
                             {task.description && (
-                              <div className="text-[10px] text-zinc-300 mt-2 p-2 bg-zinc-800/70 rounded border-l-2 border-blue-500/70 space-y-1 overflow-hidden max-w-full">
+                              <div className="text-[10px] text-zinc-300 mt-2 p-2 bg-zinc-800/70 rounded border-l-2 border-white/10 space-y-1 overflow-hidden max-w-full">
                                 {task.description
                                   .replace(/<[^>]*>/g, '')
                                   .split('\n')
@@ -248,7 +248,7 @@ export function ScheduleView({ tasks, onToggleTask, onEditTask, onDeleteTask, on
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
-                            className="p-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 hover:text-red-300"
+                            className="p-1 bg-zinc-900/20 hover:bg-zinc-800/30 rounded text-zinc-400 hover:text-white"
                             title="Borrar"
                           >
                             <Trash2 className="w-3 h-3" />

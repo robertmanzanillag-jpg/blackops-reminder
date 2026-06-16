@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 
 export interface IChatStorage {
   getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;
+  getConversationByTitle(title: string): Promise<typeof conversations.$inferSelect | undefined>;
   getAllConversations(): Promise<(typeof conversations.$inferSelect)[]>;
   createConversation(title: string): Promise<typeof conversations.$inferSelect>;
   deleteConversation(id: number): Promise<void>;
@@ -14,6 +15,11 @@ export interface IChatStorage {
 export const chatStorage: IChatStorage = {
   async getConversation(id: number) {
     const [conversation] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conversation;
+  },
+
+  async getConversationByTitle(title: string) {
+    const [conversation] = await db.select().from(conversations).where(eq(conversations.title, title));
     return conversation;
   },
 
@@ -40,4 +46,3 @@ export const chatStorage: IChatStorage = {
     return message;
   },
 };
-

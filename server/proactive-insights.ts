@@ -1,9 +1,8 @@
 import { storage } from "./storage";
-import { sendTelegramMessage } from "./telegram";
-import { format, startOfWeek, addDays, differenceInDays } from "date-fns";
+import { sendTelegramPlainMessage } from "./telegram";
+import { format, startOfWeek, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
-
-const MOCK_USER_ID = "mock-user-123";
+import { getSystemUserId } from "./user-context";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 interface Insight {
@@ -13,9 +12,9 @@ interface Insight {
   emoji: string;
 }
 
-async function analyzeGoalsAndPortfolio(): Promise<Insight[]> {
+async function analyzeGoalsAndPortfolio(userId: string): Promise<Insight[]> {
   const insights: Insight[] = [];
-  const yearlyGoals = await storage.getYearlyGoals(MOCK_USER_ID, new Date().getFullYear().toString());
+  const yearlyGoals = await storage.getYearlyGoals(userId, new Date().getFullYear().toString());
   
   const incomeGoal = yearlyGoals.find(g => 
     g.title.toLowerCase().includes("income") || 
@@ -24,8 +23,8 @@ async function analyzeGoalsAndPortfolio(): Promise<Insight[]> {
   );
   
   if (incomeGoal && !incomeGoal.completed) {
-    const investments = await storage.getInvestments(MOCK_USER_ID);
-    const history = await storage.getPortfolioHistory(MOCK_USER_ID, 7);
+    const investments = await storage.getInvestments(userId);
+    const history = await storage.getPortfolioHistory(userId, 7);
     
     if (history.length === 0 || investments.length > 0) {
       const lastCheck = history.length > 0 ? new Date(history[history.length - 1].date) : null;
@@ -45,12 +44,12 @@ async function analyzeGoalsAndPortfolio(): Promise<Insight[]> {
   return insights;
 }
 
-async function analyzeWeeklyTasks(): Promise<Insight[]> {
+async function analyzeWeeklyTasks(userId: string): Promise<Insight[]> {
   const insights: Insight[] = [];
   const now = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   
-  const weeklyTasks = await storage.getWeeklyTasks(MOCK_USER_ID, weekStart);
+  const weeklyTasks = await storage.getWeeklyTasks(userId, weekStart);
   
   const abuelosTask = weeklyTasks.find(t => 
     t.title.toLowerCase().includes("abuelo") && !t.completed
@@ -81,9 +80,9 @@ async function analyzeWeeklyTasks(): Promise<Insight[]> {
   return insights;
 }
 
-async function analyzeRadioEvents(): Promise<Insight[]> {
+async function analyzeRadioEvents(userId: string): Promise<Insight[]> {
   const insights: Insight[] = [];
-  const tasks = await storage.getTasks(MOCK_USER_ID);
+  const tasks = await storage.getTasks(userId);
   const now = new Date();
   
   const upcomingRadios = tasks.filter(t => 
@@ -121,14 +120,14 @@ async function analyzeRadioEvents(): Promise<Insight[]> {
   return insights;
 }
 
-export async function generateProactiveInsights(): Promise<Insight[]> {
+export async function generateProactiveInsights(userId = getSystemUserId()): Promise<Insight[]> {
   const allInsights: Insight[] = [];
   
   try {
     const [goalInsights, taskInsights, radioInsights] = await Promise.all([
-      analyzeGoalsAndPortfolio(),
-      analyzeWeeklyTasks(),
-      analyzeRadioEvents()
+      analyzeGoalsAndPortfolio(userId),
+      analyzeWeeklyTasks(userId),
+      analyzeRadioEvents(userId)
     ]);
     
     allInsights.push(...goalInsights, ...taskInsights, ...radioInsights);
@@ -145,20 +144,20 @@ export async function generateProactiveInsights(): Promise<Insight[]> {
   return allInsights;
 }
 
-export async function sendProactiveInsights(): Promise<{ sent: boolean; insights: number }> {
-  const insights = await generateProactiveInsights();
+export async function sendProactiveInsights(userId = getSystemUserId()): Promise<{ sent: boolean; insights: number }> {
+  const insights = await generateProactiveInsights(userId);
   
   if (insights.length === 0) {
     return { sent: false, insights: 0 };
   }
   
-  const telegramConfig = await storage.getTelegramConfig(MOCK_USER_ID);
+  const telegramConfig = await storage.getTelegramConfig(userId);
   if (!telegramConfig || !telegramConfig.enabled || !telegramConfig.chatId) {
     console.log("Telegram not configured or disabled, skipping proactive insights");
     return { sent: false, insights: insights.length };
   }
   
-  let message = "🧠 *Insights del día*\n\n";
+  let message = "🧠 Insights del día\n\n";
   message += "He analizado tu calendario, metas y tareas. Aquí hay algunas sugerencias:\n\n";
   
   for (const insight of insights) {
@@ -166,10 +165,10 @@ export async function sendProactiveInsights(): Promise<{ sent: boolean; insights
     message += `${insight.emoji} ${priorityLabel}${insight.message}\n\n`;
   }
   
-  message += "_— Tu asistente BlackOps_";
+  message += "— Tu asistente BlackOps";
   
   try {
-    await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+    await sendTelegramPlainMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
     return { sent: true, insights: insights.length };
   } catch (error) {
     console.error("Error sending proactive insights:", error);

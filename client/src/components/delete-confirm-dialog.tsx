@@ -29,7 +29,7 @@ export function DeleteConfirmDialog({
       >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Trash2 className="w-5 h-5 text-red-400" />
+            <Trash2 className="w-5 h-5 text-zinc-400" />
             Eliminar evento
           </h2>
           <button
@@ -63,7 +63,7 @@ export function DeleteConfirmDialog({
           <Button
             onClick={onDeleteAll}
             variant="destructive"
-            className="w-full justify-start bg-red-600 hover:bg-red-700"
+            className="w-full justify-start bg-zinc-800 hover:bg-zinc-800"
             data-testid="button-delete-all"
           >
             <Trash2 className="w-4 h-4 mr-2" />

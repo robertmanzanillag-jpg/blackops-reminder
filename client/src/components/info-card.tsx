@@ -10,7 +10,7 @@ import {
 interface InfoCardProps {
   title: string;
   description?: string;
-  children: React.ReactReactNode;
+  children: React.ReactNode;
   className?: string;
 }
 

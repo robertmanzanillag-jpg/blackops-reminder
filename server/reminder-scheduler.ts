@@ -1,21 +1,54 @@
 import { storage } from "./storage";
 import { sendPushNotification } from "./push-notifications";
-import { sendTelegramMessage } from "./telegram";
+import { sendTelegramMessage, sendTelegramPlainMessageChunks } from "./telegram";
 import { sendProactiveInsights } from "./proactive-insights";
 import { executeAction } from "./agent-actions";
 import { getPortfolioNews } from "./finance";
+import { getSystemUserId } from "./user-context";
+import { generateCeoMorningBrief } from "./ceo-briefing";
+import {
+  getDateKeyFromClock,
+  getZonedClock as getClockInTimezone,
+  shouldRunDailyScheduledJob,
+  type SchedulerClock,
+} from "./scheduler-time";
 
-const MOCK_USER_ID = "mock-user-123";
+const SCHEDULER_TIMEZONE = process.env.SCHEDULER_TIMEZONE || "America/New_York";
+const CEO_BRIEF_HOUR = Number(process.env.CEO_BRIEF_HOUR || 7);
+const CEO_BRIEF_MINUTE = Number(process.env.CEO_BRIEF_MINUTE || 0);
+const INSIGHTS_HOUR = Number(process.env.INSIGHTS_HOUR || 8);
+const NEWS_DIGEST_HOUR = Number(process.env.NEWS_DIGEST_HOUR || 9);
+const EVENING_REVIEW_HOUR = Number(process.env.EVENING_REVIEW_HOUR || 21);
 
-async function sendTelegramNotification(title: string, body: string): Promise<void> {
+export function getReminderSchedulerConfig() {
+  return {
+    timezone: SCHEDULER_TIMEZONE,
+    ceoBriefHour: CEO_BRIEF_HOUR,
+    ceoBriefMinute: CEO_BRIEF_MINUTE,
+    insightsHour: INSIGHTS_HOUR,
+    newsDigestHour: NEWS_DIGEST_HOUR,
+    eveningReviewHour: EVENING_REVIEW_HOUR,
+  };
+}
+
+async function sendTelegramNotificationToUser(userId: string, title: string, body: string, plainText = false): Promise<boolean> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) return;
+  if (!botToken) return false;
 
-  const config = await storage.getTelegramConfig(MOCK_USER_ID);
-  if (!config || !config.enabled) return;
+  const config = await storage.getTelegramConfig(userId);
+  if (!config || !config.enabled) return false;
 
   const message = `<b>${title}</b>\n\n${body}`;
-  await sendTelegramMessage(botToken, config.chatId, message);
+  return plainText
+    ? sendTelegramPlainMessageChunks(botToken, config.chatId, `${title}\n\n${body}`)
+    : sendTelegramMessage(botToken, config.chatId, message);
+}
+
+async function getEnabledTelegramUserIds(): Promise<string[]> {
+  const telegramConfigs = await storage.getEnabledTelegramConfigs();
+  return telegramConfigs.length > 0
+    ? Array.from(new Set(telegramConfigs.map((config) => config.userId)))
+    : [getSystemUserId()];
 }
 
 let lastMorningNotification: string | null = null;
@@ -28,13 +61,8 @@ let lastVideoEditCheck: string | null = null;
 let lastNewsNotification: string | null = null;
 const userRemindersSent: Map<string, string> = new Map();
 
-function getDateKey(date: Date): string {
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-}
-
-function getWeekKey(date: Date): string {
-  const weekStart = getWeekStart(date);
-  return `${weekStart.getFullYear()}-${weekStart.getMonth() + 1}-${weekStart.getDate()}`;
+export function getZonedClock(date: Date): SchedulerClock {
+  return getClockInTimezone(date, SCHEDULER_TIMEZONE);
 }
 
 function getWeekStart(date: Date): Date {
@@ -54,8 +82,8 @@ function isSameDay(date1: Date, date2: Date): boolean {
   );
 }
 
-async function getTodaysTasks(): Promise<{ pending: string[]; completed: string[] }> {
-  const tasks = await storage.getTasks(MOCK_USER_ID);
+async function getTodaysTasks(userId = getSystemUserId()): Promise<{ pending: string[]; completed: string[] }> {
+  const tasks = await storage.getTasks(userId);
   const today = new Date();
   
   const todaysTasks = tasks.filter((task) => isSameDay(new Date(task.date), today));
@@ -66,131 +94,202 @@ async function getTodaysTasks(): Promise<{ pending: string[]; completed: string[
   return { pending, completed };
 }
 
-async function getIncompleteWeeklyTasks(): Promise<string[]> {
+async function getIncompleteWeeklyTasks(userId = getSystemUserId()): Promise<string[]> {
   const weekStart = getWeekStart(new Date());
-  const weeklyTasks = await storage.getWeeklyTasks(MOCK_USER_ID, weekStart);
+  const weeklyTasks = await storage.getWeeklyTasks(userId, weekStart);
   
   return weeklyTasks.filter((t) => !t.completed).map((t) => t.title);
 }
 
 async function sendMorningReminder(): Promise<void> {
-  const { pending } = await getTodaysTasks();
-  
-  if (pending.length === 0) {
-    console.log("[Reminder] No pending tasks for today - skipping morning notification");
-    return;
-  }
-  
-  const taskList = pending.slice(0, 5).join("\n• ");
-  const moreText = pending.length > 5 ? `\n+${pending.length - 5} más` : "";
-  
-  const title = "🌅 Tareas de Hoy";
-  const body = `Tienes ${pending.length} tarea${pending.length > 1 ? "s" : ""} pendiente${pending.length > 1 ? "s" : ""}:\n• ${taskList}${moreText}`;
+  const title = "🌅 Brief CEO";
+  const userIds = await getEnabledTelegramUserIds();
+
+  await Promise.all(userIds.map(async (userId) => {
+    const { pending } = await getTodaysTasks(userId);
+    const body = await generateCeoMorningBrief(userId);
+
+    await Promise.all([
+      sendPushNotification(userId, { title, body: pending.length > 0 ? `${pending.length} pendiente(s) para hoy.` : "Brief ejecutivo listo.", url: "/", tag: "morning-reminder" }),
+      sendTelegramNotificationToUser(userId, title, body, true),
+    ]);
+
+    console.log(`[Reminder] CEO morning brief sent for ${userId} - ${pending.length} pending tasks`);
+  }));
+}
+
+async function sendMorningReminderForUser(userId: string): Promise<void> {
+  const { pending } = await getTodaysTasks(userId);
+  const title = "🌅 Brief CEO";
+  const body = await generateCeoMorningBrief(userId);
 
   await Promise.all([
-    sendPushNotification(MOCK_USER_ID, { title, body, url: "/", tag: "morning-reminder" }),
-    sendTelegramNotification(title, body),
+    sendPushNotification(userId, { title, body: pending.length > 0 ? `${pending.length} pendiente(s) para hoy.` : "Brief ejecutivo listo.", url: "/", tag: "morning-reminder" }),
+    sendTelegramNotificationToUser(userId, title, body, true),
   ]);
-  
-  console.log(`[Reminder] Morning notification sent - ${pending.length} pending tasks`);
+
+  console.log(`[Reminder] CEO morning brief test sent for ${userId} - ${pending.length} pending tasks`);
 }
 
 async function sendEveningReminder(): Promise<void> {
-  const { pending } = await getTodaysTasks();
-  
+  const title = "🌙 Tareas sin Completar";
+  const userIds = await getEnabledTelegramUserIds();
+
+  await Promise.all(userIds.map(async (userId) => {
+    const { pending } = await getTodaysTasks(userId);
+
+    if (pending.length === 0) {
+      console.log(`[Reminder] All tasks completed for ${userId} today - skipping evening notification`);
+      return;
+    }
+
+    const taskList = pending.slice(0, 5).join("\n• ");
+    const moreText = pending.length > 5 ? `\n+${pending.length - 5} más` : "";
+    const body = `Quedan ${pending.length} tarea${pending.length > 1 ? "s" : ""} por hacer:\n• ${taskList}${moreText}`;
+
+    await Promise.all([
+      sendPushNotification(userId, { title, body, url: "/", tag: "evening-reminder" }),
+      sendTelegramNotificationToUser(userId, title, body, true),
+    ]);
+
+    console.log(`[Reminder] Evening notification sent for ${userId} - ${pending.length} incomplete tasks`);
+  }));
+}
+
+async function sendEveningReminderForUser(userId: string): Promise<void> {
+  const title = "🌙 Tareas sin Completar";
+  const { pending } = await getTodaysTasks(userId);
+
   if (pending.length === 0) {
-    console.log("[Reminder] All tasks completed for today - skipping evening notification");
+    console.log(`[Reminder] All tasks completed for ${userId} today - skipping evening notification`);
     return;
   }
-  
+
   const taskList = pending.slice(0, 5).join("\n• ");
   const moreText = pending.length > 5 ? `\n+${pending.length - 5} más` : "";
-  
-  const title = "🌙 Tareas sin Completar";
   const body = `Quedan ${pending.length} tarea${pending.length > 1 ? "s" : ""} por hacer:\n• ${taskList}${moreText}`;
 
   await Promise.all([
-    sendPushNotification(MOCK_USER_ID, { title, body, url: "/", tag: "evening-reminder" }),
-    sendTelegramNotification(title, body),
+    sendPushNotification(userId, { title, body, url: "/", tag: "evening-reminder" }),
+    sendTelegramNotificationToUser(userId, title, body, true),
   ]);
-  
-  console.log(`[Reminder] Evening notification sent - ${pending.length} incomplete tasks`);
+
+  console.log(`[Reminder] Evening notification test sent for ${userId} - ${pending.length} incomplete tasks`);
 }
 
 async function sendWeeklyReminder(): Promise<void> {
-  const incompleteTasks = await getIncompleteWeeklyTasks();
-  
+  const title = "📅 Tareas Semanales Pendientes";
+  const userIds = await getEnabledTelegramUserIds();
+
+  await Promise.all(userIds.map(async (userId) => {
+    const incompleteTasks = await getIncompleteWeeklyTasks(userId);
+
+    if (incompleteTasks.length === 0) {
+      console.log(`[Reminder] All weekly tasks completed for ${userId} - skipping weekly notification`);
+      return;
+    }
+
+    const taskList = incompleteTasks.slice(0, 5).join("\n• ");
+    const moreText = incompleteTasks.length > 5 ? `\n+${incompleteTasks.length - 5} más` : "";
+    const body = `Tienes ${incompleteTasks.length} tarea${incompleteTasks.length > 1 ? "s" : ""} semanal${incompleteTasks.length > 1 ? "es" : ""} pendiente${incompleteTasks.length > 1 ? "s" : ""}:\n• ${taskList}${moreText}`;
+
+    await Promise.all([
+      sendPushNotification(userId, { title, body, url: "/", tag: "weekly-reminder" }),
+      sendTelegramNotificationToUser(userId, title, body, true),
+    ]);
+
+    console.log(`[Reminder] Weekly notification sent for ${userId} - ${incompleteTasks.length} incomplete weekly tasks`);
+  }));
+}
+
+async function sendWeeklyReminderForUser(userId: string): Promise<void> {
+  const title = "📅 Tareas Semanales Pendientes";
+  const incompleteTasks = await getIncompleteWeeklyTasks(userId);
+
   if (incompleteTasks.length === 0) {
-    console.log("[Reminder] All weekly tasks completed - skipping weekly notification");
+    console.log(`[Reminder] All weekly tasks completed for ${userId} - skipping weekly notification`);
     return;
   }
-  
+
   const taskList = incompleteTasks.slice(0, 5).join("\n• ");
   const moreText = incompleteTasks.length > 5 ? `\n+${incompleteTasks.length - 5} más` : "";
-  
-  const title = "📅 Tareas Semanales Pendientes";
   const body = `Tienes ${incompleteTasks.length} tarea${incompleteTasks.length > 1 ? "s" : ""} semanal${incompleteTasks.length > 1 ? "es" : ""} pendiente${incompleteTasks.length > 1 ? "s" : ""}:\n• ${taskList}${moreText}`;
 
   await Promise.all([
-    sendPushNotification(MOCK_USER_ID, { title, body, url: "/", tag: "weekly-reminder" }),
-    sendTelegramNotification(title, body),
+    sendPushNotification(userId, { title, body, url: "/", tag: "weekly-reminder" }),
+    sendTelegramNotificationToUser(userId, title, body, true),
   ]);
-  
-  console.log(`[Reminder] Weekly notification sent - ${incompleteTasks.length} incomplete weekly tasks`);
+
+  console.log(`[Reminder] Weekly notification test sent for ${userId} - ${incompleteTasks.length} incomplete weekly tasks`);
 }
 
 async function sendDailyNewsDigest(): Promise<{ sent: boolean; newsCount: number }> {
   try {
-    const investments = await storage.getInvestments(MOCK_USER_ID);
-    const symbols = investments.map(inv => inv.symbol);
-    const news = await getPortfolioNews(symbols);
-    
-    if (news.length === 0) {
-      console.log("[Reminder] No news available for portfolio");
-      return { sent: false, newsCount: 0 };
-    }
-    
-    const topNews = news.slice(0, 5);
-    const newsItems = topNews.map((n, i) => 
-      `${i + 1}. <b>${n.related}</b>: ${n.headline}\n   <a href="${n.url}">Leer más</a>`
-    ).join("\n\n");
-    
-    const title = "📰 Noticias de tu Portafolio";
-    const body = `${newsItems}\n\n<i>Total: ${news.length} noticias disponibles</i>`;
-    
-    await sendTelegramNotification(title, body);
-    console.log(`[Reminder] Daily news digest sent - ${news.length} news items`);
-    return { sent: true, newsCount: news.length };
+    const userIds = await getEnabledTelegramUserIds();
+    const results = await Promise.all(userIds.map((userId) => sendDailyNewsDigestForUser(userId)));
+
+    return {
+      sent: results.some((result) => result.sent),
+      newsCount: results.reduce((total, result) => total + result.newsCount, 0),
+    };
   } catch (error) {
     console.error("[Reminder] Error sending news digest:", error);
     return { sent: false, newsCount: 0 };
   }
 }
 
+async function sendDailyNewsDigestForUser(userId: string): Promise<{ sent: boolean; newsCount: number }> {
+  const investments = await storage.getInvestments(userId);
+  const symbols = investments.map(inv => inv.symbol);
+  if (symbols.length === 0) {
+    console.log(`[Reminder] No portfolio symbols for ${userId} news digest`);
+    return { sent: false, newsCount: 0 };
+  }
+
+  const news = await getPortfolioNews(symbols);
+
+  if (news.length === 0) {
+    console.log(`[Reminder] No news available for ${userId} portfolio`);
+    return { sent: false, newsCount: 0 };
+  }
+
+  const topNews = news.slice(0, 5);
+  const newsItems = topNews.map((n, i) =>
+    `${i + 1}. ${n.related}: ${n.headline}\n   ${n.url}`
+  ).join("\n\n");
+
+  const title = "📰 Noticias de tu Portafolio";
+  const body = `${newsItems}\n\nTotal: ${news.length} noticias disponibles`;
+
+  const sent = await sendTelegramNotificationToUser(userId, title, body, true);
+  console.log(`[Reminder] Daily news digest ${sent ? "sent" : "not sent"} for ${userId} - ${news.length} news items`);
+  return { sent, newsCount: news.length };
+}
+
 async function checkScheduledReminders(): Promise<void> {
   const now = new Date();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const dayOfWeek = now.getDay();
-  const dateKey = getDateKey(now);
-  const weekKey = getWeekKey(now);
+  const clock = getZonedClock(now);
+  const { hour, minute, dayOfWeek } = clock;
+  const dateKey = getDateKeyFromClock(clock);
+  const weekKey = dateKey;
   
   try {
-    if (hour === 7 && minute === 0 && lastMorningNotification !== dateKey) {
+    if (shouldRunDailyScheduledJob(clock, CEO_BRIEF_HOUR, CEO_BRIEF_MINUTE, lastMorningNotification)) {
       lastMorningNotification = dateKey;
       await sendMorningReminder();
     }
     
-    if (hour === 8 && minute === 0 && lastInsightsNotification !== dateKey) {
+    if (shouldRunDailyScheduledJob(clock, INSIGHTS_HOUR, 0, lastInsightsNotification)) {
       lastInsightsNotification = dateKey;
-      const result = await sendProactiveInsights();
-      if (result.sent) {
-        console.log(`[Reminder] Proactive insights sent - ${result.insights} insights`);
-      }
+      const userIds = await getEnabledTelegramUserIds();
+      const results = await Promise.all(userIds.map((userId) => sendProactiveInsights(userId)));
+      const sentCount = results.filter((result) => result.sent).length;
+      const insightCount = results.reduce((total, result) => total + result.insights, 0);
+      console.log(`[Reminder] Proactive insights processed for ${userIds.length} user(s) - ${sentCount} sent, ${insightCount} insights`);
     }
     
     // Daily news digest at 9:00 AM
-    if (hour === 9 && minute === 0 && lastNewsNotification !== dateKey) {
+    if (shouldRunDailyScheduledJob(clock, NEWS_DIGEST_HOUR, 0, lastNewsNotification)) {
       lastNewsNotification = dateKey;
       const result = await sendDailyNewsDigest();
       if (result.sent) {
@@ -198,7 +297,7 @@ async function checkScheduledReminders(): Promise<void> {
       }
     }
     
-    if (hour === 21 && minute === 0 && lastEveningNotification !== dateKey) {
+    if (shouldRunDailyScheduledJob(clock, EVENING_REVIEW_HOUR, 0, lastEveningNotification)) {
       lastEveningNotification = dateKey;
       await sendEveningReminder();
     }
@@ -211,22 +310,25 @@ async function checkScheduledReminders(): Promise<void> {
     // Agent Actions - Radio analysis Monday 8:00 AM
     if (dayOfWeek === 1 && hour === 8 && minute === 0 && lastRadioAnalysis !== weekKey) {
       lastRadioAnalysis = weekKey;
-      const result = await executeAction("radio_notify_slots");
-      console.log(`[Agent] Radio analysis: ${result.message}`);
+      const userIds = await getEnabledTelegramUserIds();
+      const results = await Promise.all(userIds.map((userId) => executeAction("radio_notify_slots", userId)));
+      console.log(`[Agent] Radio analysis processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
     // Agent Actions - Portfolio weekly report Sunday 10:00 AM
     if (dayOfWeek === 0 && hour === 10 && minute === 0 && lastPortfolioReport !== weekKey) {
       lastPortfolioReport = weekKey;
-      const result = await executeAction("portfolio_weekly_report");
-      console.log(`[Agent] Portfolio report: ${result.message}`);
+      const userIds = await getEnabledTelegramUserIds();
+      const results = await Promise.all(userIds.map((userId) => executeAction("portfolio_weekly_report", userId)));
+      console.log(`[Agent] Portfolio report processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
     // Agent Actions - Create video edit tasks Friday 10:00 AM
     if (dayOfWeek === 5 && hour === 10 && minute === 0 && lastVideoEditCheck !== dateKey) {
       lastVideoEditCheck = dateKey;
-      const result = await executeAction("create_video_edit_task");
-      console.log(`[Agent] Video edit task check: ${result.message}`);
+      const userIds = await getEnabledTelegramUserIds();
+      const results = await Promise.all(userIds.map((userId) => executeAction("create_video_edit_task", userId)));
+      console.log(`[Agent] Video edit task check processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
     // User scheduled reminders
@@ -249,9 +351,8 @@ const dayNameToNumber: Record<string, number> = {
 async function processUserScheduledReminders(now: Date, dateKey: string): Promise<void> {
   try {
     const reminders = await storage.getActiveScheduledReminders();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    const dayOfWeek = now.getDay();
+    const clock = getZonedClock(now);
+    const { hour, minute, dayOfWeek } = clock;
     
     for (const reminder of reminders) {
       if (reminder.hour !== hour || reminder.minute !== minute) continue;
@@ -269,7 +370,7 @@ async function processUserScheduledReminders(now: Date, dateKey: string): Promis
       
       userRemindersSent.set(reminderKey, dateKey);
       
-      await sendTelegramNotification("⏰ Recordatorio", reminder.message);
+      await sendTelegramNotificationToUser(reminder.userId, "⏰ Recordatorio", reminder.message, true);
       console.log(`[Reminder] User reminder sent: ${reminder.message}`);
     }
   } catch (error) {
@@ -279,7 +380,8 @@ async function processUserScheduledReminders(now: Date, dateKey: string): Promis
 
 export function startReminderScheduler(): void {
   console.log("[Reminder] Starting reminder scheduler...");
-  console.log("[Reminder] Schedule: Morning 7:00 AM, Insights 8:00 AM, News 9:00 AM, Evening 9:00 PM, Weekly Sunday 6:00 PM");
+  console.log(`[Reminder] Schedule timezone: ${SCHEDULER_TIMEZONE}`);
+  console.log(`[Reminder] Schedule: CEO Brief ${CEO_BRIEF_HOUR}:${String(CEO_BRIEF_MINUTE).padStart(2, "0")}, Insights ${INSIGHTS_HOUR}:00, News ${NEWS_DIGEST_HOUR}:00, Evening ${EVENING_REVIEW_HOUR}:00, Weekly Sunday 18:00`);
   console.log("[Agent] Schedule: Radio Monday 8:00 AM, Portfolio Sunday 10:00 AM, Video Tasks Friday 10:00 AM");
   
   setInterval(checkScheduledReminders, 60 * 1000);
@@ -287,49 +389,64 @@ export function startReminderScheduler(): void {
   checkScheduledReminders();
 }
 
-export async function testMorningReminder(): Promise<{ success: boolean; message: string }> {
+export async function testMorningReminder(userId?: string): Promise<{ success: boolean; message: string }> {
   try {
-    await sendMorningReminder();
-    return { success: true, message: "Morning reminder sent" };
+    if (userId) await sendMorningReminderForUser(userId);
+    else await sendMorningReminder();
+    return { success: true, message: "CEO morning brief sent" };
   } catch (error: any) {
     return { success: false, message: error.message };
   }
 }
 
-export async function testEveningReminder(): Promise<{ success: boolean; message: string }> {
+export async function testCeoMorningBrief(userId = getSystemUserId()): Promise<{ success: boolean; message: string }> {
   try {
-    await sendEveningReminder();
+    await sendMorningReminderForUser(userId);
+    return { success: true, message: "CEO morning brief sent" };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function testEveningReminder(userId?: string): Promise<{ success: boolean; message: string }> {
+  try {
+    if (userId) await sendEveningReminderForUser(userId);
+    else await sendEveningReminder();
     return { success: true, message: "Evening reminder sent" };
   } catch (error: any) {
     return { success: false, message: error.message };
   }
 }
 
-export async function testWeeklyReminder(): Promise<{ success: boolean; message: string }> {
+export async function testWeeklyReminder(userId?: string): Promise<{ success: boolean; message: string }> {
   try {
-    await sendWeeklyReminder();
+    if (userId) await sendWeeklyReminderForUser(userId);
+    else await sendWeeklyReminder();
     return { success: true, message: "Weekly reminder sent" };
   } catch (error: any) {
     return { success: false, message: error.message };
   }
 }
 
-export async function testProactiveInsights(): Promise<{ success: boolean; message: string; insights: number }> {
+export async function testProactiveInsights(userId?: string): Promise<{ success: boolean; message: string; insights: number }> {
   try {
-    const result = await sendProactiveInsights();
-    return { 
-      success: result.sent, 
-      message: result.sent ? "Proactive insights sent" : "No insights to send or Telegram not configured",
-      insights: result.insights 
+    const userIds = userId ? [userId] : await getEnabledTelegramUserIds();
+    const results = await Promise.all(userIds.map((userId) => sendProactiveInsights(userId)));
+    const sent = results.some((result) => result.sent);
+    const insights = results.reduce((total, result) => total + result.insights, 0);
+    return {
+      success: sent,
+      message: sent ? "Proactive insights sent" : "No insights to send or Telegram not configured",
+      insights
     };
   } catch (error: any) {
     return { success: false, message: error.message, insights: 0 };
   }
 }
 
-export async function testNewsDigest(): Promise<{ success: boolean; message: string; newsCount: number }> {
+export async function testNewsDigest(userId?: string): Promise<{ success: boolean; message: string; newsCount: number }> {
   try {
-    const result = await sendDailyNewsDigest();
+    const result = userId ? await sendDailyNewsDigestForUser(userId) : await sendDailyNewsDigest();
     return { 
       success: result.sent, 
       message: result.sent ? "News digest sent" : "No news available or FINNHUB_API_KEY not configured",
