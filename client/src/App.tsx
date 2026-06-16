@@ -102,7 +102,8 @@ function Router() {
         )}
       </div>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={AgentsOfficePage} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/assistant" component={AssistantPage} />
         <Route path="/ceo" component={CeoDashboardPage} />
         <Route path="/tools" component={ToolsPage} />
