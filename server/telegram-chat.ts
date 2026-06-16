@@ -10,7 +10,7 @@ import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getReminderSchedulerConfig } from "./reminder-scheduler";
 import { classifyTelegramControlCommand } from "./telegram-command";
 import { buildCeoReadinessReport } from "./ceo-readiness";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
+import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { executeMultipleActions } from "./agent-actions";
 import type { PendingActionStatus } from "@shared/schema";
@@ -27,6 +27,12 @@ export function resolveTelegramWebhookUrl(): string | null {
 
   const publicAppUrl = process.env.PUBLIC_APP_URL?.trim();
   if (publicAppUrl) return `${trimTrailingSlash(publicAppUrl)}${TELEGRAM_WEBHOOK_PATH}`;
+
+  const replitDomains = process.env.REPLIT_DOMAINS?.trim();
+  if (replitDomains) {
+    const domain = replitDomains.split(",").map((item) => item.trim()).find(Boolean);
+    if (domain) return `https://${domain}${TELEGRAM_WEBHOOK_PATH}`;
+  }
 
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}${TELEGRAM_WEBHOOK_PATH}`;
@@ -1005,11 +1011,14 @@ export async function handleTelegramMessage(update: TelegramUpdate): Promise<voi
     return;
   }
 
-  const config = await storage.getTelegramConfigByChatId(chatId);
-  if (!config?.enabled) {
-    await sendTelegramPlainMessage(botToken, chatId,
-      "⚠️ Este chat no está configurado. Por favor configura el bot desde la aplicación web primero.");
-    return;
+  let config = await storage.getTelegramConfigByChatId(chatId);
+  if (!config) {
+    const userId = getSystemUserId();
+    config = await storage.saveTelegramConfig(userId, chatId);
+    await sendTelegramPlainMessage(botToken, chatId, "✅ Telegram conectado a BlackOps CEO. Ya puedes escribirme tareas, preguntas y cambios.");
+  }
+  if (!config.enabled) {
+    config = await storage.saveTelegramConfig(config.userId, chatId);
   }
   const userId = config.userId;
 
