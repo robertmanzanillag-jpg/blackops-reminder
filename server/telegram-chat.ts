@@ -12,6 +12,7 @@ import { classifyTelegramControlCommand } from "./telegram-command";
 import { buildCeoReadinessReport } from "./ceo-readiness";
 import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
+import { executeMultipleActions } from "./agent-actions";
 import type { PendingActionStatus } from "@shared/schema";
 
 const TELEGRAM_WEBHOOK_PATH = "/api/telegram/webhook";
@@ -379,6 +380,116 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
   }
 
   return null;
+}
+
+function normalizeTelegramText(message: string): string {
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesAny(text: string, terms: string[]): boolean {
+  return terms.some((term) => text.includes(term));
+}
+
+function routeTelegramWorkRequest(message: string): string[] {
+  const text = normalizeTelegramText(message);
+  const actionIds = new Set<string>();
+
+  const asksToWork = includesAny(text, [
+    "revisa",
+    "analiza",
+    "haz",
+    "hacer",
+    "dame",
+    "manda",
+    "envia",
+    "prepara",
+    "chequea",
+    "check",
+    "actualiza",
+    "detecta",
+    "busca",
+    "resumen",
+    "reporte",
+    "estado",
+    "que tengo",
+    "que hay",
+  ]);
+
+  if (!asksToWork) return [];
+
+  if (includesAny(text, ["radio", "dj", "djs", "slot", "slots", "evento"])) {
+    actionIds.add("radio_analyze");
+    if (includesAny(text, ["manda", "envia", "telegram", "notifica", "reporte"])) {
+      actionIds.add("radio_notify_slots");
+    }
+    if (includesAny(text, ["importa", "historial", "djs anteriores"])) {
+      actionIds.add("radio_import_djs");
+    }
+  }
+
+  if (includesAny(text, ["portfolio", "portafolio", "inversion", "inversiones", "acciones", "stock", "crypto", "mercado"])) {
+    if (includesAny(text, ["precio", "precios", "actualiza"])) {
+      actionIds.add("update_investment_prices");
+    }
+    if (includesAny(text, ["rebalance", "rebalanceo", "balance"])) {
+      actionIds.add("portfolio_rebalance");
+    }
+    if (includesAny(text, ["oportunidad", "oportunidades", "alerta", "mercado"])) {
+      actionIds.add("portfolio_opportunities");
+    }
+    if (actionIds.size === 0 || includesAny(text, ["resumen", "estado", "cuanto", "total"])) {
+      actionIds.add("portfolio_summary");
+    }
+  }
+
+  if (includesAny(text, ["tarea", "tareas", "agenda", "pendiente", "pendientes", "hoy", "semana"])) {
+    if (includesAny(text, ["atrasada", "atrasadas", "vencida", "vencidas"])) {
+      actionIds.add("tasks_overdue");
+    } else if (includesAny(text, ["semana", "weekly", "proximos 7"])) {
+      actionIds.add("tasks_week_summary");
+    } else {
+      actionIds.add("tasks_today_summary");
+    }
+  }
+
+  if (includesAny(text, ["briefing", "brief", "buenos dias", "reporte diario", "resumen diario"])) {
+    actionIds.add("morning_briefing");
+  }
+
+  if (includesAny(text, ["cierre del dia", "noche", "revision del dia", "evening"])) {
+    actionIds.add("evening_review");
+  }
+
+  if (includesAny(text, ["editar video", "edicion de video", "video radio"])) {
+    actionIds.add("create_video_edit_task");
+  }
+
+  return Array.from(actionIds);
+}
+
+async function handleTelegramWorkRequest(userId: string, message: string): Promise<string | null> {
+  const actionIds = routeTelegramWorkRequest(message);
+  if (actionIds.length === 0) return null;
+
+  const results = await executeMultipleActions(actionIds, userId);
+  const lines = results.map((result, index) => {
+    const status = result.success ? "✅" : "⚠️";
+    return `${status} ${actionIds[index]}: ${telegramPlain(result.message)}`;
+  });
+
+  return [
+    "Ya puse a trabajar los agentes:",
+    "",
+    ...lines,
+    "",
+    "Si quieres que haga algo más específico, dime el área y el objetivo. Ejemplo: “Radio, busca slots vacíos y dime a quién falta confirmar”.",
+  ].join("\n");
 }
 
 async function buildTelegramHealthStatus(userId: string): Promise<string> {
@@ -913,6 +1024,13 @@ export async function handleTelegramMessage(update: TelegramUpdate): Promise<voi
     if (controlResponse) {
       await sendTelegramPlainMessageChunks(botToken, chatId, controlResponse);
       await saveCeoConversationMessage(userId, "assistant", controlResponse);
+      return;
+    }
+
+    const workResponse = userMessage ? await handleTelegramWorkRequest(userId, userMessage) : null;
+    if (workResponse) {
+      await sendTelegramPlainMessageChunks(botToken, chatId, workResponse);
+      await saveCeoConversationMessage(userId, "assistant", workResponse);
       return;
     }
 
