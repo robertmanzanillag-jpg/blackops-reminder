@@ -201,6 +201,8 @@ type ChatMessage = {
   text: string;
 };
 
+const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
+
 const agentById = agents.reduce<Record<AgentId, Agent>>((lookup, agent) => {
   lookup[agent.id] = agent;
   return lookup;
@@ -229,10 +231,10 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
     return `${opener}Lo miro como decision: impacto, urgencia y riesgo. Mi recomendacion inicial es separar esto en: que hay que decidir hoy, que puede esperar y que dato falta para no improvisar.`;
   }
   if (contact.name === "Code") {
-    return `${opener}Lo reviso como problema tecnico. Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
+    return `${opener}Lo reviso como problema tecnico.${text.includes("repo objetivo") ? " Voy a trabajar con el repo objetivo que seleccionaste, no con todos a la vez." : ""} Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
   }
   if (contact.name === "GitHub") {
-    return `${opener}Lo veo desde repos/PRs/checks. Si hablas de un proyecto, dime cual repo o rama. Yo revisaria estado remoto, cambios pendientes, issues y si hay CI fallando.`;
+    return `${opener}Lo veo desde repos/PRs/checks.${text.includes("repo objetivo") ? " Ya tengo el repo objetivo seleccionado." : " Si hablas de un proyecto, dime cual repo o rama."} Yo revisaria estado remoto, cambios pendientes, issues y si hay CI fallando.`;
   }
   if (contact.name === "Portfolio") {
     return `${opener}Lo traduzco a lectura financiera: posicion, riesgo, noticia relevante y accion posible. Si me das ticker o captura, lo organizo como mantener, revisar o actuar.`;
@@ -592,6 +594,8 @@ export default function AgentsOfficePage() {
   const [activeChatContact, setActiveChatContact] = useState<OfficeContact | null>(null);
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
+  const [targetRepo, setTargetRepo] = useState("workspace");
+  const [lastRemoteTask, setLastRemoteTask] = useState("");
   const [sentMessages, setSentMessages] = useState<{ to: string; text: string }[]>([]);
   const [visibleNotes, setVisibleNotes] = useState({
     chat: true,
@@ -648,6 +652,22 @@ export default function AgentsOfficePage() {
       }));
   }, [blackRoomProject, connectedProjects, kongProject]);
   const totalVisibleAgents = agents.length + githubAppTeams.reduce((sum, team) => sum + team.agents.length, 0) + appAgents.length;
+  const repoTargets = useMemo(() => {
+    const remoteRepos = connectedProjects
+      .filter((project) => project.githubRepo)
+      .map((project) => ({
+        id: project.githubRepo!,
+        label: project.name,
+        repo: project.githubRepo!,
+      }));
+    const fallbackRepos = [
+      { id: "robertmanzanillag-jpg/kong-nightlife", label: "Kong", repo: "robertmanzanillag-jpg/kong-nightlife" },
+      { id: "robertmanzanillag-jpg/br-website", label: "Black Room", repo: "robertmanzanillag-jpg/br-website" },
+    ].filter((fallback) => !remoteRepos.some((repo) => repo.id === fallback.id));
+
+    return [{ id: "workspace", label: "Este app", repo: "local workspace" }, ...remoteRepos, ...fallbackRepos];
+  }, [connectedProjects]);
+  const selectedTarget = repoTargets.find((item) => item.id === targetRepo) || repoTargets[0];
   const contact = selectedContact || {
     id: selectedAgent.id,
     name: selectedAgent.name,
@@ -677,14 +697,31 @@ export default function AgentsOfficePage() {
   const handleSendDirectMessage = () => {
     const text = directMessage.trim();
     if (!text) return;
-    const reply = buildAgentReply(contact, text);
+    const repoContext =
+      (contact.name === "Code" || contact.name === "GitHub") && selectedTarget
+        ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
+        : "";
+    const reply = buildAgentReply(contact, `${text}${repoContext}`);
+    if ((contact.name === "Code" || contact.name === "GitHub") && targetRepo !== "workspace") {
+      setLastRemoteTask(text);
+      window.localStorage.setItem(
+        OFFICE_GITHUB_HANDOFF_KEY,
+        JSON.stringify({
+          repo: selectedTarget.repo,
+          app: selectedTarget.label,
+          agent: contact.name,
+          task: text,
+          createdAt: new Date().toISOString(),
+        })
+      );
+    }
     setActiveChatContact(contact);
     setSelectedContact(contact);
     setAgentChats((current) => ({
       ...current,
       [contact.id]: [
         ...(current[contact.id] || []),
-        { role: "user", text },
+        { role: "user", text: repoContext ? `${text}\n${repoContext.trim()}` : text },
         { role: "agent", text: reply },
       ],
     }));
@@ -705,6 +742,10 @@ export default function AgentsOfficePage() {
       color: agent.color,
     });
   };
+  const openHref =
+    (contact.name === "Code" || contact.name === "GitHub") && targetRepo !== "workspace"
+      ? `/github-agent?repo=${encodeURIComponent(targetRepo)}${lastRemoteTask ? `&task=${encodeURIComponent(lastRemoteTask)}` : ""}`
+      : contact.href;
   const handleSelectTeamAgent = (team: (typeof githubAppTeams)[number], agent: (typeof githubAppTeams)[number]["agents"][number]) => {
     const activityByName: Record<string, string> = {
       "KONG AI": "Chat central de Kong: recibe preguntas, usa herramientas internas y coordina informacion de eventos, mesas, promoters y venues.",
@@ -851,6 +892,31 @@ export default function AgentsOfficePage() {
                 <p className="text-[10px] uppercase tracking-wide text-zinc-500">Que hace</p>
                 <p className="mt-1 text-sm leading-5 text-zinc-200">{contact.activity}</p>
               </div>
+              {(contact.name === "Code" || contact.name === "GitHub") && (
+                <div className="mt-2 rounded-md border border-cyan-200/15 bg-cyan-950/15 p-3">
+                  <label className="text-[10px] uppercase tracking-wide text-cyan-200" htmlFor="office-target-repo">
+                    App / repo objetivo
+                  </label>
+                  <select
+                    id="office-target-repo"
+                    value={targetRepo}
+                    onChange={(event) => setTargetRepo(event.target.value)}
+                    className="mt-2 h-9 w-full rounded-md border border-white/10 bg-black px-2 text-sm text-white focus:border-cyan-200/50 focus:outline-none"
+                    data-testid="select-office-target-repo"
+                  >
+                    {repoTargets.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label} - {item.repo}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs leading-4 text-zinc-400">
+                    {targetRepo === "workspace"
+                      ? "Code aplica cambios en este app local con vista previa y aprobacion."
+                      : "Para apps de GitHub, abre GitHub Agent con ese repo y crea cambios/commit con aprobacion."}
+                  </p>
+                </div>
+              )}
               {isChatOpen && (
                 <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-md border border-cyan-200/15 bg-black/40 p-3">
                   {activeMessages.map((message, index) => (
@@ -888,8 +954,8 @@ export default function AgentsOfficePage() {
                   <Send className="mr-2 h-4 w-4" />
                   {isChatOpen ? "Responder" : "Abrir chat"}
                 </Button>
-                {contact.href && (
-                  <Link href={contact.href}>
+                {openHref && (
+                  <Link href={openHref}>
                     <Button type="button" variant="outline" className="h-10 rounded-full border-white/10 bg-black/40 px-4 text-white hover:bg-white/10">
                       Abrir
                     </Button>

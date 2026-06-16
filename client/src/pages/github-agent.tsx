@@ -48,6 +48,8 @@ interface Message {
   } | null;
 }
 
+const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
+
 export default function GitHubAgentPage() {
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [user, setUser] = useState<GitHubUser | null>(null);
@@ -64,10 +66,61 @@ export default function GitHubAgentPage() {
   const [pendingEdit, setPendingEdit] = useState<{ path: string; content: string; sha?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const requestedRepo = new URLSearchParams(window.location.search).get("repo");
+  const requestedTask = new URLSearchParams(window.location.search).get("task");
+  const [handoffLoaded, setHandoffLoaded] = useState(false);
 
   useEffect(() => {
     checkConnection();
   }, []);
+
+  useEffect(() => {
+    if (!requestedRepo || selectedRepo || repos.length === 0) return;
+    const repo = repos.find((item) => item.full_name === requestedRepo || item.name === requestedRepo);
+    if (repo) {
+      selectRepo(repo);
+    }
+  }, [requestedRepo, repos, selectedRepo]);
+
+  useEffect(() => {
+    if (!selectedRepo || handoffLoaded) return;
+
+    let task = requestedTask || "";
+    let sourceAgent = "Oficina";
+    let sourceApp = selectedRepo.name;
+
+    try {
+      const rawHandoff = window.localStorage.getItem(OFFICE_GITHUB_HANDOFF_KEY);
+      if (rawHandoff) {
+        const handoff = JSON.parse(rawHandoff) as {
+          repo?: string;
+          app?: string;
+          agent?: string;
+          task?: string;
+        };
+        if (handoff.repo === selectedRepo.full_name && handoff.task) {
+          task = task || handoff.task;
+          sourceAgent = handoff.agent || sourceAgent;
+          sourceApp = handoff.app || sourceApp;
+        }
+      }
+    } catch {
+      // Ignore invalid local handoff data.
+    }
+
+    if (!task) return;
+
+    setInput(task);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: `📨 Solicitud recibida desde ${sourceAgent} para **${sourceApp}**:\n\n${task}\n\nSelecciona el archivo que quieres cambiar y te preparo una vista previa antes de hacer commit.`,
+        timestamp: new Date(),
+      },
+    ]);
+    setHandoffLoaded(true);
+  }, [handoffLoaded, requestedTask, selectedRepo]);
 
   useEffect(() => {
     if (scrollRef.current) {
