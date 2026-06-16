@@ -19,11 +19,6 @@ interface RadioSlot {
   slot8: string | null;
   slot9: string | null;
   emptySlots: number[];
-  rawDescription?: string | null;
-  eventTitle?: string;
-  weekday?: string;
-  dayNumber?: number;
-  ordinalDay?: string;
 }
 
 interface DjContact {
@@ -137,7 +132,7 @@ export default function RadioPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Radio className="h-8 w-8 text-zinc-400" />
+            <Radio className="h-8 w-8 text-purple-500" />
             <div>
               <h1 className="text-2xl font-bold">Radio Agent</h1>
               <p className="text-zinc-400 text-sm">Gestión de slots y DJs</p>
@@ -159,7 +154,7 @@ export default function RadioPage() {
 
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-zinc-400">
+            <CardTitle className="flex items-center gap-2 text-purple-400">
               <AlertCircle className="h-5 w-5" />
               Slots Vacíos ({slotsWithEmpty.length} eventos)
             </CardTitle>
@@ -181,20 +176,20 @@ export default function RadioPage() {
                       <span className="font-medium text-white">{slot.dateStr}</span>
                       <div className="flex gap-1">
                         {slot.emptySlots.map((s) => (
-                          <Badge key={s} variant="destructive" className="bg-zinc-900/50 text-zinc-400">
+                          <Badge key={s} variant="destructive" className="bg-red-900/50 text-red-300">
                             {s}pm vacío
                           </Badge>
                         ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div className={`p-2 rounded ${slot.slot7 ? "bg-zinc-900/30 text-zinc-400" : "bg-zinc-900/30 text-zinc-400"}`}>
+                      <div className={`p-2 rounded ${slot.slot7 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
                         7pm: {slot.slot7 || "Vacío"}
                       </div>
-                      <div className={`p-2 rounded ${slot.slot8 ? "bg-zinc-900/30 text-zinc-400" : "bg-zinc-900/30 text-zinc-400"}`}>
+                      <div className={`p-2 rounded ${slot.slot8 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
                         8pm: {slot.slot8 || "Vacío"}
                       </div>
-                      <div className={`p-2 rounded ${slot.slot9 ? "bg-zinc-900/30 text-zinc-400" : "bg-zinc-900/30 text-zinc-400"}`}>
+                      <div className={`p-2 rounded ${slot.slot9 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
                         9pm: {slot.slot9 || "Vacío"}
                       </div>
                     </div>
@@ -208,7 +203,7 @@ export default function RadioPage() {
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-zinc-400">
+              <CardTitle className="flex items-center gap-2 text-purple-400">
                 <Users className="h-5 w-5" />
                 DJs ({djs.length})
               </CardTitle>
@@ -278,7 +273,7 @@ export default function RadioPage() {
                         )}
                       </div>
                       {dj.rating && (
-                        <Badge variant="outline" className="text-zinc-400 border-white/10">
+                        <Badge variant="outline" className="text-yellow-500 border-yellow-500/50">
                           {"⭐".repeat(dj.rating)}
                         </Badge>
                       )}
@@ -288,9 +283,9 @@ export default function RadioPage() {
                         variant="outline"
                         className={
                           dj.status === "available"
-                            ? "text-zinc-400 border-white/10"
+                            ? "text-green-400 border-green-400/50"
                             : dj.status === "contacted"
-                            ? "text-zinc-400 border-white/10"
+                            ? "text-yellow-400 border-yellow-400/50"
                             : "text-zinc-400 border-zinc-400/50"
                         }
                       >
@@ -354,7 +349,7 @@ export default function RadioPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => deleteDjMutation.mutate(dj.id)}
-                        className="text-zinc-400 hover:text-white"
+                        className="text-red-400 hover:text-red-300"
                         data-testid={`delete-dj-${dj.id}`}
                       >
                         <Trash2 className="h-4 w-4" />
