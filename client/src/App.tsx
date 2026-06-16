@@ -102,7 +102,7 @@ function Router() {
         )}
       </div>
       <Switch>
-        <Route path="/" component={AgentsOfficePage} />
+        <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/assistant" component={AssistantPage} />
         <Route path="/ceo" component={CeoDashboardPage} />
