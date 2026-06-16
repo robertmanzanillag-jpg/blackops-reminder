@@ -5,8 +5,10 @@ import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, add
 import { es } from "date-fns/locale";
 import { getCurrentUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
+import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
+import type { PendingAction } from "@shared/schema";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
@@ -15,6 +17,68 @@ const ai = new GoogleGenAI({
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
+
+function normalizeApprovalText(message: string): string {
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function userAlreadyApprovedExecution(message?: string): boolean {
+  if (!message) return false;
+  const text = normalizeApprovalText(message);
+  return [
+    "hazlo",
+    "hazlo ya",
+    "dale",
+    "aprobado",
+    "lo apruebo",
+    "si cambialo",
+    "cambialo",
+    "cambiame",
+    "quiero que",
+    "agregame",
+    "agrega",
+    "creame",
+    "crea",
+    "modifica",
+    "actualiza",
+  ].some((phrase) => text.includes(phrase));
+}
+
+async function executeIfAlreadyApproved(
+  pendingAction: PendingAction,
+  userId: string,
+  message?: string,
+): Promise<{ executed: boolean; error?: string }> {
+  if (!userAlreadyApprovedExecution(message)) return { executed: false };
+
+  const approved = await storage.updatePendingAction(pendingAction.id, {
+    status: "approved",
+    approvedBy: userId,
+    approvedAt: new Date(),
+    approvalReason: "Aprobado en el mismo mensaje del chat.",
+  });
+
+  await storage.createPendingActionEvent({
+    pendingActionId: approved.id,
+    userId,
+    actorType: "user",
+    actorId: "web-user",
+    eventType: "approved",
+    previousStatus: pendingAction.status,
+    nextStatus: "approved",
+    note: "Aprobado en el mismo mensaje del chat.",
+    metadata: { origin: "web" },
+  });
+
+  const result = await executeApprovedPendingAction(approved, userId);
+  return result.success ? { executed: true } : { executed: false, error: result.error };
+}
 
 async function getUserProfileContext(userId: string): Promise<string> {
   const profileData = await storage.getUserProfileData(userId);
@@ -80,7 +144,9 @@ async function getCalendarContext(userId: string): Promise<string> {
   let context = `## Contexto del calendario del usuario\n\nFecha actual: ${format(now, "EEEE d 'de' MMMM yyyy", { locale: es })}\n\n`;
 
   // Add Radio events summary at the top for quick reference
-  const radioEvents = upcomingTasks.filter(t => t.title === "Radio" && t.externalSource === "google");
+  const radioEvents = upcomingTasks.filter(t =>
+    t.externalSource === "google" && t.title.toLowerCase().includes("radio")
+  );
   if (radioEvents.length > 0) {
     context += `### RESUMEN DE EVENTOS RADIO (próximos 12 meses):\n`;
     for (const radio of radioEvents) {
@@ -226,6 +292,7 @@ COMANDOS DISPONIBLES:
 - [CREAR_BORRADOR_COMUNICACION: {"recipient": "...", "channel": "email|telegram|whatsapp|slack|sms", "subject": "...", "message": "...", "context": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
+- [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock|etf|crypto|bond|fund", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
@@ -233,6 +300,8 @@ COMANDOS DISPONIBLES:
 - [CREAR_RECORDATORIO: {"message": "Mensaje a enviar", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]}]
 - [ELIMINAR_RECORDATORIO: {"id": "reminder-id"}]
 - [LISTAR_RECORDATORIOS: {}]
+
+Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
 ## RECORDATORIOS PROGRAMADOS:
 Puedes crear recordatorios que se envían automáticamente por Telegram.
@@ -483,7 +552,14 @@ export function registerAssistantRoutes(app: Express): void {
             input: radioData,
             proposedChanges: { description: radioData.description },
           });
-          res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ radioError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
         } catch (e) {
           console.error("Error updating radio from assistant:", e);
           res.write(`data: ${JSON.stringify({ radioError: "No se pudo actualizar el evento de Radio" })}\n\n`);
@@ -507,10 +583,54 @@ export function registerAssistantRoutes(app: Express): void {
             input: eventData,
             proposedChanges: eventData,
           });
-          res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ googleEventError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
         } catch (e) {
           console.error("Error creating Google Calendar event from assistant:", e);
           res.write(`data: ${JSON.stringify({ googleEventError: "No se pudo crear el evento en Google Calendar" })}\n\n`);
+        }
+      }
+
+      const editGoogleEventRegex = /\[EDITAR_EVENTO_GOOGLE:\s*(\{[^}]+\})\]/g;
+      let editGoogleEventMatch;
+      while ((editGoogleEventMatch = editGoogleEventRegex.exec(fullResponse)) !== null) {
+        try {
+          const eventData = JSON.parse(editGoogleEventMatch[1]);
+          if (!eventData.eventId) {
+            res.write(`data: ${JSON.stringify({ googleEventError: "Falta eventId para editar el evento" })}\n\n`);
+            continue;
+          }
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "calendar.update_event",
+            resourceType: "calendar_event",
+            resourceId: eventData.eventId,
+            title: `Editar evento: ${eventData.title || eventData.eventId}`,
+            description: "El asistente quiere editar un evento existente de Google Calendar.",
+            input: eventData,
+            proposedChanges: eventData,
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ googleEventError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+        } catch (e) {
+          console.error("Error editing Google Calendar event from assistant:", e);
+          res.write(`data: ${JSON.stringify({ googleEventError: "No se pudo editar el evento en Google Calendar" })}\n\n`);
         }
       }
 

@@ -3,7 +3,7 @@ import { google } from 'googleapis';
 
 let connectionSettings: any;
 
-async function getAccessToken() {
+export async function getGoogleAccessToken() {
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
     return connectionSettings.settings.access_token;
   }
@@ -40,13 +40,22 @@ async function getAccessToken() {
 // WARNING: Never cache this client.
 // Access tokens expire, so a new client must be created each time.
 export async function getGoogleCalendarClient() {
-  const accessToken = await getAccessToken();
+  const accessToken = await getGoogleAccessToken();
 
+  return getGoogleOAuthCalendarClient(accessToken);
+}
+
+export function getGoogleOAuthClient(accessToken: string) {
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({
     access_token: accessToken
   });
 
+  return oauth2Client;
+}
+
+function getGoogleOAuthCalendarClient(accessToken: string) {
+  const oauth2Client = getGoogleOAuthClient(accessToken);
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
@@ -148,7 +157,7 @@ export async function getCalendarEvents(timeMin: Date, timeMax: Date): Promise<C
 
 export async function isGoogleCalendarConnected(): Promise<boolean> {
   try {
-    await getAccessToken();
+    await getGoogleAccessToken();
     return true;
   } catch {
     return false;
@@ -177,6 +186,53 @@ export async function updateCalendarEventDescription(eventId: string, newDescrip
     return true;
   } catch (error) {
     console.error('Error updating Google Calendar event:', error);
+    throw error;
+  }
+}
+
+export interface UpdateEventParams {
+  eventId: string;
+  title?: string;
+  date?: string;
+  endDate?: string;
+  description?: string;
+  location?: string;
+  isAllDay?: boolean;
+}
+
+export async function updateCalendarEvent(params: UpdateEventParams): Promise<boolean> {
+  try {
+    const calendar = await getGoogleCalendarClient();
+    const requestBody: any = {};
+
+    if (params.title !== undefined) requestBody.summary = params.title;
+    if (params.description !== undefined) requestBody.description = params.description;
+    if (params.location !== undefined) requestBody.location = params.location;
+
+    if (params.date) {
+      const startDate = new Date(params.date);
+      const endDate = params.endDate
+        ? new Date(params.endDate)
+        : new Date(startDate.getTime() + 60 * 60 * 1000);
+
+      if (params.isAllDay) {
+        requestBody.start = { date: startDate.toISOString().split('T')[0] };
+        requestBody.end = { date: endDate.toISOString().split('T')[0] };
+      } else {
+        requestBody.start = { dateTime: startDate.toISOString(), timeZone: 'America/New_York' };
+        requestBody.end = { dateTime: endDate.toISOString(), timeZone: 'America/New_York' };
+      }
+    }
+
+    await calendar.events.patch({
+      calendarId: 'primary',
+      eventId: params.eventId,
+      requestBody,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error editing Google Calendar event:', error);
     throw error;
   }
 }

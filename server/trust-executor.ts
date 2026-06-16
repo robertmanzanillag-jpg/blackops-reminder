@@ -1,6 +1,6 @@
 import type { PendingAction } from "@shared/schema";
 import { storage } from "./storage";
-import { createCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
+import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
 
 type JsonRecord = Record<string, any>;
@@ -52,6 +52,30 @@ export async function executeApprovedPendingAction(
         const taskToUpdate = tasks.find((task) => task.externalId === input.eventId);
         if (taskToUpdate) {
           await storage.updateTask(taskToUpdate.id, { description: input.description });
+        }
+        result = { eventId: input.eventId, updatedLocalTask: !!taskToUpdate };
+        break;
+      }
+
+      case "calendar.update_event": {
+        await updateCalendarEvent({
+          eventId: input.eventId,
+          title: input.title,
+          date: input.date,
+          endDate: input.endDate,
+          description: input.description,
+          location: input.location,
+          isAllDay: input.isAllDay,
+        });
+        const tasks = await storage.getTasks(action.userId);
+        const taskToUpdate = tasks.find((task) => task.externalId === input.eventId);
+        if (taskToUpdate) {
+          await storage.updateTask(taskToUpdate.id, {
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+            ...(input.endDate !== undefined ? { endDate: new Date(input.endDate) } : {}),
+          });
         }
         result = { eventId: input.eventId, updatedLocalTask: !!taskToUpdate };
         break;

@@ -232,12 +232,39 @@ export default function AssistantPage() {
               if (
                 data.taskCreated ||
                 data.radioUpdated ||
+                data.actionExecuted ||
                 data.googleEventCreated ||
                 data.investmentCreated ||
                 data.investmentUpdated
               ) {
                 queryClient.invalidateQueries({ queryKey: ["tasks"] });
                 queryClient.invalidateQueries({ queryKey: ["investments"] });
+              }
+              if (data.actionExecuted) {
+                assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
+                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
+              }
+              if (data.googleEventError || data.radioError) {
+                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError}`;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
               }
               if (data.approvalRequired && data.pendingAction) {
                 assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Revisa approvals para aprobarlo o ejecutarlo.`;
@@ -287,6 +314,7 @@ export default function AssistantPage() {
       .replace(/\[CREAR_TAREA:.*?\]/g, "Tarea creada")
       .replace(/\[MODIFICAR_RADIO:.*?\]/g, "Radio actualizado")
       .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "Evento creado en Google Calendar")
+      .replace(/\[EDITAR_EVENTO_GOOGLE:.*?\]/g, "Evento actualizado en Google Calendar")
       .replace(/\[AGREGAR_INVERSION:.*?\]/g, "Inversion agregada")
       .replace(/\[ACTUALIZAR_INVERSION:.*?\]/g, "Inversion actualizada")
       .replace(/\[ELIMINAR_INVERSION:.*?\]/g, "Inversion eliminada")

@@ -41,6 +41,7 @@ export function DashboardAssistantChat() {
     return content
       .replace(/\[CREAR_TAREA:.*?\]/g, "Listo, agregue la tarea.")
       .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "Listo, lo mande al calendario.")
+      .replace(/\[EDITAR_EVENTO_GOOGLE:.*?\]/g, "Listo, actualice el evento.")
       .replace(/\[MODIFICAR_RADIO:.*?\]/g, "Listo, actualice Radio.")
       .replace(/\[AGREGAR_INVERSION:.*?\]/g, "Listo, agregue la inversion.")
       .replace(/\[ACTUALIZAR_INVERSION:.*?\]/g, "Listo, actualice la inversion.")
@@ -107,12 +108,37 @@ export function DashboardAssistantChat() {
             if (
               data.taskCreated ||
               data.googleEventCreated ||
+              data.actionExecuted ||
               data.radioUpdated ||
               data.investmentCreated ||
               data.investmentUpdated
             ) {
               queryClient.invalidateQueries({ queryKey: ["tasks"] });
               queryClient.invalidateQueries({ queryKey: ["investments"] });
+            }
+            if (data.actionExecuted) {
+              assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
+              queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
+            }
+            if (data.googleEventError || data.radioError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError}`;
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
             }
             if (data.approvalRequired && data.pendingAction) {
               assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Revisalo en approvals antes de ejecutar.`;
