@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, Loader2, Play, Sparkles } from "lucide-react";
+import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, FolderInput, Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,8 +32,10 @@ interface PromoVideoStatus {
   inputDir: string;
   outputDir: string;
   reportDir: string;
+  sourceDir: string | null;
   inputVideos: PromoVideoFile[];
   outputVideos: PromoVideoFile[];
+  sourceVideos: PromoVideoFile[];
   templates: PromoTemplate[];
 }
 
@@ -93,6 +95,7 @@ export default function PromoVideoPage() {
   const [style, setStyle] = useState<PromoVideoStyle>("full");
   const [hookText, setHookText] = useState("");
   const [ctaText, setCtaText] = useState("");
+  const [sourceDir, setSourceDir] = useState("");
   const [lastRun, setLastRun] = useState<PromoVideoRunResult | null>(null);
 
   const { data: status, isLoading } = useQuery<PromoVideoStatus>({
@@ -102,6 +105,60 @@ export default function PromoVideoPage() {
   const selectedTemplate = useMemo(() => {
     return status?.templates.find((template) => template.id === objective);
   }, [objective, status?.templates]);
+
+  useEffect(() => {
+    if (status?.sourceDir) setSourceDir(status.sourceDir);
+  }, [status?.sourceDir]);
+
+  const sourceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/promo-video/source", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceDir }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No pude leer esa carpeta");
+      return data as PromoVideoStatus;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/promo-video/status"], data);
+      toast({
+        title: "Carpeta conectada",
+        description: `${data.sourceVideos.length} videos encontrados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "No pude conectar esa carpeta",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/promo-video/import-source", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No pude importar los videos");
+      return data as { imported: number; skipped: number; status: PromoVideoStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/promo-video/status"], data.status);
+      toast({
+        title: "Videos importados",
+        description: `${data.imported} nuevos, ${data.skipped} ya estaban.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "No pude importar",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -300,7 +357,56 @@ export default function PromoVideoPage() {
           </Card>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-zinc-800 bg-zinc-950/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <FolderInput className="h-4 w-4 text-fuchsia-300" />
+              Carpeta de la PC
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-[1fr_auto_auto]">
+            <div className="space-y-2">
+              <Label>Ruta origen</Label>
+              <Input
+                value={sourceDir}
+                onChange={(event) => setSourceDir(event.target.value)}
+                placeholder="/Users/robertmanzanilla/Movies/promos"
+                className="border-zinc-800 bg-black"
+                data-testid="promo-video-source-input"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                onClick={() => sourceMutation.mutate()}
+                disabled={sourceMutation.isPending || !sourceDir.trim()}
+                className="w-full border-zinc-800"
+                data-testid="promo-video-source-button"
+              >
+                {sourceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Escanear
+              </Button>
+            </div>
+            <div className="flex items-end">
+              <Button
+                onClick={() => importMutation.mutate()}
+                disabled={importMutation.isPending || !status?.sourceVideos.length}
+                className="w-full bg-fuchsia-200 text-zinc-950 hover:bg-fuchsia-100"
+                data-testid="promo-video-import-button"
+              >
+                {importMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderInput className="mr-2 h-4 w-4" />}
+                Importar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <FileList
+            title="PC origen"
+            files={status?.sourceVideos || []}
+            emptyText="Sin carpeta conectada."
+          />
           <FileList
             title="Originales"
             files={status?.inputVideos || []}
@@ -330,4 +436,3 @@ export default function PromoVideoPage() {
     </div>
   );
 }
-
