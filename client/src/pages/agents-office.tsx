@@ -162,7 +162,7 @@ const agents = [
     outfit: "bg-rose-500",
     hair: "bg-violet-950",
     skin: "bg-orange-200",
-    position: "left-[65%] top-[61%]",
+    position: "left-[65%] top-[73%]",
     bubblePosition: "right-[9%] top-[49%]",
   },
   {
@@ -180,7 +180,7 @@ const agents = [
     outfit: "bg-amber-500",
     hair: "bg-zinc-950",
     skin: "bg-orange-100",
-    position: "left-[76%] top-[61%]",
+    position: "left-[75%] top-[73%]",
     bubblePosition: "right-[28%] top-[47%]",
   },
   {
@@ -198,7 +198,7 @@ const agents = [
     outfit: "bg-indigo-500",
     hair: "bg-zinc-800",
     skin: "bg-amber-100",
-    position: "left-[42%] top-[62%]",
+    position: "left-[42%] top-[73%]",
     bubblePosition: "left-[36%] top-[44%]",
   },
   {
@@ -216,7 +216,7 @@ const agents = [
     outfit: "bg-red-500",
     hair: "bg-stone-900",
     skin: "bg-orange-100",
-    position: "left-[88%] top-[62%]",
+    position: "left-[86%] top-[73%]",
     bubblePosition: "right-[7%] top-[69%]",
   },
 ];
@@ -381,9 +381,9 @@ const githubAppTeams = [
     app: "Kong",
     repo: "robertmanzanillag-jpg/kong-nightlife",
     agents: [
-      { name: "KONG AI", job: "Chat central", position: "left-[42%] top-[45%]", tone: "bg-[#3fb66f]" },
-      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[32%] top-[47%]", tone: "bg-[#f1c36a]" },
-      { name: "Venues", job: "Events", position: "left-[52%] top-[47%]", tone: "bg-[#60a5fa]" },
+      { name: "KONG AI", job: "Chat central", position: "left-[43%] top-[45%]", tone: "bg-[#3fb66f]" },
+      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[34%] top-[47%]", tone: "bg-[#f1c36a]" },
+      { name: "Venues", job: "Events", position: "left-[53%] top-[47%]", tone: "bg-[#60a5fa]" },
     ],
   },
 ];
@@ -458,13 +458,13 @@ function RoomZone({ className, label }: { className?: string; label: string }) {
   return (
     <div
       className={cn(
-        "absolute z-[2] rounded-[28px] border border-cyan-100/22 bg-[#07101d]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
+        "absolute rounded-[28px] border border-cyan-100/22 bg-[#07101d]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
         className
       )}
     >
       <div className="absolute inset-x-5 top-12 h-px bg-cyan-100/12" />
       <div className="absolute inset-y-5 left-5 w-px bg-cyan-100/10" />
-      <div className="absolute left-1/2 top-4 z-[55] -translate-x-1/2 whitespace-nowrap rounded-2xl border border-cyan-100/30 bg-[#050812]/98 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-50 shadow-xl shadow-black/55">
+      <div className="absolute left-1/2 top-4 z-[90] -translate-x-1/2 whitespace-nowrap rounded-2xl border border-cyan-100/40 bg-[#02050d] px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-50 shadow-xl shadow-black/70">
         {label}
       </div>
     </div>
