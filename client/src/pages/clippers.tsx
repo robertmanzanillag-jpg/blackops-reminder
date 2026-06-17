@@ -44,6 +44,7 @@ type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth"
 type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 type ClipperReadinessStatus = "ready" | "missing" | "partial";
 type ClipperConnectActionStatus = "ready" | "blocked";
+type ClipperOAuthConnectionStatus = "pending" | "code_received" | "error";
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -138,6 +139,17 @@ interface ClipperConnectAction {
   nextStep: string;
 }
 
+interface ClipperOAuthConnection {
+  platform: ClipperPlatform;
+  status: ClipperOAuthConnectionStatus;
+  receivedAt: string;
+  scopes: string[];
+  state: string | null;
+  codeHash: string | null;
+  error: string | null;
+  note: string;
+}
+
 interface ClipperPipelineItem {
   stage: string;
   count: number;
@@ -180,6 +192,7 @@ interface ClipperStatus {
   sourceFolders: ClipperSourceFolder[];
   credentialChecks: ClipperCredentialCheck[];
   connectActions: ClipperConnectAction[];
+  oauthConnections: ClipperOAuthConnection[];
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
@@ -240,6 +253,12 @@ function readinessBadge(status: ClipperReadinessStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function oauthBadge(status: ClipperOAuthConnectionStatus) {
+  if (status === "code_received") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-200";
+  if (status === "error") return "border-red-300/30 bg-red-300/10 text-red-200";
+  return "border-amber-300/30 bg-amber-300/10 text-amber-200";
 }
 
 function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Target; label: string; value: string; detail: string }) {
@@ -640,6 +659,32 @@ export default function ClippersPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="border-zinc-800 bg-zinc-950/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <KeyRound className="h-4 w-4 text-cyan-200" />
+              OAuth recibido
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            {(status?.oauthConnections || []).length === 0 ? (
+              <p className="text-sm text-zinc-500">Todavia no hay authorization codes registrados.</p>
+            ) : (
+              (status?.oauthConnections || []).map((connection) => (
+                <div key={`${connection.platform}-${connection.receivedAt}`} className="rounded-md border border-white/10 bg-black/35 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-white">{connection.platform}</p>
+                    <Badge className={cn("border", oauthBadge(connection.status))}>{connection.status}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">{connection.note}</p>
+                  <p className="mt-2 text-xs text-zinc-600">{formatDate(connection.receivedAt)}</p>
+                  {connection.codeHash && <p className="mt-2 text-xs text-zinc-600">code hash: {connection.codeHash}</p>}
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <Card className="border-zinc-800 bg-zinc-950/70">

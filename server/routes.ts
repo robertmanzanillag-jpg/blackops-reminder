@@ -37,7 +37,7 @@ import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, readClipperReport, runClipperDailyPlan } from "./clippers-agent";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, readClipperReport, recordClipperOAuthCallback, runClipperDailyPlan } from "./clippers-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1592,19 +1592,36 @@ export async function registerRoutes(
   });
 
   app.get("/api/clippers/oauth/:platform/callback", async (req, res) => {
-    const codeReceived = typeof req.query.code === "string" && req.query.code.length > 0;
-    const error = typeof req.query.error === "string" ? req.query.error : null;
-    const platform = req.params.platform;
-    res.status(error ? 400 : 200).send(`
-      <html>
-        <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>${error ? "OAuth no conectado" : "OAuth recibido"}</h1>
-          <p>${error || (codeReceived ? "La plataforma devolvio authorization code. El intercambio por token queda pendiente de credenciales y almacenamiento seguro." : "No se recibio authorization code.")}</p>
-          <p style="color:#94a3b8;">Plataforma: ${String(platform).replace(/[<>&]/g, "")}</p>
-          <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
-        </body>
-      </html>
-    `);
+    try {
+      const connection = await recordClipperOAuthCallback({
+        platform: req.params.platform,
+        code: req.query.code,
+        state: req.query.state,
+        error: req.query.error,
+      });
+      const isError = connection.status === "error";
+      res.status(isError ? 400 : 200).send(`
+        <html>
+          <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+            <h1>${isError ? "OAuth no conectado" : "OAuth registrado"}</h1>
+            <p>${connection.note}</p>
+            <p style="color:#94a3b8;">Plataforma: ${connection.platform}</p>
+            <p style="color:#94a3b8;">Estado: ${connection.status}</p>
+            <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
+          </body>
+        </html>
+      `);
+    } catch (error: any) {
+      res.status(400).send(`
+        <html>
+          <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+            <h1>OAuth no conectado</h1>
+            <p>${error.message || "No se pudo registrar OAuth."}</p>
+            <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
+          </body>
+        </html>
+      `);
+    }
   });
 
   app.get("/api/clippers/reports/:id", async (req, res) => {

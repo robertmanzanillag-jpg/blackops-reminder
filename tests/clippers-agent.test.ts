@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { stat } from "node:fs/promises";
 import test from "node:test";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, runClipperDailyPlan } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, recordClipperOAuthCallback, runClipperDailyPlan } from "../server/clippers-agent";
 
 test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   const result = __clipperInternals.normalizeRunOptions({
@@ -94,4 +94,22 @@ test("buildClipperConnectActions creates OAuth URL when env is present", () => {
     if (originalTikTokSecret) process.env.TIKTOK_CLIENT_SECRET = originalTikTokSecret;
     else delete process.env.TIKTOK_CLIENT_SECRET;
   }
+});
+
+test("recordClipperOAuthCallback stores hashed OAuth metadata and updates account state", async () => {
+  const connection = await recordClipperOAuthCallback({
+    platform: "tiktok",
+    code: "sample-auth-code",
+    state: "clippers-tiktok",
+  });
+
+  assert.equal(connection.status, "code_received");
+  assert.equal(connection.codeHash, __clipperInternals.hashOAuthCode("sample-auth-code"));
+  assert.notEqual(connection.codeHash, "sample-auth-code");
+
+  const status = await getClipperStatus();
+  assert.ok(status.oauthConnections.some((item) => item.platform === "tiktok" && item.status === "code_received"));
+  assert.ok(status.accounts.some((account) =>
+    account.platformAccounts.some((platformAccount) => platformAccount.platform === "tiktok" && platformAccount.status === "needs_review")
+  ));
 });

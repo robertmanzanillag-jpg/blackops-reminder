@@ -831,14 +831,14 @@ export default function AgentsOfficePage() {
                 <Bot className="h-5 w-5 text-cyan-200" />
               </span>
               <div>
-                <p className="text-lg font-semibold tracking-[0.18em] text-white">SAMS</p>
-                <p className="text-[10px] text-slate-500">Spatial Agentic System</p>
+                <p className="text-lg font-semibold tracking-[0.18em] text-white">ROBS</p>
+                <p className="text-[10px] text-slate-500">Agentic Office</p>
               </div>
             </div>
             <div className="mt-6 rounded-2xl border border-white/10 bg-black/25 p-3">
               <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Explorer</p>
               <div className="space-y-2 text-xs">
-                <p className="font-semibold text-slate-200">SAMS-WORKSPACE</p>
+                <p className="font-semibold text-slate-200">ROBS-WORKSPACE</p>
                 <div className="pl-3 text-slate-400">
                   <p className="mb-1 text-slate-300">▾ agents</p>
                   {agents.slice(0, 6).map((agent) => (
