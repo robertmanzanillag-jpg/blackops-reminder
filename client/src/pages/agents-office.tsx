@@ -162,7 +162,7 @@ const agents = [
     outfit: "bg-rose-500",
     hair: "bg-violet-950",
     skin: "bg-orange-200",
-    position: "left-[56%] top-[73%]",
+    position: "left-[36%] top-[90%]",
     bubblePosition: "right-[9%] top-[49%]",
   },
   {
@@ -180,7 +180,7 @@ const agents = [
     outfit: "bg-amber-500",
     hair: "bg-zinc-950",
     skin: "bg-orange-100",
-    position: "left-[72%] top-[73%]",
+    position: "left-[74%] top-[74%]",
     bubblePosition: "right-[28%] top-[47%]",
   },
   {
@@ -198,13 +198,13 @@ const agents = [
     outfit: "bg-indigo-500",
     hair: "bg-zinc-800",
     skin: "bg-amber-100",
-    position: "left-[42%] top-[73%]",
+    position: "left-[18%] top-[90%]",
     bubblePosition: "left-[36%] top-[44%]",
   },
   {
     id: "control",
-    name: "Control",
-    role: "Permisos",
+    name: "Control / Permisos",
+    role: "Riesgos y aprobaciones",
     href: "/tools",
     icon: ShieldCheck,
     station: "Puerta segura",
@@ -216,7 +216,7 @@ const agents = [
     outfit: "bg-red-500",
     hair: "bg-stone-900",
     skin: "bg-orange-100",
-    position: "left-[86%] top-[73%]",
+    position: "left-[87%] top-[74%]",
     bubblePosition: "right-[7%] top-[69%]",
   },
 ];
@@ -257,6 +257,14 @@ type SkillSuggestion = {
   helpsWith: string;
   nextStep: string;
 };
+type RoomConversation = {
+  from: AgentId;
+  text: string;
+};
+type RoomPresence = {
+  agent: AgentId;
+  position: string;
+};
 
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 
@@ -276,7 +284,7 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
     if (contact.name === "Code") {
       return `${opener}Lo puedo resolver desde UI: reducir elementos superpuestos, ordenar posiciones, hacer labels persistentes y probar que cada click abra el chat correcto.`;
     }
-    if (contact.name === "Control") {
+    if (contact.id === "control") {
       return `${opener}Desde control, lo importante es que no confundas roles. Si un agente no tiene trabajo real, mejor convertirlo en herramienta dentro de otro agente.`;
     }
   }
@@ -308,7 +316,7 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
   if (contact.name === "Autos") {
     return `${opener}Puedo convertir esto en una rutina. Dime cada cuanto debe correr, que condicion dispara la accion y como quieres que te avise si falla.`;
   }
-  if (contact.name === "Control") {
+  if (contact.id === "control") {
     return `${opener}Lo reviso como permisos y riesgo. Antes de ejecutar, confirmo: que accion se hara, que datos toca, si se puede deshacer y si necesita aprobacion tuya.`;
   }
   if (contact.name === "KONG AI") {
@@ -334,7 +342,7 @@ function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
   if (contact.name === "Radio") return "Estoy en Black Room. Dime si hablamos de evento, flyer, calendario o media.";
   if (contact.name === "Clippers") return "Estoy en el war room social. Puedo preparar cuentas, drafts diarios, fuentes permitidas y reportes de views.";
-  if (contact.name === "Control") return "Estoy aqui para revisar permisos, riesgo y acciones sensibles antes de ejecutar.";
+  if (contact.id === "control") return "Estoy aqui para revisar permisos, riesgo y acciones sensibles antes de ejecutar.";
   if (contact.name === "KONG AI") return "Estoy conectado al contexto de Kong. Dime si el tema es eventos, mesas, promoters, venues o usuarios.";
   if (contact.name === "Promoters + Mesas") return "Estoy con promoters y mesas. Dime quien falta por confirmar o que seguimiento quieres hacer.";
   if (contact.name === "Venues") return "Estoy revisando venues/eventos. Dime venue, fecha o fuente y lo organizo.";
@@ -393,6 +401,26 @@ const breakRoomThreads: { from: AgentId; text: string }[] = [
   { from: "automations", text: "Estoy en break hasta que llegue el proximo job. Idea: mostrar un timeline de rutinas activas." },
   { from: "radio", text: "Podemos mejorar el studio con previews de flyers y eventos pendientes." },
   { from: "assistant", text: "Yo puedo resumir cada area al inicio del dia: que paso, que falta y quien necesita ayuda." },
+];
+
+const meetingRoomThreads: RoomConversation[] = [
+  { from: "ceo", text: "Definamos prioridad: primero impacto, luego urgencia, luego quien ejecuta." },
+  { from: "code", text: "Si una idea toca producto, la convierto en cambio pequeno y verificable." },
+  { from: "github", text: "Yo reviso repos, PRs y checks antes de publicar para no romper produccion." },
+  { from: "revenue", text: "Traigo deals validados: fuente, margen, oferta y website necesario." },
+];
+
+const breakRoomPresence: RoomPresence[] = [
+  { agent: "automations", position: "left-[50%] top-[89%]" },
+  { agent: "radio", position: "left-[55%] top-[89%]" },
+  { agent: "assistant", position: "left-[60%] top-[89%]" },
+];
+
+const meetingRoomPresence: RoomPresence[] = [
+  { agent: "ceo", position: "left-[37%] top-[71%]" },
+  { agent: "code", position: "left-[43%] top-[71%]" },
+  { agent: "github", position: "left-[49%] top-[71%]" },
+  { agent: "revenue", position: "left-[55%] top-[71%]" },
 ];
 
 const officeFeed: OfficeFeedItem[] = [
@@ -764,6 +792,26 @@ function GitHubTeamAgent({
   );
 }
 
+function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string }) {
+  const agent = agentById[item.agent];
+  const Icon = agent.icon;
+
+  return (
+    <button
+      type="button"
+      className={cn("absolute z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center", item.position)}
+      aria-label={`${agent.name} en ${label}`}
+    >
+      <span className={cn("flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-gradient-to-br text-zinc-950 shadow-lg shadow-black/40", agent.color)}>
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="mt-1 max-w-16 truncate rounded-full border border-white/10 bg-black/70 px-1.5 py-0.5 text-[8px] font-semibold text-white">
+        {agent.name}
+      </span>
+    </button>
+  );
+}
+
 export default function AgentsOfficePage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
   const [selectedContact, setSelectedContact] = useState<OfficeContact | null>(null);
@@ -1064,11 +1112,12 @@ export default function AgentsOfficePage() {
           <RoomZone className="left-[54%] top-[27%] h-[29%] w-[10%]" label="Deals + Websites" />
           <RoomZone className="left-[65%] top-[19%] h-[43%] w-[25%]" label="Dev + GitHub" />
           <RoomZone className="left-[10%] top-[52%] h-[25%] w-[18%]" label="Finance" />
-          <RoomZone className="left-[31%] top-[62%] h-[20%] w-[17%]" label="Ops" />
-          <RoomZone className="left-[50%] top-[62%] h-[20%] w-[13%]" label="Black Room" />
-          <RoomZone className="left-[65%] top-[62%] h-[20%] w-[13%]" label="Clippers" />
-          <RoomZone className="left-[80%] top-[62%] h-[20%] w-[12%]" label="Security" />
-          <RoomZone className="left-[35%] top-[84%] h-[12%] w-[31%]" label="Break Room" />
+          <RoomZone className="left-[31%] top-[65%] h-[17%] w-[32%]" label="Meeting Room" />
+          <RoomZone className="left-[10%] top-[82%] h-[13%] w-[18%]" label="Ops" />
+          <RoomZone className="left-[30%] top-[84%] h-[12%] w-[13%]" label="Black Room" />
+          <RoomZone className="left-[68%] top-[65%] h-[17%] w-[12%]" label="Clippers" />
+          <RoomZone className="left-[82%] top-[65%] h-[17%] w-[10%]" label="Control" />
+          <RoomZone className="left-[45%] top-[84%] h-[12%] w-[24%]" label="Break Room" />
 
           <div className="absolute left-[13%] top-[25%] z-[5] text-left">
             <p className="max-w-[180px] text-xl font-black leading-6 tracking-[0.12em] text-white/90">ROBS AGENTIC OFFICE</p>
@@ -1092,19 +1141,19 @@ export default function AgentsOfficePage() {
             <div className="absolute left-4 top-3 h-4 w-12 rounded-full bg-lime-200/25" />
             <div className="absolute right-4 top-3 h-4 w-9 rounded-full bg-cyan-200/18" />
           </div>
-          <div className="absolute left-[33%] top-[74%] z-[3] h-12 w-[16%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[35%] top-[72%] z-[3] h-10 w-[24%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-5 top-4 h-4 w-14 rounded-full bg-indigo-200/20" />
             <div className="absolute right-5 top-4 h-4 w-10 rounded-full bg-white/12" />
           </div>
-          <div className="absolute left-[52%] top-[74%] z-[3] h-12 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[32%] top-[90%] z-[3] h-8 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-rose-200/22" />
             <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-amber-200/18" />
           </div>
-          <div className="absolute left-[67%] top-[74%] z-[3] h-12 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[70%] top-[75%] z-[3] h-10 w-[7%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-amber-200/24" />
             <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-rose-200/18" />
           </div>
-          <div className="absolute left-[38%] top-[88%] z-[3] h-10 w-[25%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[48%] top-[89%] z-[3] h-10 w-[18%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-7 top-5 h-4 w-16 rounded-full bg-white/18" />
             <div className="absolute left-28 top-5 h-4 w-14 rounded-full bg-lime-200/24" />
             <div className="absolute right-8 top-4 h-6 w-10 rounded-xl bg-cyan-200/16" />
@@ -1120,6 +1169,14 @@ export default function AgentsOfficePage() {
               selected={agent.id === selectedAgent.id}
               onSelect={handleSelectAgent}
             />
+          ))}
+
+          {meetingRoomPresence.map((item) => (
+            <RoomPresenceDot key={`meeting-${item.agent}`} item={item} label="Meeting Room" />
+          ))}
+
+          {breakRoomPresence.map((item) => (
+            <RoomPresenceDot key={`break-${item.agent}`} item={item} label="Break Room" />
           ))}
 
           {appAgents.map((appAgent, index) => (
@@ -1483,6 +1540,40 @@ export default function AgentsOfficePage() {
                   Cada agente comparte una mejora pequena para otro equipo antes de cerrar el dia.
                 </p>
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <BriefcaseBusiness className="h-4 w-4 text-cyan-200" />
+                <p className="text-sm font-medium text-zinc-300">Meeting Room</p>
+              </div>
+              <span className="rounded-full border border-cyan-200/15 bg-cyan-300/10 px-2 py-1 text-[11px] text-cyan-100">
+                {meetingRoomPresence.length} reunidos
+              </span>
+            </div>
+            <div className="space-y-2">
+              {meetingRoomThreads.map((item) => {
+                const agent = agentById[item.from];
+                const Icon = agent.icon;
+                return (
+                  <button
+                    key={`meeting-thread-${item.from}`}
+                    type="button"
+                    onClick={() => handleSelectAgent(agent)}
+                    className="w-full rounded-lg border border-white/10 bg-black/35 p-3 text-left transition hover:border-cyan-200/25 hover:bg-cyan-300/5"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className={cn("flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br text-zinc-950", agent.color)}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <p className="text-xs font-semibold text-white">{agent.name} en reunion</p>
+                    </div>
+                    <p className="text-sm leading-5 text-zinc-300">{item.text}</p>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
