@@ -38,6 +38,7 @@ import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOA
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, readClipperReport, recordClipperOAuthCallback, runClipperDailyPlan } from "./clippers-agent";
+import { buildRevenueEnginePlan, getRevenueEngineSnapshot, revenueEnginePlanSchema } from "./revenue-engine";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -2318,6 +2319,28 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch automation summary" });
+    }
+  });
+
+  // ==================== REVENUE ENGINE ====================
+
+  app.get("/api/revenue-engine", async (_req, res) => {
+    try {
+      res.json(getRevenueEngineSnapshot());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch revenue engine snapshot" });
+    }
+  });
+
+  app.post("/api/revenue-engine/plan", async (req, res) => {
+    try {
+      const input = revenueEnginePlanSchema.parse(req.body);
+      res.json(buildRevenueEnginePlan(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue engine plan" });
     }
   });
 
