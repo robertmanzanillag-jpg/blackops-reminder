@@ -78,19 +78,19 @@ const agents = [
   {
     id: "revenue",
     name: "Revenue",
-    role: "Ventas y mockups",
+    role: "Deals y websites",
     href: "/revenue-engine",
     icon: BadgeDollarSign,
-    station: "Revenue room",
+    station: "Deals + Websites",
     status: "Armando pipeline",
-    activity: "Buscando nichos, preparando mockups y cuidando margen",
-    shortAction: "Ventas",
+    activity: "Buscando deals, creando landing pages y preparando websites de oportunidad",
+    shortAction: "Deals",
     mode: "working",
     color: "from-emerald-300 to-sky-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
     skin: "bg-orange-100",
-    position: "left-[52%] top-[30%]",
+    position: "left-[54%] top-[34%]",
     bubblePosition: "left-[51%] top-[12%]",
   },
   {
@@ -162,7 +162,7 @@ const agents = [
     outfit: "bg-rose-500",
     hair: "bg-violet-950",
     skin: "bg-orange-200",
-    position: "left-[65%] top-[73%]",
+    position: "left-[56%] top-[73%]",
     bubblePosition: "right-[9%] top-[49%]",
   },
   {
@@ -180,7 +180,7 @@ const agents = [
     outfit: "bg-amber-500",
     hair: "bg-zinc-950",
     skin: "bg-orange-100",
-    position: "left-[75%] top-[73%]",
+    position: "left-[72%] top-[73%]",
     bubblePosition: "right-[28%] top-[47%]",
   },
   {
@@ -381,9 +381,9 @@ const githubAppTeams = [
     app: "Kong",
     repo: "robertmanzanillag-jpg/kong-nightlife",
     agents: [
-      { name: "KONG AI", job: "Chat central", position: "left-[43%] top-[45%]", tone: "bg-[#3fb66f]" },
-      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[34%] top-[47%]", tone: "bg-[#f1c36a]" },
-      { name: "Venues", job: "Events", position: "left-[53%] top-[47%]", tone: "bg-[#60a5fa]" },
+      { name: "KONG AI", job: "Chat central", position: "left-[37%] top-[45%]", tone: "bg-[#3fb66f]" },
+      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[32%] top-[48%]", tone: "bg-[#f1c36a]" },
+      { name: "Venues", job: "Events", position: "left-[42%] top-[48%]", tone: "bg-[#60a5fa]" },
     ],
   },
 ];
@@ -464,7 +464,7 @@ function RoomZone({ className, label }: { className?: string; label: string }) {
     >
       <div className="absolute inset-x-5 top-12 h-px bg-cyan-100/12" />
       <div className="absolute inset-y-5 left-5 w-px bg-cyan-100/10" />
-      <div className="absolute left-1/2 top-4 z-[90] -translate-x-1/2 whitespace-nowrap rounded-2xl border border-cyan-100/40 bg-[#02050d] px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-50 shadow-xl shadow-black/70">
+      <div className="absolute left-1/2 top-4 z-[90] max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-2xl border border-cyan-100/40 bg-[#02050d] px-3 py-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-cyan-50 shadow-xl shadow-black/70">
         {label}
       </div>
     </div>
@@ -947,11 +947,13 @@ export default function AgentsOfficePage() {
           <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
 
           <RoomZone className="left-[10%] top-[19%] h-[29%] w-[18%]" label="Recepcion" />
-          <RoomZone className="left-[30%] top-[19%] h-[39%] w-[31%]" label="Kong + Revenue" />
+          <RoomZone className="left-[30%] top-[19%] h-[39%] w-[16%]" label="Kong" />
+          <RoomZone className="left-[48%] top-[19%] h-[39%] w-[13%]" label="Deals + Websites" />
           <RoomZone className="left-[63%] top-[19%] h-[39%] w-[27%]" label="Dev + GitHub" />
           <RoomZone className="left-[10%] top-[52%] h-[25%] w-[18%]" label="Finance" />
-          <RoomZone className="left-[31%] top-[62%] h-[20%] w-[22%]" label="Ops" />
-          <RoomZone className="left-[56%] top-[62%] h-[20%] w-[22%]" label="Black Room" />
+          <RoomZone className="left-[31%] top-[62%] h-[20%] w-[17%]" label="Ops" />
+          <RoomZone className="left-[50%] top-[62%] h-[20%] w-[13%]" label="Black Room" />
+          <RoomZone className="left-[65%] top-[62%] h-[20%] w-[13%]" label="Clippers" />
           <RoomZone className="left-[80%] top-[62%] h-[20%] w-[12%]" label="Security" />
           <RoomZone className="left-[10%] top-[80%] h-[13%] w-[43%]" label="Break Room" />
 
@@ -960,10 +962,13 @@ export default function AgentsOfficePage() {
             <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/70">Command center</p>
           </div>
 
-          <div className="absolute left-[32%] top-[31%] z-[3] h-20 w-[25%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[32%] top-[31%] z-[3] h-20 w-[13%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-6 top-4 h-10 w-20 rounded-xl bg-cyan-200/18" />
-            <div className="absolute left-[42%] top-4 h-10 w-20 rounded-xl bg-emerald-200/16" />
-            <div className="absolute right-6 top-5 h-8 w-12 rounded-xl bg-amber-200/16" />
+            <div className="absolute right-4 top-5 h-8 w-10 rounded-xl bg-amber-200/16" />
+          </div>
+          <div className="absolute left-[50%] top-[32%] z-[3] h-20 w-[9%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+            <div className="absolute left-4 top-4 h-10 w-14 rounded-xl bg-emerald-200/18" />
+            <div className="absolute right-4 top-5 h-8 w-8 rounded-xl bg-cyan-200/16" />
           </div>
           <div className="absolute left-[66%] top-[33%] z-[3] h-20 w-[20%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-5 top-4 h-10 w-16 rounded-xl bg-cyan-200/20" />
@@ -978,9 +983,13 @@ export default function AgentsOfficePage() {
             <div className="absolute left-5 top-4 h-4 w-14 rounded-full bg-indigo-200/20" />
             <div className="absolute right-5 top-4 h-4 w-10 rounded-full bg-white/12" />
           </div>
-          <div className="absolute left-[59%] top-[74%] z-[3] h-12 w-[16%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-5 top-4 h-4 w-12 rounded-full bg-rose-200/22" />
-            <div className="absolute right-5 top-4 h-4 w-12 rounded-full bg-amber-200/18" />
+          <div className="absolute left-[52%] top-[74%] z-[3] h-12 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+            <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-rose-200/22" />
+            <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-amber-200/18" />
+          </div>
+          <div className="absolute left-[67%] top-[74%] z-[3] h-12 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+            <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-amber-200/24" />
+            <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-rose-200/18" />
           </div>
           <div className="absolute left-[13%] top-[83%] z-[3] h-14 w-[34%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-7 top-5 h-4 w-16 rounded-full bg-white/18" />
