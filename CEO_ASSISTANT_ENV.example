@@ -49,6 +49,13 @@ EVENING_REVIEW_HOUR=21
 # GOOGLE_REFRESH_TOKEN=
 # GOOGLE_DRIVE_RADIO_FOLDER_ID=
 
+# Black Room admin links
+# BLACKROOM_ADMIN_BASE_URL=https://blackroomus.com
+# Use one of these depending on how blackroomus.com admin auth is configured:
+# BLACKROOM_ADMIN_COOKIE=
+# BLACKROOM_ADMIN_BEARER_TOKEN=
+# BLACKROOM_ADMIN_API_KEY=
+
 # FINNHUB_API_KEY=
 # ZOHO_CLIENT_ID=
 # ZOHO_CLIENT_SECRET=

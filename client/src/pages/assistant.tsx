@@ -254,8 +254,8 @@ export default function AssistantPage() {
                   return updated;
                 });
               }
-              if (data.googleEventError || data.radioError) {
-                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError}`;
+              if (data.googleEventError || data.radioError || data.blackRoomLinkError) {
+                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError}`;
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[updated.length - 1] = {

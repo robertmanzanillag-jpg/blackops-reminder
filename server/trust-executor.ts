@@ -2,6 +2,7 @@ import type { PendingAction } from "@shared/schema";
 import { storage } from "./storage";
 import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
+import { addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
 
 type JsonRecord = Record<string, any>;
 
@@ -130,6 +131,21 @@ export async function executeApprovedPendingAction(
           message: input.message,
           note: "Communication integrations are not connected yet. Draft approved for manual send.",
         };
+        break;
+      }
+
+      case "marketing.blackroom_link_add": {
+        result = await addBlackRoomLink(input as any);
+        break;
+      }
+
+      case "marketing.blackroom_link_update": {
+        result = await updateBlackRoomLink(input as any);
+        break;
+      }
+
+      case "marketing.blackroom_link_deactivate": {
+        result = await deactivateBlackRoomLink(input as any);
         break;
       }
 

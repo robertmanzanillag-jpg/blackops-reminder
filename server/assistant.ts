@@ -47,7 +47,17 @@ function userAlreadyApprovedExecution(message?: string): boolean {
     "crea",
     "modifica",
     "actualiza",
+    "desactiva",
+    "quita",
   ].some((phrase) => text.includes(phrase));
+}
+
+function requireStringField(data: any, field: string, label: string): string {
+  const value = data?.[field];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Falta ${label}`);
+  }
+  return value.trim();
 }
 
 async function executeIfAlreadyApproved(
@@ -290,6 +300,9 @@ COMANDOS DISPONIBLES:
 - [GUARDAR_PERSONA: {"name": "...", "role": "...", "company": "...", "notes": "..."}]
 - [GUARDAR_COMPROMISO: {"owner": "...", "commitment": "...", "dueAt": "YYYY-MM-DDTHH:mm:ss", "context": "..."}]
 - [CREAR_BORRADOR_COMUNICACION: {"recipient": "...", "channel": "email|telegram|whatsapp|slack|sms", "subject": "...", "message": "...", "context": "..."}]
+- [BLACKROOM_LINK_ADD: {"title": "...", "subtitle": "...", "url": "https://...", "icon": "ticket|shopping-bag|instagram|youtube|music|calendar|link", "display_order": 0}]
+- [BLACKROOM_LINK_UPDATE: {"matchTitle": "...", "matchUrl": "...", "title": "...", "subtitle": "...", "url": "https://...", "icon": "ticket|shopping-bag|instagram|youtube|music|calendar|link", "display_order": 0}]
+- [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -302,6 +315,14 @@ COMANDOS DISPONIBLES:
 - [LISTAR_RECORDATORIOS: {}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
+
+## BLACK ROOM LINKS:
+Puedes ayudar a editar los links públicos de Black Room.
+- Para agregar un link usa BLACKROOM_LINK_ADD.
+- Para editar uno existente usa BLACKROOM_LINK_UPDATE con matchTitle o matchUrl para identificarlo.
+- Si el usuario pide borrar, quitar, remover u ocultar un link, usa BLACKROOM_LINK_DEACTIVATE. NUNCA propongas borrarlo permanentemente; desactivar preserva analytics/data histórica.
+- Los cambios afectan link-stats y el builder visual.
+- Iconos comunes: tickets/evento=ticket, shop/merch=shopping-bag, instagram=instagram, youtube=youtube, música=music, calendario=calendar, default=link.
 
 ## RECORDATORIOS PROGRAMADOS:
 Puedes crear recordatorios que se envían automáticamente por Telegram.
@@ -764,6 +785,141 @@ export function registerAssistantRoutes(app: Express): void {
           res.write(`data: ${JSON.stringify({ communicationDraftCreated: true, pendingActionId: pendingAction.id })}\n\n`);
         } catch (e) {
           console.error("Error creating communication draft from assistant:", e);
+        }
+      }
+
+      const blackRoomAddRegex = /\[BLACKROOM_LINK_ADD:\s*(\{[^}]+\})\]/g;
+      let blackRoomAddMatch;
+      while ((blackRoomAddMatch = blackRoomAddRegex.exec(fullResponse)) !== null) {
+        try {
+          const linkData = JSON.parse(blackRoomAddMatch[1]);
+          const title = requireStringField(linkData, "title", "title para el link");
+          const url = requireStringField(linkData, "url", "url para el link");
+          const input = {
+            title,
+            subtitle: linkData.subtitle || null,
+            url,
+            icon: linkData.icon || "link",
+            display_order: linkData.display_order ?? null,
+            builderStyle: linkData.builderStyle || "filled",
+            builderColor: linkData.builderColor || "#1a1a1a",
+          };
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.blackroom_link_add",
+            resourceType: "blackroom_link",
+            title: `Agregar link Black Room: ${title}`,
+            description: "El asistente quiere agregar un link en link-stats y en el builder de Black Room.",
+            input,
+            proposedChanges: input,
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ blackRoomLinkError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error creating Black Room link pending action:", e);
+          res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No se pudo preparar el link de Black Room" })}\n\n`);
+        }
+      }
+
+      const blackRoomUpdateRegex = /\[BLACKROOM_LINK_UPDATE:\s*(\{[^}]+\})\]/g;
+      let blackRoomUpdateMatch;
+      while ((blackRoomUpdateMatch = blackRoomUpdateRegex.exec(fullResponse)) !== null) {
+        try {
+          const linkData = JSON.parse(blackRoomUpdateMatch[1]);
+          const title = requireStringField(linkData, "title", "title nuevo para el link");
+          const url = requireStringField(linkData, "url", "url nueva para el link");
+          if (!linkData.matchTitle && !linkData.matchUrl && !linkData.matchId) {
+            throw new Error("Falta matchTitle, matchUrl o matchId para saber cuál link editar.");
+          }
+          const input = {
+            matchId: linkData.matchId || null,
+            matchTitle: linkData.matchTitle || null,
+            matchUrl: linkData.matchUrl || null,
+            title,
+            subtitle: linkData.subtitle || null,
+            url,
+            icon: linkData.icon || "link",
+            display_order: linkData.display_order ?? null,
+            builderStyle: linkData.builderStyle || "filled",
+            builderColor: linkData.builderColor || "#1a1a1a",
+          };
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.blackroom_link_update",
+            resourceType: "blackroom_link",
+            resourceId: String(input.matchId || input.matchUrl || input.matchTitle),
+            title: `Editar link Black Room: ${title}`,
+            description: "El asistente quiere editar un link existente en link-stats y en el builder de Black Room.",
+            input,
+            proposedChanges: input,
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ blackRoomLinkError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error updating Black Room link pending action:", e);
+          res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No se pudo preparar la edición del link de Black Room" })}\n\n`);
+        }
+      }
+
+      const blackRoomDeactivateRegex = /\[BLACKROOM_LINK_DEACTIVATE:\s*(\{[^}]+\})\]/g;
+      let blackRoomDeactivateMatch;
+      while ((blackRoomDeactivateMatch = blackRoomDeactivateRegex.exec(fullResponse)) !== null) {
+        try {
+          const linkData = JSON.parse(blackRoomDeactivateMatch[1]);
+          if (!linkData.title && !linkData.url && !linkData.id) {
+            throw new Error("Falta title, url o id para saber cuál link desactivar.");
+          }
+          const input = {
+            id: linkData.id || null,
+            title: linkData.title || null,
+            url: linkData.url || null,
+            reason: linkData.reason || "Desactivar link preservando data histórica.",
+          };
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.blackroom_link_deactivate",
+            resourceType: "blackroom_link",
+            resourceId: String(input.id || input.url || input.title),
+            title: `Desactivar link Black Room: ${input.title || input.url || input.id}`,
+            description: "El asistente quiere desactivar un link de Black Room sin borrar su data histórica.",
+            input,
+            proposedChanges: { ...input, is_active: false, delete: false, preserveHistoricalData: true },
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ blackRoomLinkError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error deactivating Black Room link pending action:", e);
+          res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No se pudo preparar la desactivación del link de Black Room" })}\n\n`);
         }
       }
 
