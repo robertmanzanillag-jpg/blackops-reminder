@@ -4,6 +4,7 @@ import sharp from "sharp";
 import {
   buildRadioTemplateSourceHash,
   forceTransparentBackground,
+  renderLocalRadioTemplatePng,
   sanitizeRadioFilenamePart,
 } from "../server/radio-template-agent";
 
@@ -84,4 +85,21 @@ test("forceTransparentBackground turns black pixels transparent", async () => {
 
   assert.equal(data[3], 0);
   assert.equal(data[((3 * 6 + 3) * 4) + 3], 255);
+});
+
+test("renderLocalRadioTemplatePng creates a transparent 1280x720 PNG", async () => {
+  const output = await renderLocalRadioTemplatePng("Lucia Reina");
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.format, "png");
+  assert.equal(metadata.width, 1280);
+  assert.equal(metadata.height, 720);
+
+  const { data, info } = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let transparentPixels = 0;
+  for (let index = 3; index < data.length; index += info.channels) {
+    if (data[index] === 0) transparentPixels++;
+  }
+
+  assert.ok(transparentPixels > info.width * info.height * 0.8);
 });

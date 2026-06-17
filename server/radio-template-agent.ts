@@ -1,22 +1,30 @@
 import { createHash } from "crypto";
-import { setTimeout as delay } from "timers/promises";
+import { existsSync } from "fs";
+import path from "path";
 import sharp from "sharp";
 import { storage } from "./storage";
 import { getRadioSlotsForMonth, type RadioSlot } from "./radio-agent";
 import { ensureRadioDriveFolder, uploadRadioTemplatePng } from "./google-drive";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { getSystemUserId } from "./user-context";
-import { getCanvaAccessToken } from "./canva-oauth";
 import type { RadioTemplateAsset } from "@shared/schema";
 
 const RADIO_TIMEZONE = "America/New_York";
-const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 const CANVA_REFERENCE_DESIGN_ID = "DAGRzIet_rI";
 const DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID = "EAHMxABUd6M";
 const DEFAULT_CANVA_DJ_FIELD = "dj_name";
 const CANVA_TRANSPARENT_EXPORT = true;
 const BLACK_BACKGROUND_ALPHA_THRESHOLD = 18;
 const EDGE_CLEANUP_PIXELS = 2;
+const RADIO_TEMPLATE_WIDTH = 1280;
+const RADIO_TEMPLATE_HEIGHT = 720;
+const RADIO_TEXT_LEFT = 29;
+const RADIO_TEXT_TOP = 647;
+const RADIO_TEXT_BOX_WIDTH = 560;
+const RADIO_TEXT_BOX_HEIGHT = 58;
+const RADIO_TEXT_FONT_SIZE = 36;
+const RADIO_TEXT_FONT_FAMILY = "DIN Condensed, Avenir Next Condensed, Impact, Arial Narrow, sans-serif";
+const RADIO_TEXT_ERASE_PADDING = 10;
 
 export interface GeneratedRadioTemplate {
   eventId: string;
@@ -41,7 +49,7 @@ export interface RadioTemplateRunResult {
   files: GeneratedRadioTemplate[];
 }
 
-interface CanvaAutofillResult {
+interface RadioTemplateDesignReference {
   designId: string;
   editUrl: string | null;
   viewUrl: string | null;
@@ -58,28 +66,6 @@ function getRequiredCanvaTemplateConfig() {
   }
 
   return { brandTemplateId, djField };
-}
-
-async function canvaRequest<T>(userId: string, path: string, init: RequestInit = {}): Promise<T> {
-  const accessToken = await getCanvaAccessToken(userId);
-  const response = await fetch(`${CANVA_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`Canva permission is missing or expired. ${body}`.trim());
-    }
-    throw new Error(`Canva API request failed (${response.status}). ${body}`.trim());
-  }
-
-  return response.json() as Promise<T>;
 }
 
 export function getDateKeyInTimezone(date: Date, timezone = RADIO_TIMEZONE): string {
@@ -125,7 +111,7 @@ export function buildRadioTemplateSourceHash(params: {
       canvaBrandTemplateId: params.canvaBrandTemplateId || process.env.CANVA_RADIO_BRAND_TEMPLATE_ID || DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID,
       canvaDjField: params.canvaDjField || process.env.CANVA_RADIO_DJ_FIELD || DEFAULT_CANVA_DJ_FIELD,
       transparentBackground: CANVA_TRANSPARENT_EXPORT,
-      template: "canva-codeine-corvette-v2",
+      template: "local-codeine-corvette-transparent-v3",
     }))
     .digest("hex");
 }
@@ -148,85 +134,6 @@ function getTemplateInputs(slot: RadioSlot): Array<{ slotHour: number; djName: s
     if (djName) inputs.push({ slotHour, djName });
   }
   return inputs;
-}
-
-async function createCanvaAutofill(userId: string, djName: string): Promise<CanvaAutofillResult> {
-  const { brandTemplateId, djField } = getRequiredCanvaTemplateConfig();
-  const created = await canvaRequest<{ job: { id: string } }>(userId, "/autofills", {
-    method: "POST",
-    body: JSON.stringify({
-      brand_template_id: brandTemplateId,
-      data: {
-        [djField]: {
-          type: "text",
-          text: djName.toUpperCase(),
-        },
-      },
-    }),
-  });
-
-  for (let attempt = 0; attempt < 24; attempt++) {
-    const job = await canvaRequest<any>(userId, `/autofills/${created.job.id}`);
-    const status = job.job?.status || job.status;
-
-    if (status === "success") {
-      const result = job.job?.result || job.result || {};
-      const design = result.design || result;
-      return {
-        designId: design.id,
-        editUrl: design.urls?.edit_url || result.urls?.edit_url || design.url || null,
-        viewUrl: design.urls?.view_url || result.urls?.view_url || null,
-      };
-    }
-
-    if (status === "failed") {
-      throw new Error(job.job?.error?.message || job.error?.message || "Canva autofill failed");
-    }
-
-    await delay(1500);
-  }
-
-  throw new Error("Canva autofill timed out");
-}
-
-async function exportCanvaDesignPng(userId: string, designId: string): Promise<Buffer> {
-  const created = await canvaRequest<{ job: { id: string } }>(userId, "/exports", {
-    method: "POST",
-    body: JSON.stringify({
-      design_id: designId,
-      format: {
-        type: "png",
-        transparent_background: CANVA_TRANSPARENT_EXPORT,
-        lossless: true,
-        pages: [1],
-      },
-    }),
-  });
-
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const job = await canvaRequest<any>(userId, `/exports/${created.job.id}`);
-    const status = job.job?.status || job.status;
-
-    if (status === "success") {
-      const urls: string[] = job.job?.urls || job.urls || job.job?.result?.urls || [];
-      const url = urls[0];
-      if (!url) throw new Error("Canva export did not return a PNG URL");
-
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download Canva PNG export (${response.status})`);
-      }
-      return Buffer.from(await response.arrayBuffer());
-    }
-
-    if (status === "failed") {
-      throw new Error(job.job?.error?.message || job.error?.message || "Canva export failed");
-    }
-
-    await delay(1500);
-  }
-
-  throw new Error("Canva export timed out");
 }
 
 export async function forceTransparentBackground(input: Buffer): Promise<Buffer> {
@@ -265,6 +172,81 @@ export async function forceTransparentBackground(input: Buffer): Promise<Buffer>
       channels: info.channels,
     },
   })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function getRadioTemplatePath(): string {
+  const configuredPath = process.env.RADIO_TEMPLATE_IMAGE_PATH;
+  const candidates = [
+    configuredPath,
+    path.join(process.cwd(), "client/public/br-radio-video-template.png"),
+    path.join(process.cwd(), "dist/public/br-radio-video-template.png"),
+    path.join(process.cwd(), "client/public/br-radio-template.png"),
+    path.join(process.cwd(), "dist/public/br-radio-template.png"),
+  ].filter(Boolean) as string[];
+
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) {
+    throw new Error("Radio template image not found. Add RADIO_TEMPLATE_IMAGE_PATH or keep client/public/br-radio-template.png.");
+  }
+
+  return found;
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildDjTextOverlay(djName: string): Buffer {
+  const text = escapeSvgText(djName.trim().toUpperCase());
+  const svg = `
+    <svg width="${RADIO_TEMPLATE_WIDTH}" height="${RADIO_TEMPLATE_HEIGHT}" viewBox="0 0 ${RADIO_TEMPLATE_WIDTH} ${RADIO_TEMPLATE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .dj {
+          fill: #ffffff;
+          font-family: ${RADIO_TEXT_FONT_FAMILY};
+          font-size: ${RADIO_TEXT_FONT_SIZE}px;
+          font-weight: 900;
+          letter-spacing: 0;
+        }
+      </style>
+      <text x="${RADIO_TEXT_LEFT}" y="${RADIO_TEXT_TOP + RADIO_TEXT_FONT_SIZE}" class="dj">${text}</text>
+    </svg>
+  `;
+
+  return Buffer.from(svg);
+}
+
+export async function renderLocalRadioTemplatePng(djName: string): Promise<Buffer> {
+  const templatePath = getRadioTemplatePath();
+  const template = await sharp(templatePath)
+    .resize(RADIO_TEMPLATE_WIDTH, RADIO_TEMPLATE_HEIGHT, { fit: "fill" })
+    .ensureAlpha()
+    .composite([
+      {
+        input: {
+          create: {
+            width: RADIO_TEXT_BOX_WIDTH + RADIO_TEXT_ERASE_PADDING * 2,
+            height: RADIO_TEXT_BOX_HEIGHT + RADIO_TEXT_ERASE_PADDING * 2,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 1 },
+          },
+        },
+        left: Math.max(0, RADIO_TEXT_LEFT - RADIO_TEXT_ERASE_PADDING),
+        top: Math.max(0, RADIO_TEXT_TOP - RADIO_TEXT_ERASE_PADDING),
+      },
+    ])
+    .png()
+    .toBuffer();
+
+  const transparentBase = await forceTransparentBackground(template);
+  return sharp(transparentBase)
+    .composite([{ input: buildDjTextOverlay(djName), left: 0, top: 0 }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
@@ -340,9 +322,12 @@ export async function generateRadioTemplatesForDate(
       });
 
       try {
-        const canvaDesign = await createCanvaAutofill(userId, input.djName);
-        const exportedBuffer = await exportCanvaDesignPng(userId, canvaDesign.designId);
-        const buffer = await forceTransparentBackground(exportedBuffer);
+        const canvaDesign: RadioTemplateDesignReference = {
+          designId: CANVA_REFERENCE_DESIGN_ID,
+          editUrl: process.env.CANVA_RADIO_TEMPLATE_EDIT_URL || null,
+          viewUrl: process.env.CANVA_RADIO_TEMPLATE_VIEW_URL || null,
+        };
+        const buffer = await renderLocalRadioTemplatePng(input.djName);
         folderId ||= await ensureRadioDriveFolder(dateFolderName);
         const upload = await uploadRadioTemplatePng({
           buffer,
