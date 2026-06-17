@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Bot,
   Building2,
+  Clapperboard,
   Code2,
   Github,
   LayoutDashboard,
@@ -68,6 +69,13 @@ const tools = [
     description: "Flyers, DJs y calendario de Black Room.",
     href: "/radio",
     icon: Radio,
+  },
+  {
+    title: "Promo Video",
+    description: "Clips locales para fiestas, dinners, pool parties y yachts.",
+    href: "/promo-video",
+    icon: Clapperboard,
+    primary: true,
   },
   {
     title: "Control",

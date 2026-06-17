@@ -10,6 +10,7 @@ import Portfolio from "@/pages/portfolio";
 import InvestmentDetail from "@/pages/investment-detail";
 import Projects from "@/pages/projects";
 import RadioPage from "@/pages/radio";
+import PromoVideoPage from "@/pages/promo-video";
 import AssistantPage from "@/pages/assistant";
 import CodeAgentPage from "@/pages/code-agent";
 import GitHubAgentPage from "@/pages/github-agent";
@@ -115,6 +116,7 @@ function Router() {
         <Route path="/portfolio/:symbol" component={InvestmentDetail} />
         <Route path="/projects" component={Projects} />
         <Route path="/radio" component={RadioPage} />
+        <Route path="/promo-video" component={PromoVideoPage} />
         <Route component={NotFound} />
       </Switch>
     </>

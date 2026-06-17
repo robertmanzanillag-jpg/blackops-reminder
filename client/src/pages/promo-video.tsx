@@ -1,0 +1,333 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, Loader2, Play, Sparkles } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+
+type PromoVideoStyle = "full" | "post";
+type PromoVideoObjective = "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
+
+interface PromoTemplate {
+  id: PromoVideoObjective;
+  label: string;
+  hook: string;
+  cta: string;
+}
+
+interface PromoVideoFile {
+  name: string;
+  path: string;
+  sizeMb: number;
+  modifiedAt: string;
+}
+
+interface PromoVideoStatus {
+  rootDir: string;
+  inputDir: string;
+  outputDir: string;
+  reportDir: string;
+  inputVideos: PromoVideoFile[];
+  outputVideos: PromoVideoFile[];
+  templates: PromoTemplate[];
+}
+
+interface PromoVideoRunResult {
+  ok: boolean;
+  output: string;
+  reportPath: string;
+  status: PromoVideoStatus;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function FileList({ title, files, emptyText }: { title: string; files: PromoVideoFile[]; emptyText: string }) {
+  return (
+    <Card className="border-zinc-800 bg-zinc-950/70">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base text-white">
+          <FileVideo className="h-4 w-4 text-zinc-300" />
+          {title}
+          <Badge variant="secondary" className="ml-auto bg-white/10 text-zinc-200">
+            {files.length}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {files.length === 0 ? (
+          <p className="text-sm text-zinc-500">{emptyText}</p>
+        ) : (
+          files.slice(0, 12).map((file) => (
+            <div key={file.path} className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/40 px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-zinc-100">{file.name}</p>
+                <p className="text-xs text-zinc-500">{file.sizeMb} MB · {formatDate(file.modifiedAt)}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function PromoVideoPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [objective, setObjective] = useState<PromoVideoObjective>("nightlife");
+  const [clipsPerVideo, setClipsPerVideo] = useState(5);
+  const [targetSeconds, setTargetSeconds] = useState(15);
+  const [cuts, setCuts] = useState(3);
+  const [style, setStyle] = useState<PromoVideoStyle>("full");
+  const [hookText, setHookText] = useState("");
+  const [ctaText, setCtaText] = useState("");
+  const [lastRun, setLastRun] = useState<PromoVideoRunResult | null>(null);
+
+  const { data: status, isLoading } = useQuery<PromoVideoStatus>({
+    queryKey: ["/api/promo-video/status"],
+  });
+
+  const selectedTemplate = useMemo(() => {
+    return status?.templates.find((template) => template.id === objective);
+  }, [objective, status?.templates]);
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/promo-video/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          objective,
+          clipsPerVideo,
+          targetSeconds,
+          cuts,
+          style,
+          hookText: hookText || selectedTemplate?.hook,
+          ctaText: ctaText || selectedTemplate?.cta,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron generar los clips");
+      return data as PromoVideoRunResult;
+    },
+    onSuccess: (data) => {
+      setLastRun(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
+      toast({
+        title: "Clips generados",
+        description: `${data.status.outputVideos.length} videos listos en la carpeta final.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "No se generaron los clips",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const copyPath = async (path: string, label: string) => {
+    await navigator.clipboard.writeText(path);
+    toast({ title: "Ruta copiada", description: label });
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 px-4 py-6 text-white md:px-8" data-testid="promo-video-page">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <header className="flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/tools">
+              <Button variant="ghost" size="icon" data-testid="button-back-tools">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-black">
+              <Clapperboard className="h-5 w-5 text-fuchsia-300" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold">Promo Video Agent</h1>
+              <p className="text-sm text-zinc-500">BlackOps local editor</p>
+            </div>
+          </div>
+          <Button
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending || isLoading || !status?.inputVideos.length}
+            className="bg-white text-zinc-950 hover:bg-zinc-200"
+            data-testid="generate-promo-videos-button"
+          >
+            {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+            Generar clips
+          </Button>
+        </header>
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <Sparkles className="h-4 w-4 text-fuchsia-300" />
+                Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Objetivo</Label>
+                <Select value={objective} onValueChange={(value) => setObjective(value as PromoVideoObjective)}>
+                  <SelectTrigger className="border-zinc-800 bg-black">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(status?.templates || []).map((template) => (
+                      <SelectItem key={template.id} value={template.id}>{template.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Formato</Label>
+                <Select value={style} onValueChange={(value) => setStyle(value as PromoVideoStyle)}>
+                  <SelectTrigger className="border-zinc-800 bg-black">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full vertical</SelectItem>
+                    <SelectItem value="post">Post centrado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hook</Label>
+                <Input
+                  value={hookText}
+                  onChange={(event) => setHookText(event.target.value)}
+                  placeholder={selectedTemplate?.hook || "BEST APP TO GO OUT"}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>CTA</Label>
+                <Input
+                  value={ctaText}
+                  onChange={(event) => setCtaText(event.target.value)}
+                  placeholder={selectedTemplate?.cta || "JOIN THE GUESTLIST"}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Clips por video</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={clipsPerVideo}
+                  onChange={(event) => setClipsPerVideo(Number(event.target.value))}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Segundos</Label>
+                <Input
+                  type="number"
+                  min={6}
+                  max={90}
+                  value={targetSeconds}
+                  onChange={(event) => setTargetSeconds(Number(event.target.value))}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Cortes internos</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={cuts}
+                  onChange={(event) => setCuts(Number(event.target.value))}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <Folder className="h-4 w-4 text-zinc-300" />
+                Carpetas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                ["Originales", status?.inputDir],
+                ["Finales", status?.outputDir],
+                ["Reportes", status?.reportDir],
+              ].map(([label, path]) => (
+                <div key={label} className="rounded-md border border-white/10 bg-black/40 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-zinc-100">{label}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={!path}
+                      onClick={() => path && copyPath(path, label || "")}
+                      className="h-8 w-8 text-zinc-400 hover:text-white"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="break-all text-xs text-zinc-500">{path || "..."}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <FileList
+            title="Originales"
+            files={status?.inputVideos || []}
+            emptyText="Sin videos crudos todavia."
+          />
+          <FileList
+            title="Listos para subir"
+            files={status?.outputVideos || []}
+            emptyText="Aun no hay clips exportados."
+          />
+        </div>
+
+        {lastRun && (
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="text-base text-white">Ultima corrida</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="break-all text-xs text-zinc-500">{lastRun.reportPath}</p>
+              <pre className="max-h-56 overflow-auto rounded-md border border-white/10 bg-black p-3 text-xs text-zinc-300">
+                {lastRun.output}
+              </pre>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+

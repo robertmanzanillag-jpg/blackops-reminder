@@ -36,6 +36,7 @@ import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
+import { getPromoVideoStatus, normalizePromoVideoOptions, runPromoVideoEdit } from "./promo-video-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1468,6 +1469,34 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate radio templates" });
+    }
+  });
+
+  // ==================== PROMO VIDEO AGENT ====================
+
+  app.get("/api/promo-video/status", async (_req, res) => {
+    try {
+      const status = await getPromoVideoStatus();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect promo video folders" });
+    }
+  });
+
+  app.post("/api/promo-video/preview-options", async (req, res) => {
+    try {
+      res.json(normalizePromoVideoOptions(req.body || {}));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Invalid promo video options" });
+    }
+  });
+
+  app.post("/api/promo-video/generate", async (req, res) => {
+    try {
+      const result = await runPromoVideoEdit(req.body || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to generate promo videos" });
     }
   });
 
