@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
-import { ensureDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
+import { DRIVE_KONG_VIDEOS_FOLDER, ensureAppDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
 import { getSystemUserId } from "./user-context";
 
 export type PromoVideoStyle = "full" | "post";
@@ -105,7 +105,6 @@ const LINKS_DIR = path.join(ROOT_DIR, "02_links");
 const OUTPUT_DIR = path.join(ROOT_DIR, "03_listos_para_subir");
 const REPORT_DIR = path.join(ROOT_DIR, "04_reportes");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
-const PROMO_DRIVE_ROOT_FOLDER = "VIDEOS PROMO DE KOG";
 
 export const PROMO_TEMPLATES: PromoTemplate[] = [
   {
@@ -475,7 +474,7 @@ async function uploadPromoOutputsToDrive(outputFiles: string[], options: PromoVi
 
   for (const filePath of outputFiles) {
     const category = categoryFromOutputFile(filePath, options);
-    const folderId = await ensureDriveFolderPath([PROMO_DRIVE_ROOT_FOLDER, category, dateFolder], userId);
+    const folderId = await ensureAppDriveFolderPath([DRIVE_KONG_VIDEOS_FOLDER, category, dateFolder], userId);
     const upload = await uploadLocalFileToDriveFolder({
       filePath,
       folderId,

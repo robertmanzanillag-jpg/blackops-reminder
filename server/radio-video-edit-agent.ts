@@ -6,13 +6,13 @@ import { storage } from "./storage";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { sendPushNotification } from "./push-notifications";
 import { sendTelegramPlainMessage } from "./telegram";
-import { ensureDriveFolderAtRoot, uploadLocalFileToDriveFolder } from "./google-drive";
+import { DRIVE_APP_ROOT_FOLDER, DRIVE_BLACK_ROOM_VIDEOS_FOLDER, ensureAppDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
 const DEFAULT_FALLBACK_INPUT_DIR = path.join(process.cwd(), "radio_video_edits", "01_originales");
-const IG_RADIO_FOLDER_NAME = "videos editado para ig";
-const TIKTOK_RADIO_FOLDER_NAME = "VIDEOS DE TIKTOK DE LA RADIO";
+const IG_RADIO_FOLDER_NAME = "Instagram";
+const TIKTOK_RADIO_FOLDER_NAME = "TikTok";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 type RadioEditStatus = "queued" | "analyzing" | "needs_dj_name" | "rendering" | "completed" | "failed";
@@ -373,7 +373,7 @@ function resolveDriveOutputDir(folderName: string): string | null {
   const explicit = process.env.DRIVE_OUTPUT_DIR?.trim();
   if (explicit) return explicit;
   const cloudStorage = path.join(os.homedir(), "Library", "CloudStorage");
-  return path.join(cloudStorage, "__AUTO_DISCOVER__", folderName);
+  return path.join(cloudStorage, "__AUTO_DISCOVER__", DRIVE_APP_ROOT_FOLDER, DRIVE_BLACK_ROOM_VIDEOS_FOLDER, folderName);
 }
 
 async function copyToGoogleDriveDesktop(filePath: string, folderName = IG_RADIO_FOLDER_NAME): Promise<string | null> {
@@ -392,7 +392,7 @@ async function copyToGoogleDriveDesktop(filePath: string, folderName = IG_RADIO_
       : await pathExists(path.join(driveRoot, "Mi unidad"))
         ? path.join(driveRoot, "Mi unidad")
         : driveRoot;
-    const destinationDir = path.join(myDrive, folderName);
+    const destinationDir = path.join(myDrive, DRIVE_APP_ROOT_FOLDER, DRIVE_BLACK_ROOM_VIDEOS_FOLDER, folderName);
     await fs.mkdir(destinationDir, { recursive: true });
     const destination = path.join(destinationDir, path.basename(filePath));
     await fs.copyFile(filePath, destination);
@@ -457,7 +457,7 @@ async function renderRadioVideoJob(input: RadioVideoJobInput & { djName: string;
 
     for (const clip of clips) {
       const folderName = clip.driveFolderName || IG_RADIO_FOLDER_NAME;
-      const folderId = await ensureDriveFolderAtRoot(folderName, input.userId);
+      const folderId = await ensureAppDriveFolderPath([DRIVE_BLACK_ROOM_VIDEOS_FOLDER, folderName], input.userId);
       const upload = await uploadLocalFileToDriveFolder({
         filePath: clip.path,
         folderId,

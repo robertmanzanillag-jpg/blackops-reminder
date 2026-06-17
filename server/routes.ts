@@ -36,6 +36,7 @@ import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
+import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, readClipperReport, recordClipperOAuthCallback, runClipperDailyPlan } from "./clippers-agent";
 import { buildRevenueEnginePlan, getRevenueEngineSnapshot, revenueEnginePlanSchema } from "./revenue-engine";
@@ -181,6 +182,15 @@ export async function registerRoutes(
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch Google Drive status" });
+    }
+  });
+
+  app.post("/api/google-drive/organize", async (req, res) => {
+    try {
+      const result = await ensureAppDriveStructure(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to organize Google Drive folders" });
     }
   });
 

@@ -62,6 +62,15 @@ interface GoogleDriveStatus {
   storageError?: string | null;
 }
 
+interface DriveFolderSetupResult {
+  rootFolderId: string;
+  folders: Array<{
+    label: string;
+    path: string[];
+    folderId: string;
+  }>;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("es-US", {
     month: "short",
@@ -132,6 +141,29 @@ export default function PromoVideoPage() {
 
   const { data: driveStatus } = useQuery<GoogleDriveStatus>({
     queryKey: ["/api/google-drive/status"],
+  });
+
+  const organizeDriveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/google-drive/organize", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No pude acomodar Google Drive");
+      return data as DriveFolderSetupResult;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/google-drive/status"] });
+      toast({
+        title: "Drive acomodado",
+        description: `Robert A creado/actualizado con ${data.folders.length} subcarpetas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "No pude acomodar Drive",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const selectedTemplate = useMemo(() => {
@@ -445,7 +477,7 @@ export default function PromoVideoPage() {
                   {driveStatus?.connected ? "Conectado" : "Pendiente de conectar"}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Los clips finales se suben a VIDEOS PROMO DE KOG con subcarpetas por categoria y fecha.
+                  Los clips finales se suben a Robert A / Videos de Kong con subcarpetas por categoria y fecha.
                 </p>
                 {driveStatus?.storageError && (
                   <p className="mt-2 text-xs text-yellow-200">Drive necesita DB local o refresh token en env para guardar OAuth.</p>
@@ -458,6 +490,17 @@ export default function PromoVideoPage() {
                   >
                     <HardDrive className="mr-2 h-4 w-4" />
                     Conectar Drive
+                  </Button>
+                )}
+                {driveStatus?.connected && (
+                  <Button
+                    type="button"
+                    onClick={() => organizeDriveMutation.mutate()}
+                    disabled={organizeDriveMutation.isPending}
+                    className="mt-3 h-9 rounded-full bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+                  >
+                    {organizeDriveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Folder className="mr-2 h-4 w-4" />}
+                    Acomodar Drive
                   </Button>
                 )}
               </div>

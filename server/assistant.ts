@@ -282,7 +282,7 @@ async function executePromoVideoGenerateData(input: any, userId?: string) {
     "",
     `Listo. Procesé ${options.count} video${options.count === 1 ? "" : "s"} de promo de ${options.targetSeconds}s.`,
     options.sourceHint ? `Fuente: ${options.sourceHint}.` : null,
-    `Google Drive: ${result.driveUploads.length} archivo${result.driveUploads.length === 1 ? "" : "s"} subido${result.driveUploads.length === 1 ? "" : "s"} en VIDEOS PROMO DE KOG.`,
+    `Google Drive: ${result.driveUploads.length} archivo${result.driveUploads.length === 1 ? "" : "s"} subido${result.driveUploads.length === 1 ? "" : "s"} en Robert A / Videos de Kong.`,
     driveLinks.length ? `Links: ${driveLinks.slice(0, 5).join(" | ")}` : null,
     `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
     `Cache local: ${result.status.outputDir}`,

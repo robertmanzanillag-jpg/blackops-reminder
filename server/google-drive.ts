@@ -7,12 +7,24 @@ import { getGoogleDriveOAuthClient } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
-const ROOT_FOLDER_NAME = "Black Room Radio Templates";
+export const DRIVE_APP_ROOT_FOLDER = "Robert A";
+export const DRIVE_RADIO_FLYERS_FOLDER = "Flyers de la radio";
+export const DRIVE_BLACK_ROOM_VIDEOS_FOLDER = "Videos de Black Room";
+export const DRIVE_KONG_VIDEOS_FOLDER = "Videos de Kong";
 
 export interface DriveUploadResult {
   fileId: string;
   webViewLink: string | null;
   webContentLink: string | null;
+}
+
+export interface DriveFolderSetupResult {
+  rootFolderId: string;
+  folders: Array<{
+    label: string;
+    path: string[];
+    folderId: string;
+  }>;
 }
 
 function escapeDriveQueryValue(value: string): string {
@@ -96,12 +108,39 @@ export async function ensureDriveFolderPath(folderNames: string[], userId = getS
   }
 }
 
+export async function ensureAppDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string> {
+  return ensureDriveFolderPath([DRIVE_APP_ROOT_FOLDER, ...folderNames], userId);
+}
+
+export async function ensureAppDriveStructure(userId = getSystemUserId()): Promise<DriveFolderSetupResult> {
+  const rootFolderId = await ensureDriveFolderPath([DRIVE_APP_ROOT_FOLDER], userId);
+  const folderSpecs = [
+    { label: "Flyers de la radio", path: [DRIVE_RADIO_FLYERS_FOLDER] },
+    { label: "Videos de Black Room", path: [DRIVE_BLACK_ROOM_VIDEOS_FOLDER] },
+    { label: "Videos de Black Room / Instagram", path: [DRIVE_BLACK_ROOM_VIDEOS_FOLDER, "Instagram"] },
+    { label: "Videos de Black Room / TikTok", path: [DRIVE_BLACK_ROOM_VIDEOS_FOLDER, "TikTok"] },
+    { label: "Videos de Kong", path: [DRIVE_KONG_VIDEOS_FOLDER] },
+  ];
+
+  const folders = [];
+  for (const spec of folderSpecs) {
+    folders.push({
+      label: spec.label,
+      path: [DRIVE_APP_ROOT_FOLDER, ...spec.path],
+      folderId: await ensureAppDriveFolderPath(spec.path, userId),
+    });
+  }
+
+  return { rootFolderId, folders };
+}
+
 export async function ensureRadioDriveFolder(dateFolderName: string, userId = getSystemUserId()): Promise<string> {
   try {
     const drive = await getDriveClient(userId);
     const configuredRootId = process.env.GOOGLE_DRIVE_RADIO_FOLDER_ID;
-    const rootId = configuredRootId || (await findOrCreateFolder(drive, ROOT_FOLDER_NAME, "root"));
-    return findOrCreateFolder(drive, dateFolderName, rootId);
+    const appRootId = configuredRootId || (await findOrCreateFolder(drive, DRIVE_APP_ROOT_FOLDER, "root"));
+    const flyersRootId = await findOrCreateFolder(drive, DRIVE_RADIO_FLYERS_FOLDER, appRootId);
+    return findOrCreateFolder(drive, dateFolderName, flyersRootId);
   } catch (error: any) {
     if (isDrivePermissionError(error)) {
       throw new Error("Google Drive permission is missing.");
