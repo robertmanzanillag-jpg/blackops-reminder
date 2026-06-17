@@ -6,7 +6,7 @@ import { executeAction } from "./agent-actions";
 import { getPortfolioNews } from "./finance";
 import { getSystemUserId } from "./user-context";
 import { generateCeoMorningBrief } from "./ceo-briefing";
-import { ensureDefaultAutomations } from "./automation-registry";
+import { ensureDefaultAutomations, recordScheduledAutomationRun, type ScheduledAutomationRunOutcome } from "./automation-registry";
 import { generateRadioTemplatesForDate } from "./radio-template-agent";
 import {
   getDateKeyFromClock,
@@ -46,11 +46,40 @@ async function sendTelegramNotificationToUser(userId: string, title: string, bod
     : sendTelegramMessage(botToken, config.chatId, message);
 }
 
-async function getEnabledTelegramUserIds(): Promise<string[]> {
-  const telegramConfigs = await storage.getEnabledTelegramConfigs();
-  return telegramConfigs.length > 0
-    ? Array.from(new Set(telegramConfigs.map((config) => config.userId)))
-    : [getSystemUserId()];
+async function getScheduledNotificationUserIds(): Promise<string[]> {
+  const [telegramConfigs, pushSubscriptions] = await Promise.all([
+    storage.getEnabledTelegramConfigs(),
+    storage.getAllPushSubscriptions(),
+  ]);
+  const userIds = [
+    ...telegramConfigs.map((config) => config.userId),
+    ...pushSubscriptions.map((subscription) => subscription.userId),
+  ].filter((userId): userId is string => Boolean(userId));
+  const uniqueUserIds = Array.from(new Set(userIds));
+  return uniqueUserIds.length ? uniqueUserIds : [getSystemUserId()];
+}
+
+async function runTrackedScheduledAutomation<T>(
+  userId: string,
+  automationKey: string,
+  run: () => Promise<T>,
+  summarize: (result: T) => ScheduledAutomationRunOutcome,
+): Promise<T> {
+  const startedAt = new Date();
+  try {
+    const result = await run();
+    await recordScheduledAutomationRun(userId, automationKey, startedAt, summarize(result));
+    return result;
+  } catch (error: any) {
+    const message = error?.message || "Scheduled automation failed";
+    await recordScheduledAutomationRun(userId, automationKey, startedAt, {
+      status: "failed",
+      resultSummary: `${automationKey} failed`,
+      errorMessage: message,
+      metadata: { error: message },
+    });
+    throw error;
+  }
 }
 
 let lastMorningNotification: string | null = null;
@@ -106,9 +135,12 @@ async function getIncompleteWeeklyTasks(userId = getSystemUserId()): Promise<str
 
 async function sendMorningReminder(): Promise<void> {
   const title = "🌅 Brief CEO";
-  const userIds = await getEnabledTelegramUserIds();
+  const userIds = await getScheduledNotificationUserIds();
 
-  await Promise.all(userIds.map(async (userId) => {
+  await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+    userId,
+    "morning-reminder",
+    async () => {
     const { pending } = await getTodaysTasks(userId);
     const body = await generateCeoMorningBrief(userId);
 
@@ -118,7 +150,14 @@ async function sendMorningReminder(): Promise<void> {
     ]);
 
     console.log(`[Reminder] CEO morning brief sent for ${userId} - ${pending.length} pending tasks`);
-  }));
+      return { pendingCount: pending.length };
+    },
+    (result) => ({
+      status: "success",
+      resultSummary: `CEO morning brief sent with ${result.pendingCount} pending task(s).`,
+      metadata: result,
+    }),
+  )));
 }
 
 async function sendMorningReminderForUser(userId: string): Promise<void> {
@@ -136,14 +175,17 @@ async function sendMorningReminderForUser(userId: string): Promise<void> {
 
 async function sendEveningReminder(): Promise<void> {
   const title = "🌙 Tareas sin Completar";
-  const userIds = await getEnabledTelegramUserIds();
+  const userIds = await getScheduledNotificationUserIds();
 
-  await Promise.all(userIds.map(async (userId) => {
+  await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+    userId,
+    "evening-reminder",
+    async () => {
     const { pending } = await getTodaysTasks(userId);
 
     if (pending.length === 0) {
       console.log(`[Reminder] All tasks completed for ${userId} today - skipping evening notification`);
-      return;
+      return { sent: false, pendingCount: 0 };
     }
 
     const taskList = pending.slice(0, 5).join("\n• ");
@@ -156,7 +198,16 @@ async function sendEveningReminder(): Promise<void> {
     ]);
 
     console.log(`[Reminder] Evening notification sent for ${userId} - ${pending.length} incomplete tasks`);
-  }));
+      return { sent: true, pendingCount: pending.length };
+    },
+    (result) => ({
+      status: result.sent ? "success" : "skipped",
+      resultSummary: result.sent
+        ? `Evening reminder sent with ${result.pendingCount} pending task(s).`
+        : "Evening reminder skipped because all tasks are complete.",
+      metadata: result,
+    }),
+  )));
 }
 
 async function sendEveningReminderForUser(userId: string): Promise<void> {
@@ -182,14 +233,17 @@ async function sendEveningReminderForUser(userId: string): Promise<void> {
 
 async function sendWeeklyReminder(): Promise<void> {
   const title = "📅 Tareas Semanales Pendientes";
-  const userIds = await getEnabledTelegramUserIds();
+  const userIds = await getScheduledNotificationUserIds();
 
-  await Promise.all(userIds.map(async (userId) => {
+  await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+    userId,
+    "weekly-reminder",
+    async () => {
     const incompleteTasks = await getIncompleteWeeklyTasks(userId);
 
     if (incompleteTasks.length === 0) {
       console.log(`[Reminder] All weekly tasks completed for ${userId} - skipping weekly notification`);
-      return;
+      return { sent: false, incompleteCount: 0 };
     }
 
     const taskList = incompleteTasks.slice(0, 5).join("\n• ");
@@ -202,7 +256,16 @@ async function sendWeeklyReminder(): Promise<void> {
     ]);
 
     console.log(`[Reminder] Weekly notification sent for ${userId} - ${incompleteTasks.length} incomplete weekly tasks`);
-  }));
+      return { sent: true, incompleteCount: incompleteTasks.length };
+    },
+    (result) => ({
+      status: result.sent ? "success" : "skipped",
+      resultSummary: result.sent
+        ? `Weekly reminder sent with ${result.incompleteCount} incomplete task(s).`
+        : "Weekly reminder skipped because all weekly tasks are complete.",
+      metadata: result,
+    }),
+  )));
 }
 
 async function sendWeeklyReminderForUser(userId: string): Promise<void> {
@@ -228,8 +291,19 @@ async function sendWeeklyReminderForUser(userId: string): Promise<void> {
 
 async function sendDailyNewsDigest(): Promise<{ sent: boolean; newsCount: number }> {
   try {
-    const userIds = await getEnabledTelegramUserIds();
-    const results = await Promise.all(userIds.map((userId) => sendDailyNewsDigestForUser(userId)));
+    const userIds = await getScheduledNotificationUserIds();
+    const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+      userId,
+      "portfolio-news-digest",
+      () => sendDailyNewsDigestForUser(userId),
+      (result) => ({
+        status: result.sent ? "success" : "skipped",
+        resultSummary: result.sent
+          ? `Portfolio news digest sent with ${result.newsCount} news item(s).`
+          : "Portfolio news digest skipped because no news was sent.",
+        metadata: result,
+      }),
+    )));
 
     return {
       sent: results.some((result) => result.sent),
@@ -334,8 +408,19 @@ async function checkScheduledReminders(): Promise<void> {
     
     if (shouldRunDailyScheduledJob(clock, INSIGHTS_HOUR, 0, lastInsightsNotification)) {
       lastInsightsNotification = dateKey;
-      const userIds = await getEnabledTelegramUserIds();
-      const results = await Promise.all(userIds.map((userId) => sendProactiveInsights(userId)));
+      const userIds = await getScheduledNotificationUserIds();
+      const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+        userId,
+        "proactive-insights",
+        () => sendProactiveInsights(userId),
+        (result) => ({
+          status: result.sent ? "success" : "skipped",
+          resultSummary: result.sent
+            ? `Proactive insights sent with ${result.insights} insight(s).`
+            : "Proactive insights skipped because nothing was sent.",
+          metadata: result,
+        }),
+      )));
       const sentCount = results.filter((result) => result.sent).length;
       const insightCount = results.reduce((total, result) => total + result.insights, 0);
       console.log(`[Reminder] Proactive insights processed for ${userIds.length} user(s) - ${sentCount} sent, ${insightCount} insights`);
@@ -343,7 +428,7 @@ async function checkScheduledReminders(): Promise<void> {
 
     if (shouldRunDailyScheduledJob(clock, 8, 15, lastRadioTemplateGeneration)) {
       lastRadioTemplateGeneration = dateKey;
-      const userIds = await getEnabledTelegramUserIds();
+      const userIds = await getScheduledNotificationUserIds();
       const results = await Promise.all(userIds.map((userId) => runRadioTemplateGenerationForUser(userId)));
       console.log(`[Agent] Radio template generation processed for ${userIds.length} user(s): ${results.join("; ")}`);
     }
@@ -370,24 +455,54 @@ async function checkScheduledReminders(): Promise<void> {
     // Agent Actions - Radio analysis Monday 8:00 AM
     if (dayOfWeek === 1 && hour === 8 && minute === 0 && lastRadioAnalysis !== weekKey) {
       lastRadioAnalysis = weekKey;
-      const userIds = await getEnabledTelegramUserIds();
-      const results = await Promise.all(userIds.map((userId) => executeAction("radio_notify_slots", userId)));
+      const userIds = await getScheduledNotificationUserIds();
+      const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+        userId,
+        "radio-slot-check",
+        () => executeAction("radio_notify_slots", userId),
+        (result) => ({
+          status: result.success ? "success" : "failed",
+          resultSummary: result.message,
+          errorMessage: result.success ? null : result.message,
+          metadata: result,
+        }),
+      )));
       console.log(`[Agent] Radio analysis processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
     // Agent Actions - Portfolio weekly report Sunday 10:00 AM
     if (dayOfWeek === 0 && hour === 10 && minute === 0 && lastPortfolioReport !== weekKey) {
       lastPortfolioReport = weekKey;
-      const userIds = await getEnabledTelegramUserIds();
-      const results = await Promise.all(userIds.map((userId) => executeAction("portfolio_weekly_report", userId)));
+      const userIds = await getScheduledNotificationUserIds();
+      const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+        userId,
+        "portfolio-weekly-report",
+        () => executeAction("portfolio_weekly_report", userId),
+        (result) => ({
+          status: result.success ? "success" : "failed",
+          resultSummary: result.message,
+          errorMessage: result.success ? null : result.message,
+          metadata: result,
+        }),
+      )));
       console.log(`[Agent] Portfolio report processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
     // Agent Actions - Create video edit tasks Friday 10:00 AM
     if (dayOfWeek === 5 && hour === 10 && minute === 0 && lastVideoEditCheck !== dateKey) {
       lastVideoEditCheck = dateKey;
-      const userIds = await getEnabledTelegramUserIds();
-      const results = await Promise.all(userIds.map((userId) => executeAction("create_video_edit_task", userId)));
+      const userIds = await getScheduledNotificationUserIds();
+      const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+        userId,
+        "video-edit-task-check",
+        () => executeAction("create_video_edit_task", userId),
+        (result) => ({
+          status: result.success ? "success" : "failed",
+          resultSummary: result.message,
+          errorMessage: result.success ? null : result.message,
+          metadata: result,
+        }),
+      )));
       console.log(`[Agent] Video edit task check processed for ${userIds.length} user(s): ${results.map((result) => result.message).join("; ")}`);
     }
     
@@ -490,7 +605,7 @@ export async function testWeeklyReminder(userId?: string): Promise<{ success: bo
 
 export async function testProactiveInsights(userId?: string): Promise<{ success: boolean; message: string; insights: number }> {
   try {
-    const userIds = userId ? [userId] : await getEnabledTelegramUserIds();
+    const userIds = userId ? [userId] : await getScheduledNotificationUserIds();
     const results = await Promise.all(userIds.map((userId) => sendProactiveInsights(userId)));
     const sent = results.some((result) => result.sent);
     const insights = results.reduce((total, result) => total + result.insights, 0);

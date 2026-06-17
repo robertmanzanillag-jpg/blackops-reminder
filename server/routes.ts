@@ -6,14 +6,12 @@ import { z } from "zod";
 import { getCalendarEvents, isGoogleCalendarConnected } from "./google-calendar";
 import { syncZohoCalendar, checkZohoConnection, getZohoAuthUrl, exchangeZohoCode } from "./zoho-calendar";
 import { getVapidPublicKey, sendPushNotification } from "./push-notifications";
-import { testMorningReminder, testEveningReminder, testWeeklyReminder, testProactiveInsights, testNewsDigest, testCeoMorningBrief, getReminderSchedulerConfig } from "./reminder-scheduler";
+import { testMorningReminder, testEveningReminder, testWeeklyReminder, testProactiveInsights, testNewsDigest } from "./reminder-scheduler";
 import { registerAssistantRoutes } from "./assistant";
-import { sendTelegramMessage, getTelegramUpdates, isTelegramWebhookSecretValid } from "./telegram";
-import { handleTelegramMessage, setupTelegramWebhook, getTelegramWebhookStatus, resolveTelegramWebhookUrl } from "./telegram-chat";
 import { getPrice, getMarketOverview, searchSymbol, getBatchCryptoPrices, getHistoricalData, getPortfolioNews, getMarketNews, getCompanyNews } from "./finance";
 import { insertInvestmentSchema, insertTransactionSchema, insertWatchlistSchema, insertPriceAlertSchema, insertMonitoredProjectSchema, insertAppProjectSchema, insertAutomationDefinitionSchema } from "@shared/schema";
 import { checkSingleProject } from "./health-check";
-import { sendDailyMarketUpdate, calculatePortfolioSummary } from "./market-news";
+import { sendDailyMarketUpdateForUser, calculatePortfolioSummary } from "./market-news";
 import { insertPortfolioHistorySchema, insertDjContactSchema } from "@shared/schema";
 import { analyzeRadioEvents, sendRadioSlotsSummary, getRadioSlotsForMonth, importDjsFromRadioHistory, generateDjMessage } from "./radio-agent";
 import { generateRadioTemplatesForDate } from "./radio-template-agent";
@@ -28,29 +26,34 @@ import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
-import { buildCeoReadinessReport } from "./ceo-readiness";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
-import { getCeoConversationMessages } from "./ceo-conversation-history";
-import { resolveSessionRuntimeSettings } from "./session-config-core";
-import { createInMemoryRateLimiter } from "./rate-limit";
-import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
+import { buildCeoOperationalHealth } from "./ceo-operational-health";
+import { registerTelegramRoutes } from "./telegram-routes";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, readClipperReport, recordClipperOAuthCallback, runClipperDailyPlan } from "./clippers-agent";
-import { buildRevenueEnginePlan, getRevenueEngineSnapshot, revenueEnginePlanSchema } from "./revenue-engine";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, verifyClipperProductionUrl } from "./clippers-agent";
+import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { runCybersecurityScan } from "./cybersecurity-agent";
+import { runLegalComplianceReports } from "./legal-compliance-agent";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const telegramWebhookRateLimit = createInMemoryRateLimiter({
-    scope: "telegram-webhook",
-    limit: 180,
-    windowMs: 60 * 1000,
+  app.get("/clippers/legal/privacy", (_req, res) => {
+    res.type("html").send(renderClipperPrivacyPolicyHtml());
   });
-  const telegramUpdateDeduper = createTelegramUpdateDeduper();
+
+  app.get("/clippers/legal/terms", (_req, res) => {
+    res.type("html").send(renderClipperTermsOfServiceHtml());
+  });
+
+  app.get("/clippers/review-demo", (_req, res) => {
+    res.type("html").send(renderClipperAppReviewDemoHtml());
+  });
+
+  registerTelegramRoutes(app);
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {
@@ -238,9 +241,9 @@ export async function registerRoutes(
       res.send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1 style="color:#22c55e;">Google Drive conectado</h1>
-          <p>La conexión de Drive quedó guardada para subir los templates de radio automáticamente.</p>
+          <p>La conexión de Drive quedó guardada para preparar carpetas y fuentes de Clippers.</p>
           <p style="color:#94a3b8;">Scopes: ${result.scope || "guardados"}</p>
-          <a href="/radio" style="color:#3b82f6;">Ir a Radio</a>
+          <a href="/clippers" style="color:#3b82f6;">Ir a Clippers</a>
         </body></html>
       `);
     } catch (callbackError: any) {
@@ -473,6 +476,12 @@ export async function registerRoutes(
   // PATCH update weekly summary
   app.patch("/api/weekly-summaries/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getWeeklySummaryById(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Weekly summary not found" });
+      }
+
       const body = {
         ...req.body,
         weekStart: req.body.weekStart ? (typeof req.body.weekStart === "string" ? new Date(req.body.weekStart) : req.body.weekStart) : undefined,
@@ -855,280 +864,6 @@ export async function registerRoutes(
     }
   });
 
-  // ==================== TELEGRAM ENDPOINTS ====================
-
-  // GET telegram status
-  app.get("/api/telegram/status", async (req, res) => {
-    try {
-      const config = await storage.getTelegramConfig(getCurrentUserId(req));
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      
-      if (!botToken) {
-        return res.json({ configured: false, enabled: false, reason: "no_token" });
-      }
-      
-      if (!config) {
-        return res.json({ configured: false, enabled: false, reason: "no_chat_id" });
-      }
-      
-      res.json({ 
-        configured: true, 
-        enabled: config.enabled, 
-        chatId: config.chatId 
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get telegram status" });
-    }
-  });
-
-  app.get("/api/telegram/health", async (req, res) => {
-    try {
-      const userId = getCurrentUserId(req);
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const aiConfigured = Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
-      const config = await storage.getTelegramConfig(userId);
-      const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
-      const expectedWebhookUrl = resolveTelegramWebhookUrl();
-
-      res.json({
-        tokenConfigured: Boolean(botToken),
-        aiConfigured,
-        webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
-        webhookUrlConfigured: Boolean(expectedWebhookUrl),
-        chatConfigured: Boolean(config?.chatId),
-        enabled: Boolean(config?.enabled),
-        chatId: config?.chatId || null,
-        webhookUrl: webhook?.url || null,
-        expectedWebhookUrl,
-        webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-        pendingUpdates: webhook?.pending_update_count || 0,
-        lastWebhookError: webhook?.last_error_message || null,
-        readyForBriefs: Boolean(botToken && config?.chatId && config?.enabled),
-        readyForChat: Boolean(aiConfigured && botToken && config?.chatId && config?.enabled && webhook?.url),
-        scheduler: getReminderSchedulerConfig(),
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get Telegram health" });
-    }
-  });
-
-  app.get("/api/ceo/readiness", async (req, res) => {
-    try {
-      const userId = getCurrentUserId(req);
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const config = await storage.getTelegramConfig(userId);
-      const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
-      const expectedWebhookUrl = resolveTelegramWebhookUrl();
-      const scheduler = getReminderSchedulerConfig();
-      const sessionSettings = resolveSessionRuntimeSettings();
-
-      res.json(buildCeoReadinessReport({
-        auth: {
-          userId,
-          devFallbackAllowed: allowsDevUserFallback(),
-          usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
-          defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
-          sessionSecretConfigured: Boolean(process.env.SESSION_SECRET),
-          sessionStoreKind: sessionSettings.storeKind,
-        },
-        assistant: {
-          aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
-        },
-        telegram: {
-          tokenConfigured: Boolean(botToken),
-          chatConfigured: Boolean(config?.chatId),
-          enabled: Boolean(config?.enabled),
-          webhookUrlConfigured: Boolean(expectedWebhookUrl),
-          webhookRegistered: Boolean(webhook?.url),
-          webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-          webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
-          lastWebhookError: webhook?.last_error_message || null,
-        },
-        scheduler: {
-          timezone: scheduler.timezone,
-          ceoBriefHour: scheduler.ceoBriefHour,
-          ceoBriefMinute: scheduler.ceoBriefMinute,
-        },
-      }));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get CEO readiness" });
-    }
-  });
-
-  app.get("/api/ceo/conversation-history", async (req, res) => {
-    try {
-      const userId = getCurrentUserId(req);
-      const limit = Math.min(Number(req.query.limit || 12) || 12, 50);
-      const messages = await getCeoConversationMessages(userId, limit);
-      res.json({
-        messages: messages.map((message) => ({
-          id: message.id,
-          role: message.role,
-          content: message.content,
-          createdAt: message.createdAt,
-        })),
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get CEO conversation history" });
-    }
-  });
-
-  app.post("/api/telegram/test-ceo-brief", async (req, res) => {
-    try {
-      const result = await testCeoMorningBrief(getCurrentUserId(req));
-      res.status(result.success ? 200 : 500).json(result);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to send CEO brief" });
-    }
-  });
-
-  // POST configure telegram with chat ID from bot updates or manual input
-  app.post("/api/telegram/configure", async (req, res) => {
-    try {
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) {
-        return res.status(400).json({ error: "TELEGRAM_BOT_TOKEN not configured" });
-      }
-
-      let chatId = req.body.chatId;
-
-      // If no chat ID provided, try to get it from updates
-      if (!chatId) {
-        const updates = await getTelegramUpdates(botToken);
-        
-        if (updates.length === 0) {
-          return res.status(400).json({ 
-            error: "No messages found. Please send /start to your bot first.",
-            instruction: "Send /start to your Telegram bot, then try again.",
-            manualOption: "Or provide chatId in request body"
-          });
-        }
-
-        // Get the most recent chat ID
-        const lastMessage = updates[updates.length - 1];
-        chatId = lastMessage.message?.chat?.id?.toString();
-      }
-      
-      if (!chatId) {
-        return res.status(400).json({ error: "Could not find chat ID" });
-      }
-
-      const config = await storage.saveTelegramConfig(getCurrentUserId(req), chatId);
-      
-      // Send confirmation message
-      await sendTelegramMessage(botToken, chatId, "✅ BlackOps Reminder conectado! Recibirás notificaciones aquí.");
-      
-      res.json({ success: true, chatId, config });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to configure telegram" });
-    }
-  });
-
-  // POST toggle telegram notifications
-  app.post("/api/telegram/toggle", async (req, res) => {
-    try {
-      const { enabled } = req.body;
-      const config = await storage.updateTelegramConfig(getCurrentUserId(req), enabled);
-      
-      if (!config) {
-        return res.status(404).json({ error: "Telegram not configured" });
-      }
-      
-      res.json({ success: true, enabled: config.enabled });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to toggle telegram" });
-    }
-  });
-
-  // POST test telegram notification
-  app.post("/api/telegram/test", async (req, res) => {
-    try {
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) {
-        return res.status(400).json({ error: "TELEGRAM_BOT_TOKEN not configured" });
-      }
-
-      const config = await storage.getTelegramConfig(getCurrentUserId(req));
-      if (!config) {
-        return res.status(400).json({ error: "Telegram not configured. Send /start to your bot first." });
-      }
-
-      const success = await sendTelegramMessage(
-        botToken, 
-        config.chatId, 
-        "🧪 Prueba de notificación\n\nEsta es una notificación de prueba de BlackOps Reminder."
-      );
-      
-      if (success) {
-        res.json({ success: true, message: "Test notification sent" });
-      } else {
-        res.status(500).json({ error: "Failed to send test notification" });
-      }
-    } catch (error) {
-      res.status(500).json({ error: "Failed to send test notification" });
-    }
-  });
-
-  // DELETE disconnect telegram
-  app.delete("/api/telegram/disconnect", async (req, res) => {
-    try {
-      await storage.deleteTelegramConfig(getCurrentUserId(req));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to disconnect telegram" });
-    }
-  });
-
-  // POST telegram webhook (receives messages from Telegram)
-  app.post("/api/telegram/webhook", telegramWebhookRateLimit, async (req, res) => {
-    try {
-      const providedSecret = req.header("x-telegram-bot-api-secret-token");
-      if (!isTelegramWebhookSecretValid(process.env.TELEGRAM_WEBHOOK_SECRET, providedSecret)) {
-        console.warn("[Telegram Webhook] Rejected update with invalid secret token");
-        return res.status(401).json({ ok: false });
-      }
-
-      const update = req.body;
-      console.log("[Telegram Webhook] Received update:", JSON.stringify(update).slice(0, 200));
-
-      if (!telegramUpdateDeduper.shouldProcess(update)) {
-        console.log(`[Telegram Webhook] Duplicate update skipped: ${update.update_id}`);
-        return res.status(200).json({ ok: true, duplicate: true });
-      }
-      
-      // Process message asynchronously
-      handleTelegramMessage(update).catch(err => {
-        console.error("[Telegram Webhook] Error handling message:", err);
-      });
-      
-      // Always respond 200 OK to Telegram
-      res.status(200).json({ ok: true });
-    } catch (error) {
-      console.error("[Telegram Webhook] Error:", error);
-      res.status(200).json({ ok: true }); // Always return 200 to Telegram
-    }
-  });
-
-  // POST setup telegram webhook
-  app.post("/api/telegram/setup-webhook", async (req, res) => {
-    try {
-      const result = await setupTelegramWebhook();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to setup webhook" });
-    }
-  });
-
-  // GET telegram webhook status
-  app.get("/api/telegram/webhook-status", async (req, res) => {
-    try {
-      const status = await getTelegramWebhookStatus();
-      res.json(status || { url: null, pending_update_count: 0 });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get webhook status" });
-    }
-  });
-
   // ==================== FINANCE ENDPOINTS ====================
 
   // GET market overview
@@ -1290,7 +1025,7 @@ export async function registerRoutes(
   // POST test market update notification
   app.post("/api/portfolio/test-notification", async (req, res) => {
     try {
-      await sendDailyMarketUpdate();
+      await sendDailyMarketUpdateForUser(getCurrentUserId(req));
       res.json({ success: true, message: "Market update sent" });
     } catch (error) {
       res.status(500).json({ error: "Failed to send market update" });
@@ -1550,9 +1285,9 @@ export async function registerRoutes(
 
   // ==================== CLIPPERS COMMAND CENTER ====================
 
-  app.get("/api/clippers/status", async (_req, res) => {
+  app.get("/api/clippers/status", async (req, res) => {
     try {
-      const status = await getClipperStatus();
+      const status = await getClipperStatus(getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect clippers status" });
@@ -1561,28 +1296,604 @@ export async function registerRoutes(
 
   app.post("/api/clippers/run-daily-plan", async (req, res) => {
     try {
-      const result = await runClipperDailyPlan(req.body || {});
+      const result = await runClipperDailyPlan(req.body || {}, getCurrentUserId(req));
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate clippers daily plan" });
     }
   });
 
-  app.post("/api/clippers/bootstrap-accounts", async (_req, res) => {
+  app.post("/api/clippers/bootstrap-accounts", async (req, res) => {
     try {
-      const status = await bootstrapClipperAccounts();
+      const status = await bootstrapClipperAccounts(getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers accounts" });
     }
   });
 
-  app.post("/api/clippers/bootstrap-workspace", async (_req, res) => {
+  app.post("/api/clippers/bootstrap-workspace", async (req, res) => {
     try {
-      const status = await bootstrapClipperWorkspace();
+      const status = await bootstrapClipperWorkspace(getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers workspace" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-identity-kit", async (req, res) => {
+    try {
+      const result = await prepareClipperAccountIdentityKit(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account identity kit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-launch-kit", async (req, res) => {
+    try {
+      const result = await prepareClipperAccountLaunchKit(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account launch kit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-creation-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperAccountCreationPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account creation pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-manual-posting-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperManualPostingPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers manual posting pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-evidence-vault", async (req, res) => {
+    try {
+      const result = await prepareClipperAccountEvidenceVault(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account evidence vault" });
+    }
+  });
+
+  app.post("/api/clippers/record-account-evidence", async (req, res) => {
+    try {
+      const result = await recordClipperAccountEvidence(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record clippers account evidence" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-developer-app-evidence-vault", async (req, res) => {
+    try {
+      const result = await prepareClipperDeveloperAppEvidenceVault(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers developer app evidence vault" });
+    }
+  });
+
+  app.post("/api/clippers/record-developer-app-evidence", async (req, res) => {
+    try {
+      const result = await recordClipperDeveloperAppEvidence(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record clippers developer app evidence" });
+    }
+  });
+
+  app.post("/api/clippers/preview-launch-evidence-batch", async (req, res) => {
+    try {
+      const result = await previewClipperLaunchEvidenceBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview clippers launch evidence batch" });
+    }
+  });
+
+  app.post("/api/clippers/record-launch-evidence-batch", async (req, res) => {
+    try {
+      const result = await recordClipperLaunchEvidenceBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers launch evidence batch" });
+    }
+  });
+
+  app.post("/api/clippers/import-launch-evidence-drop-files", async (req, res) => {
+    try {
+      const result = await importClipperLaunchEvidenceDropFiles(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to import clippers launch evidence drop files" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-credential-setup", async (req, res) => {
+    try {
+      const result = await prepareClipperCredentialSetupCenter(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers credential setup center" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-credential-doctor", async (req, res) => {
+    try {
+      const result = await prepareClipperCredentialDoctor(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers credential doctor" });
+    }
+  });
+
+  app.post("/api/clippers/record-credential-secret", async (req, res) => {
+    try {
+      const result = await recordClipperCredentialSecret(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers credential secret" });
+    }
+  });
+
+  app.post("/api/clippers/preview-credential-secrets-batch", async (req, res) => {
+    try {
+      const result = await previewClipperCredentialSecretsBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview clippers credential secrets batch" });
+    }
+  });
+
+  app.post("/api/clippers/record-credential-secrets-batch", async (req, res) => {
+    try {
+      const result = await recordClipperCredentialSecretsBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers credential secrets batch" });
+    }
+  });
+
+  app.post("/api/clippers/import-credential-drop-files", async (req, res) => {
+    try {
+      const result = await importClipperCredentialDropFiles(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to import clippers credential drop files" });
+    }
+  });
+
+  app.post("/api/clippers/record-production-public-url", async (req, res) => {
+    try {
+      const result = await recordClipperProductionPublicUrl(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers production public URL" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-platform-readiness", async (req, res) => {
+    try {
+      const result = await prepareClipperPlatformReadinessMatrix(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers platform readiness matrix" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-external-setup-queue", async (req, res) => {
+    try {
+      const result = await prepareClipperExternalSetupQueue(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external setup queue" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-external-execution-handoff", async (req, res) => {
+    try {
+      const result = await prepareClipperExternalExecutionHandoff(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external execution handoff" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-external-execution-session", async (req, res) => {
+    try {
+      const result = await prepareClipperExternalExecutionSession(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external execution session" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-external-launch-dossier", async (req, res) => {
+    try {
+      const result = await prepareClipperExternalLaunchDossier(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external launch dossier" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-platform-portal-checklist", async (req, res) => {
+    try {
+      const result = await prepareClipperPlatformPortalChecklist(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers platform portal checklist" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-official-permission-matrix", async (req, res) => {
+    try {
+      const result = await prepareClipperOfficialPermissionMatrix(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers official permission matrix" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-app-review-submission-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperAppReviewSubmissionPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers app review submission pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-app-review-demo-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperAppReviewDemoPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers app review demo pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-developer-application-drafts", async (req, res) => {
+    try {
+      const result = await prepareClipperDeveloperApplicationDrafts(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers developer application drafts" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-go-live-execution-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperGoLiveExecutionPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers go-live execution pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-publisher-connectors", async (req, res) => {
+    try {
+      const result = await prepareClipperPublisherConnectors(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers publisher connectors" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-production-url-setup", async (req, res) => {
+    try {
+      const result = await prepareClipperProductionUrlSetup(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers production URL setup" });
+    }
+  });
+
+  app.post("/api/clippers/verify-production-url", async (req, res) => {
+    try {
+      const result = await verifyClipperProductionUrl(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to verify clippers production URL" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-https-tunnel-plan", async (req, res) => {
+    try {
+      const result = await prepareClipperHttpsTunnelPlan(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers HTTPS tunnel plan" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-legal-policy-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperLegalPolicyPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers legal policy pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-oauth-go-live", async (req, res) => {
+    try {
+      const result = await prepareClipperOAuthGoLivePreflight(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers OAuth go-live preflight" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-oauth-connection-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperOAuthConnectionPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers OAuth connection pack" });
+    }
+  });
+
+  app.post("/api/clippers/reload-credentials", async (req, res) => {
+    try {
+      const result = await reloadClipperCredentials(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to reload clippers credentials" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-command-center", async (req, res) => {
+    try {
+      const result = await prepareClipperLaunchCommandCenter(getCurrentUserId(req), req.body || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers launch command center" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-blocker-resolution-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperBlockerResolutionPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers blocker resolution pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-go-live-autopilot-brief", async (req, res) => {
+    try {
+      const result = await prepareClipperGoLiveAutopilotBrief(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers go-live autopilot brief" });
+    }
+  });
+
+  app.post("/api/clippers/run-go-live-autopilot", async (req, res) => {
+    try {
+      const result = await runClipperGoLiveAutopilot(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run clippers go-live autopilot" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-permissions", async (req, res) => {
+    try {
+      const result = await prepareClipperPermissionPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers permission pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-permission-tracker", async (req, res) => {
+    try {
+      const result = await prepareClipperPermissionTracker(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers permission tracker" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-permission-request-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperPermissionRequestPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers permission request pack" });
+    }
+  });
+
+  app.post("/api/clippers/record-permission-status", async (req, res) => {
+    try {
+      const result = await recordClipperPermissionStatus(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record clippers permission status" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-drive-workspace", async (req, res) => {
+    try {
+      const result = await prepareClipperDriveWorkspace(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Google Drive workspace" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-production-queue", async (req, res) => {
+    try {
+      const result = await prepareClipperProductionQueue(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers production queue" });
+    }
+  });
+
+  app.post("/api/clippers/import-source-drop-files", async (req, res) => {
+    try {
+      const result = await importClipperSourceDropFiles(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to import clippers source drop files" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-source-acquisition", async (req, res) => {
+    try {
+      const result = await prepareClipperSourceAcquisitionPlan(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers source acquisition plan" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-source-hunt", async (req, res) => {
+    try {
+      const result = await prepareClipperSourceHuntSheet(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers source hunt sheet" });
+    }
+  });
+
+  app.post("/api/clippers/record-source-intake-batch", async (req, res) => {
+    try {
+      const result = await recordClipperSourceIntakeBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers source intake batch" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-viral-discovery", async (req, res) => {
+    try {
+      const result = await prepareClipperViralDiscoveryPack(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers viral discovery pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-rights-outreach", async (req, res) => {
+    try {
+      const result = await prepareClipperRightsOutreachPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers rights outreach pack" });
+    }
+  });
+
+  app.post("/api/clippers/record-source-rights", async (req, res) => {
+    try {
+      const result = await recordClipperSourceRights(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record clippers source rights" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-draft-specs", async (req, res) => {
+    try {
+      const result = await prepareClipperDraftSpecs(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers draft specs" });
+    }
+  });
+
+  app.post("/api/clippers/render-draft-videos", async (req, res) => {
+    try {
+      const result = await renderClipperDraftVideos(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to render clippers draft videos" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-publishing-package", async (req, res) => {
+    try {
+      const result = await prepareClipperPublishingPackage(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers publishing package" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-intake-kit", async (req, res) => {
+    try {
+      const result = await prepareClipperIntakeKit(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers intake kit" });
+    }
+  });
+
+  app.post("/api/clippers/ingest-metrics", async (req, res) => {
+    try {
+      const result = await ingestClipperMetrics(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to ingest clippers metrics" });
+    }
+  });
+
+  app.post("/api/clippers/ingest-trends", async (req, res) => {
+    try {
+      const result = await ingestClipperTrends(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to ingest clippers trends" });
+    }
+  });
+
+  app.post("/api/clippers/record-trend-candidates-batch", async (req, res) => {
+    try {
+      const result = await recordClipperTrendCandidatesBatch(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers trend candidates batch" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-trend-rights-outreach", async (req, res) => {
+    try {
+      const result = await prepareClipperTrendRightsOutreachPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers trend rights outreach pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-automation-schedule", async (req, res) => {
+    try {
+      const result = await prepareClipperAutomationSchedule(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers automation schedule" });
+    }
+  });
+
+  app.post("/api/clippers/run-automation-cycle", async (req, res) => {
+    try {
+      const result = await runClipperAutomationCycle(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run clippers automation cycle" });
     }
   });
 
@@ -1616,8 +1927,10 @@ export async function registerRoutes(
           <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
             <h1>${isError ? "OAuth no conectado" : "OAuth registrado"}</h1>
             <p>${connection.note}</p>
+            ${connection.tokenNote ? `<p style="color:#fbbf24;">${connection.tokenNote}</p>` : ""}
             <p style="color:#94a3b8;">Plataforma: ${connection.platform}</p>
             <p style="color:#94a3b8;">Estado: ${connection.status}</p>
+            ${connection.tokenStatus ? `<p style="color:#94a3b8;">Token: ${connection.tokenStatus}</p>` : ""}
             <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
           </body>
         </html>
@@ -1637,7 +1950,7 @@ export async function registerRoutes(
 
   app.get("/api/clippers/reports/:id", async (req, res) => {
     try {
-      const report = await readClipperReport(req.params.id);
+      const report = await readClipperReport(req.params.id, getCurrentUserId(req));
       if (!report) return res.status(404).json({ error: "Report not found" });
       res.json(report);
     } catch (error: any) {
@@ -1669,6 +1982,11 @@ export async function registerRoutes(
   // PATCH update DJ contact
   app.patch("/api/djs/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getDjContact(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "DJ not found" });
+      }
       const dj = await storage.updateDjContact(req.params.id, req.body);
       res.json(dj);
     } catch (error) {
@@ -1679,6 +1997,11 @@ export async function registerRoutes(
   // DELETE DJ contact
   app.delete("/api/djs/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getDjContact(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "DJ not found" });
+      }
       await storage.deleteDjContact(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1689,9 +2012,10 @@ export async function registerRoutes(
   // POST generate message for DJ
   app.post("/api/djs/:id/message", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
       const { eventDate, slot } = req.body;
       const dj = await storage.getDjContact(req.params.id);
-      if (!dj) {
+      if (!dj || dj.userId !== userId) {
         return res.status(404).json({ error: "DJ not found" });
       }
       const message = await generateDjMessage(dj, eventDate, slot);
@@ -1706,7 +2030,7 @@ export async function registerRoutes(
   // GET portfolio summary with real-time prices
   app.get("/api/portfolio/summary", async (req, res) => {
     try {
-      const summary = await getPortfolioSummary();
+      const summary = await getPortfolioSummary(getCurrentUserId(req));
       res.json(summary);
     } catch (error) {
       res.status(500).json({ error: "Failed to get portfolio summary" });
@@ -1717,7 +2041,7 @@ export async function registerRoutes(
   app.get("/api/portfolio/gains/:period", async (req, res) => {
     try {
       const { period } = req.params;
-      const gains = await getGainsByPeriod(period);
+      const gains = await getGainsByPeriod(period, getCurrentUserId(req));
       res.json(gains);
     } catch (error) {
       console.error("Error getting gains by period:", error);
@@ -1753,7 +2077,7 @@ export async function registerRoutes(
   // GET rebalancing recommendations
   app.get("/api/portfolio/rebalance", async (req, res) => {
     try {
-      const recommendations = await analyzeRebalancing();
+      const recommendations = await analyzeRebalancing(getCurrentUserId(req));
       res.json(recommendations);
     } catch (error) {
       res.status(500).json({ error: "Failed to analyze rebalancing" });
@@ -1763,7 +2087,7 @@ export async function registerRoutes(
   // GET price opportunities from watchlist and alerts
   app.get("/api/portfolio/opportunities", async (req, res) => {
     try {
-      const opportunities = await checkPriceOpportunities();
+      const opportunities = await checkPriceOpportunities(getCurrentUserId(req));
       res.json(opportunities);
     } catch (error) {
       res.status(500).json({ error: "Failed to check opportunities" });
@@ -1773,7 +2097,7 @@ export async function registerRoutes(
   // GET weekly portfolio report (preview)
   app.get("/api/portfolio/weekly-report", async (req, res) => {
     try {
-      const report = await generateWeeklyReport();
+      const report = await generateWeeklyReport(getCurrentUserId(req));
       res.json({ report });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate report" });
@@ -1783,7 +2107,7 @@ export async function registerRoutes(
   // POST send weekly portfolio report via Telegram
   app.post("/api/portfolio/send-report", async (req, res) => {
     try {
-      const result = await sendWeeklyPortfolioReport();
+      const result = await sendWeeklyPortfolioReport(getCurrentUserId(req));
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send report" });
@@ -2354,6 +2678,354 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/scouting-mission", async (req, res) => {
+    try {
+      const input = revenueScoutingMissionSchema.parse(req.body);
+      res.json(recordRevenueScoutingMission(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue scouting mission" });
+    }
+  });
+
+  app.post("/api/revenue-engine/lead-radar", async (req, res) => {
+    try {
+      const input = revenueLeadRadarSchema.parse(req.body);
+      res.json(buildRevenueLeadRadar(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue lead radar" });
+    }
+  });
+
+  app.post("/api/revenue-engine/launch-readiness", async (req, res) => {
+    try {
+      const input = revenueLaunchReadinessSchema.parse(req.body);
+      res.json(buildRevenueLaunchReadiness(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue launch readiness" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-quote", async (req, res) => {
+    try {
+      const input = automationQuoteSchema.parse(req.body);
+      res.json(buildAutomationQuote(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build automation quote" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-intakes", async (req, res) => {
+    try {
+      const input = revenueAutomationIntakeSchema.parse(req.body);
+      res.json(recordRevenueAutomationIntake(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record automation intake" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-intakes/answer", async (req, res) => {
+    try {
+      const input = revenueAutomationIntakeAnswerSchema.parse(req.body);
+      res.json(answerRevenueAutomationIntake(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to answer automation intake" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-intakes/convert", async (req, res) => {
+    try {
+      const input = revenueAutomationIntakeConvertSchema.parse(req.body);
+      res.json(convertRevenueAutomationIntakeToOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to convert automation intake" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-agent-command", async (req, res) => {
+    try {
+      const input = revenueAutomationAgentCommandSchema.parse(req.body);
+      res.json(runRevenueAutomationAgentCommand(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue automation agent command" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-opportunities", async (req, res) => {
+    try {
+      const input = revenueAutomationOpportunitySchema.parse(req.body);
+      res.json(recordRevenueAutomationOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record automation opportunity" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-opportunities/delivery-workspace", async (req, res) => {
+    try {
+      const input = revenueAutomationOpportunityDeliverySchema.parse(req.body);
+      res.json(createDeliveryWorkspaceFromAutomationOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create delivery workspace from automation opportunity" });
+    }
+  });
+
+  app.post("/api/revenue-engine/automation-opportunities/close", async (req, res) => {
+    try {
+      const input = revenueAutomationOpportunityCloseSchema.parse(req.body);
+      res.json(closeRevenueAutomationOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to close automation opportunity" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-review", async (req, res) => {
+    try {
+      const input = deliveryReviewSchema.parse(req.body);
+      res.json(buildDeliveryReview(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build delivery review" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces", async (req, res) => {
+    try {
+      const input = revenueDeliveryWorkspaceSchema.parse(req.body);
+      res.json(recordRevenueDeliveryWorkspace(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record delivery workspace" });
+    }
+  });
+
+  app.patch("/api/revenue-engine/delivery-workspaces/qa", async (req, res) => {
+    try {
+      const input = revenueDeliveryWorkspaceUpdateSchema.parse(req.body);
+      res.json(updateRevenueDeliveryWorkspaceQa(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update delivery workspace QA" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/deliver", async (req, res) => {
+    try {
+      const input = revenueDeliveryWorkspaceDeliverSchema.parse(req.body);
+      res.json(deliverRevenueDeliveryWorkspace(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to deliver revenue workspace" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/improvement-review", async (req, res) => {
+    try {
+      const input = revenueDeliveryWorkspaceImprovementReviewSchema.parse(req.body);
+      res.json(recordRevenueDeliveryWorkspaceImprovementReview(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create delivery improvement review" });
+    }
+  });
+
+  app.post("/api/revenue-engine/approval-decisions", async (req, res) => {
+    try {
+      const input = revenueApprovalDecisionSchema.parse(req.body);
+      res.json(recordRevenueApprovalDecision(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record approval decision" });
+    }
+  });
+
+  app.post("/api/revenue-engine/proposal-email", async (req, res) => {
+    try {
+      const input = proposalEmailSchema.parse(req.body);
+      res.json(buildProposalEmail(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build proposal email" });
+    }
+  });
+
+  app.post("/api/revenue-engine/outreach-drafts", async (req, res) => {
+    try {
+      const input = revenueOutreachDraftSchema.parse(req.body);
+      res.json(recordRevenueOutreachDraft(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record outreach draft" });
+    }
+  });
+
+  app.post("/api/revenue-engine/outreach-send", async (req, res) => {
+    try {
+      const input = revenueOutreachSendSchema.parse(req.body);
+      res.json(await sendRevenueOutreachDraft(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to send outreach draft" });
+    }
+  });
+
+  app.post("/api/revenue-engine/agent-runs", async (req, res) => {
+    try {
+      const input = revenueAgentRunSchema.parse(req.body);
+      res.json(recordRevenueAgentRun(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue agent" });
+    }
+  });
+
+  app.post("/api/revenue-engine/sales-autopilot", async (req, res) => {
+    try {
+      const input = revenueSalesAutopilotSchema.parse(req.body);
+      res.json(recordRevenueSalesAutopilot(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue sales autopilot" });
+    }
+  });
+
+  app.post("/api/revenue-engine/improvement-review", async (req, res) => {
+    try {
+      const input = improvementReviewSchema.parse(req.body);
+      res.json(recordRevenueImprovementReview(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build improvement review" });
+    }
+  });
+
+  app.post("/api/revenue-engine/ledger", async (req, res) => {
+    try {
+      const input = revenueLedgerEntrySchema.parse(req.body);
+      res.json(recordRevenueLedgerEntry(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue ledger entry" });
+    }
+  });
+
+  app.post("/api/revenue-engine/expense-preflight", async (req, res) => {
+    try {
+      const input = revenueExpensePreflightSchema.parse(req.body);
+      res.json(preflightRevenueExpense(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to preflight revenue expense" });
+    }
+  });
+
+  app.post("/api/revenue-engine/leads", async (req, res) => {
+    try {
+      const input = revenueLeadSchema.parse(req.body);
+      res.json(recordRevenueLead(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue lead" });
+    }
+  });
+
+  app.post("/api/revenue-engine/mockup", async (req, res) => {
+    try {
+      const input = revenueMockupSchema.parse(req.body);
+      res.json(buildRevenueMockup(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue mockup" });
+    }
+  });
+
+  app.post("/api/revenue-engine/mockup-template-pack", async (req, res) => {
+    try {
+      const input = revenueMockupTemplatePackSchema.parse(req.body);
+      res.json(buildRevenueMockupTemplatePack(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue mockup template pack" });
+    }
+  });
+
+  app.post("/api/revenue-engine/project-plan", async (req, res) => {
+    try {
+      const input = revenueProjectPlanSchema.parse(req.body);
+      res.json(buildRevenueProjectPlan(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue project plan" });
+    }
+  });
+
   const createFollowUpSchema = z.object({
     person: z.string().trim().min(1),
     topic: z.string().trim().min(1),
@@ -2852,6 +3524,7 @@ export async function registerRoutes(
       const failedAutomations = automations.filter((automation) => automation.status === "failed");
       const failedAutomationRuns = automationRuns.filter((run) => run.status === "failed");
       const pendingAutomationRuns = automationRuns.filter((run) => run.status === "pending_approval");
+      const operationalHealth = buildCeoOperationalHealth({ automations, runs: automationRuns, now });
       const triggeredFinanceAlerts = priceAlerts.filter((alert) => alert.enabled && alert.triggered);
       const radioTasks = tasks
         .filter((task) => {
@@ -2964,6 +3637,7 @@ export async function registerRoutes(
             pendingApproval: pendingAutomationRuns.length,
           },
         },
+        operationalHealth,
         financeAlerts: triggeredFinanceAlerts.map((alert) => ({
           id: alert.id,
           symbol: alert.symbol,
@@ -3125,6 +3799,34 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch developer health dashboard" });
+    }
+  });
+
+  app.get("/api/cybersecurity-agent/status", async (req, res) => {
+    try {
+      const result = await runCybersecurityScan(getCurrentUserId(req), false);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to scan cybersecurity status" });
+    }
+  });
+
+  app.post("/api/cybersecurity-agent/scan", async (req, res) => {
+    try {
+      const notify = Boolean(req.body?.notify);
+      const result = await runCybersecurityScan(getCurrentUserId(req), notify);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run cybersecurity scan" });
+    }
+  });
+
+  app.get("/api/legal-compliance/reports", async (req, res) => {
+    try {
+      const result = await runLegalComplianceReports(getCurrentUserId(req));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate legal compliance reports" });
     }
   });
 
@@ -3371,8 +4073,9 @@ export async function registerRoutes(
   // GET single monitored project
   app.get("/api/projects/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
       const project = await storage.getMonitoredProject(req.params.id);
-      if (!project) {
+      if (!project || project.userId !== userId) {
         return res.status(404).json({ error: "Project not found" });
       }
       res.json(project);
@@ -3398,6 +4101,11 @@ export async function registerRoutes(
   // PATCH update monitored project
   app.patch("/api/projects/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getMonitoredProject(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const project = await storage.updateMonitoredProject(req.params.id, req.body);
       res.json(project);
     } catch (error) {
@@ -3408,6 +4116,11 @@ export async function registerRoutes(
   // DELETE monitored project
   app.delete("/api/projects/:id", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const existing = await storage.getMonitoredProject(req.params.id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       await storage.deleteMonitoredProject(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -3418,6 +4131,11 @@ export async function registerRoutes(
   // POST check project health manually
   app.post("/api/projects/:id/check", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const project = await storage.getMonitoredProject(req.params.id);
+      if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const result = await checkSingleProject(req.params.id);
       if (!result) {
         return res.status(404).json({ error: "Project not found" });
@@ -3431,6 +4149,11 @@ export async function registerRoutes(
   // GET project health check logs
   app.get("/api/projects/:id/logs", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const project = await storage.getMonitoredProject(req.params.id);
+      if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const limit = parseInt(req.query.limit as string) || 100;
       const logs = await storage.getHealthCheckLogs(req.params.id, limit);
       res.json(logs);
@@ -3442,6 +4165,11 @@ export async function registerRoutes(
   // GET project incidents
   app.get("/api/projects/:id/incidents", async (req, res) => {
     try {
+      const userId = getCurrentUserId(req);
+      const project = await storage.getMonitoredProject(req.params.id);
+      if (!project || project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const incidents = await storage.getIncidents(req.params.id);
       res.json(incidents);
     } catch (error) {

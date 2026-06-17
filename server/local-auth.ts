@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage";
 import { DEFAULT_DEV_USER_ID, resolveCurrentUserId } from "./user-context";
-import { createInMemoryRateLimiter } from "./rate-limit";
+import { createRateLimiter } from "./rate-limit";
 import {
   hashPassword,
   isLocalAuthEnabled,
@@ -32,10 +32,14 @@ const authBodySchema = z.object({
   username: z.string().trim().min(2).max(80),
   password: z.string().min(8).max(200),
 });
-const localAuthRateLimit = createInMemoryRateLimiter({
+const localAuthRateLimit = createRateLimiter({
   scope: "local-auth",
   limit: 20,
   windowMs: 15 * 60 * 1000,
+  persistentStore: storage,
+  onPersistentError: (error) => {
+    console.warn("[RateLimit] Persistent local-auth limiter unavailable; using in-memory fallback:", error instanceof Error ? error.message : error);
+  },
 });
 
 function ensureSessionAvailable(req: RequestWithSession, res: Response): boolean {

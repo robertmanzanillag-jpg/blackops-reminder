@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -15,7 +15,9 @@ import {
   MessageSquare,
   Monitor,
   Radio,
+  Scale,
   Send,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Zap,
@@ -202,6 +204,42 @@ const agents = [
     bubblePosition: "left-[36%] top-[44%]",
   },
   {
+    id: "cybersecurity",
+    name: "Cybersecurity",
+    role: "Proteccion de apps",
+    href: "/cybersecurity-agent",
+    icon: ShieldAlert,
+    station: "Security ops",
+    status: "Monitoreando",
+    activity: "Revisando apps, HTTPS, incidentes, repos y alertas por Telegram",
+    shortAction: "Threats",
+    mode: "working",
+    color: "from-cyan-200 to-blue-400",
+    outfit: "bg-cyan-500",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[84%] top-[71%]",
+    bubblePosition: "right-[5%] top-[58%]",
+  },
+  {
+    id: "legal",
+    name: "Legal / Compliance",
+    role: "Legal, privacidad y multas",
+    href: "/legal-compliance",
+    icon: Scale,
+    station: "Legal desk",
+    status: "Auditando",
+    activity: "Revisando contratos, privacidad, copyright, terminos, riesgos regulatorios y alertas criticas",
+    shortAction: "Legal",
+    mode: "working",
+    color: "from-violet-200 to-indigo-400",
+    outfit: "bg-indigo-400",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[87%] top-[91%]",
+    bubblePosition: "right-[8%] top-[80%]",
+  },
+  {
     id: "control",
     name: "Control / Permisos",
     role: "Riesgos y aprobaciones",
@@ -257,6 +295,44 @@ type SkillSuggestion = {
   helpsWith: string;
   nextStep: string;
 };
+type LegalBridgeReport = {
+  source: string;
+  target: string;
+  severity: "critico" | "revisar" | "info";
+  title: string;
+  text: string;
+};
+type LegalAppReport = {
+  id: string;
+  appName: string;
+  repo: string;
+  source?: "developer_health" | "projects" | "github";
+  url?: string | null;
+  ownerAgent?: string;
+  scoutAgent?: string;
+  operatingModel?: "central_review" | "app_scout_to_main";
+  escalationPath?: string[];
+  severity: "critico" | "revisar" | "info";
+  summary: string;
+  checks: string[];
+  riskAreas?: string[];
+  evidenceSources?: string[];
+  nextAction: string;
+  disclaimer?: string;
+};
+type LegalComplianceRun = {
+  generatedAt: string;
+  totalTargets: number;
+  githubConnected: boolean;
+  githubError: string | null;
+  sourceErrors: string[];
+  summary: {
+    critico: number;
+    revisar: number;
+    info: number;
+  };
+  reports: LegalAppReport[];
+};
 type RoomConversation = {
   from: AgentId;
   text: string;
@@ -265,13 +341,119 @@ type RoomPresence = {
   agent: AgentId;
   position: string;
 };
+type OfficeRoom = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+type OfficeRoomConnection = {
+  from: string;
+  to: string;
+};
+type AgentLocationMap = Partial<Record<AgentId, string>>;
+type AgentRoomOffsetMap = Partial<Record<AgentId, { x: number; y: number }>>;
 
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
+const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
+const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
+const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
+const AGENT_WALK_MS = 1800;
+const defaultOfficeRooms: OfficeRoom[] = [
+  { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
+  { id: "kong", label: "Kong", x: 29, y: 19, w: 22, h: 45 },
+  { id: "deals", label: "Deals + Websites", x: 54, y: 27, w: 10, h: 29 },
+  { id: "dev", label: "Dev + GitHub", x: 65, y: 19, w: 25, h: 43 },
+  { id: "finance", label: "Finance", x: 10, y: 52, w: 18, h: 25 },
+  { id: "meeting", label: "Meeting Room", x: 31, y: 65, w: 32, h: 17 },
+  { id: "ops", label: "Ops", x: 10, y: 82, w: 18, h: 13 },
+  { id: "black-room", label: "Black Room", x: 30, y: 84, w: 13, h: 12 },
+  { id: "clippers", label: "Clippers", x: 68, y: 65, w: 12, h: 17 },
+  { id: "security", label: "Cybersecurity", x: 82, y: 65, w: 12, h: 17 },
+  { id: "legal", label: "Legal", x: 82, y: 84, w: 10, h: 12 },
+  { id: "break-room", label: "Break Room", x: 45, y: 84, w: 24, h: 12 },
+];
+const officeRoomConnections: OfficeRoomConnection[] = [
+  { from: "reception", to: "kong" },
+  { from: "reception", to: "finance" },
+  { from: "kong", to: "deals" },
+  { from: "kong", to: "meeting" },
+  { from: "deals", to: "dev" },
+  { from: "dev", to: "security" },
+  { from: "finance", to: "ops" },
+  { from: "meeting", to: "black-room" },
+  { from: "meeting", to: "break-room" },
+  { from: "meeting", to: "clippers" },
+  { from: "clippers", to: "security" },
+  { from: "security", to: "legal" },
+  { from: "legal", to: "break-room" },
+  { from: "ops", to: "black-room" },
+  { from: "black-room", to: "break-room" },
+];
+const defaultAgentLocations: AgentLocationMap = {
+  assistant: "reception",
+  ceo: "kong",
+  revenue: "deals",
+  code: "dev",
+  github: "dev",
+  portfolio: "finance",
+  radio: "black-room",
+  clippers: "clippers",
+  automations: "ops",
+  cybersecurity: "security",
+  legal: "legal",
+  control: "security",
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 const agentById = agents.reduce<Record<AgentId, Agent>>((lookup, agent) => {
   lookup[agent.id] = agent;
   return lookup;
 }, {} as Record<AgentId, Agent>);
+
+function buildRadioAgentReply(contact: OfficeContact, message: string): string {
+  const text = message.toLowerCase();
+  const opener =
+    contact.station.toLowerCase().includes("black room")
+      ? "Black Room activo. "
+      : `Estoy en ${contact.station}, Black Room activo. `;
+  const asksForNext = "Dime fecha, venue, hora, DJ/artista y que asset tienes listo, y te lo devuelvo como plan de publicacion.";
+
+  if (text.includes("hola") || text.includes("hey") || text.includes("buenas")) {
+    return `${opener}Estoy aqui. Puedo ayudarte con evento, flyer, copy, calendario, DJs, video o recordatorios. ${asksForNext}`;
+  }
+
+  if (text.includes("publicar") || text.includes("caption") || text.includes("copy") || text.includes("instagram")) {
+    return `${opener}Te puedo escribir el caption. Base recomendada: una linea con energia, fecha/venue, lineup o detalle fuerte, CTA para RSVP/DM, y hashtags minimos. Pasame el nombre del evento y te hago 2 versiones: elegante y agresiva.`;
+  }
+
+  if (text.includes("flyer") || text.includes("arte") || text.includes("diseño") || text.includes("diseno") || text.includes("post")) {
+    return `${opener}Para el flyer haria esto: 1) confirmar lineup y venue, 2) definir formato IG post/story, 3) preparar copy corto, 4) revisar que fecha/hora/precio esten visibles, 5) dejarlo listo para publicar. Si me pasas los detalles, te escribo el copy y checklist.`;
+  }
+
+  if (text.includes("dj") || text.includes("lineup") || text.includes("slot") || text.includes("artista")) {
+    return `${opener}Para DJs/slots necesito separar confirmados, pendientes y huecos. Mandame los nombres o horarios que tienes y te respondo con una lista tipo: confirmado, falta confirmar, mensaje para mandar y siguiente accion.`;
+  }
+
+  if (text.includes("calendario") || text.includes("calendar") || text.includes("fecha") || text.includes("evento")) {
+    return `${opener}Lo organizo como calendario: fecha, venue, responsables, assets, posts pendientes y recordatorios. Si el evento ya existe, dime cual; si es nuevo, mandame fecha/hora/venue y lo convierto en tareas claras.`;
+  }
+
+  if (text.includes("video") || text.includes("reel") || text.includes("clip") || text.includes("tiktok")) {
+    return `${opener}Para video/reel prepararia: hook de 2 segundos, nombre del evento visible, cortes rapidos, CTA final y version 9:16. Si tienes video base o flyer, dime cual y te armo instrucciones de edicion.`;
+  }
+
+  if (text.includes("que falta") || text.includes("pendiente") || text.includes("todo") || text.includes("checklist")) {
+    return `${opener}Checklist Radio: confirmar fecha/venue, cerrar lineup, revisar flyer, escribir copy, preparar story, programar post, avisar a DJs/promoters y revisar el dia antes. Si me dices el evento, te marco exactamente que falta.`;
+  }
+
+  return `${opener}Si lo que quieres es "${message.trim()}", lo convierto en ejecucion de Radio. Mi siguiente paso seria armar: objetivo, asset necesario, copy, responsable y deadline. ${asksForNext}`;
+}
 
 function buildAgentReply(contact: OfficeContact, message: string): string {
   const text = message.toLowerCase();
@@ -308,10 +490,13 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
     return `${opener}Lo traduzco a lectura financiera: posicion, riesgo, noticia relevante y accion posible. Si me das ticker o captura, lo organizo como mantener, revisar o actuar.`;
   }
   if (contact.name === "Radio") {
-    return `${opener}Lo manejo como Black Room: evento, calendario, flyer/media y ejecucion. Si es un evento, dime fecha, venue, assets disponibles y que falta publicar.`;
+    return buildRadioAgentReply(contact, message);
   }
   if (contact.name === "Clippers") {
     return `${opener}Lo manejo como sistema de clips: cuentas por categoria, fuentes con permiso, drafts diarios, programacion y reportes. Para escalar bien necesito conectar plataformas oficiales y una allowlist clara de videos/creadores.`;
+  }
+  if (contact.id === "legal") {
+    return `${opener}Lo reviso como Legal / Compliance: privacidad, terminos, copyright, contratos, mensajes externos, datos de usuarios y riesgos de multa. Si encuentro algo critico, lo marco como alerta y recomiendo hablar con abogado real antes de ejecutar.`;
   }
   if (contact.name === "Autos") {
     return `${opener}Puedo convertir esto en una rutina. Dime cada cuanto debe correr, que condicion dispara la accion y como quieres que te avise si falla.`;
@@ -342,6 +527,8 @@ function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
   if (contact.name === "Radio") return "Estoy en Black Room. Dime si hablamos de evento, flyer, calendario o media.";
   if (contact.name === "Clippers") return "Estoy en el war room social. Puedo preparar cuentas, drafts diarios, fuentes permitidas y reportes de views.";
+  if (contact.id === "cybersecurity") return "Estoy monitoreando tus apps, HTTPS, incidentes, repos y señales raras. Puedo escanear y mandarte reporte por Telegram.";
+  if (contact.id === "legal") return "Estoy aqui para revisar riesgos legales, privacidad, copyright, contratos y posibles multas antes de que algo se vuelva problema.";
   if (contact.id === "control") return "Estoy aqui para revisar permisos, riesgo y acciones sensibles antes de ejecutar.";
   if (contact.name === "KONG AI") return "Estoy conectado al contexto de Kong. Dime si el tema es eventos, mesas, promoters, venues o usuarios.";
   if (contact.name === "Promoters + Mesas") return "Estoy con promoters y mesas. Dime quien falta por confirmar o que seguimiento quieres hacer.";
@@ -385,6 +572,16 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
     { from: "ceo", to: "clippers", text: "Prioriza momentum, reportes claros y crecimiento sin quemar cuentas." },
     { from: "control", to: "clippers", text: "Antes de autopostear, verifico permisos, credenciales oficiales y riesgo de strikes." },
   ],
+  cybersecurity: [
+    { from: "cybersecurity", to: "ceo", text: "Estoy revisando apps, HTTPS, incidentes y repos conectados. Te aviso por Telegram si hay riesgo alto." },
+    { from: "github", to: "cybersecurity", text: "Te paso contexto de repos y cambios para cruzarlo con amenazas." },
+    { from: "cybersecurity", to: "control", text: "Si detecto accion sensible o riesgo alto, lo marco antes de ejecutar." },
+  ],
+  legal: [
+    { from: "legal", to: "ceo", text: "Estoy revisando riesgos legales: privacidad, copyright, terminos, contratos y posibles multas." },
+    { from: "ceo", to: "legal", text: "Quiero alertas claras: critico, revisar pronto o bajo riesgo. Nada de ruido innecesario." },
+    { from: "legal", to: "control", text: "Si una accion puede exponer datos, incumplir terminos o generar reclamo, la marco antes de ejecutar." },
+  ],
   automations: [
     { from: "automations", to: "control", text: "Estoy listo para correr rutinas, pero necesito permisos cuando haya impacto real." },
     { from: "control", to: "automations", text: "Correcto. Automatiza lo repetible y pausa lo riesgoso." },
@@ -408,6 +605,7 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "code", text: "Si una idea toca producto, la convierto en cambio pequeno y verificable." },
   { from: "github", text: "Yo reviso repos, PRs y checks antes de publicar para no romper produccion." },
   { from: "revenue", text: "Traigo deals validados: fuente, margen, oferta y website necesario." },
+  { from: "cybersecurity", text: "Yo reviso superficie de ataque: apps, dominios, HTTPS, incidents y Telegram alerts." },
 ];
 
 const breakRoomPresence: RoomPresence[] = [
@@ -421,6 +619,7 @@ const meetingRoomPresence: RoomPresence[] = [
   { agent: "code", position: "left-[43%] top-[71%]" },
   { agent: "github", position: "left-[49%] top-[71%]" },
   { agent: "revenue", position: "left-[55%] top-[71%]" },
+  { agent: "cybersecurity", position: "left-[61%] top-[71%]" },
 ];
 
 const officeFeed: OfficeFeedItem[] = [
@@ -441,6 +640,18 @@ const officeFeed: OfficeFeedItem[] = [
     title: "Mejora de clips",
     text: "Los clips funcionan mejor si cada cuenta tiene nicho, fuente permitida y reporte semanal de views.",
     sharesWith: "Radio, Control",
+  },
+  {
+    agent: "cybersecurity",
+    title: "Security scan",
+    text: "Reviso apps conectadas, HTTPS, incidentes abiertos, repos faltantes y health URLs criticas.",
+    sharesWith: "CEO, GitHub, Control",
+  },
+  {
+    agent: "legal",
+    title: "Legal watch",
+    text: "Reviso privacidad, copyright, terminos, contratos y mensajes externos para detectar riesgos antes de que escalen.",
+    sharesWith: "CEO, Control",
   },
   {
     agent: "code",
@@ -468,6 +679,18 @@ const learningSuggestions: LearningSuggestion[] = [
     agent: "code",
     lesson: "Code debe hacer cambios pequenos, con build y resumen claro antes de pasar a GitHub.",
     reason: "Reduce errores y hace que los demas agentes entiendan que cambio.",
+  },
+  {
+    id: "security-threat-briefs",
+    agent: "cybersecurity",
+    lesson: "Cybersecurity debe separar amenaza real de ruido: app caida, HTTPS faltante, incidente abierto o repo sin trazabilidad.",
+    reason: "Permite mandar alertas por Telegram solo cuando hay algo accionable.",
+  },
+  {
+    id: "legal-critical-alerts",
+    agent: "legal",
+    lesson: "Legal debe marcar como critico cualquier riesgo de multa, datos personales, copyright, contratos o terminos de plataforma.",
+    reason: "Te avisa temprano cuando algo necesita revision antes de operar o publicar.",
   },
 ];
 
@@ -507,7 +730,100 @@ const skillSuggestions: SkillSuggestion[] = [
     helpsWith: "Convertir feedback tuyo en reglas limpias, sin guardar ruido ni contradicciones.",
     nextStep: "Pedir aprobacion antes de guardar cualquier aprendizaje permanente.",
   },
+  {
+    id: "cybersecurity-attack-surface",
+    agent: "cybersecurity",
+    skill: "Attack Surface Mapper",
+    helpsWith: "Mantener inventario de apps, dominios, health URLs, repos, webhooks y prioridades de riesgo.",
+    nextStep: "Conectar cada app importante y correr scan automatico con alertas por Telegram.",
+  },
+  {
+    id: "legal-compliance-monitor",
+    agent: "legal",
+    skill: "Compliance Monitor",
+    helpsWith: "Vigilar privacidad, copyright, terminos de plataformas, contratos, mensajes externos y obligaciones que puedan causar multas.",
+    nextStep: "Crear reportes semanales y alertas criticas cuando haya riesgo alto.",
+  },
 ];
+
+const legalBridgeReports: LegalBridgeReport[] = [
+  {
+    source: "Kong Legal",
+    target: "Legal Main",
+    severity: "revisar",
+    title: "Scout de Kong",
+    text: "Kong Legal no decide solo: observa venues, promoters, mensajes externos y terminos, y manda hallazgos al Legal Main.",
+  },
+  {
+    source: "Legal Main",
+    target: "Kong Legal",
+    severity: "critico",
+    title: "Alerta de multa o reclamo",
+    text: "Legal Main consolida lo que mandan los scouts de apps y decide prioridad, bloqueo o revision humana.",
+  },
+  {
+    source: "Kong Legal",
+    target: "Control / Permisos",
+    severity: "info",
+    title: "Permisos operativos",
+    text: "Cuando Kong Legal aprueba una accion, Control valida permisos antes de que el agente la ejecute.",
+  },
+];
+
+function buildLegalAppReport(project: MonitoredProject, overview?: GitHubOverview[string]): LegalAppReport {
+  const text = `${project.name} ${project.description || ""} ${project.githubRepo || ""} ${project.url || ""}`.toLowerCase();
+  const checks = ["Privacidad y datos de usuarios", "Terminos visibles", "Riesgo de mensajes externos"];
+  let summary = "Revision general de privacidad, terminos, permisos, contenido y riesgos operativos.";
+  let nextAction = "Mantener reporte semanal y marcar cualquier cambio que toque usuarios, pagos, mensajes o contenido.";
+  let severity: LegalAppReport["severity"] = "info";
+
+  if (text.includes("kong")) {
+    checks.push("Promoters, venues, mesas y eventos", "Contratos o acuerdos con terceros");
+    summary = "Kong requiere vigilancia legal por venues, promoters, mensajes externos, usuarios y eventos.";
+    nextAction = "Kong Legal envia cambios al Legal central; si hay datos personales, cobros, contratos o reclamos, escalar como revisar.";
+    severity = "revisar";
+  } else if (text.includes("black room") || text.includes("blackroom") || text.includes("br-website")) {
+    checks.push("Copyright de flyers/media", "Uso de nombres, artistas, venues y contenido promocional");
+    summary = "Black Room necesita revisar derechos de imagen, musica/media, flyers, eventos y textos publicos.";
+    nextAction = "Antes de publicar assets o eventos, confirmar fuente permitida y copy sin promesas legales riesgosas.";
+    severity = "revisar";
+  } else if (text.includes("clip")) {
+    checks.push("Derechos de uso de videos", "Reglas de plataforma y riesgo de strikes");
+    summary = "Clippers puede tener riesgo alto si usa fuentes no permitidas o automatiza publicaciones sin permiso.";
+    nextAction = "Crear allowlist de fuentes permitidas y bloquear autoposting si no hay permiso claro.";
+    severity = "critico";
+  } else if (text.includes("deal") || text.includes("website") || text.includes("revenue")) {
+    checks.push("Claims de landing pages", "Formularios, leads y consentimiento");
+    summary = "Deals + Websites debe revisar claims, formularios, consentimiento y politicas antes de publicar.";
+    nextAction = "Agregar checklist legal a cada landing: privacidad, terminos, contacto, claims y tracking.";
+    severity = "revisar";
+  }
+
+  if (project.status === "offline" || project.status === "degraded") {
+    checks.push("Estado tecnico con posible impacto a usuarios");
+    severity = severity === "critico" ? "critico" : "revisar";
+  }
+  if (typeof overview?.open_prs === "number" && overview.open_prs > 0) {
+    checks.push(`${overview.open_prs} PRs abiertos para revisar antes de publicar cambios legales`);
+  }
+  if (typeof overview?.open_issues === "number" && overview.open_issues > 0) {
+    checks.push(`${overview.open_issues} issues abiertos que pueden contener riesgos o bugs visibles`);
+  }
+  if (overview?.error) {
+    checks.push("GitHub no respondio completo; falta contexto legal del repo");
+    severity = severity === "critico" ? "critico" : "revisar";
+  }
+
+  return {
+    id: project.id,
+    appName: project.name,
+    repo: project.githubRepo || project.url || "sin repo detectado",
+    severity,
+    summary,
+    checks,
+    nextAction,
+  };
+}
 
 const githubAppTeams = [
   {
@@ -517,6 +833,7 @@ const githubAppTeams = [
       { name: "KONG AI", job: "Chat central", position: "left-[38%] top-[46%]", tone: "bg-[#3fb66f]" },
       { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[34%] top-[52%]", tone: "bg-[#f1c36a]" },
       { name: "Venues", job: "Events", position: "left-[43%] top-[52%]", tone: "bg-[#60a5fa]" },
+      { name: "Kong Legal", job: "Legal sync", position: "left-[47%] top-[45%]", tone: "bg-[#a78bfa]" },
     ],
   },
 ];
@@ -587,20 +904,142 @@ function Cubicle({
   );
 }
 
-function RoomZone({ className, label }: { className?: string; label: string }) {
+function RoomZone({
+  label,
+  style,
+  editMode,
+  onMoveStart,
+  onResizeStart,
+  onLabelChange,
+}: {
+  label: string;
+  style: CSSProperties;
+  editMode: boolean;
+  onMoveStart: (event: PointerEvent<HTMLDivElement>) => void;
+  onResizeStart: (event: PointerEvent<HTMLButtonElement>) => void;
+  onLabelChange: (label: string) => void;
+}) {
   return (
     <div
+      style={style}
+      onPointerDown={editMode ? onMoveStart : undefined}
       className={cn(
-        "absolute rounded-[28px] border border-cyan-100/22 bg-[#07101d]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
-        className
+        "absolute z-[12] rounded-[28px] border border-cyan-100/22 bg-[#07101d]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
+        editMode && "z-[65] cursor-move ring-1 ring-cyan-200/45"
       )}
     >
       <div className="absolute inset-x-5 top-12 h-px bg-cyan-100/12" />
       <div className="absolute inset-y-5 left-5 w-px bg-cyan-100/10" />
       <div className="absolute left-1/2 top-[-12px] z-[90] max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-2xl border border-cyan-100/40 bg-[#02050d] px-3 py-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-cyan-50 shadow-xl shadow-black/70">
-        {label}
+        {editMode ? (
+          <input
+            value={label}
+            onChange={(event) => onLabelChange(event.target.value)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            className="h-5 w-full min-w-24 bg-transparent text-center uppercase text-cyan-50 outline-none placeholder:text-cyan-100/40"
+            aria-label={`Nombre de room ${label}`}
+            placeholder="Room"
+          />
+        ) : (
+          label
+        )}
       </div>
+      {editMode && (
+        <button
+          type="button"
+          onPointerDown={onResizeStart}
+          className="absolute bottom-1 right-1 z-[95] flex h-11 w-11 cursor-se-resize items-end justify-end rounded-br-[24px] rounded-tl-2xl border-b-2 border-r-2 border-cyan-100/70 bg-cyan-300/20 p-2 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.35),0_12px_28px_rgba(0,0,0,0.55)] transition hover:bg-cyan-300/35"
+          aria-label={`Arrastrar esquina para cambiar tamano de ${label}`}
+          title="Arrastra esta esquina para agrandar o achicar"
+        >
+          <Scale className="h-4 w-4" />
+        </button>
+      )}
     </div>
+  );
+}
+
+function OfficeConnections({
+  rooms,
+  connections,
+}: {
+  rooms: OfficeRoom[];
+  connections: OfficeRoomConnection[];
+}) {
+  const roomById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-[8] h-full w-full overflow-visible"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <filter id="office-connection-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="office-tunnel-gradient" x1="0%" x2="100%" y1="0%" y2="0%">
+          <stop offset="0%" stopColor="rgba(34,211,238,0.1)" />
+          <stop offset="50%" stopColor="rgba(165,243,252,0.55)" />
+          <stop offset="100%" stopColor="rgba(34,211,238,0.1)" />
+        </linearGradient>
+      </defs>
+      {connections.map((connection) => {
+        const from = roomById.get(connection.from);
+        const to = roomById.get(connection.to);
+        if (!from || !to) return null;
+        const x1 = from.x + from.w / 2;
+        const y1 = from.y + from.h / 2;
+        const x2 = to.x + to.w / 2;
+        const y2 = to.y + to.h / 2;
+        const cx = (x1 + x2) / 2;
+        const tunnelPath = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
+        const key = `${connection.from}-${connection.to}`;
+
+        return (
+          <g key={key}>
+            <path
+              d={tunnelPath}
+              stroke="rgba(2,6,23,0.78)"
+              strokeLinecap="round"
+              strokeWidth="4.6"
+              fill="none"
+            />
+            <path
+              d={tunnelPath}
+              stroke="rgba(125,211,252,0.2)"
+              strokeLinecap="round"
+              strokeWidth="3.1"
+              fill="none"
+            />
+            <path
+              d={tunnelPath}
+              stroke="url(#office-tunnel-gradient)"
+              strokeLinecap="round"
+              strokeWidth="1.25"
+              fill="none"
+              filter="url(#office-connection-glow)"
+            />
+            <path
+              d={tunnelPath}
+              stroke="rgba(207,250,254,0.78)"
+              strokeDasharray="1.2 2.2"
+              strokeLinecap="round"
+              strokeWidth="0.55"
+              fill="none"
+            />
+            <circle cx={x1} cy={y1} r="0.72" fill="rgba(207,250,254,0.92)" />
+            <circle cx={x2} cy={y2} r="0.72" fill="rgba(207,250,254,0.92)" />
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -629,11 +1068,19 @@ function BreakRoom({ className }: { className?: string }) {
 
 function AgentPerson({
   agent,
+  style,
+  editMode,
   selected,
+  walking,
+  onMoveStart,
   onSelect,
 }: {
   agent: Agent;
+  style?: CSSProperties;
+  editMode: boolean;
   selected: boolean;
+  walking: boolean;
+  onMoveStart: (event: PointerEvent<HTMLButtonElement>) => void;
   onSelect: (agent: Agent) => void;
 }) {
   const Icon = agent.icon;
@@ -642,13 +1089,20 @@ function AgentPerson({
     <motion.button
       type="button"
       onClick={() => onSelect(agent)}
-      className={cn("absolute z-30 flex h-28 w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
-      animate={{ y: selected ? [0, -7, 0] : [0, -3, 0] }}
-      transition={{ duration: selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
+      onPointerDown={editMode ? onMoveStart : undefined}
+      style={style}
+      className={cn(
+        "absolute z-30 flex h-28 w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center",
+        !style && agent.position,
+        walking && !editMode && "z-[88] transition-[left,top] duration-[1800ms] ease-[cubic-bezier(0.2,0.9,0.25,1)]",
+        editMode && "z-[85] cursor-grab active:cursor-grabbing"
+      )}
+      animate={{ y: walking ? [0, -7, 0, -4, 0] : selected ? [0, -7, 0] : [0, -3, 0] }}
+      transition={{ duration: walking ? 0.62 : selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
       aria-label={`Ver agente ${agent.name}`}
       data-testid={`agent-avatar-${agent.id}`}
     >
-      <span className="absolute bottom-3 h-5 w-14 rounded-full bg-black/55 blur-md" />
+      <span className={cn("absolute bottom-3 h-5 w-14 rounded-full bg-black/55 blur-md", walking && "w-16 bg-cyan-950/80")} />
       <span className="relative flex h-[84px] w-14 flex-col items-center [transform-style:preserve-3d]">
         <span
           className={cn(
@@ -675,13 +1129,74 @@ function AgentPerson({
           </span>
           <span className="absolute left-2 top-2 h-8 w-2 rounded-full bg-white/20 blur-[1px]" />
         </span>
-        <span className="absolute top-[78px] left-4 h-4 w-2 rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]" />
-        <span className="absolute top-[78px] right-4 h-4 w-2 rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]" />
+        <span
+          className={cn(
+            "absolute top-[78px] left-4 h-4 w-2 origin-top rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]",
+            walking && "animate-[office-step-left_0.42s_ease-in-out_infinite]"
+          )}
+        />
+        <span
+          className={cn(
+            "absolute top-[78px] right-4 h-4 w-2 origin-top rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]",
+            walking && "animate-[office-step-right_0.42s_ease-in-out_infinite]"
+          )}
+        />
       </span>
       <span className={cn("mt-1 max-w-20 truncate rounded-xl border px-2 py-0.5 text-[9px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#070b12]/70 text-white/80")}>
         {agent.name}
       </span>
     </motion.button>
+  );
+}
+
+function AgentSpeechBubble({
+  agent,
+  text,
+  style,
+  active,
+  onClose,
+}: {
+  agent: Agent;
+  text: string;
+  style?: CSSProperties;
+  active: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      style={style}
+      className={cn(
+        "pointer-events-auto absolute z-[92] w-[210px] -translate-x-1/2 -translate-y-full rounded-lg border bg-[#050a12]/95 px-3 py-2 pr-9 text-left shadow-2xl shadow-black/60 backdrop-blur",
+        active ? "border-cyan-100/70 text-cyan-50" : "border-white/15 text-zinc-200"
+      )}
+      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
+        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/10 text-cyan-50 transition hover:border-cyan-100/70 hover:bg-cyan-100 hover:text-slate-950"
+        aria-label={`Cerrar chat de ${agent.name}`}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      <div className="mb-1 flex items-center gap-2">
+        <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
+        <p className="truncate text-[10px] font-black uppercase tracking-wide text-cyan-100">{agent.name}</p>
+      </div>
+      <p className="line-clamp-3 text-xs leading-4">{text}</p>
+      <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-inherit bg-[#050a12]" />
+    </motion.div>
   );
 }
 
@@ -813,11 +1328,47 @@ function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string })
 }
 
 export default function AgentsOfficePage() {
+  const officeMapRef = useRef<HTMLDivElement | null>(null);
+  const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
   const [selectedContact, setSelectedContact] = useState<OfficeContact | null>(null);
   const [activeChatContact, setActiveChatContact] = useState<OfficeContact | null>(null);
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
+  const [editRooms, setEditRooms] = useState(false);
+  const [walkingAgents, setWalkingAgents] = useState<Partial<Record<AgentId, boolean>>>({});
+  const [closedConversationBubbles, setClosedConversationBubbles] = useState<Record<string, boolean>>({});
+  const [officeRooms, setOfficeRooms] = useState<OfficeRoom[]>(() => {
+    if (typeof window === "undefined") return defaultOfficeRooms;
+    try {
+      const stored = window.localStorage.getItem(OFFICE_LAYOUT_KEY);
+      if (!stored) return defaultOfficeRooms;
+      const parsed = JSON.parse(stored) as OfficeRoom[];
+      const roomById = new Map(parsed.map((room) => [room.id, room]));
+      return defaultOfficeRooms.map((room) => ({ ...room, ...(roomById.get(room.id) || {}) }));
+    } catch {
+      return defaultOfficeRooms;
+    }
+  });
+  const [agentLocations, setAgentLocations] = useState<AgentLocationMap>(() => {
+    if (typeof window === "undefined") return defaultAgentLocations;
+    try {
+      const stored = window.localStorage.getItem(OFFICE_AGENT_LOCATIONS_KEY);
+      if (!stored) return defaultAgentLocations;
+      return { ...defaultAgentLocations, ...(JSON.parse(stored) as AgentLocationMap) };
+    } catch {
+      return defaultAgentLocations;
+    }
+  });
+  const [agentOffsets, setAgentOffsets] = useState<AgentRoomOffsetMap>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const stored = window.localStorage.getItem(OFFICE_AGENT_OFFSETS_KEY);
+      return stored ? (JSON.parse(stored) as AgentRoomOffsetMap) : {};
+    } catch {
+      return {};
+    }
+  });
   const [targetRepo, setTargetRepo] = useState("workspace");
   const [lastRemoteTask, setLastRemoteTask] = useState("");
   const [sentMessages, setSentMessages] = useState<{ to: string; text: string }[]>([]);
@@ -840,6 +1391,28 @@ export default function AgentsOfficePage() {
     retry: false,
     refetchInterval: 60000,
   });
+  const { data: legalCompliance } = useQuery<LegalComplianceRun>({
+    queryKey: ["legal-compliance-reports"],
+    queryFn: () => fetch("/api/legal-compliance/reports").then((response) => response.json()),
+    retry: false,
+    refetchInterval: 60000,
+  });
+  useEffect(() => {
+    window.localStorage.setItem(OFFICE_LAYOUT_KEY, JSON.stringify(officeRooms));
+  }, [officeRooms]);
+  useEffect(() => {
+    window.localStorage.setItem(OFFICE_AGENT_LOCATIONS_KEY, JSON.stringify(agentLocations));
+  }, [agentLocations]);
+  useEffect(() => {
+    window.localStorage.setItem(OFFICE_AGENT_OFFSETS_KEY, JSON.stringify(agentOffsets));
+  }, [agentOffsets]);
+  useEffect(() => {
+    return () => {
+      Object.values(walkingTimersRef.current).forEach((timer) => {
+        if (timer) window.clearTimeout(timer);
+      });
+    };
+  }, []);
   const conversation = officeThreads[selectedAgent.id];
   const activeIndex = useMemo(
     () => agents.findIndex((agent) => agent.id === selectedAgent.id) + 1,
@@ -893,21 +1466,130 @@ export default function AgentsOfficePage() {
 
     return [{ id: "workspace", label: "Este app", repo: "local workspace" }, ...remoteRepos, ...fallbackRepos];
   }, [connectedProjects]);
+  const fallbackLegalAppReports = useMemo(
+    () =>
+      connectedProjects.map((project) =>
+        buildLegalAppReport(project, project.githubRepo ? githubOverview[project.githubRepo] : undefined)
+      ),
+    [connectedProjects, githubOverview]
+  );
+  const legalAppReports = legalCompliance?.reports.length ? legalCompliance.reports : fallbackLegalAppReports;
+  const walkingRoomShortcuts = useMemo(
+    () =>
+      ["meeting", "break-room"]
+        .map((roomId) => officeRooms.find((room) => room.id === roomId))
+        .filter((room): room is OfficeRoom => Boolean(room)),
+    [officeRooms]
+  );
   const selectedTarget = repoTargets.find((item) => item.id === targetRepo) || repoTargets[0];
-  const contact = selectedContact || {
+  const getAgentStation = (agent: Agent) => {
+    const roomId = agentLocations[agent.id] || defaultAgentLocations[agent.id];
+    return officeRooms.find((room) => room.id === roomId)?.label || agent.station;
+  };
+  const baseContact = selectedContact || {
     id: selectedAgent.id,
     name: selectedAgent.name,
     role: selectedAgent.role,
-    station: selectedAgent.station,
+    station: getAgentStation(selectedAgent),
     status: selectedAgent.status,
     activity: selectedAgent.activity,
     href: selectedAgent.href,
     icon: selectedAgent.icon,
     color: selectedAgent.color,
   };
+  const contact =
+    selectedContact && selectedContact.id in agentById
+      ? { ...baseContact, station: getAgentStation(agentById[selectedContact.id as AgentId]) }
+      : baseContact;
   const ContactIcon = contact.icon;
   const activeMessages = agentChats[contact.id] || [];
   const isChatOpen = activeChatContact?.id === contact.id;
+  const roomOccupants = useMemo(() => {
+    return agents.reduce<Record<string, AgentId[]>>((rooms, agent) => {
+      const roomId = agentLocations[agent.id] || defaultAgentLocations[agent.id];
+      if (!roomId) return rooms;
+      rooms[roomId] = [...(rooms[roomId] || []), agent.id];
+      return rooms;
+    }, {});
+  }, [agentLocations]);
+  const getAgentRoomStyle = (agent: Agent): CSSProperties | undefined => {
+    const roomId = agentLocations[agent.id] || defaultAgentLocations[agent.id];
+    if (!roomId) return undefined;
+    const room = officeRooms.find((item) => item.id === roomId);
+    if (!room) return undefined;
+    const manualOffset = agentOffsets[agent.id];
+    if (manualOffset) {
+      return {
+        left: `${room.x + (room.w * manualOffset.x) / 100}%`,
+        top: `${room.y + (room.h * manualOffset.y) / 100}%`,
+      };
+    }
+    const occupants = roomOccupants[roomId] || [];
+    const slot = Math.max(0, occupants.indexOf(agent.id));
+    const columns = Math.max(1, Math.min(3, Math.floor(room.w / 8)));
+    const row = Math.floor(slot / columns);
+    const column = slot % columns;
+    const x = room.x + (room.w * (column + 1)) / (columns + 1);
+    const y = room.y + room.h * clamp(0.34 + row * 0.22, 0.34, 0.74);
+
+    return { left: `${x}%`, top: `${y}%` };
+  };
+  const visibleConversationBubbles = (conversation || [])
+    .slice(0, 3)
+    .map((message, index) => {
+      const speaker = agentById[message.from];
+      const baseStyle = getAgentRoomStyle(speaker);
+      const top = typeof baseStyle?.top === "string" ? baseStyle.top : undefined;
+      const key = `${selectedAgent.id}-${message.from}-${index}`;
+
+      return {
+        key,
+        agent: speaker,
+        text: message.text,
+        active: message.from === selectedAgent.id,
+        style:
+          baseStyle && top
+            ? {
+                ...baseStyle,
+                top: `calc(${top} - ${94 + index * 22}px)`,
+              }
+            : baseStyle,
+      };
+    })
+    .filter((bubble) => !closedConversationBubbles[bubble.key]);
+  const closeAgentCard = () => {
+    setSelectedContact(null);
+    setActiveChatContact(null);
+    setDirectMessage("");
+  };
+  const markAgentWalking = (agentId: AgentId) => {
+    const currentTimer = walkingTimersRef.current[agentId];
+    if (currentTimer) window.clearTimeout(currentTimer);
+
+    setWalkingAgents((current) => ({ ...current, [agentId]: true }));
+    walkingTimersRef.current[agentId] = window.setTimeout(() => {
+      setWalkingAgents((current) => ({ ...current, [agentId]: false }));
+      delete walkingTimersRef.current[agentId];
+    }, AGENT_WALK_MS + 260);
+  };
+  const stopAgentWalking = (agentId: AgentId) => {
+    const currentTimer = walkingTimersRef.current[agentId];
+    if (currentTimer) window.clearTimeout(currentTimer);
+    delete walkingTimersRef.current[agentId];
+    setWalkingAgents((current) => ({ ...current, [agentId]: false }));
+  };
+  const moveAgentToRoom = (agentId: AgentId, roomId: string) => {
+    markAgentWalking(agentId);
+    window.requestAnimationFrame(() => {
+      setAgentLocations((current) => ({ ...current, [agentId]: roomId }));
+      setAgentOffsets((current) => ({ ...current, [agentId]: { x: 50, y: 50 } }));
+    });
+  };
+  const renameRoom = (roomId: string, label: string) => {
+    setOfficeRooms((current) =>
+      current.map((room) => (room.id === roomId ? { ...room, label } : room))
+    );
+  };
   const openContactChat = (nextContact: OfficeContact) => {
     setSelectedContact(nextContact);
     setActiveChatContact(nextContact);
@@ -956,11 +1638,12 @@ export default function AgentsOfficePage() {
   };
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgent(agent);
+    setClosedConversationBubbles({});
     openContactChat({
       id: agent.id,
       name: agent.name,
       role: agent.role,
-      station: agent.station,
+      station: getAgentStation(agent),
       status: agent.status,
       activity: agent.activity,
       href: agent.href,
@@ -977,6 +1660,7 @@ export default function AgentsOfficePage() {
       "KONG AI": "Chat central de Kong: recibe preguntas, usa herramientas internas y coordina informacion de eventos, mesas, promoters y venues.",
       "Promoters + Mesas": "Gestiona el flujo comercial de Kong: outreach a promoters, seguimiento de mesas y recordatorios de lunes.",
       Venues: "Busca, revisa e importa eventos de venues para mantener Kong actualizado.",
+      "Kong Legal": "Agente legal integrado en Kong: revisa venues, promoters, terminos, privacidad, mensajes externos y manda reportes al Legal / Compliance central.",
     };
     openContactChat({
       id: `${team.app}-${agent.name}`,
@@ -996,10 +1680,103 @@ export default function AgentsOfficePage() {
   const handleApproveSkill = (skillId: string) => {
     setApprovedSkills((current) => (current.includes(skillId) ? current : [...current, skillId]));
   };
+  const startRoomEdit = (
+    event: PointerEvent<HTMLElement>,
+    roomId: string,
+    mode: "move" | "resize"
+  ) => {
+    if (!editRooms || !officeMapRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const bounds = officeMapRef.current.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startRoom = officeRooms.find((room) => room.id === roomId);
+    if (!startRoom) return;
+
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      const dx = ((moveEvent.clientX - startX) / bounds.width) * 100;
+      const dy = ((moveEvent.clientY - startY) / bounds.height) * 100;
+
+      setOfficeRooms((current) =>
+        current.map((room) => {
+          if (room.id !== roomId) return room;
+          if (mode === "move") {
+            return {
+              ...room,
+              x: clamp(startRoom.x + dx, 2, 96 - startRoom.w),
+              y: clamp(startRoom.y + dy, 10, 96 - startRoom.h),
+            };
+          }
+
+          return {
+            ...room,
+            w: clamp(startRoom.w + dx, 8, 92 - startRoom.x),
+            h: clamp(startRoom.h + dy, 8, 92 - startRoom.y),
+          };
+        })
+      );
+    };
+    const stopRoomEdit = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopRoomEdit);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopRoomEdit);
+  };
+  const startAgentEdit = (event: PointerEvent<HTMLButtonElement>, agentId: AgentId) => {
+    if (!editRooms || !officeMapRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stopAgentWalking(agentId);
+
+    const bounds = officeMapRef.current.getBoundingClientRect();
+    const currentRoomId = agentLocations[agentId] || defaultAgentLocations[agentId];
+
+    const updateAgentPosition = (clientX: number, clientY: number) => {
+      const x = clamp(((clientX - bounds.left) / bounds.width) * 100, 2, 96);
+      const y = clamp(((clientY - bounds.top) / bounds.height) * 100, 10, 96);
+      const targetRoom =
+        officeRooms.find((room) => x >= room.x && x <= room.x + room.w && y >= room.y && y <= room.y + room.h) ||
+        officeRooms.find((room) => room.id === currentRoomId);
+
+      if (!targetRoom) return;
+      const offsetX = clamp(((x - targetRoom.x) / targetRoom.w) * 100, 16, 84);
+      const offsetY = clamp(((y - targetRoom.y) / targetRoom.h) * 100, 24, 82);
+
+      setAgentLocations((current) => ({ ...current, [agentId]: targetRoom.id }));
+      setAgentOffsets((current) => ({ ...current, [agentId]: { x: offsetX, y: offsetY } }));
+    };
+
+    updateAgentPosition(event.clientX, event.clientY);
+
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      updateAgentPosition(moveEvent.clientX, moveEvent.clientY);
+    };
+    const stopAgentEdit = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopAgentEdit);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopAgentEdit);
+  };
+  const resetOfficeRooms = () => {
+    Object.values(walkingTimersRef.current).forEach((timer) => {
+      if (timer) window.clearTimeout(timer);
+    });
+    walkingTimersRef.current = {};
+    setWalkingAgents({});
+    setOfficeRooms(defaultOfficeRooms);
+    setAgentLocations(defaultAgentLocations);
+    setAgentOffsets({});
+  };
 
   return (
     <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
-      <section className="relative h-full overflow-hidden bg-[radial-gradient(circle_at_58%_7%,rgba(34,211,238,0.12),transparent_30%),linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:auto,64px_64px,64px_64px]">
+      <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">
@@ -1053,6 +1830,26 @@ export default function AgentsOfficePage() {
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant={editRooms ? "secondary" : "outline"}
+                className="rounded-2xl border-white/10 bg-[#0c1018]/90 px-4 text-xs font-semibold text-white shadow-xl shadow-black/30"
+                onClick={() => setEditRooms((current) => !current)}
+              >
+                {editRooms ? "Terminar edicion" : "Editar oficina"}
+              </Button>
+              {editRooms && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-xs text-slate-300"
+                  onClick={resetOfficeRooms}
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
             <div className="hidden w-[260px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-semibold text-white">System Overview</p>
@@ -1095,7 +1892,7 @@ export default function AgentsOfficePage() {
             </div>
         </div>
 
-        <div className="relative h-full min-h-[620px] w-full [perspective:1400px]">
+        <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
           <div className="absolute left-[9%] top-[7%] h-[68%] w-[78%] [transform:rotateX(58deg)_rotateZ(-34deg)] [transform-style:preserve-3d]">
             <div className="absolute inset-0 rounded-[34px] border border-cyan-100/10 bg-[linear-gradient(145deg,#151f2c_0%,#0b1018_58%,#05070c_100%)] shadow-[0_90px_130px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.09)]" />
             <div className="absolute left-5 right-5 top-5 bottom-5 rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.16),transparent_32%)] bg-[size:54px_54px,54px_54px,auto]" />
@@ -1107,17 +1904,28 @@ export default function AgentsOfficePage() {
           <div className="absolute left-[13%] top-[12%] h-[7%] w-[68%] -skew-x-12 rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/13 via-white/6 to-white/12 backdrop-blur" />
           <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
 
-          <RoomZone className="left-[10%] top-[19%] h-[29%] w-[18%]" label="Recepcion" />
-          <RoomZone className="left-[29%] top-[19%] h-[45%] w-[22%]" label="Kong" />
-          <RoomZone className="left-[54%] top-[27%] h-[29%] w-[10%]" label="Deals + Websites" />
-          <RoomZone className="left-[65%] top-[19%] h-[43%] w-[25%]" label="Dev + GitHub" />
-          <RoomZone className="left-[10%] top-[52%] h-[25%] w-[18%]" label="Finance" />
-          <RoomZone className="left-[31%] top-[65%] h-[17%] w-[32%]" label="Meeting Room" />
-          <RoomZone className="left-[10%] top-[82%] h-[13%] w-[18%]" label="Ops" />
-          <RoomZone className="left-[30%] top-[84%] h-[12%] w-[13%]" label="Black Room" />
-          <RoomZone className="left-[68%] top-[65%] h-[17%] w-[12%]" label="Clippers" />
-          <RoomZone className="left-[82%] top-[65%] h-[17%] w-[10%]" label="Control" />
-          <RoomZone className="left-[45%] top-[84%] h-[12%] w-[24%]" label="Break Room" />
+          <OfficeConnections rooms={officeRooms} connections={officeRoomConnections} />
+          {officeRooms.map((room) => (
+            <RoomZone
+              key={room.id}
+              label={room.label}
+              editMode={editRooms}
+              style={{
+                left: `${room.x}%`,
+                top: `${room.y}%`,
+                width: `${room.w}%`,
+                height: `${room.h}%`,
+              }}
+              onMoveStart={(event) => startRoomEdit(event, room.id, "move")}
+              onResizeStart={(event) => startRoomEdit(event, room.id, "resize")}
+              onLabelChange={(label) => renameRoom(room.id, label)}
+            />
+          ))}
+          {editRooms && (
+            <div className="absolute left-[12%] top-[12%] z-[95] rounded-2xl border border-cyan-100/20 bg-black/90 px-4 py-3 text-xs text-cyan-50 shadow-2xl shadow-black/70 backdrop-blur">
+              Arrastra cajas o agentes. Edita nombres en las etiquetas. Usa la esquina brillante de cada caja para estirarla.
+            </div>
+          )}
 
           <div className="absolute left-[13%] top-[25%] z-[5] text-left">
             <p className="max-w-[180px] text-xl font-black leading-6 tracking-[0.12em] text-white/90">ROBS AGENTIC OFFICE</p>
@@ -1153,6 +1961,10 @@ export default function AgentsOfficePage() {
             <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-amber-200/24" />
             <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-rose-200/18" />
           </div>
+          <div className="absolute left-[84%] top-[90%] z-[3] h-8 w-[6%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+            <div className="absolute left-3 top-3 h-4 w-9 rounded-full bg-violet-200/24" />
+            <div className="absolute right-3 top-3 h-4 w-7 rounded-full bg-white/14" />
+          </div>
           <div className="absolute left-[48%] top-[89%] z-[3] h-10 w-[18%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-7 top-5 h-4 w-16 rounded-full bg-white/18" />
             <div className="absolute left-28 top-5 h-4 w-14 rounded-full bg-lime-200/24" />
@@ -1166,17 +1978,24 @@ export default function AgentsOfficePage() {
             <AgentPerson
               key={agent.id}
               agent={agent}
+              style={getAgentRoomStyle(agent)}
+              editMode={editRooms}
               selected={agent.id === selectedAgent.id}
+              walking={Boolean(walkingAgents[agent.id])}
+              onMoveStart={(event) => startAgentEdit(event, agent.id)}
               onSelect={handleSelectAgent}
             />
           ))}
 
-          {meetingRoomPresence.map((item) => (
-            <RoomPresenceDot key={`meeting-${item.agent}`} item={item} label="Meeting Room" />
-          ))}
-
-          {breakRoomPresence.map((item) => (
-            <RoomPresenceDot key={`break-${item.agent}`} item={item} label="Break Room" />
+          {visibleConversationBubbles.map((bubble) => (
+            <AgentSpeechBubble
+              key={bubble.key}
+              agent={bubble.agent}
+              text={bubble.text}
+              style={bubble.style}
+              active={bubble.active}
+              onClose={() => setClosedConversationBubbles((current) => ({ ...current, [bubble.key]: true }))}
+            />
           ))}
 
           {appAgents.map((appAgent, index) => (
@@ -1204,16 +2023,26 @@ export default function AgentsOfficePage() {
             ))
           )}
           {selectedContact && (
-            <div className="absolute right-6 top-6 z-[70] w-[360px] rounded-lg border border-cyan-200/25 bg-zinc-950/95 p-4 text-white shadow-2xl shadow-black/60 backdrop-blur">
+            <div className="contents">
               <button
                 type="button"
-                onClick={() => setSelectedContact(null)}
-                className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/10 hover:text-white"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeAgentCard();
+                }}
+                className="fixed right-8 top-28 z-[9999] flex h-11 w-11 items-center justify-center rounded-full border border-cyan-100/80 bg-cyan-100 text-slate-950 shadow-[0_0_24px_rgba(103,232,249,0.45),0_14px_32px_rgba(0,0,0,0.5)] transition hover:scale-105 hover:bg-white"
                 aria-label="Cerrar ficha de agente"
+                data-testid="button-close-agent-card"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
-              <div className="flex items-start gap-3 pr-8">
+              <div className="absolute right-6 top-5 z-[120] max-h-[calc(100vh-5rem)] w-[min(420px,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-cyan-200/35 bg-zinc-950/96 p-4 text-white shadow-2xl shadow-black/70 backdrop-blur">
+              <div className="flex items-start gap-3 pr-12">
                 <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-zinc-950", contact.color)}>
                   <ContactIcon className="h-6 w-6" />
                 </div>
@@ -1237,6 +2066,40 @@ export default function AgentsOfficePage() {
                 <p className="text-[10px] uppercase tracking-wide text-zinc-500">Que hace</p>
                 <p className="mt-1 text-sm leading-5 text-zinc-200">{contact.activity}</p>
               </div>
+              {contact.id in agentById && (
+                <div className="mt-2 rounded-md border border-cyan-200/15 bg-cyan-950/10 p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-cyan-200/70">Mover agente a room</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {walkingRoomShortcuts.map((room) => (
+                      <button
+                        key={`walk-shortcut-${contact.id}-${room.id}`}
+                        type="button"
+                        onClick={() => moveAgentToRoom(contact.id as AgentId, room.id)}
+                        className="rounded-md border border-cyan-200/25 bg-cyan-300/10 px-2 py-2 text-left text-[11px] font-semibold text-cyan-50 transition hover:border-cyan-100/60 hover:bg-cyan-300/20"
+                      >
+                        Caminar a {room.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                    {officeRooms.map((room) => (
+                      <button
+                        key={`move-${contact.id}-${room.id}`}
+                        type="button"
+                        onClick={() => moveAgentToRoom(contact.id as AgentId, room.id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[10px] font-semibold transition",
+                          (agentLocations[contact.id as AgentId] || defaultAgentLocations[contact.id as AgentId]) === room.id
+                            ? "border-cyan-200 bg-cyan-100 text-slate-950"
+                            : "border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/10"
+                        )}
+                      >
+                        {room.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(contact.name === "Code" || contact.name === "GitHub") && (
                 <div className="mt-2 rounded-md border border-cyan-200/15 bg-cyan-950/15 p-3">
                   <label className="text-[10px] uppercase tracking-wide text-cyan-200" htmlFor="office-target-repo">
@@ -1303,9 +2166,10 @@ export default function AgentsOfficePage() {
                   <Link href={openHref}>
                     <Button type="button" variant="outline" className="h-10 rounded-full border-white/10 bg-black/40 px-4 text-white hover:bg-white/10">
                       Abrir
-                    </Button>
-                  </Link>
-                )}
+                  </Button>
+                </Link>
+              )}
+              </div>
               </div>
             </div>
           )}
@@ -1326,7 +2190,7 @@ export default function AgentsOfficePage() {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-white/10 bg-black/35 p-3">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-500">Estacion</p>
-                <p className="mt-1 text-sm font-medium text-white">{selectedAgent.station}</p>
+                <p className="mt-1 text-sm font-medium text-white">{getAgentStation(selectedAgent)}</p>
               </div>
               <div className="rounded-lg border border-white/10 bg-black/35 p-3">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-500">Estado</p>
@@ -1665,6 +2529,133 @@ export default function AgentsOfficePage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-indigo-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Scale className="h-4 w-4 text-indigo-200" />
+                <p className="text-sm font-medium text-zinc-300">Legal Main + App Scouts</p>
+              </div>
+              <span className="rounded-full border border-indigo-200/15 bg-indigo-300/10 px-2 py-1 text-[11px] text-indigo-100">
+                {legalCompliance?.totalTargets ?? legalAppReports.length} apps/repos revisados
+              </span>
+            </div>
+            <div className="mb-3 grid gap-2 text-[11px] sm:grid-cols-3">
+              <p className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-500">
+                GitHub: <span className={legalCompliance?.githubConnected ? "text-emerald-200" : "text-amber-200"}>{legalCompliance?.githubConnected ? "conectado" : "manual"}</span>
+              </p>
+              <p className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-500">
+                Critico: <span className="text-red-100">{legalCompliance?.summary.critico ?? legalAppReports.filter((report) => report.severity === "critico").length}</span>
+              </p>
+              <p className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-500">
+                Revisar: <span className="text-amber-100">{legalCompliance?.summary.revisar ?? legalAppReports.filter((report) => report.severity === "revisar").length}</span>
+              </p>
+            </div>
+            {legalCompliance?.sourceErrors?.length ? (
+              <p className="mb-3 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-2 text-[11px] leading-4 text-amber-100">
+                Fuentes pendientes: {legalCompliance.sourceErrors.slice(0, 2).join(" | ")}
+              </p>
+            ) : null}
+            {legalAppReports.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-white/10 bg-black/30 p-3 text-sm text-zinc-500">
+                Conecta apps/repos para que Legal / Compliance genere reportes por cada proyecto.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {legalAppReports.map((report) => (
+                  <div key={report.id} className="rounded-lg border border-white/10 bg-black/35 p-3">
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{report.appName}</p>
+                        <p className="mt-1 truncate text-[11px] text-zinc-500">{report.repo}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            report.severity === "critico" && "bg-red-300/15 text-red-100",
+                            report.severity === "revisar" && "bg-amber-300/15 text-amber-100",
+                            report.severity === "info" && "bg-cyan-300/15 text-cyan-100"
+                          )}
+                        >
+                          {report.severity}
+                        </span>
+                        {report.source && (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
+                            {report.source}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm leading-5 text-zinc-300">{report.summary}</p>
+                    <div className="mt-2 rounded-md border border-indigo-200/10 bg-indigo-300/5 px-2 py-2 text-[11px] leading-4 text-indigo-100">
+                      <span className="font-semibold">{report.scoutAgent || "Legal Main"}</span>
+                      {report.operatingModel === "app_scout_to_main" ? " observa esta app y escala al " : " revisa directo como "}
+                      <span className="font-semibold">{report.ownerAgent || "Legal Main"}</span>
+                      {report.escalationPath?.length ? ` · Ruta: ${report.escalationPath.join(" -> ")}` : ""}
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {report.checks.slice(0, 4).map((check) => (
+                        <p key={`${report.id}-${check}`} className="rounded-md border border-white/10 bg-zinc-950/60 px-2 py-1.5 text-xs leading-4 text-zinc-400">
+                          {check}
+                        </p>
+                      ))}
+                    </div>
+                    {report.riskAreas && report.riskAreas.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {report.riskAreas.slice(0, 5).map((risk) => (
+                          <span key={`${report.id}-${risk}`} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-500">
+                            {risk}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-3 rounded-md border border-indigo-200/10 bg-indigo-300/10 px-2 py-2 text-xs leading-4 text-indigo-100">
+                      Proxima accion: {report.nextAction}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-[11px] leading-4 text-zinc-600">
+              Nota: esto es monitoreo operativo y no reemplaza revision de un abogado real.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-indigo-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Scale className="h-4 w-4 text-indigo-200" />
+                <p className="text-sm font-medium text-zinc-300">Legal Sync</p>
+              </div>
+              <span className="rounded-full border border-indigo-200/15 bg-indigo-300/10 px-2 py-1 text-[11px] text-indigo-100">
+                Kong conectado
+              </span>
+            </div>
+            <div className="space-y-2">
+              {legalBridgeReports.map((report) => (
+                <div key={`${report.source}-${report.title}`} className="rounded-lg border border-white/10 bg-black/35 p-3">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white">{report.source} / {report.target}</p>
+                      <p className="mt-1 text-sm font-medium text-indigo-100">{report.title}</p>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        report.severity === "critico" && "bg-red-300/15 text-red-100",
+                        report.severity === "revisar" && "bg-amber-300/15 text-amber-100",
+                        report.severity === "info" && "bg-cyan-300/15 text-cyan-100"
+                      )}
+                    >
+                      {report.severity}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-5 text-zinc-300">{report.text}</p>
+                </div>
+              ))}
             </div>
           </div>
 

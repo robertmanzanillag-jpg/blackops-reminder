@@ -1,0 +1,1819 @@
+import assert from "node:assert/strict";
+import path from "node:path";
+import test from "node:test";
+import {
+  answerRevenueAutomationIntake,
+  buildAutomationQuote,
+  buildImprovementReview,
+  buildRevenueEnginePlan,
+  buildRevenueLaunchReadiness,
+  buildRevenueLeadRadar,
+  buildRevenueMockup,
+  buildRevenueMockupTemplatePack,
+  buildRevenueProjectPlan,
+  buildRevenueScoutingMission,
+  closeRevenueAutomationOpportunity,
+  convertRevenueAutomationIntakeToOpportunity,
+  createDeliveryWorkspaceFromAutomationOpportunity,
+  deliverRevenueDeliveryWorkspace,
+  getRevenueEngineSnapshot,
+  preflightRevenueExpense,
+  recordRevenueAgentRun,
+  recordRevenueApprovalDecision,
+  recordRevenueAutomationIntake,
+  recordRevenueAutomationOpportunity,
+  recordRevenueDeliveryWorkspace,
+  recordRevenueDeliveryWorkspaceImprovementReview,
+  recordRevenueImprovementReview,
+  recordRevenueLead,
+  recordRevenueLedgerEntry,
+  recordRevenueOutreachDraft,
+  recordRevenueSalesAutopilot,
+  recordRevenueScoutingMission,
+  runRevenueAutomationAgentCommand,
+  resetRevenueAgentRunsForTests,
+  resetRevenueApprovalDecisionsForTests,
+  resetRevenueAutomationIntakesForTests,
+  resetRevenueAutomationOpportunitiesForTests,
+  resetRevenueDeliveryWorkspacesForTests,
+  resetRevenueImprovementReviewsForTests,
+  resetRevenueLeadsForTests,
+  resetRevenueLedgerForTests,
+  resetRevenueOutreachForTests,
+  resetRevenueScoutingMissionsForTests,
+  setRevenueAgentRunsPathForTests,
+  setRevenueApprovalDecisionsPathForTests,
+  setRevenueAutomationIntakesPathForTests,
+  setRevenueAutomationOpportunitiesPathForTests,
+  setRevenueDeliveryWorkspacesPathForTests,
+  setRevenueImprovementReviewsPathForTests,
+  setRevenueLeadsPathForTests,
+  setRevenueLedgerPathForTests,
+  setRevenueOutreachPathForTests,
+  setRevenueScoutingMissionsPathForTests,
+  setRevenueOutreachSenderForTests,
+  sendRevenueOutreachDraft,
+  updateRevenueDeliveryWorkspaceQa,
+} from "../server/revenue-engine";
+
+const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
+const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
+const testOutreachPath = path.join("/tmp", "revenue-engine-outreach-test.json");
+const testAgentRunsPath = path.join("/tmp", "revenue-engine-agent-runs-test.json");
+const testApprovalDecisionsPath = path.join("/tmp", "revenue-engine-approval-decisions-test.json");
+const testAutomationIntakesPath = path.join("/tmp", "revenue-engine-automation-intakes-test.json");
+const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automation-opportunities-test.json");
+const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
+const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
+const testDeliveryWorkspacesPath = path.join("/tmp", "revenue-engine-delivery-workspaces-test.json");
+const originalResendApiKey = process.env.RESEND_API_KEY;
+const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
+const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
+
+test.beforeEach(() => {
+  delete process.env.RESEND_API_KEY;
+  delete process.env.REVENUE_ENGINE_FROM_EMAIL;
+  delete process.env.RESEND_FROM_EMAIL;
+  setRevenueLedgerPathForTests(testLedgerPath);
+  setRevenueLeadsPathForTests(testLeadsPath);
+  setRevenueOutreachPathForTests(testOutreachPath);
+  setRevenueAgentRunsPathForTests(testAgentRunsPath);
+  setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
+  setRevenueAutomationIntakesPathForTests(testAutomationIntakesPath);
+  setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
+  setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
+  setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
+  setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+  resetRevenueLedgerForTests();
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueAgentRunsForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenueAutomationIntakesForTests();
+  resetRevenueAutomationOpportunitiesForTests();
+  resetRevenueImprovementReviewsForTests();
+  resetRevenueScoutingMissionsForTests();
+  resetRevenueDeliveryWorkspacesForTests();
+});
+
+test.afterEach(() => {
+  if (originalResendApiKey === undefined) delete process.env.RESEND_API_KEY;
+  else process.env.RESEND_API_KEY = originalResendApiKey;
+  if (originalRevenueEngineFromEmail === undefined) delete process.env.REVENUE_ENGINE_FROM_EMAIL;
+  else process.env.REVENUE_ENGINE_FROM_EMAIL = originalRevenueEngineFromEmail;
+  if (originalResendFromEmail === undefined) delete process.env.RESEND_FROM_EMAIL;
+  else process.env.RESEND_FROM_EMAIL = originalResendFromEmail;
+});
+
+test("caps lead plan spend at the starting monthly budget", () => {
+  const plan = buildRevenueEnginePlan({
+    area: "Miami",
+    niche: "restaurants",
+    offerFocus: "both",
+    monthlyBudgetUsd: 250,
+    leadCount: 50,
+  });
+
+  assert.equal(plan.budget.monthlyCapUsd, 100);
+  assert.equal(plan.budget.isInsideCap, true);
+});
+
+test("builds a no-website scouting mission with approval gates", () => {
+  const mission = buildRevenueScoutingMission({
+    area: "Miami",
+    niche: "med spas",
+    offerFocus: "both",
+    targetLeadCount: 40,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+
+  assert.equal(mission.mission.mode, "free_public_research");
+  assert.equal(mission.mission.leadBatchSize, 25);
+  assert.equal(mission.budgetGate.monthlyCapUsd, 100);
+  assert.equal(mission.budgetGate.requiresApprovalToSpend, false);
+  assert.equal(mission.budgetGate.blockedBeforeApproval.includes("send email"), true);
+  assert.equal(mission.searchQueries.some((query) => query.includes("Miami")), true);
+  assert.equal(mission.qualificationScorecard.some((item) => item.item === "No website or weak website signal"), true);
+  assert.equal(mission.subagentReviews.some((review) => review.agent === "qa-council"), true);
+});
+
+test("caps paid scouting spend and requires approval", () => {
+  const mission = buildRevenueScoutingMission({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    targetLeadCount: 80,
+    maxPaidDataSpendUsd: 140,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: false,
+  });
+
+  assert.equal(mission.budgetGate.approvedPaidDataSpendUsd, 100);
+  assert.equal(mission.budgetGate.requiresApprovalToSpend, true);
+  assert.equal(mission.mission.mode, "paid_data_requires_approval");
+  assert.equal(mission.mission.leadBatchSize, 50);
+  assert.equal(mission.nextActions.some((action) => action.includes("80")), false);
+});
+
+test("records and persists scouting missions as batch memory", () => {
+  const result = recordRevenueScoutingMission({
+    area: "Miami",
+    niche: "med spas",
+    offerFocus: "both",
+    targetLeadCount: 25,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+
+  assert.equal(result.mission.status, "ready_for_leads");
+  assert.equal(result.mission.learningNote.includes("research publico gratis"), true);
+  assert.equal(result.snapshot.recentScoutingMissions[0].mission.area, "Miami");
+  assert.equal(result.snapshot.persistence.scoutingMissionsStatus, "ok");
+
+  setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentScoutingMissions.length, 1);
+  assert.equal(snapshot.recentScoutingMissions[0].mission.niche, "med spas");
+});
+
+test("builds an always-on lead radar with contact and mockup limits", () => {
+  const radar = buildRevenueLeadRadar({
+    area: "Miami",
+    niches: "med spas, gyms, restaurants",
+    offerFocus: "both",
+    runHoursPerDay: 24,
+    dailyResearchTarget: 120,
+    dailyQualifiedLeadLimit: 36,
+    dailyMockupLimit: 8,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+  });
+
+  assert.equal(radar.status, "always_on_ready");
+  assert.equal(radar.operatingMode.researchRunsAllDay, true);
+  assert.equal(radar.operatingMode.contactMode, "draft_only");
+  assert.equal(radar.dailyLimits.researchPerHour, 5);
+  assert.equal(radar.dailyLimits.qualifiedPerHour, 2);
+  assert.equal(radar.dailyLimits.mockupLimit, 8);
+  assert.equal(radar.dailyLimits.contactLimit, 10);
+  assert.equal(radar.dailyLimits.monthlySpendCapUsd, 100);
+  assert.equal(radar.channelMix[0].channel.includes("Google Maps"), true);
+  assert.equal(radar.mockupPolicy.whoCreatesMockups.includes("Codex"), true);
+  assert.equal(radar.recommendation.includes("Buscar leads puede correr 24/7"), true);
+});
+
+test("lead radar caps paid data spend and requires approval", () => {
+  const radar = buildRevenueLeadRadar({
+    area: "Orlando",
+    niches: "roofers",
+    offerFocus: "websites",
+    runHoursPerDay: 12,
+    dailyResearchTarget: 240,
+    dailyQualifiedLeadLimit: 40,
+    dailyMockupLimit: 6,
+    dailyContactLimit: 12,
+    maxPaidDataSpendUsd: 350,
+    requireRobertApprovalToContact: true,
+  });
+
+  assert.equal(radar.status, "needs_spend_approval");
+  assert.equal(radar.operatingMode.spendMode, "approval_required");
+  assert.equal(radar.dailyLimits.approvedPaidDataSpendUsd, 100);
+  assert.equal(radar.nextActions.some((action) => action.includes("Contactar max 12/dia")), true);
+});
+
+test("builds a zero-cost premium mockup template pack", () => {
+  const pack = buildRevenueMockupTemplatePack({
+    niche: "med spas",
+    area: "Miami",
+    dailyMockupTarget: 8,
+    maxCustomMinutesPerMockup: 18,
+    estimatedAiCostPerMockupUsd: 0,
+  });
+
+  assert.equal(pack.status, "ready");
+  assert.equal(pack.pack.templateCount, 5);
+  assert.equal(pack.costModel.hostingCostUsd, 0);
+  assert.equal(pack.costModel.paidAssetCostUsd, 0);
+  assert.equal(pack.costModel.monthlyAiCostUsd, 0);
+  assert.equal(pack.costModel.insideZeroCostMode, true);
+  assert.equal(pack.templates.some((template) => template.id === "shock_hero_booking"), true);
+  assert.equal(pack.productionLine.some((step) => step.ownerAgent === "visual-qa"), true);
+  assert.equal(pack.guardrails.some((guardrail) => guardrail.includes("No pagar hosting")), true);
+});
+
+test("mockup template pack makes AI cost visible and caps monthly spend", () => {
+  const pack = buildRevenueMockupTemplatePack({
+    niche: "gyms",
+    area: "Orlando",
+    dailyMockupTarget: 20,
+    maxCustomMinutesPerMockup: 12,
+    estimatedAiCostPerMockupUsd: 0.03,
+  });
+
+  assert.equal(pack.status, "ready");
+  assert.equal(pack.costModel.dailyAiCostUsd, 0.6);
+  assert.equal(pack.costModel.monthlyAiCostUsd, 18);
+  assert.equal(pack.costModel.insideZeroCostMode, false);
+  assert.equal(pack.costModel.insideMonthlyCap, true);
+  assert.equal(pack.productionTargets.estimatedMockupsPerMonth, 600);
+  assert.equal(pack.productionTargets.recommendedContactLimitPerDay, 15);
+});
+
+test("launch readiness is ready to start with only email pending", () => {
+  const readiness = buildRevenueLaunchReadiness({
+    area: "Miami",
+    niche: "med spas / aesthetics",
+    dailyResearchTarget: 120,
+    dailyMockupTarget: 5,
+    dailyContactTarget: 10,
+    emailPending: true,
+  });
+
+  assert.equal(readiness.status, "ready_to_start");
+  assert.equal(readiness.blocked, 0);
+  assert.equal(readiness.pendingAllowed, 1);
+  assert.equal(readiness.items.find((item) => item.id === "email_sender")?.status, "pending_allowed");
+  assert.equal(readiness.emailPending.isPending, true);
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("contact forms"), true);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
+  assert.equal(readiness.summary.includes("solo falta configurar el correo"), true);
+});
+
+test("snapshot exposes launch readiness without blocking on email provider", () => {
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
+  assert.equal(snapshot.launchReadiness.blocked, 0);
+  assert.equal(snapshot.launchReadiness.emailPending.isPending, true);
+  assert.equal(snapshot.emailProvider.configured, false);
+});
+
+test("records sold apps and automations into revenue metrics", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Black Room",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Website 3D Premium + Automation Sprint",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.guardrail.status, "ok");
+  assert.equal(snapshot.metrics.appsSold, 1);
+  assert.equal(snapshot.metrics.automationsSold, 1);
+  assert.equal(snapshot.metrics.revenueUsd, 6000);
+  assert.equal(snapshot.metrics.cashCollectedUsd, 3000);
+  assert.equal(snapshot.metrics.estimatedSpendUsd, 64);
+  assert.equal(snapshot.metrics.profitUsd, 2936);
+  assert.equal(snapshot.executiveSummary.appsSold, 1);
+  assert.equal(snapshot.executiveSummary.automationsSold, 1);
+  assert.equal(snapshot.executiveSummary.cashCollectedUsd, 3000);
+  assert.equal(snapshot.executiveSummary.status, "ready");
+  assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "closed" && stage.count === 1 && stage.valueUsd === 6000), true);
+});
+
+test("blocks ledger expense when spend is higher than collected cash", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "expense",
+    clientName: "Lead tools",
+    amountUsd: 25,
+    cashCollectedUsd: 0,
+    estimatedInternalCostUsd: 0,
+    notes: "Paid outreach test",
+  });
+
+  assert.equal(result.entry, null);
+  assert.equal(result.guardrail.status, "blocked");
+  assert.equal(result.guardrail.reason.includes("cash cobrado"), true);
+  assert.equal(result.snapshot.metrics.estimatedSpendUsd, 0);
+  assert.equal(result.snapshot.metrics.profitUsd, 0);
+  assert.equal(result.snapshot.profitGuard.status, "collect_first");
+  assert.equal(result.snapshot.profitGuard.canSpendUsd, 0);
+});
+
+test("expense preflight blocks spend before cash or cap allow it", () => {
+  const result = preflightRevenueExpense({
+    concept: "Paid lead data",
+    amountUsd: 25,
+    estimatedInternalCostUsd: 0,
+    notes: "Proposed spend before collecting deposit.",
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.blockers.some((blocker) => blocker.includes("cash")), true);
+  assert.equal(result.snapshot.metrics.estimatedSpendUsd, 0);
+  assert.equal(result.nextAction.includes("No gastar"), true);
+});
+
+test("profit guard collects first before any external spend", () => {
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.profitGuard.status, "collect_first");
+  assert.equal(snapshot.profitGuard.canSpendUsd, 0);
+  assert.equal(snapshot.profitGuard.requiredActions.includes("cobrar deposito"), true);
+  assert.equal(snapshot.nextBatchPlan.status, "collect_first");
+  assert.equal(snapshot.nextBatchPlan.maxSpendUsd, 0);
+  assert.equal(snapshot.agentOperatingContract.mode, "draft_only");
+  assert.equal(snapshot.agentOperatingContract.requiresHumanApproval.includes("gastar dinero"), true);
+  assert.equal(snapshot.operatorConsole.canSpendNow, false);
+  assert.equal(snapshot.operatorConsole.nextCommand.includes("cobrar deposito"), true);
+  assert.equal(snapshot.operatorConsole.moneyLine.includes("0 apps/websites"), true);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "separate_area" && item.status === "ready"), true);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "ask_when_unclear" && item.status === "ready"), true);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "continuous_improvement" && item.status === "needs_data"), true);
+});
+
+test("profit guard allows small scale only when cash covers spend", () => {
+  recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Cash Client",
+    amountUsd: 5000,
+    cashCollectedUsd: 2500,
+    estimatedInternalCostUsd: 40,
+    notes: "Deposit collected",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.profitGuard.status, "scale_carefully");
+  assert.equal(snapshot.profitGuard.canSpendUsd, 60);
+  assert.equal(snapshot.profitGuard.remainingCapUsd, 60);
+  assert.equal(snapshot.agentOperatingContract.mode, "controlled_autopilot");
+  assert.equal(snapshot.agentOperatingContract.blockedActions.length, 0);
+  assert.equal(snapshot.operatorConsole.canSpendNow, true);
+  assert.equal(snapshot.operatorConsole.spendPermission.includes("60 USD"), true);
+  assert.equal(snapshot.operatorConsole.scoreboard.cashCollectedUsd, 2500);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "dont_spend_more_than_cash" && item.status === "ready"), true);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "controlled_autonomy" && item.status === "ready"), true);
+});
+
+test("expense preflight approves only within cash and monthly cap", () => {
+  recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Preflight Cash Client",
+    amountUsd: 3000,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 25,
+    notes: "Deposit collected",
+  });
+
+  const result = preflightRevenueExpense({
+    concept: "Small approved data check",
+    amountUsd: 15,
+    estimatedInternalCostUsd: 0,
+    notes: "Preflight only.",
+  });
+
+  assert.equal(result.status, "approved");
+  assert.equal(result.projected.spendUsd, 40);
+  assert.equal(result.projected.cashCoverageUsd, 1460);
+  assert.equal(result.snapshot.metrics.estimatedSpendUsd, 25);
+});
+
+test("records ledger expense only after cash covers spend and cap remains safe", () => {
+  recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Expense Safe Client",
+    amountUsd: 3000,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 25,
+    notes: "Deposit collected",
+  });
+
+  const result = recordRevenueLedgerEntry({
+    kind: "expense",
+    clientName: "Approved lead check",
+    amountUsd: 15,
+    cashCollectedUsd: 0,
+    estimatedInternalCostUsd: 0,
+    notes: "Small approved spend.",
+  });
+
+  assert.equal(result.entry?.kind, "expense");
+  assert.equal(result.guardrail.status, "ok");
+  assert.equal(result.snapshot.metrics.estimatedSpendUsd, 40);
+  assert.equal(result.snapshot.metrics.profitUsd, 1460);
+});
+
+test("records approval decisions without bypassing spend guardrails", () => {
+  const result = recordRevenueApprovalDecision({
+    targetId: "manual",
+    targetType: "manual",
+    decision: "approved",
+    approvedAction: "Aprobar research y mockup interno",
+    maxSpendUsd: 0,
+    notes: "No external spend.",
+  });
+
+  assert.equal(result.decision.guardrail.status, "recorded");
+  assert.equal(result.snapshot.recentApprovalDecisions[0].approvedAction, "Aprobar research y mockup interno");
+});
+
+test("blocks approval decisions that try to spend before profit guard allows it", () => {
+  const result = recordRevenueApprovalDecision({
+    targetId: "paid-data",
+    targetType: "manual",
+    decision: "approved",
+    approvedAction: "Comprar data de leads",
+    maxSpendUsd: 25,
+    notes: "Trying paid data before cash.",
+  });
+
+  assert.equal(result.decision.guardrail.status, "blocked");
+  assert.equal(result.decision.guardrail.reason.includes("No se puede aprobar gasto"), true);
+  assert.equal(result.snapshot.recentApprovalDecisions[0].guardrail.status, "blocked");
+});
+
+test("persists approval decisions across module state reloads", () => {
+  recordRevenueApprovalDecision({
+    targetId: "manual",
+    targetType: "manual",
+    decision: "needs_changes",
+    approvedAction: "Revisar copy antes de enviar",
+    maxSpendUsd: 0,
+    notes: "Needs tighter proof.",
+  });
+
+  setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentApprovalDecisions[0].decision, "needs_changes");
+  assert.equal(snapshot.recentApprovalDecisions[0].approvedAction, "Revisar copy antes de enviar");
+}
+);
+
+test("qualifies no-website leads for mockup when evidence and contact exist", () => {
+  const result = recordRevenueLead({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@nositecafe",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu, events capture and catering leads.",
+    estimatedOfferUsd: 2500,
+    status: "research",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.qualification.grade, "A");
+  assert.equal(result.lead.status, "mockup_ready");
+  assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1 && stage.valueUsd === 2500), true);
+});
+
+test("persists leads across module state reloads", () => {
+  recordRevenueLead({
+    businessName: "Persisted Lead",
+    area: "Miami",
+    niche: "salon",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "hello@example.com",
+    evidence: "Website loads slowly and has no booking CTA.",
+    painPoint: "Needs booking follow-up.",
+    estimatedOfferUsd: 3500,
+    status: "research",
+  });
+
+  setRevenueLeadsPathForTests(testLeadsPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentLeads[0].businessName, "Persisted Lead");
+  assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1), true);
+});
+
+test("builds a sellable mockup with 3D brief and automation guardrails", () => {
+  const mockup = buildRevenueMockup({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu, events capture and catering leads.",
+    primaryOffer: "Website 3D Premium + Automation Sprint",
+    estimatedOfferUsd: 3500,
+    includeAutomation: true,
+  });
+
+  assert.equal(mockup.decision.status, "mockup_ready");
+  assert.equal(mockup.offer.insideCostCap, true);
+  assert.equal(mockup.visualSystem.threeDSceneBrief.length > 0, true);
+  assert.equal(mockup.sections.some((section) => section.id === "automation"), true);
+  assert.equal(mockup.qa.some((check) => check.agent === "closer" && check.result === "approval_required"), true);
+});
+
+test("builds production plan only when commercial and cost gates pass", () => {
+  const plan = buildRevenueProjectPlan({
+    clientName: "No Site Cafe",
+    projectType: "bundle",
+    packageName: "Website 3D Premium + Automation Sprint",
+    setupUsd: 4725,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Website and lead follow-up",
+  });
+
+  assert.equal(plan.decision.status, "ready_to_build");
+  assert.equal(plan.budget.insideCostCap, true);
+  assert.equal(plan.phases.some((phase) => phase.ownerAgent === "qa-council"), true);
+  assert.equal(plan.subagentCorrections.some((item) => item.agent === "cost-controller"), true);
+});
+
+test("records outreach draft without sending and moves matching lead to outreach", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Black Room",
+    area: "Miami",
+    niche: "techno events",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "info@blackroom.miami",
+    evidence: "Website has events, videos, shop and community content.",
+    painPoint: "Needs stronger conversion tracking and follow-up.",
+    estimatedOfferUsd: 6700,
+    status: "research",
+  });
+
+  const result = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "robert.manzanillag@gmail.com",
+    contactName: "Robert",
+    businessName: "Black Room",
+    sourceUrl: "https://blackroomus.com",
+    businessSummary: "Black Room is a Miami Techno community with events, videos, shop, residents, academy and newsletter.",
+    websitePriceUsd: 4500,
+    automationPriceUsd: 2200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "Test quote",
+  });
+
+  assert.equal(result.draft.status, "draft");
+  assert.equal(result.draft.delivery.sendStatus, "not_sent");
+  assert.equal(result.draft.qaGates.some((gate) => gate.gate === "approval" && gate.passed === false), true);
+  assert.equal(result.syncedLead?.status, "outreach_ready");
+  assert.equal(result.snapshot.recentOutreach[0].businessName, "Black Room");
+  assert.equal(result.snapshot.metrics.approvalQueue, 1);
+  assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Black Room"), true);
+});
+
+test("sales autopilot prepares lead mockup agent QA and draft without sending", () => {
+  const result = recordRevenueSalesAutopilot({
+    businessName: "Autopilot Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@example.com",
+    evidence: "Google listing has no website, Instagram bio has no link, menu only appears in posts.",
+    painPoint: "Needs online menu, catering lead capture and follow-up.",
+    request: "Create a 3D website with lead capture, catering inquiry follow-up and weekly owner dashboard.",
+    projectType: "bundle",
+    estimatedOfferUsd: 4200,
+    estimatedInternalCostUsd: 54,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 0,
+    recipientEmail: "owner@example.com",
+    contactName: "Owner",
+    sourceUrl: "https://example.com/listing",
+    businessSummary: "Autopilot Cafe has public evidence of no website and needs a stronger online menu, catering capture and follow-up system.",
+    monthlyRetainerUsd: 750,
+    approvalToContact: false,
+    approvalToSpend: false,
+    approvalToBuild: false,
+  });
+
+  assert.equal(result.status, "approval_required");
+  assert.equal(result.lead.status, "outreach_ready");
+  assert.equal(result.mockup.decision.status, "mockup_ready");
+  assert.equal(result.agentRun.status, "approval_required");
+  assert.equal(result.deliveryReview.status, "blocked");
+  assert.equal(result.outreachDraft?.status, "draft");
+  assert.equal(result.requiredBeforeExternalAction.includes("aprobar contacto externo"), true);
+  assert.equal(result.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "agent_run" && item.title === "Autopilot Cafe"), true);
+  assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Autopilot Cafe"), true);
+});
+
+test("sales autopilot blocks when internal cost breaks the starting cap", () => {
+  const result = recordRevenueSalesAutopilot({
+    businessName: "Expensive Automation",
+    area: "Miami",
+    niche: "clinic",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@example.com",
+    evidence: "Public website is slow and has no booking workflow or lead follow-up.",
+    painPoint: "Needs booking, reminders and reporting.",
+    request: "Build automation with many paid tools and live messaging before deposit.",
+    projectType: "automation",
+    estimatedOfferUsd: 2500,
+    estimatedInternalCostUsd: 180,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 0,
+    recipientEmail: "owner@example.com",
+    businessSummary: "Expensive Automation has a weak website and needs booking automation.",
+    approvalToContact: true,
+    approvalToSpend: false,
+    approvalToBuild: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.outreachDraft, null);
+  assert.equal(result.requiredBeforeExternalAction.includes("reducir costo interno bajo $100/mes"), true);
+  assert.equal(result.agentRun.status, "blocked");
+});
+
+test("blocks outreach draft when evidence or cost cap fails", () => {
+  const result = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "lead@example.com",
+    contactName: "Lead",
+    businessName: "Risky Outreach",
+    businessSummary: "Too vague.",
+    websitePriceUsd: 1500,
+    automationPriceUsd: 1500,
+    monthlyRetainerUsd: 150,
+    estimatedInternalMonthlyCostUsd: 125,
+    notes: "",
+  });
+
+  assert.equal(result.draft.status, "blocked");
+  assert.equal(result.draft.pricing.insideCostCap, false);
+  assert.equal(result.draft.qaGates.some((gate) => gate.gate === "evidence" && gate.passed === false), true);
+  assert.equal(result.draft.qaGates.some((gate) => gate.gate === "cost" && gate.passed === false), true);
+});
+
+test("persists outreach drafts across module state reloads", () => {
+  recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Persisted Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Persisted Outreach has a public site and needs better lead capture, follow-up and quote tracking.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  setRevenueOutreachPathForTests(testOutreachPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentOutreach[0].businessName, "Persisted Outreach");
+  assert.equal(snapshot.recentOutreach[0].status, "approved");
+});
+
+test("blocks outreach send when email provider is missing", async () => {
+  const result = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Provider Missing Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Provider Missing Outreach has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.provider.configured, false);
+  assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "provider_configured" && gate.passed === false), true);
+});
+
+test("sends approved outreach with configured provider and updates matching lead", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  let capturedTo = "";
+  setRevenueOutreachSenderForTests(async (payload) => {
+    capturedTo = payload.to;
+    assert.equal(payload.from, "Revenue Engine <sales@example.com>");
+    assert.equal(payload.subject.includes("Ready Outreach"), true);
+    assert.equal(payload.idempotencyKey.startsWith("outreach-"), true);
+    return { id: "email_123" };
+  });
+  const leadResult = recordRevenueLead({
+    businessName: "Ready Outreach",
+    area: "Miami",
+    niche: "fitness",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "client@example.com",
+    evidence: "Public website has services but weak capture.",
+    painPoint: "Needs automation follow-up.",
+    estimatedOfferUsd: 6000,
+    status: "qualified",
+  });
+  const result = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Ready Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Ready Outreach has a weak website and needs better lead capture, service conversion and automated follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "sent");
+  assert.equal(capturedTo, "client@example.com");
+  assert.equal(sendResult.draft.delivery.sendStatus, "sent");
+  assert.equal(sendResult.draft.delivery.externalMessageId, "email_123");
+  assert.equal(sendResult.snapshot.recentLeads[0].status, "proposal_sent");
+});
+
+test("runs main revenue agent with subagent reviews and approvals", () => {
+  const result = recordRevenueAgentRun({
+    businessName: "Black Room",
+    area: "Miami",
+    niche: "techno events",
+    request: "Create a 3D website, event funnel, lead capture and automated follow-up for sponsors and merch buyers.",
+    stage: "production",
+    projectType: "bundle",
+    estimatedOfferUsd: 6700,
+    estimatedInternalCostUsd: 54,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 3350,
+    approvalToContact: true,
+    approvalToSpend: true,
+    approvalToBuild: true,
+  });
+
+  assert.equal(result.run.status, "ready");
+  assert.equal(result.run.budgetGate.insideCap, true);
+  assert.equal(result.run.subagentReviews.some((review) => review.agent === "qa-council" && review.verdict === "pass"), true);
+  assert.equal(result.run.workOrder.some((step) => step.ownerAgent === "automation-architect"), true);
+  assert.equal(result.snapshot.recentAgentRuns[0].businessName, "Black Room");
+});
+
+test("blocks revenue agent run when cost cap is broken", () => {
+  const result = recordRevenueAgentRun({
+    businessName: "Risky Automation",
+    area: "Miami",
+    niche: "clinic",
+    request: "Build a complex AI automation with many tools and no deposit yet.",
+    stage: "production",
+    projectType: "automation",
+    estimatedOfferUsd: 2500,
+    estimatedInternalCostUsd: 140,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 0,
+    approvalToContact: false,
+    approvalToSpend: false,
+    approvalToBuild: false,
+  });
+
+  assert.equal(result.run.status, "blocked");
+  assert.equal(result.run.requiredApprovals.includes("reducir costo mensual a menos de $100"), true);
+  assert.equal(result.run.subagentReviews.some((review) => review.agent === "cost-controller" && review.verdict === "block"), true);
+  assert.equal(result.snapshot.metrics.approvalQueue, 1);
+});
+
+test("main revenue agent asks questions when the client request is unclear", () => {
+  const result = recordRevenueAgentRun({
+    businessName: "Unclear Salon",
+    area: "Miami",
+    niche: "salon",
+    request: "Make automation",
+    stage: "proposal",
+    projectType: "automation",
+    estimatedOfferUsd: 2500,
+    estimatedInternalCostUsd: 40,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 0,
+    approvalToContact: true,
+    approvalToSpend: true,
+    approvalToBuild: false,
+  });
+
+  assert.equal(result.run.status, "approval_required");
+  assert.equal(result.run.clarificationGate.status, "needs_clarification");
+  assert.equal(result.run.requiredApprovals.includes("responder preguntas de aclaracion"), true);
+  assert.equal(result.run.workOrder[0].ownerAgent, "growth-director");
+  assert.equal(result.run.nextActions.some((action) => action.includes("preguntas de aclaracion")), true);
+});
+
+test("persists revenue agent runs across module state reloads", () => {
+  recordRevenueAgentRun({
+    businessName: "Persisted Agent Run",
+    area: "Orlando",
+    niche: "salon",
+    request: "Prepare website mockup and booking follow-up automation.",
+    stage: "mockup",
+    projectType: "bundle",
+    estimatedOfferUsd: 4200,
+    estimatedInternalCostUsd: 44,
+    monthlyBudgetUsd: 75,
+    cashCollectedUsd: 0,
+    approvalToContact: false,
+    approvalToSpend: false,
+    approvalToBuild: false,
+  });
+
+  setRevenueAgentRunsPathForTests(testAgentRunsPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentAgentRuns[0].businessName, "Persisted Agent Run");
+  assert.equal(snapshot.recentAgentRuns[0].status, "approval_required");
+});
+
+test("records sellable automation opportunity with quote and QA gates", () => {
+  const result = recordRevenueAutomationOpportunity({
+    businessName: "Booked Solid Salon",
+    industry: "salon",
+    request: "Automate new lead intake from Instagram and forms, booking follow-up, missed-call text messages, owner notifications and weekly reporting dashboard.",
+    currentTools: "Google Sheets, Gmail, Instagram DM",
+    monthlyBudgetUsd: 750,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "intake",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  assert.equal(result.opportunity.status, "quoted");
+  assert.equal(result.opportunity.quote.decision.status, "ready_to_pitch");
+  assert.equal(result.opportunity.quote.pricing.insideCostCap, true);
+  assert.equal(result.opportunity.qaGates.some((gate) => gate.gate === "cost" && gate.passed), true);
+  assert.equal(result.snapshot.recentAutomationOpportunities[0].businessName, "Booked Solid Salon");
+});
+
+test("blocks automation opportunity when request is unclear", () => {
+  const result = recordRevenueAutomationOpportunity({
+    businessName: "Vague Client",
+    industry: "services",
+    request: "Automate stuff",
+    currentTools: "",
+    monthlyBudgetUsd: 100,
+    urgency: "flexible",
+    sourceLeadId: "",
+    status: "intake",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  assert.equal(result.opportunity.status, "blocked");
+  assert.equal(result.opportunity.quote.decision.status, "needs_clarification");
+  assert.equal(result.opportunity.quote.clarificationGate.status, "needs_clarification");
+  assert.equal(result.opportunity.qaGates.some((gate) => gate.gate === "clarity" && gate.passed === false), true);
+  assert.equal(result.snapshot.metrics.approvalQueue, 1);
+});
+
+test("asks clarifying questions before quoting vague automation requests", () => {
+  const quote = buildAutomationQuote({
+    businessName: "Vague Clinic",
+    industry: "clinic",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 500,
+    urgency: "this_month",
+  });
+
+  assert.equal(quote.decision.status, "needs_clarification");
+  assert.equal(quote.clarificationGate.status, "needs_clarification");
+  assert.equal(quote.clarificationGate.blocks.includes("build completo"), true);
+  assert.equal(quote.clarifyingQuestions.length >= 3, true);
+});
+
+test("records automation intake and asks questions before quote is ready", () => {
+  const result = recordRevenueAutomationIntake({
+    businessName: "Vague Spa",
+    industry: "spa",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 500,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "",
+    source: "manual",
+  });
+
+  assert.equal(result.intake.status, "needs_answers");
+  assert.equal(result.intake.nextQuestions.length >= 3, true);
+  assert.equal(result.intake.answerTemplate.includes("Respuesta minima"), true);
+  assert.equal(result.intake.blockedUntilAnswered.includes("build completo"), true);
+  assert.equal(result.snapshot.recentAutomationIntakes[0].businessName, "Vague Spa");
+});
+
+test("answers automation intake and reruns clarification gate", () => {
+  const created = recordRevenueAutomationIntake({
+    businessName: "Answered Spa",
+    industry: "spa",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 500,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "",
+    source: "manual",
+  });
+
+  const answered = answerRevenueAutomationIntake({
+    intakeId: created.intake.id,
+    answers: "Trigger is a new website form lead. The system should save it to Google Sheets, notify the owner, and send an approved booking follow-up. Goal is more booked appointments.",
+  });
+
+  assert.equal(answered.status, "updated");
+  assert.equal(answered.intake?.status, "ready_for_quote");
+  assert.equal(answered.intake?.nextQuestions.length, 0);
+  assert.equal(answered.intake?.blockedUntilAnswered.length, 0);
+  assert.equal(answered.intake?.answerTemplate.includes("Respuesta minima"), true);
+  assert.equal(answered.snapshot.recentAutomationIntakes[0].status, "ready_for_quote");
+});
+
+test("automation agent command asks questions instead of creating vague opportunities", () => {
+  const result = runRevenueAutomationAgentCommand({
+    businessName: "Vague Command Spa",
+    industry: "spa",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 500,
+    urgency: "this_month",
+    contactName: "",
+    contactEmail: "",
+    knownAnswers: "",
+    source: "manual",
+    createOpportunityIfClear: true,
+  });
+
+  assert.equal(result.status, "needs_answers");
+  assert.equal(result.opportunity, null);
+  assert.equal(result.intake.status, "needs_answers");
+  assert.equal(result.blockedUntilAnswered.includes("build completo"), true);
+  assert.equal(result.snapshot.recentAutomationOpportunities.length, 0);
+});
+
+test("automation agent command creates quoted opportunity when request is clear", () => {
+  const result = runRevenueAutomationAgentCommand({
+    businessName: "Clear Command Gym",
+    industry: "gym",
+    request: "Automate new website trial signup into Google Sheets, notify the owner, send an approved trial follow-up email, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 800,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "Trigger is new website trial signup. Data goes to Google Sheets. Goal is booked trials. Follow-up is approved email only.",
+    source: "manual",
+    createOpportunityIfClear: true,
+  });
+
+  assert.equal(result.status, "opportunity_created");
+  assert.equal(result.opportunity?.businessName, "Clear Command Gym");
+  assert.equal(result.opportunity?.status, "quoted");
+  assert.equal(result.snapshot.recentAutomationOpportunities[0].businessName, "Clear Command Gym");
+  assert.equal(result.snapshot.recentAutomationIntakes[0].nextAction.includes("Agente creo oportunidad"), true);
+});
+
+test("automation agent command blocks sale lifecycle without scope and deposit", () => {
+  const result = runRevenueAutomationAgentCommand({
+    businessName: "Lifecycle Blocked Spa",
+    industry: "spa",
+    request: "Automate website booking requests into Google Sheets, notify the owner, send approved appointment follow-up, and report booked appointments weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 800,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "Trigger is website booking request. Data goes to Google Sheets. Goal is booked appointments. Follow-up is approved email only.",
+    source: "manual",
+    lifecycleTarget: "sale",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  assert.equal(result.status, "sale_blocked");
+  assert.equal(result.closeResult, null);
+  assert.equal(result.workspaceResult, null);
+  assert.equal(result.reason.includes("falta aprobacion escrita"), true);
+  assert.equal(result.reason.includes("falta deposito"), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("automation agent command records sale and creates delivery workspace when lifecycle gates pass", () => {
+  const result = runRevenueAutomationAgentCommand({
+    businessName: "Lifecycle Gym",
+    industry: "gym",
+    request: "Automate new website trial signup into Google Sheets, notify the owner, send an approved trial follow-up email, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "Trigger is new website trial signup. Data goes to Google Sheets. Goal is booked trials. Follow-up is approved email only.",
+    source: "manual",
+    lifecycleTarget: "delivery",
+    clientApprovedScope: true,
+    depositPaid: true,
+    cashCollectedUsd: 2500,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "delivery_workspace_created");
+  assert.equal(result.closeResult?.status, "recorded");
+  assert.equal(result.closeResult?.entry?.kind, "automation_sale");
+  assert.equal(result.workspaceResult?.status, "created");
+  assert.equal(result.workspaceResult?.workspace?.input.clientName, "Lifecycle Gym");
+  assert.equal(result.workspaceResult?.workspace?.status, "blocked");
+  assert.equal(result.workspaceResult?.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 1);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 2500);
+});
+
+test("blocks automation intake conversion until clarification is complete", () => {
+  const created = recordRevenueAutomationIntake({
+    businessName: "Blocked Intake Cafe",
+    industry: "coffee",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 350,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "",
+    source: "manual",
+  });
+
+  const converted = convertRevenueAutomationIntakeToOpportunity({
+    intakeId: created.intake.id,
+    status: "intake",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  assert.equal(converted.status, "blocked");
+  assert.equal(converted.opportunity, null);
+  assert.equal(converted.snapshot.recentAutomationOpportunities.length, 0);
+});
+
+test("converts ready automation intake into a tracked opportunity", () => {
+  const created = recordRevenueAutomationIntake({
+    businessName: "Ready Intake Gym",
+    industry: "gym",
+    request: "Need automation",
+    currentTools: "",
+    monthlyBudgetUsd: 700,
+    urgency: "this_month",
+    contactName: "Manager",
+    contactEmail: "",
+    knownAnswers: "",
+    source: "call",
+  });
+
+  answerRevenueAutomationIntake({
+    intakeId: created.intake.id,
+    answers: "Trigger is a new trial signup form. Action is saving to Google Sheets, texting the owner, emailing an approved trial class follow-up, and reporting booked trials weekly.",
+  });
+
+  const converted = convertRevenueAutomationIntakeToOpportunity({
+    intakeId: created.intake.id,
+    status: "intake",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  assert.equal(converted.status, "converted");
+  assert.equal(converted.opportunity?.businessName, "Ready Intake Gym");
+  assert.equal(converted.opportunity?.quote.decision.status, "ready_to_pitch");
+  assert.equal(converted.snapshot.recentAutomationOpportunities[0].businessName, "Ready Intake Gym");
+  assert.equal(converted.snapshot.recentAutomationIntakes[0].nextAction.includes("Oportunidad creada"), true);
+});
+
+test("persists automation intakes across module state reloads", () => {
+  recordRevenueAutomationIntake({
+    businessName: "Answered Gym",
+    industry: "gym",
+    request: "Automate new lead intake from website form into Google Sheets, notify owner, and send approved follow-up for booking trial classes.",
+    currentTools: "Google Sheets, website form, Gmail",
+    monthlyBudgetUsd: 600,
+    urgency: "this_month",
+    contactName: "Manager",
+    contactEmail: "manager@example.com",
+    knownAnswers: "Trigger is a website lead form. Action is owner notification and approved follow-up. Goal is more booked trial classes.",
+    source: "call",
+  });
+
+  setRevenueAutomationIntakesPathForTests(testAutomationIntakesPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentAutomationIntakes[0].businessName, "Answered Gym");
+  assert.equal(snapshot.recentAutomationIntakes[0].status, "ready_for_quote");
+});
+
+test("persists automation opportunities across module state reloads", () => {
+  recordRevenueAutomationOpportunity({
+    businessName: "Persisted Automation",
+    industry: "restaurant",
+    request: "Automate catering lead intake from forms and Instagram, email follow-up, reminders, invoice handoff, owner alerts and weekly reporting.",
+    currentTools: "Google Sheets, email",
+    monthlyBudgetUsd: 650,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "approved",
+    clientApprovedScope: true,
+    depositPaid: false,
+  });
+
+  setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentAutomationOpportunities[0].businessName, "Persisted Automation");
+  assert.equal(snapshot.recentAutomationOpportunities[0].status, "approved");
+});
+
+test("closes automation opportunity into ledger and updates money metrics", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Ledger Automation Gym",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+    notes: "Deposit paid by client.",
+  });
+
+  assert.equal(result.status, "recorded");
+  assert.equal(result.opportunity?.status, "sold");
+  assert.equal(result.opportunity?.depositPaid, true);
+  assert.equal(result.entry?.kind, "automation_sale");
+  assert.equal(result.entry?.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
+  assert.equal(result.snapshot.metrics.automationsSold, 1);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
+  assert.equal(result.snapshot.profitGuard.status, "scale_carefully");
+});
+
+test("blocks automation opportunity close when deposit is incomplete", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Partial Deposit Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, text the owner, send approved class follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const partialDeposit = Math.max(1, opportunity.opportunity.quote.pricing.requiredDepositUsd - 100);
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: partialDeposit,
+    markScopeApproved: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.entry, null);
+  assert.equal(result.opportunity?.status, "quoted");
+  assert.equal(result.opportunity?.depositPaid, false);
+  assert.equal(result.reason.includes("deposito incompleto"), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("does not double count automation opportunity already recorded in ledger", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Duplicate Ledger Automation",
+    industry: "gym",
+    request: "Automate new trial signup form into Google Sheets, text the owner, send approved class follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  const first = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+  });
+  const second = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+  });
+
+  assert.equal(first.status, "recorded");
+  assert.equal(second.status, "already_recorded");
+  assert.equal(second.snapshot.metrics.automationsSold, 1);
+});
+
+test("blocks delivery workspace creation from automation opportunity before deposit and scope", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "No Deposit Automation",
+    industry: "clinic",
+    request: "Automate website lead intake into Google Sheets, notify staff, send approved booking follow-up, and report booked consultations weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 800,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: false,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.equal(result.reason.includes("falta aprobacion escrita de scope"), true);
+  assert.equal(result.reason.includes("falta deposito pagado"), true);
+});
+
+test("creates delivery workspace from sold automation opportunity with QA corrections", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Sold Automation Gym",
+    industry: "gym",
+    request: "Automate new trial signup form into Google Sheets, text the owner, send approved class follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, email",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "created");
+  assert.equal(result.workspace?.input.sourceOpportunityId, opportunity.opportunity.id);
+  assert.equal(result.workspace?.input.clientName, "Sold Automation Gym");
+  assert.equal(result.workspace?.status, "blocked");
+  assert.equal(result.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
+  assert.equal(result.opportunity?.status, "in_delivery");
+  assert.equal(result.snapshot.recentDeliveryWorkspaces[0].input.sourceOpportunityId, opportunity.opportunity.id);
+});
+
+test("blocks production plan when deposit or cost cap fails", () => {
+  const plan = buildRevenueProjectPlan({
+    clientName: "Risky Client",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 2500,
+    monthlyRetainerUsd: 200,
+    estimatedInternalCostUsd: 140,
+    depositPaid: false,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Complex AI automation",
+  });
+
+  assert.equal(plan.decision.status, "blocked");
+  assert.equal(plan.decision.missing.includes("deposito pagado"), true);
+  assert.equal(plan.decision.missing.includes("costo interno bajo $100/mes"), true);
+  assert.equal(plan.deliveryGates.some((gate) => gate.gate === "cost" && gate.passed === false), true);
+});
+
+test("creates delivery workspace with subagent corrections before client handoff", () => {
+  const result = recordRevenueDeliveryWorkspace({
+    workspaceName: "Booked Solid delivery",
+    sourceOpportunityId: "opp_1",
+    clientName: "Booked Solid Salon",
+    projectType: "bundle",
+    packageName: "Website 3D Premium + Automation Sprint",
+    setupUsd: 5000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: false,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Website plus booking follow-up automation.",
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+  });
+
+  assert.equal(result.workspace.status, "blocked");
+  assert.equal(result.workspace.correctionQueue.some((item) => item.agent === "automation-qa" && item.blocksDelivery), true);
+  assert.equal(result.workspace.approvalSummary.canLaunch, false);
+  assert.equal(result.workspace.runbook.some((step) => step.ownerAgent === "qa-council"), true);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces[0].input.clientName, "Booked Solid Salon");
+  assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "delivery_workspace"), true);
+});
+
+test("revalidates delivery workspace after subagents resolve QA corrections", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "QA blocked delivery",
+    sourceOpportunityId: "opp_qa",
+    clientName: "QA Gym",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 3200,
+    monthlyRetainerUsd: 650,
+    estimatedInternalCostUsd: 45,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate lead intake, owner alert, approved follow-up and weekly reporting.",
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+  });
+
+  assert.equal(created.workspace.status, "blocked");
+
+  const updated = updateRevenueDeliveryWorkspaceQa({
+    workspaceId: created.workspace.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    notes: "Technical QA, automation QA, rollback and handoff completed.",
+  });
+
+  assert.equal(updated.status, "ready");
+  assert.equal(updated.workspace?.status, "ready_to_deliver");
+  assert.equal(updated.workspace?.correctionQueue.length, 0);
+  assert.equal(updated.workspace?.approvalSummary.canLaunch, true);
+  assert.equal(updated.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+});
+
+test("blocks delivery handoff when workspace still has QA corrections", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Blocked handoff",
+    sourceOpportunityId: "",
+    clientName: "Blocked Client",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 3200,
+    monthlyRetainerUsd: 650,
+    estimatedInternalCostUsd: 45,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate lead intake and approved follow-up.",
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+  });
+
+  const delivered = deliverRevenueDeliveryWorkspace({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+  });
+
+  assert.equal(delivered.status, "blocked");
+  assert.equal(delivered.handoff, null);
+  assert.equal(delivered.reason.includes("workspace no esta listo"), true);
+});
+
+test("delivers ready workspace and marks linked automation opportunity delivered", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Delivered Automation Gym",
+    industry: "gym",
+    request: "Automate new trial signup form into Google Sheets, text the owner, send approved class follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Delivered workspace",
+    sourceOpportunityId: opportunity.opportunity.id,
+    clientName: "Delivered Automation Gym",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    monthlyRetainerUsd: opportunity.opportunity.quote.pricing.monthlyRetainerUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: opportunity.opportunity.request,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const delivered = deliverRevenueDeliveryWorkspace({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+    notes: "Client handoff complete.",
+  });
+
+  assert.equal(delivered.status, "delivered");
+  assert.equal(delivered.handoff?.clientName, "Delivered Automation Gym");
+  assert.equal(delivered.opportunity?.status, "delivered");
+  assert.equal(delivered.workspace?.learningNote.includes("entregado con QA aprobado"), true);
+  assert.equal(delivered.snapshot.recentAutomationOpportunities[0].status, "delivered");
+});
+
+test("blocks delivery improvement review until workspace is ready", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Blocked review workspace",
+    sourceOpportunityId: "",
+    clientName: "Blocked Review Client",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 2500,
+    monthlyRetainerUsd: 500,
+    estimatedInternalCostUsd: 35,
+    depositPaid: false,
+    scopeApproved: false,
+    publicDataVerified: false,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate intake and weekly reporting.",
+    visualQaPassed: false,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+  });
+
+  const result = recordRevenueDeliveryWorkspaceImprovementReview({
+    workspaceId: created.workspace.id,
+    periodLabel: "post-delivery week 1",
+    notes: "Should not record before QA.",
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.review, null);
+  assert.equal(result.reason.includes("workspace no esta listo"), true);
+  assert.equal(result.snapshot.recentImprovementReviews.length, 0);
+});
+
+test("records delivery improvement review as playbook memory for next batch", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Learning delivery workspace",
+    sourceOpportunityId: "",
+    clientName: "Learning Delivery Client",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 3000,
+    monthlyRetainerUsd: 650,
+    estimatedInternalCostUsd: 45,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate new lead capture, owner notification and weekly report.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const result = recordRevenueDeliveryWorkspaceImprovementReview({
+    workspaceId: created.workspace.id,
+    periodLabel: "post-delivery week 1",
+    leadsContacted: 0,
+    replies: 0,
+    callsBooked: 0,
+    dealsClosed: 1,
+    hoursSaved: 3,
+    defectsFound: 0,
+    clientComplaints: 0,
+    notes: "Delivery worked and can inform the next automation batch.",
+  });
+
+  assert.equal(result.status, "recorded");
+  assert.equal(result.review?.input.campaignName, "Learning Delivery Client");
+  assert.equal(result.review?.input.bestOffer, "Automation Sprint");
+  assert.equal(result.review?.metrics.insideSpendCap, true);
+  assert.equal(result.snapshot.recentImprovementReviews[0].input.campaignName, "Learning Delivery Client");
+  assert.equal(result.snapshot.recentDeliveryWorkspaces[0].learningNote.includes(result.review?.id || ""), true);
+  assert.equal(result.snapshot.nextBatchPlan.latestReviewId, result.review?.id);
+});
+
+test("persists ready delivery workspaces across module state reloads", () => {
+  recordRevenueDeliveryWorkspace({
+    workspaceName: "Ready delivery",
+    sourceOpportunityId: "",
+    clientName: "Ready Client",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 2500,
+    monthlyRetainerUsd: 500,
+    estimatedInternalCostUsd: 35,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate lead intake from forms, notify owner, save to Google Sheets and send approved follow-up.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentDeliveryWorkspaces[0].input.clientName, "Ready Client");
+  assert.equal(snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+  assert.equal(snapshot.recentDeliveryWorkspaces[0].approvalSummary.canLaunch, true);
+});
+
+test("persists ledger entries across module state reloads", () => {
+  recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Persisted Client",
+    amountUsd: 2500,
+    cashCollectedUsd: 1250,
+    estimatedInternalCostUsd: 35,
+    notes: "Automation Sprint deposit",
+  });
+
+  setRevenueLedgerPathForTests(testLedgerPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.metrics.automationsSold, 1);
+  assert.equal(snapshot.metrics.cashCollectedUsd, 1250);
+  assert.equal(snapshot.recentLedger[0].clientName, "Persisted Client");
+});
+
+test("pauses improvement loop when spend reaches cap without collected revenue", () => {
+  const review = buildImprovementReview({
+    campaignName: "No revenue batch",
+    periodLabel: "week 1",
+    leadsContacted: 40,
+    replies: 1,
+    callsBooked: 0,
+    dealsClosed: 0,
+    revenueCollectedUsd: 0,
+    spendUsd: 100,
+    estimatedInternalMonthlyCostUsd: 40,
+    hoursSaved: 0,
+    defectsFound: 0,
+    clientComplaints: 0,
+    bestOffer: "",
+    biggestObjection: "Too expensive",
+    notes: "",
+  });
+
+  assert.equal(review.decision.status, "pause_and_fix");
+  assert.equal(review.metrics.insideSpendCap, true);
+  assert.equal(review.nextBatch.maxSpendUsd, 10);
+  assert.equal(review.agentScorecard.some((agent) => agent.agent === "cost-controller" && agent.score === "block"), true);
+});
+
+test("next batch plan pauses after a blocked improvement review", () => {
+  recordRevenueImprovementReview({
+    campaignName: "Blocked quality batch",
+    periodLabel: "week 1",
+    leadsContacted: 30,
+    replies: 2,
+    callsBooked: 0,
+    dealsClosed: 0,
+    revenueCollectedUsd: 0,
+    spendUsd: 100,
+    estimatedInternalMonthlyCostUsd: 40,
+    hoursSaved: 0,
+    defectsFound: 4,
+    clientComplaints: 1,
+    bestOffer: "",
+    biggestObjection: "Confusing offer",
+    notes: "Quality issues before scale.",
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.nextBatchPlan.status, "pause");
+  assert.equal(snapshot.nextBatchPlan.maxLeads, 0);
+  assert.equal(snapshot.nextBatchPlan.maxSpendUsd, 0);
+  assert.equal(snapshot.nextBatchPlan.requiredBeforeNextAction.includes("resolver bloqueos QA/costo antes de contactar"), true);
+});
+
+test("scales carefully when collected revenue proves profitable demand", () => {
+  const review = buildImprovementReview({
+    campaignName: "Winning automation offer",
+    periodLabel: "week 2",
+    leadsContacted: 25,
+    replies: 4,
+    callsBooked: 2,
+    dealsClosed: 1,
+    revenueCollectedUsd: 3000,
+    spendUsd: 25,
+    estimatedInternalMonthlyCostUsd: 50,
+    hoursSaved: 5,
+    defectsFound: 0,
+    clientComplaints: 0,
+    bestOffer: "Automation Sprint",
+    biggestObjection: "Need proof",
+    notes: "Closed after showing dashboard demo.",
+  });
+
+  assert.equal(review.decision.status, "scale_carefully");
+  assert.equal(review.metrics.profitable, true);
+  assert.equal(review.nextBatch.maxLeads, 25);
+  assert.equal(review.nextBatch.maxSpendUsd <= 100, true);
+});
+
+test("next batch plan scales only when cash and latest review prove demand", () => {
+  recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Winning Client",
+    amountUsd: 3000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 40,
+    notes: "Automation Sprint paid.",
+  });
+  recordRevenueImprovementReview({
+    campaignName: "Winning automation offer",
+    periodLabel: "week 2",
+    leadsContacted: 25,
+    replies: 4,
+    callsBooked: 2,
+    dealsClosed: 1,
+    revenueCollectedUsd: 3000,
+    spendUsd: 25,
+    estimatedInternalMonthlyCostUsd: 40,
+    hoursSaved: 5,
+    defectsFound: 0,
+    clientComplaints: 0,
+    bestOffer: "Automation Sprint",
+    biggestObjection: "Need proof",
+    notes: "Closed after showing dashboard demo.",
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.nextBatchPlan.status, "scale_carefully");
+  assert.equal(snapshot.nextBatchPlan.maxLeads, 25);
+  assert.equal(snapshot.nextBatchPlan.maxSpendUsd <= snapshot.profitGuard.canSpendUsd, true);
+  assert.equal(snapshot.nextBatchPlan.allowedActions.includes("contactar batch aprobado"), true);
+});
+
+test("records and persists improvement reviews as revenue playbook memory", () => {
+  const first = recordRevenueImprovementReview({
+    campaignName: "Learning batch",
+    periodLabel: "week 1",
+    leadsContacted: 10,
+    replies: 1,
+    callsBooked: 0,
+    dealsClosed: 0,
+    revenueCollectedUsd: 0,
+    spendUsd: 10,
+    estimatedInternalMonthlyCostUsd: 40,
+    hoursSaved: 0,
+    defectsFound: 0,
+    clientComplaints: 0,
+    bestOffer: "Website 3D Premium",
+    biggestObjection: "Need mockup",
+    notes: "Keep batch small.",
+  });
+  const second = recordRevenueImprovementReview({
+    campaignName: "Learning batch",
+    periodLabel: "week 2",
+    leadsContacted: 20,
+    replies: 4,
+    callsBooked: 2,
+    dealsClosed: 1,
+    revenueCollectedUsd: 3000,
+    spendUsd: 20,
+    estimatedInternalMonthlyCostUsd: 50,
+    hoursSaved: 3,
+    defectsFound: 0,
+    clientComplaints: 0,
+    bestOffer: "Automation Sprint",
+    biggestObjection: "Need proof",
+    notes: "Dashboard demo helped close.",
+  });
+
+  assert.equal(first.review.playbookVersion, 1);
+  assert.equal(second.review.playbookVersion, 2);
+  assert.equal(second.review.decisionStatus, "scale_carefully");
+  assert.equal(second.snapshot.recentImprovementReviews[0].playbookVersion, 2);
+
+  setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentImprovementReviews.length, 2);
+  assert.equal(snapshot.recentImprovementReviews[0].learningSummary.includes("Playbook v2"), true);
+});

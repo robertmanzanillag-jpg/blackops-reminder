@@ -46,9 +46,9 @@ export async function getGitHubClient(): Promise<Octokit> {
 // List user's repositories
 export async function listRepositories() {
   const octokit = await getGitHubClient();
-  const { data } = await octokit.repos.listForAuthenticatedUser({
+  const data = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
     sort: 'updated',
-    per_page: 100
+    per_page: 100,
   });
   return data.map(repo => ({
     id: repo.id,
@@ -56,10 +56,15 @@ export async function listRepositories() {
     full_name: repo.full_name,
     description: repo.description,
     private: repo.private,
+    archived: repo.archived,
+    disabled: repo.disabled,
+    fork: repo.fork,
     html_url: repo.html_url,
     homepage: repo.homepage,
     default_branch: repo.default_branch,
     updated_at: repo.updated_at,
+    pushed_at: repo.pushed_at,
+    open_issues_count: repo.open_issues_count,
     language: repo.language
   }));
 }

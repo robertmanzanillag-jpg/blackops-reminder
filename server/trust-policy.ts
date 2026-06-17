@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import type {
   AuditLog,
   InsertAuditLog,
+  InsertPendingAction,
   PendingAction,
   PermissionLevel,
   RiskLevel,
@@ -96,6 +97,7 @@ export async function createPendingActionForApproval(request: TrustActionRequest
   const permissionLevelRequired = await getEffectivePermission(request.userId, scope);
 
   const pendingAction = await storage.createPendingAction(request.userId, {
+    userId: request.userId,
     createdByActorType: request.actorType,
     createdByActorId: request.actorId,
     origin: request.origin,
@@ -106,8 +108,8 @@ export async function createPendingActionForApproval(request: TrustActionRequest
     description: request.description,
     riskLevel,
     permissionLevelRequired,
-    input: request.input,
-    proposedChanges: request.proposedChanges,
+    input: request.input as InsertPendingAction["input"],
+    proposedChanges: request.proposedChanges as InsertPendingAction["proposedChanges"],
   });
 
   await writeAuditLog({
@@ -119,7 +121,7 @@ export async function createPendingActionForApproval(request: TrustActionRequest
     resourceType: request.resourceType,
     resourceId: request.resourceId,
     pendingActionId: pendingAction.id,
-    metadata: request.metadata || { scope, riskLevel },
+    metadata: (request.metadata || { scope, riskLevel }) as InsertAuditLog["metadata"],
     status: "pending_approval",
     executionMode: request.executionMode,
   });

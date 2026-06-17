@@ -34,6 +34,7 @@ export function allowsDevUserFallback(): boolean {
 
 export function resolveCurrentUserId(req: Request): string | null {
   const authReq = req as RequestWithAuth;
+  const requestFallbackAllowed = allowsDevUserFallback();
 
   return (
     cleanUserId(authReq.user?.id) ||
@@ -43,9 +44,8 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
-    cleanUserId(req.header("x-user-id")) ||
-    cleanUserId(process.env.DEFAULT_USER_ID) ||
-    (allowsDevUserFallback() ? DEFAULT_DEV_USER_ID : null)
+    (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
+    (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
   );
 }
 
@@ -57,8 +57,9 @@ export function isPublicApiPath(path: string): boolean {
  * Central place for resolving the active application user.
  *
  * Supports provider-neutral auth state (Passport/Replit/Clerk/Auth.js adapters
- * can populate req.user or req.session). The mock user is now limited to dev/test
- * unless explicitly enabled with ALLOW_DEV_USER_FALLBACK=true.
+ * can populate req.user or req.session). Request fallbacks such as x-user-id and
+ * the mock user are limited to dev/test unless explicitly enabled with
+ * ALLOW_DEV_USER_FALLBACK=true. DEFAULT_USER_ID is reserved for system jobs.
  */
 export function getCurrentUserId(req: Request): string {
   const userId = resolveCurrentUserId(req);

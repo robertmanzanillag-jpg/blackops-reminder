@@ -30,6 +30,41 @@ test("Zoho calendar sync imports events into the authenticated owner account", (
   assert.match(routesSource, /syncZohoCalendar\(getCurrentUserId\(req\)\)/, "Zoho sync route should pass the authenticated user id");
 });
 
+test("Telegram webhook does not auto-bind unknown chats to the system user", () => {
+  const telegramSource = readFileSync("server/telegram-chat.ts", "utf8");
+
+  assert.doesNotMatch(telegramSource, /getSystemUserId/, "Telegram chat handler should not bind unknown chats to DEFAULT_USER_ID");
+  assert.match(telegramSource, /storage\.getTelegramConfigByChatId\(chatId\)/, "Telegram chat handler should resolve owner from existing chat mapping");
+  assert.match(telegramSource, /if \(!config\) \{[\s\S]*todavía no está vinculado[\s\S]*telegram:configure[\s\S]*return;/, "unknown Telegram chats should receive linking instructions and stop");
+});
+
+test("Telegram config route binds chats to the authenticated owner only", () => {
+  const routesSource = readFileSync("server/telegram-routes.ts", "utf8");
+
+  assert.match(routesSource, /storage\.saveTelegramConfig\(getCurrentUserId\(req\), chatId\)/, "manual Telegram config should save mapping for authenticated owner");
+  assert.doesNotMatch(routesSource, /saveTelegramConfig\(getSystemUserId\(\)/, "Telegram config routes should not bind chat IDs to the system user");
+});
+
+test("startup task dedupe runs for discovered owners instead of one system user", () => {
+  const indexSource = readFileSync("server/index.ts", "utf8");
+
+  assert.match(indexSource, /getStartupMaintenanceUserIds\(\)/, "startup should resolve maintenance owners through a helper");
+  assert.match(indexSource, /storage\.getEnabledTelegramConfigs\(\)/, "startup dedupe should discover enabled Telegram owners");
+  assert.match(indexSource, /userIds\.map\(async \(userId\)/, "startup dedupe should iterate over all discovered owners");
+  assert.match(indexSource, /storage\.deduplicateRecurringTasks\(userId\)/, "weekly task dedupe should run for each discovered owner");
+  assert.match(indexSource, /storage\.deduplicateMainTasks\(userId\)/, "main task dedupe should run for each discovered owner");
+  assert.doesNotMatch(indexSource, /deduplicate(?:Recurring|Main)Tasks\(getSystemUserId\(\)\)/, "startup dedupe should not target only DEFAULT_USER_ID");
+});
+
+test("promo video daily scheduler uploads under discovered owners", () => {
+  const promoSource = readFileSync("server/promo-video-agent.ts", "utf8");
+
+  assert.match(promoSource, /getPromoVideoSchedulerUserIds\(\)/, "promo scheduler should resolve owners through a helper");
+  assert.match(promoSource, /storage\.getEnabledTelegramConfigs\(\)/, "promo scheduler should discover enabled Telegram owners");
+  assert.match(promoSource, /runPromoVideoAutoDaily\(\{[^}]*userId/s, "promo scheduler should pass an explicit user id to auto daily runs");
+  assert.doesNotMatch(promoSource, /runPromoVideoAutoDaily\(\{ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full" \}\)/, "promo scheduler should not run auto daily without an owner");
+});
+
 test("manual notification test endpoints target the authenticated user only", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const schedulerSource = readFileSync("server/reminder-scheduler.ts", "utf8");
@@ -45,4 +80,198 @@ test("manual notification test endpoints target the authenticated user only", ()
   assert.match(schedulerSource, /testMorningReminder\(userId\?: string\)/, "manual reminder helper should accept an explicit user id");
   assert.match(schedulerSource, /testProactiveInsights\(userId\?: string\)/, "manual insights helper should accept an explicit user id");
   assert.match(schedulerSource, /testNewsDigest\(userId\?: string\)/, "manual news helper should accept an explicit user id");
+});
+
+test("scheduled notification jobs discover Telegram and push owners", () => {
+  const schedulerSource = readFileSync("server/reminder-scheduler.ts", "utf8");
+
+  assert.match(schedulerSource, /getScheduledNotificationUserIds\(\)/, "scheduler should use a shared owner discovery helper");
+  assert.match(schedulerSource, /storage\.getEnabledTelegramConfigs\(\)/, "scheduler should discover Telegram-enabled owners");
+  assert.match(schedulerSource, /storage\.getAllPushSubscriptions\(\)/, "scheduler should discover push-notification owners");
+  assert.match(schedulerSource, /\.\.\.telegramConfigs\.map\(\(config\) => config\.userId\)/, "scheduler should include Telegram owner ids");
+  assert.match(schedulerSource, /\.\.\.pushSubscriptions\.map\(\(subscription\) => subscription\.userId\)/, "scheduler should include push subscription owner ids");
+  assert.match(schedulerSource, /Array\.from\(new Set\(userIds\)\)/, "scheduler should deduplicate discovered owner ids");
+  assert.doesNotMatch(schedulerSource, /getEnabledTelegramUserIds/, "scheduler should not rely on Telegram-only owner discovery");
+});
+
+test("portfolio routes read and send reports for the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /getPortfolioSummary\(getCurrentUserId\(req\)\)/, "portfolio summary should use authenticated user id");
+  assert.match(routesSource, /getGainsByPeriod\(period, getCurrentUserId\(req\)\)/, "portfolio gains should use authenticated user id");
+  assert.match(routesSource, /analyzeRebalancing\(getCurrentUserId\(req\)\)/, "portfolio rebalance should use authenticated user id");
+  assert.match(routesSource, /checkPriceOpportunities\(getCurrentUserId\(req\)\)/, "portfolio opportunities should use authenticated user id");
+  assert.match(routesSource, /generateWeeklyReport\(getCurrentUserId\(req\)\)/, "portfolio report preview should use authenticated user id");
+  assert.match(routesSource, /sendWeeklyPortfolioReport\(getCurrentUserId\(req\)\)/, "portfolio report send should use authenticated user id");
+  assert.match(routesSource, /sendDailyMarketUpdateForUser\(getCurrentUserId\(req\)\)/, "manual market update test should target only the authenticated user");
+  assert.doesNotMatch(routesSource, /sendDailyMarketUpdate\(\)/, "manual market update test should not trigger the global scheduled job");
+});
+
+test("DJ contact mutation routes verify the authenticated owner before acting", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /const existing = await storage\.getDjContact\(req\.params\.id\);\s*if \(!existing \|\| existing\.userId !== userId\)/s, "DJ update/delete should verify contact owner");
+  assert.match(routesSource, /const dj = await storage\.getDjContact\(req\.params\.id\);\s*if \(!dj \|\| dj\.userId !== userId\)/s, "DJ message generation should verify contact owner");
+  assert.match(routesSource, /storage\.updateDjContact\(req\.params\.id, req\.body\)/, "DJ update should happen only after the owner guard");
+  assert.match(routesSource, /storage\.deleteDjContact\(req\.params\.id\)/, "DJ delete should happen only after the owner guard");
+});
+
+test("monitored project routes verify the authenticated owner before reading or mutating by id", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /const project = await storage\.getMonitoredProject\(req\.params\.id\);\s*if \(!project \|\| project\.userId !== userId\)/s, "project read/check/log routes should verify owner");
+  assert.match(routesSource, /const existing = await storage\.getMonitoredProject\(req\.params\.id\);\s*if \(!existing \|\| existing\.userId !== userId\)/s, "project update/delete routes should verify owner");
+  assert.match(routesSource, /storage\.updateMonitoredProject\(req\.params\.id, req\.body\)/, "project update should happen only after owner guard");
+  assert.match(routesSource, /storage\.deleteMonitoredProject\(req\.params\.id\)/, "project delete should happen only after owner guard");
+  assert.match(routesSource, /checkSingleProject\(req\.params\.id\)/, "manual project check should happen only after owner guard");
+  assert.match(routesSource, /storage\.getHealthCheckLogs\(req\.params\.id, limit\)/, "project logs should be fetched only after owner guard");
+  assert.match(routesSource, /storage\.getIncidents\(req\.params\.id\)/, "project incidents should be fetched only after owner guard");
+});
+
+test("weekly summary update verifies the authenticated owner before mutating by id", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const storageSource = readFileSync("server/storage.ts", "utf8");
+
+  assert.match(storageSource, /getWeeklySummaryById\(id: string\): Promise<WeeklySummary \| undefined>/, "storage should expose weekly summary lookup by id for owner guards");
+  assert.match(routesSource, /const existing = await storage\.getWeeklySummaryById\(req\.params\.id\);\s*if \(!existing \|\| existing\.userId !== userId\)/s, "weekly summary update should verify owner before update");
+  assert.match(routesSource, /storage\.updateWeeklySummary\(req\.params\.id, body\)/, "weekly summary update should happen only after owner guard");
+});
+
+test("request-triggered Clippers daily plan uses the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  assert.match(routesSource, /runClipperDailyPlan\(req\.body \|\| \{\}, getCurrentUserId\(req\)\)/, "Clippers daily plan route should pass the authenticated user id");
+  assert.match(routesSource, /readClipperReport\(req\.params\.id, getCurrentUserId\(req\)\)/, "Clippers report reads should be scoped to the authenticated user id");
+  assert.match(clippersSource, /runClipperDailyPlan\(input: unknown = \{\}, userId = getSystemUserId\(\)\)/, "Clippers daily plan should accept an explicit user id for request-bound calls");
+  assert.match(clippersSource, /const status = await getClipperStatus\(userId\)/, "Clippers daily plan should build its status for the explicit owner");
+  assert.match(clippersSource, /const report: ClipperReport = \{[\s\S]*userId,/s, "Clippers daily reports should persist their owner user id");
+  assert.match(clippersSource, /readClipperReport\(id: string, userId = getSystemUserId\(\)\)/, "Clippers report reader should accept the expected owner user id");
+  assert.match(clippersSource, /if \(report\.userId !== userId\) \{[\s\S]*return null;/, "Clippers report reader should hide reports owned by other users");
+  assert.match(clippersSource, /return \{ report, status: await getClipperStatus\(userId\) \}/, "Clippers daily plan should return final status for the explicit owner");
+});
+
+test("request-triggered Clippers account setup routes use the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  const routeCalls = [
+    "bootstrapClipperAccounts",
+    "bootstrapClipperWorkspace",
+    "prepareClipperAccountIdentityKit",
+    "prepareClipperAccountLaunchKit",
+    "prepareClipperAccountCreationPack",
+    "prepareClipperManualPostingPack",
+    "prepareClipperAccountEvidenceVault",
+    "prepareClipperProductionQueue",
+  ];
+
+  for (const helper of routeCalls) {
+    assert.match(routesSource, new RegExp(`${helper}\\(getCurrentUserId\\(req\\)\\)`), `${helper} route should pass the authenticated user id`);
+    assert.match(clippersSource, new RegExp(`${helper}\\(userId = getSystemUserId\\(\\)\\)`), `${helper} should accept an explicit user id for request-bound calls`);
+  }
+
+  assert.match(clippersSource, /const queueResult = await prepareClipperProductionQueue\(userId\)/, "manual posting pack should keep the explicit owner through its production queue dependency");
+});
+
+test("request-triggered Clippers credential and platform routes use the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  const routeCalls = [
+    "prepareClipperCredentialSetupCenter",
+    "prepareClipperCredentialDoctor",
+    "importClipperCredentialDropFiles",
+    "prepareClipperPlatformReadinessMatrix",
+    "prepareClipperOfficialPermissionMatrix",
+    "prepareClipperAppReviewSubmissionPack",
+    "prepareClipperAppReviewDemoPack",
+    "prepareClipperDeveloperApplicationDrafts",
+    "prepareClipperGoLiveExecutionPack",
+    "prepareClipperPublisherConnectors",
+    "prepareClipperProductionUrlSetup",
+    "verifyClipperProductionUrl",
+    "prepareClipperHttpsTunnelPlan",
+    "prepareClipperLegalPolicyPack",
+    "prepareClipperOAuthGoLivePreflight",
+    "prepareClipperOAuthConnectionPack",
+    "reloadClipperCredentials",
+  ];
+
+  for (const helper of routeCalls) {
+    assert.match(routesSource, new RegExp(`${helper}\\(getCurrentUserId\\(req\\)\\)`), `${helper} route should pass the authenticated user id`);
+    assert.match(clippersSource, new RegExp(`${helper}\\(userId = getSystemUserId\\(\\)\\)`), `${helper} should accept an explicit user id for request-bound calls`);
+  }
+});
+
+test("request-triggered Clippers permission source and trend routes use the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  const routeCalls = [
+    "prepareClipperDeveloperAppEvidenceVault",
+    "prepareClipperExternalSetupQueue",
+    "prepareClipperExternalExecutionHandoff",
+    "prepareClipperExternalExecutionSession",
+    "prepareClipperExternalLaunchDossier",
+    "prepareClipperPlatformPortalChecklist",
+    "prepareClipperBlockerResolutionPack",
+    "prepareClipperPermissionPack",
+    "prepareClipperPermissionTracker",
+    "prepareClipperPermissionRequestPack",
+    "importClipperSourceDropFiles",
+    "prepareClipperSourceAcquisitionPlan",
+    "prepareClipperRightsOutreachPack",
+    "prepareClipperDraftSpecs",
+    "prepareClipperPublishingPackage",
+    "prepareClipperIntakeKit",
+    "ingestClipperMetrics",
+    "ingestClipperTrends",
+    "prepareClipperTrendRightsOutreachPack",
+  ];
+
+  for (const helper of routeCalls) {
+    assert.match(routesSource, new RegExp(`${helper}\\(getCurrentUserId\\(req\\)\\)`), `${helper} route should pass the authenticated user id`);
+    assert.match(clippersSource, new RegExp(`${helper}\\(userId = getSystemUserId\\(\\)\\)`), `${helper} should accept an explicit user id for request-bound calls`);
+  }
+
+  assert.match(clippersSource, /prepareClipperExternalExecutionHandoff\(userId\)/, "external execution session should keep the explicit owner through handoff generation");
+  assert.match(clippersSource, /prepareClipperProductionQueue\(userId\)/, "source and draft helpers should keep the explicit owner through production queue generation");
+});
+
+test("request-triggered Clippers record import render and automation routes use the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  const routeCalls = [
+    "recordClipperAccountEvidence",
+    "recordClipperDeveloperAppEvidence",
+    "previewClipperCredentialSecretsBatch",
+    "recordClipperCredentialSecret",
+    "recordClipperCredentialSecretsBatch",
+    "recordClipperProductionPublicUrl",
+    "previewClipperLaunchEvidenceBatch",
+    "recordClipperLaunchEvidenceBatch",
+    "importClipperLaunchEvidenceDropFiles",
+    "recordClipperPermissionStatus",
+    "prepareClipperSourceHuntSheet",
+    "recordClipperSourceIntakeBatch",
+    "prepareClipperViralDiscoveryPack",
+    "recordClipperSourceRights",
+    "renderClipperDraftVideos",
+    "recordClipperTrendCandidatesBatch",
+    "prepareClipperAutomationSchedule",
+    "runClipperAutomationCycle",
+  ];
+
+  for (const helper of routeCalls) {
+    assert.match(routesSource, new RegExp(`${helper}\\([^\\n]*getCurrentUserId\\(req\\)`), `${helper} route should pass the authenticated user id`);
+    assert.match(clippersSource, new RegExp(`${helper}\\([^\\)]*userId = getSystemUserId\\(\\)`, "s"), `${helper} should accept an explicit user id for request-bound calls`);
+  }
+
+  assert.match(clippersSource, /processClipperLaunchEvidenceBatch\(input, \{ dryRun: false \}, userId\)/, "launch evidence import should keep owner through batch processing");
+  assert.match(clippersSource, /prepareClipperSourceAcquisitionPlan\(userId\)/, "source intake should keep owner through acquisition regeneration");
+  assert.match(clippersSource, /const draftResult = await prepareClipperDraftSpecs\(userId\)/, "render should keep owner through draft spec generation");
+  assert.match(clippersSource, /runClipperAutomationCycle\(\{ publishMode: "approval_required", riskTolerance: "growth" \}, userId\)/, "autopilot should keep owner through automation-cycle execution");
+  assert.match(clippersSource, /JSON\.stringify\(\{[\s\S]*userId,[\s\S]*automation,/s, "automation cycle reports should persist their owner user id");
 });

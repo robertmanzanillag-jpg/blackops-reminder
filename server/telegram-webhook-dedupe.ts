@@ -7,6 +7,10 @@ export type TelegramUpdateDeduper = {
   size(): number;
 };
 
+export type DurableTelegramUpdateRecorder = {
+  recordTelegramProcessedUpdate(updateId: number): Promise<boolean>;
+};
+
 export function createTelegramUpdateDeduper(maxEntries = 500): TelegramUpdateDeduper {
   const seen = new Set<number>();
   const order: number[] = [];
@@ -35,4 +39,22 @@ export function createTelegramUpdateDeduper(maxEntries = 500): TelegramUpdateDed
       return seen.size;
     },
   };
+}
+
+export async function shouldProcessTelegramUpdate(
+  update: TelegramUpdateLike,
+  durableRecorder: DurableTelegramUpdateRecorder,
+  memoryDeduper: TelegramUpdateDeduper,
+  onDurableError?: (error: unknown) => void,
+): Promise<boolean> {
+  if (typeof update.update_id !== "number" || !Number.isFinite(update.update_id)) {
+    return true;
+  }
+
+  try {
+    return await durableRecorder.recordTelegramProcessedUpdate(update.update_id);
+  } catch (error) {
+    onDurableError?.(error);
+    return memoryDeduper.shouldProcess(update);
+  }
 }

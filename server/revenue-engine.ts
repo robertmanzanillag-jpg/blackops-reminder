@@ -1,4 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
+
+const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
 export const revenueEnginePlanSchema = z.object({
   area: z.string().trim().min(2).max(120),
@@ -9,6 +13,1233 @@ export const revenueEnginePlanSchema = z.object({
 });
 
 export type RevenueEnginePlanInput = z.infer<typeof revenueEnginePlanSchema>;
+
+export const revenueScoutingMissionSchema = z.object({
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
+  targetLeadCount: z.coerce.number().int().min(5).max(100).default(25),
+  maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
+  requireNoWebsiteSignal: z.coerce.boolean().default(true),
+  includeWeakWebsiteLeads: z.coerce.boolean().default(true),
+});
+
+export type RevenueScoutingMissionInput = z.infer<typeof revenueScoutingMissionSchema>;
+
+export const revenueLeadRadarSchema = z.object({
+  area: z.string().trim().min(2).max(120),
+  niches: z.string().trim().min(2).max(500).default("med spas, gyms, restaurants"),
+  offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
+  runHoursPerDay: z.coerce.number().int().min(1).max(24).default(24),
+  dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
+  dailyQualifiedLeadLimit: z.coerce.number().int().min(5).max(100).default(35),
+  dailyMockupLimit: z.coerce.number().int().min(1).max(25).default(8),
+  dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
+  maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
+  requireRobertApprovalToContact: z.coerce.boolean().default(true),
+});
+
+export type RevenueLeadRadarInput = z.infer<typeof revenueLeadRadarSchema>;
+
+export const automationQuoteSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  industry: z.string().trim().min(2).max(120),
+  request: z.string().trim().min(8).max(1200),
+  currentTools: z.string().trim().max(300).optional().default(""),
+  monthlyBudgetUsd: z.coerce.number().min(0).max(5000).default(500),
+  urgency: z.enum(["this_week", "this_month", "flexible"]).default("this_month"),
+});
+
+export type AutomationQuoteInput = z.infer<typeof automationQuoteSchema>;
+
+export const revenueAutomationOpportunitySchema = automationQuoteSchema.extend({
+  sourceLeadId: z.string().trim().max(120).optional().default(""),
+  status: z.enum(["intake", "quoted", "approved", "sold", "in_delivery", "delivered", "blocked"]).default("intake"),
+  clientApprovedScope: z.coerce.boolean().default(false),
+  depositPaid: z.coerce.boolean().default(false),
+});
+
+export type RevenueAutomationOpportunityInput = z.infer<typeof revenueAutomationOpportunitySchema>;
+
+export const deliveryReviewSchema = z.object({
+  projectName: z.string().trim().min(2).max(160),
+  projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
+  setupPriceUsd: z.coerce.number().min(0).max(100000).default(2500),
+  monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(300),
+  estimatedInternalMonthlyCostUsd: z.coerce.number().min(0).max(5000).default(50),
+  clientApprovedScope: z.coerce.boolean().default(false),
+  depositPaid: z.coerce.boolean().default(false),
+  publicDataVerified: z.coerce.boolean().default(false),
+  responsiveChecked: z.coerce.boolean().default(false),
+  linksChecked: z.coerce.boolean().default(false),
+  automationTested: z.coerce.boolean().default(false),
+  rollbackPlanReady: z.coerce.boolean().default(false),
+  notes: z.string().trim().max(1200).optional().default(""),
+});
+
+export type DeliveryReviewInput = z.infer<typeof deliveryReviewSchema>;
+
+export const proposalEmailSchema = z.object({
+  recipientEmail: z.string().trim().email().max(240),
+  contactName: z.string().trim().min(1).max(120).default("Robert"),
+  businessName: z.string().trim().min(2).max(160),
+  sourceUrl: z.string().trim().url().max(300).optional(),
+  businessSummary: z.string().trim().min(10).max(2000),
+  websitePriceUsd: z.coerce.number().min(0).max(100000).default(3500),
+  automationPriceUsd: z.coerce.number().min(0).max(100000).default(2500),
+  monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
+  estimatedInternalMonthlyCostUsd: z.coerce.number().min(0).max(5000).default(54),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type ProposalEmailInput = z.infer<typeof proposalEmailSchema>;
+
+export const revenueOutreachDraftSchema = proposalEmailSchema.extend({
+  leadId: z.string().trim().max(120).optional().default(""),
+  channel: z.enum(["email", "gmail", "mailto", "instagram", "contact_form"]).default("gmail"),
+  approvalStatus: z.enum(["draft", "approved"]).default("draft"),
+  mockupUrl: z.string().trim().url().max(300).optional(),
+});
+
+export type RevenueOutreachDraftInput = z.infer<typeof revenueOutreachDraftSchema>;
+
+export const revenueOutreachSendSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  approvalToSend: z.coerce.boolean().default(false),
+});
+
+export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
+
+export const improvementReviewSchema = z.object({
+  campaignName: z.string().trim().min(2).max(160),
+  periodLabel: z.string().trim().min(2).max(80).default("esta semana"),
+  leadsContacted: z.coerce.number().int().min(0).max(10000).default(0),
+  replies: z.coerce.number().int().min(0).max(10000).default(0),
+  callsBooked: z.coerce.number().int().min(0).max(10000).default(0),
+  dealsClosed: z.coerce.number().int().min(0).max(10000).default(0),
+  revenueCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  spendUsd: z.coerce.number().min(0).max(50000).default(0),
+  estimatedInternalMonthlyCostUsd: z.coerce.number().min(0).max(5000).default(50),
+  hoursSaved: z.coerce.number().min(0).max(10000).default(0),
+  defectsFound: z.coerce.number().int().min(0).max(10000).default(0),
+  clientComplaints: z.coerce.number().int().min(0).max(10000).default(0),
+  bestOffer: z.string().trim().max(200).optional().default(""),
+  biggestObjection: z.string().trim().max(500).optional().default(""),
+  notes: z.string().trim().max(1200).optional().default(""),
+});
+
+export type ImprovementReviewInput = z.infer<typeof improvementReviewSchema>;
+
+export const revenueLedgerEntrySchema = z.object({
+  kind: z.enum(["website_sale", "automation_sale", "bundle_sale", "retainer", "expense"]),
+  clientName: z.string().trim().min(2).max(160),
+  amountUsd: z.coerce.number().min(0).max(1000000),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueLedgerEntryInput = z.infer<typeof revenueLedgerEntrySchema>;
+
+export const revenueExpensePreflightSchema = z.object({
+  concept: z.string().trim().min(2).max(160),
+  amountUsd: z.coerce.number().min(0).max(1000000),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueExpensePreflightInput = z.infer<typeof revenueExpensePreflightSchema>;
+
+export const revenueLeadSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  contactChannel: z.enum(["email", "phone", "instagram", "contact_form", "unknown"]).default("unknown"),
+  contactValue: z.string().trim().max(240).optional().default(""),
+  evidence: z.string().trim().max(1200).optional().default(""),
+  painPoint: z.string().trim().max(500).optional().default(""),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(2500),
+  status: z.enum(["research", "qualified", "mockup_ready", "outreach_ready", "contacted", "proposal_sent", "closed", "disqualified"]).default("research"),
+});
+
+export type RevenueLeadInput = z.infer<typeof revenueLeadSchema>;
+
+export const revenueMockupSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  evidence: z.string().trim().max(1200).optional().default(""),
+  painPoint: z.string().trim().max(500).optional().default(""),
+  primaryOffer: z.string().trim().max(200).optional().default("Website 3D Premium + Automation Sprint"),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  includeAutomation: z.coerce.boolean().default(true),
+});
+
+export type RevenueMockupInput = z.infer<typeof revenueMockupSchema>;
+
+export const revenueMockupTemplatePackSchema = z.object({
+  niche: z.string().trim().min(2).max(120).default("med spas"),
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  dailyMockupTarget: z.coerce.number().int().min(1).max(50).default(8),
+  maxCustomMinutesPerMockup: z.coerce.number().int().min(5).max(120).default(18),
+  estimatedAiCostPerMockupUsd: z.coerce.number().min(0).max(10).default(0),
+});
+
+export type RevenueMockupTemplatePackInput = z.infer<typeof revenueMockupTemplatePackSchema>;
+
+export const revenueLaunchReadinessSchema = z.object({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("med spas / aesthetics"),
+  dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
+  dailyMockupTarget: z.coerce.number().int().min(1).max(25).default(5),
+  dailyContactTarget: z.coerce.number().int().min(1).max(50).default(10),
+  emailPending: z.coerce.boolean().default(true),
+});
+
+export type RevenueLaunchReadinessInput = z.infer<typeof revenueLaunchReadinessSchema>;
+
+export const revenueProjectPlanSchema = z.object({
+  clientName: z.string().trim().min(2).max(160),
+  projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
+  packageName: z.string().trim().min(2).max(200).default("Website 3D Premium + Automation Sprint"),
+  setupUsd: z.coerce.number().min(0).max(100000).default(3500),
+  monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
+  depositPaid: z.coerce.boolean().default(false),
+  scopeApproved: z.coerce.boolean().default(false),
+  publicDataVerified: z.coerce.boolean().default(false),
+  includesAutomation: z.coerce.boolean().default(true),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+  clientRequest: z.string().trim().max(1200).optional().default(""),
+});
+
+export type RevenueProjectPlanInput = z.infer<typeof revenueProjectPlanSchema>;
+
+export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
+  workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
+  sourceOpportunityId: z.string().trim().max(160).optional().default(""),
+  visualQaPassed: z.coerce.boolean().default(false),
+  technicalQaPassed: z.coerce.boolean().default(false),
+  automationQaPassed: z.coerce.boolean().default(false),
+  clientHandoffReady: z.coerce.boolean().default(false),
+});
+
+export type RevenueDeliveryWorkspaceInput = z.infer<typeof revenueDeliveryWorkspaceSchema>;
+
+export const revenueDeliveryWorkspaceUpdateSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(200),
+  publicDataVerified: z.coerce.boolean().optional(),
+  visualQaPassed: z.coerce.boolean().optional(),
+  technicalQaPassed: z.coerce.boolean().optional(),
+  automationQaPassed: z.coerce.boolean().optional(),
+  clientHandoffReady: z.coerce.boolean().optional(),
+  notes: z.string().trim().max(1200).optional(),
+});
+
+export type RevenueDeliveryWorkspaceUpdateInput = z.infer<typeof revenueDeliveryWorkspaceUpdateSchema>;
+
+export const revenueDeliveryWorkspaceDeliverSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(200),
+  approvedByRobert: z.coerce.boolean().default(false),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueDeliveryWorkspaceDeliverInput = z.infer<typeof revenueDeliveryWorkspaceDeliverSchema>;
+
+export const revenueDeliveryWorkspaceImprovementReviewSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(200),
+  periodLabel: z.string().trim().min(2).max(80).default("post-delivery week 1"),
+  leadsContacted: z.coerce.number().int().min(0).max(10000).default(0),
+  replies: z.coerce.number().int().min(0).max(10000).default(0),
+  callsBooked: z.coerce.number().int().min(0).max(10000).default(0),
+  dealsClosed: z.coerce.number().int().min(0).max(10000).default(0),
+  revenueCollectedUsd: z.coerce.number().min(0).max(1000000).optional(),
+  spendUsd: z.coerce.number().min(0).max(50000).optional(),
+  hoursSaved: z.coerce.number().min(0).max(10000).default(0),
+  defectsFound: z.coerce.number().int().min(0).max(10000).default(0),
+  clientComplaints: z.coerce.number().int().min(0).max(10000).default(0),
+  notes: z.string().trim().max(1200).optional().default(""),
+});
+
+export type RevenueDeliveryWorkspaceImprovementReviewInput = z.infer<typeof revenueDeliveryWorkspaceImprovementReviewSchema>;
+
+export const revenueAgentRunSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  request: z.string().trim().min(8).max(1600),
+  stage: z.enum(["lead_research", "mockup", "outreach", "proposal", "production", "delivery", "improvement"]).default("lead_research"),
+  projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
+  monthlyBudgetUsd: z.coerce.number().min(0).max(100).default(100),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  approvalToContact: z.coerce.boolean().default(false),
+  approvalToSpend: z.coerce.boolean().default(false),
+  approvalToBuild: z.coerce.boolean().default(false),
+});
+
+export type RevenueAgentRunInput = z.infer<typeof revenueAgentRunSchema>;
+
+export const revenueSalesAutopilotSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  contactChannel: z.enum(["email", "phone", "instagram", "contact_form", "unknown"]).default("unknown"),
+  contactValue: z.string().trim().max(240).optional().default(""),
+  evidence: z.string().trim().max(1200).optional().default(""),
+  painPoint: z.string().trim().max(500).optional().default(""),
+  request: z.string().trim().min(8).max(1600),
+  projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
+  monthlyBudgetUsd: z.coerce.number().min(0).max(100).default(100),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  recipientEmail: z.union([z.string().trim().email().max(240), z.literal("")]).optional().default(""),
+  contactName: z.string().trim().max(120).optional().default("Owner"),
+  sourceUrl: z.union([z.string().trim().url().max(300), z.literal("")]).optional().default(""),
+  businessSummary: z.string().trim().max(2000).optional().default(""),
+  monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
+  approvalToContact: z.coerce.boolean().default(false),
+  approvalToSpend: z.coerce.boolean().default(false),
+  approvalToBuild: z.coerce.boolean().default(false),
+});
+
+export type RevenueSalesAutopilotInput = z.infer<typeof revenueSalesAutopilotSchema>;
+
+export const revenueApprovalDecisionSchema = z.object({
+  targetId: z.string().trim().min(1).max(200),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
+  decision: z.enum(["approved", "rejected", "needs_changes"]),
+  approvedAction: z.string().trim().min(2).max(500),
+  maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueApprovalDecisionInput = z.infer<typeof revenueApprovalDecisionSchema>;
+
+export const revenueAutomationIntakeSchema = automationQuoteSchema.extend({
+  contactName: z.string().trim().max(120).optional().default(""),
+  contactEmail: z.union([z.string().trim().email().max(240), z.literal("")]).optional().default(""),
+  knownAnswers: z.string().trim().max(2000).optional().default(""),
+  source: z.enum(["manual", "lead", "website_form", "call", "email"]).default("manual"),
+});
+
+export type RevenueAutomationIntakeInput = z.infer<typeof revenueAutomationIntakeSchema>;
+
+export const revenueAutomationIntakeAnswerSchema = z.object({
+  intakeId: z.string().trim().min(1).max(200),
+  answers: z.string().trim().min(10).max(2000),
+});
+
+export type RevenueAutomationIntakeAnswerInput = z.infer<typeof revenueAutomationIntakeAnswerSchema>;
+
+export const revenueAutomationIntakeConvertSchema = z.object({
+  intakeId: z.string().trim().min(1).max(200),
+  status: z.enum(["intake", "quoted", "approved", "sold", "in_delivery", "delivered", "blocked"]).default("intake"),
+  clientApprovedScope: z.coerce.boolean().default(false),
+  depositPaid: z.coerce.boolean().default(false),
+});
+
+export type RevenueAutomationIntakeConvertInput = z.infer<typeof revenueAutomationIntakeConvertSchema>;
+
+export const revenueAutomationAgentCommandSchema = revenueAutomationIntakeSchema.extend({
+  createOpportunityIfClear: z.coerce.boolean().default(true),
+  lifecycleTarget: z.enum(["quote", "opportunity", "sale", "delivery"]).default("opportunity"),
+  clientApprovedScope: z.coerce.boolean().default(false),
+  depositPaid: z.coerce.boolean().default(false),
+  cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
+  createDeliveryWorkspaceIfSold: z.coerce.boolean().default(false),
+  workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
+  publicDataVerified: z.coerce.boolean().default(false),
+  visualQaPassed: z.coerce.boolean().default(false),
+  technicalQaPassed: z.coerce.boolean().default(false),
+  automationQaPassed: z.coerce.boolean().default(false),
+  clientHandoffReady: z.coerce.boolean().default(false),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+});
+
+export type RevenueAutomationAgentCommandInput = z.infer<typeof revenueAutomationAgentCommandSchema>;
+
+export const revenueAutomationOpportunityDeliverySchema = z.object({
+  opportunityId: z.string().trim().min(1).max(200),
+  workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
+  publicDataVerified: z.coerce.boolean().default(false),
+  visualQaPassed: z.coerce.boolean().default(false),
+  technicalQaPassed: z.coerce.boolean().default(false),
+  automationQaPassed: z.coerce.boolean().default(false),
+  clientHandoffReady: z.coerce.boolean().default(false),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+});
+
+export type RevenueAutomationOpportunityDeliveryInput = z.infer<typeof revenueAutomationOpportunityDeliverySchema>;
+
+export const revenueAutomationOpportunityCloseSchema = z.object({
+  opportunityId: z.string().trim().min(1).max(200),
+  cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
+  markScopeApproved: z.coerce.boolean().default(true),
+  notes: z.string().trim().max(800).optional().default(""),
+});
+
+export type RevenueAutomationOpportunityCloseInput = z.infer<typeof revenueAutomationOpportunityCloseSchema>;
+
+type RevenueLedgerEntry = RevenueLedgerEntryInput & {
+  id: string;
+  createdAt: string;
+};
+
+type RevenueLead = RevenueLeadInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RevenueOutreachDraft = RevenueOutreachDraftInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "draft" | "approved" | "blocked";
+  subject: string;
+  body: string;
+  pricing: ReturnType<typeof buildProposalEmail>["pricing"];
+  delivery: ReturnType<typeof buildProposalEmail>["delivery"] & {
+    provider?: string;
+    externalMessageId?: string;
+    sentAt?: string;
+    lastAttemptAt?: string;
+  };
+  links: ReturnType<typeof buildProposalEmail>["links"];
+  qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
+  nextAction: string;
+};
+
+type RevenueEmailProviderStatus = {
+  provider: "resend";
+  configured: boolean;
+  mode: "api" | "manual";
+  fromEmail: string;
+  missing: string[];
+  monthlyCostUsd: number;
+  sendPolicy: string;
+};
+
+type RevenueOutreachSendPayload = {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  idempotencyKey: string;
+};
+
+type RevenueOutreachSendResponse = {
+  id: string;
+};
+
+type RevenueAgentRun = RevenueAgentRunInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "ready" | "approval_required" | "blocked";
+  clarificationGate: {
+    status: "clear" | "needs_clarification";
+    missing: string[];
+    questions: string[];
+    minimumAnswer: string;
+    blocks: string[];
+  };
+  mainAgent: {
+    agent: string;
+    decision: string;
+    reason: string;
+  };
+  budgetGate: {
+    monthlyCapUsd: number;
+    insideCap: boolean;
+    cashProtected: boolean;
+    allowedSpendUsd: number;
+  };
+  workOrder: Array<{
+    step: string;
+    ownerAgent: string;
+    output: string;
+    approvalRequired: boolean;
+  }>;
+  subagentReviews: Array<{
+    agent: string;
+    verdict: "pass" | "fix" | "block";
+    correction: string;
+  }>;
+  requiredApprovals: string[];
+  nextActions: string[];
+  learningUpdate: string;
+};
+
+type RevenueAutomationOpportunity = RevenueAutomationOpportunityInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  quote: ReturnType<typeof buildAutomationQuote>;
+  qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
+  nextAction: string;
+};
+
+type RevenueImprovementReview = ReturnType<typeof buildImprovementReview> & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  playbookVersion: number;
+  decisionStatus: ReturnType<typeof buildImprovementReview>["decision"]["status"];
+  learningSummary: string;
+};
+
+type RevenueScoutingMission = ReturnType<typeof buildRevenueScoutingMission> & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "planned" | "in_research" | "ready_for_leads" | "blocked";
+  learningNote: string;
+};
+
+type RevenueDeliveryWorkspace = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  input: RevenueDeliveryWorkspaceInput;
+  status: "ready_to_deliver" | "needs_corrections" | "blocked";
+  projectPlan: ReturnType<typeof buildRevenueProjectPlan>;
+  deliveryReview: ReturnType<typeof buildDeliveryReview>;
+  correctionQueue: Array<{
+    agent: string;
+    priority: "high" | "medium";
+    action: string;
+    blocksDelivery: boolean;
+  }>;
+  runbook: Array<{
+    phase: string;
+    ownerAgent: string;
+    checklist: string[];
+  }>;
+  approvalSummary: {
+    canShowClientPreview: boolean;
+    canLaunch: boolean;
+    requiredBeforeClient: string[];
+  };
+  learningNote: string;
+};
+
+type RevenueApprovalDecision = RevenueApprovalDecisionInput & {
+  id: string;
+  createdAt: string;
+  guardrail: {
+    status: "recorded" | "blocked";
+    reason: string;
+  };
+};
+
+type RevenueAutomationIntake = RevenueAutomationIntakeInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "needs_answers" | "ready_for_quote";
+  quote: ReturnType<typeof buildAutomationQuote>;
+  missingAnswers: string[];
+  nextQuestions: string[];
+  answerTemplate: string;
+  blockedUntilAnswered: string[];
+  nextAction: string;
+};
+
+const revenueLedger: RevenueLedgerEntry[] = [];
+const revenueLeads: RevenueLead[] = [];
+const revenueOutreachDrafts: RevenueOutreachDraft[] = [];
+const revenueAgentRuns: RevenueAgentRun[] = [];
+const revenueAutomationOpportunities: RevenueAutomationOpportunity[] = [];
+const revenueImprovementReviews: RevenueImprovementReview[] = [];
+const revenueScoutingMissions: RevenueScoutingMission[] = [];
+const revenueDeliveryWorkspaces: RevenueDeliveryWorkspace[] = [];
+const revenueApprovalDecisions: RevenueApprovalDecision[] = [];
+const revenueAutomationIntakes: RevenueAutomationIntake[] = [];
+const persistedRevenueLedgerEntrySchema = revenueLedgerEntrySchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+});
+const persistedRevenueLeadSchema = revenueLeadSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+});
+const persistedRevenueOutreachDraftSchema = revenueOutreachDraftSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["draft", "approved", "blocked"]),
+  subject: z.string().trim().min(1),
+  body: z.string().trim().min(1),
+  pricing: z.object({
+    totalSetupUsd: z.number(),
+    depositUsd: z.number(),
+    monthlyRetainerUsd: z.number(),
+    estimatedInternalMonthlyCostUsd: z.number(),
+    grossMarginUsd: z.number(),
+    grossMarginPercent: z.number(),
+    insideCostCap: z.boolean(),
+  }),
+  delivery: z.object({
+    mode: z.string(),
+    sendStatus: z.string(),
+    reason: z.string(),
+    requiresApproval: z.boolean(),
+    provider: z.string().optional(),
+    externalMessageId: z.string().optional(),
+    sentAt: z.string().optional(),
+    lastAttemptAt: z.string().optional(),
+  }),
+  links: z.object({
+    mailto: z.string(),
+    gmailCompose: z.string(),
+  }),
+  qaGates: z.array(z.object({ gate: z.string(), passed: z.boolean(), fix: z.string() })),
+  nextAction: z.string(),
+});
+const persistedRevenueAgentRunSchema = revenueAgentRunSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["ready", "approval_required", "blocked"]),
+  mainAgent: z.object({
+    agent: z.string(),
+    decision: z.string(),
+    reason: z.string(),
+  }),
+  budgetGate: z.object({
+    monthlyCapUsd: z.number(),
+    insideCap: z.boolean(),
+    cashProtected: z.boolean(),
+    allowedSpendUsd: z.number(),
+  }),
+  clarificationGate: z.object({
+    status: z.enum(["clear", "needs_clarification"]),
+    missing: z.array(z.string()),
+    questions: z.array(z.string()),
+    minimumAnswer: z.string(),
+    blocks: z.array(z.string()),
+  }).optional().default({
+    status: "clear",
+    missing: [],
+    questions: [],
+    minimumAnswer: "Pedido anterior cargado antes del gate de claridad.",
+    blocks: [],
+  }),
+  workOrder: z.array(z.object({
+    step: z.string(),
+    ownerAgent: z.string(),
+    output: z.string(),
+    approvalRequired: z.boolean(),
+  })),
+  subagentReviews: z.array(z.object({
+    agent: z.string(),
+    verdict: z.enum(["pass", "fix", "block"]),
+    correction: z.string(),
+  })),
+  requiredApprovals: z.array(z.string()),
+  nextActions: z.array(z.string()),
+  learningUpdate: z.string(),
+});
+const persistedRevenueAutomationOpportunitySchema = revenueAutomationOpportunitySchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  quote: z.unknown(),
+  qaGates: z.array(z.object({ gate: z.string(), passed: z.boolean(), fix: z.string() })),
+  nextAction: z.string(),
+});
+const persistedRevenueImprovementReviewSchema = z.object({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  playbookVersion: z.number(),
+  decisionStatus: z.enum(["pause_and_fix", "scale_carefully", "iterate_small_batch"]),
+  learningSummary: z.string(),
+  input: improvementReviewSchema,
+  decision: z.object({
+    status: z.enum(["pause_and_fix", "scale_carefully", "iterate_small_batch"]),
+    reason: z.string(),
+    approvalMode: z.string(),
+  }),
+  metrics: z.object({
+    replyRate: z.number(),
+    bookingRate: z.number(),
+    closeRate: z.number(),
+    profitUsd: z.number(),
+    roiPercent: z.number(),
+    grossMarginPercent: z.number(),
+    costPerReplyUsd: z.number(),
+    costPerBookedCallUsd: z.number(),
+    insideSpendCap: z.boolean(),
+    profitable: z.boolean(),
+  }),
+  experiments: z.array(z.string()),
+  playbookUpdates: z.array(z.string()),
+  agentScorecard: z.array(z.object({
+    agent: z.string(),
+    score: z.string(),
+    lesson: z.string(),
+  })),
+  nextBatch: z.object({
+    maxLeads: z.number(),
+    maxSpendUsd: z.number(),
+    requiredBeforeNextSend: z.array(z.string()),
+  }),
+});
+const persistedRevenueScoutingMissionSchema = z.object({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["planned", "in_research", "ready_for_leads", "blocked"]),
+  learningNote: z.string(),
+  mission: z.object({
+    name: z.string(),
+    area: z.string(),
+    niche: z.string(),
+    offerFocus: z.enum(["websites", "automations", "both"]),
+    targetLeadCount: z.number(),
+    leadBatchSize: z.number(),
+    mode: z.enum(["free_public_research", "paid_data_requires_approval"]),
+  }),
+  budgetGate: z.object({
+    monthlyCapUsd: z.number(),
+    requestedPaidDataSpendUsd: z.number(),
+    approvedPaidDataSpendUsd: z.number(),
+    requiresApprovalToSpend: z.boolean(),
+    allowedBeforeApproval: z.array(z.string()),
+    blockedBeforeApproval: z.array(z.string()),
+  }),
+  searchQueries: z.array(z.string()),
+  leadEvidenceChecklist: z.array(z.string()),
+  qualificationScorecard: z.array(z.object({
+    item: z.string(),
+    maxPoints: z.number(),
+    signals: z.array(z.string()),
+  })),
+  subagentReviews: z.array(z.object({
+    agent: z.string(),
+    check: z.string(),
+  })),
+  nextActions: z.array(z.string()),
+});
+const persistedRevenueDeliveryWorkspaceSchema = z.object({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  input: revenueDeliveryWorkspaceSchema,
+  status: z.enum(["ready_to_deliver", "needs_corrections", "blocked"]),
+  projectPlan: z.unknown(),
+  deliveryReview: z.unknown(),
+  correctionQueue: z.array(z.object({
+    agent: z.string(),
+    priority: z.enum(["high", "medium"]),
+    action: z.string(),
+    blocksDelivery: z.boolean(),
+  })),
+  runbook: z.array(z.object({
+    phase: z.string(),
+    ownerAgent: z.string(),
+    checklist: z.array(z.string()),
+  })),
+  approvalSummary: z.object({
+    canShowClientPreview: z.boolean(),
+    canLaunch: z.boolean(),
+    requiredBeforeClient: z.array(z.string()),
+  }),
+  learningNote: z.string(),
+});
+const persistedRevenueApprovalDecisionSchema = revenueApprovalDecisionSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  guardrail: z.object({
+    status: z.enum(["recorded", "blocked"]),
+    reason: z.string(),
+  }),
+});
+const persistedRevenueAutomationIntakeSchema = revenueAutomationIntakeSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["needs_answers", "ready_for_quote"]),
+  quote: z.unknown(),
+  missingAnswers: z.array(z.string()),
+  nextQuestions: z.array(z.string()),
+  answerTemplate: z.string().optional().default(""),
+  blockedUntilAnswered: z.array(z.string()).optional().default([]),
+  nextAction: z.string(),
+});
+let revenueLedgerLoaded = false;
+let revenueLedgerPersistenceError: string | null = null;
+let revenueLedgerPathOverride: string | null = null;
+let revenueLeadsLoaded = false;
+let revenueLeadsPersistenceError: string | null = null;
+let revenueLeadsPathOverride: string | null = null;
+let revenueOutreachLoaded = false;
+let revenueOutreachPersistenceError: string | null = null;
+let revenueOutreachPathOverride: string | null = null;
+let revenueOutreachSenderOverride: ((payload: RevenueOutreachSendPayload) => Promise<RevenueOutreachSendResponse>) | null = null;
+let revenueAgentRunsLoaded = false;
+let revenueAgentRunsPersistenceError: string | null = null;
+let revenueAgentRunsPathOverride: string | null = null;
+let revenueAutomationOpportunitiesLoaded = false;
+let revenueAutomationOpportunitiesPersistenceError: string | null = null;
+let revenueAutomationOpportunitiesPathOverride: string | null = null;
+let revenueImprovementReviewsLoaded = false;
+let revenueImprovementReviewsPersistenceError: string | null = null;
+let revenueImprovementReviewsPathOverride: string | null = null;
+let revenueScoutingMissionsLoaded = false;
+let revenueScoutingMissionsPersistenceError: string | null = null;
+let revenueScoutingMissionsPathOverride: string | null = null;
+let revenueDeliveryWorkspacesLoaded = false;
+let revenueDeliveryWorkspacesPersistenceError: string | null = null;
+let revenueDeliveryWorkspacesPathOverride: string | null = null;
+let revenueApprovalDecisionsLoaded = false;
+let revenueApprovalDecisionsPersistenceError: string | null = null;
+let revenueApprovalDecisionsPathOverride: string | null = null;
+let revenueAutomationIntakesLoaded = false;
+let revenueAutomationIntakesPersistenceError: string | null = null;
+let revenueAutomationIntakesPathOverride: string | null = null;
+
+function getRevenueLedgerPath() {
+  return revenueLedgerPathOverride || process.env.REVENUE_ENGINE_LEDGER_PATH || path.join(process.cwd(), "revenue_engine_data", "ledger.json");
+}
+
+function getRevenueLeadsPath() {
+  return revenueLeadsPathOverride || process.env.REVENUE_ENGINE_LEADS_PATH || path.join(process.cwd(), "revenue_engine_data", "leads.json");
+}
+
+function getRevenueOutreachPath() {
+  return revenueOutreachPathOverride || process.env.REVENUE_ENGINE_OUTREACH_PATH || path.join(process.cwd(), "revenue_engine_data", "outreach.json");
+}
+
+function getRevenueEmailProviderStatus(): RevenueEmailProviderStatus {
+  const fromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || "";
+  const missing = [
+    !process.env.RESEND_API_KEY && "RESEND_API_KEY",
+    !fromEmail && "REVENUE_ENGINE_FROM_EMAIL",
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    provider: "resend",
+    configured: missing.length === 0,
+    mode: missing.length === 0 ? "api" : "manual",
+    fromEmail,
+    missing,
+    monthlyCostUsd: 0,
+    sendPolicy: "Solo envia drafts approved con approvalToSend=true; si falta provider queda en Gmail/mailto manual.",
+  };
+}
+
+function textToHtml(text: string) {
+  return text
+    .split("\n")
+    .map((line) => line.trim().length > 0 ? line : "&nbsp;")
+    .map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
+    .join("");
+}
+
+async function sendWithResend(payload: RevenueOutreachSendPayload): Promise<RevenueOutreachSendResponse> {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": payload.idempotencyKey,
+    },
+    body: JSON.stringify({
+      from: payload.from,
+      to: [payload.to],
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
+      tags: [
+        { name: "system", value: "revenue_engine" },
+        { name: "draft_id", value: payload.idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 256) },
+      ],
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = typeof data?.message === "string" ? data.message : `Resend API failed with ${response.status}`;
+    throw new Error(message);
+  }
+  if (typeof data?.id !== "string" || data.id.trim().length === 0) {
+    throw new Error("Resend API did not return a message id");
+  }
+  return { id: data.id };
+}
+
+async function sendRevenueOutreachPayload(payload: RevenueOutreachSendPayload) {
+  if (revenueOutreachSenderOverride) return revenueOutreachSenderOverride(payload);
+  return sendWithResend(payload);
+}
+
+function getRevenueAgentRunsPath() {
+  return revenueAgentRunsPathOverride || process.env.REVENUE_ENGINE_AGENT_RUNS_PATH || path.join(process.cwd(), "revenue_engine_data", "agent_runs.json");
+}
+
+function getRevenueAutomationOpportunitiesPath() {
+  return revenueAutomationOpportunitiesPathOverride || process.env.REVENUE_ENGINE_AUTOMATION_OPPORTUNITIES_PATH || path.join(process.cwd(), "revenue_engine_data", "automation_opportunities.json");
+}
+
+function getRevenueImprovementReviewsPath() {
+  return revenueImprovementReviewsPathOverride || process.env.REVENUE_ENGINE_IMPROVEMENT_REVIEWS_PATH || path.join(process.cwd(), "revenue_engine_data", "improvement_reviews.json");
+}
+
+function getRevenueScoutingMissionsPath() {
+  return revenueScoutingMissionsPathOverride || process.env.REVENUE_ENGINE_SCOUTING_MISSIONS_PATH || path.join(process.cwd(), "revenue_engine_data", "scouting_missions.json");
+}
+
+function getRevenueDeliveryWorkspacesPath() {
+  return revenueDeliveryWorkspacesPathOverride || process.env.REVENUE_ENGINE_DELIVERY_WORKSPACES_PATH || path.join(process.cwd(), "revenue_engine_data", "delivery_workspaces.json");
+}
+
+function getRevenueApprovalDecisionsPath() {
+  return revenueApprovalDecisionsPathOverride || process.env.REVENUE_ENGINE_APPROVAL_DECISIONS_PATH || path.join(process.cwd(), "revenue_engine_data", "approval_decisions.json");
+}
+
+function getRevenueAutomationIntakesPath() {
+  return revenueAutomationIntakesPathOverride || process.env.REVENUE_ENGINE_AUTOMATION_INTAKES_PATH || path.join(process.cwd(), "revenue_engine_data", "automation_intakes.json");
+}
+
+function loadRevenueLedger() {
+  if (revenueLedgerLoaded) return;
+  revenueLedgerLoaded = true;
+  const ledgerPath = getRevenueLedgerPath();
+
+  if (!fs.existsSync(ledgerPath)) return;
+
+  try {
+    const raw = fs.readFileSync(ledgerPath, "utf8");
+    const parsed = z.array(persistedRevenueLedgerEntrySchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueLedgerPersistenceError = "Ledger local invalido; no se cargo para evitar metricas incorrectas.";
+      return;
+    }
+    revenueLedger.splice(0, revenueLedger.length, ...parsed.data);
+    revenueLedgerPersistenceError = null;
+  } catch (error) {
+    revenueLedgerPersistenceError = error instanceof Error ? error.message : "No se pudo leer el ledger local.";
+  }
+}
+
+function loadRevenueLeads() {
+  if (revenueLeadsLoaded) return;
+  revenueLeadsLoaded = true;
+  const leadsPath = getRevenueLeadsPath();
+
+  if (!fs.existsSync(leadsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(leadsPath, "utf8");
+    const parsed = z.array(persistedRevenueLeadSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueLeadsPersistenceError = "Leads locales invalidos; no se cargaron para evitar pipeline incorrecto.";
+      return;
+    }
+    revenueLeads.splice(0, revenueLeads.length, ...parsed.data);
+    revenueLeadsPersistenceError = null;
+  } catch (error) {
+    revenueLeadsPersistenceError = error instanceof Error ? error.message : "No se pudo leer el archivo local de leads.";
+  }
+}
+
+function loadRevenueOutreach() {
+  if (revenueOutreachLoaded) return;
+  revenueOutreachLoaded = true;
+  const outreachPath = getRevenueOutreachPath();
+
+  if (!fs.existsSync(outreachPath)) return;
+
+  try {
+    const raw = fs.readFileSync(outreachPath, "utf8");
+    const parsed = z.array(persistedRevenueOutreachDraftSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueOutreachPersistenceError = "Outreach local invalido; no se cargo para evitar contactos incorrectos.";
+      return;
+    }
+    revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length, ...parsed.data);
+    revenueOutreachPersistenceError = null;
+  } catch (error) {
+    revenueOutreachPersistenceError = error instanceof Error ? error.message : "No se pudo leer el outbox local.";
+  }
+}
+
+function loadRevenueAgentRuns() {
+  if (revenueAgentRunsLoaded) return;
+  revenueAgentRunsLoaded = true;
+  const agentRunsPath = getRevenueAgentRunsPath();
+
+  if (!fs.existsSync(agentRunsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(agentRunsPath, "utf8");
+    const parsed = z.array(persistedRevenueAgentRunSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueAgentRunsPersistenceError = "Corridas de agente invalidas; no se cargaron para evitar decisiones incorrectas.";
+      return;
+    }
+    revenueAgentRuns.splice(0, revenueAgentRuns.length, ...parsed.data);
+    revenueAgentRunsPersistenceError = null;
+  } catch (error) {
+    revenueAgentRunsPersistenceError = error instanceof Error ? error.message : "No se pudo leer el archivo local de corridas.";
+  }
+}
+
+function loadRevenueAutomationOpportunities() {
+  if (revenueAutomationOpportunitiesLoaded) return;
+  revenueAutomationOpportunitiesLoaded = true;
+  const opportunitiesPath = getRevenueAutomationOpportunitiesPath();
+
+  if (!fs.existsSync(opportunitiesPath)) return;
+
+  try {
+    const raw = fs.readFileSync(opportunitiesPath, "utf8");
+    const parsed = z.array(persistedRevenueAutomationOpportunitySchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueAutomationOpportunitiesPersistenceError = "Oportunidades de automatizacion invalidas; no se cargaron.";
+      return;
+    }
+    revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length, ...(parsed.data as RevenueAutomationOpportunity[]));
+    revenueAutomationOpportunitiesPersistenceError = null;
+  } catch (error) {
+    revenueAutomationOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo leer oportunidades de automatizacion.";
+  }
+}
+
+function loadRevenueImprovementReviews() {
+  if (revenueImprovementReviewsLoaded) return;
+  revenueImprovementReviewsLoaded = true;
+  const reviewsPath = getRevenueImprovementReviewsPath();
+
+  if (!fs.existsSync(reviewsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(reviewsPath, "utf8");
+    const parsed = z.array(persistedRevenueImprovementReviewSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueImprovementReviewsPersistenceError = "Reviews de mejora invalidos; no se cargaron para evitar aprendizajes incorrectos.";
+      return;
+    }
+    revenueImprovementReviews.splice(0, revenueImprovementReviews.length, ...(parsed.data as RevenueImprovementReview[]));
+    revenueImprovementReviewsPersistenceError = null;
+  } catch (error) {
+    revenueImprovementReviewsPersistenceError = error instanceof Error ? error.message : "No se pudo leer reviews de mejora.";
+  }
+}
+
+function loadRevenueScoutingMissions() {
+  if (revenueScoutingMissionsLoaded) return;
+  revenueScoutingMissionsLoaded = true;
+  const missionsPath = getRevenueScoutingMissionsPath();
+
+  if (!fs.existsSync(missionsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(missionsPath, "utf8");
+    const parsed = z.array(persistedRevenueScoutingMissionSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueScoutingMissionsPersistenceError = "Misiones de scouting invalidas; no se cargaron.";
+      return;
+    }
+    revenueScoutingMissions.splice(0, revenueScoutingMissions.length, ...(parsed.data as RevenueScoutingMission[]));
+    revenueScoutingMissionsPersistenceError = null;
+  } catch (error) {
+    revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo leer misiones de scouting.";
+  }
+}
+
+function loadRevenueDeliveryWorkspaces() {
+  if (revenueDeliveryWorkspacesLoaded) return;
+  revenueDeliveryWorkspacesLoaded = true;
+  const workspacesPath = getRevenueDeliveryWorkspacesPath();
+
+  if (!fs.existsSync(workspacesPath)) return;
+
+  try {
+    const raw = fs.readFileSync(workspacesPath, "utf8");
+    const parsed = z.array(persistedRevenueDeliveryWorkspaceSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueDeliveryWorkspacesPersistenceError = "Delivery workspaces invalidos; no se cargaron para evitar entregas incorrectas.";
+      return;
+    }
+    revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length, ...(parsed.data as RevenueDeliveryWorkspace[]));
+    revenueDeliveryWorkspacesPersistenceError = null;
+  } catch (error) {
+    revenueDeliveryWorkspacesPersistenceError = error instanceof Error ? error.message : "No se pudo leer delivery workspaces.";
+  }
+}
+
+function loadRevenueApprovalDecisions() {
+  if (revenueApprovalDecisionsLoaded) return;
+  revenueApprovalDecisionsLoaded = true;
+  const decisionsPath = getRevenueApprovalDecisionsPath();
+
+  if (!fs.existsSync(decisionsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(decisionsPath, "utf8");
+    const parsed = z.array(persistedRevenueApprovalDecisionSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueApprovalDecisionsPersistenceError = "Approval decisions invalidas; no se cargaron.";
+      return;
+    }
+    revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length, ...parsed.data);
+    revenueApprovalDecisionsPersistenceError = null;
+  } catch (error) {
+    revenueApprovalDecisionsPersistenceError = error instanceof Error ? error.message : "No se pudo leer approval decisions.";
+  }
+}
+
+function loadRevenueAutomationIntakes() {
+  if (revenueAutomationIntakesLoaded) return;
+  revenueAutomationIntakesLoaded = true;
+  const intakesPath = getRevenueAutomationIntakesPath();
+
+  if (!fs.existsSync(intakesPath)) return;
+
+  try {
+    const raw = fs.readFileSync(intakesPath, "utf8");
+    const parsed = z.array(persistedRevenueAutomationIntakeSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueAutomationIntakesPersistenceError = "Automation intakes invalidos; no se cargaron.";
+      return;
+    }
+    revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length, ...(parsed.data as RevenueAutomationIntake[]));
+    revenueAutomationIntakesPersistenceError = null;
+  } catch (error) {
+    revenueAutomationIntakesPersistenceError = error instanceof Error ? error.message : "No se pudo leer automation intakes.";
+  }
+}
+
+function persistRevenueLedger() {
+  const ledgerPath = getRevenueLedgerPath();
+  try {
+    fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+    fs.writeFileSync(ledgerPath, `${JSON.stringify(revenueLedger, null, 2)}\n`, "utf8");
+    revenueLedgerPersistenceError = null;
+  } catch (error) {
+    revenueLedgerPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el ledger local.";
+    throw error;
+  }
+}
+
+function persistRevenueLeads() {
+  const leadsPath = getRevenueLeadsPath();
+  try {
+    fs.mkdirSync(path.dirname(leadsPath), { recursive: true });
+    fs.writeFileSync(leadsPath, `${JSON.stringify(revenueLeads, null, 2)}\n`, "utf8");
+    revenueLeadsPersistenceError = null;
+  } catch (error) {
+    revenueLeadsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el archivo local de leads.";
+    throw error;
+  }
+}
+
+function persistRevenueOutreach() {
+  const outreachPath = getRevenueOutreachPath();
+  try {
+    fs.mkdirSync(path.dirname(outreachPath), { recursive: true });
+    fs.writeFileSync(outreachPath, `${JSON.stringify(revenueOutreachDrafts, null, 2)}\n`, "utf8");
+    revenueOutreachPersistenceError = null;
+  } catch (error) {
+    revenueOutreachPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el outbox local.";
+    throw error;
+  }
+}
+
+function persistRevenueAgentRuns() {
+  const agentRunsPath = getRevenueAgentRunsPath();
+  try {
+    fs.mkdirSync(path.dirname(agentRunsPath), { recursive: true });
+    fs.writeFileSync(agentRunsPath, `${JSON.stringify(revenueAgentRuns, null, 2)}\n`, "utf8");
+    revenueAgentRunsPersistenceError = null;
+  } catch (error) {
+    revenueAgentRunsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar la corrida de agente.";
+    throw error;
+  }
+}
+
+function persistRevenueAutomationOpportunities() {
+  const opportunitiesPath = getRevenueAutomationOpportunitiesPath();
+  try {
+    fs.mkdirSync(path.dirname(opportunitiesPath), { recursive: true });
+    fs.writeFileSync(opportunitiesPath, `${JSON.stringify(revenueAutomationOpportunities, null, 2)}\n`, "utf8");
+    revenueAutomationOpportunitiesPersistenceError = null;
+  } catch (error) {
+    revenueAutomationOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar oportunidad de automatizacion.";
+    throw error;
+  }
+}
+
+function persistRevenueImprovementReviews() {
+  const reviewsPath = getRevenueImprovementReviewsPath();
+  try {
+    fs.mkdirSync(path.dirname(reviewsPath), { recursive: true });
+    fs.writeFileSync(reviewsPath, `${JSON.stringify(revenueImprovementReviews, null, 2)}\n`, "utf8");
+    revenueImprovementReviewsPersistenceError = null;
+  } catch (error) {
+    revenueImprovementReviewsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar review de mejora.";
+    throw error;
+  }
+}
+
+function persistRevenueScoutingMissions() {
+  const missionsPath = getRevenueScoutingMissionsPath();
+  try {
+    fs.mkdirSync(path.dirname(missionsPath), { recursive: true });
+    fs.writeFileSync(missionsPath, `${JSON.stringify(revenueScoutingMissions, null, 2)}\n`, "utf8");
+    revenueScoutingMissionsPersistenceError = null;
+  } catch (error) {
+    revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar mision de scouting.";
+    throw error;
+  }
+}
+
+function persistRevenueDeliveryWorkspaces() {
+  const workspacesPath = getRevenueDeliveryWorkspacesPath();
+  try {
+    fs.mkdirSync(path.dirname(workspacesPath), { recursive: true });
+    fs.writeFileSync(workspacesPath, `${JSON.stringify(revenueDeliveryWorkspaces, null, 2)}\n`, "utf8");
+    revenueDeliveryWorkspacesPersistenceError = null;
+  } catch (error) {
+    revenueDeliveryWorkspacesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar delivery workspace.";
+    throw error;
+  }
+}
+
+function persistRevenueApprovalDecisions() {
+  const decisionsPath = getRevenueApprovalDecisionsPath();
+  try {
+    fs.mkdirSync(path.dirname(decisionsPath), { recursive: true });
+    fs.writeFileSync(decisionsPath, `${JSON.stringify(revenueApprovalDecisions, null, 2)}\n`, "utf8");
+    revenueApprovalDecisionsPersistenceError = null;
+  } catch (error) {
+    revenueApprovalDecisionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar approval decision.";
+    throw error;
+  }
+}
+
+function persistRevenueAutomationIntakes() {
+  const intakesPath = getRevenueAutomationIntakesPath();
+  try {
+    fs.mkdirSync(path.dirname(intakesPath), { recursive: true });
+    fs.writeFileSync(intakesPath, `${JSON.stringify(revenueAutomationIntakes, null, 2)}\n`, "utf8");
+    revenueAutomationIntakesPersistenceError = null;
+  } catch (error) {
+    revenueAutomationIntakesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar automation intake.";
+    throw error;
+  }
+}
 
 const agentRoster = [
   {
@@ -62,14 +1293,26 @@ const agentRoster = [
   },
 ];
 
-const pipelineStages = [
-  { id: "lead_research", name: "Research", count: 0, valueUsd: 0 },
-  { id: "qualified", name: "Calificados", count: 0, valueUsd: 0 },
-  { id: "mockup", name: "Mockup", count: 0, valueUsd: 0 },
-  { id: "outreach", name: "Outreach", count: 0, valueUsd: 0 },
-  { id: "proposal", name: "Propuesta", count: 0, valueUsd: 0 },
-  { id: "closed", name: "Cerrados", count: 0, valueUsd: 0 },
-];
+function isSaleEntry(entry: RevenueLedgerEntry) {
+  return entry.kind === "website_sale" || entry.kind === "automation_sale" || entry.kind === "bundle_sale" || entry.kind === "retainer";
+}
+
+function buildPipelineStages(entries: RevenueLedgerEntry[], leads: RevenueLead[]) {
+  const sales = entries.filter(isSaleEntry);
+  const closedValueUsd = sales.reduce((total, entry) => total + entry.amountUsd, 0);
+  const valueFor = (statuses: RevenueLead["status"][]) =>
+    leads.filter((lead) => statuses.includes(lead.status)).reduce((total, lead) => total + lead.estimatedOfferUsd, 0);
+  const countFor = (statuses: RevenueLead["status"][]) => leads.filter((lead) => statuses.includes(lead.status)).length;
+
+  return [
+    { id: "lead_research", name: "Research", count: countFor(["research"]), valueUsd: valueFor(["research"]) },
+    { id: "qualified", name: "Calificados", count: countFor(["qualified"]), valueUsd: valueFor(["qualified"]) },
+    { id: "mockup", name: "Mockup", count: countFor(["mockup_ready"]), valueUsd: valueFor(["mockup_ready"]) },
+    { id: "outreach", name: "Outreach", count: countFor(["outreach_ready", "contacted"]), valueUsd: valueFor(["outreach_ready", "contacted"]) },
+    { id: "proposal", name: "Propuesta", count: countFor(["proposal_sent"]), valueUsd: valueFor(["proposal_sent"]) },
+    { id: "closed", name: "Cerrados", count: sales.length, valueUsd: closedValueUsd },
+  ];
+}
 
 const packages = [
   {
@@ -110,18 +1353,1290 @@ const packages = [
   },
 ];
 
+function buildRevenueProfitGuard({
+  cashCollectedUsd,
+  estimatedSpendUsd,
+  profitUsd,
+  approvalQueue,
+}: {
+  cashCollectedUsd: number;
+  estimatedSpendUsd: number;
+  profitUsd: number;
+  approvalQueue: number;
+}) {
+  const remainingCapUsd = Math.max(0, 100 - estimatedSpendUsd);
+  const cashCoverageUsd = cashCollectedUsd - estimatedSpendUsd;
+  const status =
+    estimatedSpendUsd >= 100 || estimatedSpendUsd > cashCollectedUsd
+      ? "pause_spend"
+      : cashCollectedUsd <= 0
+        ? "collect_first"
+        : approvalQueue > 0
+          ? "review_queue"
+          : "scale_carefully";
+
+  return {
+    status,
+    monthlyCapUsd: 100,
+    estimatedSpendUsd,
+    remainingCapUsd,
+    cashCollectedUsd,
+    cashCoverageUsd,
+    profitUsd,
+    canSpendUsd: status === "scale_carefully" ? Math.min(remainingCapUsd, Math.max(0, cashCoverageUsd)) : 0,
+    reason:
+      status === "pause_spend"
+        ? "Pausar gasto: el spend llego al cap o supera el cash cobrado."
+        : status === "collect_first"
+          ? "Cobrar primero: todavia no hay cash cobrado para financiar gasto externo."
+          : status === "review_queue"
+            ? "Hay aprobaciones pendientes antes de escalar gasto/contacto."
+            : "Puede escalar con batch pequeno, sin pasar el cap y manteniendo aprobacion humana.",
+    requiredActions:
+      status === "pause_spend"
+        ? ["pausar gasto pagado", "cobrar deposito o retainer", "reducir herramientas/costo mensual"]
+        : status === "collect_first"
+          ? ["vender en draft/manual", "cobrar deposito", "mantener research gratis"]
+          : status === "review_queue"
+            ? ["resolver aprobaciones pendientes", "revisar outbox/QA", "confirmar evidencia y margen"]
+            : ["mantener batch pequeno", "registrar cash/costo en ledger", "revisar aprendizaje semanal"],
+  };
+}
+
+function buildRevenueNextBatchPlan(input: {
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  latestReview?: RevenueImprovementReview;
+  approvalQueue: number;
+}) {
+  const latestReview = input.latestReview;
+  const hasRevenueProof = input.profitGuard.cashCollectedUsd > 0 && input.profitGuard.profitUsd >= 0;
+  const qualityBlocked = Boolean(latestReview && (latestReview.input.defectsFound >= 3 || latestReview.input.clientComplaints > 0));
+  const reviewPaused = latestReview?.decisionStatus === "pause_and_fix";
+  const canSpendUsd = Math.max(0, Math.min(100, input.profitGuard.canSpendUsd));
+  const maxSpendUsd =
+    qualityBlocked || reviewPaused || input.profitGuard.status === "pause_spend"
+      ? 0
+      : input.profitGuard.status === "collect_first"
+        ? 0
+        : latestReview?.decisionStatus === "scale_carefully"
+          ? Math.min(canSpendUsd, latestReview.nextBatch.maxSpendUsd)
+          : Math.min(canSpendUsd, 10);
+  const status =
+    qualityBlocked || reviewPaused || input.profitGuard.status === "pause_spend"
+      ? "pause" as const
+      : input.profitGuard.status === "collect_first"
+        ? "collect_first" as const
+        : latestReview?.decisionStatus === "scale_carefully" && hasRevenueProof
+          ? "scale_carefully" as const
+          : "iterate_small_batch" as const;
+  const maxLeads =
+    status === "scale_carefully"
+      ? Math.min(25, latestReview?.nextBatch.maxLeads || 25)
+      : status === "iterate_small_batch"
+        ? 10
+        : 0;
+
+  return {
+    status,
+    maxLeads,
+    maxSpendUsd,
+    reason:
+      status === "pause"
+        ? "Pausar siguiente batch hasta resolver QA, costo, quejas o gasto bloqueado."
+        : status === "collect_first"
+          ? "Cobrar deposito/cash primero; solo research gratis y drafts internos."
+          : status === "scale_carefully"
+            ? "Hay prueba de cash/profit; escalar en batch pequeno sin pasar cap ni aprobaciones."
+            : "Iterar con batch pequeno porque todavia falta prueba fuerte de ROI.",
+    requiredBeforeNextAction: [
+      status === "collect_first" && "cobrar deposito antes de gastar",
+      status === "pause" && "resolver bloqueos QA/costo antes de contactar",
+      input.approvalQueue > 0 && "limpiar approval queue",
+      "aprobar mensaje antes de enviar",
+      "guardar resultado y objecion despues del batch",
+    ].filter(Boolean) as string[],
+    allowedActions:
+      status === "collect_first"
+        ? ["research publico gratis", "mockup/draft interno", "pedir deposito"]
+        : status === "pause"
+          ? ["corregir QA", "bajar costo", "revisar oferta"]
+          : ["contactar batch aprobado", "guardar metricas", "crear review semanal"],
+    latestReviewId: latestReview?.id || "",
+  };
+}
+
+function buildRevenueExecutiveSummary(input: {
+  appsSold: number;
+  automationsSold: number;
+  revenueUsd: number;
+  cashCollectedUsd: number;
+  estimatedSpendUsd: number;
+  profitUsd: number;
+  approvalQueue: number;
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  nextBatchPlan: ReturnType<typeof buildRevenueNextBatchPlan>;
+}) {
+  const totalProductsSold = input.appsSold + input.automationsSold;
+  const collectionRatePercent = input.revenueUsd > 0 ? Math.round((input.cashCollectedUsd / input.revenueUsd) * 100) : 0;
+  const profitMarginPercent = input.cashCollectedUsd > 0 ? Math.round((input.profitUsd / input.cashCollectedUsd) * 100) : 0;
+  const status =
+    input.profitGuard.status === "pause_spend" || input.nextBatchPlan.status === "pause"
+      ? "blocked" as const
+      : input.profitGuard.status === "collect_first"
+        ? "collect_first" as const
+        : input.approvalQueue > 0
+          ? "needs_approval" as const
+          : "ready" as const;
+
+  return {
+    status,
+    headline:
+      totalProductsSold === 0
+        ? "Todavia no hay ventas registradas; operar en modo draft y cobrar deposito primero."
+        : `${input.appsSold} apps/websites y ${input.automationsSold} automatizaciones vendidas; cash cobrado ${input.cashCollectedUsd.toLocaleString("en-US")} USD.`,
+    appsSold: input.appsSold,
+    automationsSold: input.automationsSold,
+    totalProductsSold,
+    revenueUsd: input.revenueUsd,
+    cashCollectedUsd: input.cashCollectedUsd,
+    estimatedSpendUsd: input.estimatedSpendUsd,
+    profitUsd: input.profitUsd,
+    collectionRatePercent,
+    profitMarginPercent,
+    approvalQueue: input.approvalQueue,
+    nextFocus:
+      status === "blocked"
+        ? "Resolver bloqueos antes de gastar, contactar o entregar."
+        : status === "collect_first"
+          ? "Cerrar deposito/cash antes de cualquier gasto externo."
+          : status === "needs_approval"
+            ? "Limpiar approval queue y aprobar solo acciones rentables."
+            : "Ejecutar el siguiente batch pequeno dentro del cap.",
+  };
+}
+
+function buildRevenueAgentOperatingContract(input: {
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  nextBatchPlan: ReturnType<typeof buildRevenueNextBatchPlan>;
+  approvalQueue: number;
+}) {
+  const mode =
+    input.profitGuard.status === "pause_spend" || input.nextBatchPlan.status === "pause"
+      ? "correction_only" as const
+      : input.profitGuard.status === "collect_first"
+        ? "draft_only" as const
+        : input.approvalQueue > 0
+          ? "approval_queue" as const
+          : "controlled_autopilot" as const;
+
+  return {
+    mode,
+    mainAgent: "growth-director",
+    canRunAutonomously:
+      mode === "correction_only"
+        ? ["corregir QA", "reducir costo", "preparar drafts internos"]
+        : mode === "draft_only"
+          ? ["research publico gratis", "mockup interno", "cotizacion en draft", "pedir deposito"]
+          : mode === "approval_queue"
+            ? ["organizar approvals", "preparar correcciones", "actualizar resumen ejecutivo"]
+            : ["research publico", "batch aprobado", "drafts", "QA", "review semanal"],
+    requiresHumanApproval: [
+      "contactar negocio externo",
+      "enviar email/DM/formulario",
+      "gastar dinero",
+      "comprar data",
+      "publicar mockup",
+      "activar automatizacion",
+      "cobrar cliente",
+    ],
+    blockedActions:
+      mode === "controlled_autopilot"
+        ? []
+        : ["contacto externo", "gasto externo", "launch", "automatizacion en vivo"],
+    currentInstruction:
+      mode === "correction_only"
+        ? "Solo corregir bloqueos; no vender, gastar, contactar ni lanzar."
+        : mode === "draft_only"
+          ? "Preparar venta en draft y cobrar deposito antes de gastar."
+          : mode === "approval_queue"
+            ? "Resolver approvals antes de avanzar el siguiente batch."
+      : "Ejecutar batch pequeno aprobado y registrar resultados.",
+  };
+}
+
+function buildRevenueOperatorConsole(input: {
+  appsSold: number;
+  automationsSold: number;
+  revenueUsd: number;
+  cashCollectedUsd: number;
+  estimatedSpendUsd: number;
+  profitUsd: number;
+  approvalQueue: number;
+  executiveSummary: ReturnType<typeof buildRevenueExecutiveSummary>;
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  nextBatchPlan: ReturnType<typeof buildRevenueNextBatchPlan>;
+  agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
+}) {
+  const canSpendNow = input.profitGuard.canSpendUsd > 0 && input.agentOperatingContract.mode === "controlled_autopilot";
+  const nextCommand =
+    input.executiveSummary.status === "blocked"
+      ? "Resolver bloqueos de QA/costo antes de contactar, gastar o entregar."
+      : input.executiveSummary.status === "collect_first"
+        ? "Vender en draft y cobrar deposito antes de cualquier gasto externo."
+        : input.executiveSummary.status === "needs_approval"
+          ? "Revisar approval queue y aprobar solo el siguiente paso rentable."
+          : input.nextBatchPlan.status === "scale_carefully"
+            ? `Contactar hasta ${input.nextBatchPlan.maxLeads} leads aprobados con gasto maximo ${input.nextBatchPlan.maxSpendUsd} USD.`
+            : "Iterar con batch pequeno, guardar metricas y no pasar el cap.";
+
+  return {
+    moneyLine: `${input.appsSold} apps/websites, ${input.automationsSold} automatizaciones, ${input.cashCollectedUsd.toLocaleString("en-US")} USD cash, ${input.profitUsd.toLocaleString("en-US")} USD profit.`,
+    nextCommand,
+    canSpendNow,
+    spendPermission: canSpendNow
+      ? `Puede gastar hasta ${input.profitGuard.canSpendUsd} USD dentro del cap y con batch aprobado.`
+      : "No gastar ahora: requiere cash, aprobacion limpia o resolver bloqueos.",
+    allowedNow: input.agentOperatingContract.canRunAutonomously.slice(0, 4),
+    waitingOnRobert:
+      input.approvalQueue > 0
+        ? ["revisar approval queue", ...input.nextBatchPlan.requiredBeforeNextAction].slice(0, 4)
+        : input.agentOperatingContract.requiresHumanApproval.slice(0, 3),
+    blockedNow: input.agentOperatingContract.blockedActions,
+    scoreboard: {
+      appsSold: input.appsSold,
+      automationsSold: input.automationsSold,
+      revenueUsd: input.revenueUsd,
+      cashCollectedUsd: input.cashCollectedUsd,
+      estimatedSpendUsd: input.estimatedSpendUsd,
+      profitUsd: input.profitUsd,
+      approvalQueue: input.approvalQueue,
+    },
+  };
+}
+
+function buildRevenueSystemReadiness(input: {
+  appsSold: number;
+  automationsSold: number;
+  cashCollectedUsd: number;
+  estimatedSpendUsd: number;
+  approvalQueue: number;
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  nextBatchPlan: ReturnType<typeof buildRevenueNextBatchPlan>;
+  agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
+}) {
+  const items = [
+    {
+      id: "separate_area",
+      label: "Area aparte en el app",
+      status: "ready" as const,
+      evidence: "Ruta /revenue-engine con UI propia, tabs, snapshot y consola Robert.",
+      nextStep: "Mantenerla separada de Tools/Agents Office salvo accesos directos.",
+    },
+    {
+      id: "ask_when_unclear",
+      label: "Pregunta si no entiende",
+      status: "ready" as const,
+      evidence: "Automation intakes guardan missingAnswers, nextQuestions, answerTemplate y bloqueos.",
+      nextStep: "Usar la plantilla antes de cotizar o construir pedidos vagos.",
+    },
+    {
+      id: "sell_automations",
+      label: "Vender automatizaciones",
+      status: "ready" as const,
+      evidence: "Automation quote, intake, opportunity, close-to-ledger y delivery workspace conectados.",
+      nextStep: "Convertir intakes listos en oportunidades y cobrar deposito.",
+    },
+    {
+      id: "main_agent_subagents",
+      label: "Agente principal + subagentes",
+      status: "ready" as const,
+      evidence: "Growth Director coordina work order; QA Council, Cost Controller, Closer y Automation Architect corrigen/bloquean.",
+      nextStep: "Revisar subagentReviews antes de cualquier contacto externo.",
+    },
+    {
+      id: "delivery_quality",
+      label: "Checks para entregar perfecto",
+      status: "ready" as const,
+      evidence: "Delivery workspaces bloquean por deposito, scope, QA visual/tecnica/automation, rollback, costo y margen.",
+      nextStep: "Entregar solo cuando canLaunch=true y Robert apruebe.",
+    },
+    {
+      id: "continuous_improvement",
+      label: "Mejorar cada vez",
+      status: input.nextBatchPlan.latestReviewId ? "ready" as const : "needs_data" as const,
+      evidence: input.nextBatchPlan.latestReviewId
+        ? `Ultima review: ${input.nextBatchPlan.latestReviewId}.`
+        : "Improvement reviews existen, pero falta una review real para alimentar el siguiente batch.",
+      nextStep: "Crear review semanal o post-delivery con metricas reales.",
+    },
+    {
+      id: "under_100_monthly",
+      label: "Menos de $100/mes al empezar",
+      status: input.estimatedSpendUsd <= 100 ? "ready" as const : "blocked" as const,
+      evidence: `Gasto estimado actual: ${input.estimatedSpendUsd} USD de 100 USD.`,
+      nextStep: input.estimatedSpendUsd <= 100 ? "Seguir usando Profit Guard antes de gastar." : "Bajar herramientas/costos antes de avanzar.",
+    },
+    {
+      id: "dont_spend_more_than_cash",
+      label: "No gastar mas de lo cobrado",
+      status: input.estimatedSpendUsd <= input.cashCollectedUsd ? "ready" as const : "blocked" as const,
+      evidence: `Cash cobrado ${input.cashCollectedUsd} USD vs gasto ${input.estimatedSpendUsd} USD.`,
+      nextStep: input.estimatedSpendUsd <= input.cashCollectedUsd ? "Registrar cada venta/gasto en ledger." : "Cobrar deposito o pausar gasto externo.",
+    },
+    {
+      id: "robert_money_visibility",
+      label: "Robert ve apps y dinero",
+      status: "ready" as const,
+      evidence: `${input.appsSold} apps/websites, ${input.automationsSold} automatizaciones, cash ${input.cashCollectedUsd} USD.`,
+      nextStep: "Usar Consola Robert y Ledger como vista ejecutiva.",
+    },
+    {
+      id: "controlled_autonomy",
+      label: "Autonomia controlada",
+      status: input.agentOperatingContract.mode === "controlled_autopilot" ? "ready" as const : input.approvalQueue > 0 ? "needs_approval" as const : "needs_data" as const,
+      evidence: `Modo actual: ${input.agentOperatingContract.mode}. Profit Guard: ${input.profitGuard.status}.`,
+      nextStep: input.agentOperatingContract.currentInstruction,
+    },
+  ];
+  const ready = items.filter((item) => item.status === "ready").length;
+  const blocked = items.filter((item) => item.status === "blocked").length;
+  const needsApproval = items.filter((item) => item.status === "needs_approval").length;
+  const needsData = items.filter((item) => item.status === "needs_data").length;
+
+  return {
+    score: Math.round((ready / items.length) * 100),
+    ready,
+    blocked,
+    needsApproval,
+    needsData,
+    summary:
+      blocked > 0
+        ? "Hay bloqueos de costo/cash antes de operar."
+        : needsApproval > 0
+          ? "El sistema esta armado, pero espera aprobaciones para avanzar."
+          : needsData > 0
+            ? "La arquitectura esta lista; falta data real para mejorar/escala."
+            : "Sistema operativo listo para batch controlado.",
+    items,
+  };
+}
+
+export function buildRevenueScoutingMission(input: RevenueScoutingMissionInput) {
+  const parsed = revenueScoutingMissionSchema.parse(input);
+  const paidSpendUsd = Math.min(parsed.maxPaidDataSpendUsd, 100);
+  const isFreeMode = paidSpendUsd === 0;
+  const leadBatchSize = Math.min(parsed.targetLeadCount, paidSpendUsd > 0 ? 50 : 25);
+  const websiteSignals = [
+    parsed.requireNoWebsiteSignal && "no website listed on Google/Instagram/Facebook profile",
+    parsed.requireNoWebsiteSignal && "\"website\" field empty or pointing only to social profile",
+    parsed.includeWeakWebsiteLeads && "website is broken, outdated, non-mobile or missing clear CTA",
+    parsed.includeWeakWebsiteLeads && "menu/services/pricing only shown in posts or images",
+  ].filter((item): item is string => Boolean(item));
+  const offerSignals =
+    parsed.offerFocus === "automations"
+      ? ["manual booking/intake", "missed calls or DMs", "repeated follow-up", "spreadsheet/DM workflow"]
+      : parsed.offerFocus === "websites"
+        ? ["no booking/contact funnel", "poor mobile presence", "no landing page for high-ticket service", "weak local SEO"]
+        : ["weak web presence plus repeatable lead/customer workflow", "no follow-up system after inquiry", "no dashboard for owner"];
+
+  return {
+    mission: {
+      name: `${parsed.area} ${parsed.niche} scouting`,
+      area: parsed.area,
+      niche: parsed.niche,
+      offerFocus: parsed.offerFocus,
+      targetLeadCount: parsed.targetLeadCount,
+      leadBatchSize,
+      mode: isFreeMode ? "free_public_research" : "paid_data_requires_approval",
+    },
+    budgetGate: {
+      monthlyCapUsd: 100,
+      requestedPaidDataSpendUsd: parsed.maxPaidDataSpendUsd,
+      approvedPaidDataSpendUsd: paidSpendUsd,
+      requiresApprovalToSpend: paidSpendUsd > 0,
+      allowedBeforeApproval: ["Google search", "Google Maps manual review", "Instagram profile review", "public website/social evidence"],
+      blockedBeforeApproval: ["buy data", "send email", "send DM", "submit contact form", "publish mockup"],
+    },
+    searchQueries: [
+      `${parsed.niche} in ${parsed.area} no website`,
+      `${parsed.niche} ${parsed.area} instagram`,
+      `${parsed.niche} ${parsed.area} facebook`,
+      `"${parsed.niche}" "${parsed.area}" "contact"`,
+      `"${parsed.niche}" "${parsed.area}" "booking"`,
+      `${parsed.niche} near ${parsed.area} site:instagram.com`,
+    ],
+    leadEvidenceChecklist: [
+      "Business name, area and niche captured exactly from public source.",
+      "Website status marked no_website, weak_website, has_website or unknown with evidence.",
+      "At least one contact path exists, but no contact happens before approval.",
+      "Pain point is tied to public evidence, not guessed.",
+      "Offer value is at least $1,500 setup or has recurring automation potential.",
+    ],
+    qualificationScorecard: [
+      { item: "No website or weak website signal", maxPoints: 35, signals: websiteSignals },
+      { item: "Verifiable contact path", maxPoints: 25, signals: ["email", "contact form", "Instagram", "phone"] },
+      { item: "Public evidence quality", maxPoints: 20, signals: ["profile", "reviews", "posts", "listing", "existing site"] },
+      { item: "Pain/revenue opportunity", maxPoints: 10, signals: offerSignals },
+      { item: "Minimum profitable offer", maxPoints: 10, signals: ["website >= $1,500", "automation >= $1,500", "retainer >= $300/mo"] },
+    ],
+    subagentReviews: [
+      { agent: "lead-scout", check: "Finds candidates and records public evidence only." },
+      { agent: "business-researcher", check: "Verifies business info and marks uncertain data." },
+      { agent: "mockup-builder", check: "Creates mockup brief only after evidence passes." },
+      { agent: "automation-architect", check: "Identifies workflow automation upsell and internal monthly cost." },
+      { agent: "qa-council", check: "Blocks outreach if evidence/contact/cost approval is missing." },
+    ],
+    nextActions: [
+      `Research ${leadBatchSize} ${parsed.niche} leads in ${parsed.area}.`,
+      "Record only leads with evidence into /api/revenue-engine/leads.",
+      "Generate mockup for A/B leads before outreach.",
+      "Create outreach draft, keep it draft until Robert approves.",
+      "Review batch results in improvement memory before scaling.",
+    ],
+  };
+}
+
+export function buildRevenueLeadRadar(input: RevenueLeadRadarInput) {
+  const parsed = revenueLeadRadarSchema.parse(input);
+  const niches = parsed.niches
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const safeNiches = niches.length ? niches : ["med spas"];
+  const paidSpendUsd = Math.min(parsed.maxPaidDataSpendUsd, 100);
+  const researchPerHour = Math.max(1, Math.ceil(parsed.dailyResearchTarget / parsed.runHoursPerDay));
+  const qualifiedPerHour = Math.max(1, Math.ceil(parsed.dailyQualifiedLeadLimit / parsed.runHoursPerDay));
+  const mockupCadenceHours = Math.max(1, Math.ceil(parsed.runHoursPerDay / parsed.dailyMockupLimit));
+  const contactCadenceHours = parsed.dailyContactLimit > 0 ? Math.max(1, Math.ceil(parsed.runHoursPerDay / parsed.dailyContactLimit)) : 24;
+  const contactMode = parsed.requireRobertApprovalToContact || parsed.dailyContactLimit === 0 ? "draft_only" as const : "approved_queue_only" as const;
+  const status = paidSpendUsd > 0 ? "needs_spend_approval" as const : "always_on_ready" as const;
+  const channelMix = [
+    {
+      channel: "Google Maps manual/public search",
+      priority: 1,
+      reason: "Mejor senal local para negocios sin website, telefono/listing y reviews.",
+      costUsd: 0,
+    },
+    {
+      channel: "Instagram bio + recent posts",
+      priority: 2,
+      reason: "Detecta negocios activos con solo social profile y dolores visuales claros.",
+      costUsd: 0,
+    },
+    {
+      channel: "Industry directories/Yelp/Facebook public pages",
+      priority: 3,
+      reason: "Completa telefono, categoria, fotos, reviews y website status.",
+      costUsd: 0,
+    },
+    {
+      channel: "Paid lead/data tools",
+      priority: 4,
+      reason: "Usar solo cuando el cash cobrado y Robert aprueben; no al inicio.",
+      costUsd: paidSpendUsd,
+    },
+  ];
+  const searchRotations = safeNiches.flatMap((niche) => [
+    `${niche} ${parsed.area} no website`,
+    `${niche} ${parsed.area} instagram booking`,
+    `${niche} ${parsed.area} google maps`,
+    `"${niche}" "${parsed.area}" "book now"`,
+    `${niche} near ${parsed.area} site:instagram.com`,
+  ]).slice(0, 30);
+
+  return {
+    input: parsed,
+    status,
+    operatingMode: {
+      name: "24/7 lead radar",
+      researchRunsAllDay: true,
+      contactMode,
+      spendMode: paidSpendUsd > 0 ? "approval_required" : "free_public_research",
+      mockupOwner: "Codex/mockup-builder",
+      nextHumanDecision: contactMode === "draft_only" ? "Robert aprueba contacto y envio." : "Robert revisa cola aprobada antes de envio masivo.",
+    },
+    dailyLimits: {
+      runHoursPerDay: parsed.runHoursPerDay,
+      researchTarget: parsed.dailyResearchTarget,
+      researchPerHour,
+      qualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+      qualifiedPerHour,
+      mockupLimit: parsed.dailyMockupLimit,
+      mockupCadenceHours,
+      contactLimit: parsed.dailyContactLimit,
+      contactCadenceHours,
+      monthlySpendCapUsd: 100,
+      approvedPaidDataSpendUsd: paidSpendUsd,
+    },
+    lanes: [
+      {
+        lane: "discover",
+        ownerAgent: "lead-scout",
+        runs: "24/7",
+        output: "candidatos con nombre, fuente publica, website status y contacto posible",
+        blockedActions: ["contactar", "comprar data", "prometer precio"],
+      },
+      {
+        lane: "qualify",
+        ownerAgent: "business-researcher",
+        runs: "cada hora",
+        output: "A/B/C score con evidencia, pain point y oferta minima",
+        blockedActions: ["inventar claims", "usar datos no verificados"],
+      },
+      {
+        lane: "mockup",
+        ownerAgent: "mockup-builder",
+        runs: `cada ${mockupCadenceHours}h o cuando haya lead A`,
+        output: "brief de mockup website/automation listo para construir por Codex",
+        blockedActions: ["publicar preview", "enviar al cliente sin aprobacion"],
+      },
+      {
+        lane: "outreach",
+        ownerAgent: "closer",
+        runs: `max ${parsed.dailyContactLimit}/dia`,
+        output: "draft personalizado con mockup/comparables",
+        blockedActions: ["email/DM sin aprobacion", "contactar mas del limite diario"],
+      },
+      {
+        lane: "learn",
+        ownerAgent: "growth-director",
+        runs: "diario + semanal",
+        output: "objeciones, replies, calls, deals, costo y mejoras del playbook",
+        blockedActions: ["escalar gasto si no hay cash cobrado"],
+      },
+    ],
+    channelMix,
+    searchRotations,
+    qualificationRules: [
+      "Prioridad A: no website o website roto + contacto verificable + evidencia publica + oferta >= $1,500.",
+      "Prioridad B: website debil + proceso manual visible + automatizacion clara.",
+      "Descartar: negocios sin contacto verificable, evidencia pobre o ticket demasiado bajo.",
+      "No contacto externo hasta draft aprobado; research y mockup interno si pueden correr 24/7.",
+    ],
+    mockupPolicy: {
+      whoCreatesMockups: "Codex crea mockups/briefs cuando el lead tenga evidencia A/B.",
+      requiredBeforeMockup: ["businessName", "area", "niche", "websiteStatus", "public evidence", "painPoint"],
+      maxPerDay: parsed.dailyMockupLimit,
+      qualityBar: "Cada mockup debe tener oferta, CTA, prueba publica, automatizacion vendible y costo interno <= $100/mes.",
+    },
+    recommendation:
+      "Buscar leads puede correr 24/7. Lo que debe tener limite es contacto externo, mockups finales y gasto: ahi esta la calidad, reputacion y rentabilidad.",
+    nextActions: [
+      `Correr radar gratis para ${safeNiches.join(", ")} en ${parsed.area}.`,
+      `Guardar hasta ${parsed.dailyQualifiedLeadLimit} leads calificados/dia.`,
+      `Crear max ${parsed.dailyMockupLimit} mockups/dia con evidencia fuerte.`,
+      `Contactar max ${parsed.dailyContactLimit}/dia solo con aprobacion.`,
+      "Revisar resultados semanalmente antes de subir limites.",
+    ],
+  };
+}
+
+export function recordRevenueScoutingMission(input: RevenueScoutingMissionInput) {
+  loadRevenueScoutingMissions();
+  const mission = buildRevenueScoutingMission(input);
+  const now = new Date().toISOString();
+  const persisted: RevenueScoutingMission = {
+    ...mission,
+    id: `scouting-${Date.now()}-${revenueScoutingMissions.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    status: mission.budgetGate.requiresApprovalToSpend ? "planned" : "ready_for_leads",
+    learningNote:
+      mission.budgetGate.requiresApprovalToSpend
+        ? `Pedir aprobacion antes de gastar ${mission.budgetGate.approvedPaidDataSpendUsd} en data para ${mission.mission.niche} en ${mission.mission.area}.`
+        : `Usar research publico gratis para ${mission.mission.leadBatchSize} leads de ${mission.mission.niche} en ${mission.mission.area}.`,
+  };
+
+  revenueScoutingMissions.push(persisted);
+  persistRevenueScoutingMissions();
+
+  return {
+    mission: persisted,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInput) {
+  loadRevenueApprovalDecisions();
+  const parsed = revenueApprovalDecisionSchema.parse(input);
+  const snapshot = getRevenueEngineSnapshot();
+  const spendBlocked = parsed.maxSpendUsd > 100 || (parsed.maxSpendUsd > 0 && snapshot.profitGuard.status !== "scale_carefully");
+  const guardrail = {
+    status: spendBlocked ? "blocked" as const : "recorded" as const,
+    reason: spendBlocked
+      ? "No se puede aprobar gasto: supera $100 o Profit Guard no permite spend ahora."
+      : "Decision humana registrada; el agente puede usarla como memoria operativa sin saltarse QA.",
+  };
+  const decision: RevenueApprovalDecision = {
+    ...parsed,
+    id: `approval-${Date.now()}-${revenueApprovalDecisions.length + 1}`,
+    createdAt: new Date().toISOString(),
+    guardrail,
+  };
+
+  revenueApprovalDecisions.push(decision);
+  persistRevenueApprovalDecisions();
+
+  return {
+    decision,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function buildAutomationIntakeAnswerTemplate(questions: string[], missingAnswers: string[]) {
+  const base = questions.length
+    ? questions
+    : [
+        "Que evento inicia el flujo: nuevo lead, formulario, DM, llamada, pago, reserva u otra cosa?",
+        "Donde vive hoy la informacion: Google Sheets, CRM, email, Instagram, WhatsApp, POS u otra herramienta?",
+        "Que resultado quieres venderle al cliente: mas reservas, mas leads respondidos, menos trabajo manual, reportes o cobros?",
+      ];
+
+  return [
+    "Respuesta minima para poder cotizar/construir:",
+    ...base.slice(0, 5).map((question, index) => `${index + 1}. ${question} Respuesta: ____`),
+    missingAnswers.length ? `Falta aclarar: ${missingAnswers.join(", ")}.` : "Si algo no aplica, escribir 'no aplica' y explicar por que.",
+  ].join("\n");
+}
+
+export function recordRevenueAutomationIntake(input: RevenueAutomationIntakeInput) {
+  loadRevenueAutomationIntakes();
+  const parsed = revenueAutomationIntakeSchema.parse(input);
+  const quote = buildAutomationQuote(parsed);
+  const hasEnoughAnswers = parsed.knownAnswers.trim().length >= 40;
+  const status: RevenueAutomationIntake["status"] =
+    quote.clarificationGate.status === "clear" || hasEnoughAnswers ? "ready_for_quote" : "needs_answers";
+  const missingAnswers = status === "ready_for_quote" ? [] : quote.clarificationGate.missing;
+  const nextQuestions = status === "ready_for_quote" ? [] : quote.clarifyingQuestions;
+  const now = new Date().toISOString();
+  const intake: RevenueAutomationIntake = {
+    ...parsed,
+    id: `automation-intake-${Date.now()}-${revenueAutomationIntakes.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    status,
+    quote,
+    missingAnswers,
+    nextQuestions,
+    answerTemplate: buildAutomationIntakeAnswerTemplate(nextQuestions, missingAnswers),
+    blockedUntilAnswered: status === "ready_for_quote" ? [] : quote.clarificationGate.blocks,
+    nextAction:
+      status === "ready_for_quote"
+        ? "Crear oportunidad/cotizacion y pedir aprobacion de scope/deposito."
+        : "Hacer preguntas de aclaracion antes de prometer precio, build o delivery.",
+  };
+
+  revenueAutomationIntakes.push(intake);
+  persistRevenueAutomationIntakes();
+
+  return {
+    intake,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function answerRevenueAutomationIntake(input: RevenueAutomationIntakeAnswerInput) {
+  loadRevenueAutomationIntakes();
+  const parsed = revenueAutomationIntakeAnswerSchema.parse(input);
+  const intake = revenueAutomationIntakes.find((item) => item.id === parsed.intakeId);
+
+  if (!intake) {
+    return {
+      status: "not_found" as const,
+      reason: "Intake no encontrado.",
+      intake: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  intake.knownAnswers = [intake.knownAnswers, parsed.answers].filter((item) => item.trim().length > 0).join("\n\n");
+  const enrichedRequest = `${intake.request}\n\nRespuestas del cliente:\n${intake.knownAnswers}`;
+  const quote = buildAutomationQuote({
+    businessName: intake.businessName,
+    industry: intake.industry,
+    request: enrichedRequest,
+    currentTools: intake.currentTools,
+    monthlyBudgetUsd: intake.monthlyBudgetUsd,
+    urgency: intake.urgency,
+  });
+  const ready = quote.clarificationGate.status === "clear" || intake.knownAnswers.trim().length >= 40;
+  const missingAnswers = ready ? [] : quote.clarificationGate.missing;
+  const nextQuestions = ready ? [] : quote.clarifyingQuestions;
+
+  intake.request = enrichedRequest.slice(0, 1200);
+  intake.quote = quote;
+  intake.status = ready ? "ready_for_quote" : "needs_answers";
+  intake.missingAnswers = missingAnswers;
+  intake.nextQuestions = nextQuestions;
+  intake.answerTemplate = buildAutomationIntakeAnswerTemplate(nextQuestions, missingAnswers);
+  intake.blockedUntilAnswered = ready ? [] : quote.clarificationGate.blocks;
+  intake.nextAction = ready
+    ? "Crear oportunidad/cotizacion y pedir aprobacion de scope/deposito."
+    : "Aun faltan respuestas; no prometer precio, build o delivery.";
+  intake.updatedAt = new Date().toISOString();
+  persistRevenueAutomationIntakes();
+
+  return {
+    status: "updated" as const,
+    intake,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function convertRevenueAutomationIntakeToOpportunity(input: RevenueAutomationIntakeConvertInput) {
+  loadRevenueAutomationIntakes();
+  const parsed = revenueAutomationIntakeConvertSchema.parse(input);
+  const intake = revenueAutomationIntakes.find((item) => item.id === parsed.intakeId);
+
+  if (!intake) {
+    return {
+      status: "not_found" as const,
+      reason: "Intake no encontrado.",
+      intake: null,
+      opportunity: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  if (intake.status !== "ready_for_quote") {
+    return {
+      status: "blocked" as const,
+      reason: "Responder preguntas de aclaracion antes de crear oportunidad/cotizacion.",
+      intake,
+      opportunity: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const result = recordRevenueAutomationOpportunity({
+    businessName: intake.businessName,
+    industry: intake.industry,
+    request: intake.request,
+    currentTools: intake.currentTools,
+    monthlyBudgetUsd: intake.monthlyBudgetUsd,
+    urgency: intake.urgency,
+    sourceLeadId: "",
+    status: parsed.status,
+    clientApprovedScope: parsed.clientApprovedScope,
+    depositPaid: parsed.depositPaid,
+  });
+
+  intake.nextAction = `Oportunidad creada: ${result.opportunity.id}. Pedir aprobacion de scope y deposito antes de construir.`;
+  intake.updatedAt = new Date().toISOString();
+  persistRevenueAutomationIntakes();
+
+  return {
+    status: "converted" as const,
+    reason: "Intake convertido en oportunidad de automatizacion con QA y aprobaciones pendientes.",
+    intake,
+    opportunity: result.opportunity,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCommandInput) {
+  const parsed = revenueAutomationAgentCommandSchema.parse(input);
+  const intakeResult = recordRevenueAutomationIntake({
+    businessName: parsed.businessName,
+    industry: parsed.industry,
+    request: parsed.request,
+    currentTools: parsed.currentTools,
+    monthlyBudgetUsd: parsed.monthlyBudgetUsd,
+    urgency: parsed.urgency,
+    contactName: parsed.contactName,
+    contactEmail: parsed.contactEmail,
+    knownAnswers: parsed.knownAnswers,
+    source: parsed.source,
+  });
+  const intake = intakeResult.intake;
+  const effectiveRequest = parsed.knownAnswers.trim().length > 0
+    ? `${intake.request}\n\nRespuestas del cliente:\n${parsed.knownAnswers}`
+    : intake.request;
+  const effectiveQuote = buildAutomationQuote({
+    businessName: intake.businessName,
+    industry: intake.industry,
+    request: effectiveRequest,
+    currentTools: intake.currentTools,
+    monthlyBudgetUsd: intake.monthlyBudgetUsd,
+    urgency: intake.urgency,
+  });
+  const quoteIsClear = effectiveQuote.clarificationGate.status === "clear" || intake.status === "ready_for_quote";
+  if (effectiveQuote.clarificationGate.status === "clear" && intake.quote.clarificationGate.status !== "clear") {
+    intake.request = effectiveRequest.slice(0, 1200);
+    intake.quote = effectiveQuote;
+    intake.status = "ready_for_quote";
+    intake.missingAnswers = [];
+    intake.nextQuestions = [];
+    intake.blockedUntilAnswered = [];
+    intake.nextAction = "Crear oportunidad/cotizacion y pedir aprobacion de scope/deposito.";
+    intake.updatedAt = new Date().toISOString();
+    persistRevenueAutomationIntakes();
+  }
+
+  if (!quoteIsClear) {
+    return {
+      status: "needs_answers" as const,
+      reason: "El agente no entiende suficiente el pedido; pregunta antes de cotizar final o crear oportunidad.",
+      intake,
+      quote: effectiveQuote,
+      opportunity: null,
+      blockedUntilAnswered: intake.blockedUntilAnswered,
+      nextActions: [
+        "Enviar/leer las preguntas de aclaracion.",
+        "Guardar respuestas en el intake.",
+        "Volver a correr el agente antes de crear oportunidad.",
+      ],
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  if (!parsed.createOpportunityIfClear || parsed.lifecycleTarget === "quote") {
+    return {
+      status: "quoted" as const,
+      reason: "Pedido claro; cotizacion lista en modo draft sin crear oportunidad.",
+      intake,
+      quote: effectiveQuote,
+      opportunity: null,
+      blockedUntilAnswered: [],
+      nextActions: ["Revisar precio y alcance.", "Pedir aprobacion de scope/deposito.", "Crear oportunidad cuando Robert apruebe."],
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const opportunityResult = recordRevenueAutomationOpportunity({
+    businessName: intake.businessName,
+    industry: intake.industry,
+    request: effectiveRequest,
+    currentTools: intake.currentTools,
+    monthlyBudgetUsd: intake.monthlyBudgetUsd,
+    urgency: intake.urgency,
+    sourceLeadId: "",
+    status: parsed.lifecycleTarget === "sale" || parsed.lifecycleTarget === "delivery" ? "approved" : "quoted",
+    clientApprovedScope: parsed.clientApprovedScope,
+    depositPaid: parsed.depositPaid,
+  });
+
+  intake.nextAction = `Agente creo oportunidad: ${opportunityResult.opportunity.id}. Pedir aprobacion de scope y deposito antes de construir.`;
+  intake.updatedAt = new Date().toISOString();
+  persistRevenueAutomationIntakes();
+
+  if (parsed.lifecycleTarget === "opportunity") {
+    return {
+      status: "opportunity_created" as const,
+      reason: "Pedido claro; el agente preparo cotizacion y oportunidad en draft con QA.",
+      intake,
+      quote: effectiveQuote,
+      opportunity: opportunityResult.opportunity,
+      closeResult: null,
+      workspaceResult: null,
+      blockedUntilAnswered: [],
+      nextActions: [
+        "Pedir aprobacion de scope al cliente.",
+        "Cobrar deposito antes de build.",
+        "Crear delivery workspace solo despues de venta registrada.",
+      ],
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const saleBlockers = [
+    !parsed.clientApprovedScope && "falta aprobacion escrita del scope",
+    !parsed.depositPaid && !parsed.cashCollectedUsd && "falta deposito/cash cobrado",
+  ].filter(Boolean) as string[];
+
+  if (saleBlockers.length > 0) {
+    opportunityResult.opportunity.nextAction = `No cerrar venta todavia: ${saleBlockers.join("; ")}.`;
+    opportunityResult.opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+
+    return {
+      status: "sale_blocked" as const,
+      reason: opportunityResult.opportunity.nextAction,
+      intake,
+      quote: effectiveQuote,
+      opportunity: opportunityResult.opportunity,
+      closeResult: null,
+      workspaceResult: null,
+      blockedUntilAnswered: [],
+      nextActions: [
+        "Conseguir aprobacion escrita del scope.",
+        "Cobrar deposito antes de registrar venta o construir.",
+        "Volver a correr el agente con depositPaid/cashCollectedUsd.",
+      ],
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const closeResult = closeRevenueAutomationOpportunity({
+    opportunityId: opportunityResult.opportunity.id,
+    cashCollectedUsd: parsed.cashCollectedUsd,
+    markScopeApproved: parsed.clientApprovedScope,
+    notes: "Cierre ejecutado por automation agent command con guardrails.",
+  });
+
+  if (closeResult.status !== "recorded") {
+    return {
+      status: "sale_blocked" as const,
+      reason: closeResult.reason,
+      intake,
+      quote: effectiveQuote,
+      opportunity: closeResult.opportunity || opportunityResult.opportunity,
+      closeResult,
+      workspaceResult: null,
+      blockedUntilAnswered: [],
+      nextActions: ["Resolver bloqueo de venta.", "No crear delivery hasta que ledger registre cash.", "Revisar Profit Guard antes de gastar."],
+      snapshot: closeResult.snapshot,
+    };
+  }
+
+  if (parsed.lifecycleTarget !== "delivery" && !parsed.createDeliveryWorkspaceIfSold) {
+    return {
+      status: "sale_recorded" as const,
+      reason: "Venta registrada; cash, margen y Profit Guard actualizados antes de delivery.",
+      intake,
+      quote: effectiveQuote,
+      opportunity: closeResult.opportunity,
+      closeResult,
+      workspaceResult: null,
+      blockedUntilAnswered: [],
+      nextActions: ["Crear delivery workspace.", "Resolver QA de subagentes.", "No entregar hasta aprobacion final de Robert."],
+      snapshot: closeResult.snapshot,
+    };
+  }
+
+  const workspaceResult = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunityResult.opportunity.id,
+    workspaceName: parsed.workspaceName,
+    publicDataVerified: parsed.publicDataVerified,
+    visualQaPassed: parsed.visualQaPassed,
+    technicalQaPassed: parsed.technicalQaPassed,
+    automationQaPassed: parsed.automationQaPassed,
+    clientHandoffReady: parsed.clientHandoffReady,
+    launchTargetDays: parsed.launchTargetDays,
+  });
+
+  return {
+    status: workspaceResult.status === "created" ? "delivery_workspace_created" as const : "delivery_blocked" as const,
+    reason: workspaceResult.reason,
+    intake,
+    quote: effectiveQuote,
+    opportunity: workspaceResult.opportunity || closeResult.opportunity,
+    closeResult,
+    workspaceResult,
+    blockedUntilAnswered: [],
+    nextActions: [
+      workspaceResult.status === "created" ? "Resolver correctionQueue de QA." : "Resolver bloqueo antes de crear delivery.",
+      "Mantener entrega bloqueada hasta que subagentes pasen QA.",
+      "Registrar aprendizaje despues del handoff.",
+    ],
+    snapshot: workspaceResult.snapshot,
+  };
+}
+
+export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueAutomationOpportunityDeliveryInput) {
+  loadRevenueAutomationOpportunities();
+  loadRevenueDeliveryWorkspaces();
+  const parsed = revenueAutomationOpportunityDeliverySchema.parse(input);
+  const opportunity = revenueAutomationOpportunities.find((item) => item.id === parsed.opportunityId);
+
+  if (!opportunity) {
+    return {
+      status: "not_found" as const,
+      reason: "Oportunidad no encontrada.",
+      opportunity: null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const blockingReasons = [
+    opportunity.status === "blocked" && "la oportunidad esta bloqueada",
+    opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de producir",
+    !opportunity.clientApprovedScope && "falta aprobacion escrita de scope",
+    !opportunity.depositPaid && "falta deposito pagado",
+    opportunity.quote.pricing.estimatedInternalMonthlyCostUsd > 100 && "costo interno supera $100/mes",
+    opportunity.quote.pricing.grossMarginPercent < 65 && "margen mensual menor a 65%",
+  ].filter(Boolean) as string[];
+
+  if (blockingReasons.length > 0) {
+    opportunity.nextAction = `No crear delivery todavia: ${blockingReasons.join("; ")}.`;
+    opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+
+    return {
+      status: "blocked" as const,
+      reason: opportunity.nextAction,
+      opportunity,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const workspaceResult = recordRevenueDeliveryWorkspace({
+    workspaceName: parsed.workspaceName === "Delivery workspace" ? `${opportunity.businessName} delivery` : parsed.workspaceName,
+    sourceOpportunityId: opportunity.id,
+    clientName: opportunity.businessName,
+    projectType: "automation",
+    packageName: opportunity.quote.scope.packageName,
+    setupUsd: opportunity.quote.pricing.setupPriceUsd,
+    monthlyRetainerUsd: opportunity.quote.pricing.monthlyRetainerUsd,
+    estimatedInternalCostUsd: opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    depositPaid: opportunity.depositPaid,
+    scopeApproved: opportunity.clientApprovedScope,
+    publicDataVerified: parsed.publicDataVerified,
+    includesAutomation: true,
+    launchTargetDays: parsed.launchTargetDays,
+    clientRequest: opportunity.request,
+    visualQaPassed: parsed.visualQaPassed,
+    technicalQaPassed: parsed.technicalQaPassed,
+    automationQaPassed: parsed.automationQaPassed,
+    clientHandoffReady: parsed.clientHandoffReady,
+  });
+
+  opportunity.status = "in_delivery";
+  opportunity.nextAction = `Delivery workspace creado: ${workspaceResult.workspace.id}. Resolver QA antes de mostrar o lanzar.`;
+  opportunity.updatedAt = new Date().toISOString();
+  persistRevenueAutomationOpportunities();
+
+  return {
+    status: "created" as const,
+    reason: "Workspace de delivery creado con subagentes QA y guardrails de rentabilidad.",
+    opportunity,
+    workspace: workspaceResult.workspace,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpportunityCloseInput) {
+  loadRevenueAutomationOpportunities();
+  loadRevenueLedger();
+  const parsed = revenueAutomationOpportunityCloseSchema.parse(input);
+  const opportunity = revenueAutomationOpportunities.find((item) => item.id === parsed.opportunityId);
+
+  if (!opportunity) {
+    return {
+      status: "not_found" as const,
+      reason: "Oportunidad no encontrada.",
+      opportunity: null,
+      entry: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existingEntry = revenueLedger.find((entry) => entry.notes.includes(`opportunity:${opportunity.id}`));
+  if (existingEntry) {
+    return {
+      status: "already_recorded" as const,
+      reason: "Esta oportunidad ya tiene una venta registrada en ledger.",
+      opportunity,
+      entry: existingEntry,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const cashCollectedUsd = parsed.cashCollectedUsd ?? opportunity.quote.pricing.requiredDepositUsd;
+  const requiredDepositUsd = opportunity.quote.pricing.requiredDepositUsd;
+  const blockingReasons = [
+    opportunity.status === "blocked" && "la oportunidad esta bloqueada",
+    opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de cerrar",
+    cashCollectedUsd <= 0 && "falta cash/deposito cobrado",
+    cashCollectedUsd > 0 && cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${(requiredDepositUsd - cashCollectedUsd).toLocaleString("en-US")}`,
+    opportunity.quote.pricing.estimatedInternalMonthlyCostUsd > 100 && "costo interno supera $100/mes",
+    opportunity.quote.pricing.grossMarginPercent < 65 && "margen mensual menor a 65%",
+  ].filter(Boolean) as string[];
+
+  if (blockingReasons.length > 0) {
+    opportunity.nextAction = `No registrar venta todavia: ${blockingReasons.join("; ")}.`;
+    opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+
+    return {
+      status: "blocked" as const,
+      reason: opportunity.nextAction,
+      opportunity,
+      entry: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  opportunity.status = "sold";
+  opportunity.clientApprovedScope = parsed.markScopeApproved || opportunity.clientApprovedScope;
+  opportunity.depositPaid = true;
+  opportunity.nextAction = "Venta registrada en ledger. Crear delivery workspace y mantener QA antes de entregar.";
+  opportunity.updatedAt = new Date().toISOString();
+  persistRevenueAutomationOpportunities();
+
+  const ledgerResult = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: opportunity.businessName,
+    amountUsd: opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd,
+    estimatedInternalCostUsd: opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.id}`,
+      opportunity.quote.scope.packageName,
+      parsed.notes,
+    ].filter((item) => item.trim().length > 0).join(" | "),
+  });
+
+  return {
+    status: "recorded" as const,
+    reason: "Venta de automatizacion registrada; métricas, cash y Profit Guard actualizados.",
+    opportunity,
+    entry: ledgerResult.entry,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 export function getRevenueEngineSnapshot() {
+  loadRevenueLedger();
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  loadRevenueAgentRuns();
+  loadRevenueAutomationOpportunities();
+  loadRevenueImprovementReviews();
+  loadRevenueScoutingMissions();
+  loadRevenueDeliveryWorkspaces();
+  loadRevenueApprovalDecisions();
+  loadRevenueAutomationIntakes();
+  const sales = revenueLedger.filter(isSaleEntry);
+  const expenses = revenueLedger.filter((entry) => entry.kind === "expense");
+  const appsSold = revenueLedger.filter((entry) => entry.kind === "website_sale" || entry.kind === "bundle_sale").length;
+  const automationsSold = revenueLedger.filter((entry) => entry.kind === "automation_sale" || entry.kind === "bundle_sale").length;
+  const revenueUsd = sales.reduce((total, entry) => total + entry.amountUsd, 0);
+  const cashCollectedUsd = sales.reduce((total, entry) => total + entry.cashCollectedUsd, 0);
+  const directSpendUsd = expenses.reduce((total, entry) => total + entry.amountUsd, 0);
+  const internalCostUsd = revenueLedger.reduce((total, entry) => total + entry.estimatedInternalCostUsd, 0);
+  const estimatedSpendUsd = directSpendUsd + internalCostUsd;
+  const profitUsd = cashCollectedUsd - estimatedSpendUsd;
+  const pendingOutreachApprovals = revenueOutreachDrafts.filter((draft) => draft.status === "draft" || draft.status === "blocked").length;
+  const pendingAgentApprovals = revenueAgentRuns.filter((run) => run.status === "approval_required" || run.status === "blocked").length;
+  const pendingAutomationApprovals = revenueAutomationOpportunities.filter((opportunity) =>
+    opportunity.status === "blocked" || opportunity.qaGates.some((gate) => !gate.passed),
+  ).length;
+  const pendingDeliveryApprovals = revenueDeliveryWorkspaces.filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections").length;
+  const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingDeliveryApprovals;
+  const profitGuard = buildRevenueProfitGuard({ cashCollectedUsd, estimatedSpendUsd, profitUsd, approvalQueue });
+  const latestImprovementReview = revenueImprovementReviews.at(-1);
+  const nextBatchPlan = buildRevenueNextBatchPlan({ profitGuard, latestReview: latestImprovementReview, approvalQueue });
+  const executiveSummary = buildRevenueExecutiveSummary({
+    appsSold,
+    automationsSold,
+    revenueUsd,
+    cashCollectedUsd,
+    estimatedSpendUsd,
+    profitUsd,
+    approvalQueue,
+    profitGuard,
+    nextBatchPlan,
+  });
+  const agentOperatingContract = buildRevenueAgentOperatingContract({ profitGuard, nextBatchPlan, approvalQueue });
+  const operatorConsole = buildRevenueOperatorConsole({
+    appsSold,
+    automationsSold,
+    revenueUsd,
+    cashCollectedUsd,
+    estimatedSpendUsd,
+    profitUsd,
+    approvalQueue,
+    executiveSummary,
+    profitGuard,
+    nextBatchPlan,
+    agentOperatingContract,
+  });
+  const systemReadiness = buildRevenueSystemReadiness({
+    appsSold,
+    automationsSold,
+    cashCollectedUsd,
+    estimatedSpendUsd,
+    approvalQueue,
+    profitGuard,
+    nextBatchPlan,
+    agentOperatingContract,
+  });
+  const launchReadiness = buildRevenueLaunchReadiness({
+    area: "Miami",
+    niche: "med spas / aesthetics",
+    dailyResearchTarget: 120,
+    dailyMockupTarget: 5,
+    dailyContactTarget: 10,
+    emailPending: true,
+  });
+  const approvalQueueItems = [
+    (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd) && {
+      id: "profit-guard",
+      source: "profit_guard",
+      title: "Profit Guard",
+      status: profitGuard.status,
+      priority: "high",
+      action: profitGuard.requiredActions[0] || "revisar rentabilidad",
+    },
+    ...revenueOutreachDrafts
+      .filter((draft) => draft.status === "draft" || draft.status === "blocked")
+      .slice(-5)
+      .map((draft) => ({
+        id: draft.id,
+        source: "outbox",
+        title: draft.businessName,
+        status: draft.status,
+        priority: draft.status === "blocked" ? "high" : "medium",
+        action: draft.qaGates.find((gate) => !gate.passed)?.fix || "aprobar outreach antes de enviar",
+      })),
+    ...revenueAgentRuns
+      .filter((run) => run.status === "approval_required" || run.status === "blocked")
+      .slice(-5)
+      .map((run) => ({
+        id: run.id,
+        source: "agent_run",
+        title: run.businessName,
+        status: run.status,
+        priority: run.status === "blocked" ? "high" : "medium",
+        action: run.requiredApprovals[0] || run.nextActions[0] || "resolver aprobacion del agente",
+      })),
+    ...revenueAutomationOpportunities
+      .filter((opportunity) => opportunity.status === "blocked" || opportunity.qaGates.some((gate) => !gate.passed))
+      .slice(-5)
+      .map((opportunity) => ({
+        id: opportunity.id,
+        source: "automation_opportunity",
+        title: opportunity.businessName,
+        status: opportunity.status,
+        priority: opportunity.status === "blocked" ? "high" : "medium",
+        action: opportunity.qaGates.find((gate) => !gate.passed)?.fix || opportunity.nextAction,
+      })),
+    ...revenueDeliveryWorkspaces
+      .filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections")
+      .slice(-5)
+      .map((workspace) => ({
+        id: workspace.id,
+        source: "delivery_workspace",
+        title: workspace.input.clientName,
+        status: workspace.status,
+        priority: workspace.status === "blocked" ? "high" : "medium",
+        action: workspace.correctionQueue.find((item) => item.blocksDelivery)?.action || workspace.approvalSummary.requiredBeforeClient[0] || "corregir delivery antes de entregar",
+      })),
+  ].filter(Boolean);
+
   return {
     metrics: {
-      appsSold: 0,
-      automationsSold: 0,
-      revenueUsd: 0,
-      cashCollectedUsd: 0,
+      appsSold,
+      automationsSold,
+      revenueUsd,
+      cashCollectedUsd,
       monthlySpendCapUsd: 100,
-      estimatedSpendUsd: 0,
-      profitUsd: 0,
-      approvalQueue: 0,
+      estimatedSpendUsd,
+      profitUsd,
+      approvalQueue,
     },
+    executiveSummary,
+    operatorConsole,
+    systemReadiness,
+    launchReadiness,
+    agentOperatingContract,
+    profitGuard,
+    nextBatchPlan,
+    approvalQueueItems,
     costPolicy: {
       monthlyCapUsd: 100,
       stopRule: "Pausar outreach pagado si gasto mensual > ingresos cobrados o si llega a $100.",
@@ -129,9 +2644,2252 @@ export function getRevenueEngineSnapshot() {
       allowedWithoutApproval: ["research_plan", "mockup_brief", "qa_checklist", "proposal_draft"],
       requiresApproval: ["contact_business", "buy_data", "send_email", "send_sms", "publish_mockup", "charge_client"],
     },
+    emailProvider: getRevenueEmailProviderStatus(),
     agents: agentRoster,
-    pipelineStages,
+    pipelineStages: buildPipelineStages(revenueLedger, revenueLeads),
     packages,
+    recentLedger: revenueLedger.slice(-8).reverse(),
+    recentLeads: revenueLeads.slice(-10).reverse(),
+    recentOutreach: revenueOutreachDrafts.slice(-10).reverse(),
+    recentAgentRuns: revenueAgentRuns.slice(-10).reverse(),
+    recentAutomationOpportunities: revenueAutomationOpportunities.slice(-10).reverse(),
+    recentImprovementReviews: revenueImprovementReviews.slice(-10).reverse(),
+    recentScoutingMissions: revenueScoutingMissions.slice(-10).reverse(),
+    recentDeliveryWorkspaces: revenueDeliveryWorkspaces.slice(-10).reverse(),
+    recentApprovalDecisions: revenueApprovalDecisions.slice(-10).reverse(),
+    recentAutomationIntakes: revenueAutomationIntakes.slice(-10).reverse(),
+    persistence: {
+      mode: "local_file",
+      path: getRevenueLedgerPath(),
+      leadsPath: getRevenueLeadsPath(),
+      outreachPath: getRevenueOutreachPath(),
+      agentRunsPath: getRevenueAgentRunsPath(),
+      automationOpportunitiesPath: getRevenueAutomationOpportunitiesPath(),
+      improvementReviewsPath: getRevenueImprovementReviewsPath(),
+      scoutingMissionsPath: getRevenueScoutingMissionsPath(),
+      deliveryWorkspacesPath: getRevenueDeliveryWorkspacesPath(),
+      approvalDecisionsPath: getRevenueApprovalDecisionsPath(),
+      automationIntakesPath: getRevenueAutomationIntakesPath(),
+      status: revenueLedgerPersistenceError ? "warning" : "ok",
+      leadsStatus: revenueLeadsPersistenceError ? "warning" : "ok",
+      outreachStatus: revenueOutreachPersistenceError ? "warning" : "ok",
+      agentRunsStatus: revenueAgentRunsPersistenceError ? "warning" : "ok",
+      automationOpportunitiesStatus: revenueAutomationOpportunitiesPersistenceError ? "warning" : "ok",
+      improvementReviewsStatus: revenueImprovementReviewsPersistenceError ? "warning" : "ok",
+      scoutingMissionsStatus: revenueScoutingMissionsPersistenceError ? "warning" : "ok",
+      deliveryWorkspacesStatus: revenueDeliveryWorkspacesPersistenceError ? "warning" : "ok",
+      approvalDecisionsStatus: revenueApprovalDecisionsPersistenceError ? "warning" : "ok",
+      automationIntakesStatus: revenueAutomationIntakesPersistenceError ? "warning" : "ok",
+      error:
+        revenueLedgerPersistenceError ||
+        revenueLeadsPersistenceError ||
+        revenueOutreachPersistenceError ||
+        revenueAgentRunsPersistenceError ||
+        revenueAutomationOpportunitiesPersistenceError ||
+        revenueImprovementReviewsPersistenceError ||
+        revenueScoutingMissionsPersistenceError ||
+        revenueDeliveryWorkspacesPersistenceError ||
+        revenueApprovalDecisionsPersistenceError ||
+        revenueAutomationIntakesPersistenceError,
+    },
+    automationQuoteDefaults: {
+      minimumSetupUsd: 1500,
+      minimumRetainerUsd: 300,
+      maxInternalMonthlyCostUsd: 100,
+      requiredDepositPercent: 50,
+      defaultApprovalMode: "draft_until_signed_and_deposit_paid",
+    },
+    improvementDefaults: {
+      reviewCadence: "weekly",
+      minimumGrossMarginPercent: 65,
+      maxMonthlySpendBeforeRevenueUsd: 100,
+      stopRule: "Pausar campana si el gasto llega a $100 sin ingresos cobrados o si defectos/quejas bloquean entrega.",
+      learningMode: "update_playbook_after_each_batch",
+    },
+  };
+}
+
+function qualifyRevenueLead(lead: RevenueLeadInput) {
+  const hasEvidence = lead.evidence.trim().length >= 12;
+  const hasContact = lead.contactChannel !== "unknown" && lead.contactValue.trim().length >= 3;
+  const websiteScore = lead.websiteStatus === "no_website" ? 35 : lead.websiteStatus === "weak_website" ? 25 : lead.websiteStatus === "unknown" ? 10 : 0;
+  const contactScore = hasContact ? 25 : 0;
+  const evidenceScore = hasEvidence ? 20 : 0;
+  const painScore = lead.painPoint.trim().length >= 8 ? 10 : 0;
+  const ticketScore = lead.estimatedOfferUsd >= 1500 ? 10 : 0;
+  const score = websiteScore + contactScore + evidenceScore + painScore + ticketScore;
+  const missing = [
+    !hasEvidence && "evidencia publica revisable",
+    !hasContact && "contacto verificable",
+    lead.websiteStatus === "unknown" && "confirmar si tiene website",
+    lead.estimatedOfferUsd < 1500 && "oferta minima rentable",
+  ].filter(Boolean) as string[];
+  const recommendedStatus: RevenueLead["status"] =
+    missing.length > 0
+      ? "research"
+      : score >= 80
+        ? "mockup_ready"
+        : score >= 65
+          ? "qualified"
+          : "research";
+
+  return {
+    score,
+    grade: score >= 80 ? "A" : score >= 65 ? "B" : score >= 45 ? "C" : "D",
+    recommendedStatus,
+    missing,
+    nextAgent:
+      recommendedStatus === "mockup_ready"
+        ? "mockup-builder"
+        : recommendedStatus === "qualified"
+          ? "business-researcher"
+          : "lead-scout",
+    guardrail:
+      missing.length > 0
+        ? "No contactar todavia. Completar evidencia/contacto primero."
+        : "Puede avanzar a mockup o propuesta en draft, sin envio externo hasta aprobacion.",
+    outreachDraft:
+      `Vi que ${lead.businessName} en ${lead.area} podria convertir mas clientes con una presencia web y automatizaciones mas fuertes. Puedo preparar un mockup rapido basado en informacion publica y mostrarte una version premium sin compromiso.`,
+  };
+}
+
+export function buildRevenueMockup(input: RevenueMockupInput) {
+  const niche = input.niche.toLowerCase();
+  const isFood = includesAny(niche, ["restaurant", "cafe", "coffee", "bar", "bakery", "food"]);
+  const isBeauty = includesAny(niche, ["salon", "spa", "beauty", "barber", "nail"]);
+  const isFitness = includesAny(niche, ["gym", "fitness", "trainer", "yoga", "pilates"]);
+  const isEvents = includesAny(niche, ["event", "club", "music", "venue", "techno"]);
+  const accent = isFood ? "emerald" : isBeauty ? "rose" : isFitness ? "sky" : isEvents ? "fuchsia" : "amber";
+  const marketPromise = isFood
+    ? "convertir visitas en reservas, pedidos y catering"
+    : isBeauty
+      ? "convertir visitantes en citas y clientes recurrentes"
+      : isFitness
+        ? "convertir interes en trials, membresias y seguimiento"
+        : isEvents
+          ? "convertir audiencia en tickets, comunidad y drops"
+          : "convertir atencion local en leads, llamadas y ventas";
+  const pain = input.painPoint || (input.websiteStatus === "no_website" ? "No hay presencia web clara para convertir clientes." : "La experiencia actual no captura suficiente demanda.");
+  const setupUsd = Math.max(1500, input.estimatedOfferUsd);
+  const automationUsd = input.includeAutomation ? Math.max(750, Math.round(setupUsd * 0.35)) : 0;
+  const totalUsd = setupUsd + automationUsd;
+  const estimatedInternalCostUsd = Math.min(100, 18 + (input.includeAutomation ? 36 : 12));
+
+  return {
+    input,
+    decision: {
+      status: input.evidence.trim().length >= 12 ? "mockup_ready" : "needs_evidence",
+      guardrail: "Preview interno. No publicar ni enviar al cliente sin QA y aprobacion humana.",
+      nextAgent: input.evidence.trim().length >= 12 ? "qa-council" : "business-researcher",
+    },
+    visualSystem: {
+      accent,
+      layout: "full-bleed premium operational website",
+      motion: "CSS/Three-style depth, floating product/service panels, animated conversion path",
+      threeDSceneBrief: [
+        `Escena 3D de ${input.businessName} como experiencia premium en ${input.area}.`,
+        "Capas: marca al frente, oferta principal al centro, prueba social y CTA con profundidad.",
+        "Movimiento lento y elegante; debe sentirse comercial, no decorativo.",
+      ],
+    },
+    copy: {
+      eyebrow: `${input.area} ${input.niche}`,
+      headline: `${input.businessName} deserves a website that sells while the team works`,
+      subheadline: `Una presencia premium para ${marketPromise}, con automatizaciones controladas y costo interno bajo.`,
+      primaryCta: isFood ? "Reservar / Ordenar" : isBeauty ? "Agendar cita" : isFitness ? "Book a trial" : isEvents ? "Ver proximos eventos" : "Solicitar quote",
+      secondaryCta: "Ver mockup completo",
+    },
+    sections: [
+      {
+        id: "hero",
+        title: "Hero 3D de conversion",
+        goal: "Mostrar marca, oferta y CTA en los primeros segundos.",
+        blocks: ["headline", "CTA principal", "panel 3D con oferta", "trust strip"],
+      },
+      {
+        id: "offers",
+        title: isFood ? "Menu / ofertas" : isEvents ? "Eventos / drops" : "Servicios principales",
+        goal: "Hacer que el cliente entienda que puede comprar, reservar o pedir informacion rapido.",
+        blocks: ["cards filtrables", "precio/beneficio", "CTA por item", "tracking de clicks"],
+      },
+      {
+        id: "proof",
+        title: "Prueba y autoridad",
+        goal: "Usar evidencia publica sin inventar claims.",
+        blocks: ["reviews/fotos verificadas", "antes/despues", "ubicacion", "social proof"],
+      },
+      {
+        id: "capture",
+        title: "Captura de leads",
+        goal: "No perder personas que no compran hoy.",
+        blocks: ["form corto", "newsletter/updates", "lead source", "consentimiento opt-in"],
+      },
+      {
+        id: "automation",
+        title: "Automatizaciones vendibles",
+        goal: "Reducir trabajo manual y mejorar seguimiento.",
+        blocks: ["follow-up", "dashboard", "aprobacion humana", "reporte semanal"],
+      },
+    ],
+    automations: input.includeAutomation
+      ? [
+          "Follow-up automatico a leads nuevos con aprobacion previa.",
+          "Reporte semanal: leads, clicks, reservas/interes y costo.",
+          "Pipeline simple para contacto, propuesta y cierre.",
+          "Alertas cuando un formulario, CTA o checkout falla.",
+        ]
+      : ["Automation upsell preparado para fase 2."],
+    offer: {
+      packageName: input.primaryOffer || "Website 3D Premium + Automation Sprint",
+      setupUsd,
+      automationUsd,
+      totalUsd,
+      depositUsd: Math.round(totalUsd * 0.5),
+      estimatedInternalCostUsd,
+      insideCostCap: estimatedInternalCostUsd <= 100,
+    },
+    qa: [
+      { agent: "business-researcher", check: "Evidencia publica marcada y sin claims inventados", result: input.evidence.trim().length >= 12 ? "pass" : "review" },
+      { agent: "mockup-builder", check: "Hero, secciones, CTA y oferta estan listos para preview", result: "pass" },
+      { agent: "automation-architect", check: "Automatizaciones tienen aprobacion humana y bajo costo", result: input.includeAutomation ? "pass" : "review" },
+      { agent: "cost-controller", check: "Costo interno estimado bajo $100/mes", result: estimatedInternalCostUsd <= 100 ? "pass" : "block" },
+      { agent: "closer", check: "No enviar hasta que Robert apruebe", result: "approval_required" },
+    ],
+    salesAngle: {
+      problem: pain,
+      pitch: `Preparamos una version premium de ${input.businessName} para mostrar como podria ${marketPromise}.`,
+      comparison: input.websiteStatus === "no_website" ? "Antes: sin website claro. Despues: presencia premium con captura y seguimiento." : "Antes: website debil o poco accionable. Despues: experiencia con CTA, tracking y automatizacion.",
+    },
+  };
+}
+
+export function buildRevenueMockupTemplatePack(input: RevenueMockupTemplatePackInput) {
+  const monthlyCostCapUsd = 100;
+  const dailyAiCostUsd = roundMoney(input.dailyMockupTarget * input.estimatedAiCostPerMockupUsd);
+  const monthlyAiCostUsd = roundMoney(dailyAiCostUsd * 30);
+  const productionMinutesPerDay = input.dailyMockupTarget * input.maxCustomMinutesPerMockup;
+  const isZeroCostMode = input.estimatedAiCostPerMockupUsd === 0;
+  const isInsideMonthlyCap = monthlyAiCostUsd <= monthlyCostCapUsd;
+  const nicheLabel = input.niche.toLowerCase();
+  const isBeauty = includesAny(nicheLabel, ["spa", "salon", "beauty", "nail", "aesthetic"]);
+  const isFitness = includesAny(nicheLabel, ["gym", "fitness", "trainer", "pilates", "yoga"]);
+  const isFood = includesAny(nicheLabel, ["restaurant", "cafe", "coffee", "bar", "bakery", "food"]);
+  const isEvents = includesAny(nicheLabel, ["event", "club", "venue", "music", "nightlife"]);
+  const primaryCta = isBeauty
+    ? "Book my consult"
+    : isFitness
+      ? "Claim a trial"
+      : isFood
+        ? "Reserve / order"
+        : isEvents
+          ? "Get tickets"
+          : "Request quote";
+
+  const sharedSwapFields = [
+    "businessName",
+    "area",
+    "primaryOffer",
+    "public photos or free image placeholders",
+    "reviews/social proof",
+    "contact CTA",
+  ];
+
+  const templates = [
+    {
+      id: "shock_hero_booking",
+      name: "Shock Hero + Booking",
+      bestFor: "Leads sin website o con presencia muy vieja que necesitan impacto inmediato.",
+      blocks: ["full-bleed cinematic hero", "sticky booking CTA", "floating service cards", "trust strip", "fast quote form"],
+      swapFields: sharedSwapFields,
+      animationHooks: ["mouse spotlight", "floating 3D device", "scroll reveal", "CTA shine"],
+      assetPolicy: "Usar fotos publicas verificables del negocio si existen; si no, placeholders gratuitos sin claims falsos.",
+      automationUpsell: "Booking follow-up + owner alert + weekly lead report.",
+      qualityGate: "Debe verse premium en mobile primero y tener CTA visible sin scroll.",
+    },
+    {
+      id: "before_after_revenue",
+      name: "Before / After Revenue Story",
+      bestFor: "Negocios con website debil donde conviene mostrar transformacion clara.",
+      blocks: ["before/after split", "lost revenue callouts", "upgrade path", "proof panel", "proposal CTA"],
+      swapFields: [...sharedSwapFields, "current website weakness", "new conversion promise"],
+      animationHooks: ["before/after slider", "metric counters", "depth cards", "section parallax"],
+      assetPolicy: "Capturas del website actual solo como referencia interna; no publicar comparativas agresivas sin aprobacion.",
+      automationUpsell: "Lead source tracking + abandoned inquiry follow-up.",
+      qualityGate: "Debe explicar el dinero perdido sin sonar ofensivo para el owner.",
+    },
+    {
+      id: "owner_dashboard",
+      name: "Owner Dashboard Demo",
+      bestFor: "Owners que compran cuando ven control, reportes y automatizacion.",
+      blocks: ["premium site preview", "lead pipeline", "weekly report", "approval queue", "ROI panel"],
+      swapFields: [...sharedSwapFields, "lead sources", "sales stages", "weekly KPI names"],
+      animationHooks: ["live dashboard pulse", "pipeline movement", "approval queue highlight", "chart counters"],
+      assetPolicy: "Datos demo claramente marcados como estimados; no inventar volumen real.",
+      automationUpsell: "Dashboard mensual + CRM ligero + follow-up aprobado por humano.",
+      qualityGate: "Debe vender el retainer mensual, no solo el website.",
+    },
+    {
+      id: "premium_offer_stack",
+      name: "Premium Offer Stack",
+      bestFor: "Servicios con paquetes, tratamientos, membresias, menus o tickets.",
+      blocks: ["offer grid", "best-seller highlight", "bundles", "FAQ objections", "checkout/contact CTA"],
+      swapFields: [...sharedSwapFields, "service list", "price anchors", "bundle names"],
+      animationHooks: ["card tilt", "offer hover states", "sticky compare bar", "limited slot ticker"],
+      assetPolicy: "Precios como placeholders si no estan publicados; marcar como editable.",
+      automationUpsell: "Quote intake + package recommendation + reminder sequence.",
+      qualityGate: "Debe hacer facil elegir una opcion en menos de 20 segundos.",
+    },
+    {
+      id: "social_proof_local",
+      name: "Local Proof + Community",
+      bestFor: "Negocios que viven de reviews, Instagram, eventos, referrals o barrio.",
+      blocks: ["review wall", "location strip", "Instagram-style gallery", "map CTA", "referral capture"],
+      swapFields: [...sharedSwapFields, "review snippets", "neighborhood", "social links"],
+      animationHooks: ["review marquee", "gallery drift", "map pulse", "social proof reveal"],
+      assetPolicy: "Solo usar reviews o fotos publicas verificables; si falta data, usar estructura sin nombres reales.",
+      automationUpsell: "Review request automation + referral capture + local campaign report.",
+      qualityGate: "Debe sentirse local y confiable, no como template generico.",
+    },
+  ];
+
+  return {
+    status: isInsideMonthlyCap ? "ready" : "needs_spend_approval",
+    pack: {
+      name: `${input.area} ${input.niche} Premium Mockup Pack`,
+      niche: input.niche,
+      area: input.area,
+      templateCount: templates.length,
+      targetPositioning: "websites que parecen de alto ticket, producidos con templates reutilizables y costo casi cero",
+    },
+    costModel: {
+      hostingCostUsd: 0,
+      paidAssetCostUsd: 0,
+      estimatedAiCostPerMockupUsd: input.estimatedAiCostPerMockupUsd,
+      dailyAiCostUsd,
+      monthlyAiCostUsd,
+      targetCostPerMockupUsd: input.estimatedAiCostPerMockupUsd,
+      monthlyCostCapUsd,
+      insideZeroCostMode: isZeroCostMode,
+      insideMonthlyCap: isInsideMonthlyCap,
+      spendPolicy: isZeroCostMode
+        ? "Modo $0: HTML/CSS/JS, assets gratuitos/publicos y aprobacion humana antes de contactar."
+        : "Costo AI visible. No subir volumen si el mes supera el cap o si Robert no aprueba.",
+    },
+    productionTargets: {
+      dailyMockupTarget: input.dailyMockupTarget,
+      maxCustomMinutesPerMockup: input.maxCustomMinutesPerMockup,
+      productionMinutesPerDay,
+      estimatedMockupsPerMonth: input.dailyMockupTarget * 30,
+      recommendedContactLimitPerDay: Math.max(3, Math.min(15, Math.floor(input.dailyMockupTarget * 1.25))),
+    },
+    templates,
+    productionLine: [
+      { step: "lead-evidence", ownerAgent: "business-researcher", output: "fotos, servicios, reviews, contacto y dolor real" },
+      { step: "template-match", ownerAgent: "mockup-builder", output: "elegir 1 de 5 templates segun el negocio" },
+      { step: "swap-and-polish", ownerAgent: "mockup-builder", output: "copiar data publica, CTA, fotos y oferta" },
+      { step: "premium-motion-pass", ownerAgent: "visual-qa", output: "animaciones, mobile, hero shock y contraste" },
+      { step: "sales-draft", ownerAgent: "closer", output: `mensaje con ${primaryCta}, comparacion y aprobacion antes de enviar` },
+    ],
+    pricingRecommendation: {
+      entryMockupWebsiteUsd: 500,
+      proWebsiteUsd: 1500,
+      automationBundleUsd: 2500,
+      monthlyRetainerUsd: 300,
+      note: "Vender el entry barato para cerrar rapido; subir con automatizacion, reportes y mantenimiento.",
+    },
+    guardrails: [
+      "No pagar hosting para previews: usar archivo local/static o free tier hasta que paguen.",
+      "No comprar assets para demos frios.",
+      "No enviar outreach externo sin aprobacion de Robert.",
+      "No inventar reviews, resultados, precios reales o certificaciones.",
+      "Si monthlyAiCostUsd supera el cap, pausar o pedir aprobacion.",
+    ],
+    nextActions: [
+      `Crear ${templates.length} HTML bases por nicho y reusar para ${input.area}.`,
+      `Producir ${input.dailyMockupTarget} mockups/dia maximo con QA visual.`,
+      "Contactar solo los mejores leads con mockup listo y mensaje personalizado.",
+      "Medir replies, calls booked y cierres para que el sistema mejore el template ganador.",
+    ],
+  };
+}
+
+export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) {
+  const parsed = revenueLaunchReadinessSchema.parse(input);
+  const emailProvider = getRevenueEmailProviderStatus();
+  const manualContactChannels = ["contact_form", "phone_permission", "gmail_or_mailto_manual"] as const;
+  const launchItems: Array<{
+    id: string;
+    label: string;
+    status: "ready" | "pending_allowed" | "blocked";
+    evidence: string;
+    nextStep: string;
+  }> = [
+    {
+      id: "market",
+      label: "Primer mercado decidido",
+      status: "ready" as const,
+      evidence: `${parsed.niche} en ${parsed.area}.`,
+      nextStep: "Mantener el primer sprint enfocado; no abrir mas nichos hasta tener replies.",
+    },
+    {
+      id: "lead_radar",
+      label: "Radar de leads 24/7",
+      status: "ready" as const,
+      evidence: `${parsed.dailyResearchTarget} candidatos/dia, research publico gratis, gasto $0.`,
+      nextStep: "Buscar en Google Maps/listings/websites publicos y guardar evidencia.",
+    },
+    {
+      id: "qualification",
+      label: "Scoring y pipeline",
+      status: "ready" as const,
+      evidence: "recordRevenueLead califica no_website/weak_website, contacto, evidencia, dolor y ticket.",
+      nextStep: "Registrar solo leads con contacto verificable y oportunidad clara.",
+    },
+    {
+      id: "mockup_factory",
+      label: "Fabrica de mockups premium",
+      status: "ready" as const,
+      evidence: "Template factory tiene 5 rutas premium reutilizables con $0 hosting y $0 assets pagos.",
+      nextStep: `Crear ${parsed.dailyMockupTarget} mockups/dia para leads A/B.`,
+    },
+    {
+      id: "manual_outreach",
+      label: "Contacto manual aprobado",
+      status: "ready" as const,
+      evidence: `Canales activos sin email API: ${manualContactChannels.join(", ")}.`,
+      nextStep: `Contactar max ${parsed.dailyContactTarget}/dia por contact form, llamada corta o Gmail/mailto manual.`,
+    },
+    {
+      id: "email_sender",
+      label: "Correo de negocio/API",
+      status: emailProvider.configured && !parsed.emailPending ? "ready" as const : "pending_allowed" as const,
+      evidence: emailProvider.configured
+        ? `${emailProvider.provider} configurado con ${emailProvider.fromEmail}.`
+        : `Pendiente permitido: ${emailProvider.missing.join(" + ") || "sender DNS/proveedor"}.`,
+      nextStep: "Dejarlo pendiente por ahora; no bloquea contacto manual ni drafts.",
+    },
+    {
+      id: "sales_offer",
+      label: "Oferta y precio",
+      status: "ready" as const,
+      evidence: "Entry $500, website pro $1,500+, bundle automation $2,500+, retainer $300+/mes.",
+      nextStep: "Abrir barato para cerrar rapido y subir con automation/reporting.",
+    },
+    {
+      id: "money_guard",
+      label: "Profit Guard",
+      status: "ready" as const,
+      evidence: "Cap $100/mes, gasto externo bloqueado hasta cash/aprobacion.",
+      nextStep: "No pagar data/tools/ads antes de deposito o cash cobrado.",
+    },
+    {
+      id: "delivery",
+      label: "Entrega y QA",
+      status: "ready" as const,
+      evidence: "Delivery workspace bloquea entrega hasta scope, deposito, QA visual/tecnica/automation y rollback.",
+      nextStep: "Cuando cierre un deal, crear workspace y entregar solo con QA verde.",
+    },
+  ];
+  const pending = launchItems.filter((item) => item.status === "pending_allowed");
+  const blocked = launchItems.filter((item) => item.status === "blocked");
+  const ready = launchItems.filter((item) => item.status === "ready").length;
+
+  return {
+    status: blocked.length > 0 ? "blocked" as const : "ready_to_start" as const,
+    summary: blocked.length > 0
+      ? "Hay bloqueos antes de empezar."
+      : pending.length === 1 && pending[0].id === "email_sender"
+        ? "Listo para empezar a vender; solo falta configurar el correo de negocio/API."
+        : "Listo para empezar a vender con contacto manual aprobado.",
+    market: {
+      area: parsed.area,
+      niche: parsed.niche,
+      firstSprintDays: 7,
+      goal: "conseguir replies, llamadas o primer deposito con costo $0",
+    },
+    launchScore: Math.round((ready / launchItems.length) * 100),
+    ready,
+    pendingAllowed: pending.length,
+    blocked: blocked.length,
+    items: launchItems,
+    manualStartPlan: [
+      `Dia 1: buscar ${parsed.dailyResearchTarget} candidatos publicos y guardar 20-30 con evidencia.`,
+      `Dia 1: seleccionar 10 leads A/B; crear ${parsed.dailyMockupTarget} mockups premium.`,
+      `Dia 1-2: preparar ${parsed.dailyContactTarget} drafts personalizados, sin envio automatico.`,
+      "Dia 2: contactar por contact form/Gmail manual y llamar solo los mejores para pedir permiso de enviar mockup.",
+      "Dia 3-7: registrar replies, objeciones, calls booked y cualquier cash en ledger/improvement review.",
+    ],
+    contactScripts: {
+      contactForm:
+        "Hola, vi que su negocio tiene buena presencia/reviews, pero hay una oportunidad clara de convertir mas citas con una pagina premium y follow-up. Prepare una idea visual rapida. Si te parece, te la puedo mandar para revisarla.",
+      phonePermission:
+        "Hola, soy Robert. Vi algo puntual que podria mejorar su website/booking y prepare una idea visual corta. No es una llamada de venta larga; solo queria preguntar a que correo o contacto se la puedo mandar.",
+      followUp:
+        "Te mande una idea visual basada en informacion publica del negocio. Si quieres, puedo dejar una version inicial lista esta semana desde $500 y luego sumarle booking/follow-up.",
+    },
+    doNotDoYet: [
+      "No enviar volumen masivo.",
+      "No comprar data, ads, domains extra o herramientas.",
+      "No prometer resultados garantizados.",
+      "No usar reviews/fotos privadas ni claims inventados.",
+      "No entregar nada sin deposito/scope/QA.",
+    ],
+    emailPending: {
+      isPending: !emailProvider.configured || parsed.emailPending,
+      providerConfigured: emailProvider.configured,
+      missing: emailProvider.missing,
+      allowedWhilePending: ["research", "lead scoring", "mockups", "outreach drafts", "contact forms", "manual Gmail/mailto", "phone permission calls"],
+    },
+  };
+}
+
+export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
+  const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalCostUsd;
+  const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
+  const missing = [
+    !input.scopeApproved && "scope aprobado",
+    !input.depositPaid && "deposito pagado",
+    !input.publicDataVerified && "data publica verificada",
+    input.estimatedInternalCostUsd > 100 && "costo interno bajo $100/mes",
+    grossMarginPercent < 65 && "margen mensual >= 65%",
+  ].filter(Boolean) as string[];
+  const status = missing.some((item) => ["deposito pagado", "costo interno bajo $100/mes", "margen mensual >= 65%"].includes(item))
+    ? "blocked"
+    : missing.length > 0
+      ? "needs_scope"
+      : "ready_to_build";
+  const phases = [
+    {
+      id: "intake",
+      name: "Intake y evidencia",
+      ownerAgent: "business-researcher",
+      days: 1,
+      tasks: [
+        "Confirmar alcance, precio, timeline y decision maker.",
+        "Guardar fuentes publicas usadas para copy, fotos, servicios y claims.",
+        "Marcar datos inciertos para aprobacion del cliente.",
+      ],
+    },
+    {
+      id: "build",
+      name: input.projectType === "automation" ? "Build automation" : "Build website",
+      ownerAgent: input.projectType === "automation" ? "automation-architect" : "mockup-builder",
+      days: Math.max(2, Math.min(4, input.launchTargetDays - 3)),
+      tasks: input.projectType === "automation"
+        ? [
+            "Mapear trigger, datos, aprobaciones y rollback.",
+            "Crear flujo minimo rentable con logs y datos de ejemplo.",
+            "Preparar dashboard simple para resultados.",
+          ]
+        : [
+            "Construir hero premium, secciones, CTAs y captura de leads.",
+            "Crear estructura responsive mobile/desktop.",
+            "Conectar tracking basico y formularios en modo prueba.",
+          ],
+    },
+    {
+      id: "automation",
+      name: "Automation sprint",
+      ownerAgent: "automation-architect",
+      days: input.includesAutomation ? 2 : 0,
+      tasks: input.includesAutomation
+        ? [
+            "Configurar follow-up con aprobacion humana antes de mensajes sensibles.",
+            "Crear reporte semanal de leads, clicks, reservas/interes y costo.",
+            "Definir fallback manual si una integracion falla.",
+          ]
+        : ["Mantener automation como upsell fase 2."],
+    },
+    {
+      id: "qa",
+      name: "QA council",
+      ownerAgent: "qa-council",
+      days: 1,
+      tasks: [
+        "Probar mobile, desktop, copy largo, CTAs, links y forms.",
+        "Correr pruebas de automatizacion con datos falsos.",
+        "Confirmar costo, margen, rollback y aprobacion final de Robert.",
+      ],
+    },
+    {
+      id: "handoff",
+      name: "Entrega y mejora",
+      ownerAgent: "growth-director",
+      days: 1,
+      tasks: [
+        "Entregar demo controlado, checklist y siguientes mejoras.",
+        "Registrar venta/gasto en ledger.",
+        "Programar review semanal de resultados y objeciones.",
+      ],
+    },
+  ];
+
+  return {
+    input,
+    decision: {
+      status,
+      missing,
+      mode: "human_approval_required_for_launch",
+      reason:
+        status === "ready_to_build"
+          ? "Listo para construir con subagentes y QA antes de entregar."
+          : status === "needs_scope"
+            ? "Puede prepararse internamente, pero falta evidencia/aprobacion antes de build completo."
+            : "Bloqueado: no construir, lanzar ni enviar hasta resolver gates criticos.",
+    },
+    budget: {
+      setupUsd: input.setupUsd,
+      requiredDepositUsd: Math.round(input.setupUsd * 0.5),
+      monthlyRetainerUsd: input.monthlyRetainerUsd,
+      estimatedInternalCostUsd: input.estimatedInternalCostUsd,
+      grossMarginUsd,
+      grossMarginPercent,
+      insideCostCap: input.estimatedInternalCostUsd <= 100,
+    },
+    phases,
+    subagentCorrections: [
+      { agent: "business-researcher", corrects: "claims inventados, datos sin fuente, negocio mal entendido" },
+      { agent: "mockup-builder", corrects: "CTA flojo, hero generico, layout no vendible, mobile roto" },
+      { agent: "automation-architect", corrects: "flujo sin rollback, mensajes sin aprobacion, costo oculto" },
+      { agent: "cost-controller", corrects: "gasto sobre $100/mes, margen bajo, tools innecesarias" },
+      { agent: "qa-council", corrects: "links/forms rotos, responsive, entrega sin checklist" },
+      { agent: "closer", corrects: "propuesta confusa, precio sin deposito, promesas no aprobadas" },
+    ],
+    deliveryGates: [
+      { gate: "scope", passed: input.scopeApproved, fix: "Conseguir aprobacion escrita del scope." },
+      { gate: "deposit", passed: input.depositPaid, fix: "Cobrar deposito antes de construir/lanzar." },
+      { gate: "data", passed: input.publicDataVerified, fix: "Verificar fuentes publicas y quitar claims dudosos." },
+      { gate: "cost", passed: input.estimatedInternalCostUsd <= 100, fix: "Reducir herramientas o subir retainer." },
+      { gate: "margin", passed: grossMarginPercent >= 65, fix: "Subir precio mensual o recortar alcance." },
+    ],
+    doneDefinition: [
+      "Cliente aprueba scope y deposito.",
+      "Website/mockup responsive probado.",
+      "Automatizaciones probadas con datos de ejemplo y aprobacion humana.",
+      "Rollback/manual fallback documentado.",
+      "Ledger actualizado con ingreso, cash y costo.",
+      "Review semanal creado para mejorar el sistema.",
+    ],
+  };
+}
+
+function buildAgentWorkOrder(input: RevenueAgentRunInput) {
+  const request = input.request.toLowerCase();
+  const clarificationGate = buildRevenueClarificationGate({
+    request: input.request,
+    projectType: input.projectType,
+  });
+  const wantsAutomation = input.projectType !== "website" || includesAny(request, ["automat", "automation", "follow", "crm", "mensaje", "email", "whatsapp", "lead"]);
+  const wantsWebsite = input.projectType !== "automation" || includesAny(request, ["web", "site", "landing", "3d", "seo", "pagina"]);
+  const needsContactApproval = ["outreach", "proposal"].includes(input.stage) && !input.approvalToContact;
+  const needsBuildApproval = ["production", "delivery"].includes(input.stage) && !input.approvalToBuild;
+  const needsSpendApproval = input.estimatedInternalCostUsd > 0 && input.cashCollectedUsd <= 0 && !input.approvalToSpend;
+  const insideCap = input.estimatedInternalCostUsd <= 100 && input.monthlyBudgetUsd <= 100;
+  const cashProtected = input.estimatedInternalCostUsd <= input.cashCollectedUsd || input.cashCollectedUsd === 0;
+  const requiredApprovals = [
+    clarificationGate.status === "needs_clarification" && "responder preguntas de aclaracion",
+    needsContactApproval && "aprobar contacto externo",
+    needsBuildApproval && "aprobar build/entrega",
+    needsSpendApproval && "aprobar gasto antes de tener cash cobrado",
+    !insideCap && "reducir costo mensual a menos de $100",
+  ].filter(Boolean) as string[];
+  const status: RevenueAgentRun["status"] = !insideCap ? "blocked" : requiredApprovals.length > 0 ? "approval_required" : "ready";
+  const workOrder: RevenueAgentRun["workOrder"] = [
+    clarificationGate.status === "needs_clarification" && {
+      step: "Preguntas de aclaracion",
+      ownerAgent: "growth-director",
+      output: `${clarificationGate.minimumAnswer} Preguntas: ${clarificationGate.questions.join(" ")}`,
+      approvalRequired: true,
+    },
+    {
+      step: "Research y evidencia",
+      ownerAgent: "business-researcher",
+      output: `Verificar datos publicos de ${input.businessName}, oferta, canales, pruebas y claims inciertos.`,
+      approvalRequired: false,
+    },
+    wantsWebsite && {
+      step: "Mockup website dinamico",
+      ownerAgent: "mockup-builder",
+      output: "Crear propuesta visual vendible con hero 3D, secciones de conversion, CTA y comparables.",
+      approvalRequired: input.stage === "mockup" || input.stage === "outreach",
+    },
+    wantsAutomation && {
+      step: "Arquitectura de automatizacion",
+      ownerAgent: "automation-architect",
+      output: "Convertir el pedido en flujo, triggers, datos, costos, fallback manual y retainer recomendado.",
+      approvalRequired: input.stage === "production" || input.stage === "delivery",
+    },
+    {
+      step: "Oferta y cierre",
+      ownerAgent: "closer",
+      output: `Preparar precio base de $${input.estimatedOfferUsd.toLocaleString("en-US")}, deposito y mensaje en draft.`,
+      approvalRequired: true,
+    },
+    {
+      step: "QA council",
+      ownerAgent: "qa-council",
+      output: "Revisar evidencia, costo, margen, links, mobile, copy y reglas de no gastar/no enviar sin aprobacion.",
+      approvalRequired: false,
+    },
+  ].filter(Boolean) as RevenueAgentRun["workOrder"];
+  const subagentReviews: RevenueAgentRun["subagentReviews"] = [
+    {
+      agent: "business-researcher",
+      verdict: clarificationGate.status === "clear" ? "pass" : "fix",
+      correction: clarificationGate.status === "clear" ? "Pedido suficientemente claro para armar plan inicial." : `Pedir contexto: ${clarificationGate.missing.join(", ")}.`,
+    },
+    {
+      agent: "mockup-builder",
+      verdict: wantsWebsite ? "pass" : "fix",
+      correction: wantsWebsite ? "Debe entregar preview visual y responsive antes de vender build completo." : "No crear website si el pedido es solo automatizacion.",
+    },
+    {
+      agent: "automation-architect",
+      verdict: wantsAutomation ? "pass" : "fix",
+      correction: wantsAutomation ? "Debe estimar costo mensual y fallback manual antes de activar." : "No prometer automatizacion si el cliente solo pidio website.",
+    },
+    {
+      agent: "cost-controller",
+      verdict: insideCap ? "pass" : "block",
+      correction: insideCap ? "Costo interno dentro del cap inicial." : "Bloquear: costo mensual o presupuesto supera $100.",
+    },
+    {
+      agent: "closer",
+      verdict: input.approvalToContact ? "pass" : "fix",
+      correction: input.approvalToContact ? "Puede preparar canal manual aprobado." : "Mantener mensaje en draft hasta aprobacion humana.",
+    },
+    {
+      agent: "qa-council",
+      verdict: status === "blocked" ? "block" : requiredApprovals.length > 0 ? "fix" : "pass",
+      correction: status === "blocked" ? "No avanzar hasta resolver cap/costo." : requiredApprovals.length > 0 ? "Avanzar solo en tareas internas; no contactar/gastar/construir." : "Listo para ejecutar con gates registrados.",
+    },
+  ];
+
+  return {
+    status,
+    clarificationGate,
+    budgetGate: {
+      monthlyCapUsd: 100,
+      insideCap,
+      cashProtected,
+      allowedSpendUsd: input.cashCollectedUsd > 0 ? Math.min(100, input.cashCollectedUsd, input.monthlyBudgetUsd) : 0,
+    },
+    workOrder,
+    subagentReviews,
+    requiredApprovals,
+    nextActions:
+      status === "blocked"
+        ? ["Reducir costo interno/presupuesto a menos de $100.", "Recalcular oferta o subir retainer antes de prometer entrega."]
+        : clarificationGate.status === "needs_clarification"
+          ? ["Hacer las preguntas de aclaracion al cliente/prospecto.", "No cotizar final ni construir hasta responder el gate.", "Luego rerun del agente con el pedido completo."]
+        : requiredApprovals.length > 0
+          ? ["Trabajar research/mockup interno.", "Pedir aprobacion humana antes de contacto, gasto o build.", "Guardar draft en Outbox si se va a contactar."]
+          : ["Crear mockup/propuesta.", "Registrar contacto aprobado en Outbox.", "Actualizar ledger cuando cobre deposito."],
+    mainAgent: {
+      agent: "growth-director",
+      decision: status,
+      reason:
+        status === "blocked"
+          ? "El costo o presupuesto rompe la regla inicial de menos de $100/mes."
+          : clarificationGate.status === "needs_clarification"
+            ? "No entiendo suficiente el pedido para prometer alcance, precio final o delivery."
+          : requiredApprovals.length > 0
+            ? "Puede avanzar internamente, pero requiere aprobaciones antes de acciones externas."
+            : "Puede ejecutar la siguiente accion rentable dentro del cap.",
+    },
+    learningUpdate:
+      status === "ready"
+        ? `Playbook: ${input.niche} en ${input.area} puede avanzar con ${input.projectType} si mantiene costo <= $100 y cobra deposito.`
+        : clarificationGate.status === "needs_clarification"
+          ? `Playbook: preguntar primero cuando ${input.niche} en ${input.area} no tenga trigger, accion, datos o resultado claro.`
+        : `Playbook: bloquear o pedir aprobacion cuando ${input.niche} en ${input.area} no tenga cash/aprobaciones/costo bajo control.`,
+  };
+}
+
+export function recordRevenueAgentRun(input: RevenueAgentRunInput) {
+  loadRevenueAgentRuns();
+  const built = buildAgentWorkOrder(input);
+  const now = new Date().toISOString();
+  const run: RevenueAgentRun = {
+    ...input,
+    id: `agent-run-${Date.now()}-${revenueAgentRuns.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    ...built,
+  };
+
+  revenueAgentRuns.push(run);
+  persistRevenueAgentRuns();
+
+  return {
+    run,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenueLead(input: RevenueLeadInput) {
+  loadRevenueLeads();
+  const qualification = qualifyRevenueLead(input);
+  const now = new Date().toISOString();
+  const lead: RevenueLead = {
+    ...input,
+    status: input.status === "research" ? qualification.recommendedStatus : input.status,
+    id: `lead-${Date.now()}-${revenueLeads.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  revenueLeads.push(lead);
+  persistRevenueLeads();
+
+  return {
+    lead,
+    qualification,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function syncLeadAfterOutreachDraft(draft: RevenueOutreachDraft) {
+  loadRevenueLeads();
+  const lead = draft.leadId
+    ? revenueLeads.find((item) => item.id === draft.leadId)
+    : revenueLeads.find((item) => item.businessName.toLowerCase() === draft.businessName.toLowerCase());
+
+  if (!lead || lead.status === "closed" || lead.status === "proposal_sent") return null;
+
+  lead.status = "outreach_ready";
+  lead.updatedAt = new Date().toISOString();
+  persistRevenueLeads();
+  return lead;
+}
+
+export function recordRevenueOutreachDraft(input: RevenueOutreachDraftInput) {
+  loadRevenueOutreach();
+  const proposal = buildProposalEmail(input);
+  const hasRecipient = input.recipientEmail.trim().length > 0;
+  const hasSummary = input.businessSummary.trim().length >= 40;
+  const hasSource = Boolean(input.sourceUrl || input.mockupUrl);
+  const approved = input.approvalStatus === "approved";
+  const qaGates = [
+    { gate: "recipient", passed: hasRecipient, fix: "Agregar email/contacto verificable antes de contactar." },
+    { gate: "evidence", passed: hasSummary && hasSource, fix: "Agregar fuente publica o mockup URL y resumen especifico del negocio." },
+    { gate: "cost", passed: proposal.pricing.insideCostCap, fix: "Bajar herramientas/costo mensual o subir retainer." },
+    { gate: "approval", passed: approved, fix: "Robert debe aprobar el mensaje antes de enviarlo por email, DM o formulario." },
+  ];
+  const status: RevenueOutreachDraft["status"] = qaGates.some((gate) => !gate.passed && gate.gate !== "approval")
+    ? "blocked"
+    : approved
+      ? "approved"
+      : "draft";
+  const now = new Date().toISOString();
+  const draft: RevenueOutreachDraft = {
+    ...input,
+    id: `outreach-${Date.now()}-${revenueOutreachDrafts.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    status,
+    subject: proposal.subject,
+    body: proposal.body,
+    pricing: proposal.pricing,
+    delivery: {
+      ...proposal.delivery,
+      sendStatus: "not_sent",
+      reason:
+        status === "approved"
+          ? "Aprobado para envio manual. No hay proveedor conectado, usa Gmail/mailto o copia el texto."
+          : status === "blocked"
+            ? "Bloqueado por QA. Corrige los gates antes de contactar."
+            : "Draft guardado. Falta aprobacion humana antes de contactar.",
+    },
+    links: proposal.links,
+    qaGates,
+    nextAction:
+      status === "approved"
+        ? "Abrir Gmail/mailto, revisar una ultima vez y enviar manualmente."
+        : status === "blocked"
+          ? "Corregir los gates fallidos y volver a guardar el draft."
+          : "Revisar copy, confirmar evidencia y aprobar antes de enviar.",
+  };
+
+  revenueOutreachDrafts.push(draft);
+  persistRevenueOutreach();
+  const syncedLead = syncLeadAfterOutreachDraft(draft);
+
+  return {
+    draft,
+    syncedLead,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
+  const parsed = revenueSalesAutopilotSchema.parse(input);
+  const clarificationGate = buildRevenueClarificationGate({
+    request: parsed.request,
+    projectType: parsed.projectType,
+  });
+  const leadResult = recordRevenueLead({
+    businessName: parsed.businessName,
+    area: parsed.area,
+    niche: parsed.niche,
+    websiteStatus: parsed.websiteStatus,
+    contactChannel: parsed.contactChannel,
+    contactValue: parsed.contactValue,
+    evidence: parsed.evidence,
+    painPoint: parsed.painPoint,
+    estimatedOfferUsd: parsed.estimatedOfferUsd,
+    status: "research",
+  });
+  const includeAutomation = parsed.projectType !== "website";
+  const mockup = buildRevenueMockup({
+    businessName: parsed.businessName,
+    area: parsed.area,
+    niche: parsed.niche,
+    websiteStatus: parsed.websiteStatus,
+    evidence: parsed.evidence,
+    painPoint: parsed.painPoint,
+    primaryOffer: includeAutomation ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium",
+    estimatedOfferUsd: parsed.estimatedOfferUsd,
+    includeAutomation,
+  });
+  const agentRunResult = recordRevenueAgentRun({
+    businessName: parsed.businessName,
+    area: parsed.area,
+    niche: parsed.niche,
+    request: parsed.request,
+    stage: "proposal",
+    projectType: parsed.projectType,
+    estimatedOfferUsd: parsed.estimatedOfferUsd,
+    estimatedInternalCostUsd: parsed.estimatedInternalCostUsd,
+    monthlyBudgetUsd: parsed.monthlyBudgetUsd,
+    cashCollectedUsd: parsed.cashCollectedUsd,
+    approvalToContact: parsed.approvalToContact,
+    approvalToSpend: parsed.approvalToSpend,
+    approvalToBuild: parsed.approvalToBuild,
+  });
+  const deliveryReview = buildDeliveryReview({
+    projectName: `${parsed.businessName} autopilot sale`,
+    projectType: parsed.projectType,
+    setupPriceUsd: parsed.estimatedOfferUsd,
+    monthlyRetainerUsd: parsed.monthlyRetainerUsd,
+    estimatedInternalMonthlyCostUsd: parsed.estimatedInternalCostUsd,
+    clientApprovedScope: false,
+    depositPaid: parsed.cashCollectedUsd > 0,
+    publicDataVerified: parsed.evidence.trim().length >= 12,
+    responsiveChecked: false,
+    linksChecked: false,
+    automationTested: !includeAutomation,
+    rollbackPlanReady: false,
+    notes: "Autopilot prepara venta; QA bloquea entrega hasta scope, deposito, pruebas y aprobacion.",
+  });
+  const hasRecipient = parsed.recipientEmail.trim().length > 0;
+  const canDraftOutreach = hasRecipient && leadResult.qualification.missing.length === 0 && parsed.estimatedInternalCostUsd <= 100;
+  const outreachResult = canDraftOutreach
+    ? recordRevenueOutreachDraft({
+        leadId: leadResult.lead.id,
+        channel: parsed.contactChannel === "email" ? "email" : parsed.contactChannel === "contact_form" ? "contact_form" : "gmail",
+        approvalStatus: parsed.approvalToContact ? "approved" : "draft",
+        recipientEmail: parsed.recipientEmail,
+        contactName: parsed.contactName || "Owner",
+        businessName: parsed.businessName,
+        sourceUrl: parsed.sourceUrl || undefined,
+        businessSummary: parsed.businessSummary || `${parsed.businessName} en ${parsed.area}: ${parsed.evidence || parsed.painPoint}`,
+        websitePriceUsd: includeAutomation ? Math.round(parsed.estimatedOfferUsd * 0.65) : parsed.estimatedOfferUsd,
+        automationPriceUsd: includeAutomation ? Math.round(parsed.estimatedOfferUsd * 0.35) : 0,
+        monthlyRetainerUsd: parsed.monthlyRetainerUsd,
+        estimatedInternalMonthlyCostUsd: parsed.estimatedInternalCostUsd,
+        notes: "Autopilot draft. No enviar hasta aprobacion humana final.",
+      })
+    : null;
+  const requiredBeforeExternalAction = [
+    !hasRecipient && "contacto/email verificable",
+    leadResult.qualification.missing.length > 0 && `resolver lead: ${leadResult.qualification.missing.join(", ")}`,
+    clarificationGate.status === "needs_clarification" && "responder preguntas de aclaracion",
+    !parsed.approvalToContact && "aprobar contacto externo",
+    parsed.estimatedInternalCostUsd > 100 && "reducir costo interno bajo $100/mes",
+    parsed.estimatedInternalCostUsd > parsed.cashCollectedUsd && parsed.cashCollectedUsd === 0 && !parsed.approvalToSpend && "aprobar gasto antes de cash cobrado",
+  ].filter(Boolean) as string[];
+  const status =
+    parsed.estimatedInternalCostUsd > 100
+      ? "blocked"
+      : requiredBeforeExternalAction.length > 0
+        ? "approval_required"
+        : "ready";
+
+  return {
+    status,
+    guardrail:
+      status === "ready"
+        ? "Autopilot preparo el paquete; aun asi el envio real usa outbox y aprobacion humana."
+        : status === "blocked"
+          ? "Bloqueado por costo o gates criticos; no gastar, construir ni contactar."
+          : "Autopilot preparo trabajo interno; falta aprobacion/evidencia antes de accion externa.",
+    lead: leadResult.lead,
+    leadQualification: leadResult.qualification,
+    clarificationGate,
+    mockup,
+    agentRun: agentRunResult.run,
+    deliveryReview,
+    outreachDraft: outreachResult?.draft || null,
+    requiredBeforeExternalAction,
+    nextActions:
+      status === "blocked"
+        ? ["Reducir costo interno a menos de $100.", "Recalcular oferta/retainer antes de prometer entrega."]
+        : requiredBeforeExternalAction.length > 0
+          ? ["Completar evidencia/contacto/aprobacion.", "Mantener outreach en draft.", "Usar QA antes de enviar preview."]
+          : ["Revisar draft en Outbox.", "Aprobar envio manual/API.", "Registrar deposito en ledger si cierra."],
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) {
+  loadRevenueOutreach();
+  const draft = revenueOutreachDrafts.find((item) => item.id === input.draftId);
+  const provider = getRevenueEmailProviderStatus();
+  const now = new Date().toISOString();
+  const gates = [
+    { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
+    { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
+    { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
+    { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },
+    { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.every((gate) => gate.passed)), fix: "Resolver gates de QA antes de contactar." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!draft) {
+    return {
+      status: "blocked" as const,
+      provider,
+      gates,
+      reason: failedGate?.fix || "Draft no encontrado.",
+      draft: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  draft.delivery.lastAttemptAt = now;
+
+  if (failedGate) {
+    draft.delivery.sendStatus = provider.configured ? "blocked" : "provider_missing";
+    draft.delivery.reason = failedGate.fix;
+    draft.updatedAt = now;
+    persistRevenueOutreach();
+    return {
+      status: "blocked" as const,
+      provider,
+      gates,
+      reason: failedGate.fix,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  try {
+    const sendResult = await sendRevenueOutreachPayload({
+      from: provider.fromEmail,
+      to: draft.recipientEmail,
+      subject: draft.subject,
+      text: draft.body,
+      html: textToHtml(draft.body),
+      idempotencyKey: draft.id,
+    });
+    draft.delivery.mode = "provider_api";
+    draft.delivery.sendStatus = "sent";
+    draft.delivery.reason = "Enviado por Resend API despues de aprobacion humana y QA.";
+    draft.delivery.provider = provider.provider;
+    draft.delivery.externalMessageId = sendResult.id;
+    draft.delivery.sentAt = now;
+    draft.updatedAt = now;
+
+    if (draft.leadId) {
+      loadRevenueLeads();
+      const lead = revenueLeads.find((item) => item.id === draft.leadId);
+      if (lead && lead.status !== "closed") {
+        lead.status = "proposal_sent";
+        lead.updatedAt = now;
+        persistRevenueLeads();
+      }
+    }
+
+    persistRevenueOutreach();
+    return {
+      status: "sent" as const,
+      provider,
+      gates,
+      sendResult,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Email provider failed";
+    draft.delivery.mode = "provider_api";
+    draft.delivery.sendStatus = "failed";
+    draft.delivery.reason = message;
+    draft.delivery.provider = provider.provider;
+    draft.updatedAt = now;
+    persistRevenueOutreach();
+    return {
+      status: "failed" as const,
+      provider,
+      gates,
+      reason: message,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+}
+
+export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
+  loadRevenueLedger();
+  const parsed = revenueLedgerEntrySchema.parse(input);
+  if (parsed.kind === "expense") {
+    const snapshotBefore = getRevenueEngineSnapshot();
+    const projectedSpendUsd = snapshotBefore.metrics.estimatedSpendUsd + parsed.amountUsd + parsed.estimatedInternalCostUsd;
+    const blockers = [
+      projectedSpendUsd > 100 && "Gasto mensual estimado supera el cap inicial de $100.",
+      projectedSpendUsd > snapshotBefore.metrics.cashCollectedUsd && "El gasto supera el cash cobrado; cobrar deposito antes de gastar.",
+      snapshotBefore.approvalQueueItems.length > 0 && "Hay aprobaciones pendientes; limpiar approval queue antes de gastar.",
+    ].filter(Boolean) as string[];
+
+    if (blockers.length > 0) {
+      return {
+        entry: null,
+        snapshot: snapshotBefore,
+        guardrail: {
+          status: "blocked" as const,
+          reason: blockers.join(" "),
+        },
+      };
+    }
+  }
+
+  const entry: RevenueLedgerEntry = {
+    ...parsed,
+    id: `rev-${Date.now()}-${revenueLedger.length + 1}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  revenueLedger.push(entry);
+  persistRevenueLedger();
+  const snapshot = getRevenueEngineSnapshot();
+
+  return {
+    entry,
+    snapshot,
+    guardrail: {
+      status:
+        entry.kind === "expense" && snapshot.metrics.estimatedSpendUsd > 100
+          ? "blocked"
+          : snapshot.metrics.estimatedSpendUsd > snapshot.metrics.cashCollectedUsd
+            ? "approval_required"
+            : "ok",
+      reason:
+        entry.kind === "expense" && snapshot.metrics.estimatedSpendUsd > 100
+          ? "Gasto mensual estimado supera el cap inicial de $100."
+          : snapshot.metrics.estimatedSpendUsd > snapshot.metrics.cashCollectedUsd
+            ? "El gasto supera el cash cobrado; requiere aprobacion antes de gastar o enviar mas."
+            : "Ledger actualizado dentro de las reglas de rentabilidad.",
+    },
+  };
+}
+
+export function preflightRevenueExpense(input: RevenueExpensePreflightInput) {
+  const parsed = revenueExpensePreflightSchema.parse(input);
+  const snapshot = getRevenueEngineSnapshot();
+  const projectedSpendUsd = snapshot.metrics.estimatedSpendUsd + parsed.amountUsd + parsed.estimatedInternalCostUsd;
+  const projectedProfitUsd = snapshot.metrics.cashCollectedUsd - projectedSpendUsd;
+  const blockers = [
+    parsed.amountUsd + parsed.estimatedInternalCostUsd <= 0 && "monto/costo debe ser mayor a 0",
+    projectedSpendUsd > 100 && `pasaria el cap inicial de $100/mes: ${projectedSpendUsd} USD`,
+    projectedSpendUsd > snapshot.metrics.cashCollectedUsd && `gastaria mas que el cash cobrado: cash ${snapshot.metrics.cashCollectedUsd} USD vs spend ${projectedSpendUsd} USD`,
+    snapshot.approvalQueueItems.length > 0 && "hay approval queue pendiente",
+  ].filter(Boolean) as string[];
+  const status = blockers.length > 0 ? "blocked" as const : "approved" as const;
+
+  return {
+    status,
+    concept: parsed.concept,
+    amountUsd: parsed.amountUsd,
+    estimatedInternalCostUsd: parsed.estimatedInternalCostUsd,
+    projected: {
+      spendUsd: projectedSpendUsd,
+      profitUsd: projectedProfitUsd,
+      remainingCapUsd: Math.max(0, 100 - projectedSpendUsd),
+      cashCoverageUsd: snapshot.metrics.cashCollectedUsd - projectedSpendUsd,
+    },
+    blockers,
+    nextAction:
+      status === "approved"
+        ? "Gasto pre-aprobado por Profit Guard; registrar en ledger solo si Robert confirma."
+        : "No gastar ni registrar como ejecutado; cobrar deposito, bajar costo o limpiar approvals primero.",
+    snapshot,
+  };
+}
+
+export function setRevenueLedgerPathForTests(filePath: string) {
+  revenueLedgerPathOverride = filePath;
+  revenueLedgerLoaded = false;
+  revenueLedgerPersistenceError = null;
+  revenueLedger.splice(0, revenueLedger.length);
+}
+
+export function setRevenueLeadsPathForTests(filePath: string) {
+  revenueLeadsPathOverride = filePath;
+  revenueLeadsLoaded = false;
+  revenueLeadsPersistenceError = null;
+  revenueLeads.splice(0, revenueLeads.length);
+}
+
+export function setRevenueOutreachPathForTests(filePath: string) {
+  revenueOutreachPathOverride = filePath;
+  revenueOutreachLoaded = false;
+  revenueOutreachPersistenceError = null;
+  revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length);
+}
+
+export function setRevenueOutreachSenderForTests(sender: ((payload: RevenueOutreachSendPayload) => Promise<RevenueOutreachSendResponse>) | null) {
+  revenueOutreachSenderOverride = sender;
+}
+
+export function setRevenueAgentRunsPathForTests(filePath: string) {
+  revenueAgentRunsPathOverride = filePath;
+  revenueAgentRunsLoaded = false;
+  revenueAgentRunsPersistenceError = null;
+  revenueAgentRuns.splice(0, revenueAgentRuns.length);
+}
+
+export function setRevenueAutomationOpportunitiesPathForTests(filePath: string) {
+  revenueAutomationOpportunitiesPathOverride = filePath;
+  revenueAutomationOpportunitiesLoaded = false;
+  revenueAutomationOpportunitiesPersistenceError = null;
+  revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
+}
+
+export function setRevenueImprovementReviewsPathForTests(filePath: string) {
+  revenueImprovementReviewsPathOverride = filePath;
+  revenueImprovementReviewsLoaded = false;
+  revenueImprovementReviewsPersistenceError = null;
+  revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
+}
+
+export function setRevenueScoutingMissionsPathForTests(filePath: string) {
+  revenueScoutingMissionsPathOverride = filePath;
+  revenueScoutingMissionsLoaded = false;
+  revenueScoutingMissionsPersistenceError = null;
+  revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
+}
+
+export function setRevenueDeliveryWorkspacesPathForTests(filePath: string) {
+  revenueDeliveryWorkspacesPathOverride = filePath;
+  revenueDeliveryWorkspacesLoaded = false;
+  revenueDeliveryWorkspacesPersistenceError = null;
+  revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length);
+}
+
+export function setRevenueApprovalDecisionsPathForTests(filePath: string) {
+  revenueApprovalDecisionsPathOverride = filePath;
+  revenueApprovalDecisionsLoaded = false;
+  revenueApprovalDecisionsPersistenceError = null;
+  revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length);
+}
+
+export function setRevenueAutomationIntakesPathForTests(filePath: string) {
+  revenueAutomationIntakesPathOverride = filePath;
+  revenueAutomationIntakesLoaded = false;
+  revenueAutomationIntakesPersistenceError = null;
+  revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length);
+}
+
+export function resetRevenueLedgerForTests() {
+  revenueLedger.splice(0, revenueLedger.length);
+  revenueLedgerLoaded = true;
+  revenueLedgerPersistenceError = null;
+  const ledgerPath = getRevenueLedgerPath();
+  if (fs.existsSync(ledgerPath)) {
+    fs.unlinkSync(ledgerPath);
+  }
+}
+
+export function resetRevenueLeadsForTests() {
+  revenueLeads.splice(0, revenueLeads.length);
+  revenueLeadsLoaded = true;
+  revenueLeadsPersistenceError = null;
+  const leadsPath = getRevenueLeadsPath();
+  if (fs.existsSync(leadsPath)) {
+    fs.unlinkSync(leadsPath);
+  }
+}
+
+export function resetRevenueOutreachForTests() {
+  revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length);
+  revenueOutreachLoaded = true;
+  revenueOutreachPersistenceError = null;
+  revenueOutreachSenderOverride = null;
+  const outreachPath = getRevenueOutreachPath();
+  if (fs.existsSync(outreachPath)) {
+    fs.unlinkSync(outreachPath);
+  }
+}
+
+export function resetRevenueAgentRunsForTests() {
+  revenueAgentRuns.splice(0, revenueAgentRuns.length);
+  revenueAgentRunsLoaded = true;
+  revenueAgentRunsPersistenceError = null;
+  const agentRunsPath = getRevenueAgentRunsPath();
+  if (fs.existsSync(agentRunsPath)) {
+    fs.unlinkSync(agentRunsPath);
+  }
+}
+
+export function resetRevenueAutomationOpportunitiesForTests() {
+  revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
+  revenueAutomationOpportunitiesLoaded = true;
+  revenueAutomationOpportunitiesPersistenceError = null;
+  const opportunitiesPath = getRevenueAutomationOpportunitiesPath();
+  if (fs.existsSync(opportunitiesPath)) {
+    fs.unlinkSync(opportunitiesPath);
+  }
+}
+
+export function resetRevenueImprovementReviewsForTests() {
+  revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
+  revenueImprovementReviewsLoaded = true;
+  revenueImprovementReviewsPersistenceError = null;
+  const reviewsPath = getRevenueImprovementReviewsPath();
+  if (fs.existsSync(reviewsPath)) {
+    fs.unlinkSync(reviewsPath);
+  }
+}
+
+export function resetRevenueScoutingMissionsForTests() {
+  revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
+  revenueScoutingMissionsLoaded = true;
+  revenueScoutingMissionsPersistenceError = null;
+  const missionsPath = getRevenueScoutingMissionsPath();
+  if (fs.existsSync(missionsPath)) {
+    fs.unlinkSync(missionsPath);
+  }
+}
+
+export function resetRevenueDeliveryWorkspacesForTests() {
+  revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length);
+  revenueDeliveryWorkspacesLoaded = true;
+  revenueDeliveryWorkspacesPersistenceError = null;
+  const workspacesPath = getRevenueDeliveryWorkspacesPath();
+  if (fs.existsSync(workspacesPath)) {
+    fs.unlinkSync(workspacesPath);
+  }
+}
+
+export function resetRevenueApprovalDecisionsForTests() {
+  revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length);
+  revenueApprovalDecisionsLoaded = true;
+  revenueApprovalDecisionsPersistenceError = null;
+  const decisionsPath = getRevenueApprovalDecisionsPath();
+  if (fs.existsSync(decisionsPath)) {
+    fs.unlinkSync(decisionsPath);
+  }
+}
+
+export function resetRevenueAutomationIntakesForTests() {
+  revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length);
+  revenueAutomationIntakesLoaded = true;
+  revenueAutomationIntakesPersistenceError = null;
+  const intakesPath = getRevenueAutomationIntakesPath();
+  if (fs.existsSync(intakesPath)) {
+    fs.unlinkSync(intakesPath);
+  }
+}
+
+function includesAny(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function buildRevenueClarificationGate(input: {
+  request: string;
+  projectType?: "website" | "automation" | "bundle";
+  currentTools?: string;
+}) {
+  const request = input.request.trim();
+  const lowerRequest = request.toLowerCase();
+  const lowerTools = (input.currentTools || "").toLowerCase();
+  const wantsAutomation = input.projectType === "automation" || input.projectType === "bundle" || includesAny(lowerRequest, ["automat", "follow", "crm", "mensaje", "email", "whatsapp", "lead"]);
+  const wantsWebsite = input.projectType === "website" || input.projectType === "bundle" || includesAny(lowerRequest, ["web", "site", "landing", "3d", "seo", "pagina"]);
+  const wordCount = request.split(/\s+/).filter(Boolean).length;
+  const hasTrigger = includesAny(lowerRequest, ["cuando", "when", "nuevo", "entra", "recibe", "form", "lead", "pedido", "booking", "reserva", "cita", "trigger"]);
+  const hasAction = includesAny(lowerRequest, ["automat", "enviar", "send", "crear", "actualizar", "avisar", "notificar", "notify", "notification", "guardar", "follow", "seguimiento", "responder", "report"]);
+  const hasOutcome = includesAny(lowerRequest, ["para", "so that", "cerrar", "ahorrar", "agendar", "convertir", "vender", "capture", "capturar", "follow-up", "reporting", "report", "dashboard", "booked", "trial", "appointment", "owner", "buyer", "cliente", "nadie se pierda", "menos errores"]);
+  const hasDataSource = includesAny(`${lowerRequest} ${lowerTools}`, ["lead", "cliente", "sponsor", "buyer", "sheet", "crm", "email", "gmail", "instagram", "whatsapp", "form", "calendar", "stripe", "pos", "database", "base", "excel"]);
+  const hasWebsiteGoal = !wantsWebsite || includesAny(lowerRequest, ["cta", "booking", "reserva", "menu", "servicio", "galeria", "portfolio", "seo", "contacto", "lead", "signup", "trial"]);
+  const missing = [
+    wordCount < 14 && "pedido demasiado corto",
+    wantsAutomation && !hasTrigger && "trigger inicial de la automatizacion",
+    wantsAutomation && !hasAction && "accion exacta que debe ejecutar el sistema",
+    wantsAutomation && !hasDataSource && "herramienta o fuente de datos actual",
+    !hasOutcome && "resultado de negocio esperado",
+    wantsWebsite && !hasWebsiteGoal && "objetivo principal del website/mockup",
+  ].filter(Boolean) as string[];
+  const questions = [
+    missing.includes("trigger inicial de la automatizacion") && "Que evento inicia el flujo: nuevo lead, formulario, DM, llamada, pago, reserva u otra cosa?",
+    missing.includes("accion exacta que debe ejecutar el sistema") && "Que debe hacer el sistema automaticamente despues de ese evento?",
+    missing.includes("herramienta o fuente de datos actual") && "Donde vive hoy la informacion: Google Sheets, CRM, email, Instagram, WhatsApp, POS u otra herramienta?",
+    missing.includes("resultado de negocio esperado") && "Que resultado quieres venderle al cliente: mas reservas, mas leads respondidos, menos trabajo manual, reportes o cobros?",
+    missing.includes("objetivo principal del website/mockup") && "Cual es el objetivo numero uno del website: llamadas, reservas, ventas, lista de emails o confianza visual?",
+    missing.includes("pedido demasiado corto") && "Dame 2-3 frases sobre el proceso actual, quien lo usa y que duele ahora.",
+  ].filter(Boolean) as string[];
+
+  return {
+    status: missing.length > 0 ? "needs_clarification" as const : "clear" as const,
+    missing,
+    questions: questions.slice(0, 5),
+    minimumAnswer: "Responder estas preguntas antes de cotizar final, contactar al prospecto, construir o activar automatizaciones.",
+    blocks: missing.length > 0 ? ["precio final", "contacto externo", "build completo", "launch/activacion"] : [],
+  };
+}
+
+export function buildAutomationQuote(input: AutomationQuoteInput) {
+  const request = input.request.toLowerCase();
+  const toolText = input.currentTools.toLowerCase();
+  const clarificationGate = buildRevenueClarificationGate({
+    request: input.request,
+    projectType: "automation",
+    currentTools: input.currentTools,
+  });
+  const detectedNeeds = [
+    includesAny(request, ["lead", "cliente", "customer", "prospect", "crm", "seguimiento", "signup", "trial"]) && "lead follow-up",
+    includesAny(request, ["cita", "booking", "appointment", "calendar", "reserva"]) && "booking",
+    includesAny(request, ["email", "sms", "whatsapp", "mensaje", "dm", "notify", "notification"]) && "messaging",
+    includesAny(request, ["invoice", "factura", "pago", "payment", "stripe"]) && "payments",
+    includesAny(request, ["reporte", "report", "dashboard", "metric", "analytics", "weekly"]) && "reporting",
+    includesAny(request, ["inventory", "inventario", "stock", "orden", "order"]) && "operations",
+    includesAny(request, ["ai", "ia", "chatbot", "assistant", "asistente"]) && "ai assistant",
+  ].filter(Boolean) as string[];
+
+  const integrations = [
+    includesAny(toolText + request, ["google", "calendar", "gmail", "sheets"]) && "Google Workspace",
+    includesAny(toolText + request, ["stripe", "payment", "pago"]) && "Stripe",
+    includesAny(toolText + request, ["zapier", "make", "n8n"]) && "automation platform",
+    includesAny(toolText + request, ["square", "toast", "clover", "pos"]) && "POS",
+    includesAny(toolText + request, ["shopify", "woocommerce"]) && "ecommerce",
+    includesAny(toolText + request, ["instagram", "facebook", "meta", "dm"]) && "social inbox",
+    includesAny(toolText + request, ["whatsapp", "sms", "twilio"]) && "messaging provider",
+  ].filter(Boolean) as string[];
+
+  const needCount = Math.max(1, detectedNeeds.length);
+  const integrationCount = integrations.length;
+  const complexityScore = Math.min(10, 2 + needCount + integrationCount + (input.urgency === "this_week" ? 2 : 0));
+  const setupPriceUsd = Math.max(1500, 1000 + complexityScore * 550);
+  const retainerUsd = Math.max(300, 150 + complexityScore * 75);
+  const estimatedInternalMonthlyCostUsd = Math.min(100, Number((8 + needCount * 7 + integrationCount * 9 + (detectedNeeds.includes("ai assistant") ? 25 : 0)).toFixed(0)));
+  const grossMarginUsd = retainerUsd - estimatedInternalMonthlyCostUsd;
+  const grossMarginPercent = Math.round((grossMarginUsd / retainerUsd) * 100);
+  const needsClarification = clarificationGate.status === "needs_clarification" || detectedNeeds.length === 0;
+
+  const clarifyingQuestions = [
+    ...clarificationGate.questions,
+    "Que paso exacto quieres automatizar primero?",
+    "Donde viven hoy los leads/clientes: telefono, email, Instagram, Google Sheet, CRM u otro?",
+    "Que debe pasar cuando entra un nuevo lead o pedido?",
+    "Quien aprueba errores, pagos o mensajes sensibles antes de enviarlos?",
+  ].filter((question, index, all) => all.indexOf(question) === index).slice(0, needsClarification ? 5 : 2);
+
+  return {
+    input,
+    clarificationGate,
+    decision: {
+      status: needsClarification ? "needs_clarification" : "ready_to_pitch",
+      approvalMode: "draft_only",
+      reason: needsClarification
+        ? "El pedido todavia necesita respuestas antes de prometer entrega o precio final."
+        : "Hay suficiente informacion para preparar una propuesta de venta con QA y deposito.",
+    },
+    pricing: {
+      setupPriceUsd,
+      requiredDepositUsd: Math.round(setupPriceUsd * 0.5),
+      monthlyRetainerUsd: retainerUsd,
+      estimatedInternalMonthlyCostUsd,
+      grossMarginUsd,
+      grossMarginPercent,
+      insideCostCap: estimatedInternalMonthlyCostUsd <= 100,
+      clientBudgetFit: input.monthlyBudgetUsd >= retainerUsd ? "fits" : "upsell_or_reduce_scope",
+    },
+    scope: {
+      packageName: complexityScore >= 7 ? "Automation Sprint Plus" : "Automation Sprint",
+      detectedNeeds: detectedNeeds.length ? detectedNeeds : ["manual workflow discovery"],
+      integrations: integrations.length ? integrations : ["no external integration confirmed"],
+      deliverables: [
+        "Mapa del proceso actual y nuevo flujo automatizado",
+        "Intake/formulario o trigger inicial",
+        "Base simple de clientes/leads o conexion con herramienta actual",
+        "Notificaciones y seguimiento",
+        "Dashboard basico de estado y resultados",
+        "Manual corto de uso y handoff",
+      ],
+      outOfScopeUntilApproved: [
+        "Mensajes masivos sin opt-in verificable",
+        "Comprar data de leads",
+        "Cobrar clientes finales",
+        "Integraciones con credenciales del cliente sin acceso seguro",
+      ],
+    },
+    agents: [
+      {
+        id: "automation-architect",
+        check: "Define flujo, herramientas y entregables",
+        result: complexityScore <= 7 ? "pass" : "review",
+      },
+      {
+        id: "cost-controller",
+        check: "Mantiene costo interno por debajo de $100/mes al inicio",
+        result: estimatedInternalMonthlyCostUsd <= 100 ? "pass" : "block",
+      },
+      {
+        id: "qa-council",
+        check: "Exige pruebas, logs, rollback y aprobacion de acciones sensibles",
+        result: "pass",
+      },
+      {
+        id: "closer",
+        check: "No envia propuesta final hasta que Robert apruebe precio y alcance",
+        result: "approval_required",
+      },
+    ],
+    clientProposalDraft: {
+      headline: `${input.businessName}: automatizacion para ahorrar tiempo y cerrar mas clientes`,
+      summary:
+        `Podemos automatizar el flujo principal de ${input.industry} empezando por ${detectedNeeds[0] || "el proceso manual mas repetitivo"}. La entrega incluye setup, QA, dashboard y soporte mensual para que el sistema siga mejorando sin subir costos innecesarios.`,
+      close:
+        `Para empezar: deposito de $${Math.round(setupPriceUsd * 0.5).toLocaleString("en-US")} y kickoff de 30 minutos. No enviamos ni activamos nada sensible sin aprobacion.`,
+    },
+    deliveryPlan: [
+      "Dia 1: discovery, accesos y mapa del flujo",
+      "Dia 2-3: build del flujo minimo rentable",
+      "Dia 4: QA de subagentes y pruebas con datos de ejemplo",
+      "Dia 5: demo, ajustes y aprobacion",
+      "Dia 6-7: launch controlado y primer reporte",
+    ],
+    improvementLoop: [
+      "Medir tiempo ahorrado y errores evitados",
+      "Guardar objeciones y pedidos nuevos",
+      "Reducir pasos manuales cada semana",
+      "Subir retainer solo cuando el ROI este probado",
+    ],
+    clarifyingQuestions,
+  };
+}
+
+export function recordRevenueAutomationOpportunity(input: RevenueAutomationOpportunityInput) {
+  loadRevenueAutomationOpportunities();
+  const quote = buildAutomationQuote(input);
+  const qaGates = [
+    {
+      gate: "clarity",
+      passed: quote.decision.status === "ready_to_pitch",
+      fix: "Responder preguntas clave antes de prometer alcance final.",
+    },
+    {
+      gate: "scope",
+      passed: input.clientApprovedScope || input.status === "intake" || input.status === "quoted",
+      fix: "Conseguir aprobacion escrita del alcance antes de delivery.",
+    },
+    {
+      gate: "deposit",
+      passed: input.depositPaid || input.status === "intake" || input.status === "quoted",
+      fix: `Cobrar deposito de $${quote.pricing.requiredDepositUsd.toLocaleString("en-US")} antes de construir.`,
+    },
+    {
+      gate: "cost",
+      passed: quote.pricing.insideCostCap,
+      fix: "Reducir herramientas o subir retainer para mantener costo interno bajo $100/mes.",
+    },
+    {
+      gate: "margin",
+      passed: quote.pricing.grossMarginPercent >= 65,
+      fix: "Subir retainer o recortar alcance hasta margen bruto minimo de 65%.",
+    },
+  ];
+  const hasBlockingGate = qaGates.some((gate) => !gate.passed && ["clarity", "cost", "margin"].includes(gate.gate));
+  const status: RevenueAutomationOpportunity["status"] =
+    hasBlockingGate ? "blocked" : input.status === "intake" && quote.decision.status === "ready_to_pitch" ? "quoted" : input.status;
+  const now = new Date().toISOString();
+  const opportunity: RevenueAutomationOpportunity = {
+    ...input,
+    status,
+    id: `automation-opportunity-${Date.now()}-${revenueAutomationOpportunities.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    quote,
+    qaGates,
+    nextAction:
+      status === "blocked"
+        ? "Corregir gates bloqueantes antes de vender o construir."
+        : status === "quoted"
+          ? "Enviar propuesta en draft, pedir aprobacion de scope y cobrar deposito."
+          : status === "approved"
+            ? "Crear plan de produccion y no activar acciones sensibles sin QA."
+            : status === "sold"
+              ? "Registrar venta en ledger y pasar a produccion."
+              : "Actualizar estado y correr QA antes de avanzar.",
+  };
+
+  revenueAutomationOpportunities.push(opportunity);
+  persistRevenueAutomationOpportunities();
+
+  return {
+    opportunity,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function buildDeliveryReview(input: DeliveryReviewInput) {
+  const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
+  const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
+  const isAutomation = input.projectType === "automation" || input.projectType === "bundle";
+  const isWebsite = input.projectType === "website" || input.projectType === "bundle";
+
+  const gates = [
+    {
+      id: "commercial-approval",
+      agent: "closer",
+      label: "Scope aprobado por cliente",
+      passed: input.clientApprovedScope,
+      fix: "Conseguir aprobacion escrita del alcance, precio, timeline y limites.",
+    },
+    {
+      id: "deposit",
+      agent: "finance-controller",
+      label: "Deposito recibido",
+      passed: input.depositPaid,
+      fix: "No construir ni lanzar trabajo sensible sin deposito.",
+    },
+    {
+      id: "data-verification",
+      agent: "business-researcher",
+      label: "Data publica verificada",
+      passed: input.publicDataVerified,
+      fix: "Marcar fuentes, quitar claims dudosos y confirmar datos del negocio.",
+    },
+    {
+      id: "responsive",
+      agent: "visual-qa",
+      label: "Mobile/desktop revisado",
+      passed: !isWebsite || input.responsiveChecked,
+      fix: "Revisar mobile, desktop, textos largos, formularios y hero visual.",
+    },
+    {
+      id: "links",
+      agent: "technical-qa",
+      label: "Links y formularios probados",
+      passed: input.linksChecked,
+      fix: "Probar CTA, formulario, email, telefono, tracking y paginas clave.",
+    },
+    {
+      id: "automation-test",
+      agent: "automation-qa",
+      label: "Automatizacion probada con datos de ejemplo",
+      passed: !isAutomation || input.automationTested,
+      fix: "Correr pruebas con datos falsos, errores comunes y aprobaciones sensibles.",
+    },
+    {
+      id: "rollback",
+      agent: "ops-qa",
+      label: "Rollback/manual fallback listo",
+      passed: !isAutomation || input.rollbackPlanReady,
+      fix: "Definir como pausar el flujo y operar manualmente si algo falla.",
+    },
+    {
+      id: "cost-cap",
+      agent: "cost-controller",
+      label: "Costo interno bajo $100/mes",
+      passed: input.estimatedInternalMonthlyCostUsd <= 100,
+      fix: "Reducir herramientas pagadas, limitar volumen o subir retainer antes de lanzar.",
+    },
+    {
+      id: "margin",
+      agent: "growth-director",
+      label: "Margen mensual rentable",
+      passed: grossMarginPercent >= 65 && grossMarginUsd > 0,
+      fix: "Subir precio mensual, bajar costo o recortar alcance.",
+    },
+  ];
+
+  const failedGates = gates.filter((gate) => !gate.passed);
+  const blockingGates = failedGates.filter((gate) => ["deposit", "cost-cap", "margin", "automation-test", "rollback"].includes(gate.id));
+  const status = blockingGates.length > 0 ? "blocked" : failedGates.length > 0 ? "needs_fix" : "ready_to_deliver";
+
+  return {
+    input,
+    status,
+    summary: {
+      passed: gates.length - failedGates.length,
+      total: gates.length,
+      failed: failedGates.length,
+      blocking: blockingGates.length,
+      setupPriceUsd: input.setupPriceUsd,
+      monthlyRetainerUsd: input.monthlyRetainerUsd,
+      estimatedInternalMonthlyCostUsd: input.estimatedInternalMonthlyCostUsd,
+      grossMarginUsd,
+      grossMarginPercent,
+      insideCostCap: input.estimatedInternalMonthlyCostUsd <= 100,
+    },
+    gates,
+    requiredFixes: failedGates.map((gate) => ({
+      gateId: gate.id,
+      ownerAgent: gate.agent,
+      action: gate.fix,
+    })),
+    deliveryDecision:
+      status === "ready_to_deliver"
+        ? "Puede entregarse despues de aprobacion final de Robert."
+        : status === "needs_fix"
+          ? "No entregar todavia. Corregir detalles no bloqueantes y volver a revisar."
+          : "Bloqueado. No entregar, lanzar ni contactar hasta resolver los gates criticos.",
+    nextReview: {
+      cadence: status === "ready_to_deliver" ? "post-launch weekly improvement" : "rerun after fixes",
+      improvementMetrics: [
+        "tiempo ahorrado",
+        "leads/reservas generadas",
+        "errores detectados",
+        "costo mensual real",
+        "margen mensual real",
+      ],
+    },
+  };
+}
+
+export function buildRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInput) {
+  const projectPlan = buildRevenueProjectPlan(input);
+  const deliveryReview = buildDeliveryReview({
+    projectName: input.workspaceName || input.clientName,
+    projectType: input.projectType,
+    setupPriceUsd: input.setupUsd,
+    monthlyRetainerUsd: input.monthlyRetainerUsd,
+    estimatedInternalMonthlyCostUsd: input.estimatedInternalCostUsd,
+    clientApprovedScope: input.scopeApproved,
+    depositPaid: input.depositPaid,
+    publicDataVerified: input.publicDataVerified,
+    responsiveChecked: input.projectType === "automation" || input.visualQaPassed,
+    linksChecked: input.technicalQaPassed,
+    automationTested: !input.includesAutomation || input.automationQaPassed,
+    rollbackPlanReady: !input.includesAutomation || input.automationQaPassed,
+    notes: input.clientRequest || "Delivery workspace generado por Revenue Engine.",
+  });
+  const correctionQueue = deliveryReview.requiredFixes.map((fix) => ({
+    agent: fix.ownerAgent,
+    priority: ["deposit", "automation-test", "rollback", "cost-cap", "margin"].includes(fix.gateId) ? "high" as const : "medium" as const,
+    action: fix.action,
+    blocksDelivery: ["deposit", "automation-test", "rollback", "cost-cap", "margin"].includes(fix.gateId),
+  }));
+  const handoffCorrection = !input.clientHandoffReady
+    ? [{
+        agent: "growth-director",
+        priority: "medium" as const,
+        action: "Preparar handoff del cliente: demo, instrucciones, limites, soporte y siguiente review semanal.",
+        blocksDelivery: false,
+      }]
+    : [];
+  const allCorrections = [...correctionQueue, ...handoffCorrection];
+  const status: RevenueDeliveryWorkspace["status"] =
+    deliveryReview.status === "blocked" || projectPlan.decision.status === "blocked"
+      ? "blocked"
+      : allCorrections.length > 0 || projectPlan.decision.status !== "ready_to_build"
+        ? "needs_corrections"
+        : "ready_to_deliver";
+  const requiredBeforeClient = [
+    ...projectPlan.decision.missing,
+    ...allCorrections.filter((item) => item.blocksDelivery).map((item) => item.action),
+    !input.clientHandoffReady && "handoff del cliente listo",
+  ].filter(Boolean) as string[];
+
+  return {
+    input,
+    status,
+    projectPlan,
+    deliveryReview,
+    correctionQueue: allCorrections,
+    runbook: projectPlan.phases.map((phase) => ({
+      phase: phase.name,
+      ownerAgent: phase.ownerAgent,
+      checklist: phase.tasks,
+    })),
+    approvalSummary: {
+      canShowClientPreview: projectPlan.decision.status !== "blocked" && deliveryReview.summary.blocking === 0,
+      canLaunch: status === "ready_to_deliver" && input.clientHandoffReady,
+      requiredBeforeClient,
+    },
+    learningNote:
+      status === "ready_to_deliver"
+        ? `${input.clientName}: entrega lista con QA, costo <= $100/mes y handoff preparado.`
+        : `${input.clientName}: no entregar todavia; subagentes tienen ${allCorrections.length} correcciones antes de cliente.`,
+  };
+}
+
+export function recordRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInput) {
+  loadRevenueDeliveryWorkspaces();
+  const workspace = buildRevenueDeliveryWorkspace(input);
+  const now = new Date().toISOString();
+  const persisted: RevenueDeliveryWorkspace = {
+    ...workspace,
+    id: `delivery-workspace-${Date.now()}-${revenueDeliveryWorkspaces.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  revenueDeliveryWorkspaces.push(persisted);
+  persistRevenueDeliveryWorkspaces();
+
+  return {
+    workspace: persisted,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspaceUpdateInput) {
+  loadRevenueDeliveryWorkspaces();
+  const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
+  const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
+
+  if (workspaceIndex === -1) {
+    return {
+      status: "not_found" as const,
+      reason: "Workspace no encontrado.",
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existing = revenueDeliveryWorkspaces[workspaceIndex];
+  const nextInput: RevenueDeliveryWorkspaceInput = {
+    ...existing.input,
+    publicDataVerified: parsed.publicDataVerified ?? existing.input.publicDataVerified,
+    visualQaPassed: parsed.visualQaPassed ?? existing.input.visualQaPassed,
+    technicalQaPassed: parsed.technicalQaPassed ?? existing.input.technicalQaPassed,
+    automationQaPassed: parsed.automationQaPassed ?? existing.input.automationQaPassed,
+    clientHandoffReady: parsed.clientHandoffReady ?? existing.input.clientHandoffReady,
+    clientRequest: parsed.notes
+      ? `${existing.input.clientRequest}\n\nQA update: ${parsed.notes}`.slice(0, 1200)
+      : existing.input.clientRequest,
+  };
+  const rebuilt = buildRevenueDeliveryWorkspace(nextInput);
+  const updated: RevenueDeliveryWorkspace = {
+    ...rebuilt,
+    id: existing.id,
+    createdAt: existing.createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+
+  revenueDeliveryWorkspaces[workspaceIndex] = updated;
+  persistRevenueDeliveryWorkspaces();
+
+  return {
+    status: updated.status === "ready_to_deliver" ? "ready" as const : "needs_corrections" as const,
+    reason:
+      updated.status === "ready_to_deliver"
+        ? "Workspace listo para entrega: QA, handoff, deposito, scope, costo y margen verificados."
+        : "Workspace revalidado; aun quedan correcciones antes de mostrar, lanzar o entregar.",
+    workspace: updated,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function deliverRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceDeliverInput) {
+  loadRevenueDeliveryWorkspaces();
+  loadRevenueAutomationOpportunities();
+  const parsed = revenueDeliveryWorkspaceDeliverSchema.parse(input);
+  const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
+
+  if (workspaceIndex === -1) {
+    return {
+      status: "not_found" as const,
+      reason: "Workspace no encontrado.",
+      workspace: null,
+      opportunity: null,
+      handoff: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const workspace = revenueDeliveryWorkspaces[workspaceIndex];
+  const missing = [
+    !parsed.approvedByRobert && "aprobacion final de Robert",
+    workspace.status !== "ready_to_deliver" && `workspace no esta listo: ${workspace.status}`,
+    !workspace.approvalSummary.canLaunch && "launch/handoff bloqueado",
+    ...workspace.approvalSummary.requiredBeforeClient,
+  ].filter(Boolean) as string[];
+
+  if (missing.length > 0) {
+    return {
+      status: "blocked" as const,
+      reason: `No entregar todavia: ${Array.from(new Set(missing)).join("; ")}.`,
+      workspace,
+      opportunity: null,
+      handoff: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const opportunity = workspace.input.sourceOpportunityId
+    ? revenueAutomationOpportunities.find((item) => item.id === workspace.input.sourceOpportunityId) || null
+    : null;
+  if (opportunity) {
+    opportunity.status = "delivered";
+    opportunity.nextAction = "Entrega marcada como completada. Medir resultados y correr review semanal.";
+    opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+  }
+
+  const updatedWorkspace: RevenueDeliveryWorkspace = {
+    ...workspace,
+    updatedAt: new Date().toISOString(),
+    learningNote: `${workspace.input.clientName}: entregado con QA aprobado; medir resultados en review semanal.`,
+  };
+  revenueDeliveryWorkspaces[workspaceIndex] = updatedWorkspace;
+  persistRevenueDeliveryWorkspaces();
+
+  return {
+    status: "delivered" as const,
+    reason: "Entrega aprobada: QA, handoff, costo, margen, deposito y rollback verificados.",
+    workspace: updatedWorkspace,
+    opportunity,
+    handoff: {
+      clientName: updatedWorkspace.input.clientName,
+      packageName: updatedWorkspace.input.packageName,
+      deliveredAt: updatedWorkspace.updatedAt,
+      supportPlan: "Revisar resultados semanalmente y guardar aprendizajes en Improvement Review.",
+      requiredFollowUpMetrics: updatedWorkspace.deliveryReview.nextReview.improvementMetrics,
+      notes: parsed.notes,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenueDeliveryWorkspaceImprovementReview(input: RevenueDeliveryWorkspaceImprovementReviewInput) {
+  loadRevenueDeliveryWorkspaces();
+  const parsed = revenueDeliveryWorkspaceImprovementReviewSchema.parse(input);
+  const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
+
+  if (workspaceIndex === -1) {
+    return {
+      status: "not_found" as const,
+      reason: "Workspace no encontrado.",
+      workspace: null,
+      review: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const workspace = revenueDeliveryWorkspaces[workspaceIndex];
+  const missing = [
+    workspace.status !== "ready_to_deliver" && `workspace no esta listo: ${workspace.status}`,
+    !workspace.approvalSummary.canLaunch && "launch/handoff bloqueado",
+    ...workspace.approvalSummary.requiredBeforeClient,
+  ].filter(Boolean) as string[];
+
+  if (missing.length > 0) {
+    return {
+      status: "blocked" as const,
+      reason: `No guardar review de mejora todavia: ${Array.from(new Set(missing)).join("; ")}.`,
+      workspace,
+      review: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const notes = [
+    parsed.notes,
+    workspace.learningNote,
+    `Delivery gates: ${workspace.deliveryReview.summary.passed}/${workspace.deliveryReview.summary.total}; correcciones abiertas ${workspace.correctionQueue.length}.`,
+  ].filter(Boolean).join("\n\n").slice(0, 1200);
+  const recorded = recordRevenueImprovementReview({
+    campaignName: workspace.input.clientName,
+    periodLabel: parsed.periodLabel,
+    leadsContacted: parsed.leadsContacted,
+    replies: parsed.replies,
+    callsBooked: parsed.callsBooked,
+    dealsClosed: parsed.dealsClosed,
+    revenueCollectedUsd: parsed.revenueCollectedUsd ?? workspace.input.setupUsd,
+    spendUsd: parsed.spendUsd ?? 0,
+    estimatedInternalMonthlyCostUsd: workspace.input.estimatedInternalCostUsd,
+    hoursSaved: parsed.hoursSaved,
+    defectsFound: parsed.defectsFound,
+    clientComplaints: parsed.clientComplaints,
+    bestOffer: workspace.input.packageName,
+    biggestObjection: workspace.correctionQueue[0]?.action || "Medir resultados post-entrega antes de escalar.",
+    notes,
+  });
+
+  const updatedWorkspace: RevenueDeliveryWorkspace = {
+    ...workspace,
+    updatedAt: new Date().toISOString(),
+    learningNote: `${workspace.input.clientName}: improvement review ${recorded.review.id} guardado; usar aprendizaje para el proximo batch.`,
+  };
+  revenueDeliveryWorkspaces[workspaceIndex] = updatedWorkspace;
+  persistRevenueDeliveryWorkspaces();
+
+  return {
+    status: "recorded" as const,
+    reason: "Improvement Review creada desde delivery workspace; playbook y next batch actualizados.",
+    workspace: updatedWorkspace,
+    review: recorded.review,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function buildProposalEmail(input: ProposalEmailInput) {
+  const totalSetupUsd = input.websitePriceUsd + input.automationPriceUsd;
+  const depositUsd = Math.round(totalSetupUsd * 0.5);
+  const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
+  const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
+  const sourceLine = input.sourceUrl ? `Fuente revisada: ${input.sourceUrl}` : "Fuente revisada: informacion publica provista o detectada.";
+  const subject = `Cotizacion de prueba - ${input.businessName} website + automatizaciones`;
+  const body = [
+    `${input.contactName},`,
+    "",
+    `Te mando una cotizacion de prueba basada en la informacion publica revisada para ${input.businessName}.`,
+    sourceLine,
+    "",
+    "Resumen del negocio actual:",
+    input.businessSummary
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
+      .join("\n"),
+    "",
+    `Propuesta de mejora: ${input.businessName} 3D Revenue Website`,
+    "",
+    "Objetivo:",
+    "Convertir el website en una experiencia premium que venda mas, capture leads, empuje productos/eventos/contenido y permita automatizar seguimiento sin subir el costo operativo.",
+    "",
+    "Lo que haria:",
+    "1. Homepage inmersiva con hero 3D/video, propuesta clara y CTA principal.",
+    "2. Motor de ofertas/eventos/productos con cards premium, filtros, tracking y conversion.",
+    "3. Media hub para videos, radio, galerias o casos con previews dinamicos.",
+    "4. Captura de leads con newsletter, formularios y opt-in para follow-up.",
+    "5. Dashboard interno simple con leads, clicks, ventas/interes y rendimiento semanal.",
+    "6. Automatizaciones con aprobacion antes de enviar mensajes o activar acciones sensibles.",
+    "7. QA antes de publicar: data, mobile, links, formularios, costo, margen y rollback.",
+    "",
+    "Automatizaciones recomendadas:",
+    "- Follow-up automatico para leads/newsletter.",
+    "- Recordatorios o campañas con aprobacion antes de enviar.",
+    "- Recuperacion de carrito o interesados.",
+    "- Reporte semanal de ventas/interes/leads.",
+    "- Pipeline para partners, clientes o colaboradores.",
+    "- QA operativo antes de publicar cambios importantes.",
+    "",
+    "Paquete recomendado:",
+    "Website 3D Premium + Automation Sprint",
+    "",
+    "Precio de prueba:",
+    `- Setup website premium: $${input.websitePriceUsd.toLocaleString("en-US")}`,
+    `- Automation Sprint: $${input.automationPriceUsd.toLocaleString("en-US")}`,
+    `- Total setup: $${totalSetupUsd.toLocaleString("en-US")}`,
+    `- Deposito para comenzar: $${depositUsd.toLocaleString("en-US")}`,
+    `- Retainer mensual recomendado: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`,
+    "",
+    "Costo interno estimado:",
+    `- Herramientas/API/hosting al inicio: ~$${input.estimatedInternalMonthlyCostUsd.toLocaleString("en-US")}/mes`,
+    "- Cap interno inicial: menos de $100/mes",
+    `- Margen mensual estimado: ~${grossMarginPercent}% si el retainer queda en $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`,
+    "",
+    "Timeline:",
+    "- Dia 1: discovery, assets, access, sitemap y tracking plan",
+    "- Dia 2-3: mockup premium y estructura 3D/dinamica",
+    "- Dia 4-5: build de paginas clave + oferta/media/productos",
+    "- Dia 6: automatizaciones y dashboard",
+    "- Dia 7: QA completo, mobile, links, rollback y entrega",
+    "",
+    "QA antes de entregar:",
+    "- Scope aprobado por cliente",
+    "- Deposito pagado",
+    "- Data publica verificada",
+    "- Mobile/desktop probado",
+    "- Links, forms, checkout y CTAs probados",
+    "- Automatizaciones probadas con datos de ejemplo",
+    "- Rollback/manual fallback listo",
+    "- Costo interno bajo $100/mes",
+    "- Margen rentable confirmado",
+    input.notes ? "" : null,
+    input.notes || null,
+    "",
+    "Decision:",
+    "Esta seria una oferta rentable para vender como demo: alta percepcion visual, automatizaciones claras y costo inicial controlado.",
+    "",
+    "- Revenue Engine",
+  ].filter((line): line is string => line !== null).join("\n");
+
+  const encodedTo = encodeURIComponent(input.recipientEmail);
+  const encodedSubject = encodeURIComponent(subject);
+  const encodedBody = encodeURIComponent(body);
+
+  return {
+    input,
+    subject,
+    body,
+    pricing: {
+      totalSetupUsd,
+      depositUsd,
+      monthlyRetainerUsd: input.monthlyRetainerUsd,
+      estimatedInternalMonthlyCostUsd: input.estimatedInternalMonthlyCostUsd,
+      grossMarginUsd,
+      grossMarginPercent,
+      insideCostCap: input.estimatedInternalMonthlyCostUsd <= 100,
+    },
+    delivery: {
+      mode: "draft_only",
+      sendStatus: "not_sent",
+      reason: "No email provider is connected. Open Gmail/mailto or copy the draft after review.",
+      requiresApproval: true,
+    },
+    links: {
+      mailto: `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}`,
+      gmailCompose: `https://mail.google.com/mail/?view=cm&fs=1&to=${encodedTo}&su=${encodedSubject}&body=${encodedBody}`,
+    },
+  };
+}
+
+export function buildImprovementReview(input: ImprovementReviewInput) {
+  const replyRate = input.leadsContacted > 0 ? Math.round((input.replies / input.leadsContacted) * 100) : 0;
+  const bookingRate = input.replies > 0 ? Math.round((input.callsBooked / input.replies) * 100) : 0;
+  const closeRate = input.callsBooked > 0 ? Math.round((input.dealsClosed / input.callsBooked) * 100) : 0;
+  const profitUsd = input.revenueCollectedUsd - input.spendUsd - input.estimatedInternalMonthlyCostUsd;
+  const roiPercent =
+    input.spendUsd + input.estimatedInternalMonthlyCostUsd > 0
+      ? Math.round((profitUsd / (input.spendUsd + input.estimatedInternalMonthlyCostUsd)) * 100)
+      : input.revenueCollectedUsd > 0
+        ? 100
+        : 0;
+  const grossMarginPercent =
+    input.revenueCollectedUsd > 0
+      ? Math.round(((input.revenueCollectedUsd - input.spendUsd - input.estimatedInternalMonthlyCostUsd) / input.revenueCollectedUsd) * 100)
+      : 0;
+  const costPerReplyUsd = input.replies > 0 ? Number((input.spendUsd / input.replies).toFixed(2)) : 0;
+  const costPerBookedCallUsd = input.callsBooked > 0 ? Number((input.spendUsd / input.callsBooked).toFixed(2)) : 0;
+  const insideSpendCap = input.spendUsd <= 100 && input.estimatedInternalMonthlyCostUsd <= 100;
+  const profitable = profitUsd > 0 && grossMarginPercent >= 65;
+  const qualityBlocked = input.clientComplaints > 0 || input.defectsFound >= 3;
+  const cashBlocked = input.spendUsd >= 100 && input.revenueCollectedUsd === 0;
+  const decision = qualityBlocked || cashBlocked || !insideSpendCap ? "pause_and_fix" : profitable ? "scale_carefully" : "iterate_small_batch";
+
+  const experiments = [
+    replyRate < 5 && "Cambiar el primer mensaje: abrir con evidencia especifica del negocio y una captura/mockup.",
+    bookingRate < 25 && "Agregar CTA mas simple: llamada de 15 minutos o video de 90 segundos, no propuesta larga.",
+    closeRate < 30 && "Probar oferta con deposito mas claro, garantia de QA y entrega por fases.",
+    input.dealsClosed > 0 && "Duplicar el nicho/oferta que cerro, manteniendo el gasto semanal limitado.",
+    input.hoursSaved > 0 && "Convertir horas ahorradas en prueba comercial para vender retainer.",
+    input.defectsFound > 0 && "Agregar defectos encontrados al checklist antes del proximo envio.",
+    input.clientComplaints > 0 && "Bloquear envio externo hasta revisar copy, promesas y aprobaciones.",
+  ].filter(Boolean) as string[];
+
+  const agentScorecard = [
+    {
+      agent: "lead-scout",
+      score: replyRate >= 8 ? "pass" : "review",
+      lesson: replyRate >= 8 ? "El targeting genero respuestas." : "Refinar nicho, evidencia y contacto antes de escalar.",
+    },
+    {
+      agent: "closer",
+      score: bookingRate >= 25 && closeRate >= 30 ? "pass" : "review",
+      lesson: bookingRate >= 25 && closeRate >= 30 ? "El pitch convierte." : "Mejorar CTA, precio, prueba visual u objeciones.",
+    },
+    {
+      agent: "automation-architect",
+      score: input.hoursSaved > 0 || input.dealsClosed > 0 ? "pass" : "review",
+      lesson: input.hoursSaved > 0 ? "Hay ROI operativo para vender retainer." : "Necesita prueba de ahorro, lead lift o venta.",
+    },
+    {
+      agent: "qa-council",
+      score: qualityBlocked ? "block" : "pass",
+      lesson: qualityBlocked ? "Subir controles antes de contacto/entrega." : "Calidad lista para repetir con supervision.",
+    },
+    {
+      agent: "cost-controller",
+      score: !insideSpendCap || cashBlocked ? "block" : profitUsd >= 0 ? "pass" : "review",
+      lesson:
+        !insideSpendCap || cashBlocked
+          ? "Reducir herramientas/outreach pagado o cerrar cash antes de gastar."
+          : profitUsd >= 0
+            ? "Gasto dentro del cap inicial y con retorno positivo."
+            : "Gasto dentro del cap, pero falta cobrar antes de escalar.",
+    },
+  ];
+
+  return {
+    input,
+    decision: {
+      status: decision,
+      reason:
+        decision === "pause_and_fix"
+          ? "No escalar: hay riesgo de calidad, costo o gasto sin ingresos cobrados."
+          : decision === "scale_carefully"
+            ? "La campana es rentable; repetir en batches pequenos y mantener aprobacion humana."
+            : "Todavia no hay suficiente prueba de ROI; iterar con bajo gasto antes de escalar.",
+      approvalMode: "human_approval_before_spend_or_send",
+    },
+    metrics: {
+      replyRate,
+      bookingRate,
+      closeRate,
+      profitUsd,
+      roiPercent,
+      grossMarginPercent,
+      costPerReplyUsd,
+      costPerBookedCallUsd,
+      insideSpendCap,
+      profitable,
+    },
+    experiments: experiments.length
+      ? experiments
+      : ["Mantener oferta actual, registrar objeciones nuevas y repetir solo con batch pequeno."],
+    playbookUpdates: [
+      input.bestOffer ? `Oferta que mejor performo: ${input.bestOffer}` : "Registrar oferta ganadora antes de escalar.",
+      input.biggestObjection ? `Objecion principal: ${input.biggestObjection}` : "Recolectar objecion principal en cada llamada.",
+      input.notes ? `Nota operativa: ${input.notes}` : "Guardar evidencia, capturas y metricas despues de cada batch.",
+    ],
+    agentScorecard,
+    nextBatch: {
+      maxLeads: decision === "scale_carefully" ? 25 : 10,
+      maxSpendUsd: decision === "scale_carefully" ? Math.min(100, Math.max(20, input.revenueCollectedUsd * 0.05)) : 10,
+      requiredBeforeNextSend:
+        decision === "pause_and_fix"
+          ? ["resolver bloqueos QA/costo", "aprobar nuevo mensaje", "confirmar cap menor a $100"]
+          : ["aprobar mensaje", "usar evidencia publica", "guardar resultado y objecion"],
+    },
+  };
+}
+
+export function recordRevenueImprovementReview(input: ImprovementReviewInput) {
+  loadRevenueImprovementReviews();
+  const review = buildImprovementReview(input);
+  const now = new Date().toISOString();
+  const previousVersion = revenueImprovementReviews.reduce((max, item) => Math.max(max, item.playbookVersion), 0);
+  const persisted: RevenueImprovementReview = {
+    ...review,
+    id: `improvement-${Date.now()}-${revenueImprovementReviews.length + 1}`,
+    createdAt: now,
+    updatedAt: now,
+    playbookVersion: previousVersion + 1,
+    decisionStatus: review.decision.status,
+    learningSummary:
+      review.decision.status === "scale_carefully"
+        ? `Playbook v${previousVersion + 1}: escalar ${input.bestOffer || input.campaignName} con batch pequeno, cap ${review.nextBatch.maxSpendUsd} y aprobacion humana.`
+        : review.decision.status === "pause_and_fix"
+          ? `Playbook v${previousVersion + 1}: pausar ${input.campaignName}; resolver QA/costo antes de gastar o contactar.`
+          : `Playbook v${previousVersion + 1}: iterar ${input.campaignName} con bajo gasto y guardar objeciones antes de escalar.`,
+  };
+
+  revenueImprovementReviews.push(persisted);
+  persistRevenueImprovementReviews();
+
+  return {
+    review: persisted,
+    snapshot: getRevenueEngineSnapshot(),
   };
 }
 

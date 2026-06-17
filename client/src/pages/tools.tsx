@@ -5,12 +5,15 @@ import {
   Building2,
   Clapperboard,
   Code2,
+  BadgeDollarSign,
   Github,
   LayoutDashboard,
   Monitor,
   Radio,
+  Scale,
   Settings,
   ShieldCheck,
+  ShieldAlert,
   TrendingUp,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -45,6 +48,27 @@ const tools = [
     description: "Pausar, correr y revisar automations.",
     href: "/automations",
     icon: Bot,
+  },
+  {
+    title: "Revenue Engine",
+    description: "Vender websites, automatizaciones y mockups con control de gasto.",
+    href: "/revenue-engine",
+    icon: BadgeDollarSign,
+    primary: true,
+  },
+  {
+    title: "Cybersecurity",
+    description: "Monitorea apps, riesgos, HTTPS, incidentes y alertas por Telegram.",
+    href: "/cybersecurity-agent",
+    icon: ShieldAlert,
+    primary: true,
+  },
+  {
+    title: "Legal / Compliance",
+    description: "Reportes legales por app, scouts y escalacion al Legal Main.",
+    href: "/legal-compliance",
+    icon: Scale,
+    primary: true,
   },
   {
     title: "GitHub",

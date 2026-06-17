@@ -114,4 +114,90 @@
   .text-glow {
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
   }
+
+  .clipper-tunnel-grid,
+  .clipper-tunnel-stack {
+    --clipper-tunnel-line: rgb(103 232 249 / 0.32);
+    --clipper-tunnel-glow: rgb(34 211 238 / 0.12);
+    isolation: isolate;
+    position: relative;
+  }
+
+  .clipper-tunnel-grid::before {
+    background: linear-gradient(90deg, transparent, var(--clipper-tunnel-line), transparent);
+    content: "";
+    height: 1px;
+    inset: 50% 1rem auto;
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+  }
+
+  .clipper-tunnel-box {
+    box-shadow: 0 0 0 1px rgb(34 211 238 / 0.04), 0 14px 30px rgb(0 0 0 / 0.22);
+    overflow: visible;
+    position: relative;
+    z-index: 1;
+  }
+
+  .clipper-tunnel-box::before {
+    background: radial-gradient(circle, rgb(165 243 252 / 0.72), rgb(34 211 238 / 0.18) 45%, transparent 70%);
+    border-radius: 9999px;
+    content: "";
+    height: 0.55rem;
+    left: 50%;
+    pointer-events: none;
+    position: absolute;
+    top: -0.3rem;
+    transform: translateX(-50%);
+    width: 0.55rem;
+  }
+
+  .clipper-tunnel-grid > .clipper-tunnel-box:not(:last-child)::after,
+  .clipper-tunnel-stack > .clipper-tunnel-box:not(:last-child)::after {
+    background: linear-gradient(180deg, var(--clipper-tunnel-line), transparent);
+    content: "";
+    height: 0.75rem;
+    left: 50%;
+    pointer-events: none;
+    position: absolute;
+    top: 100%;
+    transform: translateX(-50%);
+    width: 1px;
+  }
+
+  @media (min-width: 768px) {
+    .clipper-tunnel-grid > .clipper-tunnel-box:not(:last-child)::after {
+      background: linear-gradient(90deg, var(--clipper-tunnel-line), transparent);
+      height: 1px;
+      left: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0.75rem;
+    }
+
+    .clipper-tunnel-stack > .clipper-tunnel-box::before {
+      left: -0.3rem;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+  }
+}
+
+@keyframes office-step-left {
+  0%, 100% {
+    transform: rotate(-9deg) translateY(0);
+  }
+  50% {
+    transform: rotate(13deg) translateY(2px);
+  }
+}
+
+@keyframes office-step-right {
+  0%, 100% {
+    transform: rotate(13deg) translateY(2px);
+  }
+  50% {
+    transform: rotate(-9deg) translateY(0);
+  }
 }

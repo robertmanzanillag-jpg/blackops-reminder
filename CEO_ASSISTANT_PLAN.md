@@ -14,6 +14,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Brief CEO matutino y test manual desde el dashboard CEO.
 - Dashboard CEO con agenda, riesgos, aprobaciones, meeting prep, follow-ups, decisiones, personas clave y compromisos.
 - Telegram webhook resuelve el owner por `chatId -> userId` cuando entra un mensaje.
+- Telegram webhook rechaza chats desconocidos con instrucciones de vinculacion; no los auto-asigna a `DEFAULT_USER_ID`.
 - CLI `npm run telegram:configure` permite vincular `chatId` a `userId` real sin depender del frontend.
 - `telegram:configure --latest` puede tomar el ultimo chat de Telegram Updates despues de enviar `/start`.
 - Brief CEO matutino se envia por cada usuario con Telegram activo, no solo por el fallback default.
@@ -27,7 +28,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Scheduler usa `SCHEDULER_TIMEZONE` y horas configurables para el brief CEO e insights.
 - Scheduler diario usa una decision testeable para evitar duplicar brief/insights/news/evening el mismo dia.
 - Telegram divide respuestas largas y briefs largos en varios mensajes para no truncar contenido.
-- Auth boundary soporta `req.user`, `req.session`, `x-user-id` y `DEFAULT_USER_ID`; el mock queda limitado a dev/test u opt-in.
+- Auth boundary soporta `req.user` y `req.session`; `x-user-id` y mock quedan limitados a dev/test u opt-in, y `DEFAULT_USER_ID` queda reservado para system jobs.
 - Auth local opcional soporta registro/login/logout con password hasheado y sesion Express; en produccion usa Postgres como session store cuando `DATABASE_URL` esta configurado.
 - Frontend tiene gate de auth y pantalla de acceso para login/registro local cuando el backend responde 401.
 - CLI `npm run auth:create-user` permite crear el primer usuario local sin abrir registro publico.
@@ -59,7 +60,10 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Recordatorios creados por usuario se envian al Telegram del owner correcto.
 - Evening reminder, weekly reminder y portfolio news digest se generan por owner.
 - Proactive insights se generan por owner.
+- Scheduler diario descubre owners desde Telegram habilitado y push subscriptions para no excluir usuarios web/push.
 - Radio slots summary, portfolio weekly report y video edit task corren por owner.
+- Mantenimiento de arranque para deduplicar tareas corre por owners descubiertos, no solo por `DEFAULT_USER_ID`.
+- Promo video daily scheduler sube outputs a Google Drive con owner explicito descubierto desde configuraciones Telegram habilitadas.
 - Boton manual en `/ceo` para enviar el brief ahora.
 - CLI `npm run ceo:send-brief` permite enviar un brief CEO real a Telegram para smoke test operativo.
 - Chat de Telegram con contexto CEO, historial persistente y soporte de imagenes.
@@ -95,13 +99,13 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 
 - Auth real: el boundary ya soporta provider/session y bloquea mock en produccion; ya existe utilidad de migracion dry-run para datos dev, pero falta conectar proveedor real de login y ejecutar migracion en entorno real.
 - Auth local: ya existe login/session propio como puente single-user con session store persistente en Postgres, pantalla de acceso y CLI para crear el primer usuario; falta decidir si se queda como proveedor oficial o se reemplaza por Clerk/Auth.js/Replit Auth.
-- Telegram ownership real parcial: el webhook ya resuelve `chatId -> userId`; brief, evening, weekly, news digest, proactive insights, recordatorios de usuario y agent actions principales usan owner real; falta auth real y terminar hardening multiusuario.
+- Telegram ownership real parcial: el webhook ya resuelve `chatId -> userId` y no auto-vincula chats desconocidos; brief, evening, weekly, news digest, proactive insights, recordatorios de usuario y agent actions principales usan owner real; falta auth real y terminar hardening multiusuario.
 - Tests automatizados: ya hay pruebas focalizadas y una suite agregada `test:ceo-assistant` para auth boundary, comandos Telegram, particion de mensajes, formato del brief CEO, readiness CEO y decision diaria del scheduler; faltan pruebas de integracion para scheduler, data loading de `generateCeoMorningBrief`, pending actions, handler completo de Telegram y endpoints `/api/ceo`.
 - Inbox real: existen borradores y aprobacion, pero no envio externo real por email/Slack/WhatsApp/CRM.
 - Meeting post-processing: falta extraer action items despues de reuniones y generar follow-ups automaticamente.
 - Delegation OS dedicado: hoy se modela con follow-ups/commitments; falta un modelo formal de owner, status, escalation y SLA.
 - Observabilidad: faltan dashboards/logs de jobs, webhooks, errores de IA, latencia y reintentos.
-- Hardening: rate limiting y dedupe inicial ya existen para auth/webhook en single-instance; faltan ownership checks por ID restantes, backups, observabilidad y mover rate limits/dedupe a store compartido si hay multiples instancias.
+- Hardening: rate limiting y dedupe inicial ya existen para auth/webhook en single-instance; varios ownership checks por ID/accion ya cubren usuario autenticado, incluidas acciones Clippers de cuenta/credenciales/plataforma/imports/records/render/automation/permisos/fuentes/trends; faltan checks restantes, backups reales y observabilidad.
 
 ## Roadmap Recomendado
 
@@ -120,7 +124,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 
 - Elegir proveedor: Auth.js, Clerk, Replit Auth o auth propia con `express-session`/Passport.
 - Conectar proveedor real para poblar `req.user` o `req.session.userId`.
-- Mantener `DEFAULT_USER_ID` solo como config explicita de single-user/system jobs, no como auth silenciosa.
+- Mantener `DEFAULT_USER_ID` solo como config explicita de single-user/system jobs, no como auth silenciosa para requests.
 - Mantener el mapeo Telegram `chatId -> userId` como fuente de owner para webhooks.
 - Reemplazar usos de `getSystemUserId()` en jobs/webhooks por owner real de cada config/subscription.
 - Auditar rutas por ID para evitar leer/modificar recursos de otro usuario.

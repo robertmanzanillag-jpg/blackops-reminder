@@ -13,6 +13,10 @@ export type RateLimitDecision = {
 
 export type RateLimitStore = Map<string, RateLimitBucket>;
 
+export type PersistentRateLimitStore = {
+  checkPersistentRateLimit(key: string, limit: number, windowMs: number, now?: number): Promise<RateLimitDecision>;
+};
+
 export function checkRateLimit(
   store: RateLimitStore,
   key: string,
@@ -40,21 +44,30 @@ function getClientKey(req: Request, scope: string): string {
   return `${scope}:${forwarded || req.ip || req.socket.remoteAddress || "unknown"}`;
 }
 
-export function createInMemoryRateLimiter(options: {
+export function createRateLimiter(options: {
   scope: string;
   limit: number;
   windowMs: number;
+  persistentStore?: PersistentRateLimitStore;
   store?: RateLimitStore;
+  onPersistentError?: (error: unknown) => void;
 }) {
   const store = options.store || new Map<string, RateLimitBucket>();
 
-  return (req: Request, res: Response, next: NextFunction) => {
-    const decision = checkRateLimit(
-      store,
-      getClientKey(req, options.scope),
-      options.limit,
-      options.windowMs,
-    );
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const key = getClientKey(req, options.scope);
+    let decision: RateLimitDecision;
+
+    if (options.persistentStore) {
+      try {
+        decision = await options.persistentStore.checkPersistentRateLimit(key, options.limit, options.windowMs);
+      } catch (error) {
+        options.onPersistentError?.(error);
+        decision = checkRateLimit(store, key, options.limit, options.windowMs);
+      }
+    } else {
+      decision = checkRateLimit(store, key, options.limit, options.windowMs);
+    }
 
     res.setHeader("X-RateLimit-Limit", String(options.limit));
     res.setHeader("X-RateLimit-Remaining", String(decision.remaining));
@@ -68,3 +81,5 @@ export function createInMemoryRateLimiter(options: {
     next();
   };
 }
+
+export const createInMemoryRateLimiter = createRateLimiter;

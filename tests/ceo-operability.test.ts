@@ -9,7 +9,10 @@ const requiredOperationalScripts = [
   "telegram:webhook",
   "ceo:readiness",
   "ceo:send-brief",
+  "ceo:smoke",
   "ceo:doctor",
+  "ceo:db-check",
+  "ceo:backup-check",
   "test:ceo-assistant",
 ];
 
@@ -27,6 +30,8 @@ const requiredEnvKeys = [
   "SCHEDULER_TIMEZONE",
   "CEO_BRIEF_HOUR",
   "CEO_BRIEF_MINUTE",
+  "CEO_BACKUP_DIR",
+  "CEO_BACKUP_SECRETS_ENCRYPTED",
 ];
 
 test("CEO Assistant operational scripts exist and are documented", () => {
@@ -50,6 +55,9 @@ test("CEO Assistant status tracks runtime-only completion blockers", () => {
     "telegram:configure",
     "telegram:webhook",
     "ceo:send-brief",
+    "ceo:smoke",
+    "ceo:db-check",
+    "ceo:backup-check",
     "conversation-history",
   ]) {
     assert.match(status, new RegExp(required), `${required} should be tracked in status`);
@@ -68,6 +76,10 @@ test("CEO Assistant aggregate test includes core safety suites", () => {
     "test:readiness",
     "test:scheduler",
     "test:ceo",
+    "test:ceo-db-check-cli",
+    "test:ceo-backup-check-cli",
+    "test:ceo-operational-health",
+    "test:automation-registry",
     "test:telegram",
     "test:assistant-chat",
     "test:migration",
@@ -85,4 +97,14 @@ test("CEO Assistant env example covers runbook critical variables", () => {
     assert.match(envExample, new RegExp(`^#?\\s*${key}=`, "m"), `${key} should exist in env example`);
     assert.match(runbook, new RegExp(`\`${key}\``), `${key} should be documented in runbook`);
   }
+});
+
+test("Telegram and CEO readiness routes are registered through a domain module", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const telegramRoutesSource = readFileSync("server/telegram-routes.ts", "utf8");
+
+  assert.match(routesSource, /registerTelegramRoutes\(app\)/, "routes.ts should delegate Telegram routes to the domain module");
+  assert.doesNotMatch(routesSource, /api\/telegram\/webhook/, "routes.ts should not inline Telegram webhook behavior");
+  assert.match(telegramRoutesSource, /api\/telegram\/webhook/, "telegram-routes should own the Telegram webhook endpoint");
+  assert.match(telegramRoutesSource, /api\/ceo\/readiness/, "telegram-routes should own CEO readiness wiring that depends on Telegram health");
 });

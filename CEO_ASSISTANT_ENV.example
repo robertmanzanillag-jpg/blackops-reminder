@@ -31,7 +31,33 @@ INSIGHTS_HOUR=8
 NEWS_DIGEST_HOUR=9
 EVENING_REVIEW_HOUR=21
 
+# Backup/restore preflight
+CEO_BACKUP_DIR=backups/ceo-assistant
+# Set true only after credentials/ and secrets/ are covered by encrypted off-machine backup.
+CEO_BACKUP_SECRETS_ENCRYPTED=false
+
 # Optional integrations
+
+# Revenue Engine email provider
+# Required only when you want the outbox to send approved outreach by API.
+# Without these values the app stays in manual Gmail/mailto mode.
+# RESEND_API_KEY=re_replace-with-resend-api-key
+# REVENUE_ENGINE_FROM_EMAIL="Revenue Engine <sales@your-domain.example>"
+
+# Clippers command center
+# PUBLIC_BASE_URL=https://your-domain.example
+# CLIPPERS_TOKEN_ENCRYPTION_KEY=replace-with-32-plus-character-secret
+# TIKTOK_CLIENT_KEY=
+# TIKTOK_CLIENT_SECRET=
+# META_APP_ID=
+# META_APP_SECRET=
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GOOGLE_DRIVE_REDIRECT_URI=https://your-domain.example/api/google-drive/oauth/callback
+# GOOGLE_DRIVE_SCOPES=https://www.googleapis.com/auth/drive.file
+# Optional: set this instead of connecting through /api/google-drive/auth
+# GOOGLE_REFRESH_TOKEN=
+
 # Canva radio templates
 # CANVA_CLIENT_ID=
 # CANVA_CLIENT_SECRET=

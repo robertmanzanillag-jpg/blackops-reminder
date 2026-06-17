@@ -49,6 +49,15 @@ export interface CeoBriefSnapshot {
   totalUsers: number;
 }
 
+export type CeoRoutineCommand = "top3" | "blockers" | "chase" | "close_day";
+
+export interface CeoDailyCommandCenter {
+  topPriorities: string[];
+  blockers: string[];
+  chaseList: string[];
+  closeDay: string[];
+}
+
 function startOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(0, 0, 0, 0);
@@ -77,6 +86,116 @@ function isSameDay(date: Date, compareTo: Date): boolean {
     && date.getMonth() === compareTo.getMonth()
     && date.getDate() === compareTo.getDate()
   );
+}
+
+export function buildCeoDailyCommandCenter(snapshot: CeoBriefSnapshot, now = new Date()): CeoDailyCommandCenter {
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+  const nextSevenDays = addDays(todayStart, 7);
+
+  const overdueTasks = snapshot.tasks
+    .filter((task) => {
+      const date = startOfDay(new Date(task.date));
+      return !task.completed && task.type !== "event" && isBefore(date, todayStart);
+    })
+    .slice(0, 5);
+
+  const dueFollowUps = snapshot.tasks
+    .filter((task) => task.type === "follow_up" && !task.completed && new Date(task.date) <= todayEnd)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 5);
+
+  const highPriorityTasks = snapshot.tasks
+    .filter((task) => !task.completed && task.priority === "high" && new Date(task.date) <= nextSevenDays)
+    .slice(0, 5);
+
+  const todayOpenTasks = snapshot.tasks
+    .filter((task) => {
+      const date = new Date(task.date);
+      return !task.completed && task.type !== "event" && date >= todayStart && date <= todayEnd;
+    })
+    .slice(0, 5);
+
+  const pendingApprovals = snapshot.pendingActions
+    .filter((action) => action.status === "pending" || action.status === "draft" || action.status === "edited")
+    .slice(0, 5);
+
+  const openWeeklyTasks = snapshot.weeklyTasks.filter((task) => !task.completed).slice(0, 5);
+  const unhealthyProjects = snapshot.projects.filter((project) => project.status === "offline" || project.status === "degraded");
+  const recentFailures = snapshot.auditLogs.filter((log) => log.status === "failed" || log.status === "blocked").slice(0, 3);
+
+  const topPriorityItems = [...highPriorityTasks, ...overdueTasks, ...todayOpenTasks]
+    .map((task) => plain(task.title));
+  for (const task of openWeeklyTasks) {
+    if (topPriorityItems.length >= 3) break;
+    topPriorityItems.push(`${plain(task.title)} (semanal)`);
+  }
+
+  const blockers: string[] = [];
+  if (pendingApprovals.length > 0) blockers.push(`${pendingApprovals.length} aprobación(es) esperando decisión.`);
+  if (unhealthyProjects.length > 0) blockers.push(`Proyectos con alerta: ${unhealthyProjects.map((project) => `${plain(project.name)} (${project.status})`).join(", ")}.`);
+  if (overdueTasks.length > 0) blockers.push(`${overdueTasks.length} tarea(s) vencida(s).`);
+  if (dueFollowUps.length > 0) blockers.push(`${dueFollowUps.length} follow-up(s) vencido(s).`);
+  if (recentFailures.length > 0) blockers.push(`${recentFailures.length} fallo(s) recientes del assistant.`);
+
+  const chaseList = [
+    ...dueFollowUps.map((task) => plain(task.title)),
+    ...snapshot.commitments.slice(0, 5).map((commitment) => `${plain(commitment.key)}: ${plain(commitment.value)}`),
+  ].slice(0, 5);
+
+  const closeDay: string[] = [];
+  if (todayOpenTasks.length > 0) closeDay.push(`Cerrar ${todayOpenTasks.length} tarea(s) de hoy.`);
+  if (pendingApprovals.length > 0) closeDay.push(`Decidir ${pendingApprovals.length} aprobación(es): pendientes / aprobar ID / rechazar ID.`);
+  if (dueFollowUps.length > 0) closeDay.push(`Resolver ${dueFollowUps.length} follow-up(s) vencido(s).`);
+  if (highPriorityTasks.length > 0) closeDay.push(`Confirmar avance de ${Math.min(3, highPriorityTasks.length)} prioridad(es) alta(s).`);
+  closeDay.push("Enviar o guardar una nota corta con decisiones y próximos pasos.");
+
+  return {
+    topPriorities: Array.from(new Set(topPriorityItems)).slice(0, 3),
+    blockers,
+    chaseList,
+    closeDay,
+  };
+}
+
+export function formatCeoRoutineCommand(command: CeoRoutineCommand, snapshot: CeoBriefSnapshot, now = new Date()): string {
+  const center = buildCeoDailyCommandCenter(snapshot, now);
+
+  if (command === "top3") {
+    return [
+      "Top 3 prioridades:",
+      "",
+      ...(center.topPriorities.length > 0
+        ? center.topPriorities.map((item, index) => `${index + 1}. ${item}`)
+        : ["No detecté prioridades críticas. Usa el brief para cargar agenda, tareas o metas."]),
+    ].join("\n");
+  }
+
+  if (command === "blockers") {
+    return [
+      "Bloqueos actuales:",
+      "",
+      ...(center.blockers.length > 0
+        ? center.blockers.map((item) => `- ${item}`)
+        : ["No detecté bloqueos operativos fuertes ahora."]),
+    ].join("\n");
+  }
+
+  if (command === "chase") {
+    return [
+      "A quién perseguir:",
+      "",
+      ...(center.chaseList.length > 0
+        ? center.chaseList.map((item) => `- ${item}`)
+        : ["No hay follow-ups vencidos ni compromisos abiertos cargados."]),
+    ].join("\n");
+  }
+
+  return [
+    "Cierre del día:",
+    "",
+    ...center.closeDay.map((item) => `- ${item}`),
+  ].join("\n");
 }
 
 function formatSpanishDate(date: Date, options: Intl.DateTimeFormatOptions): string {
@@ -277,7 +396,7 @@ export function formatCeoMorningBrief(snapshot: CeoBriefSnapshot, now = new Date
   }
   lines.push("");
 
-  lines.push("Comandos útiles: agenda hoy, prioridades, aprobar ID, rechazar ID, crea tarea..., recuérdame...");
+  lines.push("Comandos útiles: top 3, bloqueos, a quién tengo que perseguir, cerrar día, aprobar ID, rechazar ID.");
 
   return lines.join("\n");
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Readable } from "stream";
 import { google } from "googleapis";
 import { getGoogleAccessToken, getGoogleOAuthClient } from "./google-calendar";
-import { getGoogleDriveOAuthClient } from "./google-drive-oauth";
+import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -39,10 +39,8 @@ function isDrivePermissionError(error: any): boolean {
 
 async function getDriveClient(userId: string) {
   if (
-    process.env.GOOGLE_DRIVE_REFRESH_TOKEN ||
-    process.env.GOOGLE_REFRESH_TOKEN ||
-    ((process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) &&
-      (process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET))
+    getGoogleDriveRefreshTokenFromEnv() ||
+    hasGoogleDriveOAuthClientConfig()
   ) {
     return google.drive({ version: "v3", auth: await getGoogleDriveOAuthClient(userId) });
   }

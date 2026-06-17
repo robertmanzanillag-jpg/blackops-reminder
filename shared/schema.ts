@@ -185,6 +185,15 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
+export const appRateLimitBuckets = pgTable("app_rate_limit_buckets", {
+  bucketKey: text("bucket_key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type AppRateLimitBucket = typeof appRateLimitBuckets.$inferSelect;
+
 // Telegram configuration for notifications
 export const telegramConfig = pgTable("telegram_config", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -201,6 +210,13 @@ export const insertTelegramConfigSchema = createInsertSchema(telegramConfig).omi
 
 export type InsertTelegramConfig = z.infer<typeof insertTelegramConfigSchema>;
 export type TelegramConfig = typeof telegramConfig.$inferSelect;
+
+export const telegramProcessedUpdates = pgTable("telegram_processed_updates", {
+  updateId: text("update_id").primaryKey(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+});
+
+export type TelegramProcessedUpdate = typeof telegramProcessedUpdates.$inferSelect;
 
 // ==================== FINANCE MODULE ====================
 

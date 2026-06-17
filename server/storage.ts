@@ -1,8 +1,8 @@
 import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type RadioTemplateAsset, type InsertRadioTemplateAsset, type CanvaOAuthToken, type InsertCanvaOAuthToken, type GoogleDriveOAuthToken, type InsertGoogleDriveOAuthToken, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, googleDriveOAuthTokens as googleDriveOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
-import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
+import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, appRateLimitBuckets as appRateLimitBucketsTable, telegramConfig as telegramConfigTable, telegramProcessedUpdates as telegramProcessedUpdatesTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, googleDriveOAuthTokens as googleDriveOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
+import { eq, and, desc, gte, lt, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -22,6 +22,7 @@ export interface IStorage {
   // Weekly Summary operations
   getWeeklySummaries(userId: string): Promise<WeeklySummary[]>;
   getWeeklySummary(userId: string, weekStart: Date): Promise<WeeklySummary | undefined>;
+  getWeeklySummaryById(id: string): Promise<WeeklySummary | undefined>;
   createWeeklySummary(userId: string, summary: InsertWeeklySummary): Promise<WeeklySummary>;
   updateWeeklySummary(id: string, summary: Partial<InsertWeeklySummary>): Promise<WeeklySummary>;
 
@@ -55,6 +56,7 @@ export interface IStorage {
   getAllPushSubscriptions(): Promise<PushSubscription[]>;
   createPushSubscription(userId: string, sub: InsertPushSubscription): Promise<PushSubscription>;
   deletePushSubscription(endpoint: string): Promise<void>;
+  checkPersistentRateLimit(key: string, limit: number, windowMs: number, now?: number): Promise<{ allowed: boolean; remaining: number; resetAt: number }>;
 
   // Telegram Config operations
   getTelegramConfig(userId: string): Promise<TelegramConfig | undefined>;
@@ -63,6 +65,7 @@ export interface IStorage {
   saveTelegramConfig(userId: string, chatId: string): Promise<TelegramConfig>;
   updateTelegramConfig(userId: string, enabled: boolean): Promise<TelegramConfig | undefined>;
   deleteTelegramConfig(userId: string): Promise<void>;
+  recordTelegramProcessedUpdate(updateId: number): Promise<boolean>;
 
   // Investment operations
   getInvestments(userId: string): Promise<Investment[]>;
@@ -345,6 +348,15 @@ export class DatabaseStorage implements IStorage {
           eq(weeklySummariesTable.weekStart, weekStart)
         )
       )
+      .limit(1);
+    return result[0];
+  }
+
+  async getWeeklySummaryById(id: string): Promise<WeeklySummary | undefined> {
+    const result = await db
+      .select()
+      .from(weeklySummariesTable)
+      .where(eq(weeklySummariesTable.id, id))
       .limit(1);
     return result[0];
   }
@@ -680,6 +692,44 @@ export class DatabaseStorage implements IStorage {
     await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.endpoint, endpoint));
   }
 
+  async checkPersistentRateLimit(
+    key: string,
+    limit: number,
+    windowMs: number,
+    now = Date.now(),
+  ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+    const nowDate = new Date(now);
+    const nextResetAt = new Date(now + windowMs);
+    const [bucket] = await db
+      .insert(appRateLimitBucketsTable)
+      .values({
+        bucketKey: key,
+        count: 1,
+        resetAt: nextResetAt,
+        updatedAt: nowDate,
+      })
+      .onConflictDoUpdate({
+        target: appRateLimitBucketsTable.bucketKey,
+        set: {
+          count: sql<number>`case when ${appRateLimitBucketsTable.resetAt} <= ${nowDate} then 1 else ${appRateLimitBucketsTable.count} + 1 end`,
+          resetAt: sql<Date>`case when ${appRateLimitBucketsTable.resetAt} <= ${nowDate} then ${nextResetAt} else ${appRateLimitBucketsTable.resetAt} end`,
+          updatedAt: nowDate,
+        },
+      })
+      .returning({
+        count: appRateLimitBucketsTable.count,
+        resetAt: appRateLimitBucketsTable.resetAt,
+      });
+
+    const count = bucket?.count || 1;
+    const resetAt = bucket?.resetAt ? new Date(bucket.resetAt).getTime() : nextResetAt.getTime();
+    return {
+      allowed: count <= limit,
+      remaining: Math.max(0, limit - count),
+      resetAt,
+    };
+  }
+
   // Telegram Config
   async getTelegramConfig(userId: string): Promise<TelegramConfig | undefined> {
     const result = await db
@@ -744,6 +794,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTelegramConfig(userId: string): Promise<void> {
     await db.delete(telegramConfigTable).where(eq(telegramConfigTable.userId, userId));
+  }
+
+  async recordTelegramProcessedUpdate(updateId: number): Promise<boolean> {
+    const inserted = await db
+      .insert(telegramProcessedUpdatesTable)
+      .values({ updateId: String(updateId), processedAt: new Date() })
+      .onConflictDoNothing()
+      .returning({ updateId: telegramProcessedUpdatesTable.updateId });
+    return inserted.length > 0;
   }
 
   // ==================== INVESTMENTS ====================
@@ -1219,7 +1278,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: now,
       updatedAt: now,
     };
-    await db.insert(appProjectsTable).values(newProject);
+    await db.insert(appProjectsTable).values(newProject as typeof appProjectsTable.$inferInsert);
     return newProject as AppProject;
   }
 
@@ -1244,7 +1303,7 @@ export class DatabaseStorage implements IStorage {
   async createAppHealthCheck(check: InsertAppHealthCheck): Promise<AppHealthCheck> {
     const id = randomUUID();
     const newCheck = { ...check, id, checkedAt: new Date() };
-    await db.insert(appHealthChecksTable).values(newCheck);
+    await db.insert(appHealthChecksTable).values(newCheck as typeof appHealthChecksTable.$inferInsert);
     return newCheck as AppHealthCheck;
   }
 
@@ -1285,7 +1344,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: now,
       updatedAt: now,
     };
-    await db.insert(appIncidentsTable).values(newIncident);
+    await db.insert(appIncidentsTable).values(newIncident as typeof appIncidentsTable.$inferInsert);
     return newIncident as AppIncident;
   }
 
@@ -1332,7 +1391,7 @@ export class DatabaseStorage implements IStorage {
       metadata: event.metadata || null,
       createdAt: new Date(),
     };
-    await db.insert(appErrorEventsTable).values(newEvent);
+    await db.insert(appErrorEventsTable).values(newEvent as typeof appErrorEventsTable.$inferInsert);
     return newEvent as AppErrorEvent;
   }
 
@@ -1658,7 +1717,7 @@ export class DatabaseStorage implements IStorage {
       errorMessage: log.errorMessage || null,
       createdAt: new Date(),
     };
-    await db.insert(auditLogsTable).values(newLog);
+    await db.insert(auditLogsTable).values(newLog as typeof auditLogsTable.$inferInsert);
     return newLog as AuditLog;
   }
 
@@ -1700,7 +1759,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.insert(pendingActionsTable).values(newAction);
+    await db.insert(pendingActionsTable).values(newAction as typeof pendingActionsTable.$inferInsert);
     await db.insert(pendingActionEventsTable).values({
       id: randomUUID(),
       pendingActionId: id,
@@ -1719,7 +1778,7 @@ export class DatabaseStorage implements IStorage {
         permissionLevelRequired: newAction.permissionLevelRequired,
       },
       createdAt: new Date(),
-    });
+    } as typeof pendingActionEventsTable.$inferInsert);
     return newAction as PendingAction;
   }
 
@@ -1759,7 +1818,7 @@ export class DatabaseStorage implements IStorage {
       metadata: event.metadata || null,
       createdAt: new Date(),
     };
-    await db.insert(pendingActionEventsTable).values(newEvent);
+    await db.insert(pendingActionEventsTable).values(newEvent as typeof pendingActionEventsTable.$inferInsert);
     return newEvent as PendingActionEvent;
   }
 
@@ -1777,7 +1836,7 @@ export class DatabaseStorage implements IStorage {
     if (existing[0]) {
       await db
         .update(assistantPermissionsTable)
-        .set({ ...permission, updatedAt: new Date() })
+        .set({ ...permission, updatedAt: new Date() } as Partial<typeof assistantPermissionsTable.$inferInsert>)
         .where(eq(assistantPermissionsTable.id, existing[0].id));
       const result = await db.select().from(assistantPermissionsTable).where(eq(assistantPermissionsTable.id, existing[0].id)).limit(1);
       return result[0];
@@ -1794,7 +1853,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.insert(assistantPermissionsTable).values(newPermission);
+    await db.insert(assistantPermissionsTable).values(newPermission as typeof assistantPermissionsTable.$inferInsert);
     return newPermission as AssistantPermission;
   }
 
@@ -1834,7 +1893,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.insert(automationDefinitionsTable).values(newAutomation);
+    await db.insert(automationDefinitionsTable).values(newAutomation as typeof automationDefinitionsTable.$inferInsert);
     return newAutomation as AutomationDefinition;
   }
 
@@ -1872,12 +1931,12 @@ export class DatabaseStorage implements IStorage {
       metadata: run.metadata || null,
       createdAt: new Date(),
     };
-    await db.insert(automationRunsTable).values(newRun);
+    await db.insert(automationRunsTable).values(newRun as typeof automationRunsTable.$inferInsert);
 
     await db.update(automationDefinitionsTable)
       .set({
         lastRunAt: run.startedAt,
-        lastStatus: run.status,
+        lastStatus: run.status as typeof automationDefinitionsTable.$inferInsert["lastStatus"],
         failureCount: run.status === "failed" ? sql`${automationDefinitionsTable.failureCount} + 1` : 0,
         updatedAt: new Date(),
       })

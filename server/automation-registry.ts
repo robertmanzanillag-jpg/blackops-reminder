@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
-import type { AutomationDefinition, AutomationRun, InsertAutomationDefinition } from "@shared/schema";
+import type { AutomationDefinition, AutomationRun, AutomationRunStatus, InsertAutomationDefinition, InsertAutomationRun } from "@shared/schema";
 
 type AutomationSeed = InsertAutomationDefinition & {
   key: string;
@@ -354,4 +354,51 @@ export async function recordManualAutomationRun(
     auditLogId: audit.id,
     metadata: { automationType: automation.type, directExecutionWired: false },
   });
+}
+
+export type ScheduledAutomationRunOutcome = {
+  status: AutomationRunStatus;
+  resultSummary: string;
+  errorMessage?: string | null;
+  metadata?: InsertAutomationRun["metadata"];
+};
+
+export function buildScheduledAutomationRunInput(input: {
+  automation: AutomationDefinition;
+  startedAt: Date;
+  finishedAt: Date;
+  outcome: ScheduledAutomationRunOutcome;
+}): InsertAutomationRun {
+  return {
+    automationId: input.automation.id,
+    ownerUserId: input.automation.ownerUserId,
+    startedAt: input.startedAt,
+    finishedAt: input.finishedAt,
+    status: input.outcome.status,
+    triggeredBy: "scheduler",
+    resultSummary: input.outcome.resultSummary,
+    errorMessage: input.outcome.errorMessage || null,
+    costEstimate: input.automation.costEstimate,
+    pendingActionId: null,
+    auditLogId: null,
+    metadata: input.outcome.metadata || null,
+  };
+}
+
+export async function recordScheduledAutomationRun(
+  userId: string,
+  automationKey: string,
+  startedAt: Date,
+  outcome: ScheduledAutomationRunOutcome,
+): Promise<AutomationRun | null> {
+  const automations = await ensureDefaultAutomations(userId);
+  const automation = automations.find((item) => (item.metadata as any)?.key === automationKey);
+  if (!automation) return null;
+
+  return storage.createAutomationRun(buildScheduledAutomationRunInput({
+    automation,
+    startedAt,
+    finishedAt: new Date(),
+    outcome,
+  }));
 }

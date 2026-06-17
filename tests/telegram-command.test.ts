@@ -15,6 +15,12 @@ test("classifies CEO Telegram commands", () => {
   assert.equal(classifyTelegramControlCommand("readiness"), "readiness");
   assert.equal(classifyTelegramControlCommand("estado sistema"), "health");
   assert.equal(classifyTelegramControlCommand("status"), "health");
+  assert.equal(classifyTelegramControlCommand("top 3"), "top3");
+  assert.equal(classifyTelegramControlCommand("foco"), "top3");
+  assert.equal(classifyTelegramControlCommand("bloqueos"), "blockers");
+  assert.equal(classifyTelegramControlCommand("qué bloqueo hay"), "blockers");
+  assert.equal(classifyTelegramControlCommand("a quién tengo que perseguir"), "chase");
+  assert.equal(classifyTelegramControlCommand("cerrar día"), "close_day");
   assert.equal(classifyTelegramControlCommand("pendientes"), "pending");
   assert.equal(classifyTelegramControlCommand("aprobar 00000000-0000-0000-0000-000000000000"), "approve");
   assert.equal(classifyTelegramControlCommand("rechazar 00000000-0000-0000-0000-000000000000"), "reject");

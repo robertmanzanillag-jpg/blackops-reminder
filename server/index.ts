@@ -1,3 +1,4 @@
+import "./env-loader";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -11,9 +12,34 @@ import { getSystemUserId, requireAppUser } from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
+import { startCybersecurityScheduler } from "./cybersecurity-agent";
 
 const app = express();
 const httpServer = createServer(app);
+
+async function getStartupMaintenanceUserIds(): Promise<string[]> {
+  const configuredOwners = (await storage.getEnabledTelegramConfigs())
+    .map((config) => config.userId)
+    .filter((userId): userId is string => Boolean(userId));
+  const uniqueOwners = Array.from(new Set(configuredOwners));
+  return uniqueOwners.length ? uniqueOwners : [getSystemUserId()];
+}
+
+async function runStartupTaskDeduplication(): Promise<void> {
+  const userIds = await getStartupMaintenanceUserIds();
+  await Promise.all(userIds.map(async (userId) => {
+    const [weeklyRemoved, mainRemoved] = await Promise.all([
+      storage.deduplicateRecurringTasks(userId),
+      storage.deduplicateMainTasks(userId),
+    ]);
+    if (weeklyRemoved > 0) {
+      log(`Cleaned up ${weeklyRemoved} duplicate weekly tasks for ${userId}`, "weekly-tasks");
+    }
+    if (mainRemoved > 0) {
+      log(`Cleaned up ${mainRemoved} duplicate main tasks for ${userId}`, "tasks");
+    }
+  }));
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -120,21 +146,10 @@ app.use((req, res, next) => {
       startHealthCheckScheduler();
       startMarketNewsScheduler();
       startPromoVideoDailyScheduler();
+      startCybersecurityScheduler();
       
-      storage.deduplicateRecurringTasks(getSystemUserId()).then(removed => {
-        if (removed > 0) {
-          log(`Cleaned up ${removed} duplicate weekly tasks`, "weekly-tasks");
-        }
-      }).catch(err => {
-        log(`Failed to deduplicate weekly tasks: ${err.message}`, "weekly-tasks");
-      });
-
-      storage.deduplicateMainTasks(getSystemUserId()).then(removed => {
-        if (removed > 0) {
-          log(`Cleaned up ${removed} duplicate main tasks`, "tasks");
-        }
-      }).catch(err => {
-        log(`Failed to deduplicate main tasks: ${err.message}`, "tasks");
+      runStartupTaskDeduplication().catch(err => {
+        log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
       });
 
       // Setup Telegram webhook for chat

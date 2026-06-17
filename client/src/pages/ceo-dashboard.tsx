@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useState, type React } from "react";
+import { useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -84,6 +85,28 @@ type CeoDashboardData = {
   blackRoomEvents?: { upcoming?: DashboardItem[]; djContacts?: number };
   kongDropkitStatus?: { projects?: DashboardItem[]; connectedToGithub?: boolean; needsBusinessUnitModel?: boolean };
   automationFailures?: DashboardItem[];
+  operationalHealth?: {
+    status: "ready" | "warning" | "blocked";
+    totals: {
+      automations: number;
+      active: number;
+      paused: number;
+      failedDefinitions: number;
+      failedRuns: number;
+      pendingApprovalRuns: number;
+      overdueRuns: number;
+    };
+    recentRuns: Array<{
+      id: string;
+      automationId: string;
+      title: string;
+      status: string;
+      startedAt: string;
+      finishedAt: string | null;
+      errorMessage: string | null;
+    }>;
+    items: DashboardItem[];
+  };
   followUpsDue?: DashboardItem[];
   reminders?: DashboardItem[];
   meetingPreps?: Array<DashboardItem & {
@@ -149,6 +172,12 @@ const EMPTY_DASHBOARD: CeoDashboardData = {
   blackRoomEvents: { upcoming: [], djContacts: 0 },
   kongDropkitStatus: { projects: [], connectedToGithub: false, needsBusinessUnitModel: true },
   automationFailures: [],
+  operationalHealth: {
+    status: "ready",
+    totals: { automations: 0, active: 0, paused: 0, failedDefinitions: 0, failedRuns: 0, pendingApprovalRuns: 0, overdueRuns: 0 },
+    recentRuns: [],
+    items: [],
+  },
   followUpsDue: [],
   reminders: [],
   meetingPreps: [],
@@ -260,8 +289,8 @@ function CommandCard({
   children,
 }: {
   title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
+  icon: ComponentType<{ className?: string }>;
+  children: ReactNode;
 }) {
   return (
     <Card className="border-white/10 bg-zinc-950/80 shadow-none">
@@ -401,6 +430,7 @@ export default function CeoDashboardPage() {
   });
 
   const health = data?.appHealth;
+  const operationalHealth = data?.operationalHealth;
   const hasCritical = Boolean((data?.criticalRisks?.length || 0) > 0 || (health?.projects?.offline || 0) > 0);
 
   const createFollowUp = useMutation({
@@ -604,8 +634,26 @@ export default function CeoDashboardPage() {
                 )}
               </CommandCard>
               <CommandCard title="Automations" icon={Bot}>
-                <p className="text-2xl font-semibold">{data?.automationFailures?.length || 0}</p>
-                <p className="text-xs text-zinc-500">fallas recientes</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-2xl font-semibold capitalize">{operationalHealth?.status || "unknown"}</p>
+                  <Badge variant="outline" className={statusTone(operationalHealth?.status)}>
+                    {operationalHealth?.totals.active || 0}/{operationalHealth?.totals.automations || 0} active
+                  </Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md border border-white/10 bg-black p-2">
+                    <p className="text-lg font-semibold text-red-200">{operationalHealth?.totals.failedRuns || 0}</p>
+                    <p className="text-[10px] text-zinc-500">failed</p>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black p-2">
+                    <p className="text-lg font-semibold text-amber-200">{operationalHealth?.totals.pendingApprovalRuns || 0}</p>
+                    <p className="text-[10px] text-zinc-500">approval</p>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black p-2">
+                    <p className="text-lg font-semibold text-cyan-200">{operationalHealth?.totals.overdueRuns || 0}</p>
+                    <p className="text-[10px] text-zinc-500">overdue</p>
+                  </div>
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -709,6 +757,12 @@ export default function CeoDashboardPage() {
               <CommandCard title="Automation failures" icon={AlertTriangle}>
                 <ItemList items={data?.automationFailures} empty="No hay fallas recientes." />
               </CommandCard>
+              <CommandCard title="Job health" icon={Bot}>
+                <ItemList items={operationalHealth?.items} empty="No hay jobs configurados." />
+              </CommandCard>
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-2">
               <CommandCard title="Follow-ups due" icon={Clock}>
                 <ItemList
                   items={data?.followUpsDue}

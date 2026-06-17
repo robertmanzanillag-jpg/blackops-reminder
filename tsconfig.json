@@ -5,6 +5,7 @@
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
+    "target": "ES2020",
     "module": "ESNext",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
@@ -14,7 +15,7 @@
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "baseUrl": ".",
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "react", "react-dom"],
     "paths": {
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"]

@@ -3,14 +3,12 @@ import { users as usersTable } from "@shared/schema";
 import { db } from "./db";
 import { storage } from "./storage";
 import { getUpcomingMeetingPreps } from "./meeting-intelligence";
-import { formatCeoMorningBrief, plain } from "./ceo-brief-format";
+import { formatCeoMorningBrief, formatCeoRoutineCommand, plain, type CeoBriefSnapshot, type CeoRoutineCommand } from "./ceo-brief-format";
 
-export async function generateCeoMorningBrief(userId: string): Promise<string> {
+export async function loadCeoBriefSnapshot(userId: string): Promise<{ snapshot: CeoBriefSnapshot; now: Date }> {
   const now = new Date();
   const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const nextSevenDays = addDays(todayStart, 7);
 
   const [
     tasks,
@@ -46,7 +44,9 @@ export async function generateCeoMorningBrief(userId: string): Promise<string> {
     .from(usersTable)
     .then((rows) => rows.length);
 
-  return formatCeoMorningBrief({
+  return {
+    now,
+    snapshot: {
     tasks,
     weeklyTasks,
     monthlyGoals,
@@ -62,7 +62,18 @@ export async function generateCeoMorningBrief(userId: string): Promise<string> {
     keyPeople,
     commitments,
     totalUsers,
-  }, now);
+    },
+  };
+}
+
+export async function generateCeoMorningBrief(userId: string): Promise<string> {
+  const { snapshot, now } = await loadCeoBriefSnapshot(userId);
+  return formatCeoMorningBrief(snapshot, now);
+}
+
+export async function generateCeoRoutineCommand(userId: string, command: CeoRoutineCommand): Promise<string> {
+  const { snapshot, now } = await loadCeoBriefSnapshot(userId);
+  return formatCeoRoutineCommand(command, snapshot, now);
 }
 
 export async function generateTelegramAssistantContext(userId: string): Promise<string> {

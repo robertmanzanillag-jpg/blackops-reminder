@@ -11,6 +11,25 @@ export type CeoDoctorCheck = {
   detail: string;
 };
 
+function hasRealValue(value: string | undefined): value is string {
+  if (!value) return false;
+  return !/^(replace-|<|your-|tu-|example|changeme|todo)/i.test(value.trim());
+}
+
+function hasStrongSecret(value: string | undefined, minLength = 32): boolean {
+  return hasRealValue(value) && value.trim().length >= minLength;
+}
+
+function isHttpsUrl(value: string | undefined): boolean {
+  if (!hasRealValue(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function parseCeoDoctorArgs(argv: string[]): CeoDoctorOptions {
   const getValue = (name: string) => {
     const prefix = `${name}=`;
@@ -28,6 +47,8 @@ export function parseCeoDoctorArgs(argv: string[]): CeoDoctorOptions {
 export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorOptions): CeoDoctorCheck[] {
   const briefHour = Number(env.CEO_BRIEF_HOUR ?? "7");
   const briefMinute = Number(env.CEO_BRIEF_MINUTE ?? "0");
+  const publicUrl = env.TELEGRAM_WEBHOOK_URL || env.PUBLIC_APP_URL;
+  const defaultUserMatches = Boolean(options.userId) && env.DEFAULT_USER_ID === options.userId;
   const schedulerValid = Boolean(env.SCHEDULER_TIMEZONE)
     && Number.isFinite(briefHour)
     && briefHour >= 0
@@ -40,20 +61,22 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "database",
       label: "Database",
-      ok: Boolean(env.DATABASE_URL),
+      ok: hasRealValue(env.DATABASE_URL),
       detail: env.DATABASE_URL ? "DATABASE_URL configured." : "Set DATABASE_URL for app data and persistent sessions.",
     },
     {
       id: "ai",
       label: "Assistant AI",
-      ok: Boolean(env.AI_INTEGRATIONS_GEMINI_API_KEY),
+      ok: hasRealValue(env.AI_INTEGRATIONS_GEMINI_API_KEY),
       detail: env.AI_INTEGRATIONS_GEMINI_API_KEY ? "AI key configured." : "Set AI_INTEGRATIONS_GEMINI_API_KEY for app and Telegram chat.",
     },
     {
       id: "session",
       label: "Session auth",
-      ok: Boolean(env.SESSION_SECRET),
-      detail: env.SESSION_SECRET ? "SESSION_SECRET configured." : "Set SESSION_SECRET for production login sessions.",
+      ok: hasStrongSecret(env.SESSION_SECRET),
+      detail: hasStrongSecret(env.SESSION_SECRET)
+        ? "SESSION_SECRET configured with production length."
+        : "Set SESSION_SECRET to a real random secret with at least 32 characters.",
     },
     {
       id: "local_auth",
@@ -70,28 +93,38 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "telegram_token",
       label: "Telegram token",
-      ok: Boolean(env.TELEGRAM_BOT_TOKEN),
+      ok: hasRealValue(env.TELEGRAM_BOT_TOKEN),
       detail: env.TELEGRAM_BOT_TOKEN ? "TELEGRAM_BOT_TOKEN configured." : "Set TELEGRAM_BOT_TOKEN from BotFather.",
     },
     {
       id: "telegram_url",
       label: "Telegram webhook URL",
-      ok: Boolean(env.TELEGRAM_WEBHOOK_URL || env.PUBLIC_APP_URL || env.REPLIT_DEV_DOMAIN || (env.REPL_SLUG && env.REPL_OWNER)),
-      detail: env.TELEGRAM_WEBHOOK_URL || env.PUBLIC_APP_URL
-        ? "Public webhook URL configured."
-        : "Set PUBLIC_APP_URL or TELEGRAM_WEBHOOK_URL for production webhook setup.",
+      ok: isHttpsUrl(publicUrl),
+      detail: isHttpsUrl(publicUrl)
+        ? "Public HTTPS webhook URL configured."
+        : "Set PUBLIC_APP_URL or TELEGRAM_WEBHOOK_URL to a real public HTTPS URL.",
     },
     {
       id: "telegram_secret",
       label: "Telegram webhook secret",
-      ok: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
-      detail: env.TELEGRAM_WEBHOOK_SECRET ? "TELEGRAM_WEBHOOK_SECRET configured." : "Set TELEGRAM_WEBHOOK_SECRET before production.",
+      ok: hasStrongSecret(env.TELEGRAM_WEBHOOK_SECRET, 16),
+      detail: hasStrongSecret(env.TELEGRAM_WEBHOOK_SECRET, 16)
+        ? "TELEGRAM_WEBHOOK_SECRET configured."
+        : "Set TELEGRAM_WEBHOOK_SECRET to a real random secret with at least 16 characters.",
     },
     {
       id: "user_id",
       label: "Real user id",
       ok: Boolean(options.userId),
       detail: options.userId ? `Using user id ${options.userId}.` : "Pass --user-id=<real-user-id> after creating/migrating the user.",
+    },
+    {
+      id: "default_user",
+      label: "System job user",
+      ok: defaultUserMatches,
+      detail: defaultUserMatches
+        ? "DEFAULT_USER_ID matches the checked production user."
+        : "Set DEFAULT_USER_ID to the same real user id used by --user-id for single-user system jobs.",
     },
     {
       id: "chat_id",
@@ -119,7 +152,10 @@ export function buildCeoDoctorNextCommands(options: CeoDoctorOptions): string[] 
     `npm run telegram:configure -- --user-id=${userId} --chat-id=${chatId} --execute`,
     `npm run telegram:configure -- --user-id=${userId} --latest --execute`,
     "npm run telegram:webhook -- setup --execute",
+    "npm run ceo:db-check -- --json",
+    "npm run ceo:backup-check -- --json",
     `npm run ceo:readiness -- --user-id=${userId}`,
+    `npm run ceo:smoke -- --user-id=${userId} --chat-id=${chatId}`,
     `npm run ceo:send-brief -- --user-id=${userId} --execute`,
   ];
 }

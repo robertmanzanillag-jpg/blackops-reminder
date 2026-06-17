@@ -79,6 +79,7 @@ async function calculatePortfolioSummary(userId: string): Promise<PortfolioSumma
 
 async function savePortfolioSnapshot(userId: string, summary: PortfolioSummary): Promise<void> {
   await storage.createPortfolioSnapshot(userId, {
+    userId,
     date: new Date(),
     totalValue: summary.totalValue.toFixed(2),
     stocksValue: summary.stocksValue.toFixed(2),

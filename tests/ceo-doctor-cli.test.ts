@@ -14,12 +14,13 @@ test("builds CEO doctor checks from env and options", () => {
   const checks = buildCeoDoctorChecks({
     DATABASE_URL: "postgres://example",
     AI_INTEGRATIONS_GEMINI_API_KEY: "key",
-    SESSION_SECRET: "secret",
+    SESSION_SECRET: "a-production-session-secret-32-chars",
     LOCAL_AUTH_ENABLED: "true",
     ALLOW_DEV_USER_FALLBACK: "false",
     TELEGRAM_BOT_TOKEN: "token",
     PUBLIC_APP_URL: "https://example.com",
-    TELEGRAM_WEBHOOK_SECRET: "secret",
+    TELEGRAM_WEBHOOK_SECRET: "telegram-secret-16",
+    DEFAULT_USER_ID: "user-123",
     SCHEDULER_TIMEZONE: "America/New_York",
     CEO_BRIEF_HOUR: "7",
     CEO_BRIEF_MINUTE: "0",
@@ -35,12 +36,13 @@ test("flags unsafe production auth and scheduler settings", () => {
   const checks = buildCeoDoctorChecks({
     DATABASE_URL: "postgres://example",
     AI_INTEGRATIONS_GEMINI_API_KEY: "key",
-    SESSION_SECRET: "secret",
+    SESSION_SECRET: "short",
     LOCAL_AUTH_ENABLED: "false",
     ALLOW_DEV_USER_FALLBACK: "true",
     TELEGRAM_BOT_TOKEN: "token",
-    PUBLIC_APP_URL: "https://example.com",
+    PUBLIC_APP_URL: "http://example.com",
     TELEGRAM_WEBHOOK_SECRET: "secret",
+    DEFAULT_USER_ID: "another-user",
     SCHEDULER_TIMEZONE: "",
     CEO_BRIEF_HOUR: "99",
     CEO_BRIEF_MINUTE: "0",
@@ -51,7 +53,38 @@ test("flags unsafe production auth and scheduler settings", () => {
 
   assert.equal(checks.find((check) => check.id === "local_auth")?.ok, false);
   assert.equal(checks.find((check) => check.id === "dev_fallback")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "session")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "telegram_url")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "telegram_secret")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "default_user")?.ok, false);
   assert.equal(checks.find((check) => check.id === "scheduler")?.ok, false);
+});
+
+test("flags placeholder production values", () => {
+  const checks = buildCeoDoctorChecks({
+    DATABASE_URL: "replace-with-database-url",
+    AI_INTEGRATIONS_GEMINI_API_KEY: "replace-with-gemini-api-key",
+    SESSION_SECRET: "replace-with-long-random-secret",
+    LOCAL_AUTH_ENABLED: "true",
+    ALLOW_DEV_USER_FALLBACK: "false",
+    TELEGRAM_BOT_TOKEN: "replace-with-botfather-token",
+    PUBLIC_APP_URL: "https://your-domain.example",
+    TELEGRAM_WEBHOOK_SECRET: "replace-with-telegram-webhook-secret",
+    DEFAULT_USER_ID: "replace-after-running-auth-create-user",
+    SCHEDULER_TIMEZONE: "America/New_York",
+    CEO_BRIEF_HOUR: "7",
+    CEO_BRIEF_MINUTE: "0",
+  } as NodeJS.ProcessEnv, {
+    userId: "user-123",
+    chatId: "999",
+  });
+
+  assert.equal(checks.find((check) => check.id === "database")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "ai")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "session")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "telegram_token")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "telegram_secret")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "default_user")?.ok, false);
 });
 
 test("prints next CEO doctor commands with placeholders", () => {

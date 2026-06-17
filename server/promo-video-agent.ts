@@ -3,6 +3,7 @@ import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "fs/
 import path from "path";
 import { DRIVE_KONG_VIDEOS_FOLDER, ensureAppDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
 import { getSystemUserId } from "./user-context";
+import { storage } from "./storage";
 
 export type PromoVideoStyle = "full" | "post";
 export type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
@@ -604,7 +605,16 @@ async function maybeRunPromoVideoDaily() {
   const today = getLocalDateKey(now);
   if (config.lastAutoRunDate === today) return;
 
-  await runPromoVideoAutoDaily({ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full" });
+  const userIds = await getPromoVideoSchedulerUserIds();
+  await Promise.all(userIds.map((userId) =>
+    runPromoVideoAutoDaily({ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full", userId })
+  ));
+}
+
+async function getPromoVideoSchedulerUserIds(): Promise<string[]> {
+  const configs = await storage.getEnabledTelegramConfigs();
+  const userIds = Array.from(new Set(configs.map((config) => config.userId).filter(Boolean)));
+  return userIds.length ? userIds : [getSystemUserId()];
 }
 
 export function startPromoVideoDailyScheduler() {

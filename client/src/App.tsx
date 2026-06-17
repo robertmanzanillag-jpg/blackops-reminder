@@ -1,25 +1,30 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/dashboard";
-import Portfolio from "@/pages/portfolio";
-import InvestmentDetail from "@/pages/investment-detail";
-import Projects from "@/pages/projects";
-import RadioPage from "@/pages/radio";
-import PromoVideoPage from "@/pages/promo-video";
-import ClippersPage from "@/pages/clippers";
-import AssistantPage from "@/pages/assistant";
-import CodeAgentPage from "@/pages/code-agent";
-import GitHubAgentPage from "@/pages/github-agent";
-import CeoDashboardPage from "@/pages/ceo-dashboard";
-import AutomationManagerPage from "@/pages/automation-manager";
-import ToolsPage from "@/pages/tools";
-import AgentsOfficePage from "@/pages/agents-office";
 import AuthPage from "@/pages/auth";
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Portfolio = lazy(() => import("@/pages/portfolio"));
+const InvestmentDetail = lazy(() => import("@/pages/investment-detail"));
+const Projects = lazy(() => import("@/pages/projects"));
+const RadioPage = lazy(() => import("@/pages/radio"));
+const PromoVideoPage = lazy(() => import("@/pages/promo-video"));
+const ClippersPage = lazy(() => import("@/pages/clippers"));
+const AssistantPage = lazy(() => import("@/pages/assistant"));
+const CodeAgentPage = lazy(() => import("@/pages/code-agent"));
+const GitHubAgentPage = lazy(() => import("@/pages/github-agent"));
+const CeoDashboardPage = lazy(() => import("@/pages/ceo-dashboard"));
+const AutomationManagerPage = lazy(() => import("@/pages/automation-manager"));
+const ToolsPage = lazy(() => import("@/pages/tools"));
+const AgentsOfficePage = lazy(() => import("@/pages/agents-office"));
+const RevenueEnginePage = lazy(() => import("@/pages/revenue-engine"));
+const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"));
+const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
 
 type AuthMe = {
   authenticated: boolean;
@@ -103,26 +108,35 @@ function Router() {
           </Button>
         )}
       </div>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/assistant" component={AssistantPage} />
-        <Route path="/ceo" component={CeoDashboardPage} />
-        <Route path="/tools" component={ToolsPage} />
-        <Route path="/agents-office" component={AgentsOfficePage} />
-        <Route path="/automations" component={AutomationManagerPage} />
-        <Route path="/code-agent" component={CodeAgentPage} />
-        <Route path="/github-agent" component={GitHubAgentPage} />
-        <Route path="/portfolio" component={Portfolio} />
-        <Route path="/portfolio/:symbol" component={InvestmentDetail} />
-        <Route path="/projects" component={Projects} />
-        <Route path="/radio" component={RadioPage} />
-        <Route path="/promo-video" component={PromoVideoPage} />
-        <Route path="/clippers" component={ClippersPage} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<PageLoading />}>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/assistant" component={AssistantPage} />
+          <Route path="/ceo" component={CeoDashboardPage} />
+          <Route path="/tools" component={ToolsPage} />
+          <Route path="/agents-office" component={AgentsOfficePage} />
+          <Route path="/revenue-engine" component={RevenueEnginePage} />
+          <Route path="/cybersecurity-agent" component={CybersecurityAgentPage} />
+          <Route path="/legal-compliance" component={LegalCompliancePage} />
+          <Route path="/automations" component={AutomationManagerPage} />
+          <Route path="/code-agent" component={CodeAgentPage} />
+          <Route path="/github-agent" component={GitHubAgentPage} />
+          <Route path="/portfolio" component={Portfolio} />
+          <Route path="/portfolio/:symbol" component={InvestmentDetail} />
+          <Route path="/projects" component={Projects} />
+          <Route path="/radio" component={RadioPage} />
+          <Route path="/promo-video" component={PromoVideoPage} />
+          <Route path="/clippers" component={ClippersPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </>
   );
+}
+
+function PageLoading() {
+  return <div className="flex min-h-screen items-center justify-center bg-black text-sm text-zinc-400">Cargando modulo...</div>;
 }
 
 function App() {

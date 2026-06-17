@@ -52,20 +52,23 @@ test("resolves user id from session before dev fallback", () => {
   assert.equal(userId, "user-from-session");
 });
 
-test("allows x-user-id as a development bridge", () => {
-  const userId = withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () =>
+test("allows x-user-id as a development bridge only when request fallbacks are enabled", () => {
+  const userId = withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () =>
     resolveCurrentUserId(requestWithHeader("user-from-header")),
   );
 
   assert.equal(userId, "user-from-header");
+  assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () =>
+    resolveCurrentUserId(requestWithHeader("spoofed-user")),
+  ), null);
 });
 
-test("uses explicit DEFAULT_USER_ID when no request user exists", () => {
+test("does not use explicit DEFAULT_USER_ID as request authentication", () => {
   const userId = withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: "configured-user", ALLOW_DEV_USER_FALLBACK: undefined }, () =>
     resolveCurrentUserId(requestWithHeader()),
   );
 
-  assert.equal(userId, "configured-user");
+  assert.equal(userId, null);
 });
 
 test("limits mock fallback to dev/test unless explicitly enabled", () => {

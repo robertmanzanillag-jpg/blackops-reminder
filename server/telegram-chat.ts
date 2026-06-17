@@ -6,11 +6,11 @@ import { format, addMonths, startOfWeek, endOfWeek, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
-import { generateTelegramAssistantContext } from "./ceo-briefing";
+import { generateCeoRoutineCommand, generateTelegramAssistantContext } from "./ceo-briefing";
 import { getReminderSchedulerConfig } from "./reminder-scheduler";
 import { classifyTelegramControlCommand } from "./telegram-command";
 import { buildCeoReadinessReport } from "./ceo-readiness";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId } from "./user-context";
+import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
@@ -373,6 +373,10 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
       "Comandos de Telegram:",
       "",
       "brief / resumen / agenda / prioridades - ver estado CEO",
+      "top 3 / foco - ver las tres prioridades principales",
+      "bloqueos / riesgos - ver atascos operativos",
+      "a quién tengo que perseguir - ver follow-ups y compromisos abiertos",
+      "cerrar día - checklist ejecutivo de cierre",
       "readiness / estado CEO - revisar si el assistant esta listo",
       "health / status / estado sistema - revisar salud de Telegram",
       "pendientes / aprobaciones - ver acciones esperando aprobación",
@@ -392,6 +396,10 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
 
   if (command === "brief") {
     return generateTelegramAssistantContext(userId);
+  }
+
+  if (command === "top3" || command === "blockers" || command === "chase" || command === "close_day") {
+    return generateCeoRoutineCommand(userId, command);
   }
 
   if (command === "pending") {
@@ -1059,9 +1067,17 @@ export async function handleTelegramMessage(update: TelegramUpdate): Promise<voi
 
   let config = await storage.getTelegramConfigByChatId(chatId);
   if (!config) {
-    const userId = getSystemUserId();
-    config = await storage.saveTelegramConfig(userId, chatId);
-    await sendTelegramPlainMessage(botToken, chatId, "✅ Telegram conectado a BlackOps CEO. Ya puedes escribirme tareas, preguntas y cambios.");
+    await sendTelegramPlainMessage(
+      botToken,
+      chatId,
+      [
+        "Recibí tu mensaje, pero este chat de Telegram todavía no está vinculado a un usuario del asistente.",
+        "",
+        "Para conectarlo, abre el panel web o ejecuta:",
+        "`npm run telegram:configure -- --user-id=<real-user-id> --chat-id=" + chatId + " --execute`",
+      ].join("\n")
+    );
+    return;
   }
   if (!config.enabled) {
     config = await storage.saveTelegramConfig(config.userId, chatId);

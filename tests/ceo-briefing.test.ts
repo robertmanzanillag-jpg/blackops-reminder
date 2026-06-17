@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatCeoMorningBrief, type CeoBriefSnapshot } from "../server/ceo-brief-format";
+import { buildCeoDailyCommandCenter, formatCeoMorningBrief, formatCeoRoutineCommand, type CeoBriefSnapshot } from "../server/ceo-brief-format";
 
 function emptySnapshot(overrides: Partial<CeoBriefSnapshot> = {}): CeoBriefSnapshot {
   return {
@@ -69,4 +69,30 @@ test("formats CEO morning brief with priorities, approvals, risks, and context",
   assert.match(brief, /Pricing/);
   assert.match(brief, /Persona: Ana/);
   assert.match(brief, /Reach MRR target/);
+});
+
+test("builds CEO routine command center from the same brief snapshot", () => {
+  const now = new Date("2026-06-15T12:00:00Z");
+  const snapshot = emptySnapshot({
+    tasks: [
+      { title: "Close investor memo", date: "2026-06-15T16:00:00Z", type: "regular", priority: "high", completed: false },
+      { title: "Follow-up: Ana - contract", date: "2026-06-14T18:00:00Z", type: "follow_up", completed: false },
+    ],
+    weeklyTasks: [{ title: "Ship CEO dashboard", completed: false }],
+    pendingActions: [{ id: "00000000-0000-0000-0000-000000000001", title: "Send investor update", status: "pending", riskLevel: "medium" }],
+    projects: [{ name: "Client portal", status: "degraded" }],
+    auditLogs: [{ status: "failed" }],
+    commitments: [{ key: "Roberto", value: "Send deck by Friday" }],
+  });
+
+  const center = buildCeoDailyCommandCenter(snapshot, now);
+  assert.deepEqual(center.topPriorities.slice(0, 2), ["Close investor memo", "Follow-up: Ana - contract"]);
+  assert.equal(center.blockers.some((item) => item.includes("aprobación")), true);
+  assert.equal(center.blockers.some((item) => item.includes("Client portal")), true);
+  assert.equal(center.chaseList.some((item) => item.includes("Ana")), true);
+
+  assert.match(formatCeoRoutineCommand("top3", snapshot, now), /Top 3 prioridades/);
+  assert.match(formatCeoRoutineCommand("blockers", snapshot, now), /Bloqueos actuales/);
+  assert.match(formatCeoRoutineCommand("chase", snapshot, now), /A quién perseguir/);
+  assert.match(formatCeoRoutineCommand("close_day", snapshot, now), /Cierre del día/);
 });
