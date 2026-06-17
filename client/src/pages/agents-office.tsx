@@ -250,6 +250,13 @@ type LearningSuggestion = {
   lesson: string;
   reason: string;
 };
+type SkillSuggestion = {
+  id: string;
+  agent: AgentId;
+  skill: string;
+  helpsWith: string;
+  nextStep: string;
+};
 
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 
@@ -433,6 +440,44 @@ const learningSuggestions: LearningSuggestion[] = [
     agent: "code",
     lesson: "Code debe hacer cambios pequenos, con build y resumen claro antes de pasar a GitHub.",
     reason: "Reduce errores y hace que los demas agentes entiendan que cambio.",
+  },
+];
+
+const skillSuggestions: SkillSuggestion[] = [
+  {
+    id: "code-visual-qa",
+    agent: "code",
+    skill: "Visual QA",
+    helpsWith: "Revisar screenshots, detectar textos montados y validar que los cambios se vean bien antes de publicar.",
+    nextStep: "Usarlo en cada cambio visual de la oficina, landing pages y dashboards.",
+  },
+  {
+    id: "github-ci-review",
+    agent: "github",
+    skill: "PR + CI Reviewer",
+    helpsWith: "Leer diffs, checks, errores de build y resumir que falta para subir cambios sin romper produccion.",
+    nextStep: "Activarlo cuando Code termine un cambio o cuando un repo tenga errores.",
+  },
+  {
+    id: "revenue-deal-research",
+    agent: "revenue",
+    skill: "Deal Research",
+    helpsWith: "Buscar oportunidades, validar margen, detectar nichos y decidir si vale la pena crear website.",
+    nextStep: "Crear checklist para cada deal antes de construir landing o contactar.",
+  },
+  {
+    id: "clippers-source-analytics",
+    agent: "clippers",
+    skill: "Source + Analytics Scout",
+    helpsWith: "Encontrar fuentes permitidas, medir views por cuenta y aprender que formatos conviene repetir.",
+    nextStep: "Conectar reportes semanales y allowlist de fuentes.",
+  },
+  {
+    id: "assistant-memory-curator",
+    agent: "assistant",
+    skill: "Memory Curator",
+    helpsWith: "Convertir feedback tuyo en reglas limpias, sin guardar ruido ni contradicciones.",
+    nextStep: "Pedir aprobacion antes de guardar cualquier aprendizaje permanente.",
   },
 ];
 
@@ -729,6 +774,7 @@ export default function AgentsOfficePage() {
   const [lastRemoteTask, setLastRemoteTask] = useState("");
   const [sentMessages, setSentMessages] = useState<{ to: string; text: string }[]>([]);
   const [approvedLearning, setApprovedLearning] = useState<string[]>([]);
+  const [approvedSkills, setApprovedSkills] = useState<string[]>([]);
   const [visibleNotes, setVisibleNotes] = useState({
     chat: true,
     reply: true,
@@ -898,6 +944,9 @@ export default function AgentsOfficePage() {
   };
   const handleApproveLearning = (lessonId: string) => {
     setApprovedLearning((current) => (current.includes(lessonId) ? current : [...current, lessonId]));
+  };
+  const handleApproveSkill = (skillId: string) => {
+    setApprovedSkills((current) => (current.includes(skillId) ? current : [...current, skillId]));
   };
 
   return (
@@ -1470,6 +1519,58 @@ export default function AgentsOfficePage() {
                       </Button>
                     </div>
                     <p className="text-xs leading-4 text-zinc-500">{item.reason}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-violet-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-200" />
+                <p className="text-sm font-medium text-zinc-300">Skill Scout</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-zinc-500">
+                {approvedSkills.length} skills aprobados
+              </span>
+            </div>
+            <div className="space-y-2">
+              {skillSuggestions.map((item) => {
+                const agent = agentById[item.agent];
+                const Icon = agent.icon;
+                const approved = approvedSkills.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "rounded-lg border p-3",
+                      approved ? "border-violet-300/30 bg-violet-300/10" : "border-white/10 bg-black/35"
+                    )}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 gap-2">
+                        <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-zinc-950", agent.color)}>
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white">{agent.name} propone skill</p>
+                          <p className="mt-1 text-sm font-medium text-violet-100">{item.skill}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={approved ? "outline" : "secondary"}
+                        size="sm"
+                        onClick={() => handleApproveSkill(item.id)}
+                        className={cn("h-8 shrink-0 rounded-full px-3 text-xs", approved && "border-violet-300/30 bg-violet-300/10 text-violet-100")}
+                        disabled={approved}
+                      >
+                        {approved ? "Aprobado" : "Aprobar"}
+                      </Button>
+                    </div>
+                    <p className="text-sm leading-5 text-zinc-300">{item.helpsWith}</p>
+                    <p className="mt-2 text-xs leading-4 text-zinc-500">Siguiente paso: {item.nextStep}</p>
                   </div>
                 );
               })}
