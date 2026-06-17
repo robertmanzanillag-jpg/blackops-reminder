@@ -470,42 +470,43 @@ function AgentPerson({
     <motion.button
       type="button"
       onClick={() => onSelect(agent)}
-      className={cn("absolute z-30 flex h-24 w-16 -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
-      animate={{ y: selected ? [0, -5, 0] : [0, -2, 0] }}
+      className={cn("absolute z-30 flex h-28 w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
+      animate={{ y: selected ? [0, -7, 0] : [0, -3, 0] }}
       transition={{ duration: selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
       aria-label={`Ver agente ${agent.name}`}
       data-testid={`agent-avatar-${agent.id}`}
     >
-      <span className="absolute bottom-3 h-4 w-12 rounded-full bg-black/50 blur-md" />
-      <span className="relative flex h-[72px] w-12 flex-col items-center">
+      <span className="absolute bottom-3 h-5 w-14 rounded-full bg-black/55 blur-md" />
+      <span className="relative flex h-[84px] w-14 flex-col items-center [transform-style:preserve-3d]">
         <span
           className={cn(
-            "absolute top-0 h-9 w-9 rounded-[16px] border border-white/25 bg-gradient-to-br shadow-[inset_0_1px_12px_rgba(255,255,255,0.18),0_16px_32px_rgba(0,0,0,0.35)]",
+            "absolute top-0 h-11 w-11 rounded-[22px] border border-white/30 bg-gradient-to-br shadow-[inset_6px_8px_14px_rgba(255,255,255,0.22),inset_-8px_-10px_16px_rgba(0,0,0,0.22),0_18px_34px_rgba(0,0,0,0.42)]",
             agent.color,
             selected && "ring-2 ring-cyan-100"
           )}
         >
-          <span className="absolute left-1/2 top-3.5 h-3 w-6 -translate-x-1/2 rounded-full bg-[#06101d] shadow-[inset_0_0_8px_rgba(34,211,238,0.55)]">
-            <span className="absolute left-1.5 top-1 h-1 w-1 rounded-full bg-cyan-100" />
-            <span className="absolute right-1.5 top-1 h-1 w-1 rounded-full bg-cyan-100" />
+          <span className="absolute left-1/2 top-[17px] h-3.5 w-7 -translate-x-1/2 rounded-full bg-[#04101d] shadow-[inset_0_0_10px_rgba(34,211,238,0.65),0_1px_4px_rgba(255,255,255,0.16)]">
+            <span className="absolute left-2 top-1 h-1.5 w-1.5 rounded-full bg-cyan-100" />
+            <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-cyan-100" />
           </span>
         </span>
         <span
           className={cn(
-            "absolute top-8 h-10 w-10 rounded-[18px] border border-white/20 bg-gradient-to-br shadow-[0_18px_36px_rgba(0,0,0,0.38)]",
+            "absolute top-9 h-12 w-12 rounded-[24px] border border-white/25 bg-gradient-to-br shadow-[inset_7px_8px_14px_rgba(255,255,255,0.18),inset_-8px_-12px_18px_rgba(0,0,0,0.2),0_20px_38px_rgba(0,0,0,0.45)]",
             agent.color
           )}
         >
-          <span className="absolute -left-2 top-2.5 h-6 w-2.5 rounded-full border border-white/20 bg-inherit" />
-          <span className="absolute -right-2 top-2.5 h-6 w-2.5 rounded-full border border-white/20 bg-inherit" />
-          <span className="absolute left-1/2 top-2.5 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-xl border border-black/15 bg-black/18 text-white">
-            <Icon className="h-3 w-3" />
+          <span className="absolute -left-2.5 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit shadow-[inset_-4px_-6px_8px_rgba(0,0,0,0.18)]" />
+          <span className="absolute -right-2.5 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit shadow-[inset_-4px_-6px_8px_rgba(0,0,0,0.18)]" />
+          <span className="absolute left-1/2 top-3 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/65">
+            <Icon className="h-2.5 w-2.5" />
           </span>
+          <span className="absolute left-2 top-2 h-8 w-2 rounded-full bg-white/20 blur-[1px]" />
         </span>
-        <span className="absolute top-[66px] left-3.5 h-3.5 w-1.5 rounded-b bg-[#101827]" />
-        <span className="absolute top-[66px] right-3.5 h-3.5 w-1.5 rounded-b bg-[#101827]" />
+        <span className="absolute top-[78px] left-4 h-4 w-2 rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]" />
+        <span className="absolute top-[78px] right-4 h-4 w-2 rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]" />
       </span>
-      <span className={cn("mt-1 max-w-20 truncate rounded-xl border px-2 py-0.5 text-[9px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#070b12]/90 text-white")}>
+      <span className={cn("mt-1 max-w-20 truncate rounded-xl border px-2 py-0.5 text-[9px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#070b12]/70 text-white/80")}>
         {agent.name}
       </span>
     </motion.button>
@@ -894,14 +895,17 @@ export default function AgentsOfficePage() {
             </div>
         </div>
 
-        <div className="relative h-full min-h-[620px] w-full">
-          <div className="absolute left-[7%] top-[12%] h-[63%] w-[78%] rounded-[34px] border border-white/10 bg-[#0b1018] shadow-[0_60px_140px_rgba(0,0,0,0.72)]" />
-          <div className="absolute left-[10%] top-[15%] h-[56%] w-[72%] rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(145deg,#111a26_0%,#0b1018_52%,#06080d_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" />
-          <div className="absolute left-[12%] top-[17%] h-[52%] w-[68%] rounded-[24px] bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:54px_54px]" />
+        <div className="relative h-full min-h-[620px] w-full [perspective:1400px]">
+          <div className="absolute left-[9%] top-[7%] h-[68%] w-[78%] [transform:rotateX(58deg)_rotateZ(-34deg)] [transform-style:preserve-3d]">
+            <div className="absolute inset-0 rounded-[34px] border border-cyan-100/10 bg-[linear-gradient(145deg,#151f2c_0%,#0b1018_58%,#05070c_100%)] shadow-[0_90px_130px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.09)]" />
+            <div className="absolute left-5 right-5 top-5 bottom-5 rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.16),transparent_32%)] bg-[size:54px_54px,54px_54px,auto]" />
+            <div className="absolute -bottom-8 left-10 right-10 h-8 rounded-b-[28px] bg-[#05070c] shadow-[0_32px_70px_rgba(0,0,0,0.58)] [transform:rotateX(-82deg)] [transform-origin:top]" />
+            <div className="absolute -right-8 bottom-10 top-10 w-8 rounded-r-[28px] bg-[#070b12] [transform:rotateY(82deg)] [transform-origin:left]" />
+          </div>
 
-          <div className="absolute left-[12%] top-[17%] h-[36%] w-[4%] rounded-l-3xl border-l border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/3 backdrop-blur" />
-          <div className="absolute left-[12%] top-[17%] h-[5%] w-[68%] rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/10 via-white/6 to-white/10 backdrop-blur" />
-          <div className="absolute right-[20%] top-[17%] h-[52%] w-[4%] rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/10 to-white/3 backdrop-blur" />
+          <div className="absolute left-[11%] top-[14%] h-[40%] w-[5%] -skew-y-6 rounded-l-3xl border-l border-t border-cyan-100/10 bg-gradient-to-b from-white/14 to-white/4 backdrop-blur" />
+          <div className="absolute left-[13%] top-[12%] h-[7%] w-[68%] -skew-x-12 rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/13 via-white/6 to-white/12 backdrop-blur" />
+          <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
 
           <div className="absolute left-[18%] top-[23%] text-left">
             <p className="text-3xl font-black tracking-[0.18em] text-white/80">SAMS</p>

@@ -43,6 +43,7 @@ type ClipperPlatform = "tiktok" | "instagram" | "youtube";
 type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
 type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 type ClipperReadinessStatus = "ready" | "missing" | "partial";
+type ClipperConnectActionStatus = "ready" | "blocked";
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -126,6 +127,17 @@ interface ClipperSourceFolder {
   purpose: string;
 }
 
+interface ClipperConnectAction {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperConnectActionStatus;
+  authUrl: string | null;
+  callbackPath: string;
+  missingEnvVars: string[];
+  scopes: string[];
+  nextStep: string;
+}
+
 interface ClipperPipelineItem {
   stage: string;
   count: number;
@@ -167,6 +179,7 @@ interface ClipperStatus {
   sources: ClipperSource[];
   sourceFolders: ClipperSourceFolder[];
   credentialChecks: ClipperCredentialCheck[];
+  connectActions: ClipperConnectAction[];
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
@@ -590,6 +603,45 @@ export default function ClippersPage() {
             </CardContent>
           </Card>
 
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <ExternalLink className="h-4 w-4 text-cyan-200" />
+                Acciones de conexion
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(status?.connectActions || []).map((action) => (
+                <div key={action.platform} className="rounded-md border border-white/10 bg-black/35 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">{action.label}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{action.nextStep}</p>
+                    </div>
+                    {action.authUrl ? (
+                      <a href={`/api/clippers/oauth/${action.platform}/start`} className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-cyan-200 px-3 text-sm font-medium text-zinc-950 hover:bg-cyan-100">
+                        Conectar
+                      </a>
+                    ) : (
+                      <Badge className="w-fit border border-red-300/30 bg-red-300/10 text-red-200">bloqueado</Badge>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {action.scopes.map((scope) => (
+                      <Badge key={scope} variant="outline" className="border-zinc-700 text-zinc-300">{scope}</Badge>
+                    ))}
+                  </div>
+                  {action.missingEnvVars.length > 0 && (
+                    <p className="mt-2 text-xs text-amber-200">Faltan: {action.missingEnvVars.join(", ")}</p>
+                  )}
+                  <p className="mt-2 text-xs text-zinc-600">Callback: {action.callbackPath}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <Card className="border-zinc-800 bg-zinc-950/70">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base text-white">

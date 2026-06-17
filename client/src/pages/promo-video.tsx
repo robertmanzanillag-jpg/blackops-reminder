@@ -59,6 +59,7 @@ interface GoogleDriveStatus {
   expiresAt: string | null;
   scope: string | null;
   redirectUri: string | null;
+  storageError?: string | null;
 }
 
 function formatDate(value: string) {
@@ -446,6 +447,9 @@ export default function PromoVideoPage() {
                 <p className="mt-1 text-xs text-zinc-500">
                   Los clips finales se suben a VIDEOS PROMO DE KOG con subcarpetas por categoria y fecha.
                 </p>
+                {driveStatus?.storageError && (
+                  <p className="mt-2 text-xs text-yellow-200">Drive necesita DB local o refresh token en env para guardar OAuth.</p>
+                )}
                 {!driveStatus?.connected && driveStatus?.configured && (
                   <Button
                     type="button"

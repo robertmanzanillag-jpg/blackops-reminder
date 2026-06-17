@@ -172,16 +172,29 @@ export async function getGoogleDriveOAuthClient(userId: string) {
 }
 
 export async function getGoogleDriveOAuthStatus(userId: string) {
-  const token = await storage.getGoogleDriveOAuthToken(userId);
+  const envConnected = Boolean(process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN);
+  const configured = Boolean(
+    envConnected ||
+    ((process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) &&
+      (process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET))
+  );
+
+  let token = null;
+  let storageError: string | null = null;
+  if (!envConnected) {
+    try {
+      token = await storage.getGoogleDriveOAuthToken(userId);
+    } catch (error: any) {
+      storageError = error.message || "No se pudo leer el token de Google Drive.";
+    }
+  }
+
   return {
-    configured: Boolean(
-      (process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN) ||
-      ((process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) &&
-        (process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET))
-    ),
-    connected: Boolean(process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN || token),
+    configured,
+    connected: Boolean(envConnected || token),
     expiresAt: token?.expiresAt || null,
     scope: token?.scope || process.env.GOOGLE_DRIVE_SCOPES || DEFAULT_GOOGLE_DRIVE_SCOPES,
     redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI || null,
+    storageError,
   };
 }

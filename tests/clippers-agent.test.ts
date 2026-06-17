@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { stat } from "node:fs/promises";
 import test from "node:test";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperStatus, runClipperDailyPlan } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, runClipperDailyPlan } from "../server/clippers-agent";
 
 test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   const result = __clipperInternals.normalizeRunOptions({
@@ -59,4 +59,39 @@ test("bootstrapClipperWorkspace prepares source folders and credential checks", 
   assert.ok(sportsFolder);
   const folderStat = await stat(sportsFolder.path);
   assert.equal(folderStat.isDirectory(), true);
+});
+
+test("buildClipperConnectActions blocks missing OAuth credentials", () => {
+  const originalTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+  const originalGoogleClientId = process.env.GOOGLE_CLIENT_ID;
+  delete process.env.TIKTOK_CLIENT_KEY;
+  delete process.env.GOOGLE_CLIENT_ID;
+
+  try {
+    const actions = buildClipperConnectActions();
+    assert.equal(actions.find((action) => action.platform === "tiktok")?.status, "blocked");
+    assert.equal(actions.find((action) => action.platform === "youtube")?.authUrl, null);
+  } finally {
+    if (originalTikTokKey) process.env.TIKTOK_CLIENT_KEY = originalTikTokKey;
+    if (originalGoogleClientId) process.env.GOOGLE_CLIENT_ID = originalGoogleClientId;
+  }
+});
+
+test("buildClipperConnectActions creates OAuth URL when env is present", () => {
+  const originalTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+  const originalTikTokSecret = process.env.TIKTOK_CLIENT_SECRET;
+  process.env.TIKTOK_CLIENT_KEY = "test-client-key";
+  process.env.TIKTOK_CLIENT_SECRET = "test-client-secret";
+
+  try {
+    const action = buildClipperConnectActions().find((item) => item.platform === "tiktok");
+    assert.equal(action?.status, "ready");
+    assert.ok(action?.authUrl?.includes("client_key=test-client-key"));
+    assert.ok(action?.authUrl?.includes("video.publish"));
+  } finally {
+    if (originalTikTokKey) process.env.TIKTOK_CLIENT_KEY = originalTikTokKey;
+    else delete process.env.TIKTOK_CLIENT_KEY;
+    if (originalTikTokSecret) process.env.TIKTOK_CLIENT_SECRET = originalTikTokSecret;
+    else delete process.env.TIKTOK_CLIENT_SECRET;
+  }
 });

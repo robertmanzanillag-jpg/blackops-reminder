@@ -9,6 +9,7 @@ export type ClipperPlatform = "tiktok" | "instagram" | "youtube";
 export type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
 export type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 export type ClipperReadinessStatus = "ready" | "missing" | "partial";
+export type ClipperConnectActionStatus = "ready" | "blocked";
 
 export interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -65,6 +66,7 @@ export interface ClipperStatus {
   sources: ClipperSource[];
   sourceFolders: ClipperSourceFolder[];
   credentialChecks: ClipperCredentialCheck[];
+  connectActions: ClipperConnectAction[];
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
@@ -119,6 +121,17 @@ export interface ClipperSourceFolder {
   path: string;
   status: "ready";
   purpose: string;
+}
+
+export interface ClipperConnectAction {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperConnectActionStatus;
+  authUrl: string | null;
+  callbackPath: string;
+  missingEnvVars: string[];
+  scopes: string[];
+  nextStep: string;
 }
 
 export interface ClipperRunOptions {
@@ -225,6 +238,12 @@ const CREDENTIAL_ENV_REQUIREMENTS: Array<Pick<ClipperCredentialCheck, "platform"
     nextStep: "Activar YouTube Data API v3 en Google Cloud y reutilizar/guardar OAuth client id/secret.",
   },
 ];
+
+const PLATFORM_SCOPES: Record<ClipperPlatform, string[]> = {
+  tiktok: ["video.publish", "video.upload"],
+  instagram: ["instagram_basic", "instagram_content_publish", "pages_show_list"],
+  youtube: ["https://www.googleapis.com/auth/youtube.upload"],
+};
 
 const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
   {
@@ -467,6 +486,101 @@ function buildCredentialChecks(): ClipperCredentialCheck[] {
   });
 }
 
+function getPublicBaseUrl(): string {
+  return process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || "http://127.0.0.1:5010";
+}
+
+function buildRedirectUri(platform: ClipperPlatform): string {
+  return `${getPublicBaseUrl().replace(/\/$/, "")}/api/clippers/oauth/${platform}/callback`;
+}
+
+function getCredentialCheck(platform: ClipperPlatform): ClipperCredentialCheck {
+  const check = buildCredentialChecks().find((item) => item.platform === platform);
+  if (!check) {
+    return {
+      platform,
+      label: platform,
+      status: "missing",
+      requiredEnvVars: [],
+      configuredEnvVars: [],
+      missingEnvVars: [],
+      nextStep: "Configurar credenciales OAuth.",
+    };
+  }
+  return check;
+}
+
+function buildPlatformAuthUrl(platform: ClipperPlatform): string | null {
+  const redirectUri = buildRedirectUri(platform);
+  const state = `clippers-${platform}`;
+
+  if (platform === "tiktok") {
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    if (!clientKey) return null;
+    const params = new URLSearchParams({
+      client_key: clientKey,
+      response_type: "code",
+      scope: PLATFORM_SCOPES.tiktok.join(","),
+      redirect_uri: redirectUri,
+      state,
+    });
+    return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
+  }
+
+  if (platform === "instagram") {
+    const appId = process.env.META_APP_ID;
+    if (!appId) return null;
+    const params = new URLSearchParams({
+      client_id: appId,
+      redirect_uri: redirectUri,
+      scope: PLATFORM_SCOPES.instagram.join(","),
+      response_type: "code",
+      state,
+    });
+    return `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`;
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return null;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: PLATFORM_SCOPES.youtube.join(" "),
+    access_type: "offline",
+    prompt: "consent",
+    state,
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+export function buildClipperConnectActions(): ClipperConnectAction[] {
+  return (["tiktok", "instagram", "youtube"] as ClipperPlatform[]).map((platform) => {
+    const credentialCheck = getCredentialCheck(platform);
+    const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform);
+    const authUrl = credentialCheck.status === "missing" ? null : buildPlatformAuthUrl(platform);
+    return {
+      platform,
+      label: requirement?.label || platform,
+      status: authUrl ? "ready" : "blocked",
+      authUrl,
+      callbackPath: `/api/clippers/oauth/${platform}/callback`,
+      missingEnvVars: credentialCheck.missingEnvVars,
+      scopes: PLATFORM_SCOPES[platform],
+      nextStep: authUrl
+        ? `Abrir OAuth y autorizar ${requirement?.label || platform}.`
+        : credentialCheck.nextStep,
+    };
+  });
+}
+
+export function getClipperConnectAction(platform: unknown): ClipperConnectAction {
+  if (platform !== "tiktok" && platform !== "instagram" && platform !== "youtube") {
+    throw new Error("Plataforma no soportada.");
+  }
+  return buildClipperConnectActions().find((action) => action.platform === platform)!;
+}
+
 async function writeWorkspaceReadme() {
   const readmePath = path.join(ROOT_DIR, "README.md");
   try {
@@ -582,6 +696,7 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
     sources,
     sourceFolders: SOURCE_FOLDERS,
     credentialChecks: buildCredentialChecks(),
+    connectActions: buildClipperConnectActions(),
     platformRequirements: PLATFORM_REQUIREMENTS,
     permissionQueue: PERMISSION_QUEUE,
     agents: DEFAULT_AGENTS,
@@ -709,4 +824,5 @@ export const __clipperInternals = {
   normalizeRunOptions,
   buildPlannedClips,
   defaultPlatformAccounts,
+  buildPlatformAuthUrl,
 };
