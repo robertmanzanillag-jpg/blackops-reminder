@@ -61,6 +61,44 @@ function requireStringField(data: any, field: string, label: string): string {
   return value.trim();
 }
 
+function extractBlackRoomLinkTarget(message: string): string | null {
+  const cleaned = message.replace(/\s+/g, " ").trim();
+  const patterns = [
+    /(?:evento|link|bot[oó]n|timer|contador)\s+de\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
+    /(?:desactiva|desactivar|quitar|quita|oculta|ocultar|remueve|remover|borra|borrar)\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
+    /(?:evento|link|bot[oó]n|timer|contador)\s+(.+?)\s+en\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    const value = match?.[1]?.trim();
+    if (value) return value.replace(/^["'“”]+|["'“”]+$/g, "").trim();
+  }
+
+  return null;
+}
+
+export function buildDirectBlackRoomCommand(message?: string): { content: string; command: string } | null {
+  if (!message) return null;
+  const text = normalizeApprovalText(message);
+  const isBlackRoom = text.includes("black room");
+  const isWebsiteTarget = /\b(links?|linsks?|website|web|pagina|builder)\b/.test(text);
+  const wantsDeactivate = /\b(desactiv\w*|quit\w*|ocult\w*|remuev\w*|remov\w*|borr\w*)\b/.test(text);
+
+  if (!isBlackRoom || !isWebsiteTarget || !wantsDeactivate) return null;
+
+  const title = extractBlackRoomLinkTarget(message);
+  if (!title) return null;
+
+  return {
+    content: `Entendido. Voy a desactivar "${title}" de los links de Black Room sin borrar su data histórica.`,
+    command: `[BLACKROOM_LINK_DEACTIVATE: ${JSON.stringify({
+      title,
+      reason: "Desactivar desde el website/builder de Black Room preservando data histórica.",
+    })}]`,
+  };
+}
+
 async function executeIfAlreadyApproved(
   pendingAction: PendingAction,
   userId: string,
@@ -321,6 +359,7 @@ Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con e
 
 ## BLACK ROOM LINKS:
 Puedes ayudar a editar los links públicos de Black Room.
+- Si el usuario menciona "links de Black Room", "website", "web", "página" o "builder", NO busques Google Calendar aunque use la palabra "evento"; se refiere al website/admin de Black Room.
 - Para agregar un link usa BLACKROOM_LINK_ADD.
 - Para editar uno existente usa BLACKROOM_LINK_UPDATE con matchTitle o matchUrl para identificarlo.
 - Si el usuario pide borrar, quitar, remover u ocultar un link, usa BLACKROOM_LINK_DEACTIVATE. NUNCA propongas borrarlo permanentemente; desactivar preserva analytics/data histórica.
@@ -479,18 +518,24 @@ export function registerAssistantRoutes(app: Express): void {
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      const stream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        contents,
-      });
-
       let fullResponse = "";
+      const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
 
-      for await (const chunk of stream) {
-        const content = chunk.text || "";
-        if (content) {
-          fullResponse += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      if (directBlackRoomCommand) {
+        fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
+        res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
+      } else {
+        const stream = await ai.models.generateContentStream({
+          model: "gemini-2.5-flash",
+          contents,
+        });
+
+        for await (const chunk of stream) {
+          const content = chunk.text || "";
+          if (content) {
+            fullResponse += content;
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
         }
       }
 

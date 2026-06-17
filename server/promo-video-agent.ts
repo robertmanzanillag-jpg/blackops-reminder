@@ -1,9 +1,9 @@
 import { spawn } from "child_process";
-import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
+import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 
 export type PromoVideoStyle = "full" | "post";
-export type PromoVideoObjective = "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
+export type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
 
 export interface PromoVideoFile {
   name: string;
@@ -37,6 +37,7 @@ export interface PromoVideoRunOptions {
   targetSeconds: number;
   cuts: number;
   style: PromoVideoStyle;
+  maxVideos: number;
   hookText?: string;
   ctaText?: string;
 }
@@ -56,6 +57,15 @@ export interface PromoVideoImportResult {
   status: PromoVideoStatus;
 }
 
+export interface PromoVideoAutoRunResult extends PromoVideoRunResult {
+  importResult: PromoVideoImportResult;
+}
+
+interface PromoVideoConfig {
+  sourceDir: string | null;
+  lastAutoRunDate?: string | null;
+}
+
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const ROOT_DIR = path.join(process.cwd(), "promo_video_edits");
 const INPUT_DIR = path.join(ROOT_DIR, "01_originales");
@@ -65,6 +75,12 @@ const REPORT_DIR = path.join(ROOT_DIR, "04_reportes");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
 
 export const PROMO_TEMPLATES: PromoTemplate[] = [
+  {
+    id: "auto",
+    label: "Auto selector",
+    hook: "BEST APP TO GO OUT",
+    cta: "JOIN THE GUESTLIST",
+  },
   {
     id: "nightlife",
     label: "Nightlife app",
@@ -106,45 +122,82 @@ async function ensurePromoVideoDirs() {
   ]);
 }
 
-async function readPromoConfig(): Promise<{ sourceDir: string | null }> {
+async function readPromoConfig(): Promise<PromoVideoConfig> {
   try {
     const raw = await readFile(CONFIG_PATH, "utf8");
-    const parsed = JSON.parse(raw) as { sourceDir?: unknown };
+    const parsed = JSON.parse(raw) as { sourceDir?: unknown; lastAutoRunDate?: unknown };
     return {
       sourceDir: typeof parsed.sourceDir === "string" && parsed.sourceDir.trim()
         ? path.resolve(parsed.sourceDir.trim())
         : null,
+      lastAutoRunDate: typeof parsed.lastAutoRunDate === "string" ? parsed.lastAutoRunDate : null,
     };
   } catch {
     return { sourceDir: null };
   }
 }
 
-async function writePromoConfig(config: { sourceDir: string | null }) {
+async function writePromoConfig(config: PromoVideoConfig) {
   await ensurePromoVideoDirs();
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
-async function listVideoFiles(dir: string, options: { create?: boolean } = { create: true }): Promise<PromoVideoFile[]> {
+function isVideoFile(filePath: string): boolean {
+  return VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+async function listVideoFiles(dir: string, options: { create?: boolean; recursive?: boolean } = { create: true }): Promise<PromoVideoFile[]> {
   if (options.create !== false) {
     await mkdir(dir, { recursive: true });
   }
 
-  let entries: string[];
+  let entries: Array<{ name: string; fullPath: string }>;
   try {
-    entries = await readdir(dir);
+    const names = await readdir(dir, { withFileTypes: true });
+    if (options.recursive) {
+      const nested = await Promise.all(
+        names.map(async (entry) => {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            return listVideoFiles(fullPath, { create: false, recursive: true });
+          }
+
+          return isVideoFile(fullPath) ? [{
+            name: path.relative(dir, fullPath),
+            path: fullPath,
+            sizeMb: 0,
+            modifiedAt: "",
+          }] : [];
+        })
+      );
+      const flattened = nested.flat();
+      const withStats = await Promise.all(
+        flattened.map(async (entry) => {
+          const fileStat = await stat(entry.path);
+          return {
+            name: entry.name,
+            path: entry.path,
+            sizeMb: Math.round((fileStat.size / 1024 / 1024) * 10) / 10,
+            modifiedAt: fileStat.mtime.toISOString(),
+          };
+        })
+      );
+      return withStats.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+    }
+
+    entries = names.map((entry) => ({ name: entry.name, fullPath: path.join(dir, entry.name) }));
   } catch {
     return [];
   }
 
   const files = await Promise.all(
     entries
-      .filter((entry) => VIDEO_EXTENSIONS.has(path.extname(entry).toLowerCase()))
+      .filter((entry) => isVideoFile(entry.fullPath))
       .map(async (entry) => {
-        const fullPath = path.join(dir, entry);
+        const fullPath = entry.fullPath;
         const fileStat = await stat(fullPath);
         return {
-          name: entry,
+          name: entry.name,
           path: fullPath,
           sizeMb: Math.round((fileStat.size / 1024 / 1024) * 10) / 10,
           modifiedAt: fileStat.mtime.toISOString(),
@@ -165,7 +218,7 @@ export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
   const [inputVideos, outputVideos, sourceVideos] = await Promise.all([
     listVideoFiles(INPUT_DIR),
     listVideoFiles(OUTPUT_DIR),
-    config.sourceDir ? listVideoFiles(config.sourceDir, { create: false }) : Promise.resolve([]),
+    config.sourceDir ? listVideoFiles(config.sourceDir, { create: false, recursive: true }) : Promise.resolve([]),
   ]);
 
   return {
@@ -183,8 +236,9 @@ export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
 
 export async function setPromoVideoSourceDir(sourceDir: unknown): Promise<PromoVideoStatus> {
   await ensurePromoVideoDirs();
+  const current = await readPromoConfig();
   if (typeof sourceDir !== "string" || !sourceDir.trim()) {
-    await writePromoConfig({ sourceDir: null });
+    await writePromoConfig({ ...current, sourceDir: null });
     return getPromoVideoStatus();
   }
 
@@ -194,23 +248,35 @@ export async function setPromoVideoSourceDir(sourceDir: unknown): Promise<PromoV
     throw new Error("La ruta indicada no es una carpeta.");
   }
 
-  await writePromoConfig({ sourceDir: resolved });
+  await writePromoConfig({ ...current, sourceDir: resolved });
   return getPromoVideoStatus();
 }
 
-export async function importPromoVideosFromSource(): Promise<PromoVideoImportResult> {
+function sanitizeFilenamePart(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "video";
+}
+
+export async function importPromoVideosFromSource(input: { limit?: unknown } = {}): Promise<PromoVideoImportResult> {
   await ensurePromoVideoDirs();
   const config = await readPromoConfig();
   if (!config.sourceDir) {
     throw new Error("Primero indica una carpeta origen.");
   }
 
-  const sourceVideos = await listVideoFiles(config.sourceDir, { create: false });
+  const sourceVideos = await listVideoFiles(config.sourceDir, { create: false, recursive: true });
+  const limit = clampInteger(input.limit, sourceVideos.length, 1, 5000);
   let imported = 0;
   let skipped = 0;
 
-  for (const video of sourceVideos) {
-    const destination = path.join(INPUT_DIR, video.name);
+  for (const video of sourceVideos.slice(0, limit)) {
+    const relative = path.relative(config.sourceDir, video.path);
+    const destinationName = sanitizeFilenamePart(relative.replace(/[\\/]+/g, "__"));
+    const destination = path.join(INPUT_DIR, destinationName);
     try {
       await stat(destination);
       skipped += 1;
@@ -238,7 +304,7 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
 export function normalizePromoVideoOptions(input: Partial<PromoVideoRunOptions>): PromoVideoRunOptions {
   const objective = PROMO_TEMPLATES.some((template) => template.id === input.objective)
     ? input.objective as PromoVideoObjective
-    : "nightlife";
+    : "auto";
   const template = getPromoTemplate(objective);
 
   return {
@@ -247,6 +313,7 @@ export function normalizePromoVideoOptions(input: Partial<PromoVideoRunOptions>)
     targetSeconds: clampInteger(input.targetSeconds, 15, 6, 90),
     cuts: clampInteger(input.cuts, 3, 1, 12),
     style: input.style === "post" ? "post" : "full",
+    maxVideos: clampInteger(input.maxVideos, 0, 0, 5000),
     hookText: (input.hookText || template.hook).trim().slice(0, 80),
     ctaText: (input.ctaText || template.cta).trim().slice(0, 80),
   };
@@ -268,6 +335,7 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
         TARGET_SECONDS: String(options.targetSeconds),
         CUTS: String(options.cuts),
         STYLE: options.style,
+        MAX_VIDEOS: String(options.maxVideos),
         HOOK_TEXT: options.hookText || "",
         CTA_TEXT: options.ctaText || "",
       },
@@ -294,4 +362,79 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
   const result = { ok: true, output, reportPath, options, status };
   await writeFile(reportPath, JSON.stringify(result, null, 2));
   return result;
+}
+
+export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions> = {}): Promise<PromoVideoAutoRunResult> {
+  const importResult = await importPromoVideosFromSource({ limit: input.maxVideos || 5 });
+  const runResult = await runPromoVideoEdit({
+    objective: "auto",
+    clipsPerVideo: 1,
+    targetSeconds: input.targetSeconds || 15,
+    cuts: input.cuts || 3,
+    style: input.style || "full",
+    maxVideos: input.maxVideos || 5,
+  });
+
+  const config = await readPromoConfig();
+  await writePromoConfig({
+    ...config,
+    lastAutoRunDate: getLocalDateKey(new Date()),
+  });
+
+  return {
+    ...runResult,
+    importResult,
+  };
+}
+
+function getLocalDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+async function maybeRunPromoVideoDaily() {
+  const config = await readPromoConfig();
+  if (!config.sourceDir) return;
+
+  const now = new Date();
+  const hour = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    hour12: false,
+  }).format(now));
+  if (hour < 8) return;
+
+  const today = getLocalDateKey(now);
+  if (config.lastAutoRunDate === today) return;
+
+  await runPromoVideoAutoDaily({ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full" });
+}
+
+export function startPromoVideoDailyScheduler() {
+  const run = () => {
+    maybeRunPromoVideoDaily().catch((error) => {
+      console.error(`[PromoVideo] Auto daily failed: ${error.message}`);
+    });
+  };
+
+  setTimeout(run, 15 * 1000);
+  setInterval(run, 60 * 60 * 1000);
+}
+
+export async function deletePromoOutputVideo(filename: unknown): Promise<PromoVideoStatus> {
+  if (typeof filename !== "string" || !filename.trim()) {
+    throw new Error("Falta el nombre del video.");
+  }
+
+  const target = path.resolve(OUTPUT_DIR, filename);
+  if (!target.startsWith(path.resolve(OUTPUT_DIR) + path.sep)) {
+    throw new Error("Video invalido.");
+  }
+
+  await unlink(target);
+  return getPromoVideoStatus();
 }

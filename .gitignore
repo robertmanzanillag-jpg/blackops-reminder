@@ -4,3 +4,7 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+promo_video_edits/config.json
+promo_video_edits/01_originales/*
+promo_video_edits/03_listos_para_subir/*
+promo_video_edits/04_reportes/*

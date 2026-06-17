@@ -6,6 +6,7 @@ INPUT_DIR="$ROOT_DIR/promo_video_edits/01_originales"
 OUTPUT_DIR="$ROOT_DIR/promo_video_edits/03_listos_para_subir"
 
 OBJECTIVE="${OBJECTIVE:-nightlife}"
+MAX_VIDEOS="${MAX_VIDEOS:-0}"
 CLIPS_PER_VIDEO="${CLIPS_PER_VIDEO:-5}"
 TARGET_SECONDS="${TARGET_SECONDS:-15}"
 CUTS="${CUTS:-3}"
@@ -40,8 +41,71 @@ text_filter() {
   printf "%s" "drawtext=text='${hook}':x=(w-text_w)/2:y=150:fontcolor=white:fontsize=72:font='Arial Bold':box=1:boxcolor=black@0.62:boxborderw=28,drawtext=text='${cta}':x=(w-text_w)/2:y=h-250:fontcolor=white:fontsize=54:font='Arial Bold':box=1:boxcolor=black@0.62:boxborderw=22"
 }
 
+create_text_overlay() {
+  local overlay_path="$1"
+  OVERLAY_PATH="$overlay_path" OVERLAY_WIDTH="$WIDTH" OVERLAY_HEIGHT="$HEIGHT" OVERLAY_HOOK="$HOOK_TEXT" OVERLAY_CTA="$CTA_TEXT" node -e '
+    const sharp = require("sharp");
+    const width = Number(process.env.OVERLAY_WIDTH || 1080);
+    const height = Number(process.env.OVERLAY_HEIGHT || 1920);
+    const escapeXml = (value) => String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    const hook = escapeXml(process.env.OVERLAY_HOOK || "BEST APP TO GO OUT");
+    const cta = escapeXml(process.env.OVERLAY_CTA || "JOIN THE GUESTLIST");
+    const svg = `
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .label { fill: white; font-family: Arial, Helvetica, sans-serif; font-weight: 900; text-anchor: middle; letter-spacing: 0; }
+        </style>
+        <rect x="${width * 0.08}" y="104" width="${width * 0.84}" height="132" rx="20" fill="black" opacity="0.66"/>
+        <text x="${width / 2}" y="188" class="label" font-size="68">${hook}</text>
+        <rect x="${width * 0.1}" y="${height - 318}" width="${width * 0.8}" height="112" rx="18" fill="black" opacity="0.66"/>
+        <text x="${width / 2}" y="${height - 246}" class="label" font-size="52">${cta}</text>
+      </svg>
+    `;
+    sharp(Buffer.from(svg)).png().toFile(process.env.OVERLAY_PATH).catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
+  '
+}
+
+template_for_file() {
+  local filename
+  filename="$(basename "$1" | tr '[:upper:]' '[:lower:]')"
+
+  if [ "$OBJECTIVE" != "auto" ]; then
+    printf "%s|%s|%s" "$OBJECTIVE" "$HOOK_TEXT" "$CTA_TEXT"
+    return
+  fi
+
+  case "$filename" in
+    *yacht*)
+      printf "yacht|YACHT PARTY WEEKEND|DM FOR ACCESS"
+      ;;
+    *pool*)
+      printf "pool|POOL PARTY THIS WEEK|GET ON THE LIST"
+      ;;
+    *dinner*|*restaurant*)
+      printf "dinner|PROMO DINNERS TONIGHT|RESERVE YOUR SPOT"
+      ;;
+    *guestlist*|*nightclub*|*club*)
+      printf "guestlist|GUESTLIST OPEN|TAP IN TONIGHT"
+      ;;
+    *)
+      printf "nightlife|BEST APP TO GO OUT|JOIN THE GUESTLIST"
+      ;;
+  esac
+}
+
 shopt -s nullglob
-videos=("$INPUT_DIR"/*.mp4 "$INPUT_DIR"/*.mov "$INPUT_DIR"/*.m4v)
+videos=(
+  "$INPUT_DIR"/*.mp4 "$INPUT_DIR"/*.MP4
+  "$INPUT_DIR"/*.mov "$INPUT_DIR"/*.MOV
+  "$INPUT_DIR"/*.m4v "$INPUT_DIR"/*.M4V
+)
 
 if [ "${#videos[@]}" -eq 0 ]; then
   echo "No encontre videos en: $INPUT_DIR"
@@ -49,9 +113,22 @@ if [ "${#videos[@]}" -eq 0 ]; then
   exit 0
 fi
 
+processed_videos=0
+
 for input in "${videos[@]}"; do
+  if [ "$MAX_VIDEOS" -gt 0 ] && [ "$processed_videos" -ge "$MAX_VIDEOS" ]; then
+    break
+  fi
+
   base="$(basename "$input")"
   name="${base%.*}"
+  template="$(template_for_file "$input")"
+  clip_objective="${template%%|*}"
+  template_rest="${template#*|}"
+  HOOK_TEXT="${template_rest%%|*}"
+  CTA_TEXT="${template_rest#*|}"
+  overlay_file="${TMPDIR:-/tmp}/promo_overlay_$$_${processed_videos}.png"
+  create_text_overlay "$overlay_file"
 
   duration="$(
     ffprobe -v error \
@@ -76,7 +153,7 @@ for input in "${videos[@]}"; do
   fi
 
   for ((clip = 1; clip <= CLIPS_PER_VIDEO; clip++)); do
-    safe_objective="$(printf "%s" "$OBJECTIVE" | tr -cd '[:alnum:]_-')"
+    safe_objective="$(printf "%s" "$clip_objective" | tr -cd '[:alnum:]_-')"
     output="$OUTPUT_DIR/${name}_${safe_objective}_clip$(printf "%02d" "$clip")_${TARGET_SECONDS}s.mp4"
 
     if awk "BEGIN { exit !($duration > $TARGET_SECONDS) }"; then
@@ -109,14 +186,14 @@ for input in "${videos[@]}"; do
       done
 
       if [ -n "$has_audio" ]; then
-        filter+="${concat_inputs}concat=n=${CUTS}:v=1:a=1[vraw][a];[vraw]${text_filter}[v]"
+        filter+="${concat_inputs}concat=n=${CUTS}:v=1:a=1[vraw][a];[vraw][1:v]overlay=0:0[v]"
         map_args=(-map "[v]" -map "[a]")
       else
-        filter+="${concat_inputs}concat=n=${CUTS}:v=1:a=0,${text_filter}[v]"
+        filter+="${concat_inputs}concat=n=${CUTS}:v=1:a=0[vraw];[vraw][1:v]overlay=0:0[v]"
         map_args=(-map "[v]")
       fi
 
-      ffmpeg -y -i "$input" \
+      ffmpeg -y -i "$input" -i "$overlay_file" \
         -filter_complex "$filter" \
         "${map_args[@]}" \
         -t "$TARGET_SECONDS" \
@@ -126,8 +203,8 @@ for input in "${videos[@]}"; do
         -movflags +faststart \
         "$output"
     else
-      ffmpeg -y -ss "$start" -i "$input" \
-        -filter_complex "$(video_base_filter "[0:v]"),$(text_filter)[v]" \
+      ffmpeg -y -ss "$start" -i "$input" -i "$overlay_file" \
+        -filter_complex "$(video_base_filter "[0:v]")[vraw];[vraw][1:v]overlay=0:0[v]" \
         -map "[v]" -map 0:a? \
         -t "$TARGET_SECONDS" \
         -c:v libx264 -preset medium -crf 18 \
@@ -139,4 +216,6 @@ for input in "${videos[@]}"; do
 
     echo "Listo: $output"
   done
+
+  processed_videos=$((processed_videos + 1))
 done

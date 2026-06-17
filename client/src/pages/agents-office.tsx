@@ -342,26 +342,26 @@ function OfficeDesk({ className, wide = false }: { className?: string; wide?: bo
   return (
     <div
       className={cn(
-        "absolute rounded-sm border-2 border-[#0f172a] bg-[#202836] shadow-[6px_6px_0_rgba(0,0,0,0.55)]",
+        "absolute rounded-2xl border border-white/10 bg-[#151924] shadow-[0_22px_55px_rgba(0,0,0,0.42)]",
         wide ? "h-16 w-36" : "h-14 w-28",
         className
       )}
     >
-      <div className="absolute inset-x-2 top-2 h-2 bg-[#39465b]" />
-      <div className="absolute left-3 top-4 h-6 w-9 border-2 border-[#1f7a8c] bg-[#70e1f5]" />
-      <div className="absolute left-5 top-10 h-1.5 w-7 bg-[#06080d]" />
-      <div className="absolute bottom-3 right-3 h-2 w-12 bg-[#4b5563]" />
-      <div className="absolute -bottom-3 left-4 h-4 w-2 bg-[#111827]" />
-      <div className="absolute -bottom-3 right-4 h-4 w-2 bg-[#111827]" />
+      <div className="absolute inset-x-4 top-3 h-2 rounded-full bg-white/10" />
+      <div className="absolute left-4 top-5 h-7 w-10 rounded-lg border border-cyan-300/25 bg-cyan-300/20 shadow-[0_0_22px_rgba(34,211,238,0.2)]" />
+      <div className="absolute left-6 top-11 h-1.5 w-7 rounded-full bg-white/20" />
+      <div className="absolute bottom-4 right-4 h-2 w-12 rounded-full bg-white/15" />
+      <div className="absolute -bottom-3 left-5 h-4 w-2 rounded-b bg-slate-700" />
+      <div className="absolute -bottom-3 right-5 h-4 w-2 rounded-b bg-slate-700" />
     </div>
   );
 }
 
 function Chair({ className }: { className?: string }) {
   return (
-    <div className={cn("absolute h-8 w-7 border-2 border-[#2a2a33] bg-[#4b4b59] shadow-[4px_4px_0_rgba(0,0,0,0.25)]", className)}>
-      <div className="absolute left-1/2 top-6 h-7 w-1 -translate-x-1/2 bg-[#2b2b34]" />
-      <div className="absolute -bottom-2 left-1 h-1.5 w-5 bg-[#2b2b34]" />
+    <div className={cn("absolute h-8 w-7 rounded-xl border border-white/10 bg-[#2a3142] shadow-lg shadow-black/30", className)}>
+      <div className="absolute left-1/2 top-6 h-7 w-1 -translate-x-1/2 rounded bg-slate-700" />
+      <div className="absolute -bottom-2 left-1 h-1.5 w-5 rounded bg-slate-700" />
     </div>
   );
 }
@@ -380,7 +380,7 @@ function OfficePlant({ className }: { className?: string }) {
 
 function AreaLabel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("absolute border-2 border-[#334155] bg-[#020617] px-3 py-1.5 text-center font-mono text-[12px] font-bold uppercase tracking-wide text-[#c7f9ff] shadow-[3px_3px_0_rgba(0,0,0,0.45)]", className)}>
+    <div className={cn("absolute rounded-xl border border-cyan-300/20 bg-[#090d16]/92 px-3 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-cyan-100 shadow-[0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur", className)}>
       {children}
     </div>
   );
@@ -396,10 +396,10 @@ function Cubicle({
   tone?: string;
 }) {
   return (
-    <div className={cn("absolute border-[7px] border-[#475569] shadow-[8px_8px_0_rgba(0,0,0,0.38)]", tone, className)}>
+    <div className={cn("absolute rounded-[28px] border border-white/10 bg-[#0f1421]/74 shadow-[0_28px_80px_rgba(0,0,0,0.42)] backdrop-blur", tone, className)}>
       <AreaLabel className="-top-4 left-4 right-4 z-[60] truncate">{label}</AreaLabel>
-      <div className="absolute inset-x-5 bottom-5 h-2 bg-[#64748b]" />
-      <div className="absolute right-5 top-16 h-16 w-2 bg-[#64748b]" />
+      <div className="absolute inset-x-7 bottom-6 h-px bg-white/10" />
+      <div className="absolute right-7 top-16 h-16 w-px bg-white/10" />
     </div>
   );
 }
@@ -442,44 +442,42 @@ function AgentPerson({
     <motion.button
       type="button"
       onClick={() => onSelect(agent)}
-      className={cn(
-        "absolute z-30 flex h-32 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center",
-        agent.position
-      )}
+      className={cn("absolute z-30 flex h-32 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
       animate={{ y: selected ? [0, -4, 0] : [0, -2, 0] }}
       transition={{ duration: selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
       aria-label={`Ver agente ${agent.name}`}
       data-testid={`agent-avatar-${agent.id}`}
     >
-      <span className="absolute bottom-2 h-5 w-14 rounded-full bg-black/35 blur-sm" />
-      <span className="relative flex h-24 w-16 flex-col items-center [image-rendering:pixelated]">
-        <span className={cn("absolute top-0 h-9 w-9 border-2 border-[#4a2e22]", agent.skin)}>
-          <span className={cn("absolute -top-1 left-0 h-4 w-9", agent.hair)} />
-          <span className={cn("absolute -left-1 top-2 h-5 w-2", agent.hair)} />
-          <span className={cn("absolute -right-1 top-2 h-5 w-2", agent.hair)} />
-          <span className="absolute left-2 top-5 h-1.5 w-1.5 bg-zinc-900" />
-          <span className="absolute right-2 top-5 h-1.5 w-1.5 bg-zinc-900" />
-          <span className="absolute left-1/2 top-7 h-1 w-3 -translate-x-1/2 bg-rose-700/70" />
+      <span className="absolute bottom-2 h-5 w-16 rounded-full bg-black/45 blur-md" />
+      <span className="relative flex h-24 w-16 flex-col items-center">
+        <span
+          className={cn(
+            "absolute top-0 h-11 w-11 rounded-[18px] border border-white/20 bg-gradient-to-br shadow-[inset_0_1px_12px_rgba(255,255,255,0.14),0_16px_32px_rgba(0,0,0,0.35)]",
+            agent.color,
+            selected && "ring-2 ring-cyan-100"
+          )}
+        >
+          <span className="absolute left-1/2 top-4 h-3.5 w-7 -translate-x-1/2 rounded-full bg-[#07111f] shadow-[inset_0_0_8px_rgba(34,211,238,0.45)]">
+            <span className="absolute left-1.5 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
+            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
+          </span>
         </span>
         <span
           className={cn(
-            "absolute top-9 h-11 w-11 border-2 border-[#2a2a33] shadow-[3px_3px_0_rgba(0,0,0,0.22)]",
-            agent.outfit,
-            selected && "ring-2 ring-white"
+            "absolute top-10 h-12 w-12 rounded-[20px] border border-white/20 bg-gradient-to-br shadow-[0_18px_36px_rgba(0,0,0,0.38)]",
+            agent.color
           )}
         >
-          <span className="absolute -left-3 top-2 h-8 w-3 border-2 border-[#2a2a33] bg-inherit" />
-          <span className="absolute -right-3 top-2 h-8 w-3 border-2 border-[#2a2a33] bg-inherit" />
-          <span className={cn("absolute left-1/2 top-2 flex h-7 w-7 -translate-x-1/2 items-center justify-center border-2 border-[#2a2a33] bg-gradient-to-br text-zinc-950", agent.color)}>
+          <span className="absolute -left-3 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit" />
+          <span className="absolute -right-3 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit" />
+          <span className="absolute left-1/2 top-3 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl border border-black/15 bg-black/15 text-white">
             <Icon className="h-3.5 w-3.5" />
           </span>
         </span>
-        <span className="absolute top-[76px] left-4 h-7 w-3 bg-zinc-950" />
-        <span className="absolute top-[76px] right-4 h-7 w-3 bg-zinc-950" />
-        <span className="absolute top-[100px] left-2 h-2 w-6 bg-black" />
-        <span className="absolute top-[100px] right-2 h-2 w-6 bg-black" />
+        <span className="absolute top-[82px] left-5 h-5 w-2 rounded-b bg-[#101827]" />
+        <span className="absolute top-[82px] right-5 h-5 w-2 rounded-b bg-[#101827]" />
       </span>
-      <span className={cn("mt-1 max-w-24 truncate border px-2 py-0.5 font-mono text-[10px] font-bold shadow-[2px_2px_0_rgba(0,0,0,0.3)]", selected ? "border-cyan-100 bg-cyan-100 text-zinc-950" : "border-[#334155] bg-[#020617] text-white")}>
+      <span className={cn("mt-1 max-w-24 truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#090d16]/90 text-white")}>
         {agent.name}
       </span>
     </motion.button>
@@ -766,8 +764,8 @@ export default function AgentsOfficePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-black/85 px-4 py-4 backdrop-blur md:px-8">
+    <div className="min-h-screen bg-[#05060a] text-foreground">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05060a]/90 px-4 py-4 backdrop-blur md:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/">
@@ -791,20 +789,108 @@ export default function AgentsOfficePage() {
       </header>
 
       <main className="mx-auto max-w-[1780px] space-y-5 px-4 py-5 md:px-8">
-        <section className="relative h-[calc(100vh-150px)] min-h-[720px] overflow-hidden rounded-lg border border-white/10 bg-[#05070b] shadow-2xl shadow-black/40">
-          <div className="relative h-full min-h-[620px] w-full">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:48px_48px]" />
-          <div className="absolute left-[2.5%] top-[4%] h-[92%] w-[95%] border-[14px] border-[#1e293b] bg-[#070b12] shadow-[14px_14px_0_rgba(0,0,0,0.55)]" />
-          <div className="absolute left-[4%] top-[7%] h-[86%] w-[92%] bg-[radial-gradient(circle_at_18%_18%,rgba(20,184,166,0.12),transparent_26%),repeating-linear-gradient(0deg,#0b111d_0_24px,#101827_24px_48px)]" />
+        <section className="relative h-[calc(100vh-150px)] min-h-[760px] overflow-hidden rounded-3xl border border-white/10 bg-[#080a10] shadow-2xl shadow-black/60">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_46%_10%,rgba(34,211,238,0.14),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent_38%),linear-gradient(90deg,rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:auto,auto,56px_56px,56px_56px]" />
 
-          <Cubicle className="left-[6%] top-[14%] h-[230px] w-[23%]" label="Recepcion" tone="bg-[#101827]/92" />
-          <Cubicle className="left-[34%] top-[14%] h-[300px] w-[27%]" label="Kong room" tone="bg-[#111827]/94" />
-          <Cubicle className="right-[6%] top-[14%] h-[260px] w-[31%]" label="Dev room" tone="bg-[#0f172a]/94" />
-          <Cubicle className="left-[6%] top-[48%] h-[235px] w-[23%]" label="Finance" tone="bg-[#111827]/92" />
-          <Cubicle className="left-[34%] top-[48%] h-[235px] w-[27%]" label="Ops room" tone="bg-[#0f172a]/92" />
-          <Cubicle className="right-[6%] top-[48%] h-[235px] w-[31%]" label="Radio / Black Room" tone="bg-[#111827]/94" />
-          <Cubicle className="left-[6%] bottom-[6%] h-[170px] w-[27%]" label="Break room" tone="bg-[#101827]/92" />
-          <Cubicle className="right-[6%] bottom-[6%] h-[170px] w-[31%]" label="Security / Control" tone="bg-[#111827]/94" />
+          <aside className="absolute left-5 top-5 z-[80] h-[calc(100%-40px)] w-[260px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/50 backdrop-blur">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10">
+                <Bot className="h-5 w-5 text-cyan-200" />
+              </span>
+              <div>
+                <p className="text-lg font-semibold tracking-[0.18em] text-white">SAMS</p>
+                <p className="text-[10px] text-slate-500">Spatial Agentic System</p>
+              </div>
+            </div>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/25 p-3">
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Explorer</p>
+              <div className="space-y-2 text-xs">
+                <p className="font-semibold text-slate-200">SAMS-WORKSPACE</p>
+                <div className="pl-3 text-slate-400">
+                  <p className="mb-1 text-slate-300">▾ agents</p>
+                  {agents.slice(0, 6).map((agent) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => handleSelectAgent(agent)}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-1 text-left hover:bg-white/5"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
+                        <span className="truncate">{agent.name.toLowerCase()}-agent</span>
+                      </span>
+                      <span className="text-cyan-300">{agent.mode === "working" ? "A" : "I"}</span>
+                    </button>
+                  ))}
+                  <p className="mt-3 text-slate-300">▾ workflows</p>
+                  <p className="px-2 py-1">calendar.flow <span className="float-right text-emerald-300">✓</span></p>
+                  <p className="px-2 py-1">github.flow <span className="float-right text-amber-300">•</span></p>
+                  <p className="px-2 py-1">radio.flow <span className="float-right text-emerald-300">✓</span></p>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="absolute left-[300px] right-5 top-5 z-[75] flex items-center justify-between gap-4">
+            <div className="flex h-12 min-w-[420px] items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur">
+              <Sparkles className="h-4 w-4 text-cyan-200" />
+              <span>Type a command or search...</span>
+              <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
+            </div>
+            <div className="hidden w-[260px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/40 backdrop-blur xl:block">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold text-white">System Overview</p>
+                <span className="text-slate-500">•••</span>
+              </div>
+              <div className="relative h-28 rounded-2xl border border-white/10 bg-black/25">
+                <div className="absolute inset-4 border border-dashed border-white/10" />
+                {agents.slice(0, 6).map((agent, index) => (
+                  <span
+                    key={`overview-${agent.id}`}
+                    className={cn("absolute h-3 w-3 rounded-full bg-gradient-to-br shadow-[0_0_18px_rgba(34,211,238,0.4)]", agent.color)}
+                    style={{
+                      left: `${18 + (index % 3) * 28}%`,
+                      top: `${22 + Math.floor(index / 3) * 38}%`,
+                    }}
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-emerald-300">{agents.length} agents active</p>
+            </div>
+          </div>
+
+          <div className="absolute bottom-5 left-[300px] right-5 z-[80] h-[120px] rounded-3xl border border-white/10 bg-[#0c1018]/94 p-4 shadow-2xl shadow-black/50 backdrop-blur">
+            <div className="mb-3 flex gap-6 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span className="text-white">Terminal</span>
+              <span>Output</span>
+              <span>Event log</span>
+              <span>Problems <b className="rounded-full bg-cyan-300/15 px-1.5 text-cyan-200">2</b></span>
+            </div>
+            <div className="grid grid-cols-[1fr_300px] gap-4 text-xs text-slate-400">
+              <div className="space-y-1 font-mono">
+                <p><span className="text-slate-600">10:46:21</span> <span className="text-cyan-300">assistant-agent</span> [INFO] agenda synced</p>
+                <p><span className="text-slate-600">10:46:23</span> <span className="text-emerald-300">github-agent</span> [SUCCESS] repo context loaded</p>
+                <p><span className="text-slate-600">10:46:25</span> <span className="text-amber-300">radio-agent</span> [INFO] waiting for next task</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <p className="text-white">{selectedAgent.name}</p>
+                <p className="mt-1 text-slate-500">{selectedAgent.activity}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative ml-[280px] h-full min-h-[620px] w-[calc(100%-280px)]">
+          <div className="absolute left-[7%] top-[16%] h-[60%] w-[78%] rotate-x-0 rounded-[34px] border border-white/10 bg-[#0b101a] shadow-[0_55px_120px_rgba(0,0,0,0.55)]" />
+          <div className="absolute left-[9%] top-[19%] h-[54%] w-[74%] rounded-[28px] bg-[radial-gradient(circle_at_24%_16%,rgba(34,211,238,0.12),transparent_28%),repeating-linear-gradient(0deg,#0e1420_0_26px,#111a2a_26px_52px)]" />
+
+          <Cubicle className="left-[11%] top-[23%] h-[190px] w-[20%]" label="Recepcion" tone="bg-[#101827]/62" />
+          <Cubicle className="left-[35%] top-[22%] h-[240px] w-[25%]" label="Kong room" tone="bg-[#111827]/64" />
+          <Cubicle className="right-[12%] top-[23%] h-[210px] w-[26%]" label="Dev room" tone="bg-[#0f172a]/66" />
+          <Cubicle className="left-[12%] top-[50%] h-[190px] w-[20%]" label="Finance" tone="bg-[#111827]/62" />
+          <Cubicle className="left-[38%] top-[53%] h-[185px] w-[20%]" label="Ops room" tone="bg-[#0f172a]/62" />
+          <Cubicle className="right-[13%] top-[52%] h-[190px] w-[25%]" label="Radio / Black Room" tone="bg-[#111827]/66" />
+          <Cubicle className="left-[18%] top-[73%] h-[116px] w-[24%]" label="Break room" tone="bg-[#101827]/70" />
+          <Cubicle className="right-[13%] top-[74%] h-[112px] w-[25%]" label="Security / Control" tone="bg-[#111827]/70" />
 
           <Workstation className="left-[13%] top-[36%]" wide />
           <Workstation className="left-[44%] top-[34%]" wide />
@@ -820,7 +906,7 @@ export default function AgentsOfficePage() {
           <OfficePlant className="left-[61%] top-[42%]" />
           <OfficePlant className="right-[5%] top-[75%]" />
 
-          <div className="absolute left-[44%] top-[6%] flex items-center gap-2 border-2 border-[#334155] bg-[#020617] px-4 py-2 font-mono text-sm font-bold text-[#c7f9ff] shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+          <div className="absolute left-[42%] top-[14%] flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-[#090d16]/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl shadow-black/40">
             <Sparkles className="h-4 w-4 text-cyan-200" />
             AI Office Room
           </div>

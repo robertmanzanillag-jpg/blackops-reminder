@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { getSystemUserId, requireAppUser } from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
+import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 
 const app = express();
 const httpServer = createServer(app);
@@ -118,6 +119,7 @@ app.use((req, res, next) => {
       startReminderScheduler();
       startHealthCheckScheduler();
       startMarketNewsScheduler();
+      startPromoVideoDailyScheduler();
       
       storage.deduplicateRecurringTasks(getSystemUserId()).then(removed => {
         if (removed > 0) {

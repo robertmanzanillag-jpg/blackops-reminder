@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, FolderInput, Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, FolderInput, Loader2, Play, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 type PromoVideoStyle = "full" | "post";
-type PromoVideoObjective = "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
+type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
 
 interface PromoTemplate {
   id: PromoVideoObjective;
@@ -55,7 +55,7 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function FileList({ title, files, emptyText }: { title: string; files: PromoVideoFile[]; emptyText: string }) {
+function FileList({ title, files, emptyText, onDelete }: { title: string; files: PromoVideoFile[]; emptyText: string; onDelete?: (file: PromoVideoFile) => void }) {
   return (
     <Card className="border-zinc-800 bg-zinc-950/70">
       <CardHeader className="pb-3">
@@ -77,6 +77,16 @@ function FileList({ title, files, emptyText }: { title: string; files: PromoVide
                 <p className="truncate text-sm font-medium text-zinc-100">{file.name}</p>
                 <p className="text-xs text-zinc-500">{file.sizeMb} MB · {formatDate(file.modifiedAt)}</p>
               </div>
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onDelete(file)}
+                  className="h-8 w-8 shrink-0 text-zinc-500 hover:text-red-300"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           ))
         )}
@@ -88,8 +98,9 @@ function FileList({ title, files, emptyText }: { title: string; files: PromoVide
 export default function PromoVideoPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [objective, setObjective] = useState<PromoVideoObjective>("nightlife");
+  const [objective, setObjective] = useState<PromoVideoObjective>("auto");
   const [clipsPerVideo, setClipsPerVideo] = useState(5);
+  const [maxVideos, setMaxVideos] = useState(0);
   const [targetSeconds, setTargetSeconds] = useState(15);
   const [cuts, setCuts] = useState(3);
   const [style, setStyle] = useState<PromoVideoStyle>("full");
@@ -171,6 +182,7 @@ export default function PromoVideoPage() {
           targetSeconds,
           cuts,
           style,
+          maxVideos,
           hookText: hookText || selectedTemplate?.hook,
           ctaText: ctaText || selectedTemplate?.cta,
         }),
@@ -193,6 +205,43 @@ export default function PromoVideoPage() {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  const autoDailyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/promo-video/auto-daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxVideos: 5, targetSeconds, cuts, style }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No pude correr el auto diario");
+      return data as PromoVideoRunResult;
+    },
+    onSuccess: (data) => {
+      setLastRun(data);
+      queryClient.setQueryData(["/api/promo-video/status"], data.status);
+      toast({ title: "Auto diario listo", description: "Genere al menos 5 edits para revisar." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Auto diario fallo", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteOutputMutation = useMutation({
+    mutationFn: async (file: PromoVideoFile) => {
+      const res = await fetch(`/api/promo-video/output/${encodeURIComponent(file.name)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No pude borrar el clip");
+      return data as PromoVideoStatus;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/promo-video/status"], data);
+      toast({ title: "Clip borrado", description: "Puedes correr Auto 5 edits para reemplazarlo." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude borrar", description: error.message, variant: "destructive" });
     },
   });
 
@@ -227,6 +276,15 @@ export default function PromoVideoPage() {
           >
             {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             Generar clips
+          </Button>
+          <Button
+            onClick={() => autoDailyMutation.mutate()}
+            disabled={autoDailyMutation.isPending || isLoading || !status?.sourceDir}
+            className="bg-fuchsia-200 text-zinc-950 hover:bg-fuchsia-100"
+            data-testid="auto-daily-promo-videos-button"
+          >
+            {autoDailyMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            Auto 5 edits
           </Button>
         </header>
 
@@ -318,6 +376,18 @@ export default function PromoVideoPage() {
                   max={12}
                   value={cuts}
                   onChange={(event) => setCuts(Number(event.target.value))}
+                  className="border-zinc-800 bg-black"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Limite videos</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={5000}
+                  value={maxVideos}
+                  onChange={(event) => setMaxVideos(Number(event.target.value))}
                   className="border-zinc-800 bg-black"
                 />
               </div>
@@ -416,6 +486,7 @@ export default function PromoVideoPage() {
             title="Listos para subir"
             files={status?.outputVideos || []}
             emptyText="Aun no hay clips exportados."
+            onDelete={(file) => deleteOutputMutation.mutate(file)}
           />
         </div>
 

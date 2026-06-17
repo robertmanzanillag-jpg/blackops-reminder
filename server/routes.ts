@@ -36,7 +36,7 @@ import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
-import { getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
+import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1500,12 +1500,30 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/promo-video/import-source", async (_req, res) => {
+  app.post("/api/promo-video/import-source", async (req, res) => {
     try {
-      const result = await importPromoVideosFromSource();
+      const result = await importPromoVideosFromSource(req.body || {});
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import promo videos" });
+    }
+  });
+
+  app.post("/api/promo-video/auto-daily", async (req, res) => {
+    try {
+      const result = await runPromoVideoAutoDaily(req.body || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run promo video auto daily" });
+    }
+  });
+
+  app.delete("/api/promo-video/output/:filename", async (req, res) => {
+    try {
+      const status = await deletePromoOutputVideo(req.params.filename);
+      res.json(status);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to delete promo output video" });
     }
   });
 
