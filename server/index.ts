@@ -58,6 +58,12 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+app.get("/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt", (_req, res) => {
+  res
+    .type("text/plain")
+    .send("tiktok-developers-site-verification=zjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN\n");
+});
+
 const sessionSettings = resolveSessionRuntimeSettings();
 const sessionMiddleware = createSessionMiddleware(sessionSettings);
 if (sessionMiddleware) {
