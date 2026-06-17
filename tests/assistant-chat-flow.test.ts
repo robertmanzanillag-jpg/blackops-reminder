@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildDirectBlackRoomCommand } from "../server/assistant";
+import { buildDirectBlackRoomCommand, buildDirectPromoVideoCommand } from "../server/assistant";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -29,6 +29,17 @@ test("web assistant routes Black Room website link deactivation away from calend
   assert.match(direct.command, /BLACKROOM_LINK_DEACTIVATE/);
   assert.match(direct.command, /BLACK ROOM & FRIENDS/);
   assert.doesNotMatch(direct.command, /EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
+});
+
+test("web assistant routes natural promo video requests to the local video agent", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const direct = buildDirectPromoVideoCommand("creame 5 videos para TikTok de promo");
+
+  assert.ok(direct);
+  assert.match(source, /PROMO_VIDEO_GENERATE/);
+  assert.match(direct.command, /PROMO_VIDEO_GENERATE/);
+  assert.match(direct.command, /"count":5/);
+  assert.match(direct.command, /"platform":"tiktok"/);
 });
 
 test("web assistant routes Black Room website link add when URL is present", () => {

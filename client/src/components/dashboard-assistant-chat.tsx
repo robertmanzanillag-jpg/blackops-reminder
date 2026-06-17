@@ -48,6 +48,7 @@ export function DashboardAssistantChat() {
       .replace(/\[ELIMINAR_INVERSION:.*?\]/g, "Listo, elimine la inversion.")
       .replace(/\[CREAR_RECORDATORIO:.*?\]/g, "Listo, cree el recordatorio.")
       .replace(/\[ELIMINAR_RECORDATORIO:.*?\]/g, "Listo, elimine el recordatorio.")
+      .replace(/\[PROMO_VIDEO_GENERATE:.*?\]/g, "")
       .replace(/\[GUARDAR_INFO:.*?\]/g, "")
       .trim();
   };
@@ -111,10 +112,23 @@ export function DashboardAssistantChat() {
               data.actionExecuted ||
               data.radioUpdated ||
               data.investmentCreated ||
-              data.investmentUpdated
+              data.investmentUpdated ||
+              data.promoVideosGenerated
             ) {
               queryClient.invalidateQueries({ queryKey: ["tasks"] });
               queryClient.invalidateQueries({ queryKey: ["investments"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
+            }
+            if (data.promoVideoError) {
+              assistantMessage += `\n\nNo pude generar los videos de promo: ${data.promoVideoError}`;
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
             }
             if (data.actionExecuted) {
               assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;

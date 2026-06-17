@@ -185,6 +185,37 @@ export function buildDirectPromoVideoCommand(message?: string): { content: strin
   };
 }
 
+function normalizePromoVideoGenerateData(input: any): { count: number; targetSeconds: number; cuts: number } {
+  return {
+    count: clampAssistantInteger(Number(input?.count || input?.maxVideos), 5, 1, 30),
+    targetSeconds: clampAssistantInteger(Number(input?.targetSeconds || input?.seconds), 15, 6, 90),
+    cuts: clampAssistantInteger(Number(input?.cuts), 3, 1, 12),
+  };
+}
+
+async function executePromoVideoGenerateData(input: any) {
+  const options = normalizePromoVideoGenerateData(input);
+  const result = await runPromoVideoAutoDaily({
+    maxVideos: options.count,
+    targetSeconds: options.targetSeconds,
+    cuts: options.cuts,
+    style: "full",
+  });
+  const outputNames = result.status.outputVideos.slice(0, options.count).map((video) => video.name);
+  const summary = [
+    "",
+    `Listo. Procesé ${options.count} video${options.count === 1 ? "" : "s"} de promo de ${options.targetSeconds}s.`,
+    `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
+    `Carpeta lista: ${result.status.outputDir}`,
+  ].join("\n");
+
+  return {
+    summary,
+    outputDir: result.status.outputDir,
+    outputVideos: outputNames,
+  };
+}
+
 async function executeIfAlreadyApproved(
   pendingAction: PendingAction,
   userId: string,
@@ -526,6 +557,47 @@ export function registerAssistantRoutes(app: Express): void {
         return res.status(400).json({ error: "Message or images are required" });
       }
 
+      const directPromoVideoCommand = buildDirectPromoVideoCommand(message);
+      if (directPromoVideoCommand) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        const fullResponse = `${directPromoVideoCommand.content}\n${directPromoVideoCommand.command}`;
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct promo video user message:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ content: directPromoVideoCommand.content })}\n\n`);
+
+        try {
+          const commandMatch = directPromoVideoCommand.command.match(/\[PROMO_VIDEO_GENERATE:\s*(\{[^}]+\})\]/);
+          const promoData = commandMatch ? JSON.parse(commandMatch[1]) : {};
+          const generated = await executePromoVideoGenerateData(promoData);
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${generated.summary}`,
+            promoVideosGenerated: true,
+            outputDir: generated.outputDir,
+            outputVideos: generated.outputVideos,
+          })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\n${generated.summary}`).catch((historyError) => {
+            console.error("Error saving direct promo video assistant response:", historyError);
+          });
+        } catch (e: any) {
+          const errorText = e.message || "No pude generar los videos de promo";
+          res.write(`data: ${JSON.stringify({ promoVideoError: errorText })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\nError: ${errorText}`).catch((historyError) => {
+            console.error("Error saving direct promo video assistant error:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
       const calendarContext = await getCalendarContext(userId);
       const userProfileContext = await getUserProfileContext(userId);
       const portfolioContext = await getPortfolioContext(userId);
@@ -615,12 +687,8 @@ export function registerAssistantRoutes(app: Express): void {
 
       let fullResponse = "";
       const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
-      const directPromoVideoCommand = buildDirectPromoVideoCommand(message);
 
-      if (directPromoVideoCommand) {
-        fullResponse = `${directPromoVideoCommand.content}\n${directPromoVideoCommand.command}`;
-        res.write(`data: ${JSON.stringify({ content: directPromoVideoCommand.content })}\n\n`);
-      } else if (directBlackRoomCommand) {
+      if (directBlackRoomCommand) {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
       } else {
@@ -643,27 +711,12 @@ export function registerAssistantRoutes(app: Express): void {
       while ((promoVideoGenerateMatch = promoVideoGenerateRegex.exec(fullResponse)) !== null) {
         try {
           const promoData = JSON.parse(promoVideoGenerateMatch[1]);
-          const count = clampAssistantInteger(Number(promoData.count || promoData.maxVideos), 5, 1, 30);
-          const targetSeconds = clampAssistantInteger(Number(promoData.targetSeconds || promoData.seconds), 15, 6, 90);
-          const cuts = clampAssistantInteger(Number(promoData.cuts), 3, 1, 12);
-          const result = await runPromoVideoAutoDaily({
-            maxVideos: count,
-            targetSeconds,
-            cuts,
-            style: "full",
-          });
-          const outputNames = result.status.outputVideos.slice(0, count).map((video) => video.name);
-          const summary = [
-            "",
-            `Listo. Procesé ${count} video${count === 1 ? "" : "s"} de promo de ${targetSeconds}s.`,
-            `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
-            `Carpeta lista: ${result.status.outputDir}`,
-          ].join("\n");
+          const generated = await executePromoVideoGenerateData(promoData);
           res.write(`data: ${JSON.stringify({
-            content: `\n\n${summary}`,
+            content: `\n\n${generated.summary}`,
             promoVideosGenerated: true,
-            outputDir: result.status.outputDir,
-            outputVideos: outputNames,
+            outputDir: generated.outputDir,
+            outputVideos: generated.outputVideos,
           })}\n\n`);
         } catch (e: any) {
           console.error("Error generating promo videos from assistant:", e);

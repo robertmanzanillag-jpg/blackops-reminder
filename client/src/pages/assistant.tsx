@@ -235,10 +235,12 @@ export default function AssistantPage() {
                 data.actionExecuted ||
                 data.googleEventCreated ||
                 data.investmentCreated ||
-                data.investmentUpdated
+                data.investmentUpdated ||
+                data.promoVideosGenerated
               ) {
                 queryClient.invalidateQueries({ queryKey: ["tasks"] });
                 queryClient.invalidateQueries({ queryKey: ["investments"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
               }
               if (data.actionExecuted) {
                 assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
@@ -254,8 +256,8 @@ export default function AssistantPage() {
                   return updated;
                 });
               }
-              if (data.googleEventError || data.radioError || data.blackRoomLinkError) {
-                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError}`;
+              if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError) {
+                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError}`;
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[updated.length - 1] = {
@@ -321,6 +323,7 @@ export default function AssistantPage() {
       .replace(/\[CREAR_RECORDATORIO:.*?\]/g, "Recordatorio creado")
       .replace(/\[ELIMINAR_RECORDATORIO:.*?\]/g, "Recordatorio eliminado")
       .replace(/\[LISTAR_RECORDATORIOS:.*?\]/g, "")
+      .replace(/\[PROMO_VIDEO_GENERATE:.*?\]/g, "")
       .replace(/\[GUARDAR_INFO:.*?\]/g, "")
       .trim();
   };
