@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "fs/promises";
+import { createHash } from "crypto";
 import path from "path";
 
 export type ClipperAccountCategory = "sports" | "memes" | "streamers";
@@ -10,6 +11,7 @@ export type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs
 export type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 export type ClipperReadinessStatus = "ready" | "missing" | "partial";
 export type ClipperConnectActionStatus = "ready" | "blocked";
+export type ClipperOAuthConnectionStatus = "pending" | "code_received" | "error";
 
 export interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -67,6 +69,7 @@ export interface ClipperStatus {
   sourceFolders: ClipperSourceFolder[];
   credentialChecks: ClipperCredentialCheck[];
   connectActions: ClipperConnectAction[];
+  oauthConnections: ClipperOAuthConnection[];
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
@@ -134,6 +137,17 @@ export interface ClipperConnectAction {
   nextStep: string;
 }
 
+export interface ClipperOAuthConnection {
+  platform: ClipperPlatform;
+  status: ClipperOAuthConnectionStatus;
+  receivedAt: string;
+  scopes: string[];
+  state: string | null;
+  codeHash: string | null;
+  error: string | null;
+  note: string;
+}
+
 export interface ClipperRunOptions {
   clipsPerAccount?: number;
   publishMode?: "draft_only" | "approval_required" | "auto_after_connection";
@@ -172,6 +186,7 @@ const SOURCES_DIR = path.join(ROOT_DIR, "sources");
 const DRAFTS_DIR = path.join(ROOT_DIR, "drafts");
 const SCHEDULED_DIR = path.join(ROOT_DIR, "scheduled");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
+const OAUTH_STATE_PATH = path.join(ROOT_DIR, "oauth-connections.json");
 
 const SOURCE_FOLDERS: ClipperSourceFolder[] = [
   {
@@ -468,6 +483,46 @@ async function ensureClipperDirs() {
   ]);
 }
 
+function hashOAuthCode(code: string): string {
+  return createHash("sha256").update(code).digest("hex").slice(0, 16);
+}
+
+async function readOAuthConnections(): Promise<ClipperOAuthConnection[]> {
+  try {
+    const raw = await readFile(OAUTH_STATE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed as ClipperOAuthConnection[] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeOAuthConnections(connections: ClipperOAuthConnection[]) {
+  await ensureClipperDirs();
+  await writeFile(OAUTH_STATE_PATH, JSON.stringify(connections, null, 2));
+}
+
+function applyOAuthStateToAccounts(accounts: ClipperAccount[], connections: ClipperOAuthConnection[]): ClipperAccount[] {
+  const connectedPlatforms = new Set(
+    connections
+      .filter((connection) => connection.status === "code_received")
+      .map((connection) => connection.platform)
+  );
+
+  return accounts.map((account) => ({
+    ...account,
+    platformAccounts: account.platformAccounts.map((platformAccount) => {
+      if (!connectedPlatforms.has(platformAccount.platform)) return platformAccount;
+      return {
+        ...platformAccount,
+        status: "needs_review",
+        missingSteps: platformAccount.missingSteps.filter((step) => !step.toLowerCase().includes("oauth")),
+        notes: "OAuth authorization code recibido; falta intercambio seguro por token y/o app review antes de autopost.",
+      };
+    }),
+  }));
+}
+
 function buildCredentialChecks(): ClipperCredentialCheck[] {
   return CREDENTIAL_ENV_REQUIREMENTS.map((requirement) => {
     const configuredEnvVars = requirement.requiredEnvVars.filter((name) => Boolean(process.env[name]));
@@ -683,7 +738,11 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
   await writeDefaultConfigIfMissing();
   await writeWorkspaceReadme();
   const config = await readConfig();
-  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const oauthConnections = await readOAuthConnections();
+  const accounts = applyOAuthStateToAccounts(
+    (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape),
+    oauthConnections
+  );
   const sources = Array.isArray(config.sources) && config.sources.length ? config.sources : DEFAULT_SOURCES;
   const dailyClipsTarget = accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
   const weeklyViewsPerAccount = 1_000_000;
@@ -697,6 +756,7 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
     sourceFolders: SOURCE_FOLDERS,
     credentialChecks: buildCredentialChecks(),
     connectActions: buildClipperConnectActions(),
+    oauthConnections,
     platformRequirements: PLATFORM_REQUIREMENTS,
     permissionQueue: PERMISSION_QUEUE,
     agents: DEFAULT_AGENTS,
@@ -715,6 +775,40 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
       "La app puede preparar cuentas internas y checklists, pero crear cuentas reales requiere login, verificacion y aceptacion de terminos en cada plataforma.",
     ],
   };
+}
+
+export async function recordClipperOAuthCallback(input: {
+  platform: unknown;
+  code?: unknown;
+  state?: unknown;
+  error?: unknown;
+}): Promise<ClipperOAuthConnection> {
+  if (input.platform !== "tiktok" && input.platform !== "instagram" && input.platform !== "youtube") {
+    throw new Error("Plataforma no soportada.");
+  }
+
+  const platform = input.platform;
+  const code = typeof input.code === "string" ? input.code : "";
+  const error = typeof input.error === "string" ? input.error : null;
+  const connection: ClipperOAuthConnection = {
+    platform,
+    status: error ? "error" : code ? "code_received" : "pending",
+    receivedAt: new Date().toISOString(),
+    scopes: PLATFORM_SCOPES[platform],
+    state: typeof input.state === "string" ? input.state : null,
+    codeHash: code ? hashOAuthCode(code) : null,
+    error,
+    note: error
+      ? "La plataforma devolvio error durante OAuth."
+      : code
+        ? "Authorization code recibido y resumido con hash; no se guardo el code plaintext."
+        : "Callback recibido sin authorization code.",
+  };
+
+  const previous = await readOAuthConnections();
+  const next = [connection, ...previous.filter((item) => item.platform !== platform)].slice(0, 12);
+  await writeOAuthConnections(next);
+  return connection;
 }
 
 export async function bootstrapClipperAccounts(): Promise<ClipperStatus> {
@@ -825,4 +919,5 @@ export const __clipperInternals = {
   buildPlannedClips,
   defaultPlatformAccounts,
   buildPlatformAuthUrl,
+  hashOAuthCode,
 };

@@ -432,6 +432,23 @@ function Cubicle({
   );
 }
 
+function RoomZone({ className, label }: { className?: string; label: string }) {
+  return (
+    <div
+      className={cn(
+        "absolute z-[2] rounded-[24px] border border-cyan-100/14 bg-[#08101b]/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.24)] backdrop-blur-[1px]",
+        className
+      )}
+    >
+      <div className="absolute inset-x-3 top-3 h-px bg-cyan-100/12" />
+      <div className="absolute inset-y-3 left-3 w-px bg-cyan-100/10" />
+      <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/14 bg-[#070b12]/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100 shadow-lg shadow-black/30">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 function Workstation({ className, wide = false }: { className?: string; wide?: boolean }) {
   return (
     <div className={cn("absolute", className)}>
@@ -907,9 +924,18 @@ export default function AgentsOfficePage() {
           <div className="absolute left-[13%] top-[12%] h-[7%] w-[68%] -skew-x-12 rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/13 via-white/6 to-white/12 backdrop-blur" />
           <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
 
-          <div className="absolute left-[18%] top-[23%] text-left">
-            <p className="text-3xl font-black tracking-[0.18em] text-white/80">SAMS</p>
-            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-100/50">Agentic Office</p>
+          <RoomZone className="left-[12%] top-[21%] h-[24%] w-[20%]" label="Recepcion" />
+          <RoomZone className="left-[34%] top-[21%] h-[34%] w-[25%]" label="Kong room" />
+          <RoomZone className="left-[61%] top-[21%] h-[31%] w-[21%]" label="Dev room" />
+          <RoomZone className="left-[12%] top-[48%] h-[22%] w-[20%]" label="Finance" />
+          <RoomZone className="left-[38%] top-[57%] h-[17%] w-[20%]" label="Ops room" />
+          <RoomZone className="left-[62%] top-[53%] h-[21%] w-[23%]" label="Radio / Black Room" />
+          <RoomZone className="left-[15%] top-[68%] h-[14%] w-[28%]" label="Break room" />
+          <RoomZone className="left-[72%] top-[66%] h-[16%] w-[16%]" label="Security" />
+
+          <div className="absolute left-[18%] top-[23%] z-[5] text-left">
+            <p className="text-3xl font-black tracking-[0.15em] text-white/86">ROBS</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-100/55">Agentic Office</p>
           </div>
 
           <div className="absolute left-[41%] top-[19%] h-28 w-48 rounded-2xl border border-white/10 bg-[#1d2430] shadow-2xl shadow-black/40">
