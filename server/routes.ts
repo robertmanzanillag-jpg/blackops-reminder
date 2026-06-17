@@ -36,7 +36,7 @@ import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
-import { getPromoVideoStatus, normalizePromoVideoOptions, runPromoVideoEdit } from "./promo-video-agent";
+import { getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1488,6 +1488,24 @@ export async function registerRoutes(
       res.json(normalizePromoVideoOptions(req.body || {}));
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Invalid promo video options" });
+    }
+  });
+
+  app.post("/api/promo-video/source", async (req, res) => {
+    try {
+      const status = await setPromoVideoSourceDir(req.body?.sourceDir);
+      res.json(status);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to set promo video source folder" });
+    }
+  });
+
+  app.post("/api/promo-video/import-source", async (_req, res) => {
+    try {
+      const result = await importPromoVideosFromSource();
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to import promo videos" });
     }
   });
 

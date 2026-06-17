@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { mkdir, readdir, stat, writeFile } from "fs/promises";
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
 import path from "path";
 
 export type PromoVideoStyle = "full" | "post";
@@ -17,8 +17,10 @@ export interface PromoVideoStatus {
   inputDir: string;
   outputDir: string;
   reportDir: string;
+  sourceDir: string | null;
   inputVideos: PromoVideoFile[];
   outputVideos: PromoVideoFile[];
+  sourceVideos: PromoVideoFile[];
   templates: PromoTemplate[];
 }
 
@@ -47,12 +49,20 @@ export interface PromoVideoRunResult {
   status: PromoVideoStatus;
 }
 
+export interface PromoVideoImportResult {
+  imported: number;
+  skipped: number;
+  files: PromoVideoFile[];
+  status: PromoVideoStatus;
+}
+
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const ROOT_DIR = path.join(process.cwd(), "promo_video_edits");
 const INPUT_DIR = path.join(ROOT_DIR, "01_originales");
 const LINKS_DIR = path.join(ROOT_DIR, "02_links");
 const OUTPUT_DIR = path.join(ROOT_DIR, "03_listos_para_subir");
 const REPORT_DIR = path.join(ROOT_DIR, "04_reportes");
+const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
 
 export const PROMO_TEMPLATES: PromoTemplate[] = [
   {
@@ -96,9 +106,37 @@ async function ensurePromoVideoDirs() {
   ]);
 }
 
-async function listVideoFiles(dir: string): Promise<PromoVideoFile[]> {
-  await mkdir(dir, { recursive: true });
-  const entries = await readdir(dir);
+async function readPromoConfig(): Promise<{ sourceDir: string | null }> {
+  try {
+    const raw = await readFile(CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw) as { sourceDir?: unknown };
+    return {
+      sourceDir: typeof parsed.sourceDir === "string" && parsed.sourceDir.trim()
+        ? path.resolve(parsed.sourceDir.trim())
+        : null,
+    };
+  } catch {
+    return { sourceDir: null };
+  }
+}
+
+async function writePromoConfig(config: { sourceDir: string | null }) {
+  await ensurePromoVideoDirs();
+  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+async function listVideoFiles(dir: string, options: { create?: boolean } = { create: true }): Promise<PromoVideoFile[]> {
+  if (options.create !== false) {
+    await mkdir(dir, { recursive: true });
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return [];
+  }
+
   const files = await Promise.all(
     entries
       .filter((entry) => VIDEO_EXTENSIONS.has(path.extname(entry).toLowerCase()))
@@ -123,9 +161,11 @@ export function getPromoTemplate(objective: PromoVideoObjective): PromoTemplate 
 
 export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
   await ensurePromoVideoDirs();
-  const [inputVideos, outputVideos] = await Promise.all([
+  const config = await readPromoConfig();
+  const [inputVideos, outputVideos, sourceVideos] = await Promise.all([
     listVideoFiles(INPUT_DIR),
     listVideoFiles(OUTPUT_DIR),
+    config.sourceDir ? listVideoFiles(config.sourceDir, { create: false }) : Promise.resolve([]),
   ]);
 
   return {
@@ -133,9 +173,59 @@ export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
     inputDir: INPUT_DIR,
     outputDir: OUTPUT_DIR,
     reportDir: REPORT_DIR,
+    sourceDir: config.sourceDir,
     inputVideos,
     outputVideos,
+    sourceVideos,
     templates: PROMO_TEMPLATES,
+  };
+}
+
+export async function setPromoVideoSourceDir(sourceDir: unknown): Promise<PromoVideoStatus> {
+  await ensurePromoVideoDirs();
+  if (typeof sourceDir !== "string" || !sourceDir.trim()) {
+    await writePromoConfig({ sourceDir: null });
+    return getPromoVideoStatus();
+  }
+
+  const resolved = path.resolve(sourceDir.trim().replace(/^~(?=$|\/)/, process.env.HOME || "~"));
+  const sourceStat = await stat(resolved);
+  if (!sourceStat.isDirectory()) {
+    throw new Error("La ruta indicada no es una carpeta.");
+  }
+
+  await writePromoConfig({ sourceDir: resolved });
+  return getPromoVideoStatus();
+}
+
+export async function importPromoVideosFromSource(): Promise<PromoVideoImportResult> {
+  await ensurePromoVideoDirs();
+  const config = await readPromoConfig();
+  if (!config.sourceDir) {
+    throw new Error("Primero indica una carpeta origen.");
+  }
+
+  const sourceVideos = await listVideoFiles(config.sourceDir, { create: false });
+  let imported = 0;
+  let skipped = 0;
+
+  for (const video of sourceVideos) {
+    const destination = path.join(INPUT_DIR, video.name);
+    try {
+      await stat(destination);
+      skipped += 1;
+      continue;
+    } catch {
+      await copyFile(video.path, destination);
+      imported += 1;
+    }
+  }
+
+  return {
+    imported,
+    skipped,
+    files: sourceVideos,
+    status: await getPromoVideoStatus(),
   };
 }
 
@@ -205,4 +295,3 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
   await writeFile(reportPath, JSON.stringify(result, null, 2));
   return result;
 }
-
