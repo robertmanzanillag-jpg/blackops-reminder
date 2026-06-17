@@ -72,7 +72,7 @@ const agents = [
     outfit: "bg-amber-500",
     hair: "bg-stone-800",
     skin: "bg-orange-200",
-    position: "left-[39%] top-[30%]",
+    position: "left-[38%] top-[33%]",
     bubblePosition: "left-[38%] top-[7%]",
   },
   {
@@ -90,7 +90,7 @@ const agents = [
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
     skin: "bg-orange-100",
-    position: "left-[54%] top-[34%]",
+    position: "left-[59%] top-[42%]",
     bubblePosition: "left-[51%] top-[12%]",
   },
   {
@@ -238,6 +238,18 @@ type ChatMessage = {
   role: "user" | "agent";
   text: string;
 };
+type OfficeFeedItem = {
+  agent: AgentId;
+  title: string;
+  text: string;
+  sharesWith: string;
+};
+type LearningSuggestion = {
+  id: string;
+  agent: AgentId;
+  lesson: string;
+  reason: string;
+};
 
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 
@@ -376,14 +388,62 @@ const breakRoomThreads: { from: AgentId; text: string }[] = [
   { from: "assistant", text: "Yo puedo resumir cada area al inicio del dia: que paso, que falta y quien necesita ayuda." },
 ];
 
+const officeFeed: OfficeFeedItem[] = [
+  {
+    agent: "assistant",
+    title: "Daily standup",
+    text: "Ordeno lo urgente del dia y aviso a CEO cuando algo necesita decision.",
+    sharesWith: "CEO, Autos",
+  },
+  {
+    agent: "revenue",
+    title: "Aprendizaje de deals",
+    text: "Cuando un deal aparece, necesito guardar fuente, margen posible, landing requerida y siguiente contacto.",
+    sharesWith: "CEO, Code",
+  },
+  {
+    agent: "clippers",
+    title: "Mejora de clips",
+    text: "Los clips funcionan mejor si cada cuenta tiene nicho, fuente permitida y reporte semanal de views.",
+    sharesWith: "Radio, Control",
+  },
+  {
+    agent: "code",
+    title: "Feedback tecnico",
+    text: "Cada cambio debe terminar con build, vista previa y nota corta de lo que se modifico.",
+    sharesWith: "GitHub, CEO",
+  },
+];
+
+const learningSuggestions: LearningSuggestion[] = [
+  {
+    id: "deals-source-margin",
+    agent: "revenue",
+    lesson: "Antes de crear website para un deal, validar fuente, margen, publico y oferta.",
+    reason: "Evita construir paginas para oportunidades flojas.",
+  },
+  {
+    id: "clips-allowed-sources",
+    agent: "clippers",
+    lesson: "Clippers solo debe escalar con fuentes permitidas y reporte de rendimiento.",
+    reason: "Protege cuentas y ayuda a repetir lo que si genera views.",
+  },
+  {
+    id: "code-small-verified",
+    agent: "code",
+    lesson: "Code debe hacer cambios pequenos, con build y resumen claro antes de pasar a GitHub.",
+    reason: "Reduce errores y hace que los demas agentes entiendan que cambio.",
+  },
+];
+
 const githubAppTeams = [
   {
     app: "Kong",
     repo: "robertmanzanillag-jpg/kong-nightlife",
     agents: [
-      { name: "KONG AI", job: "Chat central", position: "left-[37%] top-[45%]", tone: "bg-[#3fb66f]" },
-      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[32%] top-[48%]", tone: "bg-[#f1c36a]" },
-      { name: "Venues", job: "Events", position: "left-[42%] top-[48%]", tone: "bg-[#60a5fa]" },
+      { name: "KONG AI", job: "Chat central", position: "left-[38%] top-[46%]", tone: "bg-[#3fb66f]" },
+      { name: "Promoters + Mesas", job: "Outreach + Monday", position: "left-[34%] top-[52%]", tone: "bg-[#f1c36a]" },
+      { name: "Venues", job: "Events", position: "left-[43%] top-[52%]", tone: "bg-[#60a5fa]" },
     ],
   },
 ];
@@ -464,7 +524,7 @@ function RoomZone({ className, label }: { className?: string; label: string }) {
     >
       <div className="absolute inset-x-5 top-12 h-px bg-cyan-100/12" />
       <div className="absolute inset-y-5 left-5 w-px bg-cyan-100/10" />
-      <div className="absolute left-1/2 top-4 z-[90] max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-2xl border border-cyan-100/40 bg-[#02050d] px-3 py-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-cyan-50 shadow-xl shadow-black/70">
+      <div className="absolute left-1/2 top-[-12px] z-[90] max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-2xl border border-cyan-100/40 bg-[#02050d] px-3 py-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-cyan-50 shadow-xl shadow-black/70">
         {label}
       </div>
     </div>
@@ -668,6 +728,7 @@ export default function AgentsOfficePage() {
   const [targetRepo, setTargetRepo] = useState("workspace");
   const [lastRemoteTask, setLastRemoteTask] = useState("");
   const [sentMessages, setSentMessages] = useState<{ to: string; text: string }[]>([]);
+  const [approvedLearning, setApprovedLearning] = useState<string[]>([]);
   const [visibleNotes, setVisibleNotes] = useState({
     chat: true,
     reply: true,
@@ -835,6 +896,9 @@ export default function AgentsOfficePage() {
       color: "from-cyan-300 to-lime-300",
     });
   };
+  const handleApproveLearning = (lessonId: string) => {
+    setApprovedLearning((current) => (current.includes(lessonId) ? current : [...current, lessonId]));
+  };
 
   return (
     <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
@@ -947,30 +1011,30 @@ export default function AgentsOfficePage() {
           <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
 
           <RoomZone className="left-[10%] top-[19%] h-[29%] w-[18%]" label="Recepcion" />
-          <RoomZone className="left-[30%] top-[19%] h-[39%] w-[16%]" label="Kong" />
-          <RoomZone className="left-[48%] top-[19%] h-[39%] w-[13%]" label="Deals + Websites" />
-          <RoomZone className="left-[63%] top-[19%] h-[39%] w-[27%]" label="Dev + GitHub" />
+          <RoomZone className="left-[29%] top-[19%] h-[45%] w-[22%]" label="Kong" />
+          <RoomZone className="left-[54%] top-[27%] h-[29%] w-[10%]" label="Deals + Websites" />
+          <RoomZone className="left-[65%] top-[19%] h-[43%] w-[25%]" label="Dev + GitHub" />
           <RoomZone className="left-[10%] top-[52%] h-[25%] w-[18%]" label="Finance" />
           <RoomZone className="left-[31%] top-[62%] h-[20%] w-[17%]" label="Ops" />
           <RoomZone className="left-[50%] top-[62%] h-[20%] w-[13%]" label="Black Room" />
           <RoomZone className="left-[65%] top-[62%] h-[20%] w-[13%]" label="Clippers" />
           <RoomZone className="left-[80%] top-[62%] h-[20%] w-[12%]" label="Security" />
-          <RoomZone className="left-[10%] top-[80%] h-[13%] w-[43%]" label="Break Room" />
+          <RoomZone className="left-[35%] top-[84%] h-[12%] w-[31%]" label="Break Room" />
 
           <div className="absolute left-[13%] top-[25%] z-[5] text-left">
             <p className="max-w-[180px] text-xl font-black leading-6 tracking-[0.12em] text-white/90">ROBS AGENTIC OFFICE</p>
             <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/70">Command center</p>
           </div>
 
-          <div className="absolute left-[32%] top-[31%] z-[3] h-20 w-[13%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[31%] top-[35%] z-[3] h-20 w-[17%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-6 top-4 h-10 w-20 rounded-xl bg-cyan-200/18" />
             <div className="absolute right-4 top-5 h-8 w-10 rounded-xl bg-amber-200/16" />
           </div>
-          <div className="absolute left-[50%] top-[32%] z-[3] h-20 w-[9%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-4 top-4 h-10 w-14 rounded-xl bg-emerald-200/18" />
-            <div className="absolute right-4 top-5 h-8 w-8 rounded-xl bg-cyan-200/16" />
+          <div className="absolute left-[56%] top-[41%] z-[3] h-14 w-[6%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+            <div className="absolute left-3 top-4 h-10 w-10 rounded-xl bg-emerald-200/18" />
+            <div className="absolute right-3 top-5 h-7 w-7 rounded-xl bg-cyan-200/16" />
           </div>
-          <div className="absolute left-[66%] top-[33%] z-[3] h-20 w-[20%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[68%] top-[35%] z-[3] h-20 w-[18%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-5 top-4 h-10 w-16 rounded-xl bg-cyan-200/20" />
             <div className="absolute right-5 top-4 h-10 w-16 rounded-xl bg-white/10" />
             <div className="absolute bottom-4 left-8 right-8 h-2 rounded-full bg-white/12" />
@@ -991,7 +1055,7 @@ export default function AgentsOfficePage() {
             <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-amber-200/24" />
             <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-rose-200/18" />
           </div>
-          <div className="absolute left-[13%] top-[83%] z-[3] h-14 w-[34%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
+          <div className="absolute left-[38%] top-[88%] z-[3] h-10 w-[25%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
             <div className="absolute left-7 top-5 h-4 w-16 rounded-full bg-white/18" />
             <div className="absolute left-28 top-5 h-4 w-14 rounded-full bg-lime-200/24" />
             <div className="absolute right-8 top-4 h-6 w-10 rounded-xl bg-cyan-200/16" />
@@ -1309,6 +1373,106 @@ export default function AgentsOfficePage() {
                   );
                 })
               )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-cyan-200" />
+                <p className="text-sm font-medium text-zinc-300">Office Feed</p>
+              </div>
+              <span className="rounded-full border border-cyan-200/15 bg-cyan-300/10 px-2 py-1 text-[11px] text-cyan-100">
+                daily sync
+              </span>
+            </div>
+            <div className="space-y-2">
+              {officeFeed.map((item) => {
+                const agent = agentById[item.agent];
+                const Icon = agent.icon;
+                return (
+                  <button
+                    key={`${item.agent}-${item.title}`}
+                    type="button"
+                    onClick={() => handleSelectAgent(agent)}
+                    className="w-full rounded-lg border border-white/10 bg-black/35 p-3 text-left transition hover:border-cyan-200/25 hover:bg-cyan-300/5"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className={cn("flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br text-zinc-950", agent.color)}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white">{agent.name}</p>
+                        <p className="truncate text-[11px] text-cyan-100/60">{item.title} / {item.sharesWith}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-5 text-zinc-300">{item.text}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-amber-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-amber-200" />
+              <p className="text-sm font-medium text-zinc-300">Break Room</p>
+            </div>
+            <div className="space-y-2">
+              {breakRoomThreads.map((item) => {
+                const agent = agentById[item.from];
+                return (
+                  <div key={`${item.from}-${item.text}`} className="rounded-lg border border-white/10 bg-black/35 p-3">
+                    <p className="text-xs font-semibold text-white">{agent.name}</p>
+                    <p className="mt-1 text-sm leading-5 text-zinc-300">{item.text}</p>
+                  </div>
+                );
+              })}
+              <div className="rounded-lg border border-emerald-200/15 bg-emerald-300/10 p-3">
+                <p className="text-xs font-semibold text-emerald-100">Motivacion interna</p>
+                <p className="mt-1 text-sm leading-5 text-emerald-50/85">
+                  Cada agente comparte una mejora pequena para otro equipo antes de cerrar el dia.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-emerald-200/15 bg-zinc-950/80 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-200" />
+                <p className="text-sm font-medium text-zinc-300">Learning Board</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-zinc-500">
+                {approvedLearning.length} aprobados
+              </span>
+            </div>
+            <div className="space-y-2">
+              {learningSuggestions.map((item) => {
+                const agent = agentById[item.agent];
+                const approved = approvedLearning.includes(item.id);
+                return (
+                  <div key={item.id} className={cn("rounded-lg border p-3", approved ? "border-emerald-300/25 bg-emerald-300/10" : "border-white/10 bg-black/35")}>
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white">{agent.name} aprende</p>
+                        <p className="mt-1 text-sm leading-5 text-zinc-300">{item.lesson}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={approved ? "outline" : "secondary"}
+                        size="sm"
+                        onClick={() => handleApproveLearning(item.id)}
+                        className={cn("h-8 shrink-0 rounded-full px-3 text-xs", approved && "border-emerald-300/30 bg-emerald-300/10 text-emerald-100")}
+                        disabled={approved}
+                      >
+                        {approved ? "Aprobado" : "Aprobar"}
+                      </Button>
+                    </div>
+                    <p className="text-xs leading-4 text-zinc-500">{item.reason}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
