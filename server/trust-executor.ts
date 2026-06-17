@@ -3,6 +3,7 @@ import { storage } from "./storage";
 import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
 import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
+import { resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
 
 type JsonRecord = Record<string, any>;
 
@@ -151,6 +152,11 @@ export async function executeApprovedPendingAction(
 
       case "marketing.blackroom_timer_add": {
         result = await addBlackRoomCountdown(input as any);
+        break;
+      }
+
+      case "radio_edit.resolve_dj_name": {
+        result = await resumeRadioVideoEditWithDjName(input as any);
         break;
       }
 

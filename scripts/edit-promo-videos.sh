@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INPUT_DIR="$ROOT_DIR/promo_video_edits/01_originales"
+INPUT_DIR="${INPUT_SOURCE_DIR:-$ROOT_DIR/promo_video_edits/01_originales}"
 OUTPUT_DIR="$ROOT_DIR/promo_video_edits/03_listos_para_subir"
 
 OBJECTIVE="${OBJECTIVE:-nightlife}"
@@ -15,8 +15,13 @@ HEIGHT="${HEIGHT:-1920}"
 STYLE="${STYLE:-full}"
 HOOK_TEXT="${HOOK_TEXT:-BEST APP TO GO OUT}"
 CTA_TEXT="${CTA_TEXT:-JOIN THE GUESTLIST}"
+FONT_STYLE="${FONT_STYLE:-bold}"
+CUSTOM_TEXT="${CUSTOM_TEXT:-0}"
 
-mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
+if [ -z "${INPUT_SOURCE_DIR:-}" ]; then
+  mkdir -p "$INPUT_DIR"
+fi
 
 escape_drawtext() {
   printf "%s" "$1" | sed "s/'/ /g; s/:/ /g; s/%/ percent/g; s/\\\\/ /g"
@@ -43,7 +48,7 @@ text_filter() {
 
 create_text_overlay() {
   local overlay_path="$1"
-  OVERLAY_PATH="$overlay_path" OVERLAY_WIDTH="$WIDTH" OVERLAY_HEIGHT="$HEIGHT" OVERLAY_HOOK="$HOOK_TEXT" OVERLAY_CTA="$CTA_TEXT" node -e '
+  OVERLAY_PATH="$overlay_path" OVERLAY_WIDTH="$WIDTH" OVERLAY_HEIGHT="$HEIGHT" OVERLAY_HOOK="$HOOK_TEXT" OVERLAY_CTA="$CTA_TEXT" OVERLAY_FONT_STYLE="$FONT_STYLE" node -e '
     const sharp = require("sharp");
     const width = Number(process.env.OVERLAY_WIDTH || 1080);
     const height = Number(process.env.OVERLAY_HEIGHT || 1920);
@@ -54,15 +59,27 @@ create_text_overlay() {
       .replace(/"/g, "&quot;");
     const hook = escapeXml(process.env.OVERLAY_HOOK || "BEST APP TO GO OUT");
     const cta = escapeXml(process.env.OVERLAY_CTA || "JOIN THE GUESTLIST");
+    const styles = {
+      bold: { family: "Arial Black, Arial, Helvetica, sans-serif", weight: 900, hook: 68, cta: 52, fill: "white", box: "black", opacity: 0.66, stroke: "none", shadow: false },
+      clean: { family: "Arial, Helvetica, sans-serif", weight: 800, hook: 62, cta: 46, fill: "white", box: "#101010", opacity: 0.52, stroke: "none", shadow: false },
+      luxury: { family: "Georgia, Times New Roman, serif", weight: 700, hook: 62, cta: 46, fill: "#f7e7b4", box: "#050505", opacity: 0.58, stroke: "none", shadow: true },
+      impact: { family: "Impact, Arial Black, Arial, sans-serif", weight: 900, hook: 76, cta: 56, fill: "#ffffff", box: "#000000", opacity: 0.72, stroke: "#000000", shadow: false },
+      neon: { family: "Arial Black, Arial, Helvetica, sans-serif", weight: 900, hook: 66, cta: 50, fill: "#d9ff3f", box: "#080808", opacity: 0.64, stroke: "#ff2fb3", shadow: true },
+    };
+    const style = styles[String(process.env.OVERLAY_FONT_STYLE || "bold").toLowerCase()] || styles.bold;
+    const shadow = style.shadow ? `<filter id="glow"><feGaussianBlur stdDeviation="5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` : "";
+    const filter = style.shadow ? `filter="url(#glow)"` : "";
+    const stroke = style.stroke !== "none" ? `stroke="${style.stroke}" stroke-width="7" paint-order="stroke"` : "";
     const svg = `
       <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>${shadow}</defs>
         <style>
-          .label { fill: white; font-family: Arial, Helvetica, sans-serif; font-weight: 900; text-anchor: middle; letter-spacing: 0; }
+          .label { fill: ${style.fill}; font-family: ${style.family}; font-weight: ${style.weight}; text-anchor: middle; letter-spacing: 0; }
         </style>
-        <rect x="${width * 0.08}" y="104" width="${width * 0.84}" height="132" rx="20" fill="black" opacity="0.66"/>
-        <text x="${width / 2}" y="188" class="label" font-size="68">${hook}</text>
-        <rect x="${width * 0.1}" y="${height - 318}" width="${width * 0.8}" height="112" rx="18" fill="black" opacity="0.66"/>
-        <text x="${width / 2}" y="${height - 246}" class="label" font-size="52">${cta}</text>
+        <rect x="${width * 0.08}" y="104" width="${width * 0.84}" height="132" rx="20" fill="${style.box}" opacity="${style.opacity}"/>
+        <text x="${width / 2}" y="188" class="label" font-size="${style.hook}" ${stroke} ${filter}>${hook}</text>
+        <rect x="${width * 0.1}" y="${height - 318}" width="${width * 0.8}" height="112" rx="18" fill="${style.box}" opacity="${style.opacity}"/>
+        <text x="${width / 2}" y="${height - 246}" class="label" font-size="${style.cta}" ${stroke} ${filter}>${cta}</text>
       </svg>
     `;
     sharp(Buffer.from(svg)).png().toFile(process.env.OVERLAY_PATH).catch((error) => {
@@ -78,6 +95,11 @@ template_for_file() {
 
   if [ "$OBJECTIVE" != "auto" ]; then
     printf "%s|%s|%s" "$OBJECTIVE" "$HOOK_TEXT" "$CTA_TEXT"
+    return
+  fi
+
+  if [ "$CUSTOM_TEXT" = "1" ]; then
+    printf "custom|%s|%s" "$HOOK_TEXT" "$CTA_TEXT"
     return
   fi
 
@@ -100,12 +122,10 @@ template_for_file() {
   esac
 }
 
-shopt -s nullglob
-videos=(
-  "$INPUT_DIR"/*.mp4 "$INPUT_DIR"/*.MP4
-  "$INPUT_DIR"/*.mov "$INPUT_DIR"/*.MOV
-  "$INPUT_DIR"/*.m4v "$INPUT_DIR"/*.M4V
-)
+videos=()
+while IFS= read -r -d '' video_path; do
+  videos+=("$video_path")
+done < <(find "$INPUT_DIR" -type f \( -iname "*.mp4" -o -iname "*.mov" -o -iname "*.m4v" \) -print0)
 
 if [ "${#videos[@]}" -eq 0 ]; then
   echo "No encontre videos en: $INPUT_DIR"
@@ -116,6 +136,14 @@ fi
 processed_videos=0
 
 for input in "${videos[@]}"; do
+  input_lower="$(basename "$input" | tr '[:upper:]' '[:lower:]')"
+  case "$input_lower" in
+    *screenshot*|*screenrecording*|*screen-recording*|*screen_recording*|*captura-de-pantalla*|*captura_de_pantalla*)
+      echo "Salto captura/screen recording: $input"
+      continue
+      ;;
+  esac
+
   if [ "$MAX_VIDEOS" -gt 0 ] && [ "$processed_videos" -ge "$MAX_VIDEOS" ]; then
     break
   fi

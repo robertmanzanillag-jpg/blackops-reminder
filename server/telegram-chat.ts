@@ -13,6 +13,7 @@ import { buildCeoReadinessReport } from "./ceo-readiness";
 import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { executeMultipleActions } from "./agent-actions";
+import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import type { PendingActionStatus } from "@shared/schema";
 
 const TELEGRAM_WEBHOOK_PATH = "/api/telegram/webhook";
@@ -320,6 +321,51 @@ async function recordPendingActionDecision(
 }
 
 async function handleTelegramControlCommand(userId: string, message: string): Promise<string | null> {
+  const djNameResolution = parseDjNameResolutionCommand(message);
+  if (djNameResolution) {
+    const action = await storage.getPendingAction(djNameResolution.actionId);
+    if (!action || action.userId !== userId || action.actionType !== "radio_edit.resolve_dj_name") {
+      return "No encontré ese pendiente de video de radio para este usuario.";
+    }
+    if (!["pending", "edited", "snoozed", "failed"].includes(action.status)) {
+      return `Ese pendiente ya está en estado ${action.status}.`;
+    }
+
+    const editedInput = {
+      ...((action.input || {}) as Record<string, unknown>),
+      ...((action.editedInput || {}) as Record<string, unknown>),
+      djName: djNameResolution.djName,
+    };
+
+    await storage.updatePendingAction(action.id, {
+      status: "approved",
+      editedInput,
+      approvedBy: userId,
+      approvedAt: new Date(),
+      approvalReason: "Nombre del DJ recibido por Telegram",
+    });
+    await storage.createPendingActionEvent({
+      pendingActionId: action.id,
+      userId,
+      actorType: "user",
+      actorId: "telegram-user",
+      eventType: "edited",
+      previousStatus: action.status,
+      nextStatus: "approved",
+      note: `Nombre del DJ: ${djNameResolution.djName}`,
+      metadata: { origin: "telegram", editedInput },
+    });
+
+    const approvedAction = await storage.getPendingAction(action.id);
+    if (!approvedAction) return "Guardé el nombre, pero no pude recargar el pendiente.";
+
+    const result = await executeApprovedPendingAction(approvedAction, userId);
+    if (!result.success) {
+      return `Guardé el nombre ${djNameResolution.djName}, pero falló el render: ${result.error}`;
+    }
+    return `✅ Listo. Guardé ${djNameResolution.djName} y generé los clips de radio.`;
+  }
+
   const command = classifyTelegramControlCommand(message);
 
   if (command === "help") {

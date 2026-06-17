@@ -33,6 +33,7 @@
     "ceo:doctor": "tsx script/ceo-doctor.ts",
     "telegram:webhook": "tsx script/telegram-webhook.ts",
     "telegram:configure": "tsx script/configure-telegram.ts",
+    "radio:edit-videos": "tsx script/radio-video-edits.ts",
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
     "user:migrate": "tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",

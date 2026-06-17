@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type PromoVideoStyle = "full" | "post";
 type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
+type PromoVideoFontStyle = "bold" | "clean" | "luxury" | "impact" | "neon";
 
 interface PromoTemplate {
   id: PromoVideoObjective;
@@ -106,6 +107,7 @@ export default function PromoVideoPage() {
   const [style, setStyle] = useState<PromoVideoStyle>("full");
   const [hookText, setHookText] = useState("");
   const [ctaText, setCtaText] = useState("");
+  const [fontStyle, setFontStyle] = useState<PromoVideoFontStyle>("bold");
   const [sourceDir, setSourceDir] = useState("");
   const [lastRun, setLastRun] = useState<PromoVideoRunResult | null>(null);
 
@@ -183,8 +185,9 @@ export default function PromoVideoPage() {
           cuts,
           style,
           maxVideos,
-          hookText: hookText || selectedTemplate?.hook,
-          ctaText: ctaText || selectedTemplate?.cta,
+          hookText: hookText || undefined,
+          ctaText: ctaText || undefined,
+          fontStyle,
         }),
       });
       const data = await res.json();
@@ -213,7 +216,7 @@ export default function PromoVideoPage() {
       const res = await fetch("/api/promo-video/auto-daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maxVideos: 5, targetSeconds, cuts, style }),
+        body: JSON.stringify({ maxVideos: 5, targetSeconds, cuts, style, hookText: hookText || undefined, ctaText: ctaText || undefined, fontStyle }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No pude correr el auto diario");
@@ -342,6 +345,22 @@ export default function PromoVideoPage() {
                   placeholder={selectedTemplate?.cta || "JOIN THE GUESTLIST"}
                   className="border-zinc-800 bg-black"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Typo</Label>
+                <Select value={fontStyle} onValueChange={(value) => setFontStyle(value as PromoVideoFontStyle)}>
+                  <SelectTrigger className="border-zinc-800 bg-black">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bold">Bold</SelectItem>
+                    <SelectItem value="clean">Clean</SelectItem>
+                    <SelectItem value="luxury">Luxury</SelectItem>
+                    <SelectItem value="impact">Impact</SelectItem>
+                    <SelectItem value="neon">Neon</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

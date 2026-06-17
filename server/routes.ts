@@ -37,6 +37,7 @@ import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
+import { getClipperStatus, readClipperReport, runClipperDailyPlan } from "./clippers-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1536,6 +1537,36 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== CLIPPERS COMMAND CENTER ====================
+
+  app.get("/api/clippers/status", async (_req, res) => {
+    try {
+      const status = await getClipperStatus();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers status" });
+    }
+  });
+
+  app.post("/api/clippers/run-daily-plan", async (req, res) => {
+    try {
+      const result = await runClipperDailyPlan(req.body || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to generate clippers daily plan" });
+    }
+  });
+
+  app.get("/api/clippers/reports/:id", async (req, res) => {
+    try {
+      const report = await readClipperReport(req.params.id);
+      if (!report) return res.status(404).json({ error: "Report not found" });
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to read clippers report" });
+    }
+  });
+
   // GET all DJ contacts
   app.get("/api/djs", async (req, res) => {
     try {
@@ -1744,7 +1775,8 @@ export async function registerRoutes(
       if (!action || action.userId !== userId) {
         return res.status(404).json({ error: "Pending action not found" });
       }
-      if (!["pending", "edited", "snoozed"].includes(action.status)) {
+      const canEditRadioDjName = action.actionType === "radio_edit.resolve_dj_name" && action.status === "failed";
+      if (!["pending", "edited", "snoozed"].includes(action.status) && !canEditRadioDjName) {
         return res.status(400).json({ error: "Only pending actions can be edited" });
       }
       const updated = await storage.updatePendingAction(action.id, {
@@ -1775,6 +1807,27 @@ export async function registerRoutes(
         status: "succeeded",
         executionMode: "user_requested",
       });
+      if (action.actionType === "radio_edit.resolve_dj_name" && req.body.editedInput?.djName) {
+        const approved = await storage.updatePendingAction(action.id, {
+          status: "approved",
+          approvedBy: userId,
+          approvedAt: new Date(),
+          approvalReason: "Nombre del DJ recibido en la app",
+        });
+        await storage.createPendingActionEvent({
+          pendingActionId: action.id,
+          userId,
+          actorType: "user",
+          actorId: userId,
+          eventType: "approved",
+          previousStatus: "edited",
+          nextStatus: "approved",
+          note: "Nombre del DJ recibido en la app",
+          metadata: { editedInput: req.body.editedInput },
+        });
+        const result = await executeApprovedPendingAction(approved, userId);
+        return res.json({ ...approved, executionResult: result });
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to edit pending action" });

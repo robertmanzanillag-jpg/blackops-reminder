@@ -9,7 +9,7 @@ import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
-import { runPromoVideoAutoDaily } from "./promo-video-agent";
+import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import type { PendingAction } from "@shared/schema";
 
 const ai = new GoogleGenAI({
@@ -161,6 +161,59 @@ function extractRequestedSeconds(text: string): number {
   return 15;
 }
 
+function cleanPromoText(value?: string): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/\s+/g, " ")
+    .replace(/\b(con|y|en)\s+(typo|tipo|font|fuente|letra)\b.*$/i, "")
+    .replace(/\b(para|por)\s+(tiktok|reels?|shorts?)\b.*$/i, "")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  return cleaned ? cleaned.slice(0, 80) : undefined;
+}
+
+function extractPromoText(message: string): { hookText?: string; ctaText?: string } {
+  const quoted = [...message.matchAll(/["“”'‘’]([^"“”'‘’]{2,80})["“”'‘’]/g)]
+    .map((match) => cleanPromoText(match[1]))
+    .filter(Boolean) as string[];
+  if (quoted.length >= 2) return { hookText: quoted[0], ctaText: quoted[1] };
+  if (quoted.length === 1) return { hookText: quoted[0] };
+
+  const hookPatterns = [
+    /(?:que\s+(?:diga|ponga)|texto|hook|headline|titulo|t[ií]tulo)\s+(.+?)(?:\s+(?:cta|call to action|bot[oó]n|abajo|con typo|con tipo|con font|con fuente|con letra)\b|$)/i,
+    /(?:ponle|pon|agregale|agr[eé]gale)\s+(.+?)(?:\s+(?:cta|call to action|bot[oó]n|abajo|con typo|con tipo|con font|con fuente|con letra)\b|$)/i,
+  ];
+  const ctaPattern = /(?:cta|call to action|bot[oó]n|abajo)\s+(.+?)(?:\s+(?:con typo|con tipo|con font|con fuente|con letra)\b|$)/i;
+
+  const hookText = cleanPromoText(hookPatterns.map((pattern) => message.match(pattern)?.[1]).find(Boolean));
+  const ctaText = cleanPromoText(message.match(ctaPattern)?.[1]);
+  return { hookText, ctaText };
+}
+
+function extractPromoFontStyle(text: string): "bold" | "clean" | "luxury" | "impact" | "neon" {
+  if (/\b(luxury|lujo|elegante|serif|fino|premium)\b/.test(text)) return "luxury";
+  if (/\b(neon|brillante|club|party)\b/.test(text)) return "neon";
+  if (/\b(impact|grande|fuerte|bold|pesada|pesado)\b/.test(text)) return "impact";
+  if (/\b(clean|minimal|simple|moderna|moderno|limpia|limpio)\b/.test(text)) return "clean";
+  return "bold";
+}
+
+function extractPromoSourceHint(message: string): string | undefined {
+  const patterns = [
+    /(?:videos?\s+de|desde|usa(?:r)?|con)\s+(?:la\s+)?carpeta\s+["“”']?([^"“”'\n]+?)["“”']?(?:\s+(?:que diga|con texto|texto|cta|con typo|con tipo|para tiktok|para reels|de \d+|\d+\s*segundos?)\b|$)/i,
+    /\bde\s+(?:la\s+)?carpeta\s+["“”']?([^"“”'\n]+?)["“”']?(?:\s+(?:que diga|con texto|texto|cta|con typo|con tipo|para tiktok|para reels|de \d+|\d+\s*segundos?)\b|$)/i,
+    /(?:folder|source)\s+["“”']?([^"“”'\n]+?)["“”']?(?:\s+(?:que diga|con texto|texto|cta|con typo|con tipo|para tiktok|para reels|de \d+|\d+\s*segundos?)\b|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const value = cleanPromoText(message.match(pattern)?.[1]);
+    if (value) return value;
+  }
+
+  const absolutePath = message.match(/(\/Users\/[^\n"“”']+)/i)?.[1];
+  return cleanPromoText(absolutePath);
+}
+
 export function buildDirectPromoVideoCommand(message?: string): { content: string; command: string } | null {
   if (!message) return null;
   const text = normalizeApprovalText(message);
@@ -173,23 +226,36 @@ export function buildDirectPromoVideoCommand(message?: string): { content: strin
   const count = extractRequestedVideoCount(text);
   const targetSeconds = extractRequestedSeconds(text);
   const platform = text.includes("reel") ? "reels" : text.includes("short") ? "shorts" : "tiktok";
+  const promoText = extractPromoText(message);
+  const fontStyle = extractPromoFontStyle(text);
+  const sourceHint = extractPromoSourceHint(message);
 
   return {
-    content: `Dale. Voy a crear ${count} video${count === 1 ? "" : "s"} vertical${count === 1 ? "" : "es"} de promo para ${platform}, usando la carpeta conectada y escogiendo templates automáticamente.`,
+    content: `Dale. Voy a crear ${count} video${count === 1 ? "" : "s"} vertical${count === 1 ? "" : "es"} de promo para ${platform}, usando solo videos reales${sourceHint ? ` de la carpeta "${sourceHint}"` : ""}, con typo ${fontStyle}${promoText.hookText ? ` y texto "${promoText.hookText}"` : ""}.`,
     command: `[PROMO_VIDEO_GENERATE: ${JSON.stringify({
       count,
       platform,
       targetSeconds,
       cuts: 3,
+      fontStyle,
+      sourceHint,
+      ...promoText,
     })}]`,
   };
 }
 
-function normalizePromoVideoGenerateData(input: any): { count: number; targetSeconds: number; cuts: number } {
+function normalizePromoVideoGenerateData(input: any): { count: number; targetSeconds: number; cuts: number; hookText?: string; ctaText?: string; sourceHint?: string; fontStyle: "bold" | "clean" | "luxury" | "impact" | "neon" } {
+  const fontStyle = ["bold", "clean", "luxury", "impact", "neon"].includes(String(input?.fontStyle))
+    ? input.fontStyle
+    : "bold";
   return {
     count: clampAssistantInteger(Number(input?.count || input?.maxVideos), 5, 1, 30),
     targetSeconds: clampAssistantInteger(Number(input?.targetSeconds || input?.seconds), 15, 6, 90),
     cuts: clampAssistantInteger(Number(input?.cuts), 3, 1, 12),
+    hookText: cleanPromoText(input?.hookText),
+    ctaText: cleanPromoText(input?.ctaText),
+    sourceHint: cleanPromoText(input?.sourceHint || input?.sourceDir),
+    fontStyle,
   };
 }
 
@@ -200,20 +266,33 @@ async function executePromoVideoGenerateData(input: any) {
     targetSeconds: options.targetSeconds,
     cuts: options.cuts,
     style: "full",
+    hookText: options.hookText,
+    ctaText: options.ctaText,
+    fontStyle: options.fontStyle,
+    sourceHint: options.sourceHint,
+    customText: Boolean(options.hookText || options.ctaText),
   });
   const outputNames = result.status.outputVideos.slice(0, options.count).map((video) => video.name);
   const summary = [
     "",
     `Listo. Procesé ${options.count} video${options.count === 1 ? "" : "s"} de promo de ${options.targetSeconds}s.`,
+    options.sourceHint ? `Fuente: ${options.sourceHint}.` : null,
     `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
     `Carpeta lista: ${result.status.outputDir}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   return {
     summary,
     outputDir: result.status.outputDir,
     outputVideos: outputNames,
   };
+}
+
+function formatPromoVideoSourceQuestion(error: PromoVideoSourceError): string {
+  const options = error.suggestions.length
+    ? `\n\nCarpetas que veo: ${error.suggestions.slice(0, 12).map((folder) => `"${folder}"`).join(", ")}.`
+    : "";
+  return `No encontre la carpeta "${error.requested}". Confirmame cual carpeta quieres usar y lo corro de nuevo.${options}`;
 }
 
 async function executeIfAlreadyApproved(
@@ -471,7 +550,7 @@ COMANDOS DISPONIBLES:
 - [CREAR_RECORDATORIO: {"message": "Mensaje a enviar", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]}]
 - [ELIMINAR_RECORDATORIO: {"id": "reminder-id"}]
 - [LISTAR_RECORDATORIOS: {}]
-- [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3}]
+- [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3, "hookText": "...", "ctaText": "...", "fontStyle": "bold|clean|luxury|impact|neon", "sourceHint": "Pool parties"}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
@@ -504,7 +583,12 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 - Si el usuario pide "créame 5 videos para TikTok de promo", "sácame reels de promo", "hazme más edits", usa PROMO_VIDEO_GENERATE.
 - count es cuántos videos finales quiere. Si no dice cantidad, usa 5.
 - targetSeconds normalmente es 15 para TikTok/Reels/Shorts, salvo que el usuario pida otra duración.
+- Si el usuario indica texto, ponlo en hookText. Si indica CTA/botón/abajo, ponlo en ctaText.
+- Si pide typo/fuente/letra, usa fontStyle: luxury para elegante/premium, clean para minimal/simple, impact para grande/fuerte, neon para club/brillante, bold por defecto.
+- Si dice "videos de la carpeta X", "usa carpeta X" o pasa una ruta de carpeta, pon eso en sourceHint.
+- Si no estás seguro de la carpeta, pregunta antes de generar. Nunca uses otra carpeta como fallback cuando el usuario pidió una específica.
 - El sistema escoge templates automáticamente según el contenido/carpeta: party, dinner, pool, yacht, guestlist, nightlife.
+- No uses screenshots, screen recordings o capturas; el editor solo debe tomar videos reales de promo.
 - No inventes que publicaste en redes; por ahora quedan listos para descargar/subir manualmente.
 
 ## ANÁLISIS DE IMÁGENES DE BROKER/CARTERA:
@@ -586,6 +670,16 @@ export function registerAssistantRoutes(app: Express): void {
             console.error("Error saving direct promo video assistant response:", historyError);
           });
         } catch (e: any) {
+          if (e instanceof PromoVideoSourceError) {
+            const question = formatPromoVideoSourceQuestion(e);
+            res.write(`data: ${JSON.stringify({ content: `\n\n${question}`, promoVideoNeedsSourceConfirmation: true, suggestions: e.suggestions })}\n\n`);
+            await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\n${question}`).catch((historyError) => {
+              console.error("Error saving direct promo video source question:", historyError);
+            });
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+            return;
+          }
           const errorText = e.message || "No pude generar los videos de promo";
           res.write(`data: ${JSON.stringify({ promoVideoError: errorText })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\nError: ${errorText}`).catch((historyError) => {
@@ -720,6 +814,14 @@ export function registerAssistantRoutes(app: Express): void {
           })}\n\n`);
         } catch (e: any) {
           console.error("Error generating promo videos from assistant:", e);
+          if (e instanceof PromoVideoSourceError) {
+            res.write(`data: ${JSON.stringify({
+              content: `\n\n${formatPromoVideoSourceQuestion(e)}`,
+              promoVideoNeedsSourceConfirmation: true,
+              suggestions: e.suggestions,
+            })}\n\n`);
+            continue;
+          }
           res.write(`data: ${JSON.stringify({
             promoVideoError: e.message || "No pude generar los videos de promo",
           })}\n\n`);

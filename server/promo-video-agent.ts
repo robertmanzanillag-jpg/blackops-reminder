@@ -4,6 +4,7 @@ import path from "path";
 
 export type PromoVideoStyle = "full" | "post";
 export type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
+export type PromoVideoFontStyle = "bold" | "clean" | "luxury" | "impact" | "neon";
 
 export interface PromoVideoFile {
   name: string;
@@ -40,6 +41,10 @@ export interface PromoVideoRunOptions {
   maxVideos: number;
   hookText?: string;
   ctaText?: string;
+  fontStyle?: PromoVideoFontStyle;
+  customText?: boolean;
+  sourceDir?: string;
+  sourceHint?: string;
 }
 
 export interface PromoVideoRunResult {
@@ -64,6 +69,18 @@ export interface PromoVideoAutoRunResult extends PromoVideoRunResult {
 interface PromoVideoConfig {
   sourceDir: string | null;
   lastAutoRunDate?: string | null;
+}
+
+export class PromoVideoSourceError extends Error {
+  requested: string;
+  suggestions: string[];
+
+  constructor(message: string, requested: string, suggestions: string[] = []) {
+    super(message);
+    this.name = "PromoVideoSourceError";
+    this.requested = requested;
+    this.suggestions = suggestions;
+  }
 }
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
@@ -146,6 +163,12 @@ function isVideoFile(filePath: string): boolean {
   return VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
+function isPromoVideoCandidate(filePath: string): boolean {
+  const name = path.basename(filePath).toLowerCase();
+  if (!isVideoFile(filePath)) return false;
+  return !/(screenshot|screen[-_\s]?recording|screenrecording|captura[-_\s]?de[-_\s]?pantalla)/i.test(name);
+}
+
 async function listVideoFiles(dir: string, options: { create?: boolean; recursive?: boolean } = { create: true }): Promise<PromoVideoFile[]> {
   if (options.create !== false) {
     await mkdir(dir, { recursive: true });
@@ -162,7 +185,7 @@ async function listVideoFiles(dir: string, options: { create?: boolean; recursiv
             return listVideoFiles(fullPath, { create: false, recursive: true });
           }
 
-          return isVideoFile(fullPath) ? [{
+          return isPromoVideoCandidate(fullPath) ? [{
             name: path.relative(dir, fullPath),
             path: fullPath,
             sizeMb: 0,
@@ -192,7 +215,7 @@ async function listVideoFiles(dir: string, options: { create?: boolean; recursiv
 
   const files = await Promise.all(
     entries
-      .filter((entry) => isVideoFile(entry.fullPath))
+      .filter((entry) => isPromoVideoCandidate(entry.fullPath))
       .map(async (entry) => {
         const fullPath = entry.fullPath;
         const fileStat = await stat(fullPath);
@@ -261,20 +284,96 @@ function sanitizeFilenamePart(value: string): string {
     .slice(0, 120) || "video";
 }
 
-export async function importPromoVideosFromSource(input: { limit?: unknown } = {}): Promise<PromoVideoImportResult> {
+async function findCaseInsensitiveSubdir(parent: string, hint: string): Promise<string | null> {
+  const wanted = hint.toLowerCase().replace(/\s+/g, " ").trim();
+  try {
+    const entries = await readdir(parent, { withFileTypes: true });
+    const direct = entries.find((entry) => entry.isDirectory() && entry.name.toLowerCase() === wanted);
+    if (direct) return path.join(parent, direct.name);
+
+    const loose = entries.find((entry) => {
+      const name = entry.name.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+      return entry.isDirectory() && (name === wanted || name.includes(wanted) || wanted.includes(name));
+    });
+    return loose ? path.join(parent, loose.name) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getPromoVideoSourceFolders(): Promise<string[]> {
+  const config = await readPromoConfig();
+  if (!config.sourceDir) return [];
+
+  try {
+    const entries = await readdir(config.sourceDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+export async function resolvePromoVideoSourceDir(source: unknown): Promise<string | null> {
+  if (typeof source !== "string" || !source.trim()) return null;
+  const raw = source.trim().replace(/^["'“”]+|["'“”]+$/g, "");
+  const config = await readPromoConfig();
+  const expanded = raw.replace(/^~(?=$|\/)/, process.env.HOME || "~");
+
+  const candidates: string[] = [];
+  if (path.isAbsolute(expanded)) {
+    candidates.push(path.resolve(expanded));
+  } else {
+    if (config.sourceDir) {
+      candidates.push(path.resolve(config.sourceDir, expanded));
+      const matched = await findCaseInsensitiveSubdir(config.sourceDir, expanded);
+      if (matched) candidates.push(matched);
+    }
+    candidates.push(path.resolve(expanded));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const sourceStat = await stat(candidate);
+      if (sourceStat.isDirectory()) return candidate;
+    } catch {}
+  }
+
+  throw new PromoVideoSourceError(
+    `No encontre la carpeta de videos: ${raw}`,
+    raw,
+    await getPromoVideoSourceFolders(),
+  );
+}
+
+export async function importPromoVideosFromSource(input: { limit?: unknown; sourceDir?: unknown; sourceHint?: unknown } = {}): Promise<PromoVideoImportResult> {
   await ensurePromoVideoDirs();
   const config = await readPromoConfig();
-  if (!config.sourceDir) {
+  const requestedSource = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint).catch((error) => {
+    throw error;
+  });
+  const sourceDir = requestedSource || config.sourceDir;
+  if (!sourceDir) {
     throw new Error("Primero indica una carpeta origen.");
   }
 
-  const sourceVideos = await listVideoFiles(config.sourceDir, { create: false, recursive: true });
+  const sourceVideos = await listVideoFiles(sourceDir, { create: false, recursive: true });
+  if (sourceVideos.length === 0) {
+    throw new PromoVideoSourceError(
+      `No encontre videos .mp4, .mov o .m4v en la carpeta: ${sourceDir}`,
+      String(input.sourceDir || input.sourceHint || sourceDir),
+      await getPromoVideoSourceFolders(),
+    );
+  }
+
   const limit = clampInteger(input.limit, sourceVideos.length, 1, 5000);
   let imported = 0;
   let skipped = 0;
 
   for (const video of sourceVideos.slice(0, limit)) {
-    const relative = path.relative(config.sourceDir, video.path);
+    const relative = path.relative(sourceDir, video.path);
     const destinationName = sanitizeFilenamePart(relative.replace(/[\\/]+/g, "__"));
     const destination = path.join(INPUT_DIR, destinationName);
     try {
@@ -316,6 +415,12 @@ export function normalizePromoVideoOptions(input: Partial<PromoVideoRunOptions>)
     maxVideos: clampInteger(input.maxVideos, 0, 0, 5000),
     hookText: (input.hookText || template.hook).trim().slice(0, 80),
     ctaText: (input.ctaText || template.cta).trim().slice(0, 80),
+    fontStyle: ["bold", "clean", "luxury", "impact", "neon"].includes(String(input.fontStyle))
+      ? input.fontStyle as PromoVideoFontStyle
+      : "bold",
+    customText: Boolean(input.customText || input.hookText?.trim() || input.ctaText?.trim()),
+    sourceDir: input.sourceDir,
+    sourceHint: input.sourceHint,
   };
 }
 
@@ -338,6 +443,9 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
         MAX_VIDEOS: String(options.maxVideos),
         HOOK_TEXT: options.hookText || "",
         CTA_TEXT: options.ctaText || "",
+        FONT_STYLE: options.fontStyle || "bold",
+        CUSTOM_TEXT: options.customText ? "1" : "0",
+        INPUT_SOURCE_DIR: options.sourceDir || "",
       },
     });
 
@@ -365,7 +473,11 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
 }
 
 export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions> = {}): Promise<PromoVideoAutoRunResult> {
-  const importResult = await importPromoVideosFromSource({ limit: input.maxVideos || 5 });
+  const resolvedSourceDir = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint);
+  const importResult = await importPromoVideosFromSource({
+    limit: input.maxVideos || 5,
+    sourceDir: resolvedSourceDir || undefined,
+  });
   const runResult = await runPromoVideoEdit({
     objective: "auto",
     clipsPerVideo: 1,
@@ -373,6 +485,12 @@ export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions
     cuts: input.cuts || 3,
     style: input.style || "full",
     maxVideos: input.maxVideos || 5,
+    hookText: input.hookText,
+    ctaText: input.ctaText,
+    fontStyle: input.fontStyle,
+    customText: Boolean(input.customText || input.hookText?.trim() || input.ctaText?.trim()),
+    sourceDir: resolvedSourceDir || undefined,
+    sourceHint: input.sourceHint,
   });
 
   const config = await readPromoConfig();

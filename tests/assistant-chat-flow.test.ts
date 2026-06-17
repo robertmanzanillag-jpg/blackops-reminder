@@ -42,6 +42,35 @@ test("web assistant routes natural promo video requests to the local video agent
   assert.match(direct.command, /"platform":"tiktok"/);
 });
 
+test("web assistant extracts promo video text and typography from natural requests", () => {
+  const direct = buildDirectPromoVideoCommand(
+    'hazme 5 videos para TikTok de promo que diga "NEW APP FOR PROMO" cta "JOIN THE GUESTLIST" con typo luxury'
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /"hookText":"NEW APP FOR PROMO"/);
+  assert.match(direct.command, /"ctaText":"JOIN THE GUESTLIST"/);
+  assert.match(direct.command, /"fontStyle":"luxury"/);
+});
+
+test("web assistant extracts promo video source folder from natural requests", () => {
+  const direct = buildDirectPromoVideoCommand(
+    'hazme 5 videos para TikTok de promo de la carpeta Pool parties que diga "POOL PARTY THIS WEEK"'
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /"sourceHint":"Pool parties"/);
+  assert.match(direct.content, /carpeta "Pool parties"/);
+});
+
+test("web assistant asks for confirmation when promo source is unclear", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(source, /PromoVideoSourceError/);
+  assert.match(source, /promoVideoNeedsSourceConfirmation/);
+  assert.match(source, /Confirmame cual carpeta quieres usar/);
+});
+
 test("web assistant routes Black Room website link add when URL is present", () => {
   const direct = buildDirectBlackRoomCommand(
     "AGREGA BLACK ROOM & FRIENDS A LOS LINKS DE BLACK ROOM https://kongnightlife.com/p/bio-friends"

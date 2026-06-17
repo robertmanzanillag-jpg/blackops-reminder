@@ -1,6 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, Clock3, Play, ShieldCheck, X } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { queryClient } from "@/lib/queryClient";
 
 type PendingAction = {
@@ -11,6 +13,8 @@ type PendingAction = {
   riskLevel: "low" | "medium" | "high" | "critical";
   status: string;
   createdAt: string;
+  input?: Record<string, unknown>;
+  editedInput?: Record<string, unknown>;
 };
 
 function postAction(id: string, action: "approve" | "reject" | "execute") {
@@ -23,6 +27,55 @@ function postAction(id: string, action: "approve" | "reject" | "execute") {
     if (!response.ok) throw new Error(data.error || "No se pudo actualizar la aprobacion");
     return data;
   });
+}
+
+function editAction(id: string, editedInput: Record<string, unknown>) {
+  return fetch(`/api/pending-actions/${id}/edit`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ editedInput, note: "Nombre del DJ desde Dashboard CEO" }),
+  }).then(async (response) => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "No se pudo guardar el nombre");
+    return data;
+  });
+}
+
+function RadioDjNameResolver({
+  action,
+  disabled,
+  onSave,
+}: {
+  action: PendingAction;
+  disabled: boolean;
+  onSave: (id: string, editedInput: Record<string, unknown>) => void;
+}) {
+  const currentName = String(action.editedInput?.djName || "");
+  const [djName, setDjName] = useState(currentName);
+  const baseInput = {
+    ...(action.input || {}),
+    ...(action.editedInput || {}),
+  };
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row">
+      <Input
+        value={djName}
+        onChange={(event) => setDjName(event.target.value)}
+        placeholder="Nombre del DJ"
+        className="h-9 border-zinc-800 bg-zinc-950 text-sm text-white placeholder:text-zinc-600"
+      />
+      <Button
+        size="sm"
+        onClick={() => onSave(action.id, { ...baseInput, djName: djName.trim() })}
+        disabled={disabled || djName.trim().length < 2}
+        className="bg-zinc-100 text-zinc-950 hover:bg-white"
+      >
+        <Check className="mr-1 h-3.5 w-3.5" />
+        Guardar nombre
+      </Button>
+    </div>
+  );
 }
 
 export function PendingActionsPanel() {
@@ -39,6 +92,13 @@ export function PendingActionsPanel() {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["investments"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, editedInput }: { id: string; editedInput: Record<string, unknown> }) => editAction(id, editedInput),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
     },
   });
 
@@ -91,7 +151,7 @@ export function PendingActionsPanel() {
                   <p className="mt-1 text-[11px] text-zinc-600">{action.actionType}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  {action.status !== "approved" ? (
+                  {action.actionType === "radio_edit.resolve_dj_name" ? null : action.status !== "approved" ? (
                     <Button
                       size="sm"
                       onClick={() => mutation.mutate({ id: action.id, action: "approve" })}
@@ -124,12 +184,19 @@ export function PendingActionsPanel() {
                   </Button>
                 </div>
               </div>
+              {action.actionType === "radio_edit.resolve_dj_name" && action.status !== "approved" && (
+                <RadioDjNameResolver
+                  action={action}
+                  disabled={editMutation.isPending}
+                  onSave={(id, editedInput) => editMutation.mutate({ id, editedInput })}
+                />
+              )}
             </div>
           ))}
-          {mutation.isError && (
+          {(mutation.isError || editMutation.isError) && (
             <p className="flex items-center gap-2 text-xs text-amber-300">
               <AlertTriangle className="h-3.5 w-3.5" />
-              {(mutation.error as Error).message}
+              {((mutation.error || editMutation.error) as Error).message}
             </p>
           )}
         </div>
@@ -137,4 +204,3 @@ export function PendingActionsPanel() {
     </section>
   );
 }
-

@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bot,
   BriefcaseBusiness,
+  Clapperboard,
   Code2,
   X,
   Github,
@@ -146,6 +147,24 @@ const agents = [
     bubblePosition: "right-[9%] top-[49%]",
   },
   {
+    id: "clippers",
+    name: "Clippers",
+    role: "Clips virales",
+    href: "/clippers",
+    icon: Clapperboard,
+    station: "War room social",
+    status: "Planeando",
+    activity: "Organizando cuentas, fuentes permitidas, drafts diarios y reportes de views",
+    shortAction: "Clips",
+    mode: "working",
+    color: "from-amber-300 to-rose-400",
+    outfit: "bg-amber-500",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[58%] top-[58%]",
+    bubblePosition: "right-[28%] top-[47%]",
+  },
+  {
     id: "automations",
     name: "Autos",
     role: "Rutinas",
@@ -242,6 +261,9 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
   if (contact.name === "Radio") {
     return `${opener}Lo manejo como Black Room: evento, calendario, flyer/media y ejecucion. Si es un evento, dime fecha, venue, assets disponibles y que falta publicar.`;
   }
+  if (contact.name === "Clippers") {
+    return `${opener}Lo manejo como sistema de clips: cuentas por categoria, fuentes con permiso, drafts diarios, programacion y reportes. Para escalar bien necesito conectar plataformas oficiales y una allowlist clara de videos/creadores.`;
+  }
   if (contact.name === "Autos") {
     return `${opener}Puedo convertir esto en una rutina. Dime cada cuanto debe correr, que condicion dispara la accion y como quieres que te avise si falla.`;
   }
@@ -270,6 +292,7 @@ function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.name === "GitHub") return "Estoy mirando el lado de repos, PRs y branches. Dime que repo o cambio quieres revisar.";
   if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
   if (contact.name === "Radio") return "Estoy en Black Room. Dime si hablamos de evento, flyer, calendario o media.";
+  if (contact.name === "Clippers") return "Estoy en el war room social. Puedo preparar cuentas, drafts diarios, fuentes permitidas y reportes de views.";
   if (contact.name === "Control") return "Estoy aqui para revisar permisos, riesgo y acciones sensibles antes de ejecutar.";
   if (contact.name === "KONG AI") return "Estoy conectado al contexto de Kong. Dime si el tema es eventos, mesas, promoters, venues o usuarios.";
   if (contact.name === "Promoters + Mesas") return "Estoy con promoters y mesas. Dime quien falta por confirmar o que seguimiento quieres hacer.";
@@ -307,6 +330,11 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
     { from: "radio", to: "assistant", text: "Tengo flyers, DJs y calendario creativo en la mesa." },
     { from: "assistant", to: "radio", text: "Yo te ayudo a convertir fechas y notas en tareas concretas." },
     { from: "ceo", to: "radio", text: "Que se vea bien, pero que tambien salga a tiempo." },
+  ],
+  clippers: [
+    { from: "clippers", to: "ceo", text: "Tengo meta de 1M views por cuenta por semana y necesito fuentes con permiso para escalar." },
+    { from: "ceo", to: "clippers", text: "Prioriza momentum, reportes claros y crecimiento sin quemar cuentas." },
+    { from: "control", to: "clippers", text: "Antes de autopostear, verifico permisos, credenciales oficiales y riesgo de strikes." },
   ],
   automations: [
     { from: "automations", to: "control", text: "Estoy listo para correr rutinas, pero necesito permisos cuando haya impacto real." },
@@ -442,42 +470,42 @@ function AgentPerson({
     <motion.button
       type="button"
       onClick={() => onSelect(agent)}
-      className={cn("absolute z-30 flex h-32 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
-      animate={{ y: selected ? [0, -4, 0] : [0, -2, 0] }}
+      className={cn("absolute z-30 flex h-24 w-16 -translate-x-1/2 -translate-y-1/2 flex-col items-center", agent.position)}
+      animate={{ y: selected ? [0, -5, 0] : [0, -2, 0] }}
       transition={{ duration: selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
       aria-label={`Ver agente ${agent.name}`}
       data-testid={`agent-avatar-${agent.id}`}
     >
-      <span className="absolute bottom-2 h-5 w-16 rounded-full bg-black/45 blur-md" />
-      <span className="relative flex h-24 w-16 flex-col items-center">
+      <span className="absolute bottom-3 h-4 w-12 rounded-full bg-black/50 blur-md" />
+      <span className="relative flex h-[72px] w-12 flex-col items-center">
         <span
           className={cn(
-            "absolute top-0 h-11 w-11 rounded-[18px] border border-white/20 bg-gradient-to-br shadow-[inset_0_1px_12px_rgba(255,255,255,0.14),0_16px_32px_rgba(0,0,0,0.35)]",
+            "absolute top-0 h-9 w-9 rounded-[16px] border border-white/25 bg-gradient-to-br shadow-[inset_0_1px_12px_rgba(255,255,255,0.18),0_16px_32px_rgba(0,0,0,0.35)]",
             agent.color,
             selected && "ring-2 ring-cyan-100"
           )}
         >
-          <span className="absolute left-1/2 top-4 h-3.5 w-7 -translate-x-1/2 rounded-full bg-[#07111f] shadow-[inset_0_0_8px_rgba(34,211,238,0.45)]">
-            <span className="absolute left-1.5 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
-            <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
+          <span className="absolute left-1/2 top-3.5 h-3 w-6 -translate-x-1/2 rounded-full bg-[#06101d] shadow-[inset_0_0_8px_rgba(34,211,238,0.55)]">
+            <span className="absolute left-1.5 top-1 h-1 w-1 rounded-full bg-cyan-100" />
+            <span className="absolute right-1.5 top-1 h-1 w-1 rounded-full bg-cyan-100" />
           </span>
         </span>
         <span
           className={cn(
-            "absolute top-10 h-12 w-12 rounded-[20px] border border-white/20 bg-gradient-to-br shadow-[0_18px_36px_rgba(0,0,0,0.38)]",
+            "absolute top-8 h-10 w-10 rounded-[18px] border border-white/20 bg-gradient-to-br shadow-[0_18px_36px_rgba(0,0,0,0.38)]",
             agent.color
           )}
         >
-          <span className="absolute -left-3 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit" />
-          <span className="absolute -right-3 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit" />
-          <span className="absolute left-1/2 top-3 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl border border-black/15 bg-black/15 text-white">
-            <Icon className="h-3.5 w-3.5" />
+          <span className="absolute -left-2 top-2.5 h-6 w-2.5 rounded-full border border-white/20 bg-inherit" />
+          <span className="absolute -right-2 top-2.5 h-6 w-2.5 rounded-full border border-white/20 bg-inherit" />
+          <span className="absolute left-1/2 top-2.5 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-xl border border-black/15 bg-black/18 text-white">
+            <Icon className="h-3 w-3" />
           </span>
         </span>
-        <span className="absolute top-[82px] left-5 h-5 w-2 rounded-b bg-[#101827]" />
-        <span className="absolute top-[82px] right-5 h-5 w-2 rounded-b bg-[#101827]" />
+        <span className="absolute top-[66px] left-3.5 h-3.5 w-1.5 rounded-b bg-[#101827]" />
+        <span className="absolute top-[66px] right-3.5 h-3.5 w-1.5 rounded-b bg-[#101827]" />
       </span>
-      <span className={cn("mt-1 max-w-24 truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#090d16]/90 text-white")}>
+      <span className={cn("mt-1 max-w-20 truncate rounded-xl border px-2 py-0.5 text-[9px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#070b12]/90 text-white")}>
         {agent.name}
       </span>
     </motion.button>
@@ -641,7 +669,7 @@ export default function AgentsOfficePage() {
     const text = `${project.name} ${project.description || ""} ${project.githubRepo || ""}`.toLowerCase();
     return text.includes("black room") || text.includes("blackroom");
   });
-  const appAgentPositions = ["left-[41%] top-[82%]", "left-[50%] top-[82%]", "left-[55%] top-[82%]", "left-[46%] top-[82%]"];
+  const appAgentPositions = ["left-[64%] top-[56%]", "left-[72%] top-[56%]", "left-[78%] top-[60%]", "left-[58%] top-[61%]"];
   const appAgents = useMemo(() => {
     return connectedProjects
       .filter((project) => project.id !== kongProject?.id && project.id !== blackRoomProject?.id)
@@ -769,35 +797,38 @@ export default function AgentsOfficePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#05060a] text-foreground">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05060a]/90 px-4 py-4 backdrop-blur md:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link href="/">
-              <Button variant="ghost" size="icon" data-testid="button-back-home">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold text-white md:text-2xl">Oficina de agentes</h1>
-              <p className="truncate text-sm text-zinc-500">{totalVisibleAgents} agentes visibles en vivo</p>
-            </div>
-          </div>
-
-          <Link href={selectedAgent.href}>
-            <Button className="h-10 rounded-full bg-zinc-100 px-4 text-zinc-950 hover:bg-white" data-testid="button-open-selected-agent">
-              <SelectedIcon className="mr-2 h-4 w-4" />
-              Abrir {selectedAgent.name}
+    <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
+      <section className="relative h-full overflow-hidden bg-[radial-gradient(circle_at_58%_7%,rgba(34,211,238,0.12),transparent_30%),linear-gradient(90deg,rgba(148,163,184,0.04)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.04)_1px,transparent_1px)] bg-[size:auto,64px_64px,64px_64px]">
+        <div className="absolute inset-y-0 left-0 z-[95] hidden w-[74px] border-r border-white/10 bg-[#070a10]/96 px-3 py-5 shadow-2xl shadow-black/50 md:flex md:flex-col md:items-center">
+          <Link href="/">
+            <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
+          <div className="flex flex-1 flex-col items-center gap-3">
+            {[Bot, Sparkles, Code2, Github, Radio, Monitor].map((Icon, index) => (
+              <button
+                key={`office-rail-${index}`}
+                type="button"
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-2xl border text-slate-400 transition hover:text-white",
+                  index === 0 ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-transparent hover:border-white/10 hover:bg-white/[0.04]"
+                )}
+                aria-label={`Herramienta ${index + 1}`}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10">
+              <Bot className="h-5 w-5 text-cyan-200" />
+            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+          </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-[1780px] space-y-5 px-4 py-5 md:px-8">
-        <section className="relative h-[calc(100vh-150px)] min-h-[760px] overflow-hidden rounded-3xl border border-white/10 bg-[#080a10] shadow-2xl shadow-black/60">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_46%_10%,rgba(34,211,238,0.14),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent_38%),linear-gradient(90deg,rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:auto,auto,56px_56px,56px_56px]" />
-
-          <aside className="absolute left-5 top-5 z-[80] hidden h-[calc(100%-40px)] w-[230px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/50 backdrop-blur lg:block">
+        <aside className="absolute bottom-4 left-4 top-4 z-[80] hidden w-[260px] rounded-[28px] border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/50 backdrop-blur md:left-[88px] md:block">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10">
                 <Bot className="h-5 w-5 text-cyan-200" />
@@ -834,9 +865,9 @@ export default function AgentsOfficePage() {
                 </div>
               </div>
             </div>
-          </aside>
+        </aside>
 
-          <div className="absolute left-5 right-5 top-5 z-[75] flex items-center justify-between gap-4 lg:left-[270px]">
+        <div className="absolute left-4 right-4 top-5 z-[75] flex items-center justify-between gap-4 md:left-[374px]">
             <div className="flex h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur lg:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
               <span>Type a command or search...</span>
@@ -862,9 +893,9 @@ export default function AgentsOfficePage() {
               </div>
               <p className="mt-2 text-[11px] text-emerald-300">{agents.length} agents active</p>
             </div>
-          </div>
+        </div>
 
-          <div className="absolute bottom-5 left-5 right-5 z-[80] h-[104px] rounded-3xl border border-white/10 bg-[#0c1018]/94 p-4 shadow-2xl shadow-black/50 backdrop-blur lg:left-[270px]">
+        <div className="absolute bottom-5 left-4 right-4 z-[80] h-[116px] rounded-3xl border border-white/10 bg-[#0c1018]/94 p-4 shadow-2xl shadow-black/50 backdrop-blur md:left-[374px] lg:right-[360px]">
             <div className="mb-3 flex gap-6 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <span className="text-white">Terminal</span>
               <span>Output</span>
@@ -882,38 +913,89 @@ export default function AgentsOfficePage() {
                 <p className="mt-1 text-slate-500">{selectedAgent.activity}</p>
               </div>
             </div>
+        </div>
+
+        <div className="relative h-full min-h-[620px] w-full md:ml-[334px] md:w-[calc(100%-334px)]">
+          <div className="absolute left-[5%] top-[12%] h-[63%] w-[78%] rounded-[34px] border border-white/10 bg-[#0b1018] shadow-[0_60px_140px_rgba(0,0,0,0.72)]" />
+          <div className="absolute left-[8%] top-[15%] h-[56%] w-[72%] rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(145deg,#111a26_0%,#0b1018_52%,#06080d_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" />
+          <div className="absolute left-[10%] top-[17%] h-[52%] w-[68%] rounded-[24px] bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:54px_54px]" />
+
+          <div className="absolute left-[10%] top-[17%] h-[36%] w-[4%] rounded-l-3xl border-l border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/3 backdrop-blur" />
+          <div className="absolute left-[10%] top-[17%] h-[5%] w-[68%] rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/10 via-white/6 to-white/10 backdrop-blur" />
+          <div className="absolute right-[22%] top-[17%] h-[52%] w-[4%] rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/10 to-white/3 backdrop-blur" />
+
+          <div className="absolute left-[18%] top-[23%] text-left">
+            <p className="text-3xl font-black tracking-[0.18em] text-white/80">SAMS</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-100/50">Agentic Office</p>
           </div>
 
-          <div className="relative h-full min-h-[620px] w-full lg:ml-[245px] lg:w-[calc(100%-245px)]">
-          <div className="absolute left-[4%] top-[15%] h-[65%] w-[88%] rotate-x-0 rounded-[34px] border border-white/10 bg-[#0b101a] shadow-[0_55px_120px_rgba(0,0,0,0.55)]" />
-          <div className="absolute left-[6%] top-[18%] h-[59%] w-[84%] rounded-[28px] bg-[radial-gradient(circle_at_24%_16%,rgba(34,211,238,0.12),transparent_28%),repeating-linear-gradient(0deg,#0e1420_0_26px,#111a2a_26px_52px)]" />
+          <div className="absolute left-[41%] top-[19%] h-28 w-48 rounded-2xl border border-white/10 bg-[#1d2430] shadow-2xl shadow-black/40">
+            <div className="absolute inset-3 rounded-xl border border-cyan-100/10 bg-[#111827]">
+              <div className="absolute left-4 top-4 h-2 w-28 rounded bg-cyan-100/30" />
+              <div className="absolute left-4 top-9 h-2 w-20 rounded bg-white/15" />
+              <div className="absolute left-4 top-14 h-2 w-32 rounded bg-emerald-200/25" />
+            </div>
+          </div>
+          <div className="absolute left-[57%] top-[20%] h-28 w-48 rounded-2xl border border-white/10 bg-[#171f2b] shadow-2xl shadow-black/40">
+            <div className="grid h-full grid-cols-3 gap-2 p-3">
+              {["Backlog", "Doing", "Done"].map((label, index) => (
+                <div key={label} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                  <p className="text-[8px] uppercase text-slate-400">{label}</p>
+                  <div className={cn("mt-2 h-5 rounded", index === 0 && "bg-rose-300/35", index === 1 && "bg-amber-300/35", index === 2 && "bg-emerald-300/35")} />
+                  <div className="mt-2 h-4 rounded bg-white/10" />
+                </div>
+              ))}
+            </div>
+          </div>
 
-          <Cubicle className="left-[11%] top-[23%] h-[190px] w-[20%]" label="Recepcion" tone="bg-[#101827]/62" />
-          <Cubicle className="left-[35%] top-[22%] h-[240px] w-[25%]" label="Kong room" tone="bg-[#111827]/64" />
-          <Cubicle className="right-[12%] top-[23%] h-[210px] w-[26%]" label="Dev room" tone="bg-[#0f172a]/66" />
-          <Cubicle className="left-[12%] top-[50%] h-[190px] w-[20%]" label="Finance" tone="bg-[#111827]/62" />
-          <Cubicle className="left-[38%] top-[53%] h-[185px] w-[20%]" label="Ops room" tone="bg-[#0f172a]/62" />
-          <Cubicle className="right-[13%] top-[52%] h-[190px] w-[25%]" label="Radio / Black Room" tone="bg-[#111827]/66" />
-          <Cubicle className="left-[18%] top-[73%] h-[116px] w-[24%]" label="Break room" tone="bg-[#101827]/70" />
-          <Cubicle className="right-[13%] top-[74%] h-[112px] w-[25%]" label="Security / Control" tone="bg-[#111827]/70" />
+          <div className="absolute left-[28%] top-[40%] h-24 w-48 rounded-2xl border border-white/10 bg-[#2b2018] shadow-2xl shadow-black/50">
+            <div className="absolute left-6 top-4 h-10 w-32 rounded-xl border border-cyan-100/10 bg-[#0b111b]" />
+            <div className="absolute left-16 top-16 h-2 w-16 rounded bg-white/15" />
+          </div>
+          <div className="absolute left-[21%] top-[36%] h-20 w-24 rounded-2xl border border-white/10 bg-[#1b2230] shadow-xl">
+            <div className="absolute left-3 top-3 h-10 w-16 rounded-lg bg-cyan-200/25" />
+            <div className="absolute bottom-3 left-4 h-2 w-12 rounded bg-white/20" />
+          </div>
+          <div className="absolute left-[63%] top-[39%] h-24 w-44 rounded-2xl border border-white/10 bg-[#1a2230] shadow-2xl shadow-black/50">
+            <div className="absolute left-5 top-5 h-12 w-20 rounded-xl bg-cyan-200/25" />
+            <div className="absolute right-5 top-5 h-12 w-9 rounded-xl bg-white/10" />
+            <div className="absolute bottom-4 left-8 h-2 w-24 rounded bg-white/15" />
+          </div>
+          <div className="absolute left-[67%] top-[28%] h-24 w-9 rounded-xl border border-white/10 bg-gradient-to-b from-slate-500/40 to-slate-900 shadow-xl" />
+          <div className="absolute left-[71%] top-[30%] h-20 w-24">
+            <div className="absolute left-0 top-6 h-14 w-2 rounded bg-slate-500" />
+            <div className="absolute left-10 top-6 h-14 w-2 rounded bg-slate-500" />
+            <div className="absolute left-0 top-7 h-1 w-12 rounded bg-cyan-100/30" />
+            <div className="absolute left-0 top-14 h-1 w-12 rounded bg-cyan-100/30" />
+          </div>
 
-          <Workstation className="left-[13%] top-[36%]" wide />
-          <Workstation className="left-[44%] top-[34%]" wide />
-          <Workstation className="left-[55%] top-[34%]" wide />
-          <Workstation className="left-[72%] top-[36%]" wide />
-          <Workstation className="left-[84%] top-[36%]" wide />
-          <Workstation className="left-[15%] top-[66%]" wide />
-          <Workstation className="left-[47%] top-[68%]" wide />
-          <Workstation className="left-[75%] top-[68%]" wide />
-          <BreakRoom className="left-[11%] bottom-[9%] h-[120px] w-[230px]" />
+          <div className="absolute left-[15%] top-[53%] h-20 w-28 rounded-[24px] border border-white/10 bg-[#111827] shadow-xl">
+            <div className="absolute left-5 top-5 h-10 w-10 rounded-full bg-rose-300/25" />
+            <div className="absolute right-4 top-6 h-8 w-12 rounded-xl bg-white/10" />
+          </div>
+          <OfficePlant className="left-[13%] top-[30%]" />
+          <OfficePlant className="left-[52%] top-[32%]" />
+          <OfficePlant className="right-[22%] top-[50%]" />
 
-          <OfficePlant className="left-[30%] top-[42%]" />
-          <OfficePlant className="left-[61%] top-[42%]" />
-          <OfficePlant className="right-[5%] top-[75%]" />
-
-          <div className="absolute left-[42%] top-[14%] flex items-center gap-2 rounded-2xl border border-cyan-300/20 bg-[#090d16]/92 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-2xl shadow-black/40">
-            <Sparkles className="h-4 w-4 text-cyan-200" />
-            AI Office Room
+          <div className="absolute left-[33%] top-[14%] rounded-2xl border border-white/10 bg-[#0c1018]/95 px-4 py-2 text-xs text-white shadow-xl backdrop-blur">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-amber-300" />
+            Whiteboard
+            <span className="block text-[10px] text-slate-500">Ideas & planning</span>
+          </div>
+          <div className="absolute right-[23%] top-[21%] rounded-2xl border border-white/10 bg-[#0c1018]/95 px-4 py-2 text-xs text-white shadow-xl backdrop-blur">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-300" />
+            Kanban Wall
+            <span className="block text-[10px] text-slate-500">Work items active</span>
+          </div>
+          <div className="absolute left-[18%] top-[59%] rounded-2xl border border-white/10 bg-[#0c1018]/95 px-4 py-2 text-xs text-white shadow-xl backdrop-blur">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-cyan-300" />
+            Lounge
+            <span className="block text-[10px] text-slate-500">Idle / catch-up</span>
+          </div>
+          <div className="absolute right-[18%] top-[48%] rounded-2xl border border-white/10 bg-[#0c1018]/95 px-4 py-2 text-xs text-white shadow-xl backdrop-blur">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-300" />
+            Security Gate
+            <span className="block text-[10px] text-slate-500">Access control</span>
           </div>
 
           {agents.map((agent) => (
@@ -1056,8 +1138,6 @@ export default function AgentsOfficePage() {
             </div>
           )}
           </div>
-        </section>
-
         <section className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)_420px]">
           <div className="rounded-lg border border-white/10 bg-zinc-950/80 p-5">
             <div className="flex items-start gap-4">
@@ -1328,7 +1408,7 @@ export default function AgentsOfficePage() {
             </div>
           </div>
         </section>
-      </main>
-    </div>
+      </section>
+      </div>
   );
 }

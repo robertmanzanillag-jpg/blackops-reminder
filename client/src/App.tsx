@@ -11,6 +11,7 @@ import InvestmentDetail from "@/pages/investment-detail";
 import Projects from "@/pages/projects";
 import RadioPage from "@/pages/radio";
 import PromoVideoPage from "@/pages/promo-video";
+import ClippersPage from "@/pages/clippers";
 import AssistantPage from "@/pages/assistant";
 import CodeAgentPage from "@/pages/code-agent";
 import GitHubAgentPage from "@/pages/github-agent";
@@ -117,6 +118,7 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/radio" component={RadioPage} />
         <Route path="/promo-video" component={PromoVideoPage} />
+        <Route path="/clippers" component={ClippersPage} />
         <Route component={NotFound} />
       </Switch>
     </>
