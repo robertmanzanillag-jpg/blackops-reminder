@@ -199,7 +199,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     img.onload = () => {
       setBgImage(img);
     };
-    img.src = "/br-template.png";
+    img.src = "/br-radio-template.png";
   }, []);
 
   // Font ready — wait for Bebas Neue explicitly so canvas uses the correct face

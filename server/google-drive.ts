@@ -1,0 +1,127 @@
+import { Readable } from "stream";
+import { google } from "googleapis";
+import { getGoogleAccessToken, getGoogleOAuthClient } from "./google-calendar";
+
+const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+const ROOT_FOLDER_NAME = "Black Room Radio Templates";
+
+export interface DriveUploadResult {
+  fileId: string;
+  webViewLink: string | null;
+  webContentLink: string | null;
+}
+
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function isDrivePermissionError(error: any): boolean {
+  const status = error?.code || error?.response?.status;
+  const message = String(error?.message || error?.response?.data?.error_description || "");
+  return status === 401 || status === 403 || /insufficient|permission|scope|unauthorized/i.test(message);
+}
+
+function getDriveClient() {
+  return getGoogleAccessToken().then((accessToken) =>
+    google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) })
+  );
+}
+
+async function findFolder(drive: any, name: string, parentId: string): Promise<string | null> {
+  const query = [
+    `mimeType = '${DRIVE_FOLDER_MIME}'`,
+    `name = '${escapeDriveQueryValue(name)}'`,
+    `'${escapeDriveQueryValue(parentId)}' in parents`,
+    "trashed = false",
+  ].join(" and ");
+
+  const response = await drive.files.list({
+    q: query,
+    fields: "files(id, name)",
+    spaces: "drive",
+    pageSize: 1,
+  });
+
+  return response.data.files?.[0]?.id || null;
+}
+
+async function createFolder(drive: any, name: string, parentId: string): Promise<string> {
+  const response = await drive.files.create({
+    requestBody: {
+      name,
+      mimeType: DRIVE_FOLDER_MIME,
+      parents: [parentId],
+    },
+    fields: "id",
+  });
+
+  if (!response.data.id) {
+    throw new Error(`Google Drive did not return an id for folder ${name}`);
+  }
+
+  return response.data.id;
+}
+
+async function findOrCreateFolder(drive: any, name: string, parentId: string): Promise<string> {
+  return (await findFolder(drive, name, parentId)) || createFolder(drive, name, parentId);
+}
+
+export async function ensureRadioDriveFolder(dateFolderName: string): Promise<string> {
+  try {
+    const drive = await getDriveClient();
+    const configuredRootId = process.env.GOOGLE_DRIVE_RADIO_FOLDER_ID;
+    const rootId = configuredRootId || (await findOrCreateFolder(drive, ROOT_FOLDER_NAME, "root"));
+    return findOrCreateFolder(drive, dateFolderName, rootId);
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing.");
+    }
+    throw error;
+  }
+}
+
+export async function uploadRadioTemplatePng(params: {
+  buffer: Buffer;
+  filename: string;
+  folderId: string;
+  existingFileId?: string | null;
+}): Promise<DriveUploadResult> {
+  try {
+    const drive = await getDriveClient();
+    const media = {
+      mimeType: "image/png",
+      body: Readable.from(params.buffer),
+    };
+
+    const response = params.existingFileId
+      ? await drive.files.update({
+          fileId: params.existingFileId,
+          media,
+          requestBody: { name: params.filename },
+          fields: "id, webViewLink, webContentLink",
+        })
+      : await drive.files.create({
+          requestBody: {
+            name: params.filename,
+            parents: [params.folderId],
+          },
+          media,
+          fields: "id, webViewLink, webContentLink",
+        });
+
+    if (!response.data.id) {
+      throw new Error(`Google Drive did not return an id for ${params.filename}`);
+    }
+
+    return {
+      fileId: response.data.id,
+      webViewLink: response.data.webViewLink || null,
+      webContentLink: response.data.webContentLink || null,
+    };
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing.");
+    }
+    throw error;
+  }
+}

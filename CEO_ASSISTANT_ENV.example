@@ -32,6 +32,17 @@ NEWS_DIGEST_HOUR=9
 EVENING_REVIEW_HOUR=21
 
 # Optional integrations
+# Canva radio templates
+# CANVA_CLIENT_ID=
+# CANVA_CLIENT_SECRET=
+# CANVA_REDIRECT_URI=https://your-domain.example/api/canva/oauth/callback
+# CANVA_RADIO_BRAND_TEMPLATE_ID=EAHMxABUd6M
+# CANVA_RADIO_DJ_FIELD=dj_name
+# CANVA_SCOPES=brandtemplate:content:read brandtemplate:meta:read design:content:read design:content:write
+
+# Google Drive radio templates
+# GOOGLE_DRIVE_RADIO_FOLDER_ID=
+
 # FINNHUB_API_KEY=
 # ZOHO_CLIENT_ID=
 # ZOHO_CLIENT_SECRET=

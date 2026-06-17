@@ -649,6 +649,60 @@ export const insertDjContactSchema = createInsertSchema(djContacts).omit({
 export type DjContact = typeof djContacts.$inferSelect;
 export type InsertDjContact = z.infer<typeof insertDjContactSchema>;
 
+// ==================== RADIO TEMPLATE ASSETS ====================
+
+export const radioTemplateAssets = pgTable("radio_template_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  eventId: text("event_id").notNull(),
+  eventDate: timestamp("event_date").notNull(),
+  slotHour: integer("slot_hour").notNull(),
+  djName: text("dj_name").notNull(),
+  sourceHash: text("source_hash").notNull(),
+  canvaBrandTemplateId: text("canva_brand_template_id"),
+  canvaDesignId: text("canva_design_id"),
+  canvaEditUrl: text("canva_edit_url"),
+  canvaViewUrl: text("canva_view_url"),
+  driveFileId: text("drive_file_id"),
+  driveLink: text("drive_link"),
+  status: text("status").notNull().default("pending").$type<"pending" | "generated" | "failed">(),
+  lastGeneratedAt: timestamp("last_generated_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertRadioTemplateAssetSchema = createInsertSchema(radioTemplateAssets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type RadioTemplateAsset = typeof radioTemplateAssets.$inferSelect;
+export type InsertRadioTemplateAsset = z.infer<typeof insertRadioTemplateAssetSchema>;
+
+// ==================== CANVA OAUTH TOKENS ====================
+
+export const canvaOAuthTokens = pgTable("canva_oauth_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  scope: text("scope"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCanvaOAuthTokenSchema = createInsertSchema(canvaOAuthTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CanvaOAuthToken = typeof canvaOAuthTokens.$inferSelect;
+export type InsertCanvaOAuthToken = z.infer<typeof insertCanvaOAuthTokenSchema>;
+
 // ==================== AGENT ACTIONS (autonomous task execution) ====================
 
 export const agentActions = pgTable("agent_actions", {

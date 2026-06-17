@@ -6,6 +6,8 @@ import { executeAction } from "./agent-actions";
 import { getPortfolioNews } from "./finance";
 import { getSystemUserId } from "./user-context";
 import { generateCeoMorningBrief } from "./ceo-briefing";
+import { ensureDefaultAutomations } from "./automation-registry";
+import { generateRadioTemplatesForDate } from "./radio-template-agent";
 import {
   getDateKeyFromClock,
   getZonedClock as getClockInTimezone,
@@ -56,6 +58,7 @@ let lastEveningNotification: string | null = null;
 let lastWeeklyNotification: string | null = null;
 let lastInsightsNotification: string | null = null;
 let lastRadioAnalysis: string | null = null;
+let lastRadioTemplateGeneration: string | null = null;
 let lastPortfolioReport: string | null = null;
 let lastVideoEditCheck: string | null = null;
 let lastNewsNotification: string | null = null;
@@ -266,6 +269,56 @@ async function sendDailyNewsDigestForUser(userId: string): Promise<{ sent: boole
   return { sent, newsCount: news.length };
 }
 
+async function runRadioTemplateGenerationForUser(userId: string): Promise<string> {
+  const automations = await ensureDefaultAutomations(userId);
+  const automation = automations.find((item) => (item.metadata as any)?.key === "radio-template-generation");
+  const startedAt = new Date();
+
+  try {
+    const result = await generateRadioTemplatesForDate(userId);
+    const status = result.failed > 0 ? "failed" : result.generated > 0 || result.skipped > 0 ? "success" : "skipped";
+    const resultSummary = `Radio templates ${status}: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed for ${result.dateKey}`;
+
+    if (automation) {
+      await storage.createAutomationRun({
+        automationId: automation.id,
+        ownerUserId: userId,
+        startedAt,
+        finishedAt: new Date(),
+        status,
+        triggeredBy: "scheduler",
+        resultSummary,
+        errorMessage: status === "failed" ? result.files.find((file) => file.status === "failed")?.errorMessage || null : null,
+        costEstimate: automation.costEstimate,
+        pendingActionId: null,
+        auditLogId: null,
+        metadata: result,
+      });
+    }
+
+    return resultSummary;
+  } catch (error: any) {
+    const message = error?.message || "Radio template generation failed";
+    if (automation) {
+      await storage.createAutomationRun({
+        automationId: automation.id,
+        ownerUserId: userId,
+        startedAt,
+        finishedAt: new Date(),
+        status: "failed",
+        triggeredBy: "scheduler",
+        resultSummary: "Radio template generation failed",
+        errorMessage: message,
+        costEstimate: automation.costEstimate,
+        pendingActionId: null,
+        auditLogId: null,
+        metadata: { error: message },
+      });
+    }
+    return `Radio templates failed: ${message}`;
+  }
+}
+
 async function checkScheduledReminders(): Promise<void> {
   const now = new Date();
   const clock = getZonedClock(now);
@@ -286,6 +339,13 @@ async function checkScheduledReminders(): Promise<void> {
       const sentCount = results.filter((result) => result.sent).length;
       const insightCount = results.reduce((total, result) => total + result.insights, 0);
       console.log(`[Reminder] Proactive insights processed for ${userIds.length} user(s) - ${sentCount} sent, ${insightCount} insights`);
+    }
+
+    if (shouldRunDailyScheduledJob(clock, 8, 15, lastRadioTemplateGeneration)) {
+      lastRadioTemplateGeneration = dateKey;
+      const userIds = await getEnabledTelegramUserIds();
+      const results = await Promise.all(userIds.map((userId) => runRadioTemplateGenerationForUser(userId)));
+      console.log(`[Agent] Radio template generation processed for ${userIds.length} user(s): ${results.join("; ")}`);
     }
     
     // Daily news digest at 9:00 AM
@@ -382,7 +442,7 @@ export function startReminderScheduler(): void {
   console.log("[Reminder] Starting reminder scheduler...");
   console.log(`[Reminder] Schedule timezone: ${SCHEDULER_TIMEZONE}`);
   console.log(`[Reminder] Schedule: CEO Brief ${CEO_BRIEF_HOUR}:${String(CEO_BRIEF_MINUTE).padStart(2, "0")}, Insights ${INSIGHTS_HOUR}:00, News ${NEWS_DIGEST_HOUR}:00, Evening ${EVENING_REVIEW_HOUR}:00, Weekly Sunday 18:00`);
-  console.log("[Agent] Schedule: Radio Monday 8:00 AM, Portfolio Sunday 10:00 AM, Video Tasks Friday 10:00 AM");
+  console.log("[Agent] Schedule: Radio Monday 8:00 AM, Radio Templates daily 8:15 AM, Portfolio Sunday 10:00 AM, Video Tasks Friday 10:00 AM");
   
   setInterval(checkScheduledReminders, 60 * 1000);
   

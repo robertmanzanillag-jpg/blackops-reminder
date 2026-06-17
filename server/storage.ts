@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
+import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type RadioTemplateAsset, type InsertRadioTemplateAsset, type CanvaOAuthToken, type InsertCanvaOAuthToken, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
+import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
 import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -148,6 +148,14 @@ export interface IStorage {
   createDjContact(userId: string, contact: InsertDjContact): Promise<DjContact>;
   updateDjContact(id: string, updates: Partial<InsertDjContact>): Promise<DjContact>;
   deleteDjContact(id: string): Promise<void>;
+
+  // Radio Template Asset operations
+  getRadioTemplateAssets(userId: string, eventId?: string): Promise<RadioTemplateAsset[]>;
+  getRadioTemplateAsset(userId: string, eventId: string, slotHour: number): Promise<RadioTemplateAsset | undefined>;
+  upsertRadioTemplateAsset(userId: string, asset: InsertRadioTemplateAsset): Promise<RadioTemplateAsset>;
+  updateRadioTemplateAsset(id: string, updates: Partial<RadioTemplateAsset>): Promise<RadioTemplateAsset>;
+  getCanvaOAuthToken(userId: string): Promise<CanvaOAuthToken | undefined>;
+  saveCanvaOAuthToken(userId: string, token: InsertCanvaOAuthToken): Promise<CanvaOAuthToken>;
 
   // Agent Action operations
   getAgentActions(userId: string): Promise<AgentAction[]>;
@@ -1434,6 +1442,120 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDjContact(id: string): Promise<void> {
     await db.delete(djContactsTable).where(eq(djContactsTable.id, id));
+  }
+
+  // Radio Template Asset operations
+  async getRadioTemplateAssets(userId: string, eventId?: string): Promise<RadioTemplateAsset[]> {
+    const conditions = eventId
+      ? and(eq(radioTemplateAssetsTable.userId, userId), eq(radioTemplateAssetsTable.eventId, eventId))
+      : eq(radioTemplateAssetsTable.userId, userId);
+
+    return db
+      .select()
+      .from(radioTemplateAssetsTable)
+      .where(conditions)
+      .orderBy(desc(radioTemplateAssetsTable.eventDate));
+  }
+
+  async getRadioTemplateAsset(userId: string, eventId: string, slotHour: number): Promise<RadioTemplateAsset | undefined> {
+    const result = await db
+      .select()
+      .from(radioTemplateAssetsTable)
+      .where(
+        and(
+          eq(radioTemplateAssetsTable.userId, userId),
+          eq(radioTemplateAssetsTable.eventId, eventId),
+          eq(radioTemplateAssetsTable.slotHour, slotHour)
+        )
+      )
+      .limit(1);
+
+    return result[0];
+  }
+
+  async upsertRadioTemplateAsset(userId: string, asset: InsertRadioTemplateAsset): Promise<RadioTemplateAsset> {
+    const existing = await this.getRadioTemplateAsset(userId, asset.eventId, asset.slotHour);
+    const now = new Date();
+
+    if (existing) {
+      return this.updateRadioTemplateAsset(existing.id, {
+        ...asset,
+        userId,
+        updatedAt: now,
+      } as Partial<RadioTemplateAsset>);
+    }
+
+    const id = randomUUID();
+    const newAsset: RadioTemplateAsset = {
+      ...asset,
+      id,
+      userId,
+      status: (asset.status || "pending") as "pending" | "generated" | "failed",
+      canvaBrandTemplateId: asset.canvaBrandTemplateId || null,
+      canvaDesignId: asset.canvaDesignId || null,
+      canvaEditUrl: asset.canvaEditUrl || null,
+      canvaViewUrl: asset.canvaViewUrl || null,
+      driveFileId: asset.driveFileId || null,
+      driveLink: asset.driveLink || null,
+      errorMessage: asset.errorMessage || null,
+      lastGeneratedAt: asset.lastGeneratedAt || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(radioTemplateAssetsTable).values(newAsset);
+    return newAsset as RadioTemplateAsset;
+  }
+
+  async updateRadioTemplateAsset(id: string, updates: Partial<RadioTemplateAsset>): Promise<RadioTemplateAsset> {
+    await db
+      .update(radioTemplateAssetsTable)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(radioTemplateAssetsTable.id, id));
+
+    const result = await db
+      .select()
+      .from(radioTemplateAssetsTable)
+      .where(eq(radioTemplateAssetsTable.id, id))
+      .limit(1);
+
+    if (!result[0]) throw new Error("Radio template asset not found");
+    return result[0];
+  }
+
+  async getCanvaOAuthToken(userId: string): Promise<CanvaOAuthToken | undefined> {
+    const [token] = await db
+      .select()
+      .from(canvaOAuthTokensTable)
+      .where(eq(canvaOAuthTokensTable.userId, userId))
+      .orderBy(desc(canvaOAuthTokensTable.updatedAt))
+      .limit(1);
+
+    return token;
+  }
+
+  async saveCanvaOAuthToken(userId: string, token: InsertCanvaOAuthToken): Promise<CanvaOAuthToken> {
+    const existing = await this.getCanvaOAuthToken(userId);
+    const now = new Date();
+
+    if (existing) {
+      const [updated] = await db
+        .update(canvaOAuthTokensTable)
+        .set({ ...token, userId, updatedAt: now })
+        .where(eq(canvaOAuthTokensTable.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const newToken: CanvaOAuthToken = {
+      ...token,
+      id: randomUUID(),
+      userId,
+      scope: token.scope || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(canvaOAuthTokensTable).values(newToken);
+    return newToken;
   }
 
   // Agent Action operations

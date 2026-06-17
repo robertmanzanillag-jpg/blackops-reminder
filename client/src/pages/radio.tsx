@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Radio, Users, AlertCircle, MessageSquare, Copy, Check, Plus, Trash2, RefreshCw, Send } from "lucide-react";
+import { Radio, Users, AlertCircle, MessageSquare, Copy, Check, Plus, Trash2, RefreshCw, Send, FolderDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,19 @@ interface DjContact {
   driveLink: string | null;
 }
 
+interface RadioTemplateAsset {
+  id: string;
+  eventId: string;
+  slotHour: number;
+  djName: string;
+  canvaEditUrl: string | null;
+  canvaViewUrl: string | null;
+  driveLink: string | null;
+  status: "pending" | "generated" | "failed";
+  errorMessage: string | null;
+  lastGeneratedAt: string | null;
+}
+
 export default function RadioPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -48,6 +61,10 @@ export default function RadioPage() {
 
   const { data: djs = [], isLoading: djsLoading } = useQuery<DjContact[]>({
     queryKey: ["/api/djs"],
+  });
+
+  const { data: templateAssets = [] } = useQuery<RadioTemplateAsset[]>({
+    queryKey: ["/api/radio/templates/assets"],
   });
 
   const importDjsMutation = useMutation({
@@ -104,6 +121,30 @@ export default function RadioPage() {
     },
   });
 
+  const generateTemplatesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/radio/templates/generate-today", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron generar los templates");
+      return data as { generated: number; skipped: number; failed: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/radio/templates/assets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/radio/slots"] });
+      toast({
+        title: "Templates revisados",
+        description: `${data.generated} generados, ${data.skipped} sin cambios, ${data.failed} fallidos`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "No se generaron los templates",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const generateMessageMutation = useMutation({
     mutationFn: async ({ djId, eventDate, slot }: { djId: string; eventDate: string; slot: number }) => {
       const res = await fetch(`/api/djs/${djId}/message`, {
@@ -126,6 +167,11 @@ export default function RadioPage() {
 
   const slotsWithEmpty = slots.filter(s => s.emptySlots.length > 0);
   const availableDjs = djs.filter(d => d.status === "available");
+  const templateAssetsByEvent = templateAssets.reduce<Record<string, RadioTemplateAsset[]>>((acc, asset) => {
+    acc[asset.eventId] ||= [];
+    acc[asset.eventId].push(asset);
+    return acc;
+  }, {});
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-4 pb-24" data-testid="radio-page">
@@ -138,19 +184,82 @@ export default function RadioPage() {
               <p className="text-zinc-400 text-sm">Gestión de slots y DJs</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => notifySlotsMutation.mutate()}
-            disabled={notifySlotsMutation.isPending}
-            data-testid="notify-slots-button"
-          >
-            <Send className="h-4 w-4 mr-2" />
-            Enviar resumen
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => notifySlotsMutation.mutate()}
+              disabled={notifySlotsMutation.isPending}
+              data-testid="notify-slots-button"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Enviar resumen
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateTemplatesMutation.mutate()}
+              disabled={generateTemplatesMutation.isPending}
+              data-testid="generate-radio-templates-button"
+            >
+              <FolderDown className={`h-4 w-4 mr-2 ${generateTemplatesMutation.isPending ? "animate-pulse" : ""}`} />
+              Templates hoy
+            </Button>
+          </div>
         </div>
 
         <FlyerGenerator slots={slots} />
+
+        {templateAssets.length > 0 && (
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-purple-400">
+                <FolderDown className="h-5 w-5" />
+                Templates en Drive
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {templateAssets
+                  .slice()
+                  .sort((a, b) => a.eventId.localeCompare(b.eventId) || a.slotHour - b.slotHour)
+                  .map((asset) => {
+                    const primaryLink = asset.driveLink || asset.canvaEditUrl || asset.canvaViewUrl;
+
+                    return primaryLink ? (
+                        <span
+                          key={asset.id}
+                          className="inline-flex items-center gap-2 rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300"
+                        >
+                          <a
+                            href={primaryLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-white"
+                          >
+                            {asset.slotHour}pm · {asset.djName}
+                          </a>
+                          {asset.canvaEditUrl && (
+                            <a
+                              href={asset.canvaEditUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-purple-300 hover:text-purple-200"
+                            >
+                              Canva
+                            </a>
+                          )}
+                        </span>
+                      ) : (
+                        <span key={asset.id} className="rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-500">
+                          {asset.slotHour}pm · {asset.djName} · {asset.status}
+                        </span>
+                      );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader>

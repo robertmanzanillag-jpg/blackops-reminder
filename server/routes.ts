@@ -16,12 +16,14 @@ import { checkSingleProject } from "./health-check";
 import { sendDailyMarketUpdate, calculatePortfolioSummary } from "./market-news";
 import { insertPortfolioHistorySchema, insertDjContactSchema } from "@shared/schema";
 import { analyzeRadioEvents, sendRadioSlotsSummary, getRadioSlotsForMonth, importDjsFromRadioHistory, generateDjMessage } from "./radio-agent";
+import { generateRadioTemplatesForDate } from "./radio-template-agent";
 import { getPortfolioSummary, analyzeRebalancing, checkPriceOpportunities, generateWeeklyReport, sendWeeklyPortfolioReport, getGainsByPeriod } from "./portfolio-agent";
 import { listAllActions, executeAction, executeMultipleActions, getActionsByCategory } from "./agent-actions";
 import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTableSchema, executeQuery, getProjectStructure, addColumnToTable, createTable, getTableInfo } from "./code-agent";
 import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
 import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview } from "./github-client";
 import { getCurrentUserId } from "./user-context";
+import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
@@ -32,6 +34,7 @@ import { getCeoConversationMessages } from "./ceo-conversation-history";
 import { resolveSessionRuntimeSettings } from "./session-config-core";
 import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
+import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -157,6 +160,76 @@ export async function registerRoutes(
     }
   });
 
+  // GET Canva OAuth status
+  app.get("/api/canva/status", async (req, res) => {
+    try {
+      const status = await getCanvaOAuthStatus(getCurrentUserId(req));
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to fetch Canva status" });
+    }
+  });
+
+  // GET Canva OAuth authorization URL - redirects to Canva login/approval
+  app.get("/api/canva/auth", (req, res) => {
+    try {
+      res.redirect(createCanvaAuthorizationUrl(getCurrentUserId(req), req));
+    } catch (error: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Canva no está configurado</h1>
+          <p>${error.message || "Agrega CANVA_CLIENT_ID y CANVA_CLIENT_SECRET en los secrets."}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+  });
+
+  // GET Canva OAuth callback - stores access/refresh tokens without displaying them
+  app.get("/api/canva/oauth/callback", async (req, res) => {
+    const { code, state, error, error_description: errorDescription } = req.query;
+
+    if (error) {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Canva</h1>
+          <p>${String(errorDescription || error)}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+
+    if (!code || typeof code !== "string" || !state || typeof state !== "string") {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Canva</h1>
+          <p>No se recibió el authorization code/state de Canva.</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+
+    try {
+      const result = await exchangeCanvaAuthorizationCode({ code, state });
+      res.send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1 style="color:#22c55e;">Canva conectado</h1>
+          <p>La conexión de Canva quedó guardada para este usuario.</p>
+          <p style="color:#94a3b8;">Scopes: ${result.scope || "guardados"}</p>
+          <a href="/radio" style="color:#3b82f6;">Ir a Radio</a>
+        </body></html>
+      `);
+    } catch (callbackError: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Canva</h1>
+          <p>${callbackError.message || "No se pudo guardar la conexión de Canva."}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+  });
+
   // POST Zoho Calendar sync
   app.post("/api/calendar/zoho/sync", async (req, res) => {
     try {
@@ -235,73 +308,8 @@ export async function registerRoutes(
   // GET Google Calendar events and sync to local tasks
   app.post("/api/calendar/sync", async (req, res) => {
     try {
-      // Start from beginning of current week (Monday) so today's/this week's events are included
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Monday
-      weekStart.setHours(0, 0, 0, 0);
-
-      const twelveMonthsAhead = new Date();
-      twelveMonthsAhead.setMonth(twelveMonthsAhead.getMonth() + 12);
-      
-      const events = await getCalendarEvents(weekStart, twelveMonthsAhead);
-      
-      // Sync events to local tasks. Existing Google events must be updated so flyer data
-      // stays fresh when calendar descriptions change.
-      const userId = getCurrentUserId(req);
-      const existingTasks = await storage.getTasks(userId);
-      const existingByGoogleId = new Map(
-        existingTasks
-          .filter(t => t.externalId && t.externalSource === "google")
-          .map(t => [t.externalId, t])
-      );
-
-      let synced = 0;
-      let updated = 0;
-      for (const event of events) {
-        const existing = existingByGoogleId.get(event.id);
-        
-        if (!existing) {
-          await storage.createTask(userId, {
-            title: event.title,
-            description: event.description || null,
-            date: event.date,
-            endDate: event.endDate || null,
-            priority: "normal",
-            completed: false,
-            type: "event",
-            externalId: event.id,
-            externalSource: "google",
-          });
-          synced++;
-          continue;
-        }
-
-        const nextDescription = event.description || null;
-        const nextEndDate = event.endDate || null;
-        const changed =
-          existing.title !== event.title ||
-          (existing.description || null) !== nextDescription ||
-          new Date(existing.date).getTime() !== new Date(event.date).getTime() ||
-          ((existing.endDate && new Date(existing.endDate).getTime()) || null) !== ((nextEndDate && new Date(nextEndDate).getTime()) || null) ||
-          existing.type !== "event";
-
-        if (changed) {
-          await storage.updateTask(existing.id, {
-            title: event.title,
-            description: nextDescription,
-            date: event.date,
-            endDate: nextEndDate,
-            priority: existing.priority || "normal",
-            completed: existing.completed,
-            type: "event",
-            externalId: event.id,
-            externalSource: "google",
-          });
-          updated++;
-        }
-      }
-      
-      res.json({ success: true, synced, updated, total: events.length });
+      const result = await syncGoogleCalendarToTasks(getCurrentUserId(req));
+      res.json({ success: true, ...result });
     } catch (error: any) {
       console.error('Calendar sync error:', error);
       res.status(500).json({ error: error.message || "Failed to sync calendar" });
@@ -1368,6 +1376,27 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to import DJs" });
+    }
+  });
+
+  // GET generated radio template assets
+  app.get("/api/radio/templates/assets", async (req, res) => {
+    try {
+      const eventId = typeof req.query.eventId === "string" ? req.query.eventId : undefined;
+      const assets = await storage.getRadioTemplateAssets(getCurrentUserId(req), eventId);
+      res.json(assets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch radio template assets" });
+    }
+  });
+
+  // POST generate today's downloadable Radio templates in Google Drive
+  app.post("/api/radio/templates/generate-today", async (req, res) => {
+    try {
+      const result = await generateRadioTemplatesForDate(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to generate radio templates" });
     }
   });
 

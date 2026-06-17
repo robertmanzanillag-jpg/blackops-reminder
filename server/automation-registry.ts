@@ -164,18 +164,18 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
     metadata: { source: "server/routes.ts", endpoints: ["/api/calendar/sync", "/api/calendar/zoho/sync"] },
   },
   {
-    key: "flyer-generation",
-    name: "Flyer generation",
-    description: "Future automation slot for generating flyers after Radio schedule updates.",
+    key: "radio-template-generation",
+    name: "Radio template generation",
+    description: "Generates same-day downloadable Radio DJ templates and uploads them to Google Drive.",
     type: "flyer",
     assignedAgentId: "creative-agent",
-    schedule: { kind: "manual" },
+    schedule: { kind: "daily_time", hour: 8, minute: 15 },
     timezone: DEFAULT_TIMEZONE,
-    status: "disabled",
-    permissionLevel: "draft_only",
-    requiresApproval: true,
+    status: "active",
+    permissionLevel: "autonomous",
+    requiresApproval: false,
     costEstimate: "medium",
-    metadata: { future: true },
+    metadata: { source: "server/radio-template-agent.ts", function: "generateRadioTemplatesForDate" },
   },
   {
     key: "clip-generation",
@@ -355,4 +355,3 @@ export async function recordManualAutomationRun(
     metadata: { automationType: automation.type, directExecutionWired: false },
   });
 }
-

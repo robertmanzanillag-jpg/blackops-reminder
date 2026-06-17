@@ -64,16 +64,15 @@ function parseRadioDescription(description: string | null): { slot7: string | nu
   }
 
   const cleanDesc = decodeDescription(description);
-  const lines = cleanDesc.split(/\r?\n/);
   let slot7: string | null = null;
   let slot8: string | null = null;
   let slot9: string | null = null;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const match = trimmed.match(/^\s*([789])(?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*(.*)$/i);
-    if (!match) continue;
+  const normalized = cleanDesc.replace(/\r?\n/g, " ");
+  const slotPattern = /(?:^|\s)([789])(?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*([\s\S]*?)(?=\s[789](?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*|$)/gi;
 
+  let match: RegExpExecArray | null;
+  while ((match = slotPattern.exec(normalized)) !== null) {
     const hour = Number(match[1]);
     const djName = cleanDjName(match[2] || "");
 
