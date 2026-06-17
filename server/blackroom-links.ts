@@ -30,7 +30,57 @@ export interface BlackRoomLinkPerformanceInput extends BlackRoomLinkTarget {
   limit?: number | null;
 }
 
+export interface BlackRoomCountdownInput {
+  title?: string | null;
+  partyTitle?: string | null;
+  date?: string | null;
+  targetDate?: string | null;
+  url?: string | null;
+}
+
 const DEFAULT_BLACKROOM_BASE_URL = "https://blackroomus.com";
+const MONTH_ALIASES: Record<string, number> = {
+  jan: 0,
+  january: 0,
+  ene: 0,
+  enero: 0,
+  feb: 1,
+  february: 1,
+  febrero: 1,
+  mar: 2,
+  march: 2,
+  marzo: 2,
+  apr: 3,
+  april: 3,
+  abr: 3,
+  abril: 3,
+  may: 4,
+  mayo: 4,
+  jun: 5,
+  june: 5,
+  junio: 5,
+  jul: 6,
+  july: 6,
+  julio: 6,
+  aug: 7,
+  august: 7,
+  ago: 7,
+  agosto: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  septiembre: 8,
+  oct: 9,
+  october: 9,
+  octubre: 9,
+  nov: 10,
+  november: 10,
+  noviembre: 10,
+  dec: 11,
+  december: 11,
+  dic: 11,
+  diciembre: 11,
+};
 
 function getBlackRoomBaseUrl(): string {
   return (process.env.BLACKROOM_ADMIN_BASE_URL || DEFAULT_BLACKROOM_BASE_URL).replace(/\/$/, "");
@@ -93,6 +143,13 @@ function normalizeMatch(value?: string | number | null): string {
     .trim();
 }
 
+function normalizeSearchText(value?: string | number | null): string {
+  return normalizeMatch(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeIcon(icon?: string | null): string {
   const value = normalizeMatch(icon).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const aliases: Record<string, string> = {
@@ -149,6 +206,77 @@ function buildBioElementPayload(input: BlackRoomLinkInput): JsonRecord {
   };
 }
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function formatDateTimeLocal(date: Date): string {
+  return [
+    `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`,
+    `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`,
+  ].join("T");
+}
+
+function normalizeCountdownDate(value?: string | null): string | null {
+  if (!value || !String(value).trim()) return null;
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
+  if (!/\d{4}/.test(raw) && !/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(raw)) return null;
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatDateTimeLocal(parsed);
+  }
+
+  return null;
+}
+
+function parsePartyDate(value?: string | null, referenceDate = new Date()): string | null {
+  if (!value || !String(value).trim()) return null;
+  const normalized = normalizeCountdownDate(value);
+  if (normalized) return normalized;
+
+  const text = normalizeMatch(value).replace(/[,]+/g, " ");
+  const numericMatch = text.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  if (numericMatch) {
+    const month = Number(numericMatch[1]) - 1;
+    const day = Number(numericMatch[2]);
+    const yearText = numericMatch[3];
+    let year = yearText ? Number(yearText) : referenceDate.getFullYear();
+    if (year < 100) year += 2000;
+    const date = new Date(year, month, day, 12, 0, 0, 0);
+    if (!yearText && date.getTime() < referenceDate.getTime() - 30 * 24 * 60 * 60 * 1000) {
+      date.setFullYear(date.getFullYear() + 1);
+    }
+    if (!Number.isNaN(date.getTime())) return formatDateTimeLocal(date);
+  }
+
+  const monthNames = Object.keys(MONTH_ALIASES).join("|");
+  const monthDayMatch = text.match(new RegExp(`\\b(${monthNames})\\s+(\\d{1,2})(?:\\s+(\\d{4}))?\\b`, "i"));
+  if (!monthDayMatch) return null;
+
+  const month = MONTH_ALIASES[monthDayMatch[1]];
+  const day = Number(monthDayMatch[2]);
+  const year = monthDayMatch[3] ? Number(monthDayMatch[3]) : referenceDate.getFullYear();
+  const date = new Date(year, month, day, 12, 0, 0, 0);
+  if (!monthDayMatch[3] && date.getTime() < referenceDate.getTime() - 30 * 24 * 60 * 60 * 1000) {
+    date.setFullYear(date.getFullYear() + 1);
+  }
+  return Number.isNaN(date.getTime()) ? null : formatDateTimeLocal(date);
+}
+
+function buildCountdownPayload(input: { title: string; url?: string | null; countdownDate: string }): JsonRecord {
+  return {
+    element_type: "countdown",
+    title: input.title,
+    url: input.url || null,
+    metadata: {
+      countdown_date: input.countdownDate,
+    },
+    is_active: true,
+  };
+}
+
 function findMatchingItem<T extends JsonRecord>(items: T[], target: BlackRoomLinkTarget): T | null {
   const targetId = target.id !== undefined && target.id !== null ? String(target.id) : null;
   const targetTitle = normalizeMatch(target.title);
@@ -159,6 +287,18 @@ function findMatchingItem<T extends JsonRecord>(items: T[], target: BlackRoomLin
     if (targetUrl && normalizeMatch(item.url) === targetUrl) return true;
     if (targetTitle && normalizeMatch(item.title) === targetTitle) return true;
     return false;
+  }) || null;
+}
+
+function findMatchingParty<T extends JsonRecord>(items: T[], partyTitle?: string | null): T | null {
+  const targetTitle = normalizeSearchText(partyTitle);
+  if (!targetTitle) return null;
+  const targetTokens = targetTitle.split(" ").filter(Boolean);
+
+  return items.find((item) => {
+    const title = normalizeSearchText(item.title);
+    if (title === targetTitle || title.includes(targetTitle) || targetTitle.includes(title)) return true;
+    return targetTokens.length > 0 && targetTokens.every((token) => title.includes(token));
   }) || null;
 }
 
@@ -205,6 +345,49 @@ export async function addBlackRoomLink(input: BlackRoomLinkInput) {
   });
 
   return { bioLink, bioElement, action: "added" };
+}
+
+export async function addBlackRoomCountdown(input: BlackRoomCountdownInput) {
+  const explicitDate = normalizeCountdownDate(input.date || input.targetDate || null);
+  let title = input.title?.trim() || null;
+  let url = input.url?.trim() || null;
+  let countdownDate = explicitDate;
+  let source: "manual" | "existing_party" = "manual";
+
+  if (input.partyTitle && (!title || !url || !countdownDate)) {
+    const [links, elements] = await Promise.all([
+      listBlackRoomBioLinks().catch(() => []),
+      listBlackRoomBioElements().catch(() => []),
+    ]);
+    const party = findMatchingParty([...links, ...elements], input.partyTitle);
+    if (party) {
+      title ||= typeof party.title === "string" ? party.title : null;
+      url ||= typeof party.url === "string" ? party.url : null;
+      countdownDate ||= parsePartyDate(party.date || party.event_date || party.subtitle || party.metadata?.date || party.metadata?.countdown_date);
+      source = "existing_party";
+    }
+  }
+
+  if (!title) {
+    throw new Error("Falta el nombre de la fiesta para crear el timer de Black Room.");
+  }
+  if (!countdownDate) {
+    throw new Error("Falta la fecha del timer. Dame una fecha o dime una fiesta que ya tenga fecha en Black Room.");
+  }
+
+  const bioElement = await blackRoomAdminRequest<JsonRecord>("/api/admin/bio-elements", {
+    method: "POST",
+    body: JSON.stringify(buildCountdownPayload({ title, url, countdownDate })),
+  });
+
+  return {
+    bioElement,
+    action: "countdown_added",
+    source,
+    title,
+    url,
+    countdownDate,
+  };
 }
 
 export async function updateBlackRoomLink(input: BlackRoomLinkUpdateInput) {

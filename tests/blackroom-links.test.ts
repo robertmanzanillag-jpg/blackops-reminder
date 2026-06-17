@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deactivateBlackRoomLink, formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "../server/blackroom-links";
+import { addBlackRoomCountdown, deactivateBlackRoomLink, formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "../server/blackroom-links";
 
 test("deactivateBlackRoomLink soft-disables bio link and builder element without DELETE", async () => {
   const calls: Array<{ url: string; method: string; body?: any }> = [];
@@ -74,6 +74,108 @@ test("getBlackRoomLinkPerformance ranks links by total clicks", async () => {
     assert.equal(performance.links[0].title, "High");
     assert.equal(performance.links[0].isActive, false);
     assert.match(formatBlackRoomLinkPerformance(performance), /High \(desactivado\).*total 13/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("addBlackRoomCountdown creates builder countdown with explicit date", async () => {
+  const calls: Array<{ url: string; method: string; body?: any }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (url: any, init: any = {}) => {
+    const method = init.method || "GET";
+    calls.push({
+      url: String(url),
+      method,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+
+    return new Response(JSON.stringify({ id: 30, ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await addBlackRoomCountdown({
+      title: "Black Room & Friends",
+      date: "2026-06-21T12:00",
+      url: "https://tickets.example/party",
+    });
+
+    assert.equal(result.action, "countdown_added");
+    assert.equal(result.countdownDate, "2026-06-21T12:00");
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-elements") &&
+      call.method === "POST" &&
+      call.body?.element_type === "countdown" &&
+      call.body?.title === "Black Room & Friends" &&
+      call.body?.url === "https://tickets.example/party" &&
+      call.body?.metadata?.countdown_date === "2026-06-21T12:00"
+    ));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("addBlackRoomCountdown can derive title url and date from an existing party link", async () => {
+  const calls: Array<{ url: string; method: string; body?: any }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (url: any, init: any = {}) => {
+    const method = init.method || "GET";
+    calls.push({
+      url: String(url),
+      method,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+
+    if (String(url).endsWith("/api/admin/link-stats")) {
+      return new Response(JSON.stringify({
+        links: [
+          {
+            id: 11,
+            title: "BLACK ROOM & FRIENDS @ CASA NUBE",
+            subtitle: "JUNE 21",
+            url: "https://kongnightlife.com/p/bio-party",
+            is_active: true,
+          },
+        ],
+        totals: {},
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    if (String(url).endsWith("/api/admin/bio-elements")) {
+      if (method === "GET") {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ id: 31, ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await addBlackRoomCountdown({ partyTitle: "black room friends" });
+
+    assert.equal(result.action, "countdown_added");
+    assert.equal(result.source, "existing_party");
+    assert.equal(result.title, "BLACK ROOM & FRIENDS @ CASA NUBE");
+    assert.equal(result.url, "https://kongnightlife.com/p/bio-party");
+    assert.equal(result.countdownDate, "2026-06-21T12:00");
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-elements") &&
+      call.method === "POST" &&
+      call.body?.element_type === "countdown" &&
+      call.body?.metadata?.countdown_date === "2026-06-21T12:00"
+    ));
   } finally {
     globalThis.fetch = originalFetch;
   }

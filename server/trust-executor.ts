@@ -2,7 +2,7 @@ import type { PendingAction } from "@shared/schema";
 import { storage } from "./storage";
 import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
-import { addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
+import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
 
 type JsonRecord = Record<string, any>;
 
@@ -146,6 +146,11 @@ export async function executeApprovedPendingAction(
 
       case "marketing.blackroom_link_deactivate": {
         result = await deactivateBlackRoomLink(input as any);
+        break;
+      }
+
+      case "marketing.blackroom_timer_add": {
+        result = await addBlackRoomCountdown(input as any);
         break;
       }
 

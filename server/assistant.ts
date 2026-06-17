@@ -305,6 +305,7 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_UPDATE: {"matchTitle": "...", "matchUrl": "...", "title": "...", "subtitle": "...", "url": "https://...", "icon": "ticket|shopping-bag|instagram|youtube|music|calendar|link", "display_order": 0}]
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
+- [BLACKROOM_TIMER_ADD: {"title": "...", "date": "YYYY-MM-DDTHH:mm", "url": "https://...", "partyTitle": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -324,6 +325,7 @@ Puedes ayudar a editar los links públicos de Black Room.
 - Para editar uno existente usa BLACKROOM_LINK_UPDATE con matchTitle o matchUrl para identificarlo.
 - Si el usuario pide borrar, quitar, remover u ocultar un link, usa BLACKROOM_LINK_DEACTIVATE. NUNCA propongas borrarlo permanentemente; desactivar preserva analytics/data histórica.
 - Si el usuario pregunta por rendimiento, performance, clicks, analytics, cuál link va mejor o cuántos clicks tiene, usa BLACKROOM_LINK_PERFORMANCE. Es solo lectura y no requiere aprobación.
+- Si el usuario pide agregar un timer, countdown, contador o cuenta regresiva usa BLACKROOM_TIMER_ADD. Si da la fecha, ponla en date. Si dice el nombre de la fiesta/evento, ponlo en partyTitle para buscar el título, URL y fecha desde los links/builder existentes. Si no hay fecha ni fiesta identificable, pregunta la fecha antes de crear.
 - Los cambios afectan link-stats y el builder visual.
 - Iconos comunes: tickets/evento=ticket, shop/merch=shopping-bag, instagram=instagram, youtube=youtube, música=music, calendario=calendar, default=link.
 
@@ -807,6 +809,48 @@ export function registerAssistantRoutes(app: Express): void {
         } catch (e: any) {
           console.error("Error reading Black Room link performance:", e);
           res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No pude leer el rendimiento de los links de Black Room" })}\n\n`);
+        }
+      }
+
+      const blackRoomTimerAddRegex = /\[BLACKROOM_TIMER_ADD:\s*(\{[^}]+\})\]/g;
+      let blackRoomTimerAddMatch;
+      while ((blackRoomTimerAddMatch = blackRoomTimerAddRegex.exec(fullResponse)) !== null) {
+        try {
+          const timerData = JSON.parse(blackRoomTimerAddMatch[1]);
+          if (!timerData.title && !timerData.partyTitle) {
+            throw new Error("Falta title o partyTitle para saber a qué fiesta agregarle el timer.");
+          }
+          const input = {
+            title: timerData.title || null,
+            partyTitle: timerData.partyTitle || timerData.matchTitle || null,
+            date: timerData.date || timerData.targetDate || null,
+            targetDate: timerData.targetDate || timerData.date || null,
+            url: timerData.url || null,
+          };
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.blackroom_timer_add",
+            resourceType: "blackroom_timer",
+            title: `Agregar timer Black Room: ${input.title || input.partyTitle}`,
+            description: "El asistente quiere agregar un countdown/timer en el builder de Black Room.",
+            input,
+            proposedChanges: input,
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ blackRoomLinkError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error creating Black Room timer pending action:", e);
+          res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No se pudo preparar el timer de Black Room" })}\n\n`);
         }
       }
 
