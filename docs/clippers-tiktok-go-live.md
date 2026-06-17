@@ -9,7 +9,8 @@ Status: ready except TikTok secrets, public deploy verification, demo video, and
 - TikTok scopes: `user.info.basic`, `video.upload`, `video.publish`.
 - TikTok redirect URI: `https://sportclipsr.com/api/clippers/oauth/tiktok/callback`.
 - App icon: `client/public/sportclipsr-tiktok-icon.png` is 1024 x 1024 and has been uploaded in TikTok.
-- Verification file: `client/public/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`.
+- Current TikTok verification file: `client/public/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`.
+- Previous TikTok verification file remains served for compatibility: `client/public/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`.
 - Public policy routes:
   - `https://sportclipsr.com/clippers/legal/privacy`
   - `https://sportclipsr.com/clippers/legal/terms`
@@ -42,7 +43,7 @@ All checks must pass before clicking Verify in TikTok.
 
 Required public URLs:
 
-- `https://sportclipsr.com/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
+- `https://sportclipsr.com/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`
 - `https://sportclipsr.com/clippers/legal/privacy`
 - `https://sportclipsr.com/clippers/legal/terms`
 - `https://sportclipsr.com/clippers/review-demo`
@@ -52,7 +53,7 @@ Required public URLs:
 
 1. Open TikTok Developers > `sportclipsr`.
 2. Click URL properties.
-3. Verify `https://sportclipsr.com/` using the uploaded verification file.
+3. Verify `https://sportclipsr.com/` using the current uploaded verification file.
 4. Confirm Terms, Privacy, and Web URL no longer show "This URL is not verified."
 5. Upload the demo video required by TikTok.
 6. Save.

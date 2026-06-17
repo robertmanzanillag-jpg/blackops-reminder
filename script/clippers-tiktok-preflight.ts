@@ -1,5 +1,5 @@
 const DEFAULT_BASE_URL = "https://sportclipsr.com";
-const TIKTOK_VERIFICATION_FILE = "tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt";
+const TIKTOK_VERIFICATION_FILE = "tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt";
 
 type Check = {
   label: string;
@@ -11,7 +11,7 @@ const checks: Check[] = [
   {
     label: "TikTok URL verification file",
     path: `/${TIKTOK_VERIFICATION_FILE}`,
-    requiredText: "tiktok-developers-site-verification=zjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN",
+    requiredText: "tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP",
   },
   {
     label: "Privacy Policy",

@@ -64,6 +64,12 @@ app.get("/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt", (_req, res) => {
     .send("tiktok-developers-site-verification=zjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN\n");
 });
 
+app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
+  res
+    .type("text/plain")
+    .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
+});
+
 const sessionSettings = resolveSessionRuntimeSettings();
 const sessionMiddleware = createSessionMiddleware(sessionSettings);
 if (sessionMiddleware) {
