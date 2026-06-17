@@ -8,6 +8,7 @@ import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
+import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import type { PendingAction } from "@shared/schema";
 
 const ai = new GoogleGenAI({
@@ -303,6 +304,7 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_ADD: {"title": "...", "subtitle": "...", "url": "https://...", "icon": "ticket|shopping-bag|instagram|youtube|music|calendar|link", "display_order": 0}]
 - [BLACKROOM_LINK_UPDATE: {"matchTitle": "...", "matchUrl": "...", "title": "...", "subtitle": "...", "url": "https://...", "icon": "ticket|shopping-bag|instagram|youtube|music|calendar|link", "display_order": 0}]
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
+- [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -321,6 +323,7 @@ Puedes ayudar a editar los links públicos de Black Room.
 - Para agregar un link usa BLACKROOM_LINK_ADD.
 - Para editar uno existente usa BLACKROOM_LINK_UPDATE con matchTitle o matchUrl para identificarlo.
 - Si el usuario pide borrar, quitar, remover u ocultar un link, usa BLACKROOM_LINK_DEACTIVATE. NUNCA propongas borrarlo permanentemente; desactivar preserva analytics/data histórica.
+- Si el usuario pregunta por rendimiento, performance, clicks, analytics, cuál link va mejor o cuántos clicks tiene, usa BLACKROOM_LINK_PERFORMANCE. Es solo lectura y no requiere aprobación.
 - Los cambios afectan link-stats y el builder visual.
 - Iconos comunes: tickets/evento=ticket, shop/merch=shopping-bag, instagram=instagram, youtube=youtube, música=music, calendario=calendar, default=link.
 
@@ -785,6 +788,25 @@ export function registerAssistantRoutes(app: Express): void {
           res.write(`data: ${JSON.stringify({ communicationDraftCreated: true, pendingActionId: pendingAction.id })}\n\n`);
         } catch (e) {
           console.error("Error creating communication draft from assistant:", e);
+        }
+      }
+
+      const blackRoomPerformanceRegex = /\[BLACKROOM_LINK_PERFORMANCE:\s*(\{[^}]+\})\]/g;
+      let blackRoomPerformanceMatch;
+      while ((blackRoomPerformanceMatch = blackRoomPerformanceRegex.exec(fullResponse)) !== null) {
+        try {
+          const performanceData = JSON.parse(blackRoomPerformanceMatch[1]);
+          const performance = await getBlackRoomLinkPerformance({
+            id: performanceData.id || null,
+            title: performanceData.title || null,
+            url: performanceData.url || null,
+            limit: performanceData.limit || 10,
+          });
+          const summary = formatBlackRoomLinkPerformance(performance);
+          res.write(`data: ${JSON.stringify({ content: `\n\n${summary}` })}\n\n`);
+        } catch (e: any) {
+          console.error("Error reading Black Room link performance:", e);
+          res.write(`data: ${JSON.stringify({ blackRoomLinkError: e.message || "No pude leer el rendimiento de los links de Black Room" })}\n\n`);
         }
       }
 

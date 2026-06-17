@@ -26,6 +26,10 @@ export interface BlackRoomLinkDeactivateInput extends BlackRoomLinkTarget {
   reason?: string | null;
 }
 
+export interface BlackRoomLinkPerformanceInput extends BlackRoomLinkTarget {
+  limit?: number | null;
+}
+
 const DEFAULT_BLACKROOM_BASE_URL = "https://blackroomus.com";
 
 function getBlackRoomBaseUrl(): string {
@@ -171,6 +175,17 @@ export async function listBlackRoomBioLinks(): Promise<JsonRecord[]> {
   return Array.isArray(links) ? links : links?.links || [];
 }
 
+export async function getBlackRoomLinkStats(): Promise<{ links: JsonRecord[]; totals: JsonRecord }> {
+  const stats = await blackRoomAdminRequest<any>("/api/admin/link-stats", {
+    method: "GET",
+  });
+
+  return {
+    links: Array.isArray(stats) ? stats : stats?.links || [],
+    totals: Array.isArray(stats) ? {} : stats?.totals || {},
+  };
+}
+
 export async function listBlackRoomBioElements(): Promise<JsonRecord[]> {
   const elements = await blackRoomAdminRequest<any>("/api/admin/bio-elements", {
     method: "GET",
@@ -259,4 +274,53 @@ export async function deactivateBlackRoomLink(input: BlackRoomLinkDeactivateInpu
     preservedData: true,
     note: "The link was deactivated instead of deleted so historical analytics remain available.",
   };
+}
+
+export async function getBlackRoomLinkPerformance(input: BlackRoomLinkPerformanceInput = {}) {
+  const { links, totals } = await getBlackRoomLinkStats();
+  const matchingLink = input.id || input.title || input.url
+    ? findMatchingItem(links, input)
+    : null;
+  const selectedLinks = matchingLink ? [matchingLink] : links;
+  const limit = Math.max(1, Math.min(Number(input.limit || 10), 25));
+  const rankedLinks = selectedLinks
+    .slice()
+    .sort((a, b) => Number(b.total_clicks || 0) - Number(a.total_clicks || 0))
+    .slice(0, limit);
+
+  return {
+    totals,
+    links: rankedLinks.map((link) => ({
+      id: link.id,
+      title: link.title,
+      subtitle: link.subtitle || null,
+      url: link.url,
+      isActive: link.is_active !== false,
+      clicksToday: Number(link.clicks_today || 0),
+      clicksWeek: Number(link.clicks_week || 0),
+      clicksMonth: Number(link.clicks_month || 0),
+      totalClicks: Number(link.total_clicks || 0),
+      displayOrder: link.display_order ?? null,
+    })),
+  };
+}
+
+export function formatBlackRoomLinkPerformance(performance: Awaited<ReturnType<typeof getBlackRoomLinkPerformance>>): string {
+  const totals = performance.totals || {};
+  const header = [
+    "Rendimiento de links Black Room",
+    `Total clicks: ${Number(totals.total_clicks || 0)}`,
+    `Hoy: ${Number(totals.clicks_today || 0)} | Semana: ${Number(totals.clicks_week || 0)}`,
+  ].join("\n");
+
+  if (performance.links.length === 0) {
+    return `${header}\n\nNo encontré links para ese filtro.`;
+  }
+
+  const rows = performance.links.map((link, index) => {
+    const status = link.isActive ? "activo" : "desactivado";
+    return `${index + 1}. ${link.title} (${status}) - hoy ${link.clicksToday}, semana ${link.clicksWeek}, mes ${link.clicksMonth}, total ${link.totalClicks}`;
+  });
+
+  return `${header}\n\n${rows.join("\n")}`;
 }
