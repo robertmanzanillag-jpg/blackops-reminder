@@ -20,6 +20,8 @@ interface GlobalConfig {
   format: "story" | "post";
 }
 
+const DEFAULT_BACKGROUND_URL = "/br-radio-template.png?v=black-room-radio-miami-20260617";
+
 // ─── Canvas rendering ────────────────────────────────────────────────────────
 
 const COLORS = {
@@ -187,6 +189,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [bgLoaded, setBgLoaded] = useState(false);
   const [fontReady, setFontReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [flyerUrls, setFlyerUrls] = useState<Record<string, string>>({});
@@ -198,8 +201,13 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     img.crossOrigin = "anonymous";
     img.onload = () => {
       setBgImage(img);
+      setBgLoaded(true);
     };
-    img.src = "/br-radio-template.png";
+    img.onerror = () => {
+      setBgImage(null);
+      setBgLoaded(true);
+    };
+    img.src = DEFAULT_BACKGROUND_URL;
   }, []);
 
   // Font ready — wait for Bebas Neue explicitly so canvas uses the correct face
@@ -209,7 +217,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
 
   // Generate all flyers when data/config changes
   const generateAll = useCallback(async () => {
-    if (!fontReady) return;
+    if (!fontReady || !bgLoaded) return;
     const slotsWithDjs = slots.filter(s => s.slot7 || s.slot8 || s.slot9);
     if (slotsWithDjs.length === 0) return;
     setGenerating(true);
@@ -219,7 +227,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     }
     setFlyerUrls(urls);
     setGenerating(false);
-  }, [slots, bgImage, config, fontReady]);
+  }, [slots, bgImage, config, fontReady, bgLoaded]);
 
   useEffect(() => {
     generateAll();
@@ -231,7 +239,10 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     const reader = new FileReader();
     reader.onload = ev => {
       const img = new Image();
-      img.onload = () => setBgImage(img);
+      img.onload = () => {
+        setBgImage(img);
+        setBgLoaded(true);
+      };
       img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);

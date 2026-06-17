@@ -13,8 +13,8 @@ const RADIO_TIMEZONE = "America/New_York";
 const CANVA_REFERENCE_DESIGN_ID = "DAGRzIet_rI";
 const DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID = "EAHMxABUd6M";
 const DEFAULT_CANVA_DJ_FIELD = "dj_name";
-const CANVA_TRANSPARENT_EXPORT = true;
-const BLACK_BACKGROUND_ALPHA_THRESHOLD = 18;
+const CANVA_TRANSPARENT_EXPORT = false;
+const BLACK_BACKGROUND_ALPHA_THRESHOLD = 30;
 const EDGE_CLEANUP_PIXELS = 2;
 const RADIO_TEMPLATE_WIDTH = 1280;
 const RADIO_TEMPLATE_HEIGHT = 720;
@@ -111,7 +111,7 @@ export function buildRadioTemplateSourceHash(params: {
       canvaBrandTemplateId: params.canvaBrandTemplateId || process.env.CANVA_RADIO_BRAND_TEMPLATE_ID || DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID,
       canvaDjField: params.canvaDjField || process.env.CANVA_RADIO_DJ_FIELD || DEFAULT_CANVA_DJ_FIELD,
       transparentBackground: CANVA_TRANSPARENT_EXPORT,
-      template: "local-codeine-corvette-transparent-v3",
+      template: "local-black-room-radio-miami-photo-v4",
     }))
     .digest("hex");
 }
@@ -180,10 +180,10 @@ function getRadioTemplatePath(): string {
   const configuredPath = process.env.RADIO_TEMPLATE_IMAGE_PATH;
   const candidates = [
     configuredPath,
-    path.join(process.cwd(), "client/public/br-radio-video-template.png"),
-    path.join(process.cwd(), "dist/public/br-radio-video-template.png"),
     path.join(process.cwd(), "client/public/br-radio-template.png"),
     path.join(process.cwd(), "dist/public/br-radio-template.png"),
+    path.join(process.cwd(), "client/public/br-radio-video-template.png"),
+    path.join(process.cwd(), "dist/public/br-radio-video-template.png"),
   ].filter(Boolean) as string[];
 
   const found = candidates.find((candidate) => existsSync(candidate));
@@ -244,8 +244,7 @@ export async function renderLocalRadioTemplatePng(djName: string): Promise<Buffe
     .png()
     .toBuffer();
 
-  const transparentBase = await forceTransparentBackground(template);
-  return sharp(transparentBase)
+  return sharp(template)
     .composite([{ input: buildDjTextOverlay(djName), left: 0, top: 0 }])
     .png({ compressionLevel: 9 })
     .toBuffer();

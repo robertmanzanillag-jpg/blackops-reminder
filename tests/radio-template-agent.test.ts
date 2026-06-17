@@ -87,7 +87,7 @@ test("forceTransparentBackground turns black pixels transparent", async () => {
   assert.equal(data[((3 * 6 + 3) * 4) + 3], 255);
 });
 
-test("renderLocalRadioTemplatePng creates a transparent 1280x720 PNG", async () => {
+test("renderLocalRadioTemplatePng preserves a visible 1280x720 background", async () => {
   const output = await renderLocalRadioTemplatePng("Lucia Reina");
   const metadata = await sharp(output).metadata();
 
@@ -97,9 +97,17 @@ test("renderLocalRadioTemplatePng creates a transparent 1280x720 PNG", async () 
 
   const { data, info } = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   let transparentPixels = 0;
+  let visiblePixels = 0;
+  for (let index = 0; index < data.length; index += info.channels) {
+    const red = data[index] || 0;
+    const green = data[index + 1] || 0;
+    const blue = data[index + 2] || 0;
+    if (red > 24 || green > 24 || blue > 24) visiblePixels++;
+  }
   for (let index = 3; index < data.length; index += info.channels) {
     if (data[index] === 0) transparentPixels++;
   }
 
-  assert.ok(transparentPixels > info.width * info.height * 0.8);
+  assert.ok(transparentPixels < info.width * info.height * 0.01);
+  assert.ok(visiblePixels > info.width * info.height * 0.1);
 });
