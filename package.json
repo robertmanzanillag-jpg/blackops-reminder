@@ -34,6 +34,7 @@
     "telegram:webhook": "tsx script/telegram-webhook.ts",
     "telegram:configure": "tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
+    "radio:ensure-tiktok-drive-folder": "tsx script/ensure-radio-tiktok-drive-folder.ts",
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
     "user:migrate": "tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",

@@ -37,7 +37,7 @@ import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { getClipperStatus, readClipperReport, runClipperDailyPlan } from "./clippers-agent";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperStatus, readClipperReport, runClipperDailyPlan } from "./clippers-agent";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1512,7 +1512,7 @@ export async function registerRoutes(
 
   app.post("/api/promo-video/auto-daily", async (req, res) => {
     try {
-      const result = await runPromoVideoAutoDaily(req.body || {});
+      const result = await runPromoVideoAutoDaily({ ...(req.body || {}), userId: getCurrentUserId(req) });
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run promo video auto daily" });
@@ -1530,7 +1530,7 @@ export async function registerRoutes(
 
   app.post("/api/promo-video/generate", async (req, res) => {
     try {
-      const result = await runPromoVideoEdit(req.body || {});
+      const result = await runPromoVideoEdit({ ...(req.body || {}), userId: getCurrentUserId(req) });
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate promo videos" });
@@ -1554,6 +1554,24 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate clippers daily plan" });
+    }
+  });
+
+  app.post("/api/clippers/bootstrap-accounts", async (_req, res) => {
+    try {
+      const status = await bootstrapClipperAccounts();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers accounts" });
+    }
+  });
+
+  app.post("/api/clippers/bootstrap-workspace", async (_req, res) => {
+    try {
+      const status = await bootstrapClipperWorkspace();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers workspace" });
     }
   });
 

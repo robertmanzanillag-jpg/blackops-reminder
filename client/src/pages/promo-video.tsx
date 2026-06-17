@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clapperboard, Copy, FileVideo, Folder, FolderInput, Loader2, Play, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Clapperboard, Copy, ExternalLink, FileVideo, Folder, FolderInput, HardDrive, Loader2, Play, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +45,20 @@ interface PromoVideoRunResult {
   output: string;
   reportPath: string;
   status: PromoVideoStatus;
+  driveUploads?: Array<{
+    fileName: string;
+    category: string;
+    dateFolder: string;
+    webViewLink: string | null;
+  }>;
+}
+
+interface GoogleDriveStatus {
+  configured: boolean;
+  connected: boolean;
+  expiresAt: string | null;
+  scope: string | null;
+  redirectUri: string | null;
 }
 
 function formatDate(value: string) {
@@ -113,6 +127,10 @@ export default function PromoVideoPage() {
 
   const { data: status, isLoading } = useQuery<PromoVideoStatus>({
     queryKey: ["/api/promo-video/status"],
+  });
+
+  const { data: driveStatus } = useQuery<GoogleDriveStatus>({
+    queryKey: ["/api/google-drive/status"],
   });
 
   const selectedTemplate = useMemo(() => {
@@ -416,14 +434,33 @@ export default function PromoVideoPage() {
           <Card className="border-zinc-800 bg-zinc-950/70">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base text-white">
-                <Folder className="h-4 w-4 text-zinc-300" />
-                Carpetas
+                <HardDrive className={driveStatus?.connected ? "h-4 w-4 text-green-300" : "h-4 w-4 text-yellow-300"} />
+                Google Drive
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="rounded-md border border-white/10 bg-black/40 p-3">
+                <p className="text-sm font-medium text-zinc-100">
+                  {driveStatus?.connected ? "Conectado" : "Pendiente de conectar"}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Los clips finales se suben a VIDEOS PROMO DE KOG con subcarpetas por categoria y fecha.
+                </p>
+                {!driveStatus?.connected && driveStatus?.configured && (
+                  <Button
+                    type="button"
+                    onClick={() => { window.location.href = "/api/google-drive/auth"; }}
+                    className="mt-3 h-9 rounded-full bg-white text-zinc-950 hover:bg-zinc-200"
+                  >
+                    <HardDrive className="mr-2 h-4 w-4" />
+                    Conectar Drive
+                  </Button>
+                )}
+              </div>
+
               {[
-                ["Originales", status?.inputDir],
-                ["Finales", status?.outputDir],
+                ["Cache originales", status?.inputDir],
+                ["Cache local", status?.outputDir],
                 ["Reportes", status?.reportDir],
               ].map(([label, path]) => (
                 <div key={label} className="rounded-md border border-white/10 bg-black/40 p-3">
@@ -502,7 +539,7 @@ export default function PromoVideoPage() {
             emptyText="Sin videos crudos todavia."
           />
           <FileList
-            title="Listos para subir"
+            title="Cache local"
             files={status?.outputVideos || []}
             emptyText="Aun no hay clips exportados."
             onDelete={(file) => deleteOutputMutation.mutate(file)}
@@ -516,6 +553,23 @@ export default function PromoVideoPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="break-all text-xs text-zinc-500">{lastRun.reportPath}</p>
+              {!!lastRun.driveUploads?.length && (
+                <div className="space-y-2 rounded-md border border-green-300/20 bg-green-950/10 p-3">
+                  <p className="text-sm font-medium text-green-100">Subidos a Google Drive</p>
+                  {lastRun.driveUploads.map((upload) => (
+                    <a
+                      key={`${upload.fileName}-${upload.webViewLink}`}
+                      href={upload.webViewLink || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/35 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5"
+                    >
+                      <span className="min-w-0 truncate">{upload.category}/{upload.dateFolder}/{upload.fileName}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              )}
               <pre className="max-h-56 overflow-auto rounded-md border border-white/10 bg-black p-3 text-xs text-zinc-300">
                 {lastRun.output}
               </pre>

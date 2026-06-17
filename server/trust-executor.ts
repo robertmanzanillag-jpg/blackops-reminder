@@ -156,7 +156,7 @@ export async function executeApprovedPendingAction(
       }
 
       case "radio_edit.resolve_dj_name": {
-        result = await resumeRadioVideoEditWithDjName(input as any);
+        result = await resumeRadioVideoEditWithDjName({ ...input, userId: action.userId } as any);
         break;
       }
 

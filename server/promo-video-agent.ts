@@ -1,6 +1,8 @@
 import { spawn } from "child_process";
 import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { ensureDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
+import { getSystemUserId } from "./user-context";
 
 export type PromoVideoStyle = "full" | "post";
 export type PromoVideoObjective = "auto" | "nightlife" | "dinner" | "pool" | "yacht" | "guestlist";
@@ -45,6 +47,7 @@ export interface PromoVideoRunOptions {
   customText?: boolean;
   sourceDir?: string;
   sourceHint?: string;
+  userId?: string;
 }
 
 export interface PromoVideoRunResult {
@@ -53,6 +56,7 @@ export interface PromoVideoRunResult {
   reportPath: string;
   options: PromoVideoRunOptions;
   status: PromoVideoStatus;
+  driveUploads: PromoVideoDriveUpload[];
 }
 
 export interface PromoVideoImportResult {
@@ -69,6 +73,17 @@ export interface PromoVideoAutoRunResult extends PromoVideoRunResult {
 interface PromoVideoConfig {
   sourceDir: string | null;
   lastAutoRunDate?: string | null;
+}
+
+export interface PromoVideoDriveUpload {
+  fileName: string;
+  filePath: string;
+  category: string;
+  dateFolder: string;
+  folderId: string;
+  fileId: string;
+  webViewLink: string | null;
+  webContentLink: string | null;
 }
 
 export class PromoVideoSourceError extends Error {
@@ -90,6 +105,7 @@ const LINKS_DIR = path.join(ROOT_DIR, "02_links");
 const OUTPUT_DIR = path.join(ROOT_DIR, "03_listos_para_subir");
 const REPORT_DIR = path.join(ROOT_DIR, "04_reportes");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
+const PROMO_DRIVE_ROOT_FOLDER = "VIDEOS PROMO DE KOG";
 
 export const PROMO_TEMPLATES: PromoTemplate[] = [
   {
@@ -421,7 +437,64 @@ export function normalizePromoVideoOptions(input: Partial<PromoVideoRunOptions>)
     customText: Boolean(input.customText || input.hookText?.trim() || input.ctaText?.trim()),
     sourceDir: input.sourceDir,
     sourceHint: input.sourceHint,
+    userId: input.userId,
   };
+}
+
+function extractGeneratedOutputFiles(output: string): string[] {
+  const files: string[] = [];
+  const regex = /Listo:\s+(.+?\.mp4)\s*$/gm;
+  let match;
+  while ((match = regex.exec(output)) !== null) {
+    files.push(match[1].trim());
+  }
+  return [...new Set(files)];
+}
+
+function sanitizeDriveFolderName(value: string): string {
+  return value
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || "General";
+}
+
+function categoryFromOutputFile(filePath: string, options: PromoVideoRunOptions): string {
+  if (options.sourceHint) return sanitizeDriveFolderName(options.sourceHint);
+  const name = path.basename(filePath);
+  const prefix = name.includes("__") ? name.split("__")[0] : "";
+  if (prefix) return sanitizeDriveFolderName(prefix);
+  if (options.objective && options.objective !== "auto") return sanitizeDriveFolderName(options.objective);
+  return "General";
+}
+
+async function uploadPromoOutputsToDrive(outputFiles: string[], options: PromoVideoRunOptions): Promise<PromoVideoDriveUpload[]> {
+  const uploads: PromoVideoDriveUpload[] = [];
+  const userId = options.userId || getSystemUserId();
+  const dateFolder = getLocalDateKey(new Date());
+
+  for (const filePath of outputFiles) {
+    const category = categoryFromOutputFile(filePath, options);
+    const folderId = await ensureDriveFolderPath([PROMO_DRIVE_ROOT_FOLDER, category, dateFolder], userId);
+    const upload = await uploadLocalFileToDriveFolder({
+      filePath,
+      folderId,
+      mimeType: "video/mp4",
+      userId,
+    });
+    uploads.push({
+      fileName: path.basename(filePath),
+      filePath,
+      category,
+      dateFolder,
+      folderId,
+      fileId: upload.fileId,
+      webViewLink: upload.webViewLink,
+      webContentLink: upload.webContentLink,
+    });
+  }
+
+  return uploads;
 }
 
 export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): Promise<PromoVideoRunResult> {
@@ -466,8 +539,10 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
     });
   });
 
+  const outputFiles = extractGeneratedOutputFiles(output);
+  const driveUploads = await uploadPromoOutputsToDrive(outputFiles, options);
   const status = await getPromoVideoStatus();
-  const result = { ok: true, output, reportPath, options, status };
+  const result = { ok: true, output, reportPath, options, status, driveUploads };
   await writeFile(reportPath, JSON.stringify(result, null, 2));
   return result;
 }
@@ -491,6 +566,7 @@ export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions
     customText: Boolean(input.customText || input.hookText?.trim() || input.ctaText?.trim()),
     sourceDir: resolvedSourceDir || undefined,
     sourceHint: input.sourceHint,
+    userId: input.userId,
   });
 
   const config = await readPromoConfig();

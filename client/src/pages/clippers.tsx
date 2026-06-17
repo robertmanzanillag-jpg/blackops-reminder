@@ -7,13 +7,16 @@ import {
   CalendarClock,
   CheckCircle2,
   Clapperboard,
+  ExternalLink,
   Eye,
   Flame,
   Gauge,
+  KeyRound,
   Loader2,
   Network,
   Play,
   RefreshCw,
+  FolderOpen,
   ShieldCheck,
   Sparkles,
   Target,
@@ -36,12 +39,27 @@ import { cn } from "@/lib/utils";
 type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
 type ClipperAgentStatus = "active" | "waiting" | "review_required";
+type ClipperPlatform = "tiktok" | "instagram" | "youtube";
+type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
+type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
+type ClipperReadinessStatus = "ready" | "missing" | "partial";
+
+interface ClipperPlatformAccount {
+  platform: ClipperPlatform;
+  handle: string;
+  displayName: string;
+  status: ClipperPlatformConnectionStatus;
+  requiredScopes: string[];
+  missingSteps: string[];
+  notes: string;
+}
 
 interface ClipperAccount {
   id: string;
   name: string;
   category: ClipperAccountCategory;
   platforms: string[];
+  platformAccounts: ClipperPlatformAccount[];
   dailyClipTarget: number;
   weeklyViewsGoal: number;
   lastWeekViews: number;
@@ -64,6 +82,48 @@ interface ClipperSubAgent {
   job: string;
   status: ClipperAgentStatus;
   output: string;
+}
+
+interface ClipperPlatformRequirement {
+  platform: ClipperPlatform;
+  label: string;
+  developerPortalUrl: string;
+  accountCreationUrl: string;
+  requiredAccountType: string;
+  scopes: string[];
+  appReview: string;
+  postingMode: string;
+  humanRequired: string[];
+  docs: string[];
+}
+
+interface ClipperPermissionRequest {
+  id: string;
+  platform: ClipperPlatform;
+  scope: string;
+  label: string;
+  status: ClipperPermissionStatus;
+  reason: string;
+  evidenceRequired: string;
+  docsUrl: string;
+}
+
+interface ClipperCredentialCheck {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperReadinessStatus;
+  requiredEnvVars: string[];
+  configuredEnvVars: string[];
+  missingEnvVars: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceFolder {
+  category: ClipperAccountCategory | "allowlist" | "drafts" | "scheduled";
+  label: string;
+  path: string;
+  status: "ready";
+  purpose: string;
 }
 
 interface ClipperPipelineItem {
@@ -102,8 +162,13 @@ interface ClipperReport {
 interface ClipperStatus {
   rootDir: string;
   reportsDir: string;
+  sourceRootDir: string;
   accounts: ClipperAccount[];
   sources: ClipperSource[];
+  sourceFolders: ClipperSourceFolder[];
+  credentialChecks: ClipperCredentialCheck[];
+  platformRequirements: ClipperPlatformRequirement[];
+  permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
   pipeline: ClipperPipelineItem[];
   goals: {
@@ -149,6 +214,19 @@ function statusBadge(status: ClipperAgentStatus | ClipperAccountStatus | Clipper
     return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   }
   return "border-zinc-500/30 bg-zinc-500/10 text-zinc-300";
+}
+
+function connectionBadge(status: ClipperPlatformConnectionStatus | ClipperPermissionStatus) {
+  if (status === "ready" || status === "approved") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "requested" || status === "needs_review" || status === "needs_oauth") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "blocked") return "border-red-300/30 bg-red-300/10 text-red-200";
+  return "border-zinc-600 bg-zinc-900 text-zinc-300";
+}
+
+function readinessBadge(status: ClipperReadinessStatus) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
 function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Target; label: string; value: string; detail: string }) {
@@ -204,6 +282,44 @@ export default function ClippersPage() {
     },
   });
 
+  const bootstrapMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/bootstrap-accounts", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar las cuentas");
+      return data as ClipperStatus;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data);
+      toast({
+        title: "Cuentas preparadas",
+        description: "Cree el setup interno para deportes, memes y streamers en las plataformas.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar cuentas", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const workspaceMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/bootstrap-workspace", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar el workspace");
+      return data as ClipperStatus;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data);
+      toast({
+        title: "Workspace preparado",
+        description: "Carpetas de fuentes, allowlist, drafts y scheduled quedaron listas.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar workspace", description: error.message, variant: "destructive" });
+    },
+  });
+
   const report = lastRun || status?.latestReport || null;
   const accountsById = useMemo(() => {
     return (status?.accounts || []).reduce<Record<string, ClipperAccount>>((lookup, account) => {
@@ -249,6 +365,24 @@ export default function ClippersPage() {
             >
               {runMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               Generar plan diario
+            </Button>
+            <Button
+              onClick={() => bootstrapMutation.mutate()}
+              disabled={bootstrapMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="bootstrap-clippers-accounts-button"
+            >
+              {bootstrapMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+              Preparar cuentas
+            </Button>
+            <Button
+              onClick={() => workspaceMutation.mutate()}
+              disabled={workspaceMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="bootstrap-clippers-workspace-button"
+            >
+              {workspaceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+              Preparar workspace
             </Button>
           </div>
         </header>
@@ -321,6 +455,157 @@ export default function ClippersPage() {
                 <div key={rule} className="flex gap-2 rounded-md border border-white/10 bg-black/35 p-2 text-sm text-zinc-300">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-200" />
                   <span>{rule}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <KeyRound className="h-4 w-4 text-cyan-200" />
+                Cuentas preparadas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(status?.accounts || []).flatMap((account) =>
+                (account.platformAccounts || []).map((platformAccount) => (
+                  <div key={`${account.id}-${platformAccount.platform}`} className="rounded-md border border-white/10 bg-black/35 p-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{platformAccount.displayName} <span className="text-zinc-500">{platformAccount.handle}</span></p>
+                        <p className="mt-1 text-xs text-zinc-500">{categoryLabels[account.category]} · {platformAccount.platform}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", connectionBadge(platformAccount.status))}>{platformAccount.status}</Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {platformAccount.requiredScopes.map((scope) => (
+                        <Badge key={scope} variant="outline" className="border-zinc-700 text-zinc-300">{scope}</Badge>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">{platformAccount.notes}</p>
+                    <p className="mt-2 text-xs text-amber-200">Pendiente: {platformAccount.missingSteps.join(" · ")}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <ShieldCheck className="h-4 w-4 text-emerald-200" />
+                Permisos/API
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(status?.permissionQueue || []).map((permission) => (
+                <div key={permission.id} className="rounded-md border border-white/10 bg-black/35 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{permission.label}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{permission.reason}</p>
+                    </div>
+                    <Badge className={cn("border", connectionBadge(permission.status))}>{permission.status}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">{permission.evidenceRequired}</p>
+                  <a href={permission.docsUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-cyan-200 hover:text-cyan-100">
+                    Docs oficiales
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="border-zinc-800 bg-zinc-950/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <UploadCloud className="h-4 w-4 text-amber-200" />
+              Setup por plataforma
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 xl:grid-cols-3">
+            {(status?.platformRequirements || []).map((platform) => (
+              <div key={platform.platform} className="rounded-md border border-white/10 bg-black/35 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium">{platform.label}</p>
+                  <a href={platform.developerPortalUrl} target="_blank" rel="noreferrer" className="text-cyan-200 hover:text-cyan-100" aria-label={`Abrir ${platform.label}`}>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">{platform.requiredAccountType}</p>
+                <p className="mt-2 text-xs leading-5 text-zinc-500">{platform.appReview}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {platform.scopes.map((scope) => (
+                    <Badge key={scope} variant="outline" className="border-zinc-700 text-zinc-300">{scope}</Badge>
+                  ))}
+                </div>
+                <div className="mt-3 space-y-1">
+                  {platform.humanRequired.map((step) => (
+                    <p key={step} className="flex gap-2 text-xs leading-5 text-zinc-500">
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" />
+                      {step}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <KeyRound className="h-4 w-4 text-amber-200" />
+                Credenciales OAuth
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(status?.credentialChecks || []).map((check) => (
+                <div key={check.platform} className="rounded-md border border-white/10 bg-black/35 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">{check.label}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{check.nextStep}</p>
+                    </div>
+                    <Badge className={cn("border", readinessBadge(check.status))}>{check.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                    <div className="rounded-md border border-white/10 bg-black/30 p-2">
+                      <p className="text-zinc-500">Configuradas</p>
+                      <p className="mt-1 break-all text-zinc-300">{check.configuredEnvVars.length ? check.configuredEnvVars.join(", ") : "ninguna"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/30 p-2">
+                      <p className="text-zinc-500">Faltan</p>
+                      <p className="mt-1 break-all text-amber-200">{check.missingEnvVars.length ? check.missingEnvVars.join(", ") : "listo"}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <FolderOpen className="h-4 w-4 text-emerald-200" />
+                Carpetas de fuentes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {(status?.sourceFolders || []).map((folder) => (
+                <div key={folder.path} className="rounded-md border border-white/10 bg-black/35 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-white">{folder.label}</p>
+                    <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-emerald-200">{folder.status}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">{folder.purpose}</p>
+                  <p className="mt-2 break-all text-xs text-zinc-600">{folder.path}</p>
                 </div>
               ))}
             </CardContent>

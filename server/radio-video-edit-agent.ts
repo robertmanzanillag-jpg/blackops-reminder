@@ -6,11 +6,12 @@ import { storage } from "./storage";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { sendPushNotification } from "./push-notifications";
 import { sendTelegramPlainMessage } from "./telegram";
+import { ensureDriveFolderAtRoot, uploadLocalFileToDriveFolder } from "./google-drive";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
 const DEFAULT_FALLBACK_INPUT_DIR = path.join(process.cwd(), "radio_video_edits", "01_originales");
-const DEFAULT_DRIVE_FOLDER_NAME = "videos editado para ig";
+const IG_RADIO_FOLDER_NAME = "videos editado para ig";
 const TIKTOK_RADIO_FOLDER_NAME = "VIDEOS DE TIKTOK DE LA RADIO";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
@@ -28,11 +29,15 @@ type RadioVideoJobInput = {
   fallbackInputDir?: string;
   bestDropSecond?: number;
   djName?: string;
+  userId?: string;
 };
 
 type RenderedClip = {
   kind: "horizontal_ig" | "vertical_tiktok";
   path: string;
+  driveFolderName?: string;
+  driveFileId?: string;
+  driveWebViewLink?: string | null;
   durationSeconds: number;
   width: number;
   height: number;
@@ -371,7 +376,7 @@ function resolveDriveOutputDir(folderName: string): string | null {
   return path.join(cloudStorage, "__AUTO_DISCOVER__", folderName);
 }
 
-async function copyToGoogleDriveDesktop(filePath: string, folderName = DEFAULT_DRIVE_FOLDER_NAME): Promise<string | null> {
+async function copyToGoogleDriveDesktop(filePath: string, folderName = IG_RADIO_FOLDER_NAME): Promise<string | null> {
   const driveTarget = resolveDriveOutputDir(folderName);
   if (!driveTarget) return null;
 
@@ -401,10 +406,7 @@ async function copyToGoogleDriveDesktop(filePath: string, folderName = DEFAULT_D
 }
 
 async function renderRadioVideoJob(input: RadioVideoJobInput & { djName: string; force?: boolean }): Promise<RenderedClip[]> {
-  const outputDir = input.outputDir || DEFAULT_OUTPUT_DIR;
-  const tiktokOutputDir = path.join(outputDir, TIKTOK_RADIO_FOLDER_NAME);
-  await fs.mkdir(outputDir, { recursive: true });
-  await fs.mkdir(tiktokOutputDir, { recursive: true });
+  const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), "radio-drive-upload-"));
 
   const duration = await getVideoDuration(input.videoPath);
   const dropSecond = input.bestDropSecond ?? await findBestDropSecond(input.videoPath, duration);
@@ -413,43 +415,71 @@ async function renderRadioVideoJob(input: RadioVideoJobInput & { djName: string;
   const longStart = clipStartAroundDrop(duration, longDuration, dropSecond);
   const shortStart = clipStartAroundDrop(duration, shortDuration, dropSecond);
 
-  const horizontalPath = buildOutputPath(outputDir, input.djName, "60s_horizontal_ig");
-  const verticalPath = buildOutputPath(tiktokOutputDir, input.djName, "30s_vertical_tiktok");
+  const horizontalPath = buildOutputPath(stagingDir, input.djName, "60s_horizontal_ig");
+  const verticalPath = buildOutputPath(stagingDir, input.djName, "30s_vertical_tiktok");
 
-  await renderClip({
-    videoPath: input.videoPath,
-    outputPath: horizontalPath,
-    start: longStart,
-    duration: longDuration,
-    mode: "horizontal_ig",
-    force: input.force,
-  });
-  await renderClip({
-    videoPath: input.videoPath,
-    outputPath: verticalPath,
-    start: shortStart,
-    duration: shortDuration,
-    mode: "vertical_tiktok",
-    force: input.force,
-  });
+  try {
+    await renderClip({
+      videoPath: input.videoPath,
+      outputPath: horizontalPath,
+      start: longStart,
+      duration: longDuration,
+      mode: "horizontal_ig",
+      force: true,
+    });
+    await renderClip({
+      videoPath: input.videoPath,
+      outputPath: verticalPath,
+      start: shortStart,
+      duration: shortDuration,
+      mode: "vertical_tiktok",
+      force: true,
+    });
 
-  const clips: RenderedClip[] = [
-    { kind: "horizontal_ig", path: horizontalPath, durationSeconds: longDuration, width: 1080, height: 1350 },
-    { kind: "vertical_tiktok", path: verticalPath, durationSeconds: shortDuration, width: 1080, height: 1920 },
-  ];
+    const clips: RenderedClip[] = [
+      {
+        kind: "horizontal_ig",
+        path: horizontalPath,
+        driveFolderName: IG_RADIO_FOLDER_NAME,
+        durationSeconds: longDuration,
+        width: 1080,
+        height: 1350,
+      },
+      {
+        kind: "vertical_tiktok",
+        path: verticalPath,
+        driveFolderName: TIKTOK_RADIO_FOLDER_NAME,
+        durationSeconds: shortDuration,
+        width: 1080,
+        height: 1920,
+      },
+    ];
 
-  for (const clip of clips) {
-    try {
-      await copyToGoogleDriveDesktop(
-        clip.path,
-        clip.kind === "vertical_tiktok" ? TIKTOK_RADIO_FOLDER_NAME : DEFAULT_DRIVE_FOLDER_NAME,
-      );
-    } catch (error) {
-      console.warn("[radio-video-edit] Google Drive Desktop copy failed:", error instanceof Error ? error.message : error);
+    for (const clip of clips) {
+      const folderName = clip.driveFolderName || IG_RADIO_FOLDER_NAME;
+      const folderId = await ensureDriveFolderAtRoot(folderName, input.userId);
+      const upload = await uploadLocalFileToDriveFolder({
+        filePath: clip.path,
+        folderId,
+        mimeType: "video/mp4",
+        userId: input.userId,
+      });
+      clip.driveFileId = upload.fileId;
+      clip.driveWebViewLink = upload.webViewLink;
     }
-  }
 
-  return clips;
+    if (process.env.RADIO_EDIT_COPY_TO_DRIVE_DESKTOP === "1") {
+      for (const clip of clips) {
+        await copyToGoogleDriveDesktop(clip.path, clip.driveFolderName || IG_RADIO_FOLDER_NAME).catch((error) => {
+          console.warn("[radio-video-edit] Google Drive Desktop copy failed:", error instanceof Error ? error.message : error);
+        });
+      }
+    }
+
+    return clips;
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function notifyMissingDjName(userId: string, pendingActionId: string, videoPath: string): Promise<void> {
@@ -558,6 +588,7 @@ export async function processRadioVideo(params: {
       bestDropSecond,
       djName,
       force: params.force,
+      userId: params.userId,
     });
 
     await writeAuditLog({

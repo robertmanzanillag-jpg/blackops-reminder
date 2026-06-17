@@ -244,7 +244,7 @@ export function buildDirectPromoVideoCommand(message?: string): { content: strin
   };
 }
 
-function normalizePromoVideoGenerateData(input: any): { count: number; targetSeconds: number; cuts: number; hookText?: string; ctaText?: string; sourceHint?: string; fontStyle: "bold" | "clean" | "luxury" | "impact" | "neon" } {
+function normalizePromoVideoGenerateData(input: any): { count: number; targetSeconds: number; cuts: number; hookText?: string; ctaText?: string; sourceHint?: string; userId?: string; fontStyle: "bold" | "clean" | "luxury" | "impact" | "neon" } {
   const fontStyle = ["bold", "clean", "luxury", "impact", "neon"].includes(String(input?.fontStyle))
     ? input.fontStyle
     : "bold";
@@ -255,12 +255,13 @@ function normalizePromoVideoGenerateData(input: any): { count: number; targetSec
     hookText: cleanPromoText(input?.hookText),
     ctaText: cleanPromoText(input?.ctaText),
     sourceHint: cleanPromoText(input?.sourceHint || input?.sourceDir),
+    userId: typeof input?.userId === "string" ? input.userId : undefined,
     fontStyle,
   };
 }
 
-async function executePromoVideoGenerateData(input: any) {
-  const options = normalizePromoVideoGenerateData(input);
+async function executePromoVideoGenerateData(input: any, userId?: string) {
+  const options = normalizePromoVideoGenerateData({ ...input, userId: input?.userId || userId });
   const result = await runPromoVideoAutoDaily({
     maxVideos: options.count,
     targetSeconds: options.targetSeconds,
@@ -270,21 +271,28 @@ async function executePromoVideoGenerateData(input: any) {
     ctaText: options.ctaText,
     fontStyle: options.fontStyle,
     sourceHint: options.sourceHint,
+    userId: options.userId,
     customText: Boolean(options.hookText || options.ctaText),
   });
   const outputNames = result.status.outputVideos.slice(0, options.count).map((video) => video.name);
+  const driveLinks = result.driveUploads
+    .map((upload) => upload.webViewLink)
+    .filter(Boolean) as string[];
   const summary = [
     "",
     `Listo. Procesé ${options.count} video${options.count === 1 ? "" : "s"} de promo de ${options.targetSeconds}s.`,
     options.sourceHint ? `Fuente: ${options.sourceHint}.` : null,
+    `Google Drive: ${result.driveUploads.length} archivo${result.driveUploads.length === 1 ? "" : "s"} subido${result.driveUploads.length === 1 ? "" : "s"} en VIDEOS PROMO DE KOG.`,
+    driveLinks.length ? `Links: ${driveLinks.slice(0, 5).join(" | ")}` : null,
     `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
-    `Carpeta lista: ${result.status.outputDir}`,
+    `Cache local: ${result.status.outputDir}`,
   ].filter(Boolean).join("\n");
 
   return {
     summary,
     outputDir: result.status.outputDir,
     outputVideos: outputNames,
+    driveUploads: result.driveUploads,
   };
 }
 
@@ -659,12 +667,13 @@ export function registerAssistantRoutes(app: Express): void {
         try {
           const commandMatch = directPromoVideoCommand.command.match(/\[PROMO_VIDEO_GENERATE:\s*(\{[^}]+\})\]/);
           const promoData = commandMatch ? JSON.parse(commandMatch[1]) : {};
-          const generated = await executePromoVideoGenerateData(promoData);
+          const generated = await executePromoVideoGenerateData(promoData, userId);
           res.write(`data: ${JSON.stringify({
             content: `\n\n${generated.summary}`,
             promoVideosGenerated: true,
             outputDir: generated.outputDir,
             outputVideos: generated.outputVideos,
+            driveUploads: generated.driveUploads,
           })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\n${generated.summary}`).catch((historyError) => {
             console.error("Error saving direct promo video assistant response:", historyError);
@@ -805,12 +814,13 @@ export function registerAssistantRoutes(app: Express): void {
       while ((promoVideoGenerateMatch = promoVideoGenerateRegex.exec(fullResponse)) !== null) {
         try {
           const promoData = JSON.parse(promoVideoGenerateMatch[1]);
-          const generated = await executePromoVideoGenerateData(promoData);
+          const generated = await executePromoVideoGenerateData(promoData, userId);
           res.write(`data: ${JSON.stringify({
             content: `\n\n${generated.summary}`,
             promoVideosGenerated: true,
             outputDir: generated.outputDir,
             outputVideos: generated.outputVideos,
+            driveUploads: generated.driveUploads,
           })}\n\n`);
         } catch (e: any) {
           console.error("Error generating promo videos from assistant:", e);

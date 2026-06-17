@@ -5,12 +5,27 @@ export type ClipperAccountCategory = "sports" | "memes" | "streamers";
 export type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
 export type ClipperSourceType = "owned_folder" | "official_api" | "creator_allowlist" | "manual_drop";
 export type ClipperAgentStatus = "active" | "waiting" | "review_required";
+export type ClipperPlatform = "tiktok" | "instagram" | "youtube";
+export type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
+export type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
+export type ClipperReadinessStatus = "ready" | "missing" | "partial";
+
+export interface ClipperPlatformAccount {
+  platform: ClipperPlatform;
+  handle: string;
+  displayName: string;
+  status: ClipperPlatformConnectionStatus;
+  requiredScopes: string[];
+  missingSteps: string[];
+  notes: string;
+}
 
 export interface ClipperAccount {
   id: string;
   name: string;
   category: ClipperAccountCategory;
   platforms: string[];
+  platformAccounts: ClipperPlatformAccount[];
   dailyClipTarget: number;
   weeklyViewsGoal: number;
   lastWeekViews: number;
@@ -45,8 +60,13 @@ export interface ClipperPipelineItem {
 export interface ClipperStatus {
   rootDir: string;
   reportsDir: string;
+  sourceRootDir: string;
   accounts: ClipperAccount[];
   sources: ClipperSource[];
+  sourceFolders: ClipperSourceFolder[];
+  credentialChecks: ClipperCredentialCheck[];
+  platformRequirements: ClipperPlatformRequirement[];
+  permissionQueue: ClipperPermissionRequest[];
   agents: ClipperSubAgent[];
   pipeline: ClipperPipelineItem[];
   goals: {
@@ -57,6 +77,48 @@ export interface ClipperStatus {
   };
   latestReport: ClipperReport | null;
   guardrails: string[];
+}
+
+export interface ClipperPlatformRequirement {
+  platform: ClipperPlatform;
+  label: string;
+  developerPortalUrl: string;
+  accountCreationUrl: string;
+  requiredAccountType: string;
+  scopes: string[];
+  appReview: string;
+  postingMode: string;
+  humanRequired: string[];
+  docs: string[];
+}
+
+export interface ClipperPermissionRequest {
+  id: string;
+  platform: ClipperPlatform;
+  scope: string;
+  label: string;
+  status: ClipperPermissionStatus;
+  reason: string;
+  evidenceRequired: string;
+  docsUrl: string;
+}
+
+export interface ClipperCredentialCheck {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperReadinessStatus;
+  requiredEnvVars: string[];
+  configuredEnvVars: string[];
+  missingEnvVars: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceFolder {
+  category: ClipperAccountCategory | "allowlist" | "drafts" | "scheduled";
+  label: string;
+  path: string;
+  status: "ready";
+  purpose: string;
 }
 
 export interface ClipperRunOptions {
@@ -93,7 +155,179 @@ export interface ClipperReport {
 
 const ROOT_DIR = path.join(process.cwd(), "clippers_workspace");
 const REPORTS_DIR = path.join(ROOT_DIR, "reports");
+const SOURCES_DIR = path.join(ROOT_DIR, "sources");
+const DRAFTS_DIR = path.join(ROOT_DIR, "drafts");
+const SCHEDULED_DIR = path.join(ROOT_DIR, "scheduled");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
+
+const SOURCE_FOLDERS: ClipperSourceFolder[] = [
+  {
+    category: "sports",
+    label: "Deportes",
+    path: path.join(SOURCES_DIR, "sports"),
+    status: "ready",
+    purpose: "Videos propios, licenciados o oficiales listos para detectar highlights deportivos.",
+  },
+  {
+    category: "memes",
+    label: "Memes",
+    path: path.join(SOURCES_DIR, "memes"),
+    status: "ready",
+    purpose: "Assets originales, templates permitidos y clips remix-safe para memes.",
+  },
+  {
+    category: "streamers",
+    label: "Streamers",
+    path: path.join(SOURCES_DIR, "streamers"),
+    status: "ready",
+    purpose: "VODs propios, clips con permiso o material de creadores en allowlist.",
+  },
+  {
+    category: "allowlist",
+    label: "Allowlist",
+    path: path.join(ROOT_DIR, "allowlist"),
+    status: "ready",
+    purpose: "Evidencia de permiso/licencia por creador, liga, marca o fuente.",
+  },
+  {
+    category: "drafts",
+    label: "Drafts",
+    path: DRAFTS_DIR,
+    status: "ready",
+    purpose: "Clips generados antes de aprobacion/publicacion.",
+  },
+  {
+    category: "scheduled",
+    label: "Scheduled",
+    path: SCHEDULED_DIR,
+    status: "ready",
+    purpose: "Paquetes listos para publicar cuando haya OAuth y aprobacion.",
+  },
+];
+
+const CREDENTIAL_ENV_REQUIREMENTS: Array<Pick<ClipperCredentialCheck, "platform" | "label" | "requiredEnvVars" | "nextStep">> = [
+  {
+    platform: "tiktok",
+    label: "TikTok Content Posting API",
+    requiredEnvVars: ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
+    nextStep: "Crear app en TikTok Developers, pedir Content Posting API y guardar client key/secret.",
+  },
+  {
+    platform: "instagram",
+    label: "Meta / Instagram Graph API",
+    requiredEnvVars: ["META_APP_ID", "META_APP_SECRET"],
+    nextStep: "Crear app en Meta Developers, configurar Instagram Graph API y guardar app id/secret.",
+  },
+  {
+    platform: "youtube",
+    label: "YouTube Data API",
+    requiredEnvVars: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    nextStep: "Activar YouTube Data API v3 en Google Cloud y reutilizar/guardar OAuth client id/secret.",
+  },
+];
+
+const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
+  {
+    platform: "tiktok",
+    label: "TikTok",
+    developerPortalUrl: "https://developers.tiktok.com/",
+    accountCreationUrl: "https://www.tiktok.com/signup",
+    requiredAccountType: "Cuenta TikTok por marca + app en TikTok for Developers",
+    scopes: ["video.publish", "video.upload"],
+    appReview: "Content Posting API con Direct Post habilitado; video.publish requiere aprobacion de scope y autorizacion del usuario.",
+    postingMode: "Direct Post para autopost; Upload/InBox si quieres que el usuario termine el post en TikTok.",
+    humanRequired: [
+      "Crear o iniciar sesion en cada cuenta TikTok.",
+      "Verificar email/telefono si TikTok lo pide.",
+      "Crear app en TikTok for Developers y pedir Content Posting API.",
+      "Completar app review para levantar restricciones de visibilidad.",
+    ],
+    docs: [
+      "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+      "https://developers.tiktok.com/doc/content-posting-api-reference-upload-video/",
+    ],
+  },
+  {
+    platform: "instagram",
+    label: "Instagram Reels",
+    developerPortalUrl: "https://developers.facebook.com/",
+    accountCreationUrl: "https://www.instagram.com/accounts/emailsignup/",
+    requiredAccountType: "Cuenta profesional de Instagram conectada a una Facebook Page",
+    scopes: ["instagram_content_publish", "instagram_basic", "pages_show_list"],
+    appReview: "Meta app review para publicar contenido y leer cuentas conectadas.",
+    postingMode: "Instagram Graph API Content Publishing para Reels en cuentas profesionales elegibles.",
+    humanRequired: [
+      "Crear o iniciar sesion en cada cuenta Instagram.",
+      "Cambiar la cuenta a Professional/Creator/Business si no lo esta.",
+      "Conectarla a una Facebook Page.",
+      "Crear Meta app y completar App Review para permisos de Instagram.",
+    ],
+    docs: [
+      "https://developers.facebook.com/docs/instagram-platform/",
+      "https://developers.facebook.com/docs/permissions/reference/instagram_content_publish/",
+    ],
+  },
+  {
+    platform: "youtube",
+    label: "YouTube Shorts",
+    developerPortalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+    accountCreationUrl: "https://www.youtube.com/create_channel",
+    requiredAccountType: "Canal de YouTube por marca o cuenta Google autorizada",
+    scopes: ["https://www.googleapis.com/auth/youtube.upload"],
+    appReview: "Proyectos no verificados pueden quedar limitados; Google puede requerir OAuth verification/API compliance audit.",
+    postingMode: "YouTube Data API videos.insert con metadata de Shorts.",
+    humanRequired: [
+      "Crear o iniciar sesion en cada canal/cuenta Google.",
+      "Activar YouTube Data API v3 en Google Cloud.",
+      "Configurar OAuth consent screen.",
+      "Autorizar cada canal con youtube.upload.",
+    ],
+    docs: ["https://developers.google.com/youtube/v3/docs/videos/insert"],
+  },
+];
+
+const PERMISSION_QUEUE: ClipperPermissionRequest[] = PLATFORM_REQUIREMENTS.flatMap((platform) =>
+  platform.scopes.map((scope) => ({
+    id: `${platform.platform}-${scope.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+    platform: platform.platform,
+    scope,
+    label: `${platform.label}: ${scope}`,
+    status: "missing",
+    reason: `Necesario para publicar o preparar clips en ${platform.label}.`,
+    evidenceRequired: "Token OAuth valido, app review aprobada cuando aplique, y cuenta destino autorizada.",
+    docsUrl: platform.docs[0],
+  }))
+);
+
+const defaultPlatformAccounts = (slug: string, displayName: string): ClipperPlatformAccount[] => [
+  {
+    platform: "tiktok",
+    handle: `@${slug}`,
+    displayName,
+    status: "not_created",
+    requiredScopes: ["video.publish", "video.upload"],
+    missingSteps: ["Crear cuenta", "Conectar OAuth", "Aprobar Content Posting API", "Autorizar video.publish/video.upload"],
+    notes: "Preparado en la app; requiere accion humana en TikTok.",
+  },
+  {
+    platform: "instagram",
+    handle: `@${slug}`,
+    displayName,
+    status: "not_created",
+    requiredScopes: ["instagram_content_publish", "instagram_basic", "pages_show_list"],
+    missingSteps: ["Crear cuenta profesional", "Conectar Facebook Page", "Conectar OAuth Meta", "Aprobar permisos"],
+    notes: "Preparado en la app; requiere login y Page conectada.",
+  },
+  {
+    platform: "youtube",
+    handle: `@${slug}`,
+    displayName,
+    status: "not_created",
+    requiredScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+    missingSteps: ["Crear canal", "Activar YouTube Data API", "Conectar OAuth", "Autorizar youtube.upload"],
+    notes: "Preparado en la app; requiere canal Google/YouTube real.",
+  },
+];
 
 const DEFAULT_ACCOUNTS: ClipperAccount[] = [
   {
@@ -101,6 +335,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     name: "Sports Daily Clips",
     category: "sports",
     platforms: ["TikTok", "Instagram Reels", "YouTube Shorts"],
+    platformAccounts: defaultPlatformAccounts("sportsdailyclips", "Sports Daily Clips"),
     dailyClipTarget: 10,
     weeklyViewsGoal: 1_000_000,
     lastWeekViews: 286_000,
@@ -112,6 +347,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     name: "Meme Radar",
     category: "memes",
     platforms: ["TikTok", "Instagram Reels"],
+    platformAccounts: defaultPlatformAccounts("memeradarclips", "Meme Radar"),
     dailyClipTarget: 12,
     weeklyViewsGoal: 1_000_000,
     lastWeekViews: 412_000,
@@ -123,6 +359,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     name: "Streamer Pulse",
     category: "streamers",
     platforms: ["TikTok", "YouTube Shorts", "Instagram Reels"],
+    platformAccounts: defaultPlatformAccounts("streamerpulseclips", "Streamer Pulse"),
     dailyClipTarget: 8,
     weeklyViewsGoal: 1_000_000,
     lastWeekViews: 198_000,
@@ -208,7 +445,50 @@ async function ensureClipperDirs() {
   await Promise.all([
     mkdir(ROOT_DIR, { recursive: true }),
     mkdir(REPORTS_DIR, { recursive: true }),
+    ...SOURCE_FOLDERS.map((folder) => mkdir(folder.path, { recursive: true })),
   ]);
+}
+
+function buildCredentialChecks(): ClipperCredentialCheck[] {
+  return CREDENTIAL_ENV_REQUIREMENTS.map((requirement) => {
+    const configuredEnvVars = requirement.requiredEnvVars.filter((name) => Boolean(process.env[name]));
+    const missingEnvVars = requirement.requiredEnvVars.filter((name) => !process.env[name]);
+    return {
+      ...requirement,
+      configuredEnvVars,
+      missingEnvVars,
+      status:
+        missingEnvVars.length === 0
+          ? "ready"
+          : configuredEnvVars.length > 0
+            ? "partial"
+            : "missing",
+    };
+  });
+}
+
+async function writeWorkspaceReadme() {
+  const readmePath = path.join(ROOT_DIR, "README.md");
+  try {
+    await stat(readmePath);
+  } catch {
+    await writeFile(
+      readmePath,
+      [
+        "# Clippers Workspace",
+        "",
+        "Pon aqui solo videos propios, licenciados, de fuentes oficiales o con permiso explicito.",
+        "",
+        "- sources/sports: deportes",
+        "- sources/memes: memes",
+        "- sources/streamers: streamers",
+        "- allowlist: evidencia de permisos/licencias",
+        "- drafts: clips generados para revision",
+        "- scheduled: paquetes aprobados para publicar",
+        "",
+      ].join("\n")
+    );
+  }
 }
 
 async function readConfig(): Promise<{ accounts?: ClipperAccount[]; sources?: ClipperSource[] }> {
@@ -219,6 +499,15 @@ async function readConfig(): Promise<{ accounts?: ClipperAccount[]; sources?: Cl
   } catch {
     return {};
   }
+}
+
+function ensureAccountShape(account: ClipperAccount): ClipperAccount {
+  if (Array.isArray(account.platformAccounts) && account.platformAccounts.length) return account;
+  const slug = account.id.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+  return {
+    ...account,
+    platformAccounts: defaultPlatformAccounts(slug, account.name),
+  };
 }
 
 async function writeDefaultConfigIfMissing() {
@@ -278,8 +567,9 @@ async function getLatestReport(): Promise<ClipperReport | null> {
 
 export async function getClipperStatus(): Promise<ClipperStatus> {
   await writeDefaultConfigIfMissing();
+  await writeWorkspaceReadme();
   const config = await readConfig();
-  const accounts = Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS;
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
   const sources = Array.isArray(config.sources) && config.sources.length ? config.sources : DEFAULT_SOURCES;
   const dailyClipsTarget = accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
   const weeklyViewsPerAccount = 1_000_000;
@@ -287,8 +577,13 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
   return {
     rootDir: ROOT_DIR,
     reportsDir: REPORTS_DIR,
+    sourceRootDir: SOURCES_DIR,
     accounts,
     sources,
+    sourceFolders: SOURCE_FOLDERS,
+    credentialChecks: buildCredentialChecks(),
+    platformRequirements: PLATFORM_REQUIREMENTS,
+    permissionQueue: PERMISSION_QUEUE,
     agents: DEFAULT_AGENTS,
     pipeline: buildPipeline(accounts),
     goals: {
@@ -302,8 +597,24 @@ export async function getClipperStatus(): Promise<ClipperStatus> {
       "Publicar solo contenido propio, licenciado, permitido por el creador o disponible desde una fuente oficial.",
       "Las cuentas nuevas empiezan con aprobacion manual hasta validar calidad, permisos y riesgo de strikes.",
       "El optimizador puede cambiar hooks, horarios y volumen; no debe evadir derechos, marcas de agua o reglas de plataforma.",
+      "La app puede preparar cuentas internas y checklists, pero crear cuentas reales requiere login, verificacion y aceptacion de terminos en cada plataforma.",
     ],
   };
+}
+
+export async function bootstrapClipperAccounts(): Promise<ClipperStatus> {
+  await ensureClipperDirs();
+  await writeWorkspaceReadme();
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const sources = Array.isArray(config.sources) && config.sources.length ? config.sources : DEFAULT_SOURCES;
+  await writeFile(CONFIG_PATH, JSON.stringify({ ...config, accounts, sources }, null, 2));
+  return getClipperStatus();
+}
+
+export async function bootstrapClipperWorkspace(): Promise<ClipperStatus> {
+  await bootstrapClipperAccounts();
+  return getClipperStatus();
 }
 
 function buildPlannedClips(accounts: ClipperAccount[], clipsPerAccount: number): ClipperPlannedClip[] {
@@ -371,6 +682,7 @@ export async function runClipperDailyPlan(input: unknown = {}): Promise<{ report
     accountRecommendations: buildRecommendations(status.accounts),
     nextActions: [
       "Conectar credenciales oficiales de TikTok, Instagram y YouTube por cuenta.",
+      "Completar creacion/verificacion humana de las 9 cuentas plataforma preparadas en Setup.",
       "Crear allowlist de fuentes/creadores con permiso explicito.",
       "Definir carpetas locales por categoria para que Clip Factory pueda generar archivos reales.",
       "Activar reportes diarios por Telegram cuando existan metricas reales de plataforma.",
@@ -396,4 +708,5 @@ export async function readClipperReport(id: string): Promise<ClipperReport | nul
 export const __clipperInternals = {
   normalizeRunOptions,
   buildPlannedClips,
+  defaultPlatformAccounts,
 };
