@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
+  BadgeDollarSign,
   Bot,
   BriefcaseBusiness,
   Clapperboard,
@@ -73,6 +74,24 @@ const agents = [
     skin: "bg-orange-200",
     position: "left-[40%] top-[29%]",
     bubblePosition: "left-[38%] top-[7%]",
+  },
+  {
+    id: "revenue",
+    name: "Revenue",
+    role: "Ventas y mockups",
+    href: "/revenue-engine",
+    icon: BadgeDollarSign,
+    station: "Revenue room",
+    status: "Armando pipeline",
+    activity: "Buscando nichos, preparando mockups y cuidando margen",
+    shortAction: "Ventas",
+    mode: "working",
+    color: "from-emerald-300 to-sky-400",
+    outfit: "bg-emerald-500",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[55%] top-[31%]",
+    bubblePosition: "left-[51%] top-[12%]",
   },
   {
     id: "code",
@@ -248,6 +267,9 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
   }
   if (contact.name === "CEO") {
     return `${opener}Lo miro como decision: impacto, urgencia y riesgo. Mi recomendacion inicial es separar esto en: que hay que decidir hoy, que puede esperar y que dato falta para no improvisar.`;
+  }
+  if (contact.name === "Revenue") {
+    return `${opener}Lo convierto en pipeline: area, nicho, leads con evidencia, mockup, outreach en draft, propuesta y QA. Si falta un dato critico, pregunto antes de gastar o contactar.`;
   }
   if (contact.name === "Code") {
     return `${opener}Lo reviso como problema tecnico.${text.includes("repo objetivo") ? " Voy a trabajar con el repo objetivo que seleccionaste, no con todos a la vez." : ""} Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
@@ -436,13 +458,13 @@ function RoomZone({ className, label }: { className?: string; label: string }) {
   return (
     <div
       className={cn(
-        "absolute z-[2] rounded-[24px] border border-cyan-100/14 bg-[#08101b]/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.24)] backdrop-blur-[1px]",
+        "absolute z-[2] rounded-[24px] border border-cyan-100/24 bg-[#08101b]/48 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
         className
       )}
     >
       <div className="absolute inset-x-3 top-3 h-px bg-cyan-100/12" />
       <div className="absolute inset-y-3 left-3 w-px bg-cyan-100/10" />
-      <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/14 bg-[#070b12]/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100 shadow-lg shadow-black/30">
+      <div className="absolute left-4 top-4 z-[55] rounded-xl border border-cyan-100/24 bg-[#070b12]/95 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-50 shadow-lg shadow-black/40">
         {label}
       </div>
     </div>
@@ -934,8 +956,8 @@ export default function AgentsOfficePage() {
           <RoomZone className="left-[72%] top-[66%] h-[16%] w-[16%]" label="Security" />
 
           <div className="absolute left-[18%] top-[23%] z-[5] text-left">
-            <p className="text-3xl font-black tracking-[0.15em] text-white/86">ROBS</p>
-            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-100/55">Agentic Office</p>
+            <p className="text-2xl font-black tracking-[0.12em] text-white/90">ROBS</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/70">Agentic Office</p>
           </div>
 
           <div className="absolute left-[41%] top-[19%] h-28 w-48 rounded-2xl border border-white/10 bg-[#1d2430] shadow-2xl shadow-black/40">
