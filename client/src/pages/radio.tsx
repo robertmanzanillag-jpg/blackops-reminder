@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Radio, Users, AlertCircle, MessageSquare, Copy, Check, Plus, Trash2, RefreshCw, Send, FolderDown } from "lucide-react";
+import { Radio, Users, AlertCircle, MessageSquare, Copy, Check, Plus, Trash2, RefreshCw, Send, FolderDown, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,12 @@ interface RadioTemplateAsset {
   lastGeneratedAt: string | null;
 }
 
+interface GoogleDriveStatus {
+  configured: boolean;
+  connected: boolean;
+  scope: string | null;
+}
+
 export default function RadioPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -65,6 +71,10 @@ export default function RadioPage() {
 
   const { data: templateAssets = [] } = useQuery<RadioTemplateAsset[]>({
     queryKey: ["/api/radio/templates/assets"],
+  });
+
+  const { data: driveStatus } = useQuery<GoogleDriveStatus>({
+    queryKey: ["/api/google-drive/status"],
   });
 
   const importDjsMutation = useMutation({
@@ -209,6 +219,37 @@ export default function RadioPage() {
         </div>
 
         <FlyerGenerator slots={slots} />
+
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <HardDrive className={driveStatus?.connected ? "h-5 w-5 text-green-400" : "h-5 w-5 text-yellow-400"} />
+              <div>
+                <p className="text-sm font-medium text-white">
+                  Google Drive {driveStatus?.connected ? "conectado" : "pendiente"}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {driveStatus?.connected
+                    ? "Los templates se guardan automáticamente en Drive."
+                    : driveStatus?.configured
+                      ? "Conecta Drive para subir los templates."
+                      : "Faltan GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET."}
+                </p>
+              </div>
+            </div>
+            {!driveStatus?.connected && driveStatus?.configured && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { window.location.href = "/api/google-drive/auth"; }}
+                data-testid="connect-google-drive-button"
+              >
+                <HardDrive className="h-4 w-4 mr-2" />
+                Conectar Drive
+              </Button>
+            )}
+          </CardContent>
+        </Card>
 
         {templateAssets.length > 0 && (
           <Card className="bg-zinc-900 border-zinc-800">

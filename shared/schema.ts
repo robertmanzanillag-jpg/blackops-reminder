@@ -703,6 +703,28 @@ export const insertCanvaOAuthTokenSchema = createInsertSchema(canvaOAuthTokens).
 export type CanvaOAuthToken = typeof canvaOAuthTokens.$inferSelect;
 export type InsertCanvaOAuthToken = z.infer<typeof insertCanvaOAuthTokenSchema>;
 
+// ==================== GOOGLE DRIVE OAUTH TOKENS ====================
+
+export const googleDriveOAuthTokens = pgTable("google_drive_oauth_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  scope: text("scope"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertGoogleDriveOAuthTokenSchema = createInsertSchema(googleDriveOAuthTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type GoogleDriveOAuthToken = typeof googleDriveOAuthTokens.$inferSelect;
+export type InsertGoogleDriveOAuthToken = z.infer<typeof insertGoogleDriveOAuthTokenSchema>;
+
 // ==================== AGENT ACTIONS (autonomous task execution) ====================
 
 export const agentActions = pgTable("agent_actions", {

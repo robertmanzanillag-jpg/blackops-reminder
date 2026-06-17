@@ -328,12 +328,13 @@ export async function generateRadioTemplatesForDate(
           viewUrl: process.env.CANVA_RADIO_TEMPLATE_VIEW_URL || null,
         };
         const buffer = await renderLocalRadioTemplatePng(input.djName);
-        folderId ||= await ensureRadioDriveFolder(dateFolderName);
+        folderId ||= await ensureRadioDriveFolder(dateFolderName, userId);
         const upload = await uploadRadioTemplatePng({
           buffer,
           filename,
           folderId,
           existingFileId: asset.driveFileId,
+          userId,
         });
 
         await storage.updateRadioTemplateAsset(asset.id, {

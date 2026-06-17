@@ -41,6 +41,12 @@ EVENING_REVIEW_HOUR=21
 # CANVA_SCOPES=brandtemplate:content:read brandtemplate:meta:read design:content:read design:content:write
 
 # Google Drive radio templates
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GOOGLE_DRIVE_REDIRECT_URI=https://your-domain.example/api/google-drive/oauth/callback
+# GOOGLE_DRIVE_SCOPES=https://www.googleapis.com/auth/drive.file
+# Optional: set this instead of connecting through /api/google-drive/auth
+# GOOGLE_REFRESH_TOKEN=
 # GOOGLE_DRIVE_RADIO_FOLDER_ID=
 
 # FINNHUB_API_KEY=

@@ -1,6 +1,8 @@
 import { Readable } from "stream";
 import { google } from "googleapis";
 import { getGoogleAccessToken, getGoogleOAuthClient } from "./google-calendar";
+import { getGoogleDriveOAuthClient } from "./google-drive-oauth";
+import { getSystemUserId } from "./user-context";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 const ROOT_FOLDER_NAME = "Black Room Radio Templates";
@@ -21,10 +23,18 @@ function isDrivePermissionError(error: any): boolean {
   return status === 401 || status === 403 || /insufficient|permission|scope|unauthorized/i.test(message);
 }
 
-function getDriveClient() {
-  return getGoogleAccessToken().then((accessToken) =>
-    google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) })
-  );
+async function getDriveClient(userId: string) {
+  if (
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN ||
+    process.env.GOOGLE_REFRESH_TOKEN ||
+    ((process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) &&
+      (process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET))
+  ) {
+    return google.drive({ version: "v3", auth: await getGoogleDriveOAuthClient(userId) });
+  }
+
+  const accessToken = await getGoogleAccessToken();
+  return google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) });
 }
 
 async function findFolder(drive: any, name: string, parentId: string): Promise<string | null> {
@@ -66,9 +76,9 @@ async function findOrCreateFolder(drive: any, name: string, parentId: string): P
   return (await findFolder(drive, name, parentId)) || createFolder(drive, name, parentId);
 }
 
-export async function ensureRadioDriveFolder(dateFolderName: string): Promise<string> {
+export async function ensureRadioDriveFolder(dateFolderName: string, userId = getSystemUserId()): Promise<string> {
   try {
-    const drive = await getDriveClient();
+    const drive = await getDriveClient(userId);
     const configuredRootId = process.env.GOOGLE_DRIVE_RADIO_FOLDER_ID;
     const rootId = configuredRootId || (await findOrCreateFolder(drive, ROOT_FOLDER_NAME, "root"));
     return findOrCreateFolder(drive, dateFolderName, rootId);
@@ -85,9 +95,10 @@ export async function uploadRadioTemplatePng(params: {
   filename: string;
   folderId: string;
   existingFileId?: string | null;
+  userId?: string;
 }): Promise<DriveUploadResult> {
   try {
-    const drive = await getDriveClient();
+    const drive = await getDriveClient(params.userId || getSystemUserId());
     const media = {
       mimeType: "image/png",
       body: Readable.from(params.buffer),

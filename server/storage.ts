@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type RadioTemplateAsset, type InsertRadioTemplateAsset, type CanvaOAuthToken, type InsertCanvaOAuthToken, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
+import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type RadioTemplateAsset, type InsertRadioTemplateAsset, type CanvaOAuthToken, type InsertCanvaOAuthToken, type GoogleDriveOAuthToken, type InsertGoogleDriveOAuthToken, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
+import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, telegramConfig as telegramConfigTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, googleDriveOAuthTokens as googleDriveOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
 import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -156,6 +156,8 @@ export interface IStorage {
   updateRadioTemplateAsset(id: string, updates: Partial<RadioTemplateAsset>): Promise<RadioTemplateAsset>;
   getCanvaOAuthToken(userId: string): Promise<CanvaOAuthToken | undefined>;
   saveCanvaOAuthToken(userId: string, token: InsertCanvaOAuthToken): Promise<CanvaOAuthToken>;
+  getGoogleDriveOAuthToken(userId: string): Promise<GoogleDriveOAuthToken | undefined>;
+  saveGoogleDriveOAuthToken(userId: string, token: InsertGoogleDriveOAuthToken): Promise<GoogleDriveOAuthToken>;
 
   // Agent Action operations
   getAgentActions(userId: string): Promise<AgentAction[]>;
@@ -1555,6 +1557,42 @@ export class DatabaseStorage implements IStorage {
       updatedAt: now,
     };
     await db.insert(canvaOAuthTokensTable).values(newToken);
+    return newToken;
+  }
+
+  async getGoogleDriveOAuthToken(userId: string): Promise<GoogleDriveOAuthToken | undefined> {
+    const [token] = await db
+      .select()
+      .from(googleDriveOAuthTokensTable)
+      .where(eq(googleDriveOAuthTokensTable.userId, userId))
+      .orderBy(desc(googleDriveOAuthTokensTable.updatedAt))
+      .limit(1);
+
+    return token;
+  }
+
+  async saveGoogleDriveOAuthToken(userId: string, token: InsertGoogleDriveOAuthToken): Promise<GoogleDriveOAuthToken> {
+    const existing = await this.getGoogleDriveOAuthToken(userId);
+    const now = new Date();
+
+    if (existing) {
+      const [updated] = await db
+        .update(googleDriveOAuthTokensTable)
+        .set({ ...token, userId, updatedAt: now })
+        .where(eq(googleDriveOAuthTokensTable.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const newToken: GoogleDriveOAuthToken = {
+      ...token,
+      id: randomUUID(),
+      userId,
+      scope: token.scope || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(googleDriveOAuthTokensTable).values(newToken);
     return newToken;
   }
 

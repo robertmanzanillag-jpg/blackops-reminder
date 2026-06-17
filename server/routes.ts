@@ -35,6 +35,7 @@ import { resolveSessionRuntimeSettings } from "./session-config-core";
 import { createInMemoryRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper } from "./telegram-webhook-dedupe";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
+import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -167,6 +168,76 @@ export async function registerRoutes(
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch Canva status" });
+    }
+  });
+
+  // GET Google Drive OAuth status
+  app.get("/api/google-drive/status", async (req, res) => {
+    try {
+      const status = await getGoogleDriveOAuthStatus(getCurrentUserId(req));
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to fetch Google Drive status" });
+    }
+  });
+
+  // GET Google Drive OAuth authorization URL - redirects to Google login/approval
+  app.get("/api/google-drive/auth", (req, res) => {
+    try {
+      res.redirect(createGoogleDriveAuthorizationUrl(getCurrentUserId(req), req));
+    } catch (error: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Google Drive no está configurado</h1>
+          <p>${error.message || "Agrega GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en los secrets."}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+  });
+
+  // GET Google Drive OAuth callback - stores access/refresh tokens without displaying them
+  app.get("/api/google-drive/oauth/callback", async (req, res) => {
+    const { code, state, error, error_description: errorDescription } = req.query;
+
+    if (error) {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Google Drive</h1>
+          <p>${String(errorDescription || error)}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+
+    if (!code || typeof code !== "string" || !state || typeof state !== "string") {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Google Drive</h1>
+          <p>No se recibió el authorization code/state de Google.</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
+    }
+
+    try {
+      const result = await exchangeGoogleDriveAuthorizationCode({ code, state });
+      res.send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1 style="color:#22c55e;">Google Drive conectado</h1>
+          <p>La conexión de Drive quedó guardada para subir los templates de radio automáticamente.</p>
+          <p style="color:#94a3b8;">Scopes: ${result.scope || "guardados"}</p>
+          <a href="/radio" style="color:#3b82f6;">Ir a Radio</a>
+        </body></html>
+      `);
+    } catch (callbackError: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Google Drive</h1>
+          <p>${callbackError.message || "No se pudo guardar la conexión de Google Drive."}</p>
+          <a href="/" style="color:#3b82f6;">Volver al inicio</a>
+        </body></html>
+      `);
     }
   });
 
