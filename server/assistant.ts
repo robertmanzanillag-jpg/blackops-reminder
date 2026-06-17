@@ -9,6 +9,7 @@ import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
+import { runPromoVideoAutoDaily } from "./promo-video-agent";
 import type { PendingAction } from "@shared/schema";
 
 const ai = new GoogleGenAI({
@@ -66,6 +67,7 @@ function extractBlackRoomLinkTarget(message: string): string | null {
   const patterns = [
     /(?:evento|link|bot[oó]n|timer|contador)\s+de\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
     /(?:desactiva|desactivar|quitar|quita|oculta|ocultar|remueve|remover|borra|borrar)\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
+    /(?:agrega|agregar|agregame|agr[eé]game|a[nñ]ade|a[nñ]adir|mete|meter|sube|subir)\s+(.+?)\s+(?:a|en)\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
     /(?:evento|link|bot[oó]n|timer|contador)\s+(.+?)\s+en\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
   ];
 
@@ -78,23 +80,107 @@ function extractBlackRoomLinkTarget(message: string): string | null {
   return null;
 }
 
+function extractFirstUrl(message: string): string | null {
+  return message.match(/https?:\/\/[^\s"'<>]+/i)?.[0]?.replace(/[),.;]+$/, "") || null;
+}
+
 export function buildDirectBlackRoomCommand(message?: string): { content: string; command: string } | null {
   if (!message) return null;
   const text = normalizeApprovalText(message);
   const isBlackRoom = text.includes("black room");
   const isWebsiteTarget = /\b(links?|linsks?|website|web|pagina|builder)\b/.test(text);
   const wantsDeactivate = /\b(desactiv\w*|quit\w*|ocult\w*|remuev\w*|remov\w*|borr\w*)\b/.test(text);
+  const wantsAdd = /\b(agg|agreg\w*|anad\w*|añad\w*|met\w*|sub\w*)\b/.test(text);
 
-  if (!isBlackRoom || !isWebsiteTarget || !wantsDeactivate) return null;
+  if (!isBlackRoom || !isWebsiteTarget || (!wantsDeactivate && !wantsAdd)) return null;
 
   const title = extractBlackRoomLinkTarget(message);
   if (!title) return null;
+
+  if (wantsAdd && !wantsDeactivate) {
+    const url = extractFirstUrl(message);
+    const normalizedTitle = normalizeApprovalText(title);
+    if (!url || normalizedTitle === "este evento" || normalizedTitle === "el evento") return null;
+
+    return {
+      content: `Entendido. Voy a agregar "${title}" a los links de Black Room.`,
+      command: `[BLACKROOM_LINK_ADD: ${JSON.stringify({
+        title,
+        subtitle: null,
+        url,
+        icon: "ticket",
+      })}]`,
+    };
+  }
+
+  if (!wantsDeactivate) return null;
 
   return {
     content: `Entendido. Voy a desactivar "${title}" de los links de Black Room sin borrar su data histórica.`,
     command: `[BLACKROOM_LINK_DEACTIVATE: ${JSON.stringify({
       title,
       reason: "Desactivar desde el website/builder de Black Room preservando data histórica.",
+    })}]`,
+  };
+}
+
+const SPANISH_NUMBER_WORDS: Record<string, number> = {
+  uno: 1,
+  una: 1,
+  un: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+};
+
+function clampAssistantInteger(value: number, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function extractRequestedVideoCount(text: string): number {
+  const digitMatch = text.match(/\b(\d{1,2})\b/);
+  if (digitMatch) return clampAssistantInteger(Number(digitMatch[1]), 5, 1, 30);
+
+  for (const [word, value] of Object.entries(SPANISH_NUMBER_WORDS)) {
+    if (new RegExp(`\\b${word}\\b`).test(text)) return value;
+  }
+
+  return 5;
+}
+
+function extractRequestedSeconds(text: string): number {
+  const secondsMatch = text.match(/\b(\d{1,2})\s*(?:segundos?|secs?|s)\b/);
+  if (secondsMatch) return clampAssistantInteger(Number(secondsMatch[1]), 15, 6, 90);
+  return 15;
+}
+
+export function buildDirectPromoVideoCommand(message?: string): { content: string; command: string } | null {
+  if (!message) return null;
+  const text = normalizeApprovalText(message);
+  const mentionsVideo = /\b(videos?|clips?|edits?|tiktok|reels?|shorts?)\b/.test(text);
+  const mentionsPromo = /\b(promo|promocion|promocionales|guestlist|fiesta|fiestas|party|parties|dinner|dinners|pool|yacht|nightclub|discoteca|salir)\b/.test(text);
+  const wantsCreate = /\b(crea\w*|haz\w*|saca\w*|genera\w*|edita\w*|prepara\w*|quiero|necesito)\b/.test(text);
+
+  if (!mentionsVideo || !mentionsPromo || !wantsCreate) return null;
+
+  const count = extractRequestedVideoCount(text);
+  const targetSeconds = extractRequestedSeconds(text);
+  const platform = text.includes("reel") ? "reels" : text.includes("short") ? "shorts" : "tiktok";
+
+  return {
+    content: `Dale. Voy a crear ${count} video${count === 1 ? "" : "s"} vertical${count === 1 ? "" : "es"} de promo para ${platform}, usando la carpeta conectada y escogiendo templates automáticamente.`,
+    command: `[PROMO_VIDEO_GENERATE: ${JSON.stringify({
+      count,
+      platform,
+      targetSeconds,
+      cuts: 3,
     })}]`,
   };
 }
@@ -354,13 +440,14 @@ COMANDOS DISPONIBLES:
 - [CREAR_RECORDATORIO: {"message": "Mensaje a enviar", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]}]
 - [ELIMINAR_RECORDATORIO: {"id": "reminder-id"}]
 - [LISTAR_RECORDATORIOS: {}]
+- [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
 ## BLACK ROOM LINKS:
 Puedes ayudar a editar los links públicos de Black Room.
 - Si el usuario menciona "links de Black Room", "website", "web", "página" o "builder", NO busques Google Calendar aunque use la palabra "evento"; se refiere al website/admin de Black Room.
-- Para agregar un link usa BLACKROOM_LINK_ADD.
+- Para agregar un evento/link al website usa BLACKROOM_LINK_ADD. Necesitas title y url. Si el usuario dice "este evento" usa el evento/contexto reciente para el título si está claro; si no tienes URL de ticket/landing, pregunta por la URL antes de agregar.
 - Para editar uno existente usa BLACKROOM_LINK_UPDATE con matchTitle o matchUrl para identificarlo.
 - Si el usuario pide borrar, quitar, remover u ocultar un link, usa BLACKROOM_LINK_DEACTIVATE. NUNCA propongas borrarlo permanentemente; desactivar preserva analytics/data histórica.
 - Si el usuario pregunta por rendimiento, performance, clicks, analytics, cuál link va mejor o cuántos clicks tiene, usa BLACKROOM_LINK_PERFORMANCE. Es solo lectura y no requiere aprobación.
@@ -380,6 +467,14 @@ Ejemplos de uso:
 - "Mándame un mensaje todos los días a las 8am recordándome tomar agua" → CREAR_RECORDATORIO con hour:8, daysOfWeek:[]
 - "Recuérdame los lunes a las 9pm revisar mi portafolio" → CREAR_RECORDATORIO con hour:21, daysOfWeek:["monday"]
 - "Quiero un recordatorio de lunes a viernes a las 7:30am" → CREAR_RECORDATORIO con hour:7, minute:30, daysOfWeek:["monday","tuesday","wednesday","thursday","friday"]
+
+## PROMO VIDEO AGENT:
+Puedes crear clips verticales de promo con videos locales ya conectados desde la página Promo Video.
+- Si el usuario pide "créame 5 videos para TikTok de promo", "sácame reels de promo", "hazme más edits", usa PROMO_VIDEO_GENERATE.
+- count es cuántos videos finales quiere. Si no dice cantidad, usa 5.
+- targetSeconds normalmente es 15 para TikTok/Reels/Shorts, salvo que el usuario pida otra duración.
+- El sistema escoge templates automáticamente según el contenido/carpeta: party, dinner, pool, yacht, guestlist, nightlife.
+- No inventes que publicaste en redes; por ahora quedan listos para descargar/subir manualmente.
 
 ## ANÁLISIS DE IMÁGENES DE BROKER/CARTERA:
 Cuando el usuario envíe una imagen de su broker, app de trading, o captura de cartera:
@@ -520,8 +615,12 @@ export function registerAssistantRoutes(app: Express): void {
 
       let fullResponse = "";
       const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
+      const directPromoVideoCommand = buildDirectPromoVideoCommand(message);
 
-      if (directBlackRoomCommand) {
+      if (directPromoVideoCommand) {
+        fullResponse = `${directPromoVideoCommand.content}\n${directPromoVideoCommand.command}`;
+        res.write(`data: ${JSON.stringify({ content: directPromoVideoCommand.content })}\n\n`);
+      } else if (directBlackRoomCommand) {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
       } else {
@@ -536,6 +635,41 @@ export function registerAssistantRoutes(app: Express): void {
             fullResponse += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
+        }
+      }
+
+      const promoVideoGenerateRegex = /\[PROMO_VIDEO_GENERATE:\s*(\{[^}]+\})\]/g;
+      let promoVideoGenerateMatch;
+      while ((promoVideoGenerateMatch = promoVideoGenerateRegex.exec(fullResponse)) !== null) {
+        try {
+          const promoData = JSON.parse(promoVideoGenerateMatch[1]);
+          const count = clampAssistantInteger(Number(promoData.count || promoData.maxVideos), 5, 1, 30);
+          const targetSeconds = clampAssistantInteger(Number(promoData.targetSeconds || promoData.seconds), 15, 6, 90);
+          const cuts = clampAssistantInteger(Number(promoData.cuts), 3, 1, 12);
+          const result = await runPromoVideoAutoDaily({
+            maxVideos: count,
+            targetSeconds,
+            cuts,
+            style: "full",
+          });
+          const outputNames = result.status.outputVideos.slice(0, count).map((video) => video.name);
+          const summary = [
+            "",
+            `Listo. Procesé ${count} video${count === 1 ? "" : "s"} de promo de ${targetSeconds}s.`,
+            `Importados nuevos: ${result.importResult.imported}. Ya estaban: ${result.importResult.skipped}.`,
+            `Carpeta lista: ${result.status.outputDir}`,
+          ].join("\n");
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${summary}`,
+            promoVideosGenerated: true,
+            outputDir: result.status.outputDir,
+            outputVideos: outputNames,
+          })}\n\n`);
+        } catch (e: any) {
+          console.error("Error generating promo videos from assistant:", e);
+          res.write(`data: ${JSON.stringify({
+            promoVideoError: e.message || "No pude generar los videos de promo",
+          })}\n\n`);
         }
       }
 

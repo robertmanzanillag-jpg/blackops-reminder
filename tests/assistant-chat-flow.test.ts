@@ -30,3 +30,23 @@ test("web assistant routes Black Room website link deactivation away from calend
   assert.match(direct.command, /BLACK ROOM & FRIENDS/);
   assert.doesNotMatch(direct.command, /EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
 });
+
+test("web assistant routes Black Room website link add when URL is present", () => {
+  const direct = buildDirectBlackRoomCommand(
+    "AGREGA BLACK ROOM & FRIENDS A LOS LINKS DE BLACK ROOM https://kongnightlife.com/p/bio-friends"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /BLACKROOM_LINK_ADD/);
+  assert.match(direct.command, /BLACK ROOM & FRIENDS/);
+  assert.match(direct.command, /https:\/\/kongnightlife\.com\/p\/bio-friends/);
+  assert.doesNotMatch(direct.command, /CREAR_EVENTO_GOOGLE|EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
+});
+
+test("web assistant does not add vague Black Room event link without URL", () => {
+  const direct = buildDirectBlackRoomCommand(
+    "AGG ESTE EVENTO A L LINK DE BLACK ROOM"
+  );
+
+  assert.equal(direct, null);
+});
