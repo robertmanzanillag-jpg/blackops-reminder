@@ -3,9 +3,16 @@ import { google } from 'googleapis';
 
 let connectionSettings: any;
 
+export function hasReplitGoogleConnectorEnv() {
+  return Boolean(
+    process.env.REPLIT_CONNECTORS_HOSTNAME &&
+    (process.env.REPL_IDENTITY || process.env.WEB_REPL_RENEWAL)
+  );
+}
+
 export async function getGoogleAccessToken() {
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
+    return connectionSettings.settings.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
   }
   
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -20,7 +27,7 @@ export async function getGoogleAccessToken() {
   }
 
   connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-calendar',
+    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-drive,google-calendar',
     {
       headers: {
         'Accept': 'application/json',
@@ -29,10 +36,10 @@ export async function getGoogleAccessToken() {
     }
   ).then(res => res.json()).then(data => data.items?.[0]);
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 
   if (!connectionSettings || !accessToken) {
-    throw new Error('Google Calendar not connected');
+    throw new Error('Google connector not connected');
   }
   return accessToken;
 }

@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import type { Request } from "express";
 import { google } from "googleapis";
+import { hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { storage } from "./storage";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -173,8 +174,10 @@ export async function getGoogleDriveOAuthClient(userId: string) {
 
 export async function getGoogleDriveOAuthStatus(userId: string) {
   const envConnected = Boolean(process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN);
+  const replitConnectorAvailable = hasReplitGoogleConnectorEnv();
   const configured = Boolean(
     envConnected ||
+    replitConnectorAvailable ||
     ((process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID) &&
       (process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET))
   );
@@ -191,7 +194,8 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
 
   return {
     configured,
-    connected: Boolean(envConnected || token),
+    connected: Boolean(envConnected || token || replitConnectorAvailable),
+    provider: envConnected ? "env_refresh_token" : token ? "local_oauth" : replitConnectorAvailable ? "replit_connector" : null,
     expiresAt: token?.expiresAt || null,
     scope: token?.scope || process.env.GOOGLE_DRIVE_SCOPES || DEFAULT_GOOGLE_DRIVE_SCOPES,
     redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI || null,
