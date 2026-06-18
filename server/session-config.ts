@@ -11,6 +11,7 @@ export function createSessionMiddleware(settings = resolveSessionRuntimeSettings
   const options: SessionOptions = {
     name: "blackops.sid",
     secret: settings.secret,
+    proxy: settings.secureCookie,
     resave: false,
     saveUninitialized: false,
     cookie: {
