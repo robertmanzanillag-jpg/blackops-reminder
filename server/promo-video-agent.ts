@@ -101,11 +101,16 @@ export class PromoVideoSourceError extends Error {
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const ROOT_DIR = path.join(process.cwd(), "promo_video_edits");
-const INPUT_DIR = path.join(ROOT_DIR, "01_originales");
-const LINKS_DIR = path.join(ROOT_DIR, "02_links");
-const OUTPUT_DIR = path.join(ROOT_DIR, "03_listos_para_subir");
-const REPORT_DIR = path.join(ROOT_DIR, "04_reportes");
-const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
+const USERS_DIR = path.join(ROOT_DIR, "users");
+
+interface PromoVideoWorkspacePaths {
+  rootDir: string;
+  inputDir: string;
+  linksDir: string;
+  outputDir: string;
+  reportDir: string;
+  configPath: string;
+}
 
 export const PROMO_TEMPLATES: PromoTemplate[] = [
   {
@@ -146,18 +151,38 @@ export const PROMO_TEMPLATES: PromoTemplate[] = [
   },
 ];
 
-async function ensurePromoVideoDirs() {
-  await Promise.all([
-    mkdir(INPUT_DIR, { recursive: true }),
-    mkdir(LINKS_DIR, { recursive: true }),
-    mkdir(OUTPUT_DIR, { recursive: true }),
-    mkdir(REPORT_DIR, { recursive: true }),
-  ]);
+function sanitizePromoWorkspaceId(userId: string): string {
+  return userId.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96) || "system";
 }
 
-async function readPromoConfig(): Promise<PromoVideoConfig> {
+function getPromoVideoWorkspacePaths(userId = getSystemUserId()): PromoVideoWorkspacePaths {
+  const safeUserId = sanitizePromoWorkspaceId(userId);
+  const rootDir = path.join(USERS_DIR, safeUserId);
+  return {
+    rootDir,
+    inputDir: path.join(rootDir, "01_originales"),
+    linksDir: path.join(rootDir, "02_links"),
+    outputDir: path.join(rootDir, "03_listos_para_subir"),
+    reportDir: path.join(rootDir, "04_reportes"),
+    configPath: path.join(rootDir, "config.json"),
+  };
+}
+
+async function ensurePromoVideoDirs(userId = getSystemUserId()) {
+  const paths = getPromoVideoWorkspacePaths(userId);
+  await Promise.all([
+    mkdir(paths.inputDir, { recursive: true }),
+    mkdir(paths.linksDir, { recursive: true }),
+    mkdir(paths.outputDir, { recursive: true }),
+    mkdir(paths.reportDir, { recursive: true }),
+  ]);
+  return paths;
+}
+
+async function readPromoConfig(userId = getSystemUserId()): Promise<PromoVideoConfig> {
+  const paths = getPromoVideoWorkspacePaths(userId);
   try {
-    const raw = await readFile(CONFIG_PATH, "utf8");
+    const raw = await readFile(paths.configPath, "utf8");
     const parsed = JSON.parse(raw) as { sourceDir?: unknown; lastAutoRunDate?: unknown };
     return {
       sourceDir: typeof parsed.sourceDir === "string" && parsed.sourceDir.trim()
@@ -170,9 +195,9 @@ async function readPromoConfig(): Promise<PromoVideoConfig> {
   }
 }
 
-async function writePromoConfig(config: PromoVideoConfig) {
-  await ensurePromoVideoDirs();
-  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+async function writePromoConfig(config: PromoVideoConfig, userId = getSystemUserId()) {
+  const paths = await ensurePromoVideoDirs(userId);
+  await writeFile(paths.configPath, JSON.stringify(config, null, 2));
 }
 
 function isVideoFile(filePath: string): boolean {
@@ -251,20 +276,20 @@ export function getPromoTemplate(objective: PromoVideoObjective): PromoTemplate 
   return PROMO_TEMPLATES.find((template) => template.id === objective) || PROMO_TEMPLATES[0];
 }
 
-export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
-  await ensurePromoVideoDirs();
-  const config = await readPromoConfig();
+export async function getPromoVideoStatus(userId = getSystemUserId()): Promise<PromoVideoStatus> {
+  const paths = await ensurePromoVideoDirs(userId);
+  const config = await readPromoConfig(userId);
   const [inputVideos, outputVideos, sourceVideos] = await Promise.all([
-    listVideoFiles(INPUT_DIR),
-    listVideoFiles(OUTPUT_DIR),
+    listVideoFiles(paths.inputDir),
+    listVideoFiles(paths.outputDir),
     config.sourceDir ? listVideoFiles(config.sourceDir, { create: false, recursive: true }) : Promise.resolve([]),
   ]);
 
   return {
-    rootDir: ROOT_DIR,
-    inputDir: INPUT_DIR,
-    outputDir: OUTPUT_DIR,
-    reportDir: REPORT_DIR,
+    rootDir: paths.rootDir,
+    inputDir: paths.inputDir,
+    outputDir: paths.outputDir,
+    reportDir: paths.reportDir,
     sourceDir: config.sourceDir,
     inputVideos,
     outputVideos,
@@ -273,12 +298,12 @@ export async function getPromoVideoStatus(): Promise<PromoVideoStatus> {
   };
 }
 
-export async function setPromoVideoSourceDir(sourceDir: unknown): Promise<PromoVideoStatus> {
-  await ensurePromoVideoDirs();
-  const current = await readPromoConfig();
+export async function setPromoVideoSourceDir(sourceDir: unknown, userId = getSystemUserId()): Promise<PromoVideoStatus> {
+  await ensurePromoVideoDirs(userId);
+  const current = await readPromoConfig(userId);
   if (typeof sourceDir !== "string" || !sourceDir.trim()) {
-    await writePromoConfig({ ...current, sourceDir: null });
-    return getPromoVideoStatus();
+    await writePromoConfig({ ...current, sourceDir: null }, userId);
+    return getPromoVideoStatus(userId);
   }
 
   const resolved = path.resolve(sourceDir.trim().replace(/^~(?=$|\/)/, process.env.HOME || "~"));
@@ -287,8 +312,8 @@ export async function setPromoVideoSourceDir(sourceDir: unknown): Promise<PromoV
     throw new Error("La ruta indicada no es una carpeta.");
   }
 
-  await writePromoConfig({ ...current, sourceDir: resolved });
-  return getPromoVideoStatus();
+  await writePromoConfig({ ...current, sourceDir: resolved }, userId);
+  return getPromoVideoStatus(userId);
 }
 
 function sanitizeFilenamePart(value: string): string {
@@ -317,8 +342,8 @@ async function findCaseInsensitiveSubdir(parent: string, hint: string): Promise<
   }
 }
 
-export async function getPromoVideoSourceFolders(): Promise<string[]> {
-  const config = await readPromoConfig();
+export async function getPromoVideoSourceFolders(userId = getSystemUserId()): Promise<string[]> {
+  const config = await readPromoConfig(userId);
   if (!config.sourceDir) return [];
 
   try {
@@ -332,10 +357,10 @@ export async function getPromoVideoSourceFolders(): Promise<string[]> {
   }
 }
 
-export async function resolvePromoVideoSourceDir(source: unknown): Promise<string | null> {
+export async function resolvePromoVideoSourceDir(source: unknown, userId = getSystemUserId()): Promise<string | null> {
   if (typeof source !== "string" || !source.trim()) return null;
   const raw = source.trim().replace(/^["'“”]+|["'“”]+$/g, "");
-  const config = await readPromoConfig();
+  const config = await readPromoConfig(userId);
   const expanded = raw.replace(/^~(?=$|\/)/, process.env.HOME || "~");
 
   const candidates: string[] = [];
@@ -360,14 +385,14 @@ export async function resolvePromoVideoSourceDir(source: unknown): Promise<strin
   throw new PromoVideoSourceError(
     `No encontre la carpeta de videos: ${raw}`,
     raw,
-    await getPromoVideoSourceFolders(),
+    await getPromoVideoSourceFolders(userId),
   );
 }
 
-export async function importPromoVideosFromSource(input: { limit?: unknown; sourceDir?: unknown; sourceHint?: unknown } = {}): Promise<PromoVideoImportResult> {
-  await ensurePromoVideoDirs();
-  const config = await readPromoConfig();
-  const requestedSource = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint).catch((error) => {
+export async function importPromoVideosFromSource(input: { limit?: unknown; sourceDir?: unknown; sourceHint?: unknown } = {}, userId = getSystemUserId()): Promise<PromoVideoImportResult> {
+  const paths = await ensurePromoVideoDirs(userId);
+  const config = await readPromoConfig(userId);
+  const requestedSource = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint, userId).catch((error) => {
     throw error;
   });
   const sourceDir = requestedSource || config.sourceDir;
@@ -380,7 +405,7 @@ export async function importPromoVideosFromSource(input: { limit?: unknown; sour
     throw new PromoVideoSourceError(
       `No encontre videos .mp4, .mov o .m4v en la carpeta: ${sourceDir}`,
       String(input.sourceDir || input.sourceHint || sourceDir),
-      await getPromoVideoSourceFolders(),
+      await getPromoVideoSourceFolders(userId),
     );
   }
 
@@ -391,7 +416,7 @@ export async function importPromoVideosFromSource(input: { limit?: unknown; sour
   for (const video of sourceVideos.slice(0, limit)) {
     const relative = path.relative(sourceDir, video.path);
     const destinationName = sanitizeFilenamePart(relative.replace(/[\\/]+/g, "__"));
-    const destination = path.join(INPUT_DIR, destinationName);
+    const destination = path.join(paths.inputDir, destinationName);
     try {
       await stat(destination);
       skipped += 1;
@@ -406,7 +431,7 @@ export async function importPromoVideosFromSource(input: { limit?: unknown; sour
     imported,
     skipped,
     files: sourceVideos,
-    status: await getPromoVideoStatus(),
+    status: await getPromoVideoStatus(userId),
   };
 }
 
@@ -498,10 +523,11 @@ async function uploadPromoOutputsToDrive(outputFiles: string[], options: PromoVi
 }
 
 export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): Promise<PromoVideoRunResult> {
-  await ensurePromoVideoDirs();
   const options = normalizePromoVideoOptions(input);
+  const userId = options.userId || getSystemUserId();
+  const paths = await ensurePromoVideoDirs(userId);
   const scriptPath = path.join(process.cwd(), "scripts", "edit-promo-videos.sh");
-  const reportPath = path.join(REPORT_DIR, `${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  const reportPath = path.join(paths.reportDir, `${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn("bash", [scriptPath], {
@@ -518,7 +544,8 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
         CTA_TEXT: options.ctaText || "",
         FONT_STYLE: options.fontStyle || "bold",
         CUSTOM_TEXT: options.customText ? "1" : "0",
-        INPUT_SOURCE_DIR: options.sourceDir || "",
+        INPUT_SOURCE_DIR: options.sourceDir || paths.inputDir,
+        PROMO_OUTPUT_DIR: paths.outputDir,
       },
     });
 
@@ -541,18 +568,19 @@ export async function runPromoVideoEdit(input: Partial<PromoVideoRunOptions>): P
 
   const outputFiles = extractGeneratedOutputFiles(output);
   const driveUploads = await uploadPromoOutputsToDrive(outputFiles, options);
-  const status = await getPromoVideoStatus();
+  const status = await getPromoVideoStatus(userId);
   const result = { ok: true, output, reportPath, options, status, driveUploads };
   await writeFile(reportPath, JSON.stringify(result, null, 2));
   return result;
 }
 
 export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions> = {}): Promise<PromoVideoAutoRunResult> {
-  const resolvedSourceDir = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint);
+  const userId = input.userId || getSystemUserId();
+  const resolvedSourceDir = await resolvePromoVideoSourceDir(input.sourceDir || input.sourceHint, userId);
   const importResult = await importPromoVideosFromSource({
     limit: input.maxVideos || 5,
     sourceDir: resolvedSourceDir || undefined,
-  });
+  }, userId);
   const runResult = await runPromoVideoEdit({
     objective: "auto",
     clipsPerVideo: 1,
@@ -569,11 +597,11 @@ export async function runPromoVideoAutoDaily(input: Partial<PromoVideoRunOptions
     userId: input.userId,
   });
 
-  const config = await readPromoConfig();
+  const config = await readPromoConfig(userId);
   await writePromoConfig({
     ...config,
     lastAutoRunDate: getLocalDateKey(new Date()),
-  });
+  }, userId);
 
   return {
     ...runResult,
@@ -591,8 +619,7 @@ function getLocalDateKey(date: Date): string {
 }
 
 async function maybeRunPromoVideoDaily() {
-  const config = await readPromoConfig();
-  if (!config.sourceDir) return;
+  const userIds = await getPromoVideoSchedulerUserIds();
 
   const now = new Date();
   const hour = Number(new Intl.DateTimeFormat("en-US", {
@@ -603,12 +630,11 @@ async function maybeRunPromoVideoDaily() {
   if (hour < 8) return;
 
   const today = getLocalDateKey(now);
-  if (config.lastAutoRunDate === today) return;
-
-  const userIds = await getPromoVideoSchedulerUserIds();
-  await Promise.all(userIds.map((userId) =>
-    runPromoVideoAutoDaily({ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full", userId })
-  ));
+  await Promise.all(userIds.map(async (userId) => {
+    const config = await readPromoConfig(userId);
+    if (!config.sourceDir || config.lastAutoRunDate === today) return;
+    await runPromoVideoAutoDaily({ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full", userId });
+  }));
 }
 
 async function getPromoVideoSchedulerUserIds(): Promise<string[]> {
@@ -628,16 +654,17 @@ export function startPromoVideoDailyScheduler() {
   setInterval(run, 60 * 60 * 1000);
 }
 
-export async function deletePromoOutputVideo(filename: unknown): Promise<PromoVideoStatus> {
+export async function deletePromoOutputVideo(filename: unknown, userId = getSystemUserId()): Promise<PromoVideoStatus> {
   if (typeof filename !== "string" || !filename.trim()) {
     throw new Error("Falta el nombre del video.");
   }
 
-  const target = path.resolve(OUTPUT_DIR, filename);
-  if (!target.startsWith(path.resolve(OUTPUT_DIR) + path.sep)) {
+  const paths = getPromoVideoWorkspacePaths(userId);
+  const target = path.resolve(paths.outputDir, filename);
+  if (!target.startsWith(path.resolve(paths.outputDir) + path.sep)) {
     throw new Error("Video invalido.");
   }
 
   await unlink(target);
-  return getPromoVideoStatus();
+  return getPromoVideoStatus(userId);
 }

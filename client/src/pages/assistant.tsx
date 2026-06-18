@@ -269,7 +269,7 @@ export default function AssistantPage() {
                 });
               }
               if (data.approvalRequired && data.pendingAction) {
-                assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Revisa approvals para aprobarlo o ejecutarlo.`;
+                assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
                 queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
                 setMessages((prev) => {
                   const updated = [...prev];

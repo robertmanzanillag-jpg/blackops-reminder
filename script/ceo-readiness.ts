@@ -1,13 +1,21 @@
+import "../server/env-loader";
 import { buildCeoReadinessReport } from "../server/ceo-readiness";
-import { parseCeoReadinessArgs, formatCeoReadinessText } from "../server/ceo-readiness-cli";
+import { parseCeoReadinessArgs, formatCeoReadinessText, validateCeoReadinessOptions } from "../server/ceo-readiness-cli";
 import { getReminderSchedulerConfig } from "../server/reminder-scheduler";
 import { getTelegramWebhookStatus, resolveTelegramWebhookUrl } from "../server/telegram-chat";
 import { storage } from "../server/storage";
 import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId } from "../server/user-context";
 import { resolveSessionRuntimeSettings } from "../server/session-config-core";
+import { hasRealValue, hasStrongSecret } from "../server/ceo-doctor-cli";
 
 async function main() {
   const options = parseCeoReadinessArgs(process.argv.slice(2));
+  const validationErrors = validateCeoReadinessOptions(options);
+  if (validationErrors.length) {
+    console.error(validationErrors.join("\n"));
+    process.exit(1);
+  }
+
   let userId: string | null = options.userId || null;
   if (!userId) {
     try {
@@ -19,7 +27,7 @@ async function main() {
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const config = userId ? await storage.getTelegramConfig(userId).catch(() => undefined) : undefined;
-  const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
+  const webhook = hasRealValue(botToken) ? await getTelegramWebhookStatus().catch(() => null) : null;
   const expectedWebhookUrl = resolveTelegramWebhookUrl();
   const scheduler = getReminderSchedulerConfig();
   const sessionSettings = resolveSessionRuntimeSettings();
@@ -28,22 +36,22 @@ async function main() {
     auth: {
       userId,
       devFallbackAllowed: allowsDevUserFallback(),
-      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
-      defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
-      sessionSecretConfigured: Boolean(process.env.SESSION_SECRET),
+      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
+      defaultUserConfigured: hasRealValue(process.env.DEFAULT_USER_ID),
+      sessionSecretConfigured: hasStrongSecret(process.env.SESSION_SECRET),
       sessionStoreKind: sessionSettings.storeKind,
     },
     assistant: {
-      aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
+      aiConfigured: hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
     },
     telegram: {
-      tokenConfigured: Boolean(botToken),
+      tokenConfigured: hasRealValue(botToken),
       chatConfigured: Boolean(config?.chatId),
       enabled: Boolean(config?.enabled),
       webhookUrlConfigured: Boolean(expectedWebhookUrl),
       webhookRegistered: Boolean(webhook?.url),
       webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-      webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+      webhookSecretConfigured: hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16),
       lastWebhookError: webhook?.last_error_message || null,
     },
     scheduler: {

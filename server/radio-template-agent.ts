@@ -7,6 +7,7 @@ import { getRadioSlotsForMonth, type RadioSlot } from "./radio-agent";
 import { ensureRadioDriveFolder, uploadRadioTemplatePng } from "./google-drive";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { getSystemUserId } from "./user-context";
+import { hasRealValue } from "./ceo-doctor-cli";
 import type { RadioTemplateAsset } from "@shared/schema";
 
 const RADIO_TIMEZONE = "America/New_York";
@@ -56,7 +57,12 @@ interface RadioTemplateDesignReference {
 }
 
 function getRequiredCanvaTemplateConfig() {
-  const brandTemplateId = process.env.CANVA_RADIO_BRAND_TEMPLATE_ID || DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID;
+  const configuredBrandTemplateId = process.env.CANVA_RADIO_BRAND_TEMPLATE_ID;
+  if (configuredBrandTemplateId !== undefined && !hasRealValue(configuredBrandTemplateId)) {
+    throw new Error("CANVA_RADIO_BRAND_TEMPLATE_ID must be a real Canva brand template id, not a placeholder.");
+  }
+
+  const brandTemplateId = configuredBrandTemplateId || DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID;
   const djField = process.env.CANVA_RADIO_DJ_FIELD || DEFAULT_CANVA_DJ_FIELD;
 
   if (!brandTemplateId) {
@@ -66,6 +72,11 @@ function getRequiredCanvaTemplateConfig() {
   }
 
   return { brandTemplateId, djField };
+}
+
+function readOptionalRealEnv(name: string): string | null {
+  const value = process.env[name];
+  return hasRealValue(value) ? value : null;
 }
 
 export function getDateKeyInTimezone(date: Date, timezone = RADIO_TIMEZONE): string {
@@ -108,7 +119,9 @@ export function buildRadioTemplateSourceHash(params: {
       slotHour: params.slotHour,
       djName: params.djName.trim(),
       rawDescription: params.rawDescription || "",
-      canvaBrandTemplateId: params.canvaBrandTemplateId || process.env.CANVA_RADIO_BRAND_TEMPLATE_ID || DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID,
+      canvaBrandTemplateId:
+        params.canvaBrandTemplateId ||
+        (hasRealValue(process.env.CANVA_RADIO_BRAND_TEMPLATE_ID) ? process.env.CANVA_RADIO_BRAND_TEMPLATE_ID : DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID),
       canvaDjField: params.canvaDjField || process.env.CANVA_RADIO_DJ_FIELD || DEFAULT_CANVA_DJ_FIELD,
       transparentBackground: CANVA_TRANSPARENT_EXPORT,
       template: "local-black-room-radio-miami-photo-v4",
@@ -323,8 +336,8 @@ export async function generateRadioTemplatesForDate(
       try {
         const canvaDesign: RadioTemplateDesignReference = {
           designId: CANVA_REFERENCE_DESIGN_ID,
-          editUrl: process.env.CANVA_RADIO_TEMPLATE_EDIT_URL || null,
-          viewUrl: process.env.CANVA_RADIO_TEMPLATE_VIEW_URL || null,
+          editUrl: readOptionalRealEnv("CANVA_RADIO_TEMPLATE_EDIT_URL"),
+          viewUrl: readOptionalRealEnv("CANVA_RADIO_TEMPLATE_VIEW_URL"),
         };
         const buffer = await renderLocalRadioTemplatePng(input.djName);
         folderId ||= await ensureRadioDriveFolder(dateFolderName, userId);

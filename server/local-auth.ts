@@ -8,6 +8,7 @@ import {
   resolveCurrentUserId,
 } from "./user-context";
 import { createRateLimiter } from "./rate-limit";
+import { hasRealValue } from "./ceo-doctor-cli";
 import {
   hashPassword,
   isLocalAuthEnabled,
@@ -105,7 +106,7 @@ export function registerLocalAuthRoutes(app: Express): void {
         return res.json({
           authenticated: true,
           sessionBacked: false,
-          usingDevFallback: resolvedUserId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
+          usingDevFallback: resolvedUserId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
           user: user ? sanitizeAuthUser(user) : { id: resolvedUserId, username: resolvedUserId },
         });
       }

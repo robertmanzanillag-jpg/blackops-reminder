@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock,
+  Copy,
   FileText,
   HeartPulse,
   Landmark,
@@ -142,6 +143,25 @@ type CeoReadiness = {
     status: "ready" | "warning" | "blocked";
     detail: string;
   }>;
+};
+
+type CeoGoLive = {
+  ready: boolean;
+  automaticReady: boolean;
+  manualReady: boolean;
+  checks: Array<{
+    id: string;
+    label: string;
+    ok: boolean;
+    detail: string;
+    evidenceCommand: string;
+    evidence?: {
+      confirmedAt: string | null;
+      source: string;
+      note?: string | null;
+    };
+  }>;
+  nextCommands: string[];
 };
 
 type CeoConversationHistory = {
@@ -376,6 +396,8 @@ export default function CeoDashboardPage() {
     message: "",
     context: "",
   });
+  const [copiedGoLiveCommand, setCopiedGoLiveCommand] = useState("");
+  const [copyGoLiveCommandError, setCopyGoLiveCommandError] = useState("");
   const [editingMemory, setEditingMemory] = useState<{
     type: MemoryType;
     id: string;
@@ -419,6 +441,16 @@ export default function CeoDashboardPage() {
     refetchInterval: 60000,
   });
 
+  const { data: ceoGoLive } = useQuery<CeoGoLive | null>({
+    queryKey: ["ceo-go-live"],
+    queryFn: async () => {
+      const response = await fetch("/api/ceo/go-live");
+      if (!response.ok) return null;
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
   const { data: ceoConversationHistory } = useQuery<CeoConversationHistory>({
     queryKey: ["ceo-conversation-history"],
     queryFn: async () => {
@@ -432,6 +464,11 @@ export default function CeoDashboardPage() {
   const health = data?.appHealth;
   const operationalHealth = data?.operationalHealth;
   const hasCritical = Boolean((data?.criticalRisks?.length || 0) > 0 || (health?.projects?.offline || 0) > 0);
+  const goLivePassed = ceoGoLive?.checks.filter((check) => check.ok).length || 0;
+  const goLiveTotal = ceoGoLive?.checks.length || 0;
+  const missingGoLiveChecks = ceoGoLive?.checks.filter((check) => !check.ok) || [];
+  const confirmedGoLiveChecks = ceoGoLive?.checks.filter((check) => check.ok) || [];
+  const canManuallyConfirmGoLiveCheck = (checkId: string) => checkId !== "smoke_ready";
 
   const createFollowUp = useMutation({
     mutationFn: async () => {
@@ -562,11 +599,36 @@ export default function CeoDashboardPage() {
     },
   });
 
+  const markGoLiveEvidence = useMutation({
+    mutationFn: async ({ checkId, confirmed }: { checkId: string; confirmed: boolean }) => {
+      const res = await fetch("/api/ceo/go-live/evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkId, confirmed }),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar la evidencia go-live");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ceo-go-live"] });
+    },
+  });
+
   const canCreateFollowUp = followUp.person.trim().length > 0 && followUp.topic.trim().length > 0;
   const canSaveDecision = decision.title.trim().length > 0 && decision.decision.trim().length > 0;
   const canSavePerson = person.name.trim().length > 0;
   const canSaveCommitment = commitment.owner.trim().length > 0 && commitment.commitment.trim().length > 0;
   const canCreateCommunicationDraft = communicationDraft.recipient.trim().length > 0 && communicationDraft.channel.trim().length > 0 && communicationDraft.message.trim().length > 0;
+  const copyGoLiveCommand = async (command: string) => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopiedGoLiveCommand(command);
+      setCopyGoLiveCommandError("");
+    } catch {
+      setCopiedGoLiveCommand("");
+      setCopyGoLiveCommandError("No se pudo copiar el comando. Seleccionalo manualmente.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black pb-8 text-white">
@@ -688,6 +750,125 @@ export default function CeoDashboardPage() {
                   ))}
                   {!ceoReadiness?.checks?.length && <EmptyLine text="Readiness no disponible." />}
                 </div>
+              </CommandCard>
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-3">
+              <CommandCard title="Go-live" icon={Rocket}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-semibold">{ceoGoLive?.ready ? "Ready" : "Bloqueado"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {goLivePassed}/{goLiveTotal || 6} checks completados
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={statusTone(ceoGoLive?.ready ? "ready" : "blocked")}>
+                    {ceoGoLive?.ready ? "Encender" : "Falta evidencia"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-md border border-white/10 bg-black p-2">
+                    <p className="text-lg font-semibold text-cyan-200">{ceoGoLive?.automaticReady ? "OK" : "No"}</p>
+                    <p className="text-[10px] text-zinc-500">smoke</p>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black p-2">
+                    <p className="text-lg font-semibold text-amber-200">{ceoGoLive?.manualReady ? "OK" : "No"}</p>
+                    <p className="text-[10px] text-zinc-500">externo</p>
+                  </div>
+                </div>
+              </CommandCard>
+              <CommandCard title="Bloqueos go-live" icon={AlertTriangle}>
+                {missingGoLiveChecks.length ? (
+                  <div className="space-y-2">
+                    {missingGoLiveChecks.map((check) => (
+                      <div key={check.id} className="rounded-lg border border-white/10 bg-zinc-950/70 p-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="min-w-0 truncate text-xs font-medium text-zinc-200">{check.label}</p>
+                          <Badge variant="outline" className={statusTone("blocked")}>missing</Badge>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{check.detail}</p>
+                        {canManuallyConfirmGoLiveCheck(check.id) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={markGoLiveEvidence.isPending}
+                            onClick={() => markGoLiveEvidence.mutate({ checkId: check.id, confirmed: true })}
+                            className="mt-2 h-8 border-white/10 bg-white/[0.03] text-xs text-zinc-300 hover:bg-emerald-500/10 hover:text-emerald-100"
+                          >
+                            <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
+                            Confirmar
+                          </Button>
+                        ) : (
+                          <p className="mt-2 text-[11px] text-cyan-300">Se verifica ejecutando el comando de smoke.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyLine text={ceoGoLive?.ready ? "El asistente esta listo para salida." : "Go-live no disponible."} />
+                )}
+                {markGoLiveEvidence.isSuccess && <p className="mt-2 text-xs text-emerald-300">Evidencia actualizada.</p>}
+                {markGoLiveEvidence.isError && <p className="mt-2 text-xs text-red-300">No se pudo guardar la evidencia.</p>}
+              </CommandCard>
+              <CommandCard title="Siguiente evidencia" icon={FileText}>
+                {ceoGoLive?.nextCommands?.length ? (
+                  <div className="space-y-2">
+                    {ceoGoLive.nextCommands.map((command) => (
+                      <div key={command} className="flex items-start gap-2 rounded-lg border border-white/10 bg-black p-2">
+                        <p className="min-w-0 flex-1 break-words font-mono text-[11px] leading-relaxed text-zinc-300">
+                          {command}
+                        </p>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          title="Copiar comando"
+                          onClick={() => copyGoLiveCommand(command)}
+                          className="h-7 w-7 shrink-0 text-zinc-500 hover:bg-cyan-500/10 hover:text-cyan-100"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyLine text={ceoGoLive?.ready ? "No quedan comandos pendientes." : "Sin evidencia pendiente cargada."} />
+                )}
+                {copiedGoLiveCommand && <p className="mt-2 text-xs text-cyan-300">Comando copiado.</p>}
+                {copyGoLiveCommandError && <p className="mt-2 text-xs text-amber-300">{copyGoLiveCommandError}</p>}
+                {!!confirmedGoLiveChecks.length && (
+                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                    {confirmedGoLiveChecks.map((check) => (
+                      <div key={check.id} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-zinc-950/70 p-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs text-zinc-300">{check.label}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-zinc-600">
+                            {check.evidence?.source || "manual"}
+                            {check.evidence?.confirmedAt ? ` · ${formatTime(check.evidence.confirmedAt)}` : ""}
+                          </p>
+                          {check.evidence?.note && (
+                            <p className="mt-0.5 truncate text-[11px] text-zinc-500">{check.evidence.note}</p>
+                          )}
+                        </div>
+                        {canManuallyConfirmGoLiveCheck(check.id) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={markGoLiveEvidence.isPending}
+                            onClick={() => markGoLiveEvidence.mutate({ checkId: check.id, confirmed: false })}
+                            className="h-7 px-2 text-xs text-zinc-500 hover:bg-red-500/10 hover:text-red-200"
+                          >
+                            Reset
+                          </Button>
+                        ) : (
+                          <p className="shrink-0 text-[11px] text-cyan-300">comando</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CommandCard>
             </section>
 

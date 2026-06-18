@@ -1,4 +1,6 @@
+import "../server/env-loader";
 import { storage } from "../server/storage";
+import { hasRealValue } from "../server/ceo-doctor-cli";
 import { getTelegramUpdates, sendTelegramPlainMessage } from "../server/telegram";
 import { getLatestTelegramChatIdFromUpdates, parseTelegramConfigureArgs, validateTelegramConfigureOptions } from "../server/telegram-config-cli";
 
@@ -15,7 +17,7 @@ async function main() {
   let chatId = options.chatId;
   if (options.latest) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
+    if (!hasRealValue(botToken)) {
       console.error("TELEGRAM_BOT_TOKEN is required when using --latest.");
       process.exit(1);
     }
@@ -29,7 +31,7 @@ async function main() {
   const config = await storage.saveTelegramConfig(options.userId, chatId);
   if (options.sendConfirmation) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
+    if (!hasRealValue(botToken)) {
       console.warn("TELEGRAM_BOT_TOKEN not configured; saved chat config without confirmation message.");
     } else {
       await sendTelegramPlainMessage(botToken, chatId, "BlackOps CEO Assistant conectado. Recibiras briefs y puedes responder aqui.");

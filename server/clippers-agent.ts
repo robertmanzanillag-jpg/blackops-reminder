@@ -1,9 +1,11 @@
-import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from "fs/promises";
+import { chmod, copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "fs/promises";
+import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { createCipheriv, createHash, randomBytes } from "crypto";
 import { promises as dns } from "dns";
 import path from "path";
 import { ensureAppDriveFolderPath } from "./google-drive";
+import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { getSystemUserId } from "./user-context";
 import { LOCAL_ENV_FILES, loadLocalEnvFiles } from "./env-loader";
 
@@ -62,11 +64,15 @@ export type ClipperExternalSetupQueueStatus = "not_prepared" | "blocked" | "in_p
 export type ClipperExternalSetupQueueItemType = "account" | "developer_app" | "permission" | "credential" | "oauth";
 export type ClipperExternalSetupQueuePriority = "critical" | "high" | "medium";
 export type ClipperExternalExecutionHandoffStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
+export type ClipperPlatformWarRoomStatus = "blocked" | "in_progress" | "ready";
 export type ClipperExternalLaunchDossierStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperAppReviewSubmissionPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperOfficialPermissionMatrixStatus = "not_prepared" | "verified" | "needs_review";
 export type ClipperOfficialPermissionSourceStatus = "official_verified" | "official_login_required";
+export type ClipperPermissionSubmissionDossierStatus = "not_prepared" | "blocked" | "needs_login_recheck" | "ready_to_submit" | "ready";
 export type ClipperPublisherConnectorStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperPublisherExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
+export type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approval" | "ready_to_send";
 export type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
 export type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
@@ -78,15 +84,35 @@ export type ClipperGoLiveAutopilotActionStatus = "run_in_app" | "external_requir
 export type ClipperGoLiveAutopilotActionLane = "in_app" | "external" | "evidence" | "publish";
 export type ClipperGoLiveAutopilotRunStatus = "not_run" | "completed" | "partial" | "blocked";
 export type ClipperGoLiveAutopilotRunItemStatus = "completed" | "skipped" | "failed";
+export type ClipperLocalDropSyncStatus = "not_run" | "completed" | "partial" | "blocked";
+export type ClipperLocalDropSyncItemStatus = "completed" | "skipped" | "failed";
+export type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "blocked";
+export type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
+export type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
+export type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
+export type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
+export type ClipperDropzoneReadyPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperDropzoneReadyPackLane = "credentials" | "launch_evidence" | "source_videos";
+export type ClipperDropzoneReadyPackItemStatus = "missing" | "partial" | "ready";
+export type ClipperRobertNextActionsStatus = "not_prepared" | "blocked" | "needs_action" | "ready";
+export type ClipperRobertNextActionsLane = "local_drop" | "external_portal" | "evidence" | "source_supply" | "verification";
+export type ClipperLaunchEvidenceFixPackStatus = "not_prepared" | "needs_fix" | "ready";
 export type ClipperBlockerUnlockPhase = "credentials" | "accounts" | "public_url" | "developer_apps" | "permissions" | "oauth" | "content_supply" | "publishing" | "optimization";
 export type ClipperGoLiveExecutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperGoLiveExecutionPhaseStatus = "blocked" | "ready_to_execute" | "done";
+export type ClipperGoLiveCompletionAuditStatus = "blocked" | "partial" | "ready";
+export type ClipperGoLiveCompletionRequirementStatus = "blocked" | "needs_evidence" | "verified";
+export type ClipperGoLiveOperatorBriefStatus = "blocked" | "needs_action" | "ready";
 export type ClipperPlatformPortalChecklistStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperHttpsTunnelPlanStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
+export type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperAnalyticsReportingPackStatus = "not_prepared" | "needs_data" | "ready";
 export type ClipperAccountCreationPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperAccountSetupSessionStatus = "not_prepared" | "blocked" | "ready_to_create" | "in_progress" | "ready";
+export type ClipperAccountSetupSessionItemStatus = "blocked" | "ready_to_create" | "in_progress" | "ready";
 export type ClipperPermissionRequestPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperPermissionRequestReadiness = "blocked" | "ready_to_submit" | "submitted" | "approved";
 
@@ -154,7 +180,9 @@ export interface ClipperStatus {
   platformReadiness: ClipperPlatformReadinessSummary;
   permissionPack: ClipperPermissionPackSummary;
   productionQueue: ClipperProductionQueueSummary;
+  sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
   sourceHunt: ClipperSourceHuntSummary;
   rightsOutreach: ClipperRightsOutreachSummary;
   draftSpecs: ClipperDraftSpecSummary;
@@ -164,6 +192,7 @@ export interface ClipperStatus {
   automationSchedule: ClipperAutomationScheduleSummary;
   driveWorkspace: ClipperDriveWorkspaceSummary;
   metrics: ClipperMetricsSummary;
+  analyticsReportingPack: ClipperAnalyticsReportingPackSummary;
   trendRadar: ClipperTrendRadarSummary;
   trendRightsOutreach: ClipperTrendRightsOutreachSummary;
   viralDiscovery: ClipperViralDiscoverySummary;
@@ -172,6 +201,7 @@ export interface ClipperStatus {
   accountIdentityKit: ClipperAccountIdentityKitSummary;
   accountLaunchKit: ClipperAccountLaunchKitSummary;
   accountCreationPack: ClipperAccountCreationPackSummary;
+  accountSetupSession: ClipperAccountSetupSessionSummary;
   accountEvidence: ClipperAccountEvidenceSummary;
   developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
   permissionTracker: ClipperPermissionTrackerSummary;
@@ -179,13 +209,16 @@ export interface ClipperStatus {
   externalSetupQueue: ClipperExternalSetupQueueSummary;
   externalExecutionHandoff: ClipperExternalExecutionHandoffSummary;
   externalExecutionSession: ClipperExternalExecutionSessionSummary;
+  platformWarRoom: ClipperPlatformWarRoomSummary;
   externalLaunchDossier: ClipperExternalLaunchDossierSummary;
   platformPortalChecklist: ClipperPlatformPortalChecklistSummary;
   appReviewSubmissionPack: ClipperAppReviewSubmissionPackSummary;
   appReviewDemoPack: ClipperAppReviewDemoPackSummary;
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
+  publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
   productionUrlVerification: ClipperProductionUrlVerificationSummary;
   httpsTunnelPlan: ClipperHttpsTunnelPlanSummary;
@@ -193,10 +226,20 @@ export interface ClipperStatus {
   oauthGoLive: ClipperOAuthGoLiveSummary;
   oauthConnectionPack: ClipperOAuthConnectionPackSummary;
   goLiveExecutionPack: ClipperGoLiveExecutionPackSummary;
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  goLiveOperatorBrief: ClipperGoLiveOperatorBriefSummary;
+  goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary;
   commandCenter: ClipperLaunchCommandCenterSummary;
   blockerResolutionPack: ClipperBlockerResolutionPackSummary;
   goLiveAutopilotBrief: ClipperGoLiveAutopilotBriefSummary;
   goLiveAutopilotRun: ClipperGoLiveAutopilotRunSummary;
+  localDropSync: ClipperLocalDropSyncSummary;
+  goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
+  launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
+  robertNextActions: ClipperRobertNextActionsSummary;
+  launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary;
   growthAudit: ClipperGrowthAudit;
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
@@ -269,6 +312,7 @@ export interface ClipperConnectAction {
 export interface ClipperOAuthConnection {
   platform: ClipperPlatform;
   accountId?: string | null;
+  ownerUserId: string;
   status: ClipperOAuthConnectionStatus;
   receivedAt: string;
   scopes: string[];
@@ -292,6 +336,7 @@ export interface ClipperTokenVaultSummary {
 export interface ClipperTokenSummary {
   platform: ClipperPlatform;
   accountId?: string | null;
+  ownerUserId: string;
   status: "saved";
   savedAt: string;
   scopes: string[];
@@ -383,6 +428,8 @@ export interface ClipperSourceDropImportItem {
   fileName: string;
   status: "imported" | "skipped";
   rightsStatus: ClipperAssetRightsStatus;
+  rightsEvidencePath: string | null;
+  manifestPath: string | null;
   reason: string | null;
 }
 
@@ -390,10 +437,94 @@ export interface ClipperSourceDropImportSummary {
   importedAt: string;
   dropDir: string;
   filesScanned: number;
+  manifestFilesScanned: number;
+  manifestRows: number;
+  manifestMatched: number;
+  rightsEvidenceWritten: number;
   imported: number;
   skipped: number;
   items: ClipperSourceDropImportItem[];
   queue: ClipperProductionQueueSummary;
+  nextStep: string;
+}
+
+export type ClipperSourceDropDiagnosticStatus = "ready_to_import" | "needs_files" | "needs_rights" | "ready";
+
+export interface ClipperSourceDropDiagnosticFile {
+  relativePath: string;
+  fileName: string;
+  category: ClipperAccountCategory | null;
+  location: "category_dir" | "root" | "unsupported_dir";
+  isVideo: boolean;
+  importEligible: boolean;
+  targetFolder: string | null;
+  rightsEvidencePath: string | null;
+  manifestPath: string | null;
+  manifestEvidenceReady: boolean;
+  issue: string | null;
+  nextStep: string;
+}
+
+export interface ClipperSourceDropDiagnosticManifest {
+  relativePath: string;
+  fileName: string;
+  category: ClipperAccountCategory | null;
+  rows: number;
+  readyRows: number;
+  placeholderRows: number;
+  expectedFiles: string[];
+  missingFiles: string[];
+  evidenceReadyRows: number;
+  issue: string | null;
+  nextStep: string;
+}
+
+export interface ClipperSourceDropDiagnosticCategory {
+  category: ClipperAccountCategory;
+  label: string;
+  dropPath: string;
+  sourceFolder: string;
+  dropFiles: number;
+  importEligible: number;
+  manifestReady: number;
+  manifestFiles: number;
+  manifestRows: number;
+  manifestReadyRows: number;
+  manifestPlaceholderRows: number;
+  manifestMissingFiles: number;
+  sourceAssets: number;
+  rightsReadyAssets: number;
+  minimumWeeklySourceAssets: number;
+  missingSourceAssets: number;
+  nextStep: string;
+}
+
+export interface ClipperSourceDropDiagnosticSummary {
+  status: ClipperSourceDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  repairWorksheetCsvPath: string;
+  dropDir: string;
+  files: ClipperSourceDropDiagnosticFile[];
+  manifests: ClipperSourceDropDiagnosticManifest[];
+  categories: ClipperSourceDropDiagnosticCategory[];
+  totals: {
+    files: number;
+    importEligible: number;
+    manifestReady: number;
+    manifestFiles: number;
+    manifestRows: number;
+    manifestReadyRows: number;
+    manifestPlaceholderRows: number;
+    manifestMissingFiles: number;
+    unsupported: number;
+    categoriesReady: number;
+    minimumWeeklySourceAssets: number;
+    currentSourceAssets: number;
+    rightsReadyAssets: number;
+    missingSourceAssets: number;
+  };
   nextStep: string;
 }
 
@@ -441,6 +572,78 @@ export interface ClipperSourceAcquisitionSummary {
   nextStep: string;
 }
 
+export interface ClipperSourceSupplyDropKitItem {
+  id: string;
+  rank: number;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  targetFileName: string;
+  sourceDropPath: string;
+  targetSourcePath: string;
+  platformHint: string;
+  suggestedTitle: string;
+  suggestedSource: string;
+  sourceUrlPlaceholder: string;
+  evidenceLinkPlaceholder: string;
+  intakeBatchRow: string;
+  trendCandidateBatchRow: string;
+  rightsEvidenceBatchRow: string;
+  requiredProof: string[];
+  searchBrief: string[];
+  viralSearchQueries: string[];
+  viralScoreChecklist: string[];
+  rejectIf: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceSupplyDropKitCategoryBatch {
+  id: string;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  items: number;
+  sourceDropDir: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  sourceDropPaths: string[];
+  targetSourcePaths: string[];
+  intakeBatchRows: string[];
+  trendCandidateBatchRows: string[];
+  rightsEvidenceBatchRows: string[];
+  intakeBatchTemplate: string;
+  trendCandidateBatchTemplate: string;
+  rightsEvidenceBatchTemplate: string;
+  requiredProof: string[];
+  viralSearchQueries: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceSupplyDropKitSummary {
+  status: ClipperSourceSupplyDropKitStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  items: ClipperSourceSupplyDropKitItem[];
+  categoryBatches: ClipperSourceSupplyDropKitCategoryBatch[];
+  totals: {
+    items: number;
+    critical: number;
+    high: number;
+    watch: number;
+    categories: number;
+    weeklyMissingSourceSlots: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+  };
+  intakeBatchTemplate: string;
+  nextStep: string;
+}
+
 export interface ClipperSourceHuntItem {
   id: string;
   huntDate: string;
@@ -454,10 +657,20 @@ export interface ClipperSourceHuntItem {
   clipObjective: string;
   publishWindow: string;
   platforms: string[];
+  targetFileName: string;
+  sourceDropPath: string;
+  sourceDropManifestPath: string;
+  sourceDropManifestRow: string;
   sourceFolder: string;
   sourcePath: string | null;
   rightsStatus: ClipperAssetRightsStatus | "missing";
   suggestedSearch: string;
+  viralSearchQueries: string[];
+  viralSearchUrls: string[];
+  recencyWindow: string;
+  minimumViralSignal: string;
+  viralScoreChecklist: string[];
+  rejectIf: string[];
   evidenceNeeded: string;
   requiredInputs: string[];
   completionHint: string;
@@ -636,7 +849,7 @@ export interface ClipperSourceRightsRecord {
   evidencePath: string;
   notes: string;
   recordedAt: string;
-  source: "clippers-ui";
+  source: "clippers-ui" | "source-drop-manifest";
 }
 
 export interface ClipperScheduledPost {
@@ -664,6 +877,10 @@ export interface ClipperAutomationRun {
   reportPath: string;
   totals: {
     posts: number;
+    dailyTargetPosts: number;
+    weeklyTargetClips: number;
+    backlogPosts: number;
+    gapToDailyTarget: number;
     scheduled: number;
     readyForManual: number;
     blocked: number;
@@ -894,6 +1111,45 @@ export interface ClipperMetricsSummary {
   nextStep: string;
 }
 
+export interface ClipperAnalyticsReportingPackItem {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  exportCadence: "daily" | "weekly";
+  exportSource: string;
+  targetFileName: string;
+  targetPath: string;
+  minimumFields: string[];
+  kpiTargets: string[];
+  evidenceChecklist: string[];
+  importRowTemplate: string;
+  nextStep: string;
+}
+
+export interface ClipperAnalyticsReportingPackSummary {
+  status: ClipperAnalyticsReportingPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  metricsDir: string;
+  items: ClipperAnalyticsReportingPackItem[];
+  totals: {
+    exports: number;
+    accounts: number;
+    platforms: number;
+    metricsFiles: number;
+    metricRecords: number;
+    weeklyViewsGoal: number;
+  };
+  importTemplate: string;
+  runbook: string[];
+  nextStep: string;
+}
+
 export interface ClipperBudgetRole {
   role: string;
   weeklyHours: number;
@@ -996,6 +1252,10 @@ export interface ClipperTrendRightsOutreachItem {
   outreachSubject: string;
   outreachMessage: string;
   permissionRecordTemplate: string;
+  remixBrief: string;
+  ownedAssetPlan: string[];
+  scriptBeats: string[];
+  publishSafetyChecklist: string[];
   evidenceFileName: string;
   nextStep: string;
 }
@@ -1081,6 +1341,7 @@ export interface ClipperAccountIdentityPlatform {
   profileLink: string;
   bio: string;
   usernameAlternatives: string[];
+  handleCheckUrls: string[];
   profileImagePrompt: string;
   bannerPrompt: string;
   firstPostIdeas: string[];
@@ -1160,6 +1421,7 @@ export interface ClipperAccountCreationPackItem {
   officialHelpUrl: string;
   bio: string;
   usernameAlternatives: string[];
+  handleCheckUrls: string[];
   profileImagePrompt: string;
   bannerPrompt: string;
   firstPostIdeas: string[];
@@ -1202,6 +1464,7 @@ export interface ClipperAccountCreationSessionItem {
   priority: ClipperAccountCreationSessionPriority;
   copyPackage: Array<{ label: string; value: string }>;
   portalFormFields: Array<{ field: string; value: string; note: string }>;
+  handleCheckUrls: string[];
   handleReservationPlan: string[];
   browserSessionChecklist: string[];
   evidenceCapturePlan: string[];
@@ -1225,6 +1488,7 @@ export interface ClipperAccountClaimSheetItem {
   priority: ClipperAccountCreationSessionPriority;
   signupUrl: string;
   profileLink: string;
+  handleCheckUrls: string[];
   browserProfileLabel: string;
   vaultItemName: string;
   loginIdentifierLabel: string;
@@ -1243,6 +1507,33 @@ export interface ClipperAccountClaimSheetItem {
   blockedUntil: string[];
 }
 
+export interface ClipperAccountCreationPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperAccountCreationPackStatus;
+  profiles: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  evidenceMissing: number;
+  signupUrl: string;
+  officialHelpUrl: string;
+  handles: string[];
+  accountIds: string[];
+  copyBlock: string;
+  evidenceBatchTemplate: string;
+  submittedEvidenceRows: string[];
+  verifiedEvidenceRows: string[];
+  evidenceRecipeRows: string[];
+  browserSessionChecklist: string[];
+  operatorVaultChecklist: string[];
+  requiredProof: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 export interface ClipperAccountCreationPackSummary {
   status: ClipperAccountCreationPackStatus;
   generatedAt: string | null;
@@ -1255,6 +1546,7 @@ export interface ClipperAccountCreationPackSummary {
   items: ClipperAccountCreationPackItem[];
   sessionOrder: ClipperAccountCreationSessionItem[];
   claimSheet: ClipperAccountClaimSheetItem[];
+  platformBatches: ClipperAccountCreationPlatformBatch[];
   evidenceBatchTemplate: string;
   totals: {
     profiles: number;
@@ -1262,6 +1554,67 @@ export interface ClipperAccountCreationPackSummary {
     partial: number;
     blocked: number;
     evidenceMissing: number;
+    platformBatches: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperAccountSetupSessionItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  handle: string;
+  status: ClipperAccountSetupSessionItemStatus;
+  priority: ClipperAccountCreationSessionPriority;
+  signupUrl: string;
+  profileLink: string;
+  handleCheckUrls: string[];
+  vaultItemName: string;
+  loginIdentifierLabel: string;
+  passwordVaultSlot: string;
+  twoFactorSlot: string;
+  recoverySlot: string;
+  copyPackage: Array<{ label: string; value: string }>;
+  portalFormFields: Array<{ field: string; value: string; note: string }>;
+  claimSteps: string[];
+  verificationSteps: string[];
+  evidenceCapturePlan: string[];
+  submittedEvidenceBatchRow: string;
+  verifiedEvidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  evidenceRows: string[];
+  evidencePath: string | null;
+  evidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperAccountSetupSessionSummary {
+  status: ClipperAccountSetupSessionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperAccountSetupSessionItem[];
+  sourceArtifacts: {
+    accountCreationPackPath: string;
+    accountClaimSheetPath: string;
+    accountEvidenceConnectionKitPath: string;
+    accountSetupEvidenceTemplatePath: string;
+    ownerConnectPackPath: string;
+  };
+  totals: {
+    accounts: number;
+    blocked: number;
+    readyToCreate: number;
+    inProgress: number;
+    ready: number;
+    portalUrls: number;
+    evidenceRows: number;
+    vaultSlots: number;
   };
   nextStep: string;
 }
@@ -1281,15 +1634,72 @@ export interface ClipperAccountEvidenceItem {
   nextStep: string;
 }
 
+export interface ClipperAccountEvidenceQuickBatchRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  displayName: string;
+  profileLink: string;
+  signupUrl: string;
+  developerPortalUrl: string;
+  status: ClipperAccountEvidenceItemStatus | "missing";
+  evidencePath: string | null;
+  evidenceJsonPath: string;
+  evidenceMarkdownPath: string;
+  templatePath: string;
+  batchRow: string;
+  verifiedBatchRow: string;
+  requiredProof: string[];
+  operatorSteps: string[];
+  doneCriteria: string;
+  nextStep: string;
+}
+
+export interface ClipperAccountEvidencePlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperAccountEvidenceStatus;
+  accounts: number;
+  verified: number;
+  submitted: number;
+  rejected: number;
+  missing: number;
+  signupUrl: string;
+  developerPortalUrl: string;
+  handles: string[];
+  submittedEvidenceRows: string[];
+  verifiedEvidenceRows: string[];
+  submittedDropFilePath: string;
+  verifiedDropFilePath: string;
+  submittedTemplateFilePath: string;
+  verifiedTemplateFilePath: string;
+  submittedDropTemplate: string;
+  verifiedDropTemplate: string;
+  checklist: string[];
+  nextStep: string;
+}
+
 export interface ClipperAccountEvidenceSummary {
   status: ClipperAccountEvidenceStatus;
   evidenceDir: string;
   templateDir: string;
   readmePath: string;
+  connectionKitManifestPath: string;
+  connectionKitMarkdownPath: string;
+  connectionKitCsvPath: string;
+  connectionKitGeneratedAt: string | null;
   launchEvidenceDropDir: string;
   launchEvidenceTemplatePath: string;
   launchEvidenceTemplateRows: number;
   launchEvidenceDropChecklist: string[];
+  quickBatchRows: ClipperAccountEvidenceQuickBatchRow[];
+  connectionKitPlatformBatches: ClipperAccountEvidencePlatformBatch[];
+  quickBatchTemplate: string;
+  quickBatchChecklist: string[];
   generatedAt: string | null;
   items: ClipperAccountEvidenceItem[];
   totals: {
@@ -1317,11 +1727,68 @@ export interface ClipperDeveloperAppEvidenceItem {
   nextStep: string;
 }
 
+export interface ClipperDeveloperAppConnectionKitItem {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  appIdentifier: string | null;
+  publicBaseUrl: string | null;
+  redirectUri: string;
+  requiredEnvVars: string[];
+  configuredEnvVars: string[];
+  missingEnvVars: string[];
+  scopes: string[];
+  evidencePath: string | null;
+  templatePath: string;
+  draftEvidenceRow: string;
+  submittedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  copyChecklist: string[];
+  reviewerChecklist: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperDeveloperAppConnectionKitPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  appIdentifier: string | null;
+  publicBaseUrl: string | null;
+  redirectUri: string;
+  requiredEnvVars: string[];
+  missingEnvVars: string[];
+  scopes: string[];
+  submittedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  submittedDropFilePath: string;
+  approvedDropFilePath: string;
+  submittedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  submittedDropTemplate: string;
+  approvedDropTemplate: string;
+  checklist: string[];
+  nextStep: string;
+}
+
 export interface ClipperDeveloperAppEvidenceSummary {
   status: ClipperDeveloperAppEvidenceStatus;
   evidenceDir: string;
   templateDir: string;
   readmePath: string;
+  connectionKitManifestPath: string;
+  connectionKitMarkdownPath: string;
+  connectionKitCsvPath: string;
+  connectionKitGeneratedAt: string | null;
+  connectionKitItems: ClipperDeveloperAppConnectionKitItem[];
+  connectionKitPlatformBatches: ClipperDeveloperAppConnectionKitPlatformBatch[];
+  connectionKitTemplate: string;
+  connectionKitChecklist: string[];
   generatedAt: string | null;
   items: ClipperDeveloperAppEvidenceItem[];
   totals: {
@@ -1378,9 +1845,126 @@ export interface ClipperCredentialSetupEnvFileScan {
 export interface ClipperCredentialSetupFileScan {
   fileName: string;
   relativePath: string;
-  kind: "google_oauth_json" | "env_file" | "unknown";
+  kind: "google_oauth_json" | "credential_json" | "env_file" | "credential_text" | "unknown";
   suggestedImportTarget: string;
   supportedInputFormat: string;
+  nextStep: string;
+}
+
+export type ClipperCredentialDropDiagnosticStatus = "ready_to_import" | "needs_review" | "move_candidates_to_drop_dir" | "no_candidates";
+
+export interface ClipperCredentialDropDiagnosticFile {
+  fileName: string;
+  relativePath: string;
+  kind: ClipperCredentialSetupFileScan["kind"];
+  location: "drop_dir" | "workspace_root";
+  importEligible: boolean;
+  suggestedImportTarget: string;
+  supportedInputFormat: string;
+  detectedEnvVars: string[];
+  pendingEnvVars: string[];
+  issue: string | null;
+  nextStep: string;
+}
+
+export interface ClipperCredentialDropDiagnosticTemplateFile {
+  fileName: string;
+  relativePath: string;
+  location: "drop_dir" | "workspace_root";
+  nextStep: string;
+}
+
+export interface ClipperCredentialDropDiagnosticSummary {
+  status: ClipperCredentialDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  dropDirs: string[];
+  allowedEnvVars: string[];
+  files: ClipperCredentialDropDiagnosticFile[];
+  acceptedEnvVars: string[];
+  rejectedEnvVars: string[];
+  skippedLines: number;
+  sourceFiles: string[];
+  fileErrors: Array<{ relativePath: string; reason: string }>;
+  ignoredTemplateFiles: ClipperCredentialDropDiagnosticTemplateFile[];
+  totals: {
+    files: number;
+    dropCandidates: number;
+    rootCandidates: number;
+    importEligible: number;
+    acceptedEnvVars: number;
+    rejectedEnvVars: number;
+    fileErrors: number;
+    templateFiles: number;
+    pendingEnvVars: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperCredentialPastePackItem {
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  importOrder: number;
+  docsUrl: string;
+  portalUrl: string | null;
+  configuredEnvVars: string[];
+  missingSuggestedEnvVars: string[];
+  acceptedEnvVarGroups: string[][];
+  localDropFileNames?: string[];
+  envTemplate: string;
+  verificationCommand: string;
+  nextStep: string;
+}
+
+export interface ClipperCredentialTransferKitItem {
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  portalUrl: string | null;
+  docsUrl: string;
+  missingSuggestedEnvVars: string[];
+  acceptedEnvVarGroups: string[][];
+  driveSearchQueries: string[];
+  driveSearchUrls: string[];
+  localDropFileNames: string[];
+  envTemplate: string;
+  importSteps: string[];
+  verificationSteps: string[];
+  nextStep: string;
+}
+
+export type ClipperCredentialDropStarterStatus = "not_prepared" | "prepared" | "ready";
+export type ClipperCredentialDropStarterFileStatus = "missing" | "created" | "exists" | "not_needed";
+
+export interface ClipperCredentialDropStarterFile {
+  id: string;
+  label: string;
+  relativePath: string;
+  absolutePath: string;
+  status: ClipperCredentialDropStarterFileStatus;
+  envVars: string[];
+  sourceItemIds: string[];
+  nextStep: string;
+}
+
+export interface ClipperCredentialDropStarterSummary {
+  status: ClipperCredentialDropStarterStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  files: ClipperCredentialDropStarterFile[];
+  totals: {
+    files: number;
+    created: number;
+    existing: number;
+    missing: number;
+    notNeeded: number;
+    envVars: number;
+  };
   nextStep: string;
 }
 
@@ -1395,8 +1979,26 @@ export interface ClipperCredentialSetupSummary {
   credentialDropDirs: string[];
   envFileScans: ClipperCredentialSetupEnvFileScan[];
   credentialFileScans: ClipperCredentialSetupFileScan[];
+  credentialDropDiagnosticPath: string;
+  credentialDropDiagnosticMarkdownPath: string;
+  credentialDropDiagnosticGeneratedAt: string | null;
+  credentialDropDiagnostic: ClipperCredentialDropDiagnosticSummary;
   items: ClipperCredentialSetupItem[];
   importPlan: ClipperCredentialImportPlanItem[];
+  credentialPastePack: ClipperCredentialPastePackItem[];
+  credentialPasteTemplate: string;
+  credentialPasteChecklist: string[];
+  credentialTransferKitManifestPath: string;
+  credentialTransferKitMarkdownPath: string;
+  credentialTransferKitEnvPath: string;
+  credentialTransferKitGeneratedAt: string | null;
+  credentialTransferKitItems: ClipperCredentialTransferKitItem[];
+  credentialTransferTemplate: string;
+  credentialTransferChecklist: string[];
+  credentialDropStarterPath: string;
+  credentialDropStarterMarkdownPath: string;
+  credentialDropStarterGeneratedAt: string | null;
+  credentialDropStarter: ClipperCredentialDropStarterSummary;
   totals: {
     items: number;
     ready: number;
@@ -1502,6 +2104,14 @@ export interface ClipperCredentialDoctorItem {
   configuredEnvVars: string[];
   missingEnvVarGroups: string[];
   envFilesWithRelevantKeys: string[];
+  dropTarget: string;
+  portalUrl: string;
+  dropFileExists: boolean;
+  dropFileEnvVars: string[];
+  dropFileReadyEnvVars: string[];
+  dropFilePendingEnvVars: string[];
+  dropFileStatus: "missing" | "empty" | "pending_values" | "ready";
+  dropFileNextStep: string;
   nextStep: string;
 }
 
@@ -1510,6 +2120,7 @@ export interface ClipperCredentialDoctorSummary {
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
+  repairWorksheetCsvPath: string;
   envFiles: ClipperCredentialDoctorEnvFile[];
   items: ClipperCredentialDoctorItem[];
   totals: {
@@ -1708,6 +2319,28 @@ export interface ClipperGoLiveAutopilotAction {
   unblockCondition: string;
 }
 
+export interface ClipperGoLiveAutopilotAgentSession {
+  id: string;
+  agentId: string;
+  subAgentName: string;
+  owner: string;
+  status: ClipperGoLiveAutopilotBriefStatus;
+  actionIds: string[];
+  actionCount: number;
+  inAppReady: number;
+  externalRequired: number;
+  waiting: number;
+  blocked: number;
+  platforms: Array<ClipperPlatform | "system">;
+  portalUrls: string[];
+  localActionUrls: string[];
+  evidenceRows: string[];
+  riskControls: string[];
+  firstActionRank: number;
+  mission: string;
+  nextStep: string;
+}
+
 export interface ClipperGoLiveAutopilotBriefSummary {
   status: ClipperGoLiveAutopilotBriefStatus;
   generatedAt: string | null;
@@ -1715,6 +2348,7 @@ export interface ClipperGoLiveAutopilotBriefSummary {
   markdownPath: string;
   csvPath: string;
   actions: ClipperGoLiveAutopilotAction[];
+  agentSessions: ClipperGoLiveAutopilotAgentSession[];
   totals: {
     actions: number;
     inAppReady: number;
@@ -1723,6 +2357,7 @@ export interface ClipperGoLiveAutopilotBriefSummary {
     done: number;
     blocked: number;
     platformsCovered: number;
+    agentSessions: number;
   };
   lanes: Record<ClipperGoLiveAutopilotActionLane, number>;
   nextStep: string;
@@ -1745,6 +2380,10 @@ export interface ClipperGoLiveAutopilotRunSummary {
   markdownPath: string;
   requestedActionId: string | null;
   maxActions: number;
+  resetCompleted: boolean;
+  availableInAppActions: number;
+  alreadyCompletedInAppActions: number;
+  remainingInAppActions: number;
   completedActionIds: string[];
   items: ClipperGoLiveAutopilotRunItem[];
   totals: {
@@ -1752,6 +2391,766 @@ export interface ClipperGoLiveAutopilotRunSummary {
     completed: number;
     skipped: number;
     failed: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperLocalDropSyncItem {
+  id: "credential_drop" | "permission_template_drop" | "launch_evidence_drop" | "source_drop" | "state_refresh";
+  label: string;
+  status: ClipperLocalDropSyncItemStatus;
+  startedAt: string;
+  finishedAt: string;
+  message: string;
+}
+
+export interface ClipperLocalDropSyncMissingInput {
+  id: "credentials" | "launch_evidence" | "source_videos";
+  label: string;
+  status: "ready" | "needed";
+  dropDirs: string[];
+  acceptedFormats: string[];
+  requiredExamples: string[];
+  actionLabel: string;
+  actionUrl: string;
+  nextStep: string;
+}
+
+export interface ClipperLocalDropSyncLaunchEvidenceDrop {
+  accepted: ClipperLaunchEvidenceBatchSummary["accepted"];
+  rejected: ClipperLaunchEvidenceBatchRejectedItem[];
+  sourceFiles: string[];
+  fileErrors: Array<{ relativePath: string; reason: string }>;
+  nextStep: string;
+}
+
+export interface ClipperLocalDropSyncSummary {
+  status: ClipperLocalDropSyncStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperLocalDropSyncItem[];
+  missingInputs: ClipperLocalDropSyncMissingInput[];
+  launchEvidenceDrop: ClipperLocalDropSyncLaunchEvidenceDrop | null;
+  totals: {
+    attempted: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperGoLivePrepSweepItem {
+  id: string;
+  label: string;
+  status: ClipperGoLivePrepSweepItemStatus;
+  startedAt: string;
+  finishedAt: string;
+  message: string;
+}
+
+export interface ClipperGoLivePrepSweepSummary {
+  status: ClipperGoLivePrepSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperGoLivePrepSweepItem[];
+  localDropSync: ClipperLocalDropSyncSummary | null;
+  totals: {
+    attempted: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperOwnerConnectPackItem {
+  id: string;
+  rank: number;
+  lane: ClipperOwnerConnectPackLane;
+  platform: ClipperPlatform | "system";
+  label: string;
+  status: ClipperOwnerConnectPackItemStatus;
+  owner: string;
+  portalUrl: string | null;
+  executionUrl: string | null;
+  artifactPath: string | null;
+  dropDirs: string[];
+  evidenceRows: string[];
+  credentialTemplate: string | null;
+  checklist: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  progressStatus: ClipperOwnerConnectPackItemStatus | null;
+  progressNotes: string | null;
+  progressRecordedAt: string | null;
+  progressEvidenceRows: string[];
+  nextStep: string;
+}
+
+export interface ClipperOwnerConnectProgressRecord {
+  itemId: string;
+  status: ClipperOwnerConnectPackItemStatus;
+  notes: string;
+  evidenceRows: string[];
+  recordedAt: string;
+  source: "clippers-ui";
+}
+
+export interface ClipperOwnerConnectPackSummary {
+  status: ClipperOwnerConnectPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  progressRecordsPath: string;
+  items: ClipperOwnerConnectPackItem[];
+  progressRecords: ClipperOwnerConnectProgressRecord[];
+  sourceArtifacts: {
+    accountCreationPackPath: string;
+    developerApplicationDraftsPath: string;
+    permissionRequestPackPath: string;
+    externalExecutionSessionPath: string;
+    officialPermissionMatrixPath: string;
+    localDropSyncPath: string;
+    ownerConnectEvidenceDropPath: string;
+  };
+  totals: {
+    items: number;
+    readyToExecute: number;
+    blocked: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    credentialTemplates: number;
+    dropDirs: number;
+    progressRecords: number;
+    progressDone: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperDropzoneReadyPackItem {
+  id: string;
+  rank: number;
+  lane: ClipperDropzoneReadyPackLane;
+  label: string;
+  status: ClipperDropzoneReadyPackItemStatus;
+  priority: "critical" | "high" | "medium";
+  dropDirs: string[];
+  acceptedFormats: string[];
+  expectedFiles: string[];
+  copyReadyTemplate: string;
+  sourceArtifactPath: string | null;
+  localActionUrl: string;
+  actionLabel: string;
+  blockers: string[];
+  unlocks: string[];
+  nextStep: string;
+}
+
+export interface ClipperDropzoneReadyPackSummary {
+  status: ClipperDropzoneReadyPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperDropzoneReadyPackItem[];
+  sourceArtifacts: {
+    localDropSyncPath: string;
+    credentialSetupPath: string;
+    credentialTransferKitPath: string;
+    goLiveEvidenceBundlePath: string;
+    ownerConnectPackPath: string;
+    sourceSupplyDropKitPath: string;
+  };
+  totals: {
+    items: number;
+    ready: number;
+    partial: number;
+    missing: number;
+    critical: number;
+    dropDirs: number;
+    expectedFiles: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperRobertNextActionItem {
+  id: string;
+  rank: number;
+  lane: ClipperRobertNextActionsLane;
+  label: string;
+  status: "blocked" | "ready_to_execute" | "waiting" | "done";
+  priority: "critical" | "high" | "medium";
+  estimatedMinutes: number;
+  platform: ClipperPlatform | "system" | "mixed";
+  actionUrl: string | null;
+  artifactPath: string | null;
+  portalUrl: string | null;
+  dropDirs: string[];
+  evidenceRows: string[];
+  operatorSteps: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperRobertConnectionTunnelGate {
+  id: string;
+  rank: number;
+  label: string;
+  status: "blocked" | "ready_to_execute" | "waiting" | "done";
+  done: number;
+  total: number;
+  blockers: number;
+  actionLabel: string;
+  actionUrl: string | null;
+  artifactPath: string | null;
+  nextStep: string;
+  unlocks: string[];
+}
+
+export interface ClipperRobertOfficialPermissionCloseoutQueue {
+  status: ClipperOfficialPermissionMatrixStatus;
+  matrixPath: string;
+  csvPath: string;
+  verifiedAt: string;
+  totals: {
+    platforms: number;
+    scopes: number;
+    appReviewRequired: number;
+    officialVerified: number;
+    loginRequired: number;
+    sourceBatches: number;
+  };
+  nextRows: string[];
+  approvalRows: string[];
+  sourceBatches: Array<{
+    id: string;
+    platform: ClipperPlatform;
+    label: string;
+    sourceStatus: ClipperOfficialPermissionSourceStatus;
+    accessMode: "public" | "login_required";
+    submitDecision: "request_now" | "human_login_recheck";
+    scopes: string[];
+    officialUrls: string[];
+    verifiedClaims: string[];
+    reviewerEvidence: string[];
+    blocker: string | null;
+    nextStep: string;
+  }>;
+  webProofTrail: Array<{
+    platform: ClipperPlatform;
+    accessMode: "public" | "login_required";
+    officialUrls: string[];
+    verifiedClaims: string[];
+    nextHumanAction: string;
+  }>;
+  nextStep: string;
+}
+
+export interface ClipperRobertConnectNowHandoff {
+  markdownPath: string;
+  focusRun: ClipperExternalExecutionFocusRun;
+  evidenceCloseout: ClipperRobertEvidenceCloseoutQueue;
+  credentialCloseout: ClipperRobertCredentialCloseoutQueue;
+  sourceCloseout: ClipperRobertSourceCloseoutQueue;
+  accountCloseout: ClipperRobertAccountCloseoutQueue;
+  officialPermissionCloseout: ClipperRobertOfficialPermissionCloseoutQueue;
+  connectionTunnel: {
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    progress: number;
+    blockedGates: number;
+    readyGates: number;
+    doneGates: number;
+    gates: ClipperRobertConnectionTunnelGate[];
+    nextGate: ClipperRobertConnectionTunnelGate | null;
+    nextStep: string;
+  };
+  ownershipSplit: {
+    robertReady: Array<{
+      label: string;
+      count: number;
+      nextStep: string;
+    }>;
+    userRequired: Array<{
+      label: string;
+      count: number;
+      nextStep: string;
+    }>;
+    automationUnlockedBy: string[];
+    nextRobertAction: string;
+    nextUserAction: string;
+  };
+  weeklyRunway: {
+    status: "blocked" | "needs_sources" | "needs_connections" | "ready";
+    targetWeeklyClips: number;
+    targetDailyClips: number;
+    configuredDailyClipTarget: number;
+    plannedDailyClips: number;
+    accountCount: number;
+    platformAccountCount: number;
+    weeklyReadySlots: number;
+    weeklyMissingSlots: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+    sourceAssetGap: number;
+    blockedGates: number;
+    readyToPublish: boolean;
+    nextStep: string;
+    categories: Array<{
+      category: ClipperAccountCategory;
+      label: string;
+      accountCount: number;
+      dailyTarget: number;
+      weeklyTargetSlots: number;
+      rightsReadyAssets: number;
+      minimumWeeklySourceAssets: number;
+      sourceAssetGap: number;
+      nextStep: string;
+    }>;
+  };
+  platformLaunchBridge: Array<{
+    platform: ClipperPlatform;
+    label: string;
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    accountType: string;
+    accountCreationUrl: string;
+    developerPortalUrl: string;
+    docsUrls: string[];
+    handles: string[];
+    scopes: string[];
+    missingEnvVars: string[];
+    accountProofCount: number;
+    appPermissionCount: number;
+    oauthCount: number;
+    evidenceRows: string[];
+    portalUrls: Array<{
+      label: string;
+      url: string;
+    }>;
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  recommendedOrder: string[];
+  pendingCredentialEnvVars: string[];
+  credentialTemplate: string;
+  credentialDropDirs: string[];
+  credentialCandidateFiles: string[];
+  evidenceTemplatePath: string;
+  evidenceImportPath: string;
+  launchEvidenceTemplate: string;
+  sourceDropDirs: string[];
+  sourceIntakeTemplate: string;
+  sourceAssetsRequired: number;
+  accountHandles: Array<{
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    handle: string;
+  }>;
+  portalUrls: Array<{
+    label: string;
+    url: string;
+  }>;
+  publicUrls: Array<{
+    label: string;
+    url: string;
+  }>;
+  blockers: Array<{
+    label: string;
+    count: number;
+    nextStep: string;
+  }>;
+}
+
+export interface ClipperRobertNextActionsSummary {
+  status: ClipperRobertNextActionsStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  connectNow: ClipperRobertConnectNowHandoff;
+  items: ClipperRobertNextActionItem[];
+  sourceArtifacts: {
+    commandCenterPath: string;
+    ownerConnectPackPath: string;
+    dropzoneReadyPackPath: string;
+    goLiveCompletionAuditPath: string;
+    externalExecutionSessionPath: string;
+    sourceSupplyDropKitPath: string;
+  };
+  totals: {
+    actions: number;
+    critical: number;
+    high: number;
+    localDrop: number;
+    externalPortal: number;
+    evidence: number;
+    sourceSupply: number;
+    verification: number;
+    estimatedMinutes: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperLaunchEvidenceFixPackItem {
+  id: string;
+  rank: number;
+  rowIndex: number;
+  evidenceSource: "drop_rejected" | "current_state_gap";
+  kind: string;
+  identifier: string | null;
+  reason: string;
+  fixCategory: "account_proof" | "developer_app" | "permission_proof" | "public_url" | "source_rights" | "format";
+  requiredFix: string;
+  suggestedNotes: string;
+  suggestedReplacementRow: string;
+  importTarget: string;
+}
+
+export interface ClipperLaunchEvidenceFixPackSummary {
+  status: ClipperLaunchEvidenceFixPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  suggestedImportCsvPath: string;
+  sourceArtifacts: {
+    localDropSyncPath: string;
+    evidenceDropDir: string;
+    ownerConnectEvidencePath: string;
+  };
+  items: ClipperLaunchEvidenceFixPackItem[];
+  totals: {
+    items: number;
+    accountProof: number;
+    developerApps: number;
+    permissionProof: number;
+    publicUrl: number;
+    sourceRights: number;
+    format: number;
+    currentStateGaps: number;
+    rejectedRows: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperRobertEvidenceCloseoutQueue {
+  total: number;
+  importTarget: string;
+  fixpackPath: string;
+  byCategory: {
+    accountProof: number;
+    developerApps: number;
+    permissionProof: number;
+    publicUrl: number;
+    sourceRights: number;
+    format: number;
+    currentStateGaps: number;
+    rejectedRows: number;
+  };
+  nextRows: string[];
+  importBridge: Array<{
+    id: string;
+    label: string;
+    kind: string;
+    platform: ClipperPlatform | "system" | "mixed";
+    count: number;
+    rows: string[];
+    requiredFixes: string[];
+    identifiers: string[];
+    importTarget: string;
+    priority: "critical" | "high" | "medium";
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    evidenceSource: ClipperLaunchEvidenceFixPackItem["evidenceSource"];
+    kind: string;
+    identifier: string | null;
+    fixCategory: ClipperLaunchEvidenceFixPackItem["fixCategory"];
+    requiredFix: string;
+    suggestedReplacementRow: string;
+    importTarget: string;
+  }>;
+  nextStep: string;
+}
+
+export interface ClipperRobertCredentialCloseoutQueue {
+  status: ClipperCredentialDropDiagnosticStatus;
+  diagnosticPath: string;
+  importReady: boolean;
+  dropDirs: string[];
+  runtimeEnv: {
+    checkedEnvVars: string[];
+    configuredEnvVars: string[];
+    missingEnvVars: string[];
+    localEnvFiles: string[];
+  };
+  acceptedEnvVars: string[];
+  pendingEnvVars: string[];
+  rejectedEnvVars: string[];
+  driveCredentialBridge: Array<{
+    id: string;
+    label: string;
+    platform: ClipperPlatform | "system";
+    status: ClipperCredentialSetupStatus;
+    missingSuggestedEnvVars: string[];
+    driveSearchQueries: string[];
+    driveSearchUrls: string[];
+    localDropFileNames: string[];
+    portalUrl: string | null;
+    docsUrl: string;
+    nextStep: string;
+  }>;
+  totals: {
+    files: number;
+    dropCandidates: number;
+    rootCandidates: number;
+    importEligible: number;
+    templateFiles: number;
+    pendingEnvVars: number;
+    fileErrors: number;
+  };
+  files: Array<{
+    fileName: string;
+    relativePath: string;
+    kind: ClipperCredentialSetupFileScan["kind"];
+    location: ClipperCredentialDropDiagnosticFile["location"];
+    importEligible: boolean;
+    detectedEnvVars: string[];
+    pendingEnvVars: string[];
+    issue: string | null;
+    nextStep: string;
+  }>;
+  nextStep: string;
+}
+
+export interface ClipperRobertSourceCloseoutQueue {
+  status: ClipperSourceSupplyDropKitStatus;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  total: number;
+  nextRows: string[];
+  rightsRows: string[];
+  trendRows: string[];
+  batches: Array<{
+    category: ClipperAccountCategory;
+    label: string;
+    priority: ClipperSourceSupplyDropKitCategoryBatch["priority"];
+    items: number;
+    sourceDropDir: string;
+    sourceDropManifestPath: string;
+    sourceDropReadmePath: string;
+    intakeRows: string[];
+    rightsRows: string[];
+    viralSearchQueries: string[];
+    requiredProof: string[];
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    category: ClipperAccountCategory;
+    label: string;
+    priority: ClipperSourceSupplyDropKitItem["priority"];
+    targetFileName: string;
+    sourceDropPath: string;
+    intakeBatchRow: string;
+    rightsEvidenceBatchRow: string;
+    viralSearchQueries: string[];
+    requiredProof: string[];
+    nextStep: string;
+  }>;
+  totals: ClipperSourceSupplyDropKitSummary["totals"];
+  nextStep: string;
+}
+
+export interface ClipperRobertAccountCloseoutQueue {
+  status: ClipperOwnerConnectPackStatus;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  evidenceDropPath: string;
+  totals: {
+    items: number;
+    readyToExecute: number;
+    blocked: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+    oauth: number;
+    officialRechecks: number;
+  };
+  portalUrls: Array<{
+    label: string;
+    lane: ClipperOwnerConnectPackLane;
+    platform: ClipperPlatform | "system";
+    url: string;
+  }>;
+  evidenceRows: string[];
+  accountProofBridge: Array<{
+    id: string;
+    rank: number;
+    accountId: string;
+    platform: ClipperPlatform | "system";
+    handle: string;
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    evidenceRow: string;
+    requiredProof: string[];
+    checklist: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  appPermissionBridge: Array<{
+    id: string;
+    rank: number;
+    lane: Extract<ClipperOwnerConnectPackLane, "developer_app" | "permission" | "official_recheck">;
+    platform: ClipperPlatform | "system";
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    evidenceRows: string[];
+    scopes: string[];
+    appIdentifiers: string[];
+    publicBaseUrls: string[];
+    requiredProof: string[];
+    checklist: string[];
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    lane: ClipperOwnerConnectPackLane;
+    platform: ClipperPlatform | "system";
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    executionUrl: string | null;
+    artifactPath: string | null;
+    evidenceRows: string[];
+    checklist: string[];
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  nextStep: string;
+}
+
+export interface ClipperGoLiveCompletionRequirement {
+  id: string;
+  label: string;
+  phase: ClipperBlockerUnlockPhase | "go_live";
+  status: ClipperGoLiveCompletionRequirementStatus;
+  owner: string;
+  requiredEvidence: string[];
+  currentEvidence: string;
+  proofSource: string;
+  actionUrl: string | null;
+  portalUrl: string | null;
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperGoLiveCompletionExternalSessionItem {
+  id: string;
+  rank: number;
+  requirementId: string;
+  label: string;
+  phase: ClipperBlockerUnlockPhase | "go_live";
+  status: ClipperGoLiveCompletionRequirementStatus;
+  owner: string;
+  lane: "external_portal" | "evidence_upload" | "verification" | "done";
+  portalUrls: string[];
+  actionUrl: string | null;
+  artifactPath: string;
+  evidenceDropFileName: string;
+  evidenceDropPath: string;
+  evidenceCaptureTemplate: string;
+  evidenceRows: string[];
+  requiredEvidence: string[];
+  blockers: string[];
+  operatorSteps: string[];
+  doneCriteria: string[];
+  verificationCommand: string;
+  nextStep: string;
+}
+
+export interface ClipperGoLiveCompletionAuditSummary {
+  status: ClipperGoLiveCompletionAuditStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  externalSessionCsvPath: string;
+  readyToPublish: boolean;
+  score: number;
+  requirements: ClipperGoLiveCompletionRequirement[];
+  externalSession: ClipperGoLiveCompletionExternalSessionItem[];
+  totals: {
+    requirements: number;
+    verified: number;
+    needsEvidence: number;
+    blocked: number;
+    externalRequired: number;
+    externalSessionItems: number;
+    externalSessionPortalUrls: number;
+    externalSessionEvidenceRows: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperGoLiveOperatorBriefLane {
+  id: "accounts" | "credentials" | "public_url" | "content_supply" | "oauth_publish";
+  label: string;
+  status: ClipperGoLiveOperatorBriefStatus;
+  owner: string;
+  priority: "critical" | "high" | "medium";
+  done: number;
+  total: number;
+  artifactPath: string;
+  actionUrl: string | null;
+  portalUrls: string[];
+  evidenceRows: string[];
+  blockers: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
+export interface ClipperGoLiveOperatorBriefSummary {
+  status: ClipperGoLiveOperatorBriefStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  currentFocus: string;
+  lanes: ClipperGoLiveOperatorBriefLane[];
+  totals: {
+    lanes: number;
+    ready: number;
+    needsAction: number;
+    blocked: number;
+    portalUrls: number;
+    evidenceRows: number;
+    accountConnectionsReady: number;
+    accountConnectionsTotal: number;
+    credentialFiles: number;
+    sourceAssetsMissing: number;
   };
   nextStep: string;
 }
@@ -1828,6 +3227,38 @@ export interface ClipperPermissionRequestPackItem {
   nextStep: string;
 }
 
+export interface ClipperPermissionRequestPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPermissionRequestPackStatus;
+  permissions: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  approved: number;
+  requested: number;
+  developerPortalUrl: string;
+  docsUrls: string[];
+  scopes: string[];
+  scopeRequestLines: string[];
+  copyBlock: string;
+  evidenceRecipeRows: string[];
+  requestedEvidenceRows: string[];
+  approvedEvidenceRows: string[];
+  requestedDropFilePath: string;
+  approvedDropFilePath: string;
+  requestedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  requestedDropTemplate: string;
+  approvedDropTemplate: string;
+  requiredEvidence: string[];
+  blockers: string[];
+  submissionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 export interface ClipperPermissionRequestPackSummary {
   status: ClipperPermissionRequestPackStatus;
   generatedAt: string | null;
@@ -1836,6 +3267,7 @@ export interface ClipperPermissionRequestPackSummary {
   csvPath: string;
   sourceTrackerPath: string;
   items: ClipperPermissionRequestPackItem[];
+  platformBatches: ClipperPermissionRequestPlatformBatch[];
   totals: {
     permissions: number;
     ready: number;
@@ -1843,6 +3275,7 @@ export interface ClipperPermissionRequestPackSummary {
     blocked: number;
     approved: number;
     requested: number;
+    platformBatches: number;
   };
   nextStep: string;
 }
@@ -1863,10 +3296,21 @@ export interface ClipperLaunchEvidenceBatchRejectedItem {
   kind: string;
   reason: string;
   identifier: string | null;
+  accountId?: string | null;
+  platform?: string | null;
+  status?: string | null;
+  scope?: string | null;
+  appIdentifier?: string | null;
+  publicBaseUrl?: string | null;
+  assetId?: string | null;
+  sourcePath?: string | null;
+  fileName?: string | null;
 }
 
 export interface ClipperLaunchEvidenceBatchSummary {
   updatedAt: string;
+  strictImport?: boolean;
+  strictBlocked?: boolean;
   accepted: {
     accountEvidence: number;
     developerApps: number;
@@ -1881,6 +3325,90 @@ export interface ClipperLaunchEvidenceBatchSummary {
   accountEvidence: ClipperAccountEvidenceSummary;
   developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
   permissionTracker: ClipperPermissionTrackerSummary;
+  nextStep: string;
+}
+
+export type ClipperLaunchEvidenceDropDiagnosticStatus = "empty" | "needs_values" | "needs_review" | "ready_to_import";
+export type ClipperLaunchEvidenceDropDiagnosticRowStatus = "ready" | "pending_values" | "rejected";
+
+export interface ClipperLaunchEvidenceDropDiagnosticRow {
+  sourceFile: string;
+  index: number;
+  kind: string;
+  identifier: string | null;
+  platform: ClipperPlatform | null;
+  scope: string | null;
+  appIdentifier: string | null;
+  status: ClipperLaunchEvidenceDropDiagnosticRowStatus;
+  pendingFields: string[];
+  issue: string | null;
+  nextStep: string;
+}
+
+export interface ClipperLaunchEvidenceDropDiagnosticFile {
+  relativePath: string;
+  rows: number;
+  readyRows: number;
+  pendingRows: number;
+  rejectedRows: number;
+  kinds: Record<string, number>;
+  issue: string | null;
+  nextStep: string;
+}
+
+export interface ClipperLaunchEvidenceDropDiagnosticSummary {
+  status: ClipperLaunchEvidenceDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  repairWorksheetCsvPath: string;
+  dropDir: string;
+  files: ClipperLaunchEvidenceDropDiagnosticFile[];
+  rows: ClipperLaunchEvidenceDropDiagnosticRow[];
+  fileErrors: Array<{ relativePath: string; reason: string }>;
+  totals: {
+    files: number;
+    rows: number;
+    readyRows: number;
+    pendingRows: number;
+    rejectedRows: number;
+    fileErrors: number;
+    accountRows: number;
+    developerAppRows: number;
+    permissionRows: number;
+    sourceRightsRows: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperGoLiveEvidenceBundleSection {
+  id: "account_connections" | "developer_apps" | "permission_requests" | "approval_rows";
+  label: string;
+  rows: string[];
+  count: number;
+  checklist: string[];
+  nextStep: string;
+}
+
+export interface ClipperGoLiveEvidenceBundleSummary {
+  status: "not_prepared" | "ready";
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  importTemplate: string;
+  starterRows: string[];
+  approvalRows: string[];
+  sections: ClipperGoLiveEvidenceBundleSection[];
+  totals: {
+    rows: number;
+    starterRows: number;
+    approvalRows: number;
+    accountRows: number;
+    developerAppRows: number;
+    permissionRows: number;
+  };
+  checklist: string[];
   nextStep: string;
 }
 
@@ -2020,6 +3548,35 @@ export interface ClipperExternalExecutionPortalBatch {
   importTemplate: string;
 }
 
+export interface ClipperExternalExecutionFocusRunItem {
+  id: string;
+  rank: number;
+  sourceItemId: string;
+  platform: ClipperPlatform;
+  type: ClipperExternalSetupQueueItemType;
+  label: string;
+  actionMode: ClipperExternalExecutionSessionItem["actionMode"];
+  estimatedMinutes: number;
+  portalUrl: string;
+  executionUrl: string;
+  evidenceRow: string;
+  credentialTemplate: string;
+  checklist: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperExternalExecutionFocusRun {
+  status: "ready" | "empty";
+  label: string;
+  estimatedMinutes: number;
+  items: ClipperExternalExecutionFocusRunItem[];
+  evidenceRows: string[];
+  credentialTemplates: string[];
+  portalUrls: string[];
+  nextStep: string;
+}
+
 export interface ClipperExternalExecutionSessionSummary {
   status: ClipperExternalExecutionHandoffStatus;
   generatedAt: string | null;
@@ -2031,6 +3588,7 @@ export interface ClipperExternalExecutionSessionSummary {
   items: ClipperExternalExecutionSessionItem[];
   unlockBoard: ClipperExternalExecutionUnlockBoardItem[];
   portalBatches: ClipperExternalExecutionPortalBatch[];
+  focusRun: ClipperExternalExecutionFocusRun;
   totals: {
     items: number;
     doNow: number;
@@ -2040,6 +3598,105 @@ export interface ClipperExternalExecutionSessionSummary {
     envTemplates: number;
     importableEvidenceRows: number;
     portalBatches: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperPlatformWarRoomItem {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPlatformWarRoomStatus;
+  accountTasks: number;
+  accountsVerified: number;
+  developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  permissionsApproved: number;
+  permissionsRequested: number;
+  permissionsTotal: number;
+  credentialStatus: ClipperReadinessStatus;
+  oauthStatus: ClipperConnectActionStatus;
+  tokenSaved: boolean;
+  portalUrls: string[];
+  executionUrls: string[];
+  evidenceRows: string[];
+  credentialTemplates: string[];
+  accountEvidenceRows: string[];
+  permissionEvidenceRows: string[];
+  missingEnvVars: string[];
+  blockers: string[];
+  operatorSteps: string[];
+  connectionChecklist: string[];
+  evidenceChecklist: string[];
+  safetyRules: string[];
+  afterConnectionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperPlatformAccountConnectionRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  profileLink: string;
+  accountCreationUrl: string;
+  developerPortalUrl: string;
+  status: ClipperAccountLaunchTaskStatus;
+  evidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  evidencePath: string | null;
+  accountEvidenceRow: string;
+  proofRequirements: string[];
+  checklist: string[];
+  postConnectActions: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperPlatformPermissionApprovalRow {
+  id: string;
+  platform: ClipperPlatform;
+  scope: string;
+  label: string;
+  status: ClipperPermissionTrackerItemStatus;
+  requestReadiness: ClipperPermissionRequestReadiness | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  officialReferenceUrl: string;
+  evidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  requestedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  proofRequirements: string[];
+  portalSteps: string[];
+  reviewerEvidence: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperPlatformWarRoomSummary {
+  status: ClipperPlatformWarRoomStatus;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperPlatformWarRoomItem[];
+  accountConnectionRows: ClipperPlatformAccountConnectionRow[];
+  permissionApprovalRows: ClipperPlatformPermissionApprovalRow[];
+  totals: {
+    platforms: number;
+    ready: number;
+    inProgress: number;
+    blocked: number;
+    accountConnections: number;
+    accountConnectionsReady: number;
+    accountConnectionsPending: number;
+    accountConnectionsBlocked: number;
+    permissionApprovals: number;
+    permissionApprovalsApproved: number;
+    permissionApprovalsRequested: number;
+    permissionApprovalsBlocked: number;
+    accountEvidenceRows: number;
+    permissionEvidenceRows: number;
+    credentialTemplates: number;
   };
   nextStep: string;
 }
@@ -2296,6 +3953,10 @@ export interface ClipperOfficialPermissionMatrixItem {
     scopes: Array<{
       scope: string;
       purpose: string;
+      portalProduct: string;
+      requestMode: "request_now" | "human_login_recheck";
+      ownerAction: string;
+      humanBlocker: string | null;
       requiredForAutopost: boolean;
       appReviewRequired: boolean;
       officialReferenceUrl: string;
@@ -2334,8 +3995,40 @@ export interface ClipperOfficialPermissionMatrixItem {
   developerPrerequisites: string[];
   reviewRisks: string[];
   evidenceToPrepare: string[];
+  publicLaunchBlockers?: string[];
+  minimumApprovalEvidence?: string[];
   apiEndpointHint: string;
   nextStep: string;
+}
+
+export interface ClipperOfficialPermissionSourceBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  accessMode: "public" | "login_required";
+  scopes: string[];
+  officialUrls: string[];
+  canonicalUrls: string[];
+  verifiedClaims: string[];
+  blocker: string | null;
+  submitDecision: "request_now" | "human_login_recheck";
+  launchEvidenceRows: string[];
+  approvalEvidenceRows: string[];
+  reviewerEvidence: string[];
+  recheckSteps: string[];
+  nextStep: string;
+}
+
+export interface ClipperOfficialPermissionWebProof {
+  platform: ClipperPlatform;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  checkedAt: string;
+  accessMode: "public" | "login_required";
+  officialUrls: string[];
+  verifiedClaims: string[];
+  reviewerEvidence: string[];
+  nextHumanAction: string;
 }
 
 export interface ClipperOfficialPermissionMatrixSummary {
@@ -2343,14 +4036,73 @@ export interface ClipperOfficialPermissionMatrixSummary {
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
+  csvPath: string;
   verifiedAt: string;
   items: ClipperOfficialPermissionMatrixItem[];
+  sourceBatches: ClipperOfficialPermissionSourceBatch[];
+  webProofTrail: ClipperOfficialPermissionWebProof[];
   totals: {
     platforms: number;
     officialVerified: number;
     loginRequired: number;
     scopes: number;
     appReviewRequired: number;
+    sourceBatches: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperPermissionSubmissionDossierItem {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPermissionSubmissionDossierStatus;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  submitDecision: "request_now" | "human_login_recheck";
+  accessMode: "public" | "login_required";
+  developerPortalUrl: string;
+  scopes: string[];
+  officialUrls: string[];
+  verifiedClaims: string[];
+  copyBlock: string;
+  requestedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  requestedDropFilePath: string;
+  approvedDropFilePath: string;
+  requestedDropTemplate: string;
+  approvedDropTemplate: string;
+  requestedEvidenceRows: string[];
+  approvedEvidenceRows: string[];
+  reviewerEvidence: string[];
+  blockers: string[];
+  submissionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperPermissionSubmissionDossierSummary {
+  status: ClipperPermissionSubmissionDossierStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperPermissionSubmissionDossierItem[];
+  sourceArtifacts: {
+    permissionRequestPackPath: string;
+    officialPermissionMatrixPath: string;
+    developerApplicationDraftsPath: string;
+    goLiveEvidenceBundlePath: string;
+  };
+  totals: {
+    platforms: number;
+    blocked: number;
+    needsLoginRecheck: number;
+    readyToSubmit: number;
+    ready: number;
+    scopes: number;
+    requestedRows: number;
+    approvedRows: number;
+    officialUrls: number;
   };
   nextStep: string;
 }
@@ -2393,6 +4145,59 @@ export interface ClipperPublisherConnectorSummary {
     ready: number;
     partial: number;
     blocked: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperPublisherExecutionQueueItem {
+  id: string;
+  postId: string;
+  queueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  status: ClipperPublisherExecutionItemStatus;
+  approvalRequired: boolean;
+  canSendNow: boolean;
+  publishAt: string;
+  endpoint: string;
+  method: "POST";
+  mode: ClipperPublisherConnectorItem["mode"];
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  requestSpec: {
+    headers: string[];
+    payloadFields: string[];
+    mediaSource: string;
+    tokenSource: "encrypted_vault" | "missing";
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    done: boolean;
+    evidence: string;
+  }>;
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperPublisherExecutionQueueSummary {
+  status: ClipperPublisherExecutionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceAutomationRunId: string | null;
+  publishMode: Required<ClipperRunOptions>["publishMode"];
+  realPublishEnabled: boolean;
+  items: ClipperPublisherExecutionQueueItem[];
+  totals: {
+    items: number;
+    blocked: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
   };
   nextStep: string;
 }
@@ -2466,6 +4271,28 @@ export interface ClipperOAuthConnectionPackItem {
   nextStep: string;
 }
 
+export interface ClipperOAuthConnectionPackPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperOAuthConnectionPackStatus;
+  connections: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  tokensSaved: number;
+  authUrlsReady: number;
+  handles: string[];
+  redirectUri: string;
+  callbackPath: string;
+  developerPortalUrl: string;
+  authUrl: string | null;
+  requestedScopes: string[];
+  blockers: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
 export interface ClipperOAuthConnectionPackSummary {
   status: ClipperOAuthConnectionPackStatus;
   generatedAt: string | null;
@@ -2475,6 +4302,7 @@ export interface ClipperOAuthConnectionPackSummary {
   publicBaseUrl: string;
   productionUrlReady: boolean;
   items: ClipperOAuthConnectionPackItem[];
+  platformBatches: ClipperOAuthConnectionPackPlatformBatch[];
   totals: {
     connections: number;
     ready: number;
@@ -2536,6 +4364,14 @@ export interface ClipperProductionDnsRecordCandidate {
   validationCommand: string;
 }
 
+export interface ClipperProductionDnsProviderRecipe {
+  provider: string;
+  bestRecordId: string;
+  portalUrl: string;
+  steps: string[];
+  doneCriteria: string[];
+}
+
 export interface ClipperProductionUrlSetupSummary {
   status: ClipperOAuthGoLiveStatus;
   generatedAt: string | null;
@@ -2577,6 +4413,9 @@ export interface ClipperProductionDnsDiagnostic {
   error: string | null;
   suggestedRecords: string[];
   recordCandidates: ClipperProductionDnsRecordCandidate[];
+  providerRecipes: ClipperProductionDnsProviderRecipe[];
+  repairRunbook: string[];
+  appReviewHoldChecklist: string[];
   propagationChecks: string[];
   registrarChecklist: string[];
   blockedUntilResolved: string[];
@@ -2729,16 +4568,50 @@ const TRENDS_DIR = path.join(ROOT_DIR, "trends");
 const SOURCE_HUNTS_DIR = path.join(ROOT_DIR, "source-hunts");
 const SOURCE_DROP_DIR = path.join(ROOT_DIR, "source-drop");
 const SOURCE_DROP_README_PATH = path.join(SOURCE_DROP_DIR, "README.md");
+const SOURCE_DROP_DIAGNOSTIC_PATH = path.join(ROOT_DIR, "source-drop-diagnostic.json");
+const SOURCE_DROP_DIAGNOSTIC_MARKDOWN_PATH = path.join(ROOT_DIR, "source-drop-diagnostic.md");
+const SOURCE_DROP_REPAIR_WORKSHEET_CSV_PATH = path.join(ROOT_DIR, "source-drop-repair-worksheet.csv");
+const SOURCE_DROP_IGNORED_FILE_NAMES = new Set([
+  "README.md",
+  "source-drop-diagnostic.json",
+  "source-drop-diagnostic.md",
+  "source-drop-repair-worksheet.csv",
+  "source-drop-manifest.csv",
+  "source-drop-manifest.json",
+  "source-rights.csv",
+  "source-rights.json",
+  "rights-manifest.csv",
+  "rights-manifest.json",
+  "manifest.csv",
+  "manifest.json",
+]);
 const PERMISSION_PACK_DIR = path.join(ROOT_DIR, "permission-applications");
 const ACCOUNT_EVIDENCE_DIR = path.join(ROOT_DIR, "account-evidence");
 const ACCOUNT_EVIDENCE_TEMPLATE_DIR = path.join(ACCOUNT_EVIDENCE_DIR, "templates");
 const ACCOUNT_EVIDENCE_README_PATH = path.join(ACCOUNT_EVIDENCE_DIR, "README.md");
+const ACCOUNT_DROP_TEMPLATE_DIR = path.join(ACCOUNT_EVIDENCE_DIR, "drop-templates");
+const ACCOUNT_DROP_TEMPLATE_README_PATH = path.join(ACCOUNT_DROP_TEMPLATE_DIR, "README.md");
+const ACCOUNT_CONNECTION_KIT_PATH = path.join(ACCOUNT_EVIDENCE_DIR, "external-account-connection-kit.json");
+const ACCOUNT_CONNECTION_KIT_MARKDOWN_PATH = path.join(ACCOUNT_EVIDENCE_DIR, "external-account-connection-kit.md");
+const ACCOUNT_CONNECTION_KIT_CSV_PATH = path.join(ACCOUNT_EVIDENCE_DIR, "external-account-connection-kit.csv");
 const DEVELOPER_APP_EVIDENCE_DIR = path.join(ROOT_DIR, "developer-app-evidence");
 const DEVELOPER_APP_EVIDENCE_TEMPLATE_DIR = path.join(DEVELOPER_APP_EVIDENCE_DIR, "templates");
 const DEVELOPER_APP_EVIDENCE_README_PATH = path.join(DEVELOPER_APP_EVIDENCE_DIR, "README.md");
+const DEVELOPER_APP_DROP_TEMPLATE_DIR = path.join(DEVELOPER_APP_EVIDENCE_DIR, "drop-templates");
+const DEVELOPER_APP_DROP_TEMPLATE_README_PATH = path.join(DEVELOPER_APP_DROP_TEMPLATE_DIR, "README.md");
+const DEVELOPER_APP_CONNECTION_KIT_PATH = path.join(DEVELOPER_APP_EVIDENCE_DIR, "developer-app-connection-kit.json");
+const DEVELOPER_APP_CONNECTION_KIT_MARKDOWN_PATH = path.join(DEVELOPER_APP_EVIDENCE_DIR, "developer-app-connection-kit.md");
+const DEVELOPER_APP_CONNECTION_KIT_CSV_PATH = path.join(DEVELOPER_APP_EVIDENCE_DIR, "developer-app-connection-kit.csv");
 const LAUNCH_EVIDENCE_DROP_DIR = path.join(ROOT_DIR, "evidence-drop");
 const LAUNCH_EVIDENCE_DROP_README_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "README.md");
 const LAUNCH_EVIDENCE_TEMPLATE_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "launch-evidence-template.csv");
+const OWNER_CONNECT_EVIDENCE_DROP_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "owner-connect-evidence.csv");
+const LAUNCH_EVIDENCE_BATCH_HEADER = "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes";
+const LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_PATH = path.join(ROOT_DIR, "launch-evidence-drop-diagnostic.json");
+const LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-drop-diagnostic.md");
+const LAUNCH_EVIDENCE_DROP_REPAIR_WORKSHEET_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-drop-repair-worksheet.csv");
+const PERMISSION_DROP_TEMPLATE_DIR = path.join(ROOT_DIR, "permission-drop-templates");
+const PERMISSION_DROP_TEMPLATE_README_PATH = path.join(PERMISSION_DROP_TEMPLATE_DIR, "README.md");
 const CONFIG_PATH = path.join(ROOT_DIR, "config.json");
 const OAUTH_STATE_PATH = path.join(ROOT_DIR, "oauth-connections.json");
 const TOKEN_VAULT_PATH = path.join(ROOT_DIR, "oauth-token-vault.json");
@@ -2746,8 +4619,12 @@ const PLATFORM_READINESS_PATH = path.join(ROOT_DIR, "platform-readiness.json");
 const PLATFORM_READINESS_MARKDOWN_PATH = path.join(ROOT_DIR, "platform-readiness.md");
 const CREDENTIAL_DOCTOR_PATH = path.join(ROOT_DIR, "credential-doctor.json");
 const CREDENTIAL_DOCTOR_MARKDOWN_PATH = path.join(ROOT_DIR, "credential-doctor.md");
+const CREDENTIAL_DOCTOR_REPAIR_WORKSHEET_CSV_PATH = path.join(ROOT_DIR, "credential-doctor-repair-worksheet.csv");
 const DRIVE_WORKSPACE_MANIFEST_PATH = path.join(ROOT_DIR, "google-drive-workspace.json");
 const METRICS_SUMMARY_PATH = path.join(METRICS_DIR, "metrics-summary.json");
+const ANALYTICS_REPORTING_PACK_PATH = path.join(ROOT_DIR, "analytics-reporting-pack.json");
+const ANALYTICS_REPORTING_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "analytics-reporting-pack.md");
+const ANALYTICS_REPORTING_PACK_CSV_PATH = path.join(ROOT_DIR, "analytics-reporting-pack.csv");
 const TRENDS_SUMMARY_PATH = path.join(TRENDS_DIR, "trend-radar-summary.json");
 const TREND_RIGHTS_OUTREACH_PATH = path.join(ROOT_DIR, "trend-rights-outreach-pack.json");
 const TREND_RIGHTS_OUTREACH_MARKDOWN_PATH = path.join(ROOT_DIR, "trend-rights-outreach-pack.md");
@@ -2757,6 +4634,9 @@ const VIRAL_DISCOVERY_MARKDOWN_PATH = path.join(ROOT_DIR, "viral-discovery-pack.
 const VIRAL_DISCOVERY_CSV_PATH = path.join(ROOT_DIR, "viral-discovery-pack.csv");
 const SOURCE_ACQUISITION_PLAN_PATH = path.join(ROOT_DIR, "source-acquisition-plan.json");
 const SOURCE_ACQUISITION_PLAN_MARKDOWN_PATH = path.join(ROOT_DIR, "source-acquisition-plan.md");
+const SOURCE_SUPPLY_DROP_KIT_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.json");
+const SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.md");
+const SOURCE_SUPPLY_DROP_KIT_CSV_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.csv");
 const RIGHTS_OUTREACH_PATH = path.join(ROOT_DIR, "rights-outreach-pack.json");
 const RIGHTS_OUTREACH_MARKDOWN_PATH = path.join(ROOT_DIR, "rights-outreach-pack.md");
 const RIGHTS_OUTREACH_TEMPLATES_PATH = path.join(ROOT_DIR, "rights-outreach-templates.md");
@@ -2778,6 +4658,10 @@ const ACCOUNT_CREATION_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "account-creatio
 const ACCOUNT_CREATION_PACK_CSV_PATH = path.join(ROOT_DIR, "account-creation-pack.csv");
 const ACCOUNT_CLAIM_SHEET_MARKDOWN_PATH = path.join(ROOT_DIR, "account-claim-sheet.md");
 const ACCOUNT_CLAIM_SHEET_CSV_PATH = path.join(ROOT_DIR, "account-claim-sheet.csv");
+const ACCOUNT_SETUP_SESSION_PATH = path.join(ROOT_DIR, "account-setup-session.json");
+const ACCOUNT_SETUP_SESSION_MARKDOWN_PATH = path.join(ROOT_DIR, "account-setup-session.md");
+const ACCOUNT_SETUP_SESSION_CSV_PATH = path.join(ROOT_DIR, "account-setup-session.csv");
+const ACCOUNT_SETUP_EVIDENCE_TEMPLATE_PATH = path.join(ACCOUNT_DROP_TEMPLATE_DIR, "account-setup-evidence.csv");
 const PERMISSION_TRACKER_PATH = path.join(ROOT_DIR, "permission-tracker.json");
 const PERMISSION_TRACKER_MARKDOWN_PATH = path.join(ROOT_DIR, "permission-tracker.md");
 const PERMISSION_STATUS_RECORDS_PATH = path.join(ROOT_DIR, "permission-status-records.json");
@@ -2794,6 +4678,8 @@ const EXTERNAL_EXECUTION_SESSION_PATH = path.join(ROOT_DIR, "external-execution-
 const EXTERNAL_EXECUTION_SESSION_MARKDOWN_PATH = path.join(ROOT_DIR, "external-execution-session.md");
 const EXTERNAL_EXECUTION_SESSION_CSV_PATH = path.join(ROOT_DIR, "external-execution-session.csv");
 const EXTERNAL_EXECUTION_SESSION_EVIDENCE_PATH = path.join(ROOT_DIR, "external-execution-session-evidence-import.csv");
+const PLATFORM_WAR_ROOM_PATH = path.join(ROOT_DIR, "platform-war-room.json");
+const PLATFORM_WAR_ROOM_MARKDOWN_PATH = path.join(ROOT_DIR, "platform-war-room.md");
 const EXTERNAL_LAUNCH_DOSSIER_PATH = path.join(ROOT_DIR, "external-launch-dossier.json");
 const EXTERNAL_LAUNCH_DOSSIER_MARKDOWN_PATH = path.join(ROOT_DIR, "external-launch-dossier.md");
 const PLATFORM_PORTAL_CHECKLIST_PATH = path.join(ROOT_DIR, "platform-portal-checklist.json");
@@ -2810,8 +4696,15 @@ const DEVELOPER_APPLICATION_DRAFTS_PATH = path.join(ROOT_DIR, "developer-applica
 const DEVELOPER_APPLICATION_DRAFTS_MARKDOWN_PATH = path.join(ROOT_DIR, "developer-application-drafts.md");
 const OFFICIAL_PERMISSION_MATRIX_PATH = path.join(ROOT_DIR, "official-permission-matrix.json");
 const OFFICIAL_PERMISSION_MATRIX_MARKDOWN_PATH = path.join(ROOT_DIR, "official-permission-matrix.md");
+const OFFICIAL_PERMISSION_MATRIX_CSV_PATH = path.join(ROOT_DIR, "official-permission-matrix.csv");
+const PERMISSION_SUBMISSION_DOSSIER_PATH = path.join(ROOT_DIR, "permission-submission-dossier.json");
+const PERMISSION_SUBMISSION_DOSSIER_MARKDOWN_PATH = path.join(ROOT_DIR, "permission-submission-dossier.md");
+const PERMISSION_SUBMISSION_DOSSIER_CSV_PATH = path.join(ROOT_DIR, "permission-submission-dossier.csv");
 const PUBLISHER_CONNECTORS_PATH = path.join(ROOT_DIR, "publisher-connectors.json");
 const PUBLISHER_CONNECTORS_MARKDOWN_PATH = path.join(ROOT_DIR, "publisher-connectors.md");
+const PUBLISHER_EXECUTION_QUEUE_PATH = path.join(SCHEDULED_DIR, "publisher-execution-queue.json");
+const PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "publisher-execution-queue.md");
+const PUBLISHER_EXECUTION_QUEUE_CSV_PATH = path.join(SCHEDULED_DIR, "publisher-execution-queue.csv");
 const PRODUCTION_URL_SETUP_PATH = path.join(ROOT_DIR, "production-url-setup.json");
 const PRODUCTION_URL_SETUP_MARKDOWN_PATH = path.join(ROOT_DIR, "production-url-setup.md");
 const PRODUCTION_URL_VERIFICATION_PATH = path.join(ROOT_DIR, "production-url-verification.json");
@@ -2837,10 +4730,45 @@ const GO_LIVE_AUTOPILOT_BRIEF_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-autop
 const GO_LIVE_AUTOPILOT_BRIEF_CSV_PATH = path.join(ROOT_DIR, "go-live-autopilot-brief.csv");
 const GO_LIVE_AUTOPILOT_RUN_PATH = path.join(ROOT_DIR, "go-live-autopilot-run.json");
 const GO_LIVE_AUTOPILOT_RUN_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-autopilot-run.md");
+const LOCAL_DROP_SYNC_PATH = path.join(ROOT_DIR, "local-drop-sync.json");
+const LOCAL_DROP_SYNC_MARKDOWN_PATH = path.join(ROOT_DIR, "local-drop-sync.md");
+const GO_LIVE_PREP_SWEEP_PATH = path.join(ROOT_DIR, "go-live-prep-sweep.json");
+const GO_LIVE_PREP_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-prep-sweep.md");
+const OWNER_CONNECT_PACK_PATH = path.join(ROOT_DIR, "owner-connect-pack.json");
+const OWNER_CONNECT_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "owner-connect-pack.md");
+const OWNER_CONNECT_PACK_CSV_PATH = path.join(ROOT_DIR, "owner-connect-pack.csv");
+const OWNER_CONNECT_PROGRESS_PATH = path.join(ROOT_DIR, "owner-connect-progress.json");
+const DROPZONE_READY_PACK_PATH = path.join(ROOT_DIR, "dropzone-ready-pack.json");
+const DROPZONE_READY_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "dropzone-ready-pack.md");
+const DROPZONE_READY_PACK_CSV_PATH = path.join(ROOT_DIR, "dropzone-ready-pack.csv");
+const ROBERT_NEXT_ACTIONS_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.json");
+const ROBERT_NEXT_ACTIONS_MARKDOWN_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.md");
+const ROBERT_NEXT_ACTIONS_CSV_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.csv");
+const ROBERT_CONNECT_NOW_MARKDOWN_PATH = path.join(ROOT_DIR, "ROBERT_CONNECT_NOW.md");
+const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
+const LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.md");
+const LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.csv");
+const LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "owner-connect-evidence.fixpack.csv");
+const GO_LIVE_COMPLETION_AUDIT_PATH = path.join(ROOT_DIR, "go-live-completion-audit.json");
+const GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-completion-audit.md");
+const GO_LIVE_COMPLETION_EXTERNAL_SESSION_CSV_PATH = path.join(ROOT_DIR, "go-live-completion-external-session.csv");
+const GO_LIVE_EVIDENCE_CAPTURE_DIR = path.join(LAUNCH_EVIDENCE_DROP_DIR, "go-live-proof-templates");
+const GO_LIVE_OPERATOR_BRIEF_PATH = path.join(ROOT_DIR, "go-live-operator-brief.json");
+const GO_LIVE_OPERATOR_BRIEF_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-operator-brief.md");
+const GO_LIVE_EVIDENCE_BUNDLE_PATH = path.join(ROOT_DIR, "go-live-evidence-bundle.json");
+const GO_LIVE_EVIDENCE_BUNDLE_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-evidence-bundle.md");
+const GO_LIVE_EVIDENCE_BUNDLE_CSV_PATH = path.join(ROOT_DIR, "go-live-evidence-bundle.csv");
 const CREDENTIAL_SETUP_DIR = path.join(ROOT_DIR, "credential-setup");
 const CREDENTIAL_SETUP_README_PATH = path.join(CREDENTIAL_SETUP_DIR, "README.md");
 const CREDENTIAL_SETUP_TEMPLATE_PATH = path.join(CREDENTIAL_SETUP_DIR, "clippers-env-template.env");
 const CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH = path.join(CREDENTIAL_SETUP_DIR, "missing-env-template.env");
+const CREDENTIAL_TRANSFER_KIT_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.json");
+const CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.md");
+const CREDENTIAL_TRANSFER_KIT_ENV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.env");
+const CREDENTIAL_DROP_DIAGNOSTIC_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drop-diagnostic.json");
+const CREDENTIAL_DROP_DIAGNOSTIC_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drop-diagnostic.md");
+const CREDENTIAL_DROP_STARTER_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drop-starter.json");
+const CREDENTIAL_DROP_STARTER_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drop-starter.md");
 const GOOGLE_DRIVE_CREDENTIAL_TEMPLATE_PATH = path.join(CREDENTIAL_SETUP_DIR, "google-drive-env-template.env");
 const CREDENTIAL_DROP_DIR = path.join(process.cwd(), "credentials");
 const CREDENTIAL_DROP_README_PATH = path.join(CREDENTIAL_DROP_DIR, "README.md");
@@ -3125,6 +5053,8 @@ const PLATFORM_SCOPES: Record<ClipperPlatform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
 };
 
+const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-18";
+
 const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
   {
     platform: "tiktok",
@@ -3211,11 +5141,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "video.publish",
         purpose: "Publicar contenido directamente en el perfil TikTok del usuario autorizado.",
+        portalProduct: "Content Posting API / Direct Post",
+        requestMode: "request_now",
+        ownerAction: "Crear app TikTok, agregar Content Posting API, habilitar Direct Post, pedir video.publish y guardar evidencia de audit/review.",
+        humanBlocker: null,
         requiredForAutopost: true,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.tiktok.com/doc/content-posting-api-get-started/",
         verificationStatus: "official_verified",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "TikTok official docs state Direct Post needs Content Posting API, Direct Post config, video.publish approval, user authorization and audit before public visibility restrictions are lifted.",
         requestPortalUrl: "https://developers.tiktok.com/",
         requestAction: "En TikTok for Developers, agregar Content Posting API, habilitar Direct Post y solicitar aprobacion de video.publish.",
@@ -3234,11 +5168,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "video.upload",
         purpose: "Compartir/subir contenido como draft para que el creador termine la publicacion en TikTok.",
+        portalProduct: "Content Posting API / Upload",
+        requestMode: "request_now",
+        ownerAction: "Pedir video.upload como fallback de Upload/Draft si Direct Post aun no esta listo.",
+        humanBlocker: null,
         requiredForAutopost: false,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.tiktok.com/doc/content-posting-api-get-started/",
         verificationStatus: "official_verified",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "TikTok Content Posting API has Upload/Draft flow separate from Direct Post; keep as fallback until direct public posting is fully reviewed.",
         requestPortalUrl: "https://developers.tiktok.com/",
         requestAction: "En TikTok for Developers, solicitar video.upload para Upload/Draft posting como fallback seguro.",
@@ -3293,11 +5231,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "instagram_content_publish",
         purpose: "Publicar media/Reels en cuentas profesionales elegibles via Instagram Graph API.",
+        portalProduct: "Meta App Review / Instagram Content Publishing",
+        requestMode: "human_login_recheck",
+        ownerAction: "Entrar a Meta Developers, confirmar el permiso en App Review y capturar la pantalla real antes de enviar.",
+        humanBlocker: "Meta Developers login required to verify the exact current permission prompt and submit App Review.",
         requiredForAutopost: true,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
         verificationStatus: "official_login_required",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "Meta official docs endpoint currently requires authenticated developer login; confirm in Meta session before submission.",
         requestPortalUrl: "https://developers.facebook.com/",
         requestAction: "En Meta App Review, solicitar instagram_content_publish con screencast de Reels approval_required.",
@@ -3316,11 +5258,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "instagram_basic",
         purpose: "Leer datos basicos de la cuenta Instagram conectada para identificar el destino correcto.",
+        portalProduct: "Meta App Review / Instagram Basic Display or Instagram product",
+        requestMode: "human_login_recheck",
+        ownerAction: "Entrar a Meta Developers y confirmar que instagram_basic aplica al producto/app type seleccionado.",
+        humanBlocker: "Meta Developers login required to verify availability for the selected app type.",
         requiredForAutopost: true,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.facebook.com/docs/permissions/reference/instagram_basic/",
         verificationStatus: "official_login_required",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "Meta permission reference requires developer login for full details; use only after authenticated review confirms availability.",
         requestPortalUrl: "https://developers.facebook.com/",
         requestAction: "En Meta App Review, solicitar instagram_basic para identificar cuentas IG conectadas.",
@@ -3339,11 +5285,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "pages_show_list",
         purpose: "Listar Facebook Pages conectadas para resolver la cuenta profesional de Instagram.",
+        portalProduct: "Meta App Review / Facebook Pages",
+        requestMode: "human_login_recheck",
+        ownerAction: "Entrar a Meta Developers, confirmar Page access y adjuntar prueba Page + Instagram profesional conectado.",
+        humanBlocker: "Meta Developers login required to verify Page permission availability and app-review prompts.",
         requiredForAutopost: true,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.facebook.com/docs/permissions/reference/pages_show_list/",
         verificationStatus: "official_login_required",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "Meta permission reference requires developer login for full details; validate Page/IG connection in Meta App Review.",
         requestPortalUrl: "https://developers.facebook.com/",
         requestAction: "En Meta App Review, solicitar pages_show_list para resolver la Page conectada al IG profesional.",
@@ -3397,11 +5347,15 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
       {
         scope: "https://www.googleapis.com/auth/youtube.upload",
         purpose: "Subir videos al canal YouTube autorizado usando videos.insert.",
+        portalProduct: "Google Cloud OAuth consent / YouTube Data API v3",
+        requestMode: "request_now",
+        ownerAction: "Activar YouTube Data API v3, configurar OAuth consent/client y autorizar youtube.upload por canal.",
+        humanBlocker: null,
         requiredForAutopost: true,
         appReviewRequired: true,
         officialReferenceUrl: "https://developers.google.com/youtube/v3/docs/videos/insert",
         verificationStatus: "official_verified",
-        verifiedAt: "2026-06-17",
+        verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
         verificationNote: "YouTube official videos.insert docs require OAuth authorization; Google OAuth scope docs list youtube.upload for uploading YouTube videos.",
         requestPortalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
         requestAction: "Activar YouTube Data API v3, configurar OAuth consent y autorizar el scope youtube.upload por canal.",
@@ -3698,8 +5652,12 @@ async function ensureClipperDirs() {
     mkdir(CREDENTIAL_SETUP_DIR, { recursive: true }),
     mkdir(INTAKE_KIT_TEMPLATE_DIR, { recursive: true }),
     mkdir(ACCOUNT_EVIDENCE_TEMPLATE_DIR, { recursive: true }),
+    mkdir(ACCOUNT_DROP_TEMPLATE_DIR, { recursive: true }),
     mkdir(DEVELOPER_APP_EVIDENCE_TEMPLATE_DIR, { recursive: true }),
+    mkdir(DEVELOPER_APP_DROP_TEMPLATE_DIR, { recursive: true }),
     mkdir(LAUNCH_EVIDENCE_DROP_DIR, { recursive: true }),
+    mkdir(GO_LIVE_EVIDENCE_CAPTURE_DIR, { recursive: true }),
+    mkdir(PERMISSION_DROP_TEMPLATE_DIR, { recursive: true }),
     ...SOURCE_FOLDERS.map((folder) => mkdir(folder.path, { recursive: true })),
   ]);
   await writeCredentialDropReadme(CREDENTIAL_DROP_README_PATH, "credentials");
@@ -3721,6 +5679,10 @@ async function writeSourceDropReadme() {
     "- streamers/",
     "",
     "El importador copia archivos de video a `sources/{category}` y los deja en `review_required` hasta que exista evidencia en allowlist.",
+    "",
+    "Para desbloquear derechos en el mismo import, agrega `source-drop-manifest.csv` o `.json` en la raiz o en una carpeta de categoria.",
+    "Columnas recomendadas: category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes.",
+    "Si `rights_status` es `owned_or_permissioned` y `evidence_link`/`notes` tiene prueba concreta, el import crea el allowlist matching automaticamente.",
     "Formatos soportados: mp4, mov, m4v, webm, avi, mkv.",
     "",
     "No coloques material sin permiso si no vas a registrar evidencia antes de producir/publicar.",
@@ -3737,6 +5699,7 @@ async function writeLaunchEvidenceDropReadme() {
     "Archivo recomendado:",
     "",
     "- `launch-evidence-template.csv`: template exacto para las cuentas, apps y permisos configurados. Reemplaza los placeholders con evidencia real antes de importar.",
+    "- `owner-connect-evidence.csv`: starter generado desde Owner Connect Pack con filas para cuentas, developer apps y permisos. Completa evidencia real antes de importar.",
     "",
     "Formatos soportados:",
     "",
@@ -3811,7 +5774,8 @@ async function writeCredentialDropReadme(readmePath: string, folderName: "creden
     "",
     "- No pegues valores secretos en chat.",
     "- No commits de credenciales reales; .gitignore ignora todo aqui excepto este README.",
-    "- Puedes poner archivos como `client_secret_google.json`, `google-oauth-client.json` o `.env.clippers.local`.",
+    "- Puedes poner archivos como `client_secret_google.json`, `google-oauth-client.json`, `clippers-social-secrets.json`, `google-drive-keys.txt` o `.env.clippers.local`.",
+    "- Los archivos `.txt`, `.env` y `.local` pueden usar lineas `KEY=value`; los JSON de Google Cloud o JSON con env vars permitidas/key-value pairs tambien se importan.",
     "- Luego abre Clippers > Credential Setup y usa Preview/Save batch para importar de forma controlada.",
     "- El scanner solo muestra nombres/rutas de candidatos; no lee ni imprime valores.",
     "",
@@ -3843,11 +5807,15 @@ async function writeOAuthConnections(connections: ClipperOAuthConnection[]) {
 
 function getTokenVaultSecret(): string | null {
   const secret = process.env[TOKEN_ENCRYPTION_ENV_VAR];
-  return secret && secret.length >= 32 ? secret : null;
+  return secret && hasStrongSecret(secret) ? secret : null;
+}
+
+function envHasRealValue(name: string): boolean {
+  return hasRealValue(process.env[name]);
 }
 
 function getFirstEnvValue(names: string[]): string {
-  return names.map((name) => process.env[name]).find((value): value is string => Boolean(value)) || "";
+  return names.map((name) => process.env[name]).find(hasRealValue) || "";
 }
 
 function getTikTokClientKey(): string {
@@ -3867,7 +5835,7 @@ function getMetaAppSecret(): string {
 }
 
 function getFirstConfiguredEnvName(names: string[]): string | null {
-  return names.find((name) => Boolean(process.env[name])) || null;
+  return names.find(envHasRealValue) || null;
 }
 
 function encryptTokenPayload(payload: unknown): ClipperEncryptedPayload {
@@ -3919,10 +5887,21 @@ function splitScopes(value: unknown): string[] {
   return value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
 }
 
-function extractTokenSummary(platform: ClipperPlatform, payload: Record<string, unknown>, accountId?: string | null): Omit<ClipperTokenVaultRecord, "encryptedPayload"> {
+function looksLikeConfiguredAccountId(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return DEFAULT_ACCOUNTS.some((account) => account.id === value);
+}
+
+function extractTokenSummary(
+  platform: ClipperPlatform,
+  payload: Record<string, unknown>,
+  ownerUserId: string,
+  accountId?: string | null,
+): Omit<ClipperTokenVaultRecord, "encryptedPayload"> {
   const subject = payload.open_id || payload.user_id || payload.id || payload.sub || null;
   return {
     platform,
+    ownerUserId,
     accountId: accountId || null,
     status: "saved",
     savedAt: new Date().toISOString(),
@@ -3936,8 +5915,15 @@ function extractTokenSummary(platform: ClipperPlatform, payload: Record<string, 
   };
 }
 
-export async function saveClipperTokenPayload(platform: ClipperPlatform, payload: Record<string, unknown>, accountId?: string | null): Promise<ClipperTokenSummary> {
-  const summary = extractTokenSummary(platform, payload, accountId);
+export async function saveClipperTokenPayload(
+  platform: ClipperPlatform,
+  payload: Record<string, unknown>,
+  ownerUserIdOrAccountId = getSystemUserId(),
+  accountId?: string | null,
+): Promise<ClipperTokenSummary> {
+  const inferredAccountId = accountId ?? (looksLikeConfiguredAccountId(ownerUserIdOrAccountId) ? ownerUserIdOrAccountId : null);
+  const ownerUserId = inferredAccountId === ownerUserIdOrAccountId ? getSystemUserId() : ownerUserIdOrAccountId;
+  const summary = extractTokenSummary(platform, payload, ownerUserId, inferredAccountId);
   const record: ClipperTokenVaultRecord = {
     ...summary,
     encryptedPayload: encryptTokenPayload(payload),
@@ -3945,7 +5931,7 @@ export async function saveClipperTokenPayload(platform: ClipperPlatform, payload
   const previous = await readTokenVaultRecords();
   const next = [
     record,
-    ...previous.filter((item) => !(item.platform === platform && (item.accountId || null) === (summary.accountId || null))),
+    ...previous.filter((item) => !(item.platform === platform && (item.accountId || null) === (summary.accountId || null) && item.ownerUserId === summary.ownerUserId)),
   ].slice(0, 24);
   await writeTokenVaultRecords(next);
   return summary;
@@ -4013,9 +5999,9 @@ async function buildGoogleDriveEnvDiagnostics(): Promise<ClipperDriveEnvDiagnost
     GOOGLE_REFRESH_TOKEN_ENV_VARS,
   ]);
   const detectedAcceptedAliasesInFiles = Array.from(new Set(envFilesWithAliases.flatMap((file) => file.aliases))).sort();
-  const configuredClientIdAliases = GOOGLE_OAUTH_CLIENT_ID_ENV_VARS.filter((envVar) => Boolean(process.env[envVar]));
-  const configuredClientSecretAliases = GOOGLE_OAUTH_CLIENT_SECRET_ENV_VARS.filter((envVar) => Boolean(process.env[envVar]));
-  const configuredRefreshTokenAliases = GOOGLE_REFRESH_TOKEN_ENV_VARS.filter((envVar) => Boolean(process.env[envVar]));
+  const configuredClientIdAliases = GOOGLE_OAUTH_CLIENT_ID_ENV_VARS.filter(envHasRealValue);
+  const configuredClientSecretAliases = GOOGLE_OAUTH_CLIENT_SECRET_ENV_VARS.filter(envHasRealValue);
+  const configuredRefreshTokenAliases = GOOGLE_REFRESH_TOKEN_ENV_VARS.filter(envHasRealValue);
   const runtimeMissingGroups = [
     configuredClientIdAliases.length === 0 ? GOOGLE_OAUTH_CLIENT_ID_ENV_VARS.join(" or ") : "",
     configuredClientSecretAliases.length === 0 ? GOOGLE_OAUTH_CLIENT_SECRET_ENV_VARS.join(" or ") : "",
@@ -4075,7 +6061,7 @@ const GOOGLE_DRIVE_AUTH_PATH = "/api/google-drive/auth";
 const GOOGLE_DRIVE_CALLBACK_PATH = "/api/google-drive/oauth/callback";
 
 function normalizeOrigin(value: string | undefined): string | null {
-  if (!value) return null;
+  if (!hasRealValue(value)) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
   const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
@@ -4095,7 +6081,7 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 }
 
 function buildDriveOAuthSetupSummary(): ClipperDriveOAuthSetup {
-  const configuredRedirectUri = process.env.GOOGLE_DRIVE_REDIRECT_URI || null;
+  const configuredRedirectUri = hasRealValue(process.env.GOOGLE_DRIVE_REDIRECT_URI) ? process.env.GOOGLE_DRIVE_REDIRECT_URI : null;
   const publicOrigin = normalizeOrigin(process.env.PUBLIC_BASE_URL)
     || normalizeOrigin(process.env.PUBLIC_APP_URL)
     || normalizeOrigin(process.env.EXPO_PUBLIC_DOMAIN);
@@ -4343,7 +6329,12 @@ async function exchangeClipperOAuthCode(platform: ClipperPlatform, code: string)
   return body as Record<string, unknown>;
 }
 
-async function tryExchangeAndStoreClipperToken(platform: ClipperPlatform, code: string, accountId?: string | null): Promise<{ status: ClipperTokenExchangeStatus; note: string }> {
+async function tryExchangeAndStoreClipperToken(
+  platform: ClipperPlatform,
+  code: string,
+  ownerUserId: string,
+  accountId?: string | null,
+): Promise<{ status: ClipperTokenExchangeStatus; note: string }> {
   const credentialCheck = getCredentialCheck(platform);
   const missingEnvVars = [...credentialCheck.missingEnvVars];
   if (!getTokenVaultSecret()) missingEnvVars.push(TOKEN_ENCRYPTION_ENV_VAR);
@@ -4356,7 +6347,7 @@ async function tryExchangeAndStoreClipperToken(platform: ClipperPlatform, code: 
 
   try {
     const payload = await exchangeClipperOAuthCode(platform, code);
-    await saveClipperTokenPayload(platform, payload, accountId);
+    await saveClipperTokenPayload(platform, payload, ownerUserId, accountId);
     return {
       status: "saved",
       note: "Token intercambiado y guardado cifrado en el vault local.",
@@ -4412,9 +6403,9 @@ function applyOAuthStateToAccounts(
 
 function buildCredentialChecks(): ClipperCredentialCheck[] {
   return CREDENTIAL_ENV_REQUIREMENTS.map((requirement) => {
-    const configuredEnvVars = requirement.acceptedEnvVarGroups.flatMap((group) => group.filter((name) => Boolean(process.env[name])));
+    const configuredEnvVars = requirement.acceptedEnvVarGroups.flatMap((group) => group.filter(envHasRealValue));
     const missingEnvVars = requirement.acceptedEnvVarGroups
-      .filter((group) => !group.some((name) => Boolean(process.env[name])))
+      .filter((group) => !group.some(envHasRealValue))
       .map((group) => group[0]);
     return {
       ...requirement,
@@ -5004,7 +6995,7 @@ function renderSourceRightsEvidence(record: ClipperSourceRightsRecord): string {
     `asset_id: ${record.assetId}`,
     `source_path: ${record.sourcePath}`,
     `recorded_at: ${record.recordedAt}`,
-    "source: clippers-ui",
+    `source: ${record.source}`,
     "",
     "Notes:",
     record.notes,
@@ -5368,6 +7359,489 @@ function renderSourceAcquisitionMarkdown(summary: ClipperSourceAcquisitionSummar
   ].join("\n");
 }
 
+const sourceSupplyPlatformHints: Record<ClipperAccountCategory, string> = {
+  sports: "tiktok",
+  memes: "instagram",
+  streamers: "youtube",
+};
+
+function sourceSupplySuggestedTitle(category: ClipperAccountCategory, rank: number): string {
+  const titles: Record<ClipperAccountCategory, string[]> = {
+    sports: [
+      "Recent official highlight with clear payoff",
+      "Game-changing play with fast context",
+      "Athlete reaction or clutch moment",
+    ],
+    memes: [
+      "Original meme format with loop payoff",
+      "Permissioned creator joke template",
+      "Relatable visual gag with fast setup",
+    ],
+    streamers: [
+      "Permissioned stream clip with chat reaction",
+      "Creator-approved fail or clutch moment",
+      "Owned VOD moment with clean payoff",
+    ],
+  };
+  const pool = titles[category];
+  return `${pool[(rank - 1) % pool.length]} ${rank}`;
+}
+
+function sourceSupplyRequiredProof(category: ClipperAccountCategory): string[] {
+  const base = [
+    "Original source URL or local owner note.",
+    "Proof URL/path/id: Drive screenshot, license, creator approval, contract, or official-source evidence.",
+    "Usage scope confirms short-form posting on TikTok, Instagram Reels and YouTube Shorts.",
+    "No access tokens, passwords, recovery codes or client secrets in notes.",
+  ];
+  if (category === "sports") return ["Official/licensed highlight source or owned footage.", ...base];
+  if (category === "memes") return ["Original asset, public-domain/remix-safe template, or creator permission.", ...base];
+  return ["Owned VOD, creator allowlist, or explicit streamer clip permission.", ...base];
+}
+
+function sourceSupplyViralQueries(category: ClipperAccountCategory, rank: number): string[] {
+  const day = new Date().toISOString().slice(0, 10);
+  if (category === "sports") {
+    return [
+      `site:tiktok.com sports highlight today clutch OR comeback ${day}`,
+      `site:youtube.com/shorts official sports highlight viral today ${rank}`,
+      `site:instagram.com/reel sports reaction highlight last 24 hours`,
+    ];
+  }
+  if (category === "memes") {
+    return [
+      `site:tiktok.com meme format today viral loop ${day}`,
+      `site:instagram.com/reel meme trend today creator original ${rank}`,
+      `site:youtube.com/shorts relatable meme trend last 24 hours`,
+    ];
+  }
+  return [
+    `site:twitch.tv clips streamer funny clutch today ${day}`,
+    `site:youtube.com/shorts streamer clip viral reaction ${rank}`,
+    `site:tiktok.com streamer clip chat reaction last 24 hours`,
+  ];
+}
+
+function sourceSupplyViralScoreChecklist(category: ClipperAccountCategory): string[] {
+  const base = [
+    "Published or clipped in the last 24-72 hours, or clearly resurfacing today.",
+    "Hook is understandable in the first 1-2 seconds without long context.",
+    "Existing proof of traction: strong view velocity, comments, shares, reposts, or repeated usage across platforms.",
+    "Can be edited into 9:16 short-form without hiding the original context or attribution.",
+  ];
+  if (category === "sports") return ["Payoff moment is clear: score swing, clutch play, reaction, controversy, or record.", ...base];
+  if (category === "memes") return ["Format is simple enough to remix into multiple account variants without confusing viewers.", ...base];
+  return ["Creator/stream moment has visible reaction, chat payoff, or quotable line.", ...base];
+}
+
+function sourceSupplyRejectIf(category: ClipperAccountCategory): string[] {
+  const base = [
+    "No owner/source can be identified.",
+    "No usable proof URL/path/id can be saved before import.",
+    "Content depends on private, leaked, hacked, or non-consensual footage.",
+    "Clip requires unsafe claims, harassment, or misleading context to perform.",
+  ];
+  if (category === "sports") return ["League/team/media rights are unclear and no official/license source exists.", ...base];
+  if (category === "memes") return ["Creator watermark is cropped, repost chain hides the origin, or permission cannot be traced.", ...base];
+  return ["Streamer/VOD terms disallow clipping or creator approval is missing.", ...base];
+}
+
+async function buildSourceSupplyDropKitSummary(sourceAcquisition: ClipperSourceAcquisitionSummary): Promise<ClipperSourceSupplyDropKitSummary> {
+  const items = sourceAcquisition.categories.flatMap((category) => {
+    const targetAssets = Math.max(0, category.minimumWeeklySourceAssets - category.rightsReadyAssets);
+    return Array.from({ length: targetAssets }, (_, index) => {
+      const rank = index + 1;
+      const sequence = String(rank).padStart(2, "0");
+      const targetFileName = `${category.category}-source-${sequence}.mp4`;
+      const suggestedTitle = sourceSupplySuggestedTitle(category.category, rank);
+      const sourceUrlPlaceholder = `<approved source URL for ${targetFileName}>`;
+      const evidenceLinkPlaceholder = `<proof URL/path/id for ${targetFileName}>`;
+      const platformHint = sourceSupplyPlatformHints[category.category];
+      const rightsEvidenceBatchRow = [
+        "source_rights",
+        targetFileName,
+        category.category,
+        "owned_or_permissioned",
+        targetFileName,
+        "",
+        "",
+        `Proof required: replace ${evidenceLinkPlaceholder} with license/creator approval/official source before launch.`,
+      ].map(csvEscape).join(",");
+      const trendCandidateBatchRow = [
+        category.category,
+        platformHint,
+        suggestedTitle,
+        sourceUrlPlaceholder,
+        "<creator/rightsholder handle>",
+        "<posted_at ISO>",
+        "<views>",
+        "<likes>",
+        "<comments>",
+        "<shares>",
+        "approved_after_proof",
+        `Use ${targetFileName} only after evidence is saved.`,
+      ].map(csvEscape).join(",");
+      const intakeBatchRow = [
+        category.category,
+        suggestedTitle,
+        sourceUrlPlaceholder,
+        "<creator/rightsholder handle>",
+        platformHint,
+        targetFileName,
+        "owned_or_permissioned",
+        evidenceLinkPlaceholder,
+        category.priority === "watch" ? "medium" : "high",
+        "Replace placeholders with real source and rights proof before importing.",
+      ].map(csvEscape).join(",");
+
+      return {
+        id: `${category.category}-supply-${sequence}`,
+        rank,
+        category: category.category,
+        label: category.label,
+        priority: category.priority,
+        targetFileName,
+        sourceDropPath: path.join(SOURCE_DROP_DIR, category.category, targetFileName),
+        targetSourcePath: path.join(category.sourceFolder, targetFileName),
+        platformHint,
+        suggestedTitle,
+        suggestedSource: "<creator/rightsholder handle>",
+        sourceUrlPlaceholder,
+        evidenceLinkPlaceholder,
+        intakeBatchRow,
+        trendCandidateBatchRow,
+        rightsEvidenceBatchRow,
+        requiredProof: sourceSupplyRequiredProof(category.category),
+        searchBrief: category.searchBrief,
+        viralSearchQueries: sourceSupplyViralQueries(category.category, rank),
+        viralScoreChecklist: sourceSupplyViralScoreChecklist(category.category),
+        rejectIf: sourceSupplyRejectIf(category.category),
+        doneCriteria: [
+          `Video file exists in ${path.join(SOURCE_DROP_DIR, category.category, targetFileName)} or ${path.join(category.sourceFolder, targetFileName)}.`,
+          "Trend Candidate Batch row has real URL, source, posted_at and engagement numbers.",
+          "Source Intake Batch row has real URL/source/evidence_link, not placeholders.",
+          "Launch Evidence Batch has a source_rights row with the same target_file_name and proof details.",
+          "Source Rights evidence passes concrete proof validation.",
+          "Production Queue shows the asset as owned_or_permissioned or ready for draft specs.",
+        ],
+        nextStep: `Find/upload ${targetFileName}, replace placeholders in the intake row, then import Source Intake Batch.`,
+      };
+    });
+  });
+  const categoryBatches = buildSourceSupplyCategoryBatches(items);
+  const generatedAt = await stat(SOURCE_SUPPLY_DROP_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const totals = {
+    items: items.length,
+    critical: items.filter((item) => item.priority === "critical").length,
+    high: items.filter((item) => item.priority === "high").length,
+    watch: items.filter((item) => item.priority === "watch").length,
+    categories: sourceAcquisition.categories.filter((category) => Math.max(0, category.minimumWeeklySourceAssets - category.rightsReadyAssets) > 0).length,
+    weeklyMissingSourceSlots: sourceAcquisition.totals.weeklyMissingSourceSlots,
+    rightsReadyAssets: sourceAcquisition.totals.rightsReadyAssets,
+    minimumWeeklySourceAssets: sourceAcquisition.totals.minimumWeeklySourceAssets,
+  };
+  const status: ClipperSourceSupplyDropKitStatus = totals.items === 0
+    ? "ready"
+    : totals.items > 0 && sourceAcquisition.totals.sourceAssets > 0
+      ? "partial"
+      : "blocked";
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: SOURCE_SUPPLY_DROP_KIT_PATH,
+    markdownPath: SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH,
+    csvPath: SOURCE_SUPPLY_DROP_KIT_CSV_PATH,
+    sourceDropDir: SOURCE_DROP_DIR,
+    items,
+    categoryBatches,
+    totals,
+    intakeBatchTemplate: [
+      "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+      ...items.map((item) => item.intakeBatchRow),
+    ].join("\n") + "\n",
+    nextStep: totals.items === 0
+      ? "Source supply is covered for the weekly target; regenerate Production Queue and Draft Specs."
+      : `Fill ${totals.items} source rows with real videos and concrete rights proof before importing Source Intake Batch.`,
+  };
+}
+
+function renderSourceIntakeBatchTemplate(rows: string[]): string {
+  return [
+    "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+    ...rows,
+    "",
+  ].join("\n");
+}
+
+function renderTrendCandidateBatchTemplate(rows: string[]): string {
+  return [
+    "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle",
+    ...rows,
+    "",
+  ].join("\n");
+}
+
+function buildSourceSupplyCategoryBatches(items: ClipperSourceSupplyDropKitItem[]): ClipperSourceSupplyDropKitCategoryBatch[] {
+  return (["sports", "memes", "streamers"] as ClipperAccountCategory[])
+    .map((category) => {
+      const categoryItems = items.filter((item) => item.category === category);
+      if (!categoryItems.length) return null;
+      const priority = categoryItems.some((item) => item.priority === "critical")
+        ? "critical"
+        : categoryItems.some((item) => item.priority === "high")
+          ? "high"
+          : "watch";
+      const intakeBatchRows = categoryItems.map((item) => item.intakeBatchRow);
+      const trendCandidateBatchRows = categoryItems.map((item) => item.trendCandidateBatchRow);
+      const rightsEvidenceBatchRows = categoryItems.map((item) => item.rightsEvidenceBatchRow);
+      const requiredProof = Array.from(new Set(categoryItems.flatMap((item) => item.requiredProof)));
+      const viralSearchQueries = Array.from(new Set(categoryItems.flatMap((item) => item.viralSearchQueries))).slice(0, 12);
+      const label = categoryItems[0].label;
+      return {
+        id: `source-supply-batch-${category}`,
+        category,
+        label,
+        priority,
+        items: categoryItems.length,
+        sourceDropDir: path.join(SOURCE_DROP_DIR, category),
+        sourceDropManifestPath: path.join(SOURCE_DROP_DIR, category, "source-drop-manifest.csv"),
+        sourceDropReadmePath: path.join(SOURCE_DROP_DIR, category, "README.md"),
+        sourceDropPaths: categoryItems.map((item) => item.sourceDropPath),
+        targetSourcePaths: categoryItems.map((item) => item.targetSourcePath),
+        intakeBatchRows,
+        trendCandidateBatchRows,
+        rightsEvidenceBatchRows,
+        intakeBatchTemplate: renderSourceIntakeBatchTemplate(intakeBatchRows),
+        trendCandidateBatchTemplate: renderTrendCandidateBatchTemplate(trendCandidateBatchRows),
+        rightsEvidenceBatchTemplate: renderLaunchEvidenceImportTemplate(rightsEvidenceBatchRows),
+        requiredProof,
+        viralSearchQueries,
+        checklist: [
+          `Upload ${categoryItems.length} real ${label} video file(s) into ${path.join(SOURCE_DROP_DIR, category)}.`,
+          "Replace URL/source/evidence placeholders before importing Source Intake rows.",
+          "Import Trend rows only after real posted_at and engagement numbers are filled.",
+          "Import Rights rows only when proof links or license notes are concrete.",
+          "Regenerate Production Queue and Draft Specs after importing source files/evidence.",
+        ],
+        nextStep: `Fill ${categoryItems.length} ${label} source row(s), upload matching files, then import Intake + Rights evidence for this category.`,
+      };
+    })
+    .filter((batch): batch is ClipperSourceSupplyDropKitCategoryBatch => Boolean(batch));
+}
+
+function renderSourceSupplyDropKitCsv(summary: ClipperSourceSupplyDropKitSummary): string {
+  const batchByCategory = new Map(summary.categoryBatches.map((batch) => [batch.category, batch]));
+  const header = [
+    "category_batch_id",
+    "rank",
+    "category",
+    "priority",
+    "target_file_name",
+    "source_drop_path",
+    "source_drop_manifest_path",
+    "source_drop_readme_path",
+    "target_source_path",
+    "platform_hint",
+    "suggested_title",
+    "source_url_placeholder",
+    "evidence_link_placeholder",
+    "intake_batch_row",
+    "trend_candidate_batch_row",
+    "rights_evidence_batch_row",
+    "required_proof",
+    "viral_search_queries",
+    "viral_score_checklist",
+    "reject_if",
+    "next_step",
+  ];
+  const rows = summary.items.map((item) => [
+    batchByCategory.get(item.category)?.id || "",
+    item.rank,
+    item.category,
+    item.priority,
+    item.targetFileName,
+    item.sourceDropPath,
+    batchByCategory.get(item.category)?.sourceDropManifestPath || "",
+    batchByCategory.get(item.category)?.sourceDropReadmePath || "",
+    item.targetSourcePath,
+    item.platformHint,
+    item.suggestedTitle,
+    item.sourceUrlPlaceholder,
+    item.evidenceLinkPlaceholder,
+    item.intakeBatchRow,
+    item.trendCandidateBatchRow,
+    item.rightsEvidenceBatchRow,
+    item.requiredProof.join(" | "),
+    item.viralSearchQueries.join(" | "),
+    item.viralScoreChecklist.join(" | "),
+    item.rejectIf.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
+}
+
+function renderSourceSupplyDropKitMarkdown(summary: ClipperSourceSupplyDropKitSummary): string {
+  return [
+    "# Clippers Source Supply Drop Kit",
+    "",
+    `Status: ${summary.status}`,
+    `Generated at: ${summary.generatedAt || new Date().toISOString()}`,
+    `Source drop dir: ${summary.sourceDropDir}`,
+    `Items: ${summary.totals.items}`,
+    `Critical: ${summary.totals.critical}`,
+    `High: ${summary.totals.high}`,
+    `Weekly missing source slots: ${summary.totals.weeklyMissingSourceSlots}`,
+    `Minimum weekly source assets: ${summary.totals.minimumWeeklySourceAssets}`,
+    `Rights-ready assets: ${summary.totals.rightsReadyAssets}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Intake Template",
+    "",
+    "Paste these rows into Source Intake Batch only after replacing every placeholder with real source and proof values.",
+    "",
+    "```csv",
+    summary.intakeBatchTemplate.trim(),
+    "```",
+    "",
+    "## Category Batches",
+    "",
+    ...summary.categoryBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Category: ${batch.category}`,
+      `- Priority: ${batch.priority}`,
+      `- Items: ${batch.items}`,
+      `- Source drop dir: ${batch.sourceDropDir}`,
+      `- Source drop manifest: ${batch.sourceDropManifestPath}`,
+      `- Source drop README: ${batch.sourceDropReadmePath}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Checklist:",
+      ...batch.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Drop paths:",
+      ...batch.sourceDropPaths.map((dropPath) => `- ${dropPath}`),
+      "",
+      "Viral search queries:",
+      ...batch.viralSearchQueries.map((query) => `- ${query}`),
+      "",
+      "Source intake template:",
+      "```csv",
+      batch.intakeBatchTemplate.trim(),
+      "```",
+      "",
+      "Trend candidate template:",
+      "```csv",
+      batch.trendCandidateBatchTemplate.trim(),
+      "```",
+      "",
+      "Rights evidence template:",
+      "```csv",
+      batch.rightsEvidenceBatchTemplate.trim(),
+      "```",
+      "",
+    ]),
+    "",
+    "## Drop Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label} - ${item.targetFileName}`,
+      "",
+      `- Category: ${item.category}`,
+      `- Priority: ${item.priority}`,
+      `- Drop path: ${item.sourceDropPath}`,
+      `- Final source path: ${item.targetSourcePath}`,
+      `- Intake row: ${item.intakeBatchRow}`,
+      `- Trend candidate row: ${item.trendCandidateBatchRow}`,
+      `- Rights evidence row: ${item.rightsEvidenceBatchRow}`,
+      "",
+      "Viral search queries:",
+      ...item.viralSearchQueries.map((query) => `- ${query}`),
+      "",
+      "Viral score checklist:",
+      ...item.viralScoreChecklist.map((criteria) => `- [ ] ${criteria}`),
+      "",
+      "Search brief:",
+      ...item.searchBrief.map((brief) => `- ${brief}`),
+      "",
+      "Required proof:",
+      ...item.requiredProof.map((proof) => `- [ ] ${proof}`),
+      "",
+      "Reject if:",
+      ...item.rejectIf.map((rule) => `- ${rule}`),
+      "",
+      "Done criteria:",
+      ...item.doneCriteria.map((criteria) => `- [ ] ${criteria}`),
+      "",
+      `Next step: ${item.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeFileIfMissing(filePath: string, content: string): Promise<boolean> {
+  const exists = await stat(filePath).then((entry) => entry.isFile()).catch(() => false);
+  if (exists) return false;
+  await writeFile(filePath, content);
+  return true;
+}
+
+function renderSourceDropCategoryReadme(batch: ClipperSourceSupplyDropKitCategoryBatch): string {
+  return [
+    `# Clippers Source Drop - ${batch.label}`,
+    "",
+    `Category: ${batch.category}`,
+    `Priority: ${batch.priority}`,
+    `Needed source files: ${batch.items}`,
+    `Manifest: ${batch.sourceDropManifestPath}`,
+    "",
+    "## How To Use",
+    "",
+    "1. Add the real video files listed below into this folder.",
+    "2. Fill source-drop-manifest.csv with the real title, source URL, source handle and proof link.",
+    "3. Use owned, licensed, official-source or creator-permissioned clips only.",
+    "4. Run Import source-drop, then regenerate Production Queue and Draft Specs.",
+    "",
+    "## Expected Files",
+    "",
+    ...batch.sourceDropPaths.map((dropPath) => `- ${path.basename(dropPath)}`),
+    "",
+    "## Rights Proof Required",
+    "",
+    ...batch.requiredProof.map((proof) => `- [ ] ${proof}`),
+    "",
+    "## Viral Search Queries",
+    "",
+    ...batch.viralSearchQueries.map((query) => `- ${query}`),
+    "",
+    "## Intake Manifest Template",
+    "",
+    "```csv",
+    batch.intakeBatchTemplate.trim(),
+    "```",
+    "",
+    "## Safety Rules",
+    "",
+    "- Do not add passwords, cookies, access tokens or recovery codes.",
+    "- Do not mark rights as owned_or_permissioned without concrete proof.",
+    "- Do not upload random viral reposts unless permission/licensing evidence is ready.",
+    "",
+  ].join("\n");
+}
+
+async function writeSourceSupplyDropManifestStarters(summary: ClipperSourceSupplyDropKitSummary): Promise<void> {
+  await Promise.all(summary.categoryBatches.map(async (batch) => {
+    await Promise.all([
+      writeFileIfMissing(batch.sourceDropManifestPath, batch.intakeBatchTemplate),
+      writeFileIfMissing(batch.sourceDropReadmePath, renderSourceDropCategoryReadme(batch)),
+    ]);
+  }));
+}
+
 function sourceHuntPaths(huntDate: string) {
   const safeDate = huntDate.replace(/[^0-9-]/g, "").slice(0, 10) || new Date().toISOString().slice(0, 10);
   return {
@@ -5382,6 +7856,27 @@ function csvCell(value: unknown): string {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
 }
 
+function sourceHuntTargetFileName(item: ClipperProductionQueueItem): string {
+  const slot = String(item.slotNumber).padStart(2, "0");
+  const safeAccount = item.accountId.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  return `${item.category}-${safeAccount}-slot-${slot}.mp4`;
+}
+
+function sourceHuntManifestRow(item: ClipperProductionQueueItem, targetFileName: string): string {
+  return [
+    item.category,
+    `${item.accountName} slot ${item.slotNumber}: ${item.hook}`,
+    `<approved viral source URL for ${targetFileName}>`,
+    "<creator/rightsholder handle>",
+    sourceSupplyPlatformHints[item.category],
+    targetFileName,
+    "owned_or_permissioned",
+    `<proof URL/path/id for ${targetFileName}>`,
+    item.category === "sports" ? "high" : "medium",
+    "Replace placeholders with real URL/source/proof before importing source-drop.",
+  ].map(csvEscape).join(",");
+}
+
 function buildSourceHuntItems(queue: ClipperProductionQueueSummary, huntDate: string): ClipperSourceHuntItem[] {
   return queue.items.map((item, index) => {
     const status: ClipperSourceHuntItemStatus = item.status === "draft_ready"
@@ -5392,6 +7887,10 @@ function buildSourceHuntItems(queue: ClipperProductionQueueSummary, huntDate: st
     const brief = sourceSearchBriefs[item.category][index % sourceSearchBriefs[item.category].length];
     const sourceFolder = getSourceFolderForCategory(item.category);
     const requiredInputs = requiredInputsForSourceStatus(status, item.category, item.sourcePath);
+    const viralSearchQueries = sourceSupplyViralQueries(item.category, item.slotNumber);
+    const targetFileName = sourceHuntTargetFileName(item);
+    const sourceDropPath = path.join(SOURCE_DROP_DIR, item.category, targetFileName);
+    const sourceDropManifestPath = path.join(SOURCE_DROP_DIR, item.category, "source-drop-manifest.csv");
     return {
       id: hashId(`${huntDate}-${item.id}-${item.slotNumber}`),
       huntDate,
@@ -5405,10 +7904,24 @@ function buildSourceHuntItems(queue: ClipperProductionQueueSummary, huntDate: st
       clipObjective: item.clipObjective,
       publishWindow: item.publishWindow,
       platforms: item.platforms,
+      targetFileName,
+      sourceDropPath,
+      sourceDropManifestPath,
+      sourceDropManifestRow: sourceHuntManifestRow(item, targetFileName),
       sourceFolder,
       sourcePath: item.sourcePath,
       rightsStatus: item.rightsStatus,
       suggestedSearch: brief,
+      viralSearchQueries,
+      viralSearchUrls: viralSearchQueries.map((query) => `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=qdr:d`),
+      recencyWindow: "Preferir publicado/capturado en las ultimas 24-72 horas; rechazar si no se puede probar fecha/contexto.",
+      minimumViralSignal: item.category === "sports"
+        ? "10k+ views/hour, fuente oficial/licenciada, o tendencia fuerte ligada a partido/evento de hoy."
+        : item.category === "memes"
+          ? "3x engagement sobre baseline del creador, comentarios recientes y formato remix-safe/original."
+          : "Clip reciente del VOD/creador con chat/reacciones visibles, permiso claro y payoff antes de 12 segundos.",
+      viralScoreChecklist: sourceSupplyViralScoreChecklist(item.category),
+      rejectIf: sourceSupplyRejectIf(item.category),
       evidenceNeeded: "Guardar source original, permiso/licencia/aprobacion, link oficial o notas de uso antes de Rights OK.",
       requiredInputs,
       completionHint: completionHintForSourceStatus(status),
@@ -5471,7 +7984,17 @@ function renderSourceHuntCsv(summary: ClipperSourceHuntSummary): string {
     "clip_objective",
     "publish_window",
     "platforms",
+    "target_file_name",
+    "source_drop_path",
+    "source_drop_manifest_path",
+    "source_drop_manifest_row",
     "suggested_search",
+    "viral_search_queries",
+    "viral_search_urls",
+    "recency_window",
+    "minimum_viral_signal",
+    "viral_score_checklist",
+    "reject_if",
     "source_folder",
     "source_path",
     "rights_status",
@@ -5493,7 +8016,17 @@ function renderSourceHuntCsv(summary: ClipperSourceHuntSummary): string {
     item.clipObjective,
     item.publishWindow,
     item.platforms,
+    item.targetFileName,
+    item.sourceDropPath,
+    item.sourceDropManifestPath,
+    item.sourceDropManifestRow,
     item.suggestedSearch,
+    item.viralSearchQueries,
+    item.viralSearchUrls,
+    item.recencyWindow,
+    item.minimumViralSignal,
+    item.viralScoreChecklist,
+    item.rejectIf,
     item.sourceFolder,
     item.sourcePath || "",
     item.rightsStatus,
@@ -5529,13 +8062,36 @@ function renderSourceHuntMarkdown(summary: ClipperSourceHuntSummary): string {
       `Objective: ${item.clipObjective}`,
       `Window: ${item.publishWindow}`,
       `Platforms: ${item.platforms.join(", ")}`,
+      `Target file: ${item.targetFileName}`,
+      `Source drop path: ${item.sourceDropPath}`,
+      `Source drop manifest: ${item.sourceDropManifestPath}`,
       `Search: ${item.suggestedSearch}`,
+      `Recency window: ${item.recencyWindow}`,
+      `Minimum viral signal: ${item.minimumViralSignal}`,
       `Source folder: ${item.sourceFolder}`,
       `Evidence: ${item.evidenceNeeded}`,
+      "Viral search queries:",
+      ...item.viralSearchQueries.map((query) => `- ${query}`),
+      "",
+      "Search URLs:",
+      ...item.viralSearchUrls.map((url) => `- ${url}`),
+      "",
+      "Viral score checklist:",
+      ...item.viralScoreChecklist.map((criteria) => `- [ ] ${criteria}`),
+      "",
+      "Reject if:",
+      ...item.rejectIf.map((rule) => `- ${rule}`),
+      "",
       "Required inputs:",
       ...item.requiredInputs.map((input) => `- ${input}`),
       `Completion hint: ${item.completionHint}`,
       `Next step: ${item.nextStep}`,
+      "",
+      "Source drop manifest row:",
+      "",
+      "```csv",
+      item.sourceDropManifestRow,
+      "```",
       "",
       "Source rights record template:",
       "",
@@ -5920,6 +8476,53 @@ function requireRealEvidence(value: string, label: string): string {
     throw new Error(`${label} requiere evidencia real; reemplaza placeholders antes de importar.`);
   }
   return trimmed;
+}
+
+function requireEvidenceSignal(value: string, label: string, signalPattern: RegExp, signalHint: string): string {
+  const trimmed = requireRealEvidence(value, label);
+  if (!signalPattern.test(trimmed)) {
+    throw new Error(`${label} requiere evidencia concreta: ${signalHint}.`);
+  }
+  return trimmed;
+}
+
+function requireAccountEvidence(value: string): string {
+  const evidence = requireEvidenceSignal(
+    value,
+    "Account evidence notes",
+    /(https?:\/\/|profile|perfil|handle|@\w|2fa|screenshot|proof|captura)/i,
+    "profile URL, handle, 2FA note, or screenshot/proof link",
+  );
+  const syntheticReason = accountEvidenceVerificationProblem(evidence, evidence);
+  if (syntheticReason) throw new Error(`Account evidence notes requiere evidencia real: ${syntheticReason}.`);
+  return evidence;
+}
+
+function requireDeveloperAppEvidence(value: string): string {
+  return requireEvidenceSignal(
+    value,
+    "Developer app notes",
+    /(https?:\/\/|app review|review|ticket|case|screenshot|proof|portal|redirect|scope|permiso|aprob)/i,
+    "app review ticket/status, portal proof, screenshot/proof link, redirect/scopes note, or approval note",
+  );
+}
+
+function requirePermissionEvidence(value: string): string {
+  return requireEvidenceSignal(
+    value,
+    "Permission notes",
+    /(https?:\/\/|review|ticket|case|screenshot|proof|portal|scope|permiso|solicit|aprob)/i,
+    "permission request/approval proof, review ticket, portal note, screenshot/proof link, or scope approval note",
+  );
+}
+
+function requireSourceRightsEvidence(value: string): string {
+  return requireEvidenceSignal(
+    value,
+    "Source rights notes",
+    /(https?:\/\/|drive|screenshot|captura|email|contract|contrato|license|licencia|allowlist|official source|fuente oficial|owner note|ownership note|proof (?:url|path|id)|evidence (?:url|path|id)|signed|agreement|ticket|case)/i,
+    "Drive/proof link, screenshot path, email/contract/license, allowlist entry, official-source proof, owner note, ticket/case, or signed agreement",
+  );
 }
 
 function firstNumber(record: Record<string, unknown>, keys: string[]): number {
@@ -6587,14 +9190,18 @@ function normalizeTrendCandidateImportRow(record: Record<string, unknown>): Reco
   const title = firstString(record, ["title", "hook", "caption", "description", "topic", "trend"]);
   const url = firstString(record, ["url", "link", "video_url", "post_url"]);
   if (!title && !url) return null;
+  const source = firstString(record, ["source", "creator", "handle", "channel", "profile"]) || "manual-import";
+  const postedAt = firstString(record, ["posted_at", "published_at", "created_at", "date"]);
+  const views = firstString(record, ["views", "view_count", "plays", "impressions", "vistas"]);
+  if ([title, url, source, postedAt, views].some((value) => value && hasTemplatePlaceholder(value))) return null;
   return {
     category: firstString(record, ["category", "vertical", "account_category", "niche"]) || "memes",
     platform: firstString(record, ["platform", "network", "source"]) || "tiktok",
     title: title || url,
     url,
-    source: firstString(record, ["source", "creator", "handle", "channel", "profile"]) || "manual-import",
-    posted_at: firstString(record, ["posted_at", "published_at", "created_at", "date"]),
-    views: firstString(record, ["views", "view_count", "plays", "impressions", "vistas"]),
+    source,
+    posted_at: postedAt,
+    views,
     likes: firstString(record, ["likes", "like_count"]),
     comments: firstString(record, ["comments", "comment_count"]),
     shares: firstString(record, ["shares", "share_count"]),
@@ -6646,6 +9253,58 @@ function trendRightsEvidenceFileName(candidate: ClipperTrendCandidate): string {
   return `${slug}.md`;
 }
 
+function trendRemixBrief(candidate: ClipperTrendCandidate): string {
+  const categoryLabel = CLIPPER_CATEGORY_LABELS[candidate.category];
+  return `Crear version ${categoryLabel.toLowerCase()} con narracion propia sobre "${candidate.title}", usando el enlace solo como research hasta tener permiso o asset propio.`;
+}
+
+function trendOwnedAssetPlan(candidate: ClipperTrendCandidate): string[] {
+  const common = [
+    "Grabar voz/narracion propia; no extraer audio del video fuente.",
+    "Usar captions, shapes, screenshots permitidos o b-roll propio/generado; no usar footage ajeno sin permiso.",
+    "Guardar fuentes y evidencia en allowlist antes de marcar owned_or_permissioned.",
+  ];
+  if (candidate.category === "sports") {
+    return [
+      "Usar scoreboard recreado, mapa simple de contexto, fotos/arte propio o clips oficiales solo si el permiso lo permite.",
+      "Evitar retransmitir jugadas/broadcast footage sin licencia.",
+      ...common,
+    ];
+  }
+  if (candidate.category === "streamers") {
+    return [
+      "Usar formato explainer/reaction con avatar, subtitulos y timeline propio; no subir VOD/clip del streamer sin permiso.",
+      "Contactar creator/source y guardar aprobacion antes de usar cualquier fragmento original.",
+      ...common,
+    ];
+  }
+  return [
+    "Recrear el formato con footage/graphics propios, sin copiar el montaje del creator original.",
+    "Usar texto/plantilla inspirada en la tendencia y cambiar visuales, timing y audio.",
+    ...common,
+  ];
+}
+
+function trendScriptBeats(candidate: ClipperTrendCandidate): string[] {
+  return [
+    `0-2s hook: ${candidate.hookAngle || `Por que "${candidate.title}" esta explotando ahora`}.`,
+    "2-7s contexto: explicar que paso en una frase visual y facil de entender.",
+    "7-15s giro: anadir opinion, comparacion, dato o pregunta que invite comments.",
+    "15-23s payoff: cerrar con takeaway o remate corto.",
+    "23-30s CTA suave: pedir prediccion/reaccion sin prometer informacion no verificada.",
+  ];
+}
+
+function trendPublishSafetyChecklist(candidate: ClipperTrendCandidate): string[] {
+  return [
+    "No publicar raw footage, audio, stream clip, broadcast clip o creator video sin permiso/licencia/evidencia.",
+    `Mantener rights=review_required para "${candidate.title}" hasta guardar allowlist aprobada.`,
+    "Si se usa version remake, confirmar que todos los assets son propios, generados, licenciados o permitidos.",
+    "Guardar source URL, notas de research y decision de derechos antes de mover a Draft Specs.",
+    "Mantener publishMode=approval_required hasta que cuenta, OAuth, permisos y rights gate esten ready.",
+  ];
+}
+
 function buildTrendRightsOutreachItem(candidate: ClipperTrendCandidate): ClipperTrendRightsOutreachItem {
   const label = CLIPPER_CATEGORY_LABELS[candidate.category];
   const sourceName = candidate.source || "creator/rightsholder";
@@ -6686,6 +9345,10 @@ function buildTrendRightsOutreachItem(candidate: ClipperTrendCandidate): Clipper
     outreachSubject,
     outreachMessage,
     permissionRecordTemplate,
+    remixBrief: trendRemixBrief(candidate),
+    ownedAssetPlan: trendOwnedAssetPlan(candidate),
+    scriptBeats: trendScriptBeats(candidate),
+    publishSafetyChecklist: trendPublishSafetyChecklist(candidate),
     evidenceFileName,
     nextStep: `Enviar outreach y guardar respuesta aprobada en clippers_workspace/allowlist/${evidenceFileName}.`,
   };
@@ -6729,7 +9392,7 @@ async function buildTrendRightsOutreachSummary(trendRadar: ClipperTrendRadarSumm
 }
 
 function renderTrendRightsOutreachCsv(summary: ClipperTrendRightsOutreachSummary): string {
-  const headers = ["status", "category", "platform", "title", "url", "source", "viral_score", "subject", "message", "permission_record_template", "evidence_file", "next_step"];
+  const headers = ["status", "category", "platform", "title", "url", "source", "viral_score", "subject", "message", "permission_record_template", "remix_brief", "owned_asset_plan", "script_beats", "publish_safety_checklist", "evidence_file", "next_step"];
   const rows = summary.items.map((item) => [
     item.status,
     item.category,
@@ -6741,6 +9404,10 @@ function renderTrendRightsOutreachCsv(summary: ClipperTrendRightsOutreachSummary
     item.outreachSubject,
     item.outreachMessage,
     item.permissionRecordTemplate,
+    item.remixBrief,
+    item.ownedAssetPlan.join(" | "),
+    item.scriptBeats.join(" | "),
+    item.publishSafetyChecklist.join(" | "),
     item.evidenceFileName,
     item.nextStep,
   ]);
@@ -6787,6 +9454,19 @@ function renderTrendRightsOutreachMarkdown(summary: ClipperTrendRightsOutreachSu
       "```yaml",
       item.permissionRecordTemplate,
       "```",
+      "",
+      "Owned/remix-safe brief:",
+      "",
+      item.remixBrief,
+      "",
+      "Owned asset plan:",
+      ...item.ownedAssetPlan.map((step) => `- [ ] ${step}`),
+      "",
+      "Script beats:",
+      ...item.scriptBeats.map((beat) => `- ${beat}`),
+      "",
+      "Publish safety checklist:",
+      ...item.publishSafetyChecklist.map((step) => `- [ ] ${step}`),
       "",
     ]),
   ].join("\n");
@@ -6963,6 +9643,7 @@ function normalizeSourceIntakeRow(record: Record<string, unknown>, index: number
   const url = firstString(record, ["url", "link", "source_url", "video_url", "post_url"]);
   const source = firstString(record, ["source", "creator", "handle", "channel", "rightsholder"]) || "manual-source";
   if (!title && !url) return null;
+  if ([title, url, source].some((value) => value && hasTemplatePlaceholder(value))) return null;
 
   const category = normalizeTrendCategory(firstString(record, ["category", "vertical", "account_category", "niche"]));
   const platform = firstString(record, ["platform", "network"]) || "unknown";
@@ -6971,7 +9652,14 @@ function normalizeSourceIntakeRow(record: Record<string, unknown>, index: number
     ? "owned_or_permissioned"
     : "review_required";
   const evidenceLinkRaw = firstString(record, ["evidence_link", "evidence", "proof", "permission_proof", "drive_link"]);
-  const evidenceLink = evidenceLinkRaw && !hasTemplatePlaceholder(evidenceLinkRaw) ? evidenceLinkRaw : null;
+  let evidenceLink: string | null = null;
+  if (evidenceLinkRaw && !hasTemplatePlaceholder(evidenceLinkRaw)) {
+    try {
+      evidenceLink = requireSourceRightsEvidence(evidenceLinkRaw);
+    } catch {
+      evidenceLink = null;
+    }
+  }
   const fileName = safeSourceFileName(firstString(record, ["target_file_name", "file_name", "filename", "asset"]) || title || url, `${category}-${index + 1}`);
   const targetSourcePath = path.join(getSourceFolderForCategory(category), fileName);
   const priority = normalizeSourceIntakePriority(firstString(record, ["priority", "urgency"]));
@@ -7269,14 +9957,31 @@ function accountEvidenceJsonPath(accountId: string, platform: ClipperPlatform): 
   return path.join(ACCOUNT_EVIDENCE_DIR, `${accountEvidenceId(accountId, platform)}.json`);
 }
 
+function accountEvidenceVerificationProblem(raw: string, notes: string): string | null {
+  const combined = `${raw}\n${notes}`;
+  if (/\b(test|testing|fake|dummy|placeholder|sample)\b/i.test(combined)) {
+    return "remueve señales de test/fake/dummy/placeholder/sample y reemplaza con proof real";
+  }
+  if (!/(https?:\/\/|profile\s+url|profile|perfil|handle|@\w)/i.test(combined)) {
+    return "agrega profile URL o handle real visible";
+  }
+  if (!/(2fa|two-factor|two factor|screenshot|proof|captura|security|verification|verificad|verified|recovery)/i.test(combined)) {
+    return "agrega proof de verificacion, security/2FA o screenshot redacted";
+  }
+  return null;
+}
+
 function parseAccountEvidenceStatus(raw: string, ext: string): { status: ClipperAccountEvidenceItemStatus; notes: string } {
   if (ext === ".json") {
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const status = String(parsed.status || "submitted").toLowerCase();
+      const notes = typeof parsed.notes === "string" ? parsed.notes : "Evidence JSON imported.";
+      const normalizedStatus: ClipperAccountEvidenceItemStatus = status === "verified" ? "verified" : status === "rejected" ? "rejected" : "submitted";
+      const verificationProblem = normalizedStatus === "verified" ? accountEvidenceVerificationProblem(raw, notes) : null;
       return {
-        status: status === "verified" ? "verified" : status === "rejected" ? "rejected" : "submitted",
-        notes: typeof parsed.notes === "string" ? parsed.notes : "Evidence JSON imported.",
+        status: verificationProblem ? "rejected" : normalizedStatus,
+        notes: verificationProblem ? `Evidence rejected: ${verificationProblem}. ${notes}` : notes,
       };
     } catch {
       return { status: "submitted", notes: "Evidence JSON exists but could not be parsed; review manually." };
@@ -7290,7 +9995,12 @@ function parseAccountEvidenceStatus(raw: string, ext: string): { status: Clipper
       ? "rejected"
       : "submitted";
   const notesLine = raw.split("\n").find((line) => line.toLowerCase().startsWith("notes:"));
-  return { status, notes: notesLine ? notesLine.replace(/^notes:\s*/i, "").trim() : "Evidence markdown submitted." };
+  const notes = notesLine ? notesLine.replace(/^notes:\s*/i, "").trim() : "Evidence markdown submitted.";
+  const verificationProblem = status === "verified" ? accountEvidenceVerificationProblem(raw, notes) : null;
+  return {
+    status: verificationProblem ? "rejected" : status,
+    notes: verificationProblem ? `Evidence rejected: ${verificationProblem}. ${notes}` : notes,
+  };
 }
 
 async function readAccountEvidenceItem(account: ClipperAccount, platformAccount: ClipperPlatformAccount): Promise<ClipperAccountEvidenceItem | null> {
@@ -7328,26 +10038,356 @@ async function readAccountEvidenceItem(account: ClipperAccount, platformAccount:
   return null;
 }
 
+function buildAccountEvidenceQuickBatchRows(accounts: ClipperAccount[], items: ClipperAccountEvidenceItem[]): ClipperAccountEvidenceQuickBatchRow[] {
+  return accounts.flatMap((account) =>
+    account.platformAccounts.map((platformAccount) => {
+      const id = accountEvidenceId(account.id, platformAccount.platform);
+      const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platformAccount.platform);
+      const evidence = items.find((item) => item.accountId === account.id && item.platform === platformAccount.platform);
+      const profileLink = profileLinkForPlatform(platformAccount.platform, platformAccount.handle);
+      const proofPlaceholder = "<real handle + profile URL + 2FA/security proof + screenshot/proof URL>";
+      const importStatus: ClipperAccountEvidenceItemStatus = evidence?.status === "verified" ? "verified" : "submitted";
+      const batchRow = ["account", account.id, platformAccount.platform, importStatus, "", "", "", proofPlaceholder].map(csvEscape).join(",");
+      const verifiedBatchRow = ["account", account.id, platformAccount.platform, "verified", "", "", "", proofPlaceholder].map(csvEscape).join(",");
+      const evidenceJsonPath = accountEvidenceJsonPath(account.id, platformAccount.platform);
+      const evidenceMarkdownPath = path.join(ACCOUNT_EVIDENCE_DIR, `${id}.md`);
+      const requiredProof = [
+        `Handle visible: ${platformAccount.handle}`,
+        `Profile URL: ${profileLink}`,
+        "Security/2FA saved in password manager or operator note.",
+        "Screenshot/proof URL or internal evidence note without secrets.",
+        `Drop proof file: ${evidenceJsonPath} or ${evidenceMarkdownPath}.`,
+      ];
+      const operatorSteps = [
+        `Open signup/login: ${requirement?.accountCreationUrl || "platform signup"}.`,
+        `Claim or confirm handle ${platformAccount.handle} and display name ${platformAccount.displayName}.`,
+        "Apply bio, avatar/banner, credit/removal policy and category positioning.",
+        "Save login, recovery and 2FA outside this repo.",
+        `Save proof in ${evidenceJsonPath} or paste the verified row into Launch evidence batch.`,
+        "Replace the proof placeholder in the batch row, preview it, then import.",
+      ];
+      return {
+        id,
+        accountId: account.id,
+        accountName: account.name,
+        category: account.category,
+        platform: platformAccount.platform,
+        handle: platformAccount.handle,
+        displayName: platformAccount.displayName,
+        profileLink,
+        signupUrl: requirement?.accountCreationUrl || "",
+        developerPortalUrl: requirement?.developerPortalUrl || "",
+        status: evidence?.status || "missing",
+        evidencePath: evidence?.evidencePath || null,
+        evidenceJsonPath,
+        evidenceMarkdownPath,
+        templatePath: path.join(ACCOUNT_EVIDENCE_TEMPLATE_DIR, `${id}.md`),
+        batchRow,
+        verifiedBatchRow,
+        requiredProof,
+        operatorSteps,
+        doneCriteria: "Cuenta creada, login/2FA asegurado, perfil publico revisado y evidencia real importada sin secretos.",
+        nextStep: evidence?.status === "verified"
+          ? "Evidencia verificada; avanzar con OAuth/app review."
+          : evidence?.status === "submitted"
+            ? "Revisar prueba submitted y cambiar/importar verified cuando el perfil este confirmado."
+            : `Crear/verificar ${platformAccount.handle}, guardar prueba real y usar esta fila en Launch evidence batch.`,
+      };
+    })
+  );
+}
+
+function renderAccountEvidenceQuickBatchTemplate(rows: ClipperAccountEvidenceQuickBatchRow[]): string {
+  const header = ["kind", "account_id", "platform", "status", "scope", "app_identifier", "public_base_url", "notes"].map(csvEscape).join(",");
+  return [header, ...rows.map((row) => row.verifiedBatchRow)].join("\n");
+}
+
+function accountEvidenceBatchRow(row: ClipperAccountEvidenceQuickBatchRow, status: "submitted" | "verified"): string {
+  const proofPlaceholder = status === "verified"
+    ? "<real profile URL + final verification proof + 2FA/security note>"
+    : "<real profile URL + account creation proof + 2FA/security note>";
+  return ["account", row.accountId, row.platform, status, "", "", "", proofPlaceholder].map(csvEscape).join(",");
+}
+
+function buildAccountEvidencePlatformBatches(rows: ClipperAccountEvidenceQuickBatchRow[]): ClipperAccountEvidencePlatformBatch[] {
+  return (["tiktok", "instagram", "youtube"] as ClipperPlatform[]).map((platform) => {
+    const platformRows = rows.filter((row) => row.platform === platform);
+    const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform);
+    const verified = platformRows.filter((row) => row.status === "verified").length;
+    const submitted = platformRows.filter((row) => row.status === "submitted").length;
+    const rejected = platformRows.filter((row) => row.status === "rejected").length;
+    const missing = platformRows.filter((row) => row.status === "missing").length;
+    const status: ClipperAccountEvidenceStatus = verified === platformRows.length && platformRows.length > 0
+      ? "ready"
+      : verified > 0 || submitted > 0 || rejected > 0
+        ? "partial"
+        : "empty";
+    const submittedEvidenceRows = platformRows.map((row) => accountEvidenceBatchRow(row, "submitted"));
+    const verifiedEvidenceRows = platformRows.map((row) => accountEvidenceBatchRow(row, "verified"));
+    const submittedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `accounts-${platform}-submitted.csv`);
+    const verifiedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `accounts-${platform}-verified.csv`);
+    const submittedTemplateFilePath = path.join(ACCOUNT_DROP_TEMPLATE_DIR, `accounts-${platform}-submitted.csv`);
+    const verifiedTemplateFilePath = path.join(ACCOUNT_DROP_TEMPLATE_DIR, `accounts-${platform}-verified.csv`);
+    return {
+      id: `account-batch-${platform}`,
+      platform,
+      label: `${permissionRequestPlatformLabel(platform)} accounts`,
+      status,
+      accounts: platformRows.length,
+      verified,
+      submitted,
+      rejected,
+      missing,
+      signupUrl: requirement?.accountCreationUrl || platformRows[0]?.signupUrl || "",
+      developerPortalUrl: requirement?.developerPortalUrl || platformRows[0]?.developerPortalUrl || "",
+      handles: platformRows.map((row) => row.handle),
+      submittedEvidenceRows,
+      verifiedEvidenceRows,
+      submittedDropFilePath,
+      verifiedDropFilePath,
+      submittedTemplateFilePath,
+      verifiedTemplateFilePath,
+      submittedDropTemplate: renderLaunchEvidenceImportTemplate(submittedEvidenceRows),
+      verifiedDropTemplate: renderLaunchEvidenceImportTemplate(verifiedEvidenceRows),
+      checklist: [
+        `Create or log into ${platformRows.length} ${permissionRequestPlatformLabel(platform)} account(s).`,
+        "Confirm handle, profile URL, avatar/bio and public/eligible account settings.",
+        "Enable 2FA and store recovery codes outside this repository.",
+        "Replace every proof placeholder before preview/import.",
+        "Use submitted rows first, then verified rows only after the real account is confirmed.",
+      ],
+      nextStep: missing > 0
+        ? `Create/verify ${missing} ${permissionRequestPlatformLabel(platform)} account(s), then import submitted or verified evidence.`
+        : rejected > 0
+          ? `Fix ${rejected} rejected ${permissionRequestPlatformLabel(platform)} account evidence record(s).`
+          : verified === platformRows.length
+            ? `${permissionRequestPlatformLabel(platform)} account evidence verified; continue developer app/OAuth.`
+            : `Review ${submitted} submitted ${permissionRequestPlatformLabel(platform)} account evidence record(s) and move to verified.`,
+    };
+  });
+}
+
+async function writeAccountEvidenceDropTemplates(summary: ClipperAccountEvidenceSummary): Promise<void> {
+  await mkdir(ACCOUNT_DROP_TEMPLATE_DIR, { recursive: true });
+  await writeFile(ACCOUNT_DROP_TEMPLATE_README_PATH, [
+    "# Clippers Account Drop Templates",
+    "",
+    "These files are safe templates only. Do not copy them into evidence-drop until every placeholder has been replaced with real account proof.",
+    "",
+    "Workflow:",
+    "1. Create or verify the external account in the platform portal.",
+    "2. Replace each <...> placeholder with a real profile URL, handle, 2FA/security note, screenshot path, or proof note.",
+    "3. Run Local sync; completed CSVs are validated strictly and copied to evidence-drop automatically.",
+    "4. Use verified rows only after the account is real, accessible and secured.",
+    "",
+  ].join("\n"));
+  await Promise.all(summary.connectionKitPlatformBatches.flatMap((batch) => [
+    writeLaunchEvidenceTemplateIfSafe(batch.submittedTemplateFilePath, batch.submittedDropTemplate),
+    writeLaunchEvidenceTemplateIfSafe(batch.verifiedTemplateFilePath, batch.verifiedDropTemplate),
+  ]));
+}
+
+function buildAccountEvidenceQuickBatchChecklist(rows: ClipperAccountEvidenceQuickBatchRow[]): string[] {
+  const missing = rows.filter((row) => row.status === "missing").length;
+  const submitted = rows.filter((row) => row.status === "submitted").length;
+  const rejected = rows.filter((row) => row.status === "rejected").length;
+  return [
+    `Crear/verificar ${missing} cuentas sin evidencia real y no importar placeholders.`,
+    `Revisar ${submitted} cuentas submitted antes de subirlas a verified.`,
+    `Corregir ${rejected} evidencias rejected antes de OAuth/app review.`,
+    "Reemplazar cada notes placeholder con perfil real, screenshot/proof URL o nota interna sin secretos.",
+    "Usar Preview batch; solo importar cuando accepted.accountEvidence coincida con las cuentas listas.",
+  ];
+}
+
+function renderAccountConnectionKitCsv(summary: ClipperAccountEvidenceSummary): string {
+  const batchByPlatform = new Map(summary.connectionKitPlatformBatches.map((batch) => [batch.platform, batch]));
+  const header = [
+    "platform_batch_id",
+    "account_id",
+    "account_name",
+    "category",
+    "platform",
+    "handle",
+    "display_name",
+    "profile_link",
+    "signup_url",
+    "developer_portal_url",
+    "status",
+    "evidence_path",
+    "evidence_json_path",
+    "evidence_markdown_path",
+    "submitted_template_file_path",
+    "verified_template_file_path",
+    "submitted_drop_file_path",
+    "verified_drop_file_path",
+    "template_path",
+    "required_proof",
+    "operator_steps",
+    "verified_batch_row",
+    "done_criteria",
+    "next_step",
+  ];
+  const rows = summary.quickBatchRows.map((row) => [
+    batchByPlatform.get(row.platform)?.id || "",
+    row.accountId,
+    row.accountName,
+    row.category,
+    row.platform,
+    row.handle,
+    row.displayName,
+    row.profileLink,
+    row.signupUrl,
+    row.developerPortalUrl,
+    row.status,
+    row.evidencePath || "",
+    row.evidenceJsonPath,
+    row.evidenceMarkdownPath,
+    batchByPlatform.get(row.platform)?.submittedTemplateFilePath || "",
+    batchByPlatform.get(row.platform)?.verifiedTemplateFilePath || "",
+    batchByPlatform.get(row.platform)?.submittedDropFilePath || "",
+    batchByPlatform.get(row.platform)?.verifiedDropFilePath || "",
+    row.templatePath,
+    row.requiredProof.join(" | "),
+    row.operatorSteps.join(" | "),
+    row.verifiedBatchRow,
+    row.doneCriteria,
+    row.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
+}
+
+function renderAccountConnectionKitMarkdown(summary: ClipperAccountEvidenceSummary): string {
+  return [
+    "# Clippers External Account Connection Kit",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.connectionKitGeneratedAt || new Date().toISOString()}`,
+    `Evidence dir: ${summary.evidenceDir}`,
+    `Launch evidence template: ${summary.launchEvidenceTemplatePath}`,
+    "",
+    "## Totals",
+    "",
+    `- Expected: ${summary.totals.expected}`,
+    `- Verified: ${summary.totals.verified}`,
+    `- Submitted: ${summary.totals.submitted}`,
+    `- Rejected: ${summary.totals.rejected}`,
+    `- Missing: ${summary.totals.missing}`,
+    "",
+    "## Quick Batch",
+    "",
+    "Replace every placeholder with real proof before importing. Never paste passwords, recovery codes, cookies, tokens or client secrets.",
+    "",
+    "```csv",
+    summary.quickBatchTemplate.trim(),
+    "```",
+    "",
+    "## Checklist",
+    "",
+    ...summary.quickBatchChecklist.map((step) => `- [ ] ${step}`),
+    "",
+    "## Platform Batches",
+    "",
+    ...summary.connectionKitPlatformBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Status: ${batch.status}`,
+      `- Accounts: ${batch.accounts}`,
+      `- Verified: ${batch.verified}`,
+      `- Submitted: ${batch.submitted}`,
+      `- Rejected: ${batch.rejected}`,
+      `- Missing: ${batch.missing}`,
+      `- Signup URL: ${batch.signupUrl}`,
+      `- Developer portal: ${batch.developerPortalUrl}`,
+      `- Handles: ${batch.handles.join(", ")}`,
+      `- Submitted template file: ${batch.submittedTemplateFilePath}`,
+      `- Verified template file: ${batch.verifiedTemplateFilePath}`,
+      `- Submitted drop file: ${batch.submittedDropFilePath}`,
+      `- Verified drop file: ${batch.verifiedDropFilePath}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Checklist:",
+      ...batch.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Submitted drop template:",
+      "```csv",
+      batch.submittedDropTemplate.trim(),
+      "```",
+      "",
+      "Verified drop template:",
+      "```csv",
+      batch.verifiedDropTemplate.trim(),
+      "```",
+      "",
+    ]),
+    "",
+    "## Account Platform Rows",
+    "",
+    ...summary.quickBatchRows.flatMap((row, index) => [
+      `### ${index + 1}. ${row.accountName} / ${row.platform}`,
+      "",
+      `- Handle: ${row.handle}`,
+      `- Display name: ${row.displayName}`,
+      `- Profile link: ${row.profileLink}`,
+      `- Signup URL: ${row.signupUrl}`,
+      `- Developer portal: ${row.developerPortalUrl}`,
+      `- Current status: ${row.status}`,
+      `- Evidence path: ${row.evidencePath || "missing"}`,
+      `- JSON drop path: ${row.evidenceJsonPath}`,
+      `- Markdown drop path: ${row.evidenceMarkdownPath}`,
+      `- Template path: ${row.templatePath}`,
+      "",
+      "Required proof:",
+      ...row.requiredProof.map((proof) => `- ${proof}`),
+      "",
+      "Operator steps:",
+      ...row.operatorSteps.map((step) => `- ${step}`),
+      "",
+      "Verified import row:",
+      "",
+      "```csv",
+      row.verifiedBatchRow,
+      "```",
+      "",
+      `Done criteria: ${row.doneCriteria}`,
+      `Next step: ${row.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
 async function buildAccountEvidenceSummary(accounts: ClipperAccount[]): Promise<ClipperAccountEvidenceSummary> {
   await ensureClipperDirs();
   const items = (await Promise.all(accounts.flatMap((account) =>
     account.platformAccounts.map((platformAccount) => readAccountEvidenceItem(account, platformAccount))
   ))).filter((item): item is ClipperAccountEvidenceItem => Boolean(item));
+  const quickBatchRows = buildAccountEvidenceQuickBatchRows(accounts, items);
+  const connectionKitPlatformBatches = buildAccountEvidencePlatformBatches(quickBatchRows);
   const expected = accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
   const verified = items.filter((item) => item.status === "verified").length;
   const rejected = items.filter((item) => item.status === "rejected").length;
   const submitted = items.filter((item) => item.status === "submitted").length;
   const missing = Math.max(expected - items.length, 0);
   const generatedAt = await stat(ACCOUNT_EVIDENCE_README_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const connectionKitGeneratedAt = await stat(ACCOUNT_CONNECTION_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
     status: verified === expected && expected > 0 ? "ready" : items.length > 0 ? "partial" : "empty",
     evidenceDir: ACCOUNT_EVIDENCE_DIR,
     templateDir: ACCOUNT_EVIDENCE_TEMPLATE_DIR,
     readmePath: ACCOUNT_EVIDENCE_README_PATH,
+    connectionKitManifestPath: ACCOUNT_CONNECTION_KIT_PATH,
+    connectionKitMarkdownPath: ACCOUNT_CONNECTION_KIT_MARKDOWN_PATH,
+    connectionKitCsvPath: ACCOUNT_CONNECTION_KIT_CSV_PATH,
+    connectionKitGeneratedAt,
     launchEvidenceDropDir: LAUNCH_EVIDENCE_DROP_DIR,
     launchEvidenceTemplatePath: LAUNCH_EVIDENCE_TEMPLATE_PATH,
     launchEvidenceTemplateRows: buildLaunchEvidenceTemplateRows(accounts).length,
     launchEvidenceDropChecklist: buildLaunchEvidenceDropChecklist(),
+    quickBatchRows,
+    connectionKitPlatformBatches,
+    quickBatchTemplate: renderAccountEvidenceQuickBatchTemplate(quickBatchRows),
+    quickBatchChecklist: buildAccountEvidenceQuickBatchChecklist(quickBatchRows),
     generatedAt,
     items,
     totals: { expected, submitted, verified, rejected, missing },
@@ -7362,6 +10402,7 @@ async function buildAccountEvidenceSummary(accounts: ClipperAccount[]): Promise<
 }
 
 function renderAccountEvidenceReadme(accounts: ClipperAccount[]): string {
+  const quickBatchRows = buildAccountEvidenceQuickBatchRows(accounts, []);
   return [
     "# Clippers Account Evidence",
     "",
@@ -7385,6 +10426,36 @@ function renderAccountEvidenceReadme(accounts: ClipperAccount[]): string {
     "Batch import:",
     "",
     "- Tambien puedes llenar `../evidence-drop/launch-evidence-template.csv` y usar Import drop desde la app.",
+    "",
+    "## Account Evidence Quick Batch",
+    "",
+    "Pega estas filas en Launch evidence batch despues de reemplazar cada placeholder con evidencia real. No pegues passwords, recovery codes, client secrets ni tokens.",
+    "",
+    "```csv",
+    renderAccountEvidenceQuickBatchTemplate(quickBatchRows),
+    "```",
+    "",
+    "Quick checklist:",
+    "",
+    ...buildAccountEvidenceQuickBatchChecklist(quickBatchRows).map((step) => `- ${step}`),
+    "",
+    "Per-account proof checklist:",
+    "",
+    ...quickBatchRows.flatMap((row) => [
+      `### ${row.accountName} / ${row.platform}`,
+      "",
+      `- Handle: ${row.handle}`,
+      `- Expected profile: ${row.profileLink}`,
+      `- Signup: ${row.signupUrl}`,
+      `- JSON drop: ${row.evidenceJsonPath}`,
+      `- Markdown drop: ${row.evidenceMarkdownPath}`,
+      `- Template: ${row.templatePath}`,
+      "- Required proof:",
+      ...row.requiredProof.map((proof) => `  - ${proof}`),
+      "- Operator steps:",
+      ...row.operatorSteps.map((step) => `  - ${step}`),
+      "",
+    ]),
     "",
   ].join("\n");
 }
@@ -7425,6 +10496,26 @@ export async function prepareClipperAccountEvidenceVault(userId = getSystemUserI
       writeFile(path.join(ACCOUNT_EVIDENCE_TEMPLATE_DIR, `${accountEvidenceId(account.id, platformAccount.platform)}.md`), renderAccountEvidenceTemplate(account, platformAccount))
     )
   ));
+  const connectionKitDraft = await buildAccountEvidenceSummary(accounts);
+  const connectionKit: ClipperAccountEvidenceSummary = {
+    ...connectionKitDraft,
+    connectionKitGeneratedAt: new Date().toISOString(),
+  };
+  await writeFile(ACCOUNT_CONNECTION_KIT_PATH, JSON.stringify({
+    status: connectionKit.status,
+    generatedAt: connectionKit.connectionKitGeneratedAt,
+    evidenceDir: connectionKit.evidenceDir,
+    launchEvidenceTemplatePath: connectionKit.launchEvidenceTemplatePath,
+    quickBatchTemplate: connectionKit.quickBatchTemplate,
+    quickBatchChecklist: connectionKit.quickBatchChecklist,
+    quickBatchRows: connectionKit.quickBatchRows,
+    connectionKitPlatformBatches: connectionKit.connectionKitPlatformBatches,
+    totals: connectionKit.totals,
+    nextStep: connectionKit.nextStep,
+  }, null, 2));
+  await writeAccountEvidenceDropTemplates(connectionKit);
+  await writeFile(ACCOUNT_CONNECTION_KIT_MARKDOWN_PATH, renderAccountConnectionKitMarkdown(connectionKit));
+  await writeFile(ACCOUNT_CONNECTION_KIT_CSV_PATH, renderAccountConnectionKitCsv(connectionKit));
   return { accountEvidence: await buildAccountEvidenceSummary(accounts), status: await getClipperStatus(userId) };
 }
 
@@ -7508,7 +10599,7 @@ export async function recordClipperAccountEvidence(input: {
   const evidenceStatus = parseAccountEvidenceInputStatus(input.status);
   const rawNotes = typeof input.notes === "string" && input.notes.trim() ? input.notes.trim() : "";
   const notes = evidenceStatus === "verified"
-    ? requireRealEvidence(rawNotes, "Account evidence notes")
+    ? requireAccountEvidence(rawNotes)
     : rawNotes || "Registrado desde Clippers UI; no incluye secretos.";
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
@@ -7528,6 +10619,12 @@ export async function recordClipperAccountEvidence(input: {
     recordedAt: new Date().toISOString(),
     source: "clippers-ui",
   }, null, 2));
+  await upsertOwnerConnectProgressRecords([ownerConnectProgressRecordForEvidence({
+    itemId: ownerConnectAccountItemId(account.id, platform),
+    status: evidenceStatus === "verified" ? "done" : evidenceStatus === "submitted" ? "waiting" : "blocked",
+    notes: `Account evidence ${evidenceStatus} imported for ${account.id}/${platform}; ${evidenceStatus === "verified" ? "account portal step complete locally" : "review evidence before go-live"}.`,
+    evidenceRow: ["account", account.id, platform, evidenceStatus, "", "", "", notes].map(csvEscape).join(","),
+  })]);
   return { accountEvidence: await buildAccountEvidenceSummary(accounts), status: await getClipperStatus(userId) };
 }
 
@@ -7593,6 +10690,318 @@ async function readDeveloperAppEvidenceItem(platform: ClipperPlatform, credentia
   }
 }
 
+function buildDeveloperAppConnectionKitItems(
+  platforms: ClipperPlatform[],
+  items: ClipperDeveloperAppEvidenceItem[],
+  credentialChecks: ClipperCredentialCheck[],
+): ClipperDeveloperAppConnectionKitItem[] {
+  return platforms.map((platform) => {
+    const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform);
+    const credentialCheck = credentialChecks.find((item) => item.platform === platform) || getCredentialCheck(platform);
+    const evidence = items.find((item) => item.platform === platform) || null;
+    const label = requirement?.label || platform;
+    const publicBaseUrl = evidence?.publicBaseUrl || (isProductionPublicBaseUrl(process.env.PUBLIC_BASE_URL || "") ? process.env.PUBLIC_BASE_URL || null : null);
+    const appIdentifier = evidence?.appIdentifier || null;
+    const appPlaceholder = `<${platform} app id/client key/project id>`;
+    const publicUrlPlaceholder = publicBaseUrl || "<public https app URL>";
+    const draftEvidenceRow = ["developer_app", "", platform, "draft", "", appPlaceholder, publicUrlPlaceholder, "Developer app created as draft; replace with real app identifier and portal proof."].map(csvEscape).join(",");
+    const submittedEvidenceRow = ["developer_app", "", platform, "submitted", "", appPlaceholder, publicUrlPlaceholder, "Developer app submitted for review; include portal screenshot/ticket URL without secrets."].map(csvEscape).join(",");
+    const approvedEvidenceRow = ["developer_app", "", platform, "approved", "", appPlaceholder, publicUrlPlaceholder, "Developer app approved; include approval screenshot/ticket URL without secrets."].map(csvEscape).join(",");
+    const scopes = PLATFORM_SCOPES[platform] || [];
+    return {
+      platform,
+      label,
+      status: evidence?.status || "missing",
+      developerPortalUrl: requirement?.developerPortalUrl || "",
+      docsUrl: requirement?.docs[0] || requirement?.developerPortalUrl || "",
+      appIdentifier,
+      publicBaseUrl,
+      redirectUri: buildRedirectUri(platform),
+      requiredEnvVars: credentialCheck.requiredEnvVars,
+      configuredEnvVars: credentialCheck.configuredEnvVars,
+      missingEnvVars: credentialCheck.missingEnvVars,
+      scopes,
+      evidencePath: evidence?.evidencePath || null,
+      templatePath: developerAppEvidenceTemplatePath(platform),
+      draftEvidenceRow,
+      submittedEvidenceRow,
+      approvedEvidenceRow,
+      copyChecklist: [
+        `Open developer portal: ${requirement?.developerPortalUrl || platform}.`,
+        `Create or select the production app/project for ${label}.`,
+        `Add redirect URI: ${buildRedirectUri(platform)}.`,
+        `Request scopes: ${scopes.join(", ")}.`,
+        "Copy only non-secret app identifiers into evidence; keep client secrets/tokens in Credential Setup.",
+      ],
+      reviewerChecklist: [
+        "Privacy Policy and Terms URLs are public HTTPS.",
+        "Review demo URL and screencast script are available from App Review pack.",
+        "Content/source rights workflow is documented as approval_required until verified.",
+        "Posting permissions are requested only for owned/licensed/permissioned content.",
+        "No passwords, cookies, recovery codes, access tokens or client secrets in evidence rows.",
+      ],
+      doneCriteria: [
+        "Developer app/project exists in the official platform portal.",
+        "Redirect URI matches this app's configured public URL.",
+        "Required scopes are submitted/requested or approved in the portal.",
+        "Evidence row is imported with a real app identifier and proof URL/note.",
+      ],
+      nextStep: evidence?.status === "approved"
+        ? "App approved; move to OAuth connection and token vault."
+        : evidence?.status === "submitted"
+          ? "Watch review status and import approved row when platform approves."
+          : `Create ${label} developer app and import submitted evidence row with real proof.`,
+    };
+  });
+}
+
+function renderDeveloperAppConnectionKitTemplate(items: ClipperDeveloperAppConnectionKitItem[]): string {
+  const header = ["kind", "account_id", "platform", "status", "scope", "app_identifier", "public_base_url", "notes"].map(csvEscape).join(",");
+  return [header, ...items.map((item) => item.submittedEvidenceRow)].join("\n");
+}
+
+function buildDeveloperAppConnectionKitPlatformBatches(items: ClipperDeveloperAppConnectionKitItem[]): ClipperDeveloperAppConnectionKitPlatformBatch[] {
+  return items.map((item) => {
+    const submittedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `developer-app-${item.platform}-submitted.csv`);
+    const approvedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `developer-app-${item.platform}-approved.csv`);
+    const submittedTemplateFilePath = path.join(DEVELOPER_APP_DROP_TEMPLATE_DIR, `developer-app-${item.platform}-submitted.csv`);
+    const approvedTemplateFilePath = path.join(DEVELOPER_APP_DROP_TEMPLATE_DIR, `developer-app-${item.platform}-approved.csv`);
+    return {
+      id: `developer-app-batch-${item.platform}`,
+      platform: item.platform,
+      label: `${item.label} developer app`,
+      status: item.status,
+      developerPortalUrl: item.developerPortalUrl,
+      docsUrl: item.docsUrl,
+      appIdentifier: item.appIdentifier,
+      publicBaseUrl: item.publicBaseUrl,
+      redirectUri: item.redirectUri,
+      requiredEnvVars: item.requiredEnvVars,
+      missingEnvVars: item.missingEnvVars,
+      scopes: item.scopes,
+      submittedEvidenceRow: item.submittedEvidenceRow,
+      approvedEvidenceRow: item.approvedEvidenceRow,
+      submittedDropFilePath,
+      approvedDropFilePath,
+      submittedTemplateFilePath,
+      approvedTemplateFilePath,
+      submittedDropTemplate: renderLaunchEvidenceImportTemplate([item.submittedEvidenceRow]),
+      approvedDropTemplate: renderLaunchEvidenceImportTemplate([item.approvedEvidenceRow]),
+      checklist: [
+        `Open developer portal: ${item.developerPortalUrl || item.platform}.`,
+        `Create/select the production ${item.label} app/project and add redirect URI: ${item.redirectUri}.`,
+        `Request scopes: ${item.scopes.join(", ")}.`,
+        "Replace app identifier, public URL and proof placeholders before importing.",
+        "Import submitted CSV after review submission; import approved CSV only after real platform approval.",
+      ],
+      nextStep: item.nextStep,
+    };
+  });
+}
+
+async function writeDeveloperAppDropTemplates(summary: ClipperDeveloperAppEvidenceSummary): Promise<void> {
+  await mkdir(DEVELOPER_APP_DROP_TEMPLATE_DIR, { recursive: true });
+  await writeFile(DEVELOPER_APP_DROP_TEMPLATE_README_PATH, [
+    "# Clippers Developer App Drop Templates",
+    "",
+    "These files are safe templates only. Do not copy them into evidence-drop until every placeholder has been replaced with real developer app proof.",
+    "",
+    "Workflow:",
+    "1. Create or submit the app/project in TikTok, Meta or Google.",
+    "2. Replace app identifier, public URL and proof placeholders with real non-secret evidence.",
+    "3. Run Local sync; completed CSVs are validated strictly and copied to evidence-drop automatically.",
+    "4. Use approved rows only after the official portal shows approval.",
+    "",
+  ].join("\n"));
+  await Promise.all(summary.connectionKitPlatformBatches.flatMap((batch) => [
+    writeLaunchEvidenceTemplateIfSafe(batch.submittedTemplateFilePath, batch.submittedDropTemplate),
+    writeLaunchEvidenceTemplateIfSafe(batch.approvedTemplateFilePath, batch.approvedDropTemplate),
+  ]));
+}
+
+function buildDeveloperAppConnectionKitChecklist(items: ClipperDeveloperAppConnectionKitItem[]): string[] {
+  const missing = items.filter((item) => item.status === "missing").length;
+  const submitted = items.filter((item) => item.status === "submitted").length;
+  const approved = items.filter((item) => item.status === "approved").length;
+  return [
+    `Create/submit ${missing} developer apps that still have no evidence.`,
+    `Monitor ${submitted} submitted apps until approved or rejected.`,
+    `${approved} apps approved; connect OAuth only after account evidence and permissions are aligned.`,
+    "Import submitted/approved evidence rows only after replacing app id and proof placeholders.",
+    "Store secrets through Credential Setup, not in developer app evidence.",
+  ];
+}
+
+function renderDeveloperAppConnectionKitCsv(summary: ClipperDeveloperAppEvidenceSummary): string {
+  const batchByPlatform = new Map(summary.connectionKitPlatformBatches.map((batch) => [batch.platform, batch]));
+  const header = [
+    "platform_batch_id",
+    "platform",
+    "label",
+    "status",
+    "developer_portal_url",
+    "docs_url",
+    "app_identifier",
+    "public_base_url",
+    "redirect_uri",
+    "required_env_vars",
+    "configured_env_vars",
+    "missing_env_vars",
+    "scopes",
+    "evidence_path",
+    "template_path",
+    "submitted_template_file_path",
+    "approved_template_file_path",
+    "submitted_drop_file_path",
+    "approved_drop_file_path",
+    "submitted_evidence_row",
+    "approved_evidence_row",
+    "copy_checklist",
+    "reviewer_checklist",
+    "done_criteria",
+    "next_step",
+  ];
+  const rows = summary.connectionKitItems.map((item) => [
+    batchByPlatform.get(item.platform)?.id || "",
+    item.platform,
+    item.label,
+    item.status,
+    item.developerPortalUrl,
+    item.docsUrl,
+    item.appIdentifier || "",
+    item.publicBaseUrl || "",
+    item.redirectUri,
+    item.requiredEnvVars.join(" | "),
+    item.configuredEnvVars.join(" | "),
+    item.missingEnvVars.join(" | "),
+    item.scopes.join(" | "),
+    item.evidencePath || "",
+    item.templatePath,
+    batchByPlatform.get(item.platform)?.submittedTemplateFilePath || "",
+    batchByPlatform.get(item.platform)?.approvedTemplateFilePath || "",
+    batchByPlatform.get(item.platform)?.submittedDropFilePath || "",
+    batchByPlatform.get(item.platform)?.approvedDropFilePath || "",
+    item.submittedEvidenceRow,
+    item.approvedEvidenceRow,
+    item.copyChecklist.join(" | "),
+    item.reviewerChecklist.join(" | "),
+    item.doneCriteria.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
+}
+
+function renderDeveloperAppConnectionKitMarkdown(summary: ClipperDeveloperAppEvidenceSummary): string {
+  return [
+    "# Clippers Developer App Connection Kit",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.connectionKitGeneratedAt || new Date().toISOString()}`,
+    `Evidence dir: ${summary.evidenceDir}`,
+    `Template dir: ${summary.templateDir}`,
+    "",
+    "## Totals",
+    "",
+    `- Expected: ${summary.totals.expected}`,
+    `- Approved: ${summary.totals.approved}`,
+    `- Submitted: ${summary.totals.submitted}`,
+    `- Draft: ${summary.totals.draft}`,
+    `- Rejected: ${summary.totals.rejected}`,
+    `- Missing: ${summary.totals.missing}`,
+    "",
+    "## Evidence Batch Template",
+    "",
+    "Replace every placeholder with real app identifiers, portal proof and public HTTPS URL before importing.",
+    "",
+    "```csv",
+    summary.connectionKitTemplate.trim(),
+    "```",
+    "",
+    "## Checklist",
+    "",
+    ...summary.connectionKitChecklist.map((step) => `- [ ] ${step}`),
+    "",
+    "## Platform Batches",
+    "",
+    ...summary.connectionKitPlatformBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Status: ${batch.status}`,
+      `- Portal: ${batch.developerPortalUrl}`,
+      `- Docs: ${batch.docsUrl}`,
+      `- App identifier: ${batch.appIdentifier || "missing"}`,
+      `- Public base URL: ${batch.publicBaseUrl || "missing"}`,
+      `- Redirect URI: ${batch.redirectUri}`,
+      `- Required env vars: ${batch.requiredEnvVars.join(", ")}`,
+      `- Missing env vars: ${batch.missingEnvVars.length ? batch.missingEnvVars.join(", ") : "none"}`,
+      `- Scopes: ${batch.scopes.join(", ")}`,
+      `- Submitted template file: ${batch.submittedTemplateFilePath}`,
+      `- Approved template file: ${batch.approvedTemplateFilePath}`,
+      `- Submitted drop file: ${batch.submittedDropFilePath}`,
+      `- Approved drop file: ${batch.approvedDropFilePath}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Checklist:",
+      ...batch.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Submitted drop template:",
+      "```csv",
+      batch.submittedDropTemplate.trim(),
+      "```",
+      "",
+      "Approved drop template:",
+      "```csv",
+      batch.approvedDropTemplate.trim(),
+      "```",
+      "",
+    ]),
+    "",
+    "## Platform Apps",
+    "",
+    ...summary.connectionKitItems.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- Platform: ${item.platform}`,
+      `- Status: ${item.status}`,
+      `- Portal: ${item.developerPortalUrl}`,
+      `- Docs: ${item.docsUrl}`,
+      `- App identifier: ${item.appIdentifier || "missing"}`,
+      `- Public base URL: ${item.publicBaseUrl || "missing"}`,
+      `- Redirect URI: ${item.redirectUri}`,
+      `- Required env vars: ${item.requiredEnvVars.join(", ")}`,
+      `- Configured env vars: ${item.configuredEnvVars.length ? item.configuredEnvVars.join(", ") : "none"}`,
+      `- Missing env vars: ${item.missingEnvVars.length ? item.missingEnvVars.join(", ") : "none"}`,
+      `- Scopes: ${item.scopes.join(", ")}`,
+      `- Evidence path: ${item.evidencePath || "missing"}`,
+      "",
+      "Copy checklist:",
+      ...item.copyChecklist.map((step) => `- ${step}`),
+      "",
+      "Reviewer checklist:",
+      ...item.reviewerChecklist.map((step) => `- ${step}`),
+      "",
+      "Submitted row:",
+      "",
+      "```csv",
+      item.submittedEvidenceRow,
+      "```",
+      "",
+      "Approved row:",
+      "",
+      "```csv",
+      item.approvedEvidenceRow,
+      "```",
+      "",
+      "Done criteria:",
+      ...item.doneCriteria.map((step) => `- ${step}`),
+      "",
+      `Next step: ${item.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
 async function buildDeveloperAppEvidenceSummary(): Promise<ClipperDeveloperAppEvidenceSummary> {
   await ensureClipperDirs();
   const credentialChecks = buildCredentialChecks();
@@ -7606,11 +11015,22 @@ async function buildDeveloperAppEvidenceSummary(): Promise<ClipperDeveloperAppEv
   const expected = platforms.length;
   const missing = Math.max(expected - items.length, 0);
   const generatedAt = await stat(DEVELOPER_APP_EVIDENCE_README_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const connectionKitItems = buildDeveloperAppConnectionKitItems(platforms, items, credentialChecks);
+  const connectionKitPlatformBatches = buildDeveloperAppConnectionKitPlatformBatches(connectionKitItems);
+  const connectionKitGeneratedAt = await stat(DEVELOPER_APP_CONNECTION_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
     status: approved === expected ? "ready" : items.length > 0 ? "partial" : "empty",
     evidenceDir: DEVELOPER_APP_EVIDENCE_DIR,
     templateDir: DEVELOPER_APP_EVIDENCE_TEMPLATE_DIR,
     readmePath: DEVELOPER_APP_EVIDENCE_README_PATH,
+    connectionKitManifestPath: DEVELOPER_APP_CONNECTION_KIT_PATH,
+    connectionKitMarkdownPath: DEVELOPER_APP_CONNECTION_KIT_MARKDOWN_PATH,
+    connectionKitCsvPath: DEVELOPER_APP_CONNECTION_KIT_CSV_PATH,
+    connectionKitGeneratedAt,
+    connectionKitItems,
+    connectionKitPlatformBatches,
+    connectionKitTemplate: renderDeveloperAppConnectionKitTemplate(connectionKitItems),
+    connectionKitChecklist: buildDeveloperAppConnectionKitChecklist(connectionKitItems),
     generatedAt,
     items,
     totals: { expected, approved, submitted, draft, rejected, missing },
@@ -7665,6 +11085,26 @@ export async function prepareClipperDeveloperAppEvidenceVault(userId = getSystem
   await Promise.all((["tiktok", "instagram", "youtube"] as ClipperPlatform[]).map((platform) =>
     writeFile(developerAppEvidenceTemplatePath(platform), renderDeveloperAppEvidenceTemplate(platform))
   ));
+  const connectionKitDraft = await buildDeveloperAppEvidenceSummary();
+  const connectionKit: ClipperDeveloperAppEvidenceSummary = {
+    ...connectionKitDraft,
+    connectionKitGeneratedAt: new Date().toISOString(),
+  };
+  await writeFile(DEVELOPER_APP_CONNECTION_KIT_PATH, JSON.stringify({
+    status: connectionKit.status,
+    generatedAt: connectionKit.connectionKitGeneratedAt,
+    evidenceDir: connectionKit.evidenceDir,
+    templateDir: connectionKit.templateDir,
+    connectionKitItems: connectionKit.connectionKitItems,
+    connectionKitPlatformBatches: connectionKit.connectionKitPlatformBatches,
+    connectionKitTemplate: connectionKit.connectionKitTemplate,
+    connectionKitChecklist: connectionKit.connectionKitChecklist,
+    totals: connectionKit.totals,
+    nextStep: connectionKit.nextStep,
+  }, null, 2));
+  await writeDeveloperAppDropTemplates(connectionKit);
+  await writeFile(DEVELOPER_APP_CONNECTION_KIT_MARKDOWN_PATH, renderDeveloperAppConnectionKitMarkdown(connectionKit));
+  await writeFile(DEVELOPER_APP_CONNECTION_KIT_CSV_PATH, renderDeveloperAppConnectionKitCsv(connectionKit));
   return { developerAppEvidence: await buildDeveloperAppEvidenceSummary(), status: await getClipperStatus(userId) };
 }
 
@@ -7686,7 +11126,7 @@ export async function recordClipperDeveloperAppEvidence(input: {
     ? input.notes.trim()
     : "Registrado desde Clippers UI; no incluye client secrets ni tokens.";
   const requiresSubmissionEvidence = evidenceStatus === "submitted" || evidenceStatus === "approved";
-  const notes = requiresSubmissionEvidence ? requireRealEvidence(rawNotes, "Developer app notes") : rawNotes;
+  const notes = requiresSubmissionEvidence ? requireDeveloperAppEvidence(rawNotes) : rawNotes;
   const safeAppIdentifier = requiresSubmissionEvidence ? requireRealEvidence(appIdentifier, "Developer app identifier") : appIdentifier;
   const safePublicBaseUrl = requiresSubmissionEvidence ? requireRealEvidence(publicBaseUrl, "Developer app public URL") : publicBaseUrl;
   if (requiresSubmissionEvidence && !isProductionPublicBaseUrl(safePublicBaseUrl)) {
@@ -7706,6 +11146,12 @@ export async function recordClipperDeveloperAppEvidence(input: {
     recordedAt: new Date().toISOString(),
     source: "clippers-ui",
   }, null, 2));
+  await upsertOwnerConnectProgressRecords([ownerConnectProgressRecordForEvidence({
+    itemId: ownerConnectDeveloperAppItemId(platform),
+    status: evidenceStatus === "approved" ? "done" : evidenceStatus === "submitted" || evidenceStatus === "draft" ? "waiting" : "blocked",
+    notes: `Developer app evidence ${evidenceStatus} imported for ${platform}; ${evidenceStatus === "approved" ? "app review step complete locally" : "continue app review before go-live"}.`,
+    evidenceRow: ["developer_app", "", platform, evidenceStatus, "", safeAppIdentifier, safePublicBaseUrl, notes].map(csvEscape).join(","),
+  })]);
   return { developerAppEvidence: await buildDeveloperAppEvidenceSummary(), status: await getClipperStatus(userId) };
 }
 
@@ -7726,7 +11172,7 @@ export async function recordClipperPermissionStatus(input: {
     ? input.notes.trim()
     : "Registrado desde Clippers UI; no incluye secretos.";
   const notes = permissionStatus === "requested" || permissionStatus === "approved"
-    ? requireRealEvidence(rawNotes, "Permission notes")
+    ? requirePermissionEvidence(rawNotes)
     : rawNotes;
   const record: ClipperPermissionStatusRecord = {
     id: permission.id,
@@ -7744,6 +11190,12 @@ export async function recordClipperPermissionStatus(input: {
     record,
   ].sort((a, b) => a.platform.localeCompare(b.platform) || a.scope.localeCompare(b.scope));
   await writePermissionStatusRecords(nextRecords);
+  await upsertOwnerConnectProgressRecords([ownerConnectProgressRecordForEvidence({
+    itemId: ownerConnectPermissionItemId(platform, scope),
+    status: permissionStatus === "approved" ? "done" : permissionStatus === "requested" ? "waiting" : "blocked",
+    notes: `Permission ${permissionStatus} imported for ${platform}/${scope}; ${permissionStatus === "approved" ? "permission step complete locally" : "continue portal review before go-live"}.`,
+    evidenceRow: ["permission", "", platform, permissionStatus, scope, "", "", notes].map(csvEscape).join(","),
+  })]);
   const statusSnapshot = await getClipperStatus(userId);
   return {
     permissionStatusRecord: record,
@@ -7769,7 +11221,31 @@ function launchEvidenceKind(record: Record<string, unknown>): string {
 }
 
 function launchEvidenceIdentifier(record: Record<string, unknown>): string | null {
-  return firstString(record, ["id", "asset_id", "source_path", "file_name", "account_id", "scope", "app_identifier", "platform"]) || null;
+  const keys = ["id", "asset_id", "source_path", "file_name", "account_id", "scope", "app_identifier", "platform"];
+  for (const key of keys) {
+    const value = firstString(record, [key]);
+    if (value && !evidenceDropValueLooksPlaceholder(value)) return value;
+  }
+  return null;
+}
+
+function launchEvidenceContextValue(record: Record<string, unknown>, keys: string[]): string | null {
+  const value = firstString(record, keys);
+  return value && !evidenceDropValueLooksPlaceholder(value) ? value : null;
+}
+
+function launchEvidenceRejectedContext(record: Record<string, unknown>): Pick<ClipperLaunchEvidenceBatchRejectedItem, "accountId" | "platform" | "status" | "scope" | "appIdentifier" | "publicBaseUrl" | "assetId" | "sourcePath" | "fileName"> {
+  return {
+    accountId: launchEvidenceContextValue(record, ["account_id", "accountId"]),
+    platform: launchEvidenceContextValue(record, ["platform"]),
+    status: launchEvidenceContextValue(record, ["status", "rights_status", "rightsStatus"]),
+    scope: launchEvidenceContextValue(record, ["scope", "permission"]),
+    appIdentifier: launchEvidenceContextValue(record, ["app_identifier", "appIdentifier", "app_id", "client_key", "project_id"]),
+    publicBaseUrl: launchEvidenceContextValue(record, ["public_base_url", "publicBaseUrl", "base_url"]),
+    assetId: launchEvidenceContextValue(record, ["asset_id", "assetId", "id"]),
+    sourcePath: launchEvidenceContextValue(record, ["source_path", "sourcePath", "path", "asset_or_source"]),
+    fileName: launchEvidenceContextValue(record, ["file_name", "fileName", "filename", "asset", "asset_name"]),
+  };
 }
 
 function parseClipperSourceCategory(value: string): ClipperAccountCategory | null {
@@ -7801,7 +11277,19 @@ function findLaunchEvidenceSourceAsset(assets: ClipperSourceAsset[], record: Rec
   return null;
 }
 
-async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryRun: boolean }, userId = getSystemUserId()): Promise<ClipperLaunchEvidenceBatchSummary> {
+function isStrictLaunchEvidenceImport(input: unknown): boolean {
+  if (!input || typeof input !== "object") return false;
+  const record = input as Record<string, unknown>;
+  return record.strict === true || record.strictImport === true || record.requireClean === true;
+}
+
+function allowPartialLaunchEvidenceDropImport(input: unknown): boolean {
+  if (!input || typeof input !== "object") return false;
+  const record = input as Record<string, unknown>;
+  return record.allowPartial === true || record.force === true || record.unsafeAllowPartial === true;
+}
+
+async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryRun: boolean; strict?: boolean }, userId = getSystemUserId()): Promise<ClipperLaunchEvidenceBatchSummary> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const rows = parseLaunchEvidenceBatchRows(input);
@@ -7814,6 +11302,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
   const permissionRecords = await readPermissionStatusRecords();
   const permissionRecordMap = new Map(permissionRecords.map((record) => [`${record.platform}:${record.scope}`, record]));
   const sourceAssets = await listSourceAssets();
+  const ownerProgressRecords: ClipperOwnerConnectProgressRecord[] = [];
 
   for (const [index, record] of rows.entries()) {
     const kind = launchEvidenceKind(record);
@@ -7826,7 +11315,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
         const platformAccount = account.platformAccounts.find((item) => item.platform === platform);
         if (!platformAccount) throw new Error("La cuenta no tiene esa plataforma configurada.");
         const evidenceStatus = parseAccountEvidenceInputStatus(firstString(record, ["status"]));
-        const notes = requireRealEvidence(firstString(record, ["notes", "evidence", "url", "profile_url"]), "Account evidence notes");
+        const notes = requireAccountEvidence(firstString(record, ["notes", "evidence", "url", "profile_url"]));
         if (!options.dryRun) {
           await writeFile(accountEvidenceJsonPath(account.id, platform), JSON.stringify({
             status: evidenceStatus,
@@ -7839,6 +11328,12 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
             recordedAt: new Date().toISOString(),
             source: "clippers-ui",
           }, null, 2));
+          ownerProgressRecords.push(ownerConnectProgressRecordForEvidence({
+            itemId: ownerConnectAccountItemId(account.id, platform),
+            status: evidenceStatus === "verified" ? "done" : evidenceStatus === "submitted" ? "waiting" : "blocked",
+            notes: `Account evidence ${evidenceStatus} imported from Launch Evidence Batch for ${account.id}/${platform}.`,
+            evidenceRow: launchEvidenceProgressRow(record, "account"),
+          }));
         }
         accepted.accountEvidence += 1;
       } else if (kind === "developer_app" || kind === "developer" || kind === "app") {
@@ -7847,7 +11342,10 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
         const evidenceStatus = parseDeveloperAppEvidenceInputStatus(firstString(record, ["status"]));
         const appIdentifier = requireRealEvidence(firstString(record, ["app_identifier", "appIdentifier", "app_id", "client_key", "project_id"]), "Developer app identifier");
         const publicBaseUrl = requireRealEvidence(firstString(record, ["public_base_url", "publicBaseUrl", "base_url"]) || process.env.PUBLIC_BASE_URL || "", "Developer app public URL");
-        const notes = requireRealEvidence(firstString(record, ["notes", "review_notes", "evidence"]), "Developer app notes");
+        if (!isProductionPublicBaseUrl(publicBaseUrl)) {
+          throw new Error("Developer app public URL requiere una URL publica HTTPS, no localhost/127/local.");
+        }
+        const notes = requireDeveloperAppEvidence(firstString(record, ["notes", "review_notes", "evidence"]));
         if (!options.dryRun) {
           await writeFile(developerAppEvidencePath(platform), JSON.stringify({
             platform,
@@ -7862,6 +11360,12 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
             recordedAt: new Date().toISOString(),
             source: "clippers-ui",
           }, null, 2));
+          ownerProgressRecords.push(ownerConnectProgressRecordForEvidence({
+            itemId: ownerConnectDeveloperAppItemId(platform),
+            status: evidenceStatus === "approved" ? "done" : evidenceStatus === "submitted" || evidenceStatus === "draft" ? "waiting" : "blocked",
+            notes: `Developer app evidence ${evidenceStatus} imported from Launch Evidence Batch for ${platform}.`,
+            evidenceRow: launchEvidenceProgressRow(record, "developer_app"),
+          }));
         }
         accepted.developerApps += 1;
       } else if (kind === "permission" || kind === "scope" || kind === "app_review") {
@@ -7870,7 +11374,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
         const permission = PERMISSION_QUEUE.find((item) => item.platform === platform && item.scope === scope);
         if (!permission) throw new Error("Permiso/scope no encontrado.");
         const permissionStatus = parsePermissionTrackerInputStatus(firstString(record, ["status"]));
-        const notes = requireRealEvidence(firstString(record, ["notes", "review_notes", "evidence"]), "Permission notes");
+        const notes = requirePermissionEvidence(firstString(record, ["notes", "review_notes", "evidence"]));
         if (!options.dryRun) {
           permissionRecordMap.set(`${platform}:${scope}`, {
             id: permission.id,
@@ -7882,6 +11386,12 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
             recordedAt: new Date().toISOString(),
             source: "clippers-ui",
           });
+          ownerProgressRecords.push(ownerConnectProgressRecordForEvidence({
+            itemId: ownerConnectPermissionItemId(platform, scope),
+            status: permissionStatus === "approved" ? "done" : permissionStatus === "requested" ? "waiting" : "blocked",
+            notes: `Permission ${permissionStatus} imported from Launch Evidence Batch for ${platform}/${scope}.`,
+            evidenceRow: launchEvidenceProgressRow(record, "permission"),
+          }));
         }
         accepted.permissions += 1;
       } else if (kind === "source_rights" || kind === "source" || kind === "rights" || kind === "source_asset") {
@@ -7893,7 +11403,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
         if (rightsStatus !== "owned_or_permissioned") {
           throw new Error("Source rights debe quedar owned_or_permissioned para desbloquear produccion.");
         }
-        const notes = requireRealEvidence(firstString(record, ["notes", "evidence", "evidence_link", "permission_note", "rights_notes", "license"]), "Source rights notes");
+        const notes = requireSourceRightsEvidence(firstString(record, ["notes", "evidence", "evidence_link", "permission_note", "rights_notes", "license"]));
         if (!options.dryRun) {
           const sourceRightsRecord: ClipperSourceRightsRecord = {
             assetId: asset.id,
@@ -7918,6 +11428,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
         kind: kind || "unknown",
         reason: error instanceof Error ? error.message : String(error),
         identifier: launchEvidenceIdentifier(record),
+        ...launchEvidenceRejectedContext(record),
       });
     }
   }
@@ -7925,11 +11436,14 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
   if (!options.dryRun) {
     await writePermissionStatusRecords(Array.from(permissionRecordMap.values())
       .sort((a, b) => a.platform.localeCompare(b.platform) || a.scope.localeCompare(b.scope)));
+    await upsertOwnerConnectProgressRecords(ownerProgressRecords);
   }
 
   const statusSnapshot = await getClipperStatus(userId);
   return {
     updatedAt: new Date().toISOString(),
+    strictImport: Boolean(options.strict),
+    strictBlocked: false,
     accepted,
     rejected,
     accountEvidence: statusSnapshot.accountEvidence,
@@ -7946,7 +11460,7 @@ async function processClipperLaunchEvidenceBatch(input: unknown, options: { dryR
 }
 
 export async function previewClipperLaunchEvidenceBatch(input: unknown, userId = getSystemUserId()): Promise<{ launchEvidenceBatchPreview: ClipperLaunchEvidenceBatchSummary; status: ClipperStatus }> {
-  const launchEvidenceBatchPreview = await processClipperLaunchEvidenceBatch(input, { dryRun: true }, userId);
+  const launchEvidenceBatchPreview = await processClipperLaunchEvidenceBatch(input, { dryRun: true, strict: isStrictLaunchEvidenceImport(input) }, userId);
   return {
     launchEvidenceBatchPreview,
     status: await getClipperStatus(userId),
@@ -7954,7 +11468,23 @@ export async function previewClipperLaunchEvidenceBatch(input: unknown, userId =
 }
 
 export async function recordClipperLaunchEvidenceBatch(input: unknown, userId = getSystemUserId()): Promise<{ launchEvidenceBatch: ClipperLaunchEvidenceBatchSummary; status: ClipperStatus }> {
-  const launchEvidenceBatch = await processClipperLaunchEvidenceBatch(input, { dryRun: false }, userId);
+  const strictImport = isStrictLaunchEvidenceImport(input);
+  if (strictImport) {
+    const preview = await processClipperLaunchEvidenceBatch(input, { dryRun: true, strict: true }, userId);
+    if (preview.rejected.length > 0) {
+      return {
+        launchEvidenceBatch: {
+          ...preview,
+          strictBlocked: true,
+          nextStep: `Strict import bloqueado: corrige ${preview.rejected.length} rejected row(s). No escribi evidencia parcial.`,
+        },
+        status: await getClipperStatus(userId),
+      };
+    }
+  }
+  const launchEvidenceBatch = strictImport
+    ? await processClipperLaunchEvidenceBatch(input, { dryRun: false, strict: true }, userId)
+    : await processClipperLaunchEvidenceBatch(input, { dryRun: false }, userId);
   const statusSnapshot = await getClipperStatus(userId);
   return {
     launchEvidenceBatch,
@@ -7965,6 +11495,12 @@ export async function recordClipperLaunchEvidenceBatch(input: unknown, userId = 
 function launchEvidenceDropFileAllowed(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return lower.endsWith(".csv") || lower.endsWith(".json") || lower.endsWith(".jsonl") || lower.endsWith(".txt");
+}
+
+function launchEvidenceDropFileIgnored(fileName: string): boolean {
+  return fileName === "README.md"
+    || fileName === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH)
+    || fileName === path.basename(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH);
 }
 
 function parseLaunchEvidenceDropRaw(raw: string): Record<string, unknown>[] {
@@ -7989,7 +11525,7 @@ async function readLaunchEvidenceDropRows(): Promise<{
   const fileErrors: Array<{ relativePath: string; reason: string }> = [];
   let filesScanned = 0;
   for (const entry of entries) {
-    if (!entry.isFile() || entry.name === "README.md" || entry.name === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH) || !launchEvidenceDropFileAllowed(entry.name)) continue;
+    if (!entry.isFile() || launchEvidenceDropFileIgnored(entry.name) || !launchEvidenceDropFileAllowed(entry.name)) continue;
     filesScanned += 1;
     const absolutePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, entry.name);
     const relativePath = path.relative(process.cwd(), absolutePath);
@@ -8018,12 +11554,31 @@ async function readLaunchEvidenceDropRows(): Promise<{
   return { rows, sourceFiles, filesScanned, filesImported: sourceFiles.length, fileErrors };
 }
 
-export async function importClipperLaunchEvidenceDropFiles(userId = getSystemUserId()): Promise<{ launchEvidenceDropImport: ClipperLaunchEvidenceBatchSummary; status: ClipperStatus }> {
+export async function importClipperLaunchEvidenceDropFiles(userId = getSystemUserId(), input: unknown = {}): Promise<{ launchEvidenceDropImport: ClipperLaunchEvidenceBatchSummary; status: ClipperStatus }> {
   const drop = await readLaunchEvidenceDropRows();
   if (!drop.rows.length) {
     throw new Error(drop.filesScanned
       ? `Revise ${drop.filesScanned} archivo(s), pero no encontre rows importables en evidence-drop.`
       : `Coloca CSV/JSON de launch evidence en ${path.relative(process.cwd(), LAUNCH_EVIDENCE_DROP_DIR)}.`);
+  }
+  const diagnostic = await writeLaunchEvidenceDropDiagnosticArtifacts(await buildLaunchEvidenceDropDiagnosticSummary());
+  const needsRepair = diagnostic.totals.pendingRows > 0 || diagnostic.totals.rejectedRows > 0 || diagnostic.totals.fileErrors > 0;
+  if (needsRepair && !allowPartialLaunchEvidenceDropImport(input)) {
+    const preview = await processClipperLaunchEvidenceBatch({ records: drop.rows }, { dryRun: true, strict: true }, userId);
+    const blockedImport: ClipperLaunchEvidenceBatchSummary = {
+      ...preview,
+      strictImport: true,
+      strictBlocked: true,
+      sourceFiles: drop.sourceFiles,
+      filesScanned: drop.filesScanned,
+      filesImported: 0,
+      fileErrors: diagnostic.fileErrors,
+      nextStep: `Strict evidence-drop import bloqueado: corrige ${diagnostic.totals.pendingRows} pending row(s), ${diagnostic.totals.rejectedRows} rejected row(s) y ${diagnostic.totals.fileErrors} file error(s). No escribi evidencia parcial. Usa ${diagnostic.repairWorksheetCsvPath}.`,
+    };
+    return {
+      launchEvidenceDropImport: blockedImport,
+      status: await getClipperStatus(userId),
+    };
   }
   const launchEvidenceDropImport = await processClipperLaunchEvidenceBatch({ records: drop.rows }, { dryRun: false }, userId);
   const withDropMeta: ClipperLaunchEvidenceBatchSummary = {
@@ -8042,8 +11597,431 @@ export async function importClipperLaunchEvidenceDropFiles(userId = getSystemUse
   };
 }
 
+function launchEvidenceAcceptedTotal(summary: ClipperLaunchEvidenceBatchSummary): number {
+  return summary.accepted.accountEvidence
+    + summary.accepted.developerApps
+    + summary.accepted.permissions
+    + summary.accepted.sourceRights;
+}
+
+function launchEvidenceDropSyncMessage(summary: ClipperLaunchEvidenceBatchSummary): string {
+  const accepted = launchEvidenceAcceptedTotal(summary);
+  if (summary.strictBlocked) return summary.nextStep;
+  return `${accepted} launch evidence rows accepted from ${summary.sourceFiles?.length || 0} source file(s): ${summary.accepted.accountEvidence} account, ${summary.accepted.developerApps} app, ${summary.accepted.permissions} permission, ${summary.accepted.sourceRights} source_rights; ${summary.rejected.length} rejected; ${summary.fileErrors?.length || 0} file errors.`;
+}
+
+function evidenceDropValueLooksPlaceholder(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  const unquoted = normalized.replace(/^"+|"+$/g, "").trim();
+  return !normalized
+    || !unquoted
+    || normalized === "\""
+    || normalized === "\"\""
+    || hasTemplatePlaceholder(value)
+    || unquoted === "example.com"
+    || unquoted.includes("https://example.com")
+    || unquoted.includes("http://example.com")
+    || unquoted.includes("localhost")
+    || unquoted.includes("127.0.0.1")
+    || unquoted.includes("drop-app-id")
+    || unquoted.includes("app-id-test")
+    || /\b(test|smoke|fixture|fake|dummy|sample|preview)\b/.test(unquoted)
+    || unquoted.endsWith("-test");
+}
+
+function launchEvidenceDiagnosticRequirement(record: Record<string, unknown>): {
+  kind: string;
+  identifier: string | null;
+  required: Array<{ field: string; value: string }>;
+  issue: string | null;
+} {
+  const kind = launchEvidenceKind(record);
+  const identifier = launchEvidenceIdentifier(record);
+  if (kind === "account" || kind === "account_evidence" || kind === "account_platform") {
+    return {
+      kind: "account",
+      identifier,
+      required: [
+        { field: "account_id", value: firstString(record, ["account_id", "accountId"]) },
+        { field: "platform", value: firstString(record, ["platform"]) },
+        { field: "status", value: firstString(record, ["status"]) },
+        { field: "notes", value: firstString(record, ["notes", "evidence", "url", "profile_url"]) },
+      ],
+      issue: null,
+    };
+  }
+  if (kind === "developer_app" || kind === "developer" || kind === "app") {
+    return {
+      kind: "developer_app",
+      identifier,
+      required: [
+        { field: "platform", value: firstString(record, ["platform"]) },
+        { field: "status", value: firstString(record, ["status"]) },
+        { field: "app_identifier", value: firstString(record, ["app_identifier", "appIdentifier", "app_id", "client_key", "project_id"]) },
+        { field: "public_base_url", value: firstString(record, ["public_base_url", "publicBaseUrl", "base_url"]) || process.env.PUBLIC_BASE_URL || "" },
+        { field: "notes", value: firstString(record, ["notes", "review_notes", "evidence"]) },
+      ],
+      issue: null,
+    };
+  }
+  if (kind === "permission" || kind === "scope" || kind === "app_review") {
+    return {
+      kind: "permission",
+      identifier,
+      required: [
+        { field: "platform", value: firstString(record, ["platform"]) },
+        { field: "status", value: firstString(record, ["status"]) },
+        { field: "scope", value: firstString(record, ["scope", "permission"]) },
+        { field: "notes", value: firstString(record, ["notes", "review_notes", "evidence"]) },
+      ],
+      issue: null,
+    };
+  }
+  if (kind === "source_rights" || kind === "source" || kind === "rights" || kind === "source_asset") {
+    return {
+      kind: "source_rights",
+      identifier,
+      required: [
+        { field: "source_or_asset", value: firstString(record, ["asset_id", "assetId", "id", "source_path", "sourcePath", "path", "file_name", "fileName", "filename", "asset", "asset_name"]) },
+        { field: "status", value: firstString(record, ["status", "rights_status", "rightsStatus"]) || "owned_or_permissioned" },
+        { field: "notes", value: firstString(record, ["notes", "evidence", "evidence_link", "permission_note", "rights_notes", "license"]) },
+      ],
+      issue: null,
+    };
+  }
+  return {
+    kind: kind || "unknown",
+    identifier,
+    required: [],
+    issue: "kind debe ser account, developer_app, permission o source_rights.",
+  };
+}
+
+function launchEvidenceDiagnosticNotes(record: Record<string, unknown>, kind: string): string {
+  if (kind === "account") return firstString(record, ["notes", "evidence", "url", "profile_url"]);
+  if (kind === "developer_app") return firstString(record, ["notes", "review_notes", "evidence"]);
+  if (kind === "permission") return firstString(record, ["notes", "review_notes", "evidence"]);
+  if (kind === "source_rights") return firstString(record, ["notes", "evidence", "evidence_link", "permission_note", "rights_notes", "license"]);
+  return firstString(record, ["notes", "evidence", "review_notes"]);
+}
+
+function launchEvidenceDiagnosticPlatform(record: Record<string, unknown>): ClipperPlatform | null {
+  const value = firstString(record, ["platform"]);
+  try {
+    return value ? parseClipperPlatform(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function launchEvidenceDiagnosticOptionalValue(record: Record<string, unknown>, keys: string[]): string | null {
+  const value = firstString(record, keys);
+  return value && !evidenceDropValueLooksPlaceholder(value) ? value : null;
+}
+
+function launchEvidenceNotesHaveConcreteProof(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (evidenceDropValueLooksPlaceholder(value)) return false;
+  if (/\b(without|no|missing|lacks?)\b.{0,24}\b(proof|ticket|case|screenshot|screen shot|approval|evidence)\b/.test(normalized)
+    || /\b(sin|falta)\b.{0,24}\b(prueba|evidencia|ticket|captura|aprobacion)\b/.test(normalized)) {
+    return false;
+  }
+  return /https?:\/\/\S+/.test(value)
+    || /@[a-z0-9_.-]{3,}/i.test(value)
+    || /\b(ticket|case|review id|approval id|proof|screenshot|screen shot|profile url|drive|doc|folder|path|2fa|verified)\b/.test(normalized);
+}
+
+function diagnoseLaunchEvidenceDropRow(record: Record<string, unknown>, sourceFile: string, index: number): ClipperLaunchEvidenceDropDiagnosticRow {
+  const requirement = launchEvidenceDiagnosticRequirement(record);
+  const pendingFields = requirement.required
+    .filter((field) => evidenceDropValueLooksPlaceholder(field.value))
+    .map((field) => field.field);
+  const notes = launchEvidenceDiagnosticNotes(record, requirement.kind);
+  if (!requirement.issue && !pendingFields.includes("notes") && !launchEvidenceNotesHaveConcreteProof(notes)) {
+    pendingFields.push("notes_proof");
+  }
+  const status: ClipperLaunchEvidenceDropDiagnosticRowStatus = requirement.issue
+    ? "rejected"
+    : pendingFields.length
+      ? "pending_values"
+      : "ready";
+  return {
+    sourceFile,
+    index,
+    kind: requirement.kind,
+    identifier: requirement.identifier,
+    platform: launchEvidenceDiagnosticPlatform(record),
+    scope: launchEvidenceDiagnosticOptionalValue(record, ["scope", "permission"]),
+    appIdentifier: launchEvidenceDiagnosticOptionalValue(record, ["app_identifier", "appIdentifier", "app_id", "client_key", "project_id"]),
+    status,
+    pendingFields,
+    issue: requirement.issue || (pendingFields.length ? `Campos pendientes: ${pendingFields.join(", ")}.` : null),
+    nextStep: requirement.issue
+      ? "Corrige kind/plataforma/scope antes de importar."
+      : pendingFields.length
+        ? "Reemplaza blanks/placeholders con prueba real del portal antes de importar."
+        : "Fila lista para Preview/Import evidence batch.",
+  };
+}
+
+async function buildLaunchEvidenceDropDiagnosticSummary(): Promise<ClipperLaunchEvidenceDropDiagnosticSummary> {
+  await ensureClipperDirs();
+  const entries = await readdir(LAUNCH_EVIDENCE_DROP_DIR, { withFileTypes: true }).catch(() => []);
+  const files: ClipperLaunchEvidenceDropDiagnosticFile[] = [];
+  const rows: ClipperLaunchEvidenceDropDiagnosticRow[] = [];
+  const fileErrors: Array<{ relativePath: string; reason: string }> = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || launchEvidenceDropFileIgnored(entry.name) || !launchEvidenceDropFileAllowed(entry.name)) continue;
+    const absolutePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, entry.name);
+    const relativePath = path.relative(process.cwd(), absolutePath);
+    const fileStat = await stat(absolutePath).catch(() => null);
+    if (!fileStat?.isFile()) {
+      fileErrors.push({ relativePath, reason: "Archivo no encontrado." });
+      continue;
+    }
+    if (fileStat.size > 512_000) {
+      fileErrors.push({ relativePath, reason: "Archivo demasiado grande para diagnostico de evidencia." });
+      continue;
+    }
+    try {
+      const raw = await readFile(absolutePath, "utf8");
+      const parsedRows = parseLaunchEvidenceDropRaw(raw);
+      const diagnosedRows = parsedRows.map((record, index) => diagnoseLaunchEvidenceDropRow(record, relativePath, index + 1));
+      rows.push(...diagnosedRows);
+      const kinds = diagnosedRows.reduce<Record<string, number>>((sum, row) => {
+        sum[row.kind] = (sum[row.kind] || 0) + 1;
+        return sum;
+      }, {});
+      const pendingRows = diagnosedRows.filter((row) => row.status === "pending_values").length;
+      const rejectedRows = diagnosedRows.filter((row) => row.status === "rejected").length;
+      const readyRows = diagnosedRows.filter((row) => row.status === "ready").length;
+      files.push({
+        relativePath,
+        rows: diagnosedRows.length,
+        readyRows,
+        pendingRows,
+        rejectedRows,
+        kinds,
+        issue: !diagnosedRows.length
+          ? "No contiene rows CSV/JSON importables."
+          : pendingRows > 0
+            ? `${pendingRows} fila(s) tienen blanks/placeholders.`
+            : rejectedRows > 0
+              ? `${rejectedRows} fila(s) tienen kind invalido.`
+              : null,
+        nextStep: pendingRows || rejectedRows
+          ? "Corrige filas pendientes/rechazadas antes de Import evidence-drop."
+          : "Archivo listo para Preview/Import evidence-drop.",
+      });
+    } catch (error) {
+      fileErrors.push({ relativePath, reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const totals = rows.reduce<ClipperLaunchEvidenceDropDiagnosticSummary["totals"]>((sum, row) => {
+    sum.rows += 1;
+    if (row.status === "ready") sum.readyRows += 1;
+    if (row.status === "pending_values") sum.pendingRows += 1;
+    if (row.status === "rejected") sum.rejectedRows += 1;
+    if (row.kind === "account") sum.accountRows += 1;
+    if (row.kind === "developer_app") sum.developerAppRows += 1;
+    if (row.kind === "permission") sum.permissionRows += 1;
+    if (row.kind === "source_rights") sum.sourceRightsRows += 1;
+    return sum;
+  }, {
+    files: files.length,
+    rows: 0,
+    readyRows: 0,
+    pendingRows: 0,
+    rejectedRows: 0,
+    fileErrors: fileErrors.length,
+    accountRows: 0,
+    developerAppRows: 0,
+    permissionRows: 0,
+    sourceRightsRows: 0,
+  });
+  const status: ClipperLaunchEvidenceDropDiagnosticStatus = totals.rows === 0
+    ? "empty"
+    : totals.pendingRows > 0
+      ? "needs_values"
+      : totals.rejectedRows > 0 || totals.fileErrors > 0
+        ? "needs_review"
+        : "ready_to_import";
+  return {
+    status,
+    generatedAt: null,
+    manifestPath: LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_PATH,
+    markdownPath: LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+    repairWorksheetCsvPath: LAUNCH_EVIDENCE_DROP_REPAIR_WORKSHEET_CSV_PATH,
+    dropDir: LAUNCH_EVIDENCE_DROP_DIR,
+    files,
+    rows,
+    fileErrors,
+    totals,
+    nextStep: status === "ready_to_import"
+      ? "Evidence-drop listo para Preview/Import; despues regenera Platform Readiness."
+      : status === "needs_values"
+        ? `Hay ${totals.pendingRows} fila(s) con blanks/placeholders en evidence-drop; rellena proof real antes de importar.`
+        : status === "needs_review"
+          ? "Corrige rejected/file errors en evidence-drop antes de importar."
+          : `Coloca CSV/JSON completado en ${path.relative(process.cwd(), LAUNCH_EVIDENCE_DROP_DIR)}.`,
+  };
+}
+
+function launchEvidenceRepairProofHint(row: ClipperLaunchEvidenceDropDiagnosticRow): string {
+  if (row.kind === "account") return "profile URL, public handle, 2FA confirmation and screenshot/proof path";
+  if (row.kind === "developer_app") return "real app id/client key/project id, public HTTPS base URL and portal submission/approval proof";
+  if (row.kind === "permission") return "developer portal scope request/approval ticket, case ID, review screen URL or screenshot/proof path";
+  if (row.kind === "source_rights") return "creator approval, license, official-source URL, contract/proof path or owned-content note";
+  return "correct kind plus concrete proof URL/path/ticket";
+}
+
+function launchEvidenceRepairPortalUrl(row: ClipperLaunchEvidenceDropDiagnosticRow): string {
+  if (row.kind === "account") {
+    if (row.platform === "tiktok") return "https://www.tiktok.com/signup";
+    if (row.platform === "instagram") return "https://www.instagram.com/accounts/emailsignup/";
+    if (row.platform === "youtube") return "https://www.youtube.com/create_channel";
+  }
+  if (row.platform === "tiktok") return "https://developers.tiktok.com/";
+  if (row.platform === "instagram") return "https://developers.facebook.com/apps/";
+  if (row.platform === "youtube") return "https://console.cloud.google.com/apis/credentials";
+  return row.kind === "source_rights" ? "local:source-rights-proof" : "local:evidence-drop";
+}
+
+function launchEvidenceRepairSuggestedRow(row: ClipperLaunchEvidenceDropDiagnosticRow): string {
+  const platform = row.platform || "<platform>";
+  if (row.kind === "account") {
+    return ["account", row.identifier || "<account_id>", platform, "verified", "", "", "", "<real handle + profile URL + 2FA/security proof + screenshot/proof URL>"].map(csvCell).join(",");
+  }
+  if (row.kind === "developer_app") {
+    return ["developer_app", "", platform, "submitted", "", row.appIdentifier || "<developer app id/client key/project id>", "<public HTTPS base URL>", "<portal submission/review proof URL or screenshot note>"].map(csvCell).join(",");
+  }
+  if (row.kind === "permission") {
+    return ["permission", "", platform, "requested", row.scope || "<scope>", "", "", "<permission request/review URL, ticket, case ID, email or approval screenshot>"].map(csvCell).join(",");
+  }
+  if (row.kind === "source_rights") {
+    return ["source_rights", "", platform, "owned_or_permissioned", "", row.identifier || "<source asset/file/path>", "", "<creator approval, license, official URL, contract or Drive proof>"].map(csvCell).join(",");
+  }
+  return ["<kind>", "", platform, "<status>", row.scope || "", row.appIdentifier || "", "", "<real proof>"].map(csvCell).join(",");
+}
+
+function renderLaunchEvidenceDropRepairWorksheetCsv(summary: ClipperLaunchEvidenceDropDiagnosticSummary): string {
+  const header = [
+    "source_file",
+    "row_index",
+    "kind",
+    "identifier",
+    "platform",
+    "scope",
+    "app_identifier",
+    "status",
+    "pending_fields",
+    "issue",
+    "proof_needed",
+    "portal_url",
+    "drop_target",
+    "suggested_evidence_row",
+    "next_step",
+  ];
+  const rows = summary.rows
+    .filter((row) => row.status !== "ready")
+    .map((row) => [
+      row.sourceFile,
+      String(row.index),
+      row.kind,
+      row.identifier || "",
+      row.platform || "",
+      row.scope || "",
+      row.appIdentifier || "",
+      row.status,
+      row.pendingFields.join(" | "),
+      row.issue || "",
+      launchEvidenceRepairProofHint(row),
+      launchEvidenceRepairPortalUrl(row),
+      path.relative(process.cwd(), LAUNCH_EVIDENCE_DROP_DIR),
+      launchEvidenceRepairSuggestedRow(row),
+      row.nextStep,
+    ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderLaunchEvidenceDropDiagnosticMarkdown(summary: ClipperLaunchEvidenceDropDiagnosticSummary): string {
+  return [
+    "# Clippers Launch Evidence Drop Diagnostic",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Drop dir: ${summary.dropDir}`,
+    `Repair worksheet: ${summary.repairWorksheetCsvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Files: ${summary.totals.files}`,
+    `- Rows: ${summary.totals.rows}`,
+    `- Ready rows: ${summary.totals.readyRows}`,
+    `- Pending rows: ${summary.totals.pendingRows}`,
+    `- Rejected rows: ${summary.totals.rejectedRows}`,
+    `- File errors: ${summary.totals.fileErrors}`,
+    `- Account rows: ${summary.totals.accountRows}`,
+    `- Developer app rows: ${summary.totals.developerAppRows}`,
+    `- Permission rows: ${summary.totals.permissionRows}`,
+    `- Source rights rows: ${summary.totals.sourceRightsRows}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Files",
+    "",
+    ...(summary.files.length ? summary.files.flatMap((file) => [
+      `### ${file.relativePath}`,
+      "",
+      `- Rows: ${file.rows}`,
+      `- Ready rows: ${file.readyRows}`,
+      `- Pending rows: ${file.pendingRows}`,
+      `- Rejected rows: ${file.rejectedRows}`,
+      `- Kinds: ${Object.entries(file.kinds).map(([kind, count]) => `${kind}:${count}`).join(", ") || "none"}`,
+      `- Issue: ${file.issue || "none"}`,
+      `- Next step: ${file.nextStep}`,
+      "",
+    ]) : ["No launch evidence files found.", ""]),
+    "## Rows Needing Attention",
+    "",
+    ...summary.rows.filter((row) => row.status !== "ready").slice(0, 80).flatMap((row) => [
+      `### ${row.sourceFile} row ${row.index}`,
+      "",
+      `- Kind: ${row.kind}`,
+      `- Identifier: ${row.identifier || "n/a"}`,
+      `- Platform: ${row.platform || "n/a"}`,
+      `- Scope: ${row.scope || "n/a"}`,
+      `- App identifier: ${row.appIdentifier || "n/a"}`,
+      `- Status: ${row.status}`,
+      `- Pending fields: ${row.pendingFields.length ? row.pendingFields.join(", ") : "none"}`,
+      `- Issue: ${row.issue || "none"}`,
+      `- Next step: ${row.nextStep}`,
+      "",
+    ]),
+    summary.fileErrors.length ? "## File Errors" : "",
+    "",
+    ...summary.fileErrors.flatMap((error) => [
+      `- ${error.relativePath}: ${error.reason}`,
+    ]),
+    "",
+  ].join("\n");
+}
+
+async function writeLaunchEvidenceDropDiagnosticArtifacts(summary: ClipperLaunchEvidenceDropDiagnosticSummary): Promise<ClipperLaunchEvidenceDropDiagnosticSummary> {
+  const withGeneratedAt: ClipperLaunchEvidenceDropDiagnosticSummary = {
+    ...summary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(LAUNCH_EVIDENCE_DROP_DIAGNOSTIC_MARKDOWN_PATH, renderLaunchEvidenceDropDiagnosticMarkdown(withGeneratedAt));
+  await writeFile(LAUNCH_EVIDENCE_DROP_REPAIR_WORKSHEET_CSV_PATH, renderLaunchEvidenceDropRepairWorksheetCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
 function envGroupIsConfigured(group: string[]): boolean {
-  return group.some((envVar) => Boolean(process.env[envVar]));
+  return group.some(envHasRealValue);
 }
 
 async function existingLocalEnvFiles(): Promise<string[]> {
@@ -8065,7 +12043,7 @@ function credentialSetupItem(input: {
   nextStepReady: string;
   nextStepMissing: string;
 }): ClipperCredentialSetupItem {
-  const configuredEnvVars = input.acceptedEnvVarGroups.flatMap((group) => group.filter((envVar) => Boolean(process.env[envVar])));
+  const configuredEnvVars = input.acceptedEnvVarGroups.flatMap((group) => group.filter(envHasRealValue));
   const missingEnvVarGroups = input.acceptedEnvVarGroups
     .filter((group) => !envGroupIsConfigured(group))
     .map((group) => group.join(" or "));
@@ -8114,6 +12092,441 @@ function credentialImportPlanItem(item: ClipperCredentialSetupItem): ClipperCred
   };
 }
 
+function credentialSetupPlatform(item: ClipperCredentialSetupItem): ClipperPlatform | "system" {
+  if (item.id.includes("tiktok")) return "tiktok";
+  if (item.id.includes("meta") || item.id.includes("instagram")) return "instagram";
+  if (item.id.includes("google") || item.id.includes("youtube") || item.id.includes("drive")) return "youtube";
+  return "system";
+}
+
+function credentialSetupPortalUrl(item: ClipperCredentialSetupItem): string | null {
+  const platform = credentialSetupPlatform(item);
+  if (platform === "tiktok") return "https://developers.tiktok.com/";
+  if (platform === "instagram") return "https://developers.facebook.com/apps/";
+  if (platform === "youtube") return item.id.includes("drive")
+    ? "https://console.cloud.google.com/apis/credentials"
+    : "https://console.cloud.google.com/apis/library/youtube.googleapis.com";
+  return null;
+}
+
+function credentialPasteImportOrder(item: ClipperCredentialSetupItem): number {
+  if (item.id === "token-vault") return 0;
+  if (item.id === "tiktok-oauth") return 1;
+  if (item.id === "meta-oauth") return 2;
+  if (item.id === "google-youtube-oauth") return 3;
+  if (item.id === "google-drive-refresh") return 4;
+  return 99;
+}
+
+function buildCredentialPastePack(items: ClipperCredentialSetupItem[]): ClipperCredentialPastePackItem[] {
+  return items.map((item) => {
+    const missingSuggestedEnvVars = item.acceptedEnvVarGroups
+      .filter((group) => !envGroupIsConfigured(group))
+      .map((group) => group[0])
+      .filter(Boolean);
+    const envTemplate = [
+      `# ${item.label}`,
+      ...missingSuggestedEnvVars.map((envVar) => `${envVar}=`),
+    ].join("\n");
+    return {
+      id: item.id,
+      label: item.label,
+      platform: credentialSetupPlatform(item),
+      status: item.status,
+      importOrder: credentialPasteImportOrder(item),
+      docsUrl: item.docsUrl,
+      portalUrl: credentialSetupPortalUrl(item),
+      configuredEnvVars: item.configuredEnvVars,
+      missingSuggestedEnvVars,
+      acceptedEnvVarGroups: item.acceptedEnvVarGroups,
+      localDropFileNames: credentialTransferDropFileNames({
+        id: item.id,
+        label: item.label,
+        platform: credentialSetupPlatform(item),
+        status: item.status,
+        importOrder: credentialPasteImportOrder(item),
+        docsUrl: item.docsUrl,
+        portalUrl: credentialSetupPortalUrl(item),
+        configuredEnvVars: item.configuredEnvVars,
+        missingSuggestedEnvVars,
+        acceptedEnvVarGroups: item.acceptedEnvVarGroups,
+        envTemplate,
+        verificationCommand: "",
+        nextStep: item.nextStep,
+      }),
+      envTemplate: missingSuggestedEnvVars.length ? envTemplate : `# ${item.label}\n# ready`,
+      verificationCommand: "Preview keys, Save batch, Reload keys, then run Credential Doctor.",
+      nextStep: item.nextStep,
+    };
+  }).sort((a, b) => a.importOrder - b.importOrder || a.label.localeCompare(b.label));
+}
+
+function renderCredentialPasteTemplate(items: ClipperCredentialPastePackItem[]): string {
+  const pendingItems = items.filter((item) => item.missingSuggestedEnvVars.length > 0);
+  return [
+    "# Clippers All Missing Credentials Paste Pack",
+    "# Paste real values after each equals sign, then use Preview keys before Save batch.",
+    "# Do not commit this file with real values.",
+    "",
+    ...(pendingItems.length ? pendingItems.flatMap((item) => [
+      `# ${item.importOrder}. ${item.label}`,
+      `# Platform: ${item.platform}`,
+      `# Docs: ${item.docsUrl}`,
+      item.portalUrl ? `# Portal: ${item.portalUrl}` : null,
+      ...item.missingSuggestedEnvVars.map((envVar) => `${envVar}=`),
+      "",
+    ].filter((line): line is string => Boolean(line))) : ["# No missing credential groups."]),
+  ].join("\n");
+}
+
+function buildCredentialPasteChecklist(items: ClipperCredentialPastePackItem[]): string[] {
+  const pending = items.filter((item) => item.missingSuggestedEnvVars.length > 0);
+  return [
+    "Open each listed developer portal and copy real app/client values from the production app only.",
+    "Paste values into the Credential Setup batch, never into markdown, screenshots, account evidence or reports.",
+    "Run Preview keys and confirm only allowed env var names appear.",
+    "Save batch, Reload keys and run Credential Doctor.",
+    "Regenerate External Execution Session, OAuth Go-Live and Command Center after keys are detected.",
+    pending.length
+      ? `Missing groups remaining in paste pack: ${pending.map((item) => item.label).join(", ")}.`
+      : "All credential groups are configured; move to OAuth/app review evidence.",
+  ];
+}
+
+function credentialTransferDriveQueries(item: ClipperCredentialPastePackItem): string[] {
+  const envQuery = item.missingSuggestedEnvVars.join(" ");
+  if (item.id === "tiktok-oauth") return [
+    envQuery || "TIKTOK_CLIENT_KEY TIKTOK_CLIENT_SECRET",
+    "TikTok Developers client key client secret",
+    "Content Posting API app credentials",
+  ];
+  if (item.id === "meta-oauth") return [
+    envQuery || "META_APP_ID META_APP_SECRET",
+    "Meta Developers app id app secret Instagram",
+    "Instagram Graph API content publishing credentials",
+  ];
+  if (item.id === "google-youtube-oauth") return [
+    envQuery || "GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET",
+    "Google OAuth client JSON YouTube Data API",
+    "client_secret youtube oauth credentials json",
+  ];
+  if (item.id === "google-drive-refresh") return [
+    envQuery || "GOOGLE_DRIVE_REFRESH_TOKEN",
+    "Google Drive refresh token OAuth",
+    "youtube drive oauth token json",
+  ];
+  if (item.id === "token-vault") return [
+    envQuery || TOKEN_ENCRYPTION_ENV_VAR,
+    "Clippers token encryption key",
+  ];
+  return [envQuery || item.label].filter(Boolean);
+}
+
+function credentialTransferDropFileNames(item: ClipperCredentialPastePackItem): string[] {
+  if (item.id === "tiktok-oauth") return ["secrets/clippers-tiktok.env", "credentials/tiktok-oauth.env"];
+  if (item.id === "meta-oauth") return ["secrets/clippers-meta.env", "credentials/meta-instagram-oauth.env"];
+  if (item.id === "google-youtube-oauth") return [
+    "credentials/google-oauth-client.json",
+    "credentials/client_secret_youtube.json",
+    "credentials/google-drive-keys.txt",
+  ];
+  if (item.id === "google-drive-refresh") return [
+    "credentials/google-drive-token.json",
+    "secrets/google-drive-refresh.env",
+    "credentials/google-drive-refresh.txt",
+  ];
+  if (item.id === "token-vault") return ["secrets/clippers-token-vault.env"];
+  return [`secrets/${item.id}.env`];
+}
+
+function credentialTransferDriveSearchUrl(query: string): string {
+  return `https://drive.google.com/drive/search?q=${encodeURIComponent(query)}`;
+}
+
+function buildCredentialTransferKitItems(items: ClipperCredentialPastePackItem[]): ClipperCredentialTransferKitItem[] {
+  return items.map((item) => {
+    const driveSearchQueries = credentialTransferDriveQueries(item);
+    const localDropFileNames = credentialTransferDropFileNames(item);
+    const envTemplate = item.missingSuggestedEnvVars.length
+      ? [`# ${item.label}`, ...item.missingSuggestedEnvVars.map((envVar) => `${envVar}=`)].join("\n")
+      : `# ${item.label}\n# ready`;
+    return {
+      id: item.id,
+      label: item.label,
+      platform: item.platform,
+      status: item.status,
+      portalUrl: item.portalUrl,
+      docsUrl: item.docsUrl,
+      missingSuggestedEnvVars: item.missingSuggestedEnvVars,
+      acceptedEnvVarGroups: item.acceptedEnvVarGroups,
+      driveSearchQueries,
+      driveSearchUrls: driveSearchQueries.map(credentialTransferDriveSearchUrl),
+      localDropFileNames,
+      envTemplate,
+      importSteps: [
+        "Find the credential source in Google Drive or the official developer portal.",
+        `If it is a file, place it under ${localDropFileNames[0]} or paste only KEY=value lines into Credential Setup batch.`,
+        "Use Preview keys before saving; rejected or empty values must be fixed before import.",
+        "Use Save batch or Import drop files, then Reload keys and Credential Doctor.",
+      ],
+      verificationSteps: [
+        "Credential Doctor shows this item ready or partial by env var name only.",
+        "No raw secret value appears in markdown, evidence notes, reports or logs.",
+        "OAuth/app review packs are regenerated after the credential is detected.",
+      ],
+      nextStep: item.nextStep,
+    };
+  });
+}
+
+function renderCredentialTransferTemplate(items: ClipperCredentialTransferKitItem[]): string {
+  const pending = items.filter((item) => item.missingSuggestedEnvVars.length > 0);
+  return [
+    "# Clippers Credential Transfer Kit",
+    "# Paste real values after = only inside Credential Setup batch or a local env file.",
+    "# Do not commit this file after filling values.",
+    "",
+    ...(pending.length ? pending.flatMap((item) => [
+      `# ${item.label}`,
+      `# Search Drive: ${item.driveSearchQueries.join(" | ")}`,
+      `# Drop file options: ${item.localDropFileNames.join(" | ")}`,
+      ...item.missingSuggestedEnvVars.map((envVar) => `${envVar}=`),
+      "",
+    ]) : ["# No missing credential groups."]),
+  ].join("\n");
+}
+
+function buildCredentialTransferChecklist(items: ClipperCredentialTransferKitItem[]): string[] {
+  const missing = items.filter((item) => item.missingSuggestedEnvVars.length > 0);
+  return [
+    "Search Google Drive using the listed queries, then copy values only into Credential Setup batch or local drop files.",
+    "For Google OAuth JSON, drop the whole JSON into credentials/ so Import drop files can extract allowed env vars.",
+    "For Google Drive text exports, use KEY=value lines in credentials/google-drive-keys.txt or credentials/google-drive-refresh.txt.",
+    "For TikTok/Meta, use KEY=value lines or JSON with allowed env var names/key-value pairs; do not paste screenshots or secrets into launch evidence.",
+    "Preview keys before saving, then Save batch or Import drop files.",
+    "Run Reload keys, Credential Doctor, OAuth Go-Live and Command Center after import.",
+    missing.length
+      ? `Still missing: ${missing.map((item) => item.label).join(", ")}.`
+      : "All credential groups are detected; proceed to OAuth/app review.",
+  ];
+}
+
+function credentialDropStarterTarget(item: ClipperCredentialTransferKitItem): {
+  id: string;
+  label: string;
+  relativePath: string;
+} {
+  if (item.id === "tiktok-oauth") return { id: "tiktok", label: "TikTok pending env", relativePath: "secrets/clippers-tiktok.env.pending" };
+  if (item.id === "meta-oauth") return { id: "meta-instagram", label: "Meta / Instagram pending env", relativePath: "secrets/clippers-meta-instagram.env.pending" };
+  if (item.id === "google-youtube-oauth" || item.id === "google-drive-refresh") {
+    return { id: "google-youtube-drive", label: "Google / YouTube / Drive pending env", relativePath: "credentials/clippers-google-youtube-drive.env.pending" };
+  }
+  if (item.id === "token-vault") return { id: "token-vault", label: "Token vault pending env", relativePath: "secrets/clippers-token-vault.env.pending" };
+  return { id: item.id, label: `${item.label} pending env`, relativePath: `secrets/${item.id}.env.pending` };
+}
+
+function renderCredentialDropStarterFile(file: ClipperCredentialDropStarterFile): string {
+  return [
+    `# ${file.label}`,
+    "# Fill real values after =, then run Import drop files, Reload keys and Credential Doctor.",
+    "# Keep this file local. Do not commit real secrets.",
+    "",
+    ...file.envVars.map((envVar) => `${envVar}=`),
+    "",
+  ].join("\n");
+}
+
+async function buildCredentialDropStarterSummary(
+  items: ClipperCredentialTransferKitItem[],
+  options: { writeFiles?: boolean } = {}
+): Promise<ClipperCredentialDropStarterSummary> {
+  await ensureClipperDirs();
+  const grouped = new Map<string, {
+    id: string;
+    label: string;
+    relativePath: string;
+    envVars: Set<string>;
+    sourceItemIds: Set<string>;
+  }>();
+  for (const item of items) {
+    const target = credentialDropStarterTarget(item);
+    const current = grouped.get(target.relativePath) || {
+      id: target.id,
+      label: target.label,
+      relativePath: target.relativePath,
+      envVars: new Set<string>(),
+      sourceItemIds: new Set<string>(),
+    };
+    for (const envVar of item.missingSuggestedEnvVars) current.envVars.add(envVar);
+    current.sourceItemIds.add(item.id);
+    grouped.set(target.relativePath, current);
+  }
+
+  const files: ClipperCredentialDropStarterFile[] = [];
+  for (const spec of Array.from(grouped.values()).sort((a, b) => a.relativePath.localeCompare(b.relativePath))) {
+    const absolutePath = path.resolve(process.cwd(), spec.relativePath);
+    const allowedPath = safeCredentialDropAbsolutePath(spec.relativePath);
+    const envVars = Array.from(spec.envVars).sort();
+    const exists = await stat(absolutePath).then((file) => file.isFile()).catch(() => false);
+    let status: ClipperCredentialDropStarterFileStatus = envVars.length ? exists ? "exists" : "missing" : "not_needed";
+
+    if (options.writeFiles && envVars.length && !exists && allowedPath) {
+      await mkdir(path.dirname(allowedPath), { recursive: true });
+      const starter: ClipperCredentialDropStarterFile = {
+        id: spec.id,
+        label: spec.label,
+        relativePath: spec.relativePath,
+        absolutePath: allowedPath,
+        status: "created",
+        envVars,
+        sourceItemIds: Array.from(spec.sourceItemIds).sort(),
+        nextStep: "Fill every blank value, then run Import drop files.",
+      };
+      await writeFile(allowedPath, renderCredentialDropStarterFile(starter), { mode: 0o600 });
+      await chmod(allowedPath, 0o600).catch(() => undefined);
+      status = "created";
+    }
+
+    files.push({
+      id: spec.id,
+      label: spec.label,
+      relativePath: spec.relativePath,
+      absolutePath: allowedPath || absolutePath,
+      status,
+      envVars,
+      sourceItemIds: Array.from(spec.sourceItemIds).sort(),
+      nextStep: envVars.length
+        ? status === "exists"
+          ? "Open existing local file, fill missing values if needed, then run Import drop files."
+          : status === "created"
+            ? "Starter file created. Fill values, save locally, then run Import drop files."
+            : "Create/fill this local file, then run Import drop files."
+        : "No missing variables for this credential group.",
+    });
+  }
+
+  const totals = files.reduce<ClipperCredentialDropStarterSummary["totals"]>((sum, file) => {
+    sum.files += 1;
+    if (file.status === "created") sum.created += 1;
+    if (file.status === "exists") sum.existing += 1;
+    if (file.status === "missing") sum.missing += 1;
+    if (file.status === "not_needed") sum.notNeeded += 1;
+    sum.envVars += file.envVars.length;
+    return sum;
+  }, { files: 0, created: 0, existing: 0, missing: 0, notNeeded: 0, envVars: 0 });
+  const generatedAt = await stat(CREDENTIAL_DROP_STARTER_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const status: ClipperCredentialDropStarterStatus = totals.envVars === 0
+    ? "ready"
+    : totals.missing === 0
+      ? "prepared"
+      : "not_prepared";
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: CREDENTIAL_DROP_STARTER_PATH,
+    markdownPath: CREDENTIAL_DROP_STARTER_MARKDOWN_PATH,
+    files,
+    totals,
+    nextStep: totals.envVars === 0
+      ? "No credential starter files are needed; credential groups are configured."
+      : totals.missing > 0
+        ? "Create starter files, fill real values, then Import drop files."
+        : "Starter files exist. Fill real values, then Import drop files, Reload keys and Credential Doctor.",
+  };
+}
+
+function renderCredentialDropStarterMarkdown(summary: ClipperCredentialDropStarterSummary): string {
+  return [
+    "# Clippers Credential Drop Starter",
+    "",
+    "Local editable starter files for missing credentials. These files contain env var names only until the owner fills real values.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.created} created, ${summary.totals.existing} existing, ${summary.totals.missing} missing, ${summary.totals.notNeeded} not needed`,
+    `Env vars: ${summary.totals.envVars}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Files",
+    "",
+    ...summary.files.flatMap((file) => [
+      `### ${file.label}`,
+      "",
+      `- Status: ${file.status}`,
+      `- Path: ${file.absolutePath}`,
+      `- Relative path: ${file.relativePath}`,
+      `- Env names: ${file.envVars.length ? file.envVars.join(", ") : "none"}`,
+      `- Source items: ${file.sourceItemIds.join(", ")}`,
+      `- Next step: ${file.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeCredentialDropStarterArtifacts(summary: ClipperCredentialDropStarterSummary) {
+  const withGeneratedAt: ClipperCredentialDropStarterSummary = {
+    ...summary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(CREDENTIAL_DROP_STARTER_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(CREDENTIAL_DROP_STARTER_MARKDOWN_PATH, renderCredentialDropStarterMarkdown(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+function renderCredentialTransferKitMarkdown(summary: ClipperCredentialSetupSummary): string {
+  return [
+    "# Clippers Credential Transfer Kit",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.credentialTransferKitGeneratedAt || new Date().toISOString()}`,
+    `Env template: ${summary.credentialTransferKitEnvPath}`,
+    `Drop dirs: ${summary.credentialDropDirs.join(", ")}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Transfer Template",
+    "",
+    "```env",
+    summary.credentialTransferTemplate.trim(),
+    "```",
+    "",
+    "## Checklist",
+    "",
+    ...summary.credentialTransferChecklist.map((step) => `- [ ] ${step}`),
+    "",
+    "## Items",
+    "",
+    ...summary.credentialTransferKitItems.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Platform: ${item.platform}`,
+      `- Missing env vars: ${item.missingSuggestedEnvVars.length ? item.missingSuggestedEnvVars.join(", ") : "none"}`,
+      `- Accepted groups: ${item.acceptedEnvVarGroups.map((group) => group.join(" or ")).join("; ")}`,
+      `- Portal: ${item.portalUrl || "n/a"}`,
+      `- Docs: ${item.docsUrl}`,
+      "Drive search queries:",
+      ...item.driveSearchQueries.map((query) => `- ${query}`),
+      "Drive search URLs:",
+      ...item.driveSearchUrls.map((url) => `- ${url}`),
+      "Local drop file names:",
+      ...item.localDropFileNames.map((file) => `- ${file}`),
+      "Import steps:",
+      ...item.importSteps.map((step) => `- [ ] ${step}`),
+      "Verification:",
+      ...item.verificationSteps.map((step) => `- [ ] ${step}`),
+      `- Next step: ${item.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
 function credentialStatusFromMatchedGroups(totalGroups: number, missingGroups: number, matchedEnvVars: string[]): ClipperCredentialSetupStatus {
   if (totalGroups > 0 && missingGroups === 0) return "ready";
   if (matchedEnvVars.length > 0) return "partial";
@@ -8148,40 +12561,258 @@ async function buildCredentialSetupEnvFileScans(items: ClipperCredentialSetupIte
   });
 }
 
-async function buildCredentialSetupFileScans(): Promise<ClipperCredentialSetupFileScan[]> {
-  const scanDirs = Array.from(new Set([
-    process.cwd(),
-    CREDENTIAL_DROP_DIR,
-    SECRET_DROP_DIR,
-  ]));
+async function listCredentialCandidateFiles(): Promise<Array<{ absolutePath: string; relativePath: string; fileName: string }>> {
+  const candidates: Array<{ absolutePath: string; relativePath: string; fileName: string }> = [];
   const seen = new Set<string>();
-  const candidates: ClipperCredentialSetupFileScan[] = [];
-  for (const dir of scanDirs) {
+  const pushCandidate = (absolutePath: string, fileName: string) => {
+    const relativePath = path.relative(process.cwd(), absolutePath) || fileName;
+    if (seen.has(absolutePath)) return;
+    seen.add(absolutePath);
+    candidates.push({ absolutePath, relativePath, fileName });
+  };
+
+  const rootEntries = await readdir(process.cwd(), { withFileTypes: true }).catch(() => []);
+  for (const entry of rootEntries) {
+    if (!entry.isFile()) continue;
+    pushCandidate(path.join(process.cwd(), entry.name), entry.name);
+  }
+
+  const walkDropDir = async (dir: string, depth: number) => {
+    if (depth > 3) return;
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      if (isSourceDropIgnoredFileName(entry.name)) continue;
+      const absolutePath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walkDropDir(absolutePath, depth + 1);
+        continue;
+      }
       if (!entry.isFile()) continue;
-      const fileName = entry.name;
-      const lower = fileName.toLowerCase();
-      if (lower.includes("template") || lower.includes("example") || lower.endsWith(".sample")) continue;
-      const absolutePath = path.join(dir, fileName);
-      if (seen.has(absolutePath)) continue;
-      seen.add(absolutePath);
-      const isGoogleJson = lower.endsWith(".json") && /(google|youtube|drive|oauth|client_secret|credential|credentials)/.test(lower);
-      const isEnvFile = lower.includes("env") && !LOCAL_ENV_FILE_CANDIDATES.includes(fileName);
-      if (!isGoogleJson && !isEnvFile) continue;
-      candidates.push({
-        fileName,
-        relativePath: path.relative(process.cwd(), absolutePath) || fileName,
-        kind: isGoogleJson ? "google_oauth_json" : isEnvFile ? "env_file" : "unknown",
-        suggestedImportTarget: isGoogleJson ? "google-youtube-oauth" : "credential-secrets-batch",
-        supportedInputFormat: isGoogleJson ? "Google OAuth JSON client" : "KEY=value .env lines",
-        nextStep: isGoogleJson
-          ? "Abrir el archivo localmente, pegar su JSON en Credential Setup batch, usar Preview keys y luego Save batch."
-          : "Copiar solo lineas KEY=value permitidas al Credential Setup batch, usar Preview keys y luego Save batch.",
-      });
+      pushCandidate(absolutePath, entry.name);
     }
+  };
+
+  await walkDropDir(CREDENTIAL_DROP_DIR, 1);
+  await walkDropDir(SECRET_DROP_DIR, 1);
+  return candidates;
+}
+
+function isIgnoredCredentialTemplateFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.includes("template") || lower.includes("example") || lower.endsWith(".sample");
+}
+
+async function buildCredentialSetupFileScans(): Promise<ClipperCredentialSetupFileScan[]> {
+  const candidates: ClipperCredentialSetupFileScan[] = [];
+  for (const file of await listCredentialCandidateFiles()) {
+    const lower = file.fileName.toLowerCase();
+    if (isIgnoredCredentialTemplateFileName(file.fileName)) continue;
+    const ext = path.extname(lower);
+    const textLikeCredentialExtension = [".txt", ".secret", ".key", ".keys", ".credentials", ".local"].includes(ext) || ext === "";
+    const isGoogleJson = lower.endsWith(".json") && /(google|youtube|drive|oauth|client_secret|refresh|token)/.test(lower);
+    const isCredentialJson = !isGoogleJson && lower.endsWith(".json")
+      && /(credential|credentials|secret|secrets|env|oauth|token|tokens|key|keys|tiktok|meta|facebook|clippers)/.test(lower);
+    const isEnvFile = lower.includes("env") && !LOCAL_ENV_FILE_CANDIDATES.includes(file.fileName);
+    const isCredentialText = !isGoogleJson && !isEnvFile && textLikeCredentialExtension
+      && /(google|youtube|drive|oauth|client[_-]?secret|credential|credentials|refresh|token|tiktok|meta|facebook|clippers)[-_ .]*(key|keys|secret|secrets|token|tokens|oauth|credential|credentials)?/i.test(lower);
+    if (!isGoogleJson && !isCredentialJson && !isEnvFile && !isCredentialText) continue;
+    const kind: ClipperCredentialSetupFileScan["kind"] = isGoogleJson
+      ? "google_oauth_json"
+      : isCredentialJson
+        ? "credential_json"
+        : isEnvFile
+          ? "env_file"
+          : isCredentialText
+            ? "credential_text"
+            : "unknown";
+    candidates.push({
+      fileName: file.fileName,
+      relativePath: file.relativePath,
+      kind,
+      suggestedImportTarget: isGoogleJson ? "google-youtube-oauth" : "credential-secrets-batch",
+      supportedInputFormat: isGoogleJson
+        ? "Google OAuth client/token JSON"
+        : isCredentialJson
+          ? "JSON with allowed env var names or key/value credential pairs"
+          : isEnvFile
+            ? "KEY=value .env lines"
+            : "KEY=value text file",
+      nextStep: isGoogleJson
+        ? "Archivo candidato detectado; usa Import drop files para convertir client id/secret/refresh token a env vars permitidas sin exponer valores."
+        : isCredentialJson
+          ? "JSON de credenciales candidato detectado; Import drop files puede extraer env vars permitidas o pares key/value sin exponer valores."
+        : isCredentialText
+          ? "Archivo de texto candidato detectado; si contiene KEY=value permitidos, Import drop files puede guardarlos sin exponer valores."
+          : "Archivo candidato detectado; usa Import drop files para guardar solo variables permitidas.",
+    });
   }
   return candidates.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+async function listIgnoredCredentialTemplateFiles(): Promise<ClipperCredentialDropDiagnosticTemplateFile[]> {
+  const files = (await listCredentialCandidateFiles())
+    .filter((file) => isIgnoredCredentialTemplateFileName(file.fileName))
+    .map<ClipperCredentialDropDiagnosticTemplateFile>((file) => {
+      const inDropDir = credentialDropRelativePathAllowed(file.relativePath);
+      return {
+        fileName: file.fileName,
+        relativePath: file.relativePath,
+        location: inDropDir ? "drop_dir" : "workspace_root",
+        nextStep: inDropDir
+          ? "Template detectado y omitido: copia este archivo a un nombre real sin .template/example/sample y reemplaza placeholders por valores reales."
+          : "Template detectado fuera de drop dirs; usalo como referencia, pero no se importara como credencial real.",
+      };
+    });
+  return files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+async function buildCredentialDropDiagnosticSummary(parsedDrop?: Awaited<ReturnType<typeof parseCredentialDropFiles>>): Promise<ClipperCredentialDropDiagnosticSummary> {
+  const credentialFileScans = await buildCredentialSetupFileScans();
+  const ignoredTemplateFiles = await listIgnoredCredentialTemplateFiles();
+  const parsed = parsedDrop || await parseCredentialDropFiles();
+  const fileErrorByPath = new Map(parsed.fileErrors.map((error) => [error.relativePath, error.reason]));
+  const files = await Promise.all(credentialFileScans.map<Promise<ClipperCredentialDropDiagnosticFile>>(async (file) => {
+    const inDropDir = credentialDropRelativePathAllowed(file.relativePath);
+    const absolutePath = inDropDir ? safeCredentialDropAbsolutePath(file.relativePath) : path.resolve(process.cwd(), file.relativePath);
+    const raw = absolutePath ? await readFile(absolutePath, "utf8").catch(() => "") : "";
+    const detectedEnvVars = parseEnvKeyNames(raw).filter((envVar) => allowedCredentialEnvVars().includes(envVar));
+    const acceptedEnvVars = new Set(parsed.accepted.map((item) => item.envVar));
+    const pendingEnvVars = detectedEnvVars.filter((envVar) => !acceptedEnvVars.has(envVar));
+    const rawIssue = fileErrorByPath.get(file.relativePath);
+    const issue = rawIssue
+      || (inDropDir ? null : "Archivo candidato detectado fuera de credentials/ o secrets/.");
+    return {
+      fileName: file.fileName,
+      relativePath: file.relativePath,
+      kind: file.kind,
+      location: inDropDir ? "drop_dir" : "workspace_root",
+      importEligible: inDropDir && !issue,
+      suggestedImportTarget: file.suggestedImportTarget,
+      supportedInputFormat: file.supportedInputFormat,
+      detectedEnvVars,
+      pendingEnvVars,
+      issue,
+      nextStep: issue
+        ? pendingEnvVars.length
+          ? "Rellena valores reales para las variables detectadas, guarda el archivo y vuelve a importar."
+          : inDropDir
+          ? "Revisar formato: usa KEY=value permitido o JSON OAuth de Google con client_id/client_secret/refresh_token."
+          : "Mover o copiar este archivo a credentials/ o secrets/ para que Import drop files lo pueda procesar."
+        : file.nextStep,
+    };
+  }));
+  const totals = files.reduce<ClipperCredentialDropDiagnosticSummary["totals"]>((sum, file) => {
+    sum.files += 1;
+    if (file.location === "drop_dir") sum.dropCandidates += 1;
+    else sum.rootCandidates += 1;
+    if (file.importEligible) sum.importEligible += 1;
+    return sum;
+  }, {
+    files: 0,
+    dropCandidates: 0,
+    rootCandidates: 0,
+    importEligible: 0,
+    acceptedEnvVars: parsed.accepted.length,
+    rejectedEnvVars: parsed.rejectedEnvVars.length,
+    fileErrors: parsed.fileErrors.length,
+    templateFiles: ignoredTemplateFiles.length,
+    pendingEnvVars: files.reduce((total, file) => total + file.pendingEnvVars.length, 0),
+  });
+  const status: ClipperCredentialDropDiagnosticStatus = parsed.accepted.length
+    ? "ready_to_import"
+    : totals.dropCandidates > 0
+      ? "needs_review"
+      : totals.rootCandidates > 0
+        ? "move_candidates_to_drop_dir"
+        : "no_candidates";
+  const generatedAt = await stat(CREDENTIAL_DROP_DIAGNOSTIC_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status,
+    generatedAt,
+    manifestPath: CREDENTIAL_DROP_DIAGNOSTIC_PATH,
+    markdownPath: CREDENTIAL_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+    dropDirs: [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
+    allowedEnvVars: allowedCredentialEnvVars(),
+    files,
+    acceptedEnvVars: parsed.accepted.map((item) => item.envVar).sort(),
+    rejectedEnvVars: parsed.rejectedEnvVars,
+    skippedLines: parsed.skippedLines,
+    sourceFiles: parsed.sourceFiles,
+    fileErrors: parsed.fileErrors,
+    ignoredTemplateFiles,
+    totals,
+    nextStep: parsed.accepted.length
+      ? "Hay credenciales permitidas detectadas; usa Import drop files y luego Reload keys + Credential Doctor."
+      : totals.dropCandidates > 0
+        ? totals.pendingEnvVars > 0
+          ? "Hay archivos starter en drop dirs con variables permitidas, pero faltan valores reales. Rellena los valores y vuelve a importar."
+          : "Hay archivos en drop dirs, pero no contienen credenciales permitidas reconocidas; revisa los errores de formato."
+        : totals.rootCandidates > 0
+          ? "Hay archivos candidatos fuera de drop dirs; muevelos a credentials/ o secrets/ y vuelve a preparar Credential Setup."
+          : ignoredTemplateFiles.length > 0
+            ? "Solo encontre templates de credenciales. Copia un template a un archivo real sin .template/example/sample, rellena valores reales y vuelve a importar."
+          : `No hay candidatos. Coloca un .env o JSON OAuth en ${path.relative(process.cwd(), CREDENTIAL_DROP_DIR)} o ${path.relative(process.cwd(), SECRET_DROP_DIR)}.`,
+  };
+}
+
+function renderCredentialDropDiagnosticMarkdown(summary: ClipperCredentialDropDiagnosticSummary): string {
+  return [
+    "# Clippers Credential Drop Diagnostic",
+    "",
+    "Reporte seguro: no contiene valores de secretos, solo nombres de variables, archivos y errores de formato.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Drop dirs: ${summary.dropDirs.join(", ")}`,
+    `Allowed env vars: ${summary.allowedEnvVars.join(", ")}`,
+    "",
+    "## Totals",
+    "",
+    `- Files: ${summary.totals.files}`,
+    `- Drop candidates: ${summary.totals.dropCandidates}`,
+    `- Root candidates: ${summary.totals.rootCandidates}`,
+    `- Import eligible: ${summary.totals.importEligible}`,
+    `- Ignored templates: ${summary.totals.templateFiles}`,
+    `- Pending env names: ${summary.totals.pendingEnvVars}`,
+    `- Accepted env names: ${summary.acceptedEnvVars.length ? summary.acceptedEnvVars.join(", ") : "none"}`,
+    `- Rejected env names: ${summary.rejectedEnvVars.length ? summary.rejectedEnvVars.join(", ") : "none"}`,
+    `- Skipped lines: ${summary.skippedLines}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Files",
+    "",
+    summary.sourceFiles.length ? summary.sourceFiles.map((file) => `- ${file}`).join("\n") : "none",
+    "",
+    "## File Errors",
+    "",
+    summary.fileErrors.length ? summary.fileErrors.map((file) => `- ${file.relativePath}: ${file.reason}`).join("\n") : "none",
+    "",
+    "## Ignored Templates",
+    "",
+    summary.ignoredTemplateFiles.length ? summary.ignoredTemplateFiles.map((file) => `- ${file.relativePath}: ${file.nextStep}`).join("\n") : "none",
+    "",
+    "## Files",
+    "",
+    ...summary.files.flatMap((file) => [
+      `### ${file.relativePath}`,
+      "",
+      `- File name: ${file.fileName}`,
+      `- Kind: ${file.kind}`,
+      `- Location: ${file.location}`,
+      `- Import eligible: ${file.importEligible ? "yes" : "no"}`,
+      `- Supported input: ${file.supportedInputFormat}`,
+      `- Target: ${file.suggestedImportTarget}`,
+      `- Detected env names: ${file.detectedEnvVars.length ? file.detectedEnvVars.join(", ") : "none"}`,
+      `- Pending env names: ${file.pendingEnvVars.length ? file.pendingEnvVars.join(", ") : "none"}`,
+      `- Issue: ${file.issue || "none"}`,
+      `- Next step: ${file.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
 }
 
 async function buildCredentialSetupSummary(): Promise<ClipperCredentialSetupSummary> {
@@ -8233,8 +12864,16 @@ async function buildCredentialSetupSummary(): Promise<ClipperCredentialSetupSumm
     }),
   ];
   const importPlan = items.map(credentialImportPlanItem);
+  const credentialPastePack = buildCredentialPastePack(items);
+  const credentialPasteTemplate = renderCredentialPasteTemplate(credentialPastePack);
+  const credentialPasteChecklist = buildCredentialPasteChecklist(credentialPastePack);
+  const credentialTransferKitItems = buildCredentialTransferKitItems(credentialPastePack);
+  const credentialTransferTemplate = renderCredentialTransferTemplate(credentialTransferKitItems);
+  const credentialTransferChecklist = buildCredentialTransferChecklist(credentialTransferKitItems);
+  const credentialDropStarter = await buildCredentialDropStarterSummary(credentialTransferKitItems);
   const envFileScans = await buildCredentialSetupEnvFileScans(items);
   const credentialFileScans = await buildCredentialSetupFileScans();
+  const credentialDropDiagnostic = await buildCredentialDropDiagnosticSummary();
   const totals = items.reduce<ClipperCredentialSetupSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.status === "ready") sum.ready += 1;
@@ -8243,6 +12882,7 @@ async function buildCredentialSetupSummary(): Promise<ClipperCredentialSetupSumm
     return sum;
   }, { items: 0, ready: 0, partial: 0, missing: 0 });
   const generatedAt = await stat(CREDENTIAL_SETUP_README_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const credentialTransferKitGeneratedAt = await stat(CREDENTIAL_TRANSFER_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
     status: totals.ready === totals.items ? "ready" : totals.ready > 0 || totals.partial > 0 ? "partial" : "missing",
     generatedAt,
@@ -8254,8 +12894,26 @@ async function buildCredentialSetupSummary(): Promise<ClipperCredentialSetupSumm
     credentialDropDirs: [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
     envFileScans,
     credentialFileScans,
+    credentialDropDiagnosticPath: CREDENTIAL_DROP_DIAGNOSTIC_PATH,
+    credentialDropDiagnosticMarkdownPath: CREDENTIAL_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+    credentialDropDiagnosticGeneratedAt: credentialDropDiagnostic.generatedAt,
+    credentialDropDiagnostic,
     items,
     importPlan,
+    credentialPastePack,
+    credentialPasteTemplate,
+    credentialPasteChecklist,
+    credentialTransferKitManifestPath: CREDENTIAL_TRANSFER_KIT_PATH,
+    credentialTransferKitMarkdownPath: CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH,
+    credentialTransferKitEnvPath: CREDENTIAL_TRANSFER_KIT_ENV_PATH,
+    credentialTransferKitGeneratedAt,
+    credentialTransferKitItems,
+    credentialTransferTemplate,
+    credentialTransferChecklist,
+    credentialDropStarterPath: CREDENTIAL_DROP_STARTER_PATH,
+    credentialDropStarterMarkdownPath: CREDENTIAL_DROP_STARTER_MARKDOWN_PATH,
+    credentialDropStarterGeneratedAt: credentialDropStarter.generatedAt,
+    credentialDropStarter,
     totals,
     nextStep: items.find((item) => item.status === "missing")?.nextStep
       || items.find((item) => item.status === "partial")?.nextStep
@@ -8273,14 +12931,33 @@ function renderCredentialSetupReadme(summary: ClipperCredentialSetupSummary): st
     `Env files checked: ${summary.envFilesChecked.join(", ")}`,
     `Env files found: ${summary.envFilesFound.length ? summary.envFilesFound.join(", ") : "none"}`,
     `Credential drop dirs: ${summary.credentialDropDirs.join(", ")}`,
+    `Credential drop diagnostic: ${summary.credentialDropDiagnosticMarkdownPath}`,
     "",
     "## Fast Import",
     "",
     "En la UI de Clippers puedes pegar un batch .env o el JSON OAuth client descargado de Google Cloud.",
     `Tambien puedes colocar archivos candidatos en: ${summary.credentialDropDirs.join(", ")}.`,
-    "El importador acepta JSON con web.client_id/web.client_secret o installed.client_id/installed.client_secret y lo convierte a GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.",
+    "El importador acepta JSON con web.client_id/web.client_secret, installed.client_id/installed.client_secret o refresh_token/tokens.refresh_token y lo convierte a GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET y GOOGLE_DRIVE_REFRESH_TOKEN cuando existan.",
     "Usa Preview keys antes de guardar; las respuestas y artifacts solo muestran nombres de variables, nunca valores secretos.",
     "Despues de Guardar batch, ejecuta Reload keys y Credential Doctor para confirmar que Google/YouTube/Drive quedaron detectados.",
+    "",
+    "## All Missing Credentials Paste Pack",
+    "",
+    "Usa este bloque como unico punto de entrada para completar credenciales faltantes. Reemplaza solo los valores despues de `=` en Credential Setup batch.",
+    "",
+    "```env",
+    summary.credentialPasteTemplate.trim(),
+    "```",
+    "",
+    "Checklist:",
+    ...summary.credentialPasteChecklist.map((step) => `- [ ] ${step}`),
+    "",
+    "Paste pack items:",
+    ...summary.credentialPastePack.map((item) => [
+      `- ${item.importOrder}. ${item.label}: ${item.status}; missing ${item.missingSuggestedEnvVars.length ? item.missingSuggestedEnvVars.join(", ") : "none"}; configured ${item.configuredEnvVars.length ? item.configuredEnvVars.join(", ") : "none"}`,
+      item.portalUrl ? `  - Portal: ${item.portalUrl}` : "",
+      `  - Verify: ${item.verificationCommand}`,
+    ].filter(Boolean).join("\n")),
     "",
     "## Safe Env File Audit",
     "",
@@ -8302,6 +12979,22 @@ function renderCredentialSetupReadme(summary: ClipperCredentialSetupSummary): st
     ]),
     "Si una key existe en otro lugar pero no aparece aqui, pegala desde Credential Setup batch o mueve el nombre exacto a uno de los archivos revisados.",
     "",
+    "## Credential Drop Diagnostic",
+    "",
+    `Status: ${summary.credentialDropDiagnostic.status}`,
+    `Drop files: ${summary.credentialDropDiagnostic.totals.dropCandidates}`,
+    `Workspace root candidates: ${summary.credentialDropDiagnostic.totals.rootCandidates}`,
+    `Accepted env names: ${summary.credentialDropDiagnostic.acceptedEnvVars.length ? summary.credentialDropDiagnostic.acceptedEnvVars.join(", ") : "none"}`,
+    `Rejected env names: ${summary.credentialDropDiagnostic.rejectedEnvVars.length ? summary.credentialDropDiagnostic.rejectedEnvVars.join(", ") : "none"}`,
+    `Diagnostic path: ${summary.credentialDropDiagnosticMarkdownPath}`,
+    "",
+    summary.credentialDropDiagnostic.nextStep,
+    "",
+    ...(summary.credentialDropDiagnostic.fileErrors.length ? [
+      "File errors:",
+      ...summary.credentialDropDiagnostic.fileErrors.map((file) => `- ${file.relativePath}: ${file.reason}`),
+      "",
+    ] : []),
     "## Credential File Candidates",
     "",
     "Este scan solo mira nombres/rutas de archivos candidatos. No lee ni imprime valores secretos.",
@@ -8381,15 +13074,65 @@ function renderMissingCredentialEnvTemplate(summary: ClipperCredentialSetupSumma
   ].join("\n");
 }
 
+async function writeCredentialSetupArtifacts(summary: ClipperCredentialSetupSummary) {
+  const generatedAt = new Date().toISOString();
+  const withGeneratedAt: ClipperCredentialSetupSummary = {
+    ...summary,
+    credentialTransferKitGeneratedAt: generatedAt,
+    credentialDropDiagnosticGeneratedAt: generatedAt,
+    credentialDropStarterGeneratedAt: generatedAt,
+    credentialDropDiagnostic: {
+      ...summary.credentialDropDiagnostic,
+      generatedAt,
+    },
+    credentialDropStarter: {
+      ...summary.credentialDropStarter,
+      generatedAt,
+    },
+  };
+  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(withGeneratedAt));
+  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(withGeneratedAt));
+  await writeFile(CREDENTIAL_DROP_DIAGNOSTIC_PATH, JSON.stringify(withGeneratedAt.credentialDropDiagnostic, null, 2));
+  await writeFile(CREDENTIAL_DROP_DIAGNOSTIC_MARKDOWN_PATH, renderCredentialDropDiagnosticMarkdown(withGeneratedAt.credentialDropDiagnostic));
+  await writeFile(CREDENTIAL_TRANSFER_KIT_PATH, JSON.stringify({
+    generatedAt: withGeneratedAt.credentialTransferKitGeneratedAt,
+    status: withGeneratedAt.status,
+    manifestPath: withGeneratedAt.credentialTransferKitManifestPath,
+    markdownPath: withGeneratedAt.credentialTransferKitMarkdownPath,
+    envPath: withGeneratedAt.credentialTransferKitEnvPath,
+    items: withGeneratedAt.credentialTransferKitItems,
+    template: withGeneratedAt.credentialTransferTemplate,
+    checklist: withGeneratedAt.credentialTransferChecklist,
+    totals: withGeneratedAt.totals,
+    nextStep: withGeneratedAt.nextStep,
+  }, null, 2));
+  await writeFile(CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH, renderCredentialTransferKitMarkdown(withGeneratedAt));
+  await writeFile(CREDENTIAL_TRANSFER_KIT_ENV_PATH, withGeneratedAt.credentialTransferTemplate);
+  await writeFile(CREDENTIAL_DROP_STARTER_PATH, JSON.stringify(withGeneratedAt.credentialDropStarter, null, 2));
+  await writeFile(CREDENTIAL_DROP_STARTER_MARKDOWN_PATH, renderCredentialDropStarterMarkdown(withGeneratedAt.credentialDropStarter));
+}
+
 export async function prepareClipperCredentialSetupCenter(userId = getSystemUserId()): Promise<{ credentialSetup: ClipperCredentialSetupSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   await writeFile(CREDENTIAL_SETUP_TEMPLATE_PATH, renderEnvTemplate());
   await writeGoogleDriveCredentialTemplate();
   const credentialSetup = await buildCredentialSetupSummary();
-  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(credentialSetup));
-  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(credentialSetup));
+  await writeCredentialSetupArtifacts(credentialSetup);
   return { credentialSetup: await buildCredentialSetupSummary(), status: await getClipperStatus(userId) };
+}
+
+export async function prepareClipperCredentialDropStarter(userId = getSystemUserId()): Promise<{ credentialDropStarter: ClipperCredentialDropStarterSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  await writeFile(CREDENTIAL_SETUP_TEMPLATE_PATH, renderEnvTemplate());
+  await writeGoogleDriveCredentialTemplate();
+  const credentialSetup = await buildCredentialSetupSummary();
+  const starterDraft = await buildCredentialDropStarterSummary(credentialSetup.credentialTransferKitItems, { writeFiles: true });
+  const credentialDropStarter = await writeCredentialDropStarterArtifacts(starterDraft);
+  const refreshedSetup = await buildCredentialSetupSummary();
+  await writeCredentialSetupArtifacts(refreshedSetup);
+  return { credentialDropStarter, status: await getClipperStatus(userId) };
 }
 
 export async function reloadClipperCredentials(userId = getSystemUserId()): Promise<{ credentialReload: ClipperCredentialReloadSummary; status: ClipperStatus }> {
@@ -8398,8 +13141,7 @@ export async function reloadClipperCredentials(userId = getSystemUserId()): Prom
   const loadedFiles = loadLocalEnvFiles();
   await writeGoogleDriveCredentialTemplate();
   const credentialSetup = await buildCredentialSetupSummary();
-  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(credentialSetup));
-  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(credentialSetup));
+  await writeCredentialSetupArtifacts(credentialSetup);
   return {
     credentialReload: {
       loadedFiles,
@@ -8452,9 +13194,9 @@ function parseCredentialBatchEnvText(envText: string): {
   const acceptedByKey = new Map<string, string>();
   const rejected = new Set<string>();
   let skippedLines = 0;
-  const googleOAuthJsonCredentials = parseGoogleOAuthClientJsonCredentials(envText);
-  if (googleOAuthJsonCredentials) {
-    for (const item of googleOAuthJsonCredentials) {
+  const jsonCredentials = parseCredentialJsonCredentials(envText);
+  if (jsonCredentials) {
+    for (const item of jsonCredentials) {
       if (allowed.has(item.envVar) && item.value) acceptedByKey.set(item.envVar, item.value);
       else rejected.add(item.envVar);
     }
@@ -8522,24 +13264,137 @@ function stripJsonCodeFence(raw: string): string {
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
+function credentialJsonValueAllowed(envVar: string, value: string): boolean {
+  if (!allowedCredentialEnvVars().includes(envVar)) return false;
+  if (!value.trim() || /[\r\n]/.test(value)) return false;
+  if (envVar === TOKEN_ENCRYPTION_ENV_VAR && value.trim().length < 32) return false;
+  if (envVar === "PUBLIC_BASE_URL" && !/^https?:\/\/.+/i.test(value.trim())) return false;
+  return true;
+}
+
 function parseGoogleOAuthClientJsonCredentials(raw: string): Array<{ envVar: string; value: string }> | null {
   const candidate = stripJsonCodeFence(raw);
   if (!candidate.startsWith("{")) return null;
   try {
     const parsed = JSON.parse(candidate) as Record<string, unknown>;
-    const container = (parsed.web && typeof parsed.web === "object")
-      ? parsed.web as Record<string, unknown>
-      : (parsed.installed && typeof parsed.installed === "object")
-        ? parsed.installed as Record<string, unknown>
-        : parsed;
-    const clientId = typeof container.client_id === "string" ? container.client_id.trim() : "";
-    const clientSecret = typeof container.client_secret === "string" ? container.client_secret.trim() : "";
+    const objectOrNull = (value: unknown): Record<string, unknown> | null =>
+      value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    if (parsed.type === "service_account") return null;
+    const containers = [
+      objectOrNull(parsed.web),
+      objectOrNull(parsed.installed),
+      objectOrNull(parsed.desktop),
+      objectOrNull(parsed.authorized_user),
+      objectOrNull(parsed.tokens),
+      objectOrNull(parsed.token),
+      objectOrNull(parsed.oauth),
+      objectOrNull(parsed.oauth2),
+      objectOrNull(parsed.credentials),
+      parsed,
+    ].filter((value): value is Record<string, unknown> => Boolean(value));
+    const visit = (value: unknown, depth = 0) => {
+      if (depth > 4 || !value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value.slice(0, 20)) visit(item, depth + 1);
+        return;
+      }
+      const container = value as Record<string, unknown>;
+      if (container.type === "service_account") return;
+      containers.push(container);
+      for (const child of Object.values(container).slice(0, 40)) visit(child, depth + 1);
+    };
+    visit(parsed.oauth_client);
+    visit(parsed.client);
+    visit(parsed.google);
+    const firstString = (keys: string[]): string => {
+      for (const container of containers) {
+        for (const key of keys) {
+          const value = container[key];
+          if (typeof value === "string" && value.trim() && !/[\r\n]/.test(value)) return value.trim();
+        }
+      }
+      return "";
+    };
+    const clientId = firstString(["client_id", "clientId", "clientID"]);
+    const clientSecret = firstString(["client_secret", "clientSecret", "clientSecretValue"]);
+    const refreshToken = firstString(["refresh_token", "refreshToken"]);
     const credentials: Array<{ envVar: string; value: string }> = [];
-    if (clientId && !/[\r\n]/.test(clientId)) credentials.push({ envVar: "GOOGLE_CLIENT_ID", value: clientId });
-    if (clientSecret && !/[\r\n]/.test(clientSecret)) credentials.push({ envVar: "GOOGLE_CLIENT_SECRET", value: clientSecret });
+    if (clientId && clientSecret) {
+      credentials.push({ envVar: "GOOGLE_CLIENT_ID", value: clientId });
+      credentials.push({ envVar: "GOOGLE_CLIENT_SECRET", value: clientSecret });
+    }
+    if (refreshToken) credentials.push({ envVar: "GOOGLE_DRIVE_REFRESH_TOKEN", value: refreshToken });
     return credentials.length ? credentials : null;
   } catch {
     return null;
+  }
+}
+
+function parseCredentialJsonCredentials(raw: string): Array<{ envVar: string; value: string }> | null {
+  const candidate = stripJsonCodeFence(raw);
+  if (!candidate.startsWith("{") && !candidate.startsWith("[")) return null;
+  const acceptedByKey = new Map<string, string>();
+  const allowed = new Set(allowedCredentialEnvVars());
+  const googleOAuth = parseGoogleOAuthClientJsonCredentials(raw) || [];
+  for (const item of googleOAuth) {
+    if (credentialJsonValueAllowed(item.envVar, item.value)) acceptedByKey.set(item.envVar, item.value.trim());
+  }
+
+  try {
+    const parsed = JSON.parse(candidate) as unknown;
+    const visit = (value: unknown, depth = 0) => {
+      if (depth > 5 || !value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value.slice(0, 100)) visit(item, depth + 1);
+        return;
+      }
+      const record = value as Record<string, unknown>;
+      if (record.type === "service_account") return;
+      for (const [rawKey, rawValue] of Object.entries(record)) {
+        const key = rawKey.trim();
+        if (allowed.has(key) && typeof rawValue === "string" && credentialJsonValueAllowed(key, rawValue)) {
+          acceptedByKey.set(key, rawValue.trim());
+        }
+      }
+
+      const keyName = firstString(record, ["envVar", "env_var", "key", "name", "variable", "env"]);
+      const secretValue = firstString(record, ["value", "secret", "token", "clientSecret", "client_secret"]);
+      if (allowed.has(keyName) && credentialJsonValueAllowed(keyName, secretValue)) {
+        acceptedByKey.set(keyName, secretValue.trim());
+      }
+
+      for (const child of Object.values(record).slice(0, 80)) visit(child, depth + 1);
+    };
+    visit(parsed);
+    return acceptedByKey.size
+      ? Array.from(acceptedByKey.entries()).map(([envVar, value]) => ({ envVar, value }))
+      : null;
+  } catch {
+    return googleOAuth.length ? googleOAuth : null;
+  }
+}
+
+function describeCredentialJsonImportIssue(raw: string): string | null {
+  const candidate = stripJsonCodeFence(raw);
+  if (!candidate.startsWith("{") && !candidate.startsWith("[")) return null;
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    if (parsed.type === "service_account") {
+      return "JSON de Google service_account detectado; Clippers necesita OAuth client web/installed o token autorizado con refresh_token.";
+    }
+    const text = JSON.stringify(parsed).slice(0, 5000);
+    if (/"client_id"\s*:/.test(text) && !/"client_secret"\s*:/.test(text)) {
+      return "JSON tiene client_id pero no client_secret; descarga OAuth Client JSON tipo Web/Desktop desde Google Cloud.";
+    }
+    if (/"refresh_token"\s*:/.test(text)) {
+      return "JSON tiene refresh_token, pero no en una estructura reconocida; usa authorized_user/tokens o KEY=value.";
+    }
+    if (allowedCredentialEnvVars().some((envVar) => text.includes(`"${envVar}"`))) {
+      return "JSON contiene nombres de env vars permitidas, pero sus valores estan vacios, son multilinea o no pasan validacion.";
+    }
+    return "JSON valido, pero no contiene OAuth client_id/client_secret ni refresh_token reconocidos.";
+  } catch {
+    return "JSON invalido; exporta de nuevo o usa KEY=value.";
   }
 }
 
@@ -8611,7 +13466,14 @@ async function parseCredentialDropFiles(): Promise<{
     skippedLines += parsed.skippedLines;
     for (const envVar of parsed.rejectedEnvVars) rejected.add(envVar);
     if (!parsed.accepted.length) {
-      fileErrors.push({ relativePath: file.relativePath, reason: "No contiene variables permitidas o JSON OAuth reconocido." });
+      const jsonIssue = describeCredentialJsonImportIssue(raw);
+      const pendingEnvVars = parseEnvKeyNames(raw).filter((envVar) => allowedCredentialEnvVars().includes(envVar));
+      fileErrors.push({
+        relativePath: file.relativePath,
+        reason: jsonIssue || (pendingEnvVars.length
+          ? `Valores pendientes para: ${pendingEnvVars.join(", ")}.`
+          : "No contiene variables permitidas o JSON OAuth reconocido."),
+      });
       continue;
     }
     sourceFiles.push(file.relativePath);
@@ -8738,7 +13600,7 @@ function credentialDoctorItem(input: {
   nextStepReady: string;
   nextStepMissing: string;
 }): ClipperCredentialDoctorItem {
-  const configuredEnvVars = input.acceptedEnvVarGroups.flatMap((group) => group.filter((envVar) => Boolean(process.env[envVar])));
+  const configuredEnvVars = input.acceptedEnvVarGroups.flatMap((group) => group.filter(envHasRealValue));
   const missingEnvVarGroups = input.acceptedEnvVarGroups
     .filter((group) => !envGroupIsConfigured(group))
     .map((group) => group.join(" or "));
@@ -8749,6 +13611,7 @@ function credentialDoctorItem(input: {
   const envFilesWithRelevantKeys = input.envFiles
     .filter((envFile) => envFile.relevantKeys.some((key) => acceptedNames.has(key)))
     .map((envFile) => envFile.fileName);
+  const dropTarget = credentialDoctorDropTarget({ id: input.id, platform: input.platform } as ClipperCredentialDoctorItem);
   return {
     id: input.id,
     label: input.label,
@@ -8758,6 +13621,14 @@ function credentialDoctorItem(input: {
     configuredEnvVars,
     missingEnvVarGroups,
     envFilesWithRelevantKeys,
+    dropTarget,
+    portalUrl: credentialDoctorPortalUrl({ id: input.id, platform: input.platform } as ClipperCredentialDoctorItem),
+    dropFileExists: false,
+    dropFileEnvVars: [],
+    dropFileReadyEnvVars: [],
+    dropFilePendingEnvVars: [],
+    dropFileStatus: "missing",
+    dropFileNextStep: `Add real values to ${dropTarget}, then Import drop files, Reload keys and run Credential Doctor.`,
     nextStep: status === "ready" ? input.nextStepReady : input.nextStepMissing,
   };
 }
@@ -8765,7 +13636,7 @@ function credentialDoctorItem(input: {
 async function buildCredentialDoctorSummary(): Promise<ClipperCredentialDoctorSummary> {
   await ensureClipperDirs();
   const envFiles = await buildCredentialDoctorEnvFiles();
-  const items: ClipperCredentialDoctorItem[] = [
+  const draftItems: ClipperCredentialDoctorItem[] = [
     ...CREDENTIAL_ENV_REQUIREMENTS.map((requirement) => credentialDoctorItem({
       id: `${requirement.platform}-oauth`,
       label: requirement.label,
@@ -8798,6 +13669,7 @@ async function buildCredentialDoctorSummary(): Promise<ClipperCredentialDoctorSu
       nextStepMissing: `Agregar ${TOKEN_ENCRYPTION_ENV_VAR} con al menos 32 caracteres.`,
     }),
   ];
+  const items = await Promise.all(draftItems.map(enrichCredentialDoctorDropFileStatus));
   const totals = items.reduce<ClipperCredentialDoctorSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.status === "ready") sum.ready += 1;
@@ -8817,6 +13689,7 @@ async function buildCredentialDoctorSummary(): Promise<ClipperCredentialDoctorSu
     generatedAt,
     manifestPath: CREDENTIAL_DOCTOR_PATH,
     markdownPath: CREDENTIAL_DOCTOR_MARKDOWN_PATH,
+    repairWorksheetCsvPath: CREDENTIAL_DOCTOR_REPAIR_WORKSHEET_CSV_PATH,
     envFiles,
     items,
     totals,
@@ -8824,6 +13697,128 @@ async function buildCredentialDoctorSummary(): Promise<ClipperCredentialDoctorSu
       || items.find((item) => item.status === "partial")?.nextStep
       || "Credential doctor listo; continuar OAuth/app review.",
   };
+}
+
+function credentialDoctorPortalUrl(item: ClipperCredentialDoctorItem): string {
+  if (item.platform === "tiktok") return "https://developers.tiktok.com/";
+  if (item.platform === "instagram") return "https://developers.facebook.com/apps/";
+  if (item.platform === "youtube") return "https://console.cloud.google.com/apis/credentials";
+  if (item.id === "google-drive-refresh") return "https://console.cloud.google.com/apis/credentials";
+  return "local:clippers-token-vault";
+}
+
+function credentialDoctorDropTarget(item: ClipperCredentialDoctorItem): string {
+  if (item.platform === "tiktok") return "secrets/clippers-tiktok.env.pending";
+  if (item.platform === "instagram") return "secrets/clippers-meta-instagram.env.pending";
+  if (item.platform === "youtube" || item.id === "google-drive-refresh") return "credentials/clippers-google-youtube-drive.env.pending";
+  if (item.id === "token-vault") return "CEO_ASSISTANT_ENV";
+  return "credentials/";
+}
+
+function credentialDoctorEnvValueReady(envVar: string, value: string): boolean {
+  if (envVar === TOKEN_ENCRYPTION_ENV_VAR) return hasStrongSecret(value);
+  if (envVar === "PUBLIC_BASE_URL") return /^https?:\/\/.+/i.test(value.trim()) && hasRealValue(value);
+  return hasRealValue(value);
+}
+
+function parseCredentialDoctorDropFileEnv(raw: string): Map<string, string> {
+  const values = new Map<string, string>();
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const clean = trimmed.startsWith("export ") ? trimmed.slice("export ".length).trim() : trimmed;
+    const separatorIndex = clean.indexOf("=");
+    if (separatorIndex <= 0) continue;
+    const envVar = clean.slice(0, separatorIndex).trim();
+    let value = clean.slice(separatorIndex + 1).trim();
+    if (!/^[A-Z_][A-Z0-9_]*$/i.test(envVar)) continue;
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1).trim();
+    }
+    values.set(envVar, value);
+  }
+  return values;
+}
+
+async function enrichCredentialDoctorDropFileStatus(item: ClipperCredentialDoctorItem): Promise<ClipperCredentialDoctorItem> {
+  const dropTarget = credentialDoctorDropTarget(item);
+  const portalUrl = credentialDoctorPortalUrl(item);
+  const absolutePath = dropTarget.startsWith("local:") ? null : path.resolve(process.cwd(), dropTarget);
+  const raw = absolutePath ? await readFile(absolutePath, "utf8").catch(() => null) : null;
+  const dropFileExists = raw !== null;
+  const allowedNames = Array.from(new Set(item.acceptedEnvVarGroups.flat()));
+  const parsedValues = raw === null ? new Map<string, string>() : parseCredentialDoctorDropFileEnv(raw);
+  const dropFileEnvVars = allowedNames.filter((name) => parsedValues.has(name));
+  const dropFileReadyEnvVars = dropFileEnvVars.filter((name) => credentialDoctorEnvValueReady(name, parsedValues.get(name) || ""));
+  const dropFilePendingEnvVars = dropFileEnvVars.filter((name) => !dropFileReadyEnvVars.includes(name));
+  const allGroupsReadyInDrop = item.acceptedEnvVarGroups.every((group) => group.some((name) => dropFileReadyEnvVars.includes(name)));
+  const dropFileStatus: ClipperCredentialDoctorItem["dropFileStatus"] = !dropFileExists
+    ? "missing"
+    : !dropFileEnvVars.length
+      ? "empty"
+      : allGroupsReadyInDrop
+        ? "ready"
+        : "pending_values";
+  const dropFileNextStep = dropFileStatus === "ready"
+    ? `Import ${dropTarget}, then Reload keys and run Credential Doctor.`
+    : dropFileStatus === "pending_values"
+      ? `Fill real non-placeholder values for ${dropFilePendingEnvVars.length ? dropFilePendingEnvVars.join(", ") : item.missingEnvVarGroups.join("; ")} in ${dropTarget}.`
+      : dropFileStatus === "empty"
+        ? `Add ${allowedNames.join(" or ")} with real values to ${dropTarget}.`
+        : `Create ${dropTarget} or paste credentials through Credential Setup, then Import drop files.`;
+  return {
+    ...item,
+    dropTarget,
+    portalUrl,
+    dropFileExists,
+    dropFileEnvVars,
+    dropFileReadyEnvVars,
+    dropFilePendingEnvVars,
+    dropFileStatus,
+    dropFileNextStep,
+  };
+}
+
+function renderCredentialDoctorRepairWorksheetCsv(summary: ClipperCredentialDoctorSummary): string {
+  const header = [
+    "item_id",
+    "label",
+    "platform",
+    "status",
+    "drop_file_status",
+    "drop_file_env_vars",
+    "drop_file_ready_env_vars",
+    "drop_file_pending_env_vars",
+    "missing_group",
+    "suggested_env_var",
+    "drop_target",
+    "portal_url",
+    "drop_file_next_step",
+    "next_step",
+  ];
+  const rows = summary.items.flatMap((item) => {
+    if (item.status === "ready") return [];
+    return item.missingEnvVarGroups.map((missingGroup) => {
+      const acceptedGroup = item.acceptedEnvVarGroups.find((group) => group.join(" or ") === missingGroup) || [];
+      return [
+        item.id,
+        item.label,
+        item.platform,
+        item.status,
+        item.dropFileStatus,
+        item.dropFileEnvVars.join(" | "),
+        item.dropFileReadyEnvVars.join(" | "),
+        item.dropFilePendingEnvVars.join(" | "),
+        missingGroup,
+        acceptedGroup[0] || "",
+        item.dropTarget,
+        item.portalUrl,
+        item.dropFileNextStep,
+        item.nextStep,
+      ];
+    });
+  });
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
 }
 
 function renderCredentialDoctorMarkdown(summary: ClipperCredentialDoctorSummary): string {
@@ -8834,6 +13829,7 @@ function renderCredentialDoctorMarkdown(summary: ClipperCredentialDoctorSummary)
     "",
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Repair worksheet: ${summary.repairWorksheetCsvPath}`,
     `Totals: ${summary.totals.ready} ready, ${summary.totals.partial} partial, ${summary.totals.missing} missing`,
     "",
     "## Env files",
@@ -8851,10 +13847,23 @@ function renderCredentialDoctorMarkdown(summary: ClipperCredentialDoctorSummary)
       `- Configured names: ${item.configuredEnvVars.length ? item.configuredEnvVars.join(", ") : "none"}`,
       `- Missing groups: ${item.missingEnvVarGroups.length ? item.missingEnvVarGroups.join("; ") : "none"}`,
       `- Files with matching keys: ${item.envFilesWithRelevantKeys.length ? item.envFilesWithRelevantKeys.join(", ") : "none"}`,
+      `- Drop target: ${item.dropTarget}`,
+      `- Portal URL: ${item.portalUrl}`,
+      `- Drop file status: ${item.dropFileStatus}`,
+      `- Drop file env names: ${item.dropFileEnvVars.length ? item.dropFileEnvVars.join(", ") : "none"}`,
+      `- Drop file ready names: ${item.dropFileReadyEnvVars.length ? item.dropFileReadyEnvVars.join(", ") : "none"}`,
+      `- Drop file pending names: ${item.dropFilePendingEnvVars.length ? item.dropFilePendingEnvVars.join(", ") : "none"}`,
+      `- Drop file next step: ${item.dropFileNextStep}`,
       `- Next step: ${item.nextStep}`,
       "",
     ]),
   ].join("\n");
+}
+
+async function writeCredentialDoctorArtifacts(summary: ClipperCredentialDoctorSummary): Promise<void> {
+  await writeFile(CREDENTIAL_DOCTOR_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(CREDENTIAL_DOCTOR_MARKDOWN_PATH, renderCredentialDoctorMarkdown(summary));
+  await writeFile(CREDENTIAL_DOCTOR_REPAIR_WORKSHEET_CSV_PATH, renderCredentialDoctorRepairWorksheetCsv(summary));
 }
 
 export async function prepareClipperCredentialDoctor(userId = getSystemUserId()): Promise<{ credentialDoctor: ClipperCredentialDoctorSummary; status: ClipperStatus }> {
@@ -8872,8 +13881,7 @@ export async function prepareClipperCredentialDoctor(userId = getSystemUserId())
         ? "partial"
         : "blocked",
   };
-  await writeFile(CREDENTIAL_DOCTOR_PATH, JSON.stringify(credentialDoctor, null, 2));
-  await writeFile(CREDENTIAL_DOCTOR_MARKDOWN_PATH, renderCredentialDoctorMarkdown(credentialDoctor));
+  await writeCredentialDoctorArtifacts(credentialDoctor);
   return { credentialDoctor, status: await getClipperStatus(userId) };
 }
 
@@ -8890,8 +13898,7 @@ export async function recordClipperCredentialSecret(input: unknown, userId = get
 
   await writeGoogleDriveCredentialTemplate();
   const credentialSetup = await buildCredentialSetupSummary();
-  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(credentialSetup));
-  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(credentialSetup));
+  await writeCredentialSetupArtifacts(credentialSetup);
   const credentialDoctorDraft = await buildCredentialDoctorSummary();
   const credentialDoctor: ClipperCredentialDoctorSummary = {
     ...credentialDoctorDraft,
@@ -8902,8 +13909,7 @@ export async function recordClipperCredentialSecret(input: unknown, userId = get
         ? "partial"
         : "blocked",
   };
-  await writeFile(CREDENTIAL_DOCTOR_PATH, JSON.stringify(credentialDoctor, null, 2));
-  await writeFile(CREDENTIAL_DOCTOR_MARKDOWN_PATH, renderCredentialDoctorMarkdown(credentialDoctor));
+  await writeCredentialDoctorArtifacts(credentialDoctor);
 
   const configuredEnvVars = credentialDoctor.items.flatMap((item) => item.configuredEnvVars);
   return {
@@ -8937,8 +13943,7 @@ export async function recordClipperCredentialSecretsBatch(input: unknown, userId
 
   await writeGoogleDriveCredentialTemplate();
   const credentialSetup = await buildCredentialSetupSummary();
-  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(credentialSetup));
-  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(credentialSetup));
+  await writeCredentialSetupArtifacts(credentialSetup);
   const credentialDoctorDraft = await buildCredentialDoctorSummary();
   const credentialDoctor: ClipperCredentialDoctorSummary = {
     ...credentialDoctorDraft,
@@ -8949,8 +13954,7 @@ export async function recordClipperCredentialSecretsBatch(input: unknown, userId
         ? "partial"
         : "blocked",
   };
-  await writeFile(CREDENTIAL_DOCTOR_PATH, JSON.stringify(credentialDoctor, null, 2));
-  await writeFile(CREDENTIAL_DOCTOR_MARKDOWN_PATH, renderCredentialDoctorMarkdown(credentialDoctor));
+  await writeCredentialDoctorArtifacts(credentialDoctor);
 
   const configuredEnvVars = credentialDoctor.items.flatMap((item) => item.configuredEnvVars);
   return {
@@ -8993,8 +13997,7 @@ export async function importClipperCredentialDropFiles(userId = getSystemUserId(
 
   await writeGoogleDriveCredentialTemplate();
   const credentialSetup = await buildCredentialSetupSummary();
-  await writeFile(CREDENTIAL_SETUP_README_PATH, renderCredentialSetupReadme(credentialSetup));
-  await writeFile(CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH, renderMissingCredentialEnvTemplate(credentialSetup));
+  await writeCredentialSetupArtifacts(credentialSetup);
   const credentialDoctorDraft = await buildCredentialDoctorSummary();
   const credentialDoctor: ClipperCredentialDoctorSummary = {
     ...credentialDoctorDraft,
@@ -9005,8 +14008,7 @@ export async function importClipperCredentialDropFiles(userId = getSystemUserId(
         ? "partial"
         : "blocked",
   };
-  await writeFile(CREDENTIAL_DOCTOR_PATH, JSON.stringify(credentialDoctor, null, 2));
-  await writeFile(CREDENTIAL_DOCTOR_MARKDOWN_PATH, renderCredentialDoctorMarkdown(credentialDoctor));
+  await writeCredentialDoctorArtifacts(credentialDoctor);
 
   const configuredEnvVars = credentialDoctor.items.flatMap((item) => item.configuredEnvVars);
   return {
@@ -9157,6 +14159,7 @@ async function buildAccountIdentityKitSummary(accounts: ClipperAccount[]): Promi
       profileLink: profileLinkForPlatform(platformAccount.platform, platformAccount.handle),
       bio: accountBioForCategory(account.category),
       usernameAlternatives: usernameAlternatives(platformAccount.handle),
+      handleCheckUrls: accountCreationHandleCheckUrls(platformAccount.platform, usernameAlternatives(platformAccount.handle)),
       profileImagePrompt: profileImagePrompt(account),
       bannerPrompt: bannerPrompt(account),
       firstPostIdeas: firstPostIdeas(account),
@@ -9520,6 +14523,19 @@ function accountCreationEvidenceRecipeRow(accountId: string, platform: ClipperPl
   return ["account", accountId, platform, "verified", "", "", "", "<real handle + profile URL + 2FA/security proof + screenshot/proof URL>"].map(csvEscape).join(",");
 }
 
+function accountCreationHandleCheckUrls(platform: ClipperPlatform, handles: string[]): string[] {
+  const cleanHandles = Array.from(new Set(handles.map((handle) => handle.replace(/^@+/, "").trim()).filter(Boolean))).slice(0, 6);
+  return cleanHandles.flatMap((handle) => {
+    const profileUrl = platform === "instagram"
+      ? `https://www.instagram.com/${handle}/`
+      : platform === "tiktok"
+        ? `https://www.tiktok.com/@${handle}`
+        : `https://www.youtube.com/@${handle}`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${platform} @${handle}`)}`;
+    return [profileUrl, searchUrl];
+  });
+}
+
 function accountCreationCopyPackage(item: Pick<ClipperAccountCreationPackItem, "handle" | "displayName" | "bio" | "profileLink" | "signupUrl" | "usernameAlternatives">): Array<{ label: string; value: string }> {
   return [
     { label: "signup_url", value: item.signupUrl },
@@ -9658,6 +14674,7 @@ function buildAccountCreationSessionOrder(items: ClipperAccountCreationPackItem[
       status: item.status,
       signupUrl: item.signupUrl,
       profileLink: item.profileLink,
+      handleCheckUrls: item.handleCheckUrls,
       priority: accountCreationSessionPriority(item),
       copyPackage: item.copyPackage,
       portalFormFields: item.portalFormFields,
@@ -9682,6 +14699,85 @@ function buildAccountCreationEvidenceBatchTemplate(items: ClipperAccountCreation
   ].join("\n");
 }
 
+function accountCreationPlatformBatchStatus(items: ClipperAccountCreationPackItem[]): ClipperAccountCreationPackStatus {
+  if (items.some((item) => item.status === "blocked")) return "blocked";
+  if (items.some((item) => item.status === "partial")) return "partial";
+  return "ready";
+}
+
+function buildAccountCreationPlatformBatches(items: ClipperAccountCreationPackItem[]): ClipperAccountCreationPlatformBatch[] {
+  return (["instagram", "tiktok", "youtube"] as ClipperPlatform[])
+    .map((platform) => {
+      const platformItems = items.filter((item) => item.platform === platform);
+      if (!platformItems.length) return null;
+      const status = accountCreationPlatformBatchStatus(platformItems);
+      const first = platformItems[0];
+      const ordered = buildAccountCreationSessionOrder(platformItems);
+      const blockers = Array.from(new Set(platformItems.flatMap((item) => item.blockers)));
+      const requiredProof = Array.from(new Set(platformItems.flatMap((item) => item.platformProofRequired)));
+      const browserSessionChecklist = Array.from(new Set(platformItems.flatMap((item) => item.browserSessionChecklist)));
+      const operatorVaultChecklist = Array.from(new Set(platformItems.flatMap((item) => item.operatorVaultChecklist)));
+      const copyBlock = [
+        `${first.platform} account creation batch`,
+        "",
+        "Accounts:",
+        ...ordered.map((item) => `- ${item.accountName}: ${item.handle} (${item.status})`),
+        "",
+        "Copy fields:",
+        ...ordered.flatMap((item) => [
+          `- ${item.accountName} handle: ${item.handle}`,
+          `- ${item.accountName} profile: ${item.profileLink}`,
+          ...item.copyPackage.filter((field) => ["display_name", "bio"].includes(field.label)).map((field) => `- ${item.accountName} ${field.label}: ${field.value}`),
+        ]),
+        "",
+        "Handle check URLs:",
+        ...ordered.flatMap((item) => item.handleCheckUrls.slice(0, 2).map((url) => `- ${item.accountName}: ${url}`)),
+        "",
+        "Evidence rows:",
+        ...ordered.map((item) => `- ${item.accountName}: ${item.evidenceRecipeRow}`),
+      ].join("\n");
+      return {
+        id: `account-creation-batch-${platform}`,
+        platform,
+        label: `${platform} account creation`,
+        status,
+        profiles: platformItems.length,
+        ready: platformItems.filter((item) => item.status === "ready").length,
+        partial: platformItems.filter((item) => item.status === "partial").length,
+        blocked: platformItems.filter((item) => item.status === "blocked").length,
+        evidenceMissing: platformItems.filter((item) => !item.evidencePath).length,
+        signupUrl: first.signupUrl,
+        officialHelpUrl: first.officialHelpUrl,
+        handles: platformItems.map((item) => item.handle),
+        accountIds: platformItems.map((item) => item.accountId),
+        copyBlock,
+        evidenceBatchTemplate: [
+          ["kind", "account_id", "platform", "status", "scope", "app_identifier", "public_base_url", "notes"].map(csvEscape).join(","),
+          ...ordered.map((item) => item.verifiedEvidenceBatchRow),
+        ].join("\n"),
+        submittedEvidenceRows: ordered.map((item) => item.submittedEvidenceBatchRow),
+        verifiedEvidenceRows: ordered.map((item) => item.verifiedEvidenceBatchRow),
+        evidenceRecipeRows: ordered.map((item) => item.evidenceRecipeRow),
+        browserSessionChecklist,
+        operatorVaultChecklist,
+        requiredProof,
+        blockers,
+        doneCriteria: [
+          `All ${platformItems.length} ${platform} accounts open publicly with the final handles.`,
+          "Each account has 2FA/recovery saved in the private vault.",
+          "Each account has submitted or verified evidence imported in Launch Evidence Batch.",
+          "No OAuth/app review connection is marked ready until credentials, DNS and permissions are valid.",
+        ],
+        nextStep: status === "ready"
+          ? "All accounts for this platform have verified evidence; continue OAuth/app review."
+          : status === "partial"
+            ? "Review submitted evidence and move accounts to verified when profile/security proof is complete."
+            : blockers[0] || `Create/verify all ${platform} accounts and import evidence rows.`,
+      };
+    })
+    .filter((item): item is ClipperAccountCreationPlatformBatch => Boolean(item));
+}
+
 function buildAccountClaimSheet(items: ClipperAccountCreationPackItem[]): ClipperAccountClaimSheetItem[] {
   return buildAccountCreationSessionOrder(items).map((item) => {
     const cleanHandle = item.handle.replace(/^@+/, "");
@@ -9696,6 +14792,7 @@ function buildAccountClaimSheet(items: ClipperAccountCreationPackItem[]): Clippe
       priority: item.priority,
       signupUrl: item.signupUrl,
       profileLink: item.profileLink,
+      handleCheckUrls: item.handleCheckUrls,
       browserProfileLabel: `clippers-${item.platform}-${item.accountId}`,
       vaultItemName,
       loginIdentifierLabel: `<${item.accountId}-${item.platform}-login-email-or-phone-label>`,
@@ -9758,6 +14855,8 @@ function renderAccountClaimSheetMarkdown(items: ClipperAccountClaimSheetItem[]):
       `- Handle: ${item.handle}`,
       `- Signup URL: ${item.signupUrl}`,
       `- Expected profile: ${item.profileLink}`,
+      "- Handle check URLs:",
+      ...item.handleCheckUrls.map((url) => `  - ${url}`),
       `- Browser profile label: ${item.browserProfileLabel}`,
       `- Vault item: ${item.vaultItemName}`,
       `- Login identifier label: ${item.loginIdentifierLabel}`,
@@ -9789,7 +14888,7 @@ function renderAccountClaimSheetMarkdown(items: ClipperAccountClaimSheetItem[]):
 }
 
 function renderAccountClaimSheetCsv(items: ClipperAccountClaimSheetItem[]): string {
-  const header = ["rank", "id", "account_id", "account_name", "platform", "handle", "priority", "signup_url", "profile_link", "browser_profile_label", "vault_item_name", "login_identifier_label", "password_vault_slot", "two_factor_slot", "recovery_slot", "proof_folder", "evidence_file_name", "preflight_checks", "claim_steps", "verification_steps", "post_claim_steps", "blocked_until", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row"];
+  const header = ["rank", "id", "account_id", "account_name", "platform", "handle", "priority", "signup_url", "profile_link", "handle_check_urls", "browser_profile_label", "vault_item_name", "login_identifier_label", "password_vault_slot", "two_factor_slot", "recovery_slot", "proof_folder", "evidence_file_name", "preflight_checks", "claim_steps", "verification_steps", "post_claim_steps", "blocked_until", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row"];
   return [
     header.map(csvEscape).join(","),
     ...items.map((item) => [
@@ -9802,6 +14901,7 @@ function renderAccountClaimSheetCsv(items: ClipperAccountClaimSheetItem[]): stri
       item.priority,
       item.signupUrl,
       item.profileLink,
+      item.handleCheckUrls.join(" | "),
       item.browserProfileLabel,
       item.vaultItemName,
       item.loginIdentifierLabel,
@@ -9830,6 +14930,7 @@ async function buildAccountCreationPackSummary(input: {
     const identity = input.accountIdentityKit.accounts.find((account) => account.accountId === task.accountId);
     const profile = identity?.platforms.find((platform) => platform.platform === task.platform);
     const status = accountCreationStatus(task);
+    const usernameOptions = profile?.usernameAlternatives || usernameAlternatives(task.handle);
     const evidenceToCapture = [
       "Screenshot del perfil creado con handle visible.",
       "Screenshot de email/telefono verificado sin exponer datos sensibles completos.",
@@ -9851,7 +14952,8 @@ async function buildAccountCreationPackSummary(input: {
       signupUrl: task.accountCreationUrl,
       officialHelpUrl: officialAccountHelpUrl(task.platform),
       bio: task.bio,
-      usernameAlternatives: profile?.usernameAlternatives || usernameAlternatives(task.handle),
+      usernameAlternatives: usernameOptions,
+      handleCheckUrls: accountCreationHandleCheckUrls(task.platform, usernameOptions),
       profileImagePrompt: profile?.profileImagePrompt || "",
       bannerPrompt: profile?.bannerPrompt || "",
       firstPostIdeas: profile?.firstPostIdeas || firstPostIdeas({ id: task.accountId, name: task.accountName, category: task.category, platforms: [], platformAccounts: [], dailyClipTarget: 0, weeklyViewsGoal: 0, lastWeekViews: 0, status: "needs_connection", contentPolicy: "" }),
@@ -9859,7 +14961,7 @@ async function buildAccountCreationPackSummary(input: {
       setupChecklist: [
         `Abrir signup/login: ${task.accountCreationUrl}`,
         `Intentar handle principal: ${task.handle}`,
-        `Si no esta disponible, probar: ${(profile?.usernameAlternatives || usernameAlternatives(task.handle)).join(", ")}`,
+        `Si no esta disponible, probar: ${usernameOptions.join(", ")}`,
         `Pegar display name: ${task.displayName}`,
         `Pegar bio: ${task.bio}`,
         "Aplicar avatar/banner generado o aprobado.",
@@ -9884,7 +14986,7 @@ async function buildAccountCreationPackSummary(input: {
         bio: task.bio,
         profileLink: task.profileLink,
         signupUrl: task.accountCreationUrl,
-        usernameAlternatives: profile?.usernameAlternatives || usernameAlternatives(task.handle),
+        usernameAlternatives: usernameOptions,
       }),
       portalFormFields: accountCreationPortalFormFields({
         platform: task.platform,
@@ -9892,9 +14994,9 @@ async function buildAccountCreationPackSummary(input: {
         displayName: task.displayName,
         bio: task.bio,
         profileLink: task.profileLink,
-        usernameAlternatives: profile?.usernameAlternatives || usernameAlternatives(task.handle),
+        usernameAlternatives: usernameOptions,
       }),
-      handleReservationPlan: accountCreationHandleReservationPlan(task.handle, profile?.usernameAlternatives || usernameAlternatives(task.handle)),
+      handleReservationPlan: accountCreationHandleReservationPlan(task.handle, usernameOptions),
       browserSessionChecklist: accountCreationBrowserSessionChecklist(task.platform),
       evidenceCapturePlan: accountCreationEvidenceCapturePlan(task.platform),
       operatorVaultChecklist: accountCreationOperatorVaultChecklist(task.platform),
@@ -9910,7 +15012,7 @@ async function buildAccountCreationPackSummary(input: {
           : `Crear/verificar ${task.handle} en ${task.platform} y registrar evidencia.`,
     };
   });
-  const totals = items.reduce<ClipperAccountCreationPackSummary["totals"]>((sum, item) => {
+  const baseTotals = items.reduce<Omit<ClipperAccountCreationPackSummary["totals"], "platformBatches">>((sum, item) => {
     sum.profiles += 1;
     if (item.status === "ready") sum.ready += 1;
     if (item.status === "partial") sum.partial += 1;
@@ -9921,18 +15023,21 @@ async function buildAccountCreationPackSummary(input: {
   const generatedAt = await stat(ACCOUNT_CREATION_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const sessionOrder = buildAccountCreationSessionOrder(items);
   const claimSheet = buildAccountClaimSheet(items);
+  const platformBatches = buildAccountCreationPlatformBatches(items);
+  const totals = { ...baseTotals, platformBatches: platformBatches.length };
   return {
-    status: !generatedAt ? "not_prepared" : totals.blocked > 0 ? "blocked" : totals.partial > 0 ? "partial" : "ready",
+    status: !generatedAt ? "not_prepared" : baseTotals.blocked > 0 ? "blocked" : baseTotals.partial > 0 ? "partial" : "ready",
     generatedAt,
     manifestPath: ACCOUNT_CREATION_PACK_PATH,
     markdownPath: ACCOUNT_CREATION_PACK_MARKDOWN_PATH,
     csvPath: ACCOUNT_CREATION_PACK_CSV_PATH,
     claimSheetPath: ACCOUNT_CLAIM_SHEET_MARKDOWN_PATH,
     claimSheetCsvPath: ACCOUNT_CLAIM_SHEET_CSV_PATH,
-    officialSourcesCheckedAt: "2026-06-17",
+    officialSourcesCheckedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
     items,
     sessionOrder,
     claimSheet,
+    platformBatches,
     evidenceBatchTemplate: buildAccountCreationEvidenceBatchTemplate(items),
     totals,
     nextStep: items.find((item) => item.status === "blocked")?.nextStep
@@ -9948,11 +15053,52 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Official sources checked: ${summary.officialSourcesCheckedAt}`,
-    `Totals: ${summary.totals.ready}/${summary.totals.profiles} ready; ${summary.totals.partial} partial; ${summary.totals.blocked} blocked; ${summary.totals.evidenceMissing} evidence missing`,
+    `Totals: ${summary.totals.ready}/${summary.totals.profiles} ready; ${summary.totals.partial} partial; ${summary.totals.blocked} blocked; ${summary.totals.evidenceMissing} evidence missing; ${summary.totals.platformBatches} platform batches`,
     "",
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Platform Creation Batches",
+    "",
+    ...summary.platformBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Status: ${batch.status}`,
+      `- Profiles: ${batch.profiles}`,
+      `- Signup URL: ${batch.signupUrl}`,
+      `- Official help: ${batch.officialHelpUrl}`,
+      `- Handles: ${batch.handles.join(", ")}`,
+      `- Evidence recipe rows: ${batch.evidenceRecipeRows.length}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Copy block:",
+      "```",
+      batch.copyBlock,
+      "```",
+      "",
+      "Browser session checklist:",
+      ...batch.browserSessionChecklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Operator vault checklist:",
+      ...batch.operatorVaultChecklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Required proof:",
+      ...batch.requiredProof.map((proof) => `- [ ] ${proof}`),
+      "",
+      "Done criteria:",
+      ...batch.doneCriteria.map((step) => `- [ ] ${step}`),
+      "",
+      batch.blockers.length ? "Blockers:" : "Blockers: none",
+      ...batch.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Evidence recipe rows:",
+      "```csv",
+      ...batch.evidenceRecipeRows,
+      "```",
+      "",
+    ]),
     "",
     "## Claim Sheet",
     "",
@@ -9970,6 +15116,8 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
       `- Handle: ${item.handle}`,
       `- Signup URL: ${item.signupUrl}`,
       `- Profile link: ${item.profileLink}`,
+      "- Handle check URLs:",
+      ...item.handleCheckUrls.map((url) => `  - ${url}`),
       `- Submitted evidence row: ${item.submittedEvidenceBatchRow}`,
       `- Verified evidence row: ${item.verifiedEvidenceBatchRow}`,
       `- Evidence recipe row: ${item.evidenceRecipeRow}`,
@@ -10021,6 +15169,8 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
       `- Profile link: ${item.profileLink}`,
       `- Signup URL: ${item.signupUrl}`,
       `- Official help: ${item.officialHelpUrl}`,
+      "- Handle check URLs:",
+      ...item.handleCheckUrls.map((url) => `  - ${url}`),
       `- Bio: ${item.bio}`,
       `- Evidence: ${item.evidencePath || "missing"}`,
       `- Completion hint: ${item.completionHint}`,
@@ -10086,11 +15236,13 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
 }
 
 function renderAccountCreationPackCsv(summary: ClipperAccountCreationPackSummary): string {
-  const header = ["id", "account", "category", "platform", "status", "handle", "display_name", "signup_url", "profile_link", "copy_package", "portal_form_fields", "handle_reservation_plan", "browser_session_checklist", "evidence_capture_plan", "required_inputs", "security_checklist", "recovery_plan", "operator_vault_checklist", "platform_proof_required", "post_creation_next_actions", "completion_hint", "evidence_batch_row", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row", "evidence_path", "next_step"];
+  const batchByPlatform = new Map(summary.platformBatches.map((batch) => [batch.platform, batch]));
+  const header = ["id", "platform_batch_id", "account", "category", "platform", "status", "handle", "display_name", "signup_url", "profile_link", "handle_check_urls", "copy_package", "portal_form_fields", "handle_reservation_plan", "browser_session_checklist", "evidence_capture_plan", "required_inputs", "security_checklist", "recovery_plan", "operator_vault_checklist", "platform_proof_required", "post_creation_next_actions", "completion_hint", "evidence_batch_row", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row", "evidence_path", "next_step"];
   return [
     header.map(csvEscape).join(","),
     ...summary.items.map((item) => [
       item.id,
+      batchByPlatform.get(item.platform)?.id || "",
       item.accountName,
       item.category,
       item.platform,
@@ -10099,6 +15251,7 @@ function renderAccountCreationPackCsv(summary: ClipperAccountCreationPackSummary
       item.displayName,
       item.signupUrl,
       item.profileLink,
+      item.handleCheckUrls.join(" | "),
       item.copyPackage.map((field) => `${field.label}: ${field.value}`).join(" | "),
       item.portalFormFields.map((field) => `${field.field}: ${field.value} (${field.note})`).join(" | "),
       item.handleReservationPlan.join(" | "),
@@ -10147,6 +15300,271 @@ export async function prepareClipperAccountCreationPack(userId = getSystemUserId
   await writeFile(ACCOUNT_CLAIM_SHEET_MARKDOWN_PATH, renderAccountClaimSheetMarkdown(accountCreationPack.claimSheet));
   await writeFile(ACCOUNT_CLAIM_SHEET_CSV_PATH, renderAccountClaimSheetCsv(accountCreationPack.claimSheet));
   return { accountCreationPack, status: await getClipperStatus(userId) };
+}
+
+function accountSetupSessionItemStatus(item: ClipperAccountCreationSessionItem, evidence?: ClipperAccountEvidenceItem): ClipperAccountSetupSessionItemStatus {
+  if (evidence?.status === "verified") return "ready";
+  if (evidence?.status === "submitted") return "in_progress";
+  if (!item.signupUrl || !item.handle || !item.submittedEvidenceBatchRow || !item.verifiedEvidenceBatchRow) return "blocked";
+  return "ready_to_create";
+}
+
+function deriveAccountSetupSessionStatus(generatedAt: string | null, totals: ClipperAccountSetupSessionSummary["totals"]): ClipperAccountSetupSessionStatus {
+  if (!generatedAt) return "not_prepared";
+  if (totals.ready === totals.accounts && totals.accounts > 0) return "ready";
+  if (totals.inProgress > 0 || totals.ready > 0) return "in_progress";
+  if (totals.readyToCreate > 0) return "ready_to_create";
+  return "blocked";
+}
+
+async function buildAccountSetupSessionSummary(input: {
+  accountCreationPack: ClipperAccountCreationPackSummary;
+  accountEvidence: ClipperAccountEvidenceSummary;
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+}): Promise<ClipperAccountSetupSessionSummary> {
+  await ensureClipperDirs();
+  const generatedAt = await stat(ACCOUNT_SETUP_SESSION_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const evidenceByAccountPlatform = new Map(input.accountEvidence.items.map((item) => [`${item.accountId}:${item.platform}`, item]));
+  const claimById = new Map(input.accountCreationPack.claimSheet.map((item) => [item.id, item]));
+  const items: ClipperAccountSetupSessionItem[] = input.accountCreationPack.sessionOrder.map((item) => {
+    const evidence = evidenceByAccountPlatform.get(`${item.accountId}:${item.platform}`);
+    const claim = claimById.get(item.id);
+    const status = accountSetupSessionItemStatus(item, evidence);
+    const blockers = status === "blocked"
+      ? [
+        ...(!item.signupUrl ? ["Missing signup URL."] : []),
+        ...(!item.handle ? ["Missing target handle."] : []),
+        ...(!item.submittedEvidenceBatchRow || !item.verifiedEvidenceBatchRow ? ["Missing launch evidence rows."] : []),
+      ]
+      : [];
+    return {
+      id: `account-setup-${item.accountId}-${item.platform}`,
+      rank: item.rank,
+      accountId: item.accountId,
+      accountName: item.accountName,
+      platform: item.platform,
+      handle: item.handle,
+      status,
+      priority: item.priority,
+      signupUrl: item.signupUrl,
+      profileLink: item.profileLink,
+      handleCheckUrls: item.handleCheckUrls,
+      vaultItemName: claim?.vaultItemName || `Clippers/${item.platform}/${item.accountId}`,
+      loginIdentifierLabel: claim?.loginIdentifierLabel || `<${item.accountId}-${item.platform}-login-email-or-phone-label>`,
+      passwordVaultSlot: claim?.passwordVaultSlot || `Clippers/${item.platform}/${item.accountId}/password`,
+      twoFactorSlot: claim?.twoFactorSlot || `Clippers/${item.platform}/${item.accountId}/2fa-method-and-recovery-codes-saved-note`,
+      recoverySlot: claim?.recoverySlot || `Clippers/${item.platform}/${item.accountId}/recovery-owner-backup-admin-note`,
+      copyPackage: item.copyPackage,
+      portalFormFields: item.portalFormFields,
+      claimSteps: claim?.claimSteps || item.browserSessionChecklist,
+      verificationSteps: claim?.verificationSteps || item.doneCriteria,
+      evidenceCapturePlan: item.evidenceCapturePlan,
+      submittedEvidenceBatchRow: item.submittedEvidenceBatchRow,
+      verifiedEvidenceBatchRow: item.verifiedEvidenceBatchRow,
+      evidenceRecipeRow: item.evidenceRecipeRow,
+      evidenceRows: [item.submittedEvidenceBatchRow, item.verifiedEvidenceBatchRow, item.evidenceRecipeRow].filter(Boolean),
+      evidencePath: evidence?.evidencePath || null,
+      evidenceStatus: evidence?.status || "missing",
+      blockers,
+      doneCriteria: [
+        ...item.doneCriteria,
+        "Submitted evidence row is imported once the external account exists.",
+        "Verified evidence row is imported only after public profile, verification and 2FA proof are captured.",
+        "Owner Connect Pack progress is updated for this account.",
+      ],
+      nextStep: status === "ready"
+        ? "Account verified; continue OAuth, permissions and publisher checks."
+        : status === "in_progress"
+          ? "Review submitted proof, finish verification/2FA evidence and import the verified row."
+          : status === "ready_to_create"
+            ? `Open ${item.signupUrl}, create/claim ${item.handle}, capture proof and import submitted evidence.`
+            : blockers[0] || "Complete missing local setup before opening the external portal.",
+    };
+  });
+  const totals = items.reduce<ClipperAccountSetupSessionSummary["totals"]>((sum, item) => {
+    sum.accounts += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.status === "ready_to_create") sum.readyToCreate += 1;
+    if (item.status === "in_progress") sum.inProgress += 1;
+    if (item.status === "ready") sum.ready += 1;
+    if (item.signupUrl) sum.portalUrls += 1;
+    sum.evidenceRows += [item.submittedEvidenceBatchRow, item.verifiedEvidenceBatchRow, item.evidenceRecipeRow].filter(Boolean).length;
+    sum.vaultSlots += [item.vaultItemName, item.passwordVaultSlot, item.twoFactorSlot, item.recoverySlot].filter(Boolean).length;
+    return sum;
+  }, { accounts: 0, blocked: 0, readyToCreate: 0, inProgress: 0, ready: 0, portalUrls: 0, evidenceRows: 0, vaultSlots: 0 });
+  const status = deriveAccountSetupSessionStatus(generatedAt, totals);
+  return {
+    status,
+    generatedAt,
+    manifestPath: ACCOUNT_SETUP_SESSION_PATH,
+    markdownPath: ACCOUNT_SETUP_SESSION_MARKDOWN_PATH,
+    csvPath: ACCOUNT_SETUP_SESSION_CSV_PATH,
+    items,
+    sourceArtifacts: {
+      accountCreationPackPath: input.accountCreationPack.markdownPath,
+      accountClaimSheetPath: input.accountCreationPack.claimSheetPath,
+      accountEvidenceConnectionKitPath: input.accountEvidence.connectionKitMarkdownPath,
+      accountSetupEvidenceTemplatePath: ACCOUNT_SETUP_EVIDENCE_TEMPLATE_PATH,
+      ownerConnectPackPath: input.ownerConnectPack.markdownPath,
+    },
+    totals,
+    nextStep: items.find((item) => item.status === "blocked")?.nextStep
+      || items.find((item) => item.status === "ready_to_create")?.nextStep
+      || items.find((item) => item.status === "in_progress")?.nextStep
+      || "All external accounts have verified evidence; continue OAuth and app review.",
+  };
+}
+
+function renderAccountSetupSessionMarkdown(summary: ClipperAccountSetupSessionSummary): string {
+  return [
+    "# Clippers Account Setup Session",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.accounts} accounts; ${summary.totals.readyToCreate} ready to create; ${summary.totals.inProgress} in progress; ${summary.totals.ready} ready; ${summary.totals.blocked} blocked`,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Account Creation Pack: ${summary.sourceArtifacts.accountCreationPackPath}`,
+    `- Account Claim Sheet: ${summary.sourceArtifacts.accountClaimSheetPath}`,
+    `- Account Evidence Connection Kit: ${summary.sourceArtifacts.accountEvidenceConnectionKitPath}`,
+    `- Account Setup Evidence Template: ${summary.sourceArtifacts.accountSetupEvidenceTemplatePath}`,
+    `- Owner Connect Pack: ${summary.sourceArtifacts.ownerConnectPackPath}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Account Queue",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.accountName} / ${item.platform}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Priority: ${item.priority}`,
+      `- Handle: ${item.handle}`,
+      `- Signup URL: ${item.signupUrl}`,
+      `- Expected profile: ${item.profileLink}`,
+      "- Handle check URLs:",
+      ...item.handleCheckUrls.map((url) => `  - ${url}`),
+      `- Evidence status: ${item.evidenceStatus}`,
+      `- Evidence path: ${item.evidencePath || "missing"}`,
+      `- Vault item: ${item.vaultItemName}`,
+      `- Login label: ${item.loginIdentifierLabel}`,
+      `- Password vault slot: ${item.passwordVaultSlot}`,
+      `- 2FA slot: ${item.twoFactorSlot}`,
+      `- Recovery slot: ${item.recoverySlot}`,
+      `- Submitted row: ${item.submittedEvidenceBatchRow}`,
+      `- Verified row: ${item.verifiedEvidenceBatchRow}`,
+      `- Recipe row: ${item.evidenceRecipeRow}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Copy package:",
+      ...item.copyPackage.map((field) => `- ${field.label}: ${field.value}`),
+      "",
+      "Portal form fields:",
+      ...item.portalFormFields.map((field) => `- ${field.field}: ${field.value} (${field.note})`),
+      "",
+      "Claim steps:",
+      ...item.claimSteps.map((step) => `- [ ] ${step}`),
+      "",
+      "Verification steps:",
+      ...item.verificationSteps.map((step) => `- [ ] ${step}`),
+      "",
+      "Evidence capture plan:",
+      ...item.evidenceCapturePlan.map((step) => `- [ ] ${step}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Done criteria:",
+      ...item.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderAccountSetupSessionCsv(summary: ClipperAccountSetupSessionSummary): string {
+  const header = ["rank", "id", "account_id", "account_name", "platform", "handle", "status", "priority", "signup_url", "profile_link", "handle_check_urls", "evidence_status", "evidence_path", "vault_item_name", "login_identifier_label", "password_vault_slot", "two_factor_slot", "recovery_slot", "copy_package", "portal_form_fields", "claim_steps", "verification_steps", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row", "next_step"];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => [
+      item.rank,
+      item.id,
+      item.accountId,
+      item.accountName,
+      item.platform,
+      item.handle,
+      item.status,
+      item.priority,
+      item.signupUrl,
+      item.profileLink,
+      item.handleCheckUrls.join(" | "),
+      item.evidenceStatus,
+      item.evidencePath || "",
+      item.vaultItemName,
+      item.loginIdentifierLabel,
+      item.passwordVaultSlot,
+      item.twoFactorSlot,
+      item.recoverySlot,
+      item.copyPackage.map((field) => `${field.label}: ${field.value}`).join(" | "),
+      item.portalFormFields.map((field) => `${field.field}: ${field.value} (${field.note})`).join(" | "),
+      item.claimSteps.join(" | "),
+      item.verificationSteps.join(" | "),
+      item.submittedEvidenceBatchRow,
+      item.verifiedEvidenceBatchRow,
+      item.evidenceRecipeRow,
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+function renderAccountSetupEvidenceTemplate(summary: ClipperAccountSetupSessionSummary): string {
+  const rows = summary.items.flatMap((item) => [
+    [
+      "account",
+      item.accountId,
+      item.platform,
+      "submitted",
+      "",
+      "",
+      "",
+      `<real ${item.handle} profile URL + account created proof + 2FA/security note + screenshot/proof URL>`,
+    ].map(csvEscape).join(","),
+    [
+      "account",
+      item.accountId,
+      item.platform,
+      "verified",
+      "",
+      "",
+      "",
+      `<real ${item.handle} profile URL + verification proof + 2FA/recovery proof + screenshot/proof URL>`,
+    ].map(csvEscape).join(","),
+  ]);
+  return renderLaunchEvidenceImportTemplate(rows);
+}
+
+export async function prepareClipperAccountSetupSession(userId = getSystemUserId()): Promise<{ accountSetupSession: ClipperAccountSetupSessionSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = await buildAccountSetupSessionSummary({
+    accountCreationPack: statusBefore.accountCreationPack,
+    accountEvidence: statusBefore.accountEvidence,
+    ownerConnectPack: statusBefore.ownerConnectPack,
+  });
+  const generatedAt = new Date().toISOString();
+  const accountSetupSession: ClipperAccountSetupSessionSummary = {
+    ...draftSummary,
+    generatedAt,
+    status: deriveAccountSetupSessionStatus(generatedAt, draftSummary.totals),
+  };
+  await writeFile(ACCOUNT_SETUP_SESSION_PATH, JSON.stringify(accountSetupSession, null, 2));
+  await writeFile(ACCOUNT_SETUP_SESSION_MARKDOWN_PATH, renderAccountSetupSessionMarkdown(accountSetupSession));
+  await writeFile(ACCOUNT_SETUP_SESSION_CSV_PATH, renderAccountSetupSessionCsv(accountSetupSession));
+  await writeLaunchEvidenceTemplateIfSafe(ACCOUNT_SETUP_EVIDENCE_TEMPLATE_PATH, renderAccountSetupEvidenceTemplate(accountSetupSession));
+  return { accountSetupSession, status: await getClipperStatus(userId) };
 }
 
 function permissionTrackerItemStatus(input: {
@@ -10355,14 +15773,14 @@ function permissionRequestJustification(item: ClipperPermissionTrackerItem): str
 function permissionRequestPlatformConstraints(item: ClipperPermissionTrackerItem): string[] {
   if (item.platform === "tiktok") {
     return [
-      "Official docs checked 2026-06-17: create/register the TikTok developer app, add the Content Posting API product, and configure Direct Post before using direct publishing.",
+      `Official docs checked ${OFFICIAL_PERMISSION_DOCS_CHECKED_AT}: create/register the TikTok developer app, add the Content Posting API product, and configure Direct Post before using direct publishing.`,
       "video.publish requires explicit scope approval and user authorization before direct posting.",
       "Until TikTok audit/app review is complete, keep launches in approval_required/private-testing mode and record review evidence before scaling.",
     ];
   }
   if (item.platform === "youtube") {
     return [
-      "Official docs checked 2026-06-17: YouTube uploads require OAuth authorization with youtube.upload or another accepted YouTube upload scope.",
+      `Official docs checked ${OFFICIAL_PERMISSION_DOCS_CHECKED_AT}: YouTube uploads require OAuth authorization with youtube.upload or another accepted YouTube upload scope.`,
       "Projects created after 2020-07-28 may have uploads restricted to private while unverified; plan Google OAuth verification/API compliance audit before public autopost.",
       "YouTube videos.insert consumes the Video Uploads daily quota bucket, so production scaling needs quota monitoring per Google Cloud project.",
     ];
@@ -10427,6 +15845,107 @@ function permissionReviewerInstructions(item: ClipperPermissionTrackerItem): str
     "Every post is gated by human approval, account verification, rights evidence and QA before public publishing.",
     "Reviewer can use the public demo, privacy policy, terms, redirect URI and attached screenshots to verify the flow.",
   ].join(" ");
+}
+
+function permissionRequestPlatformLabel(platform: ClipperPlatform): string {
+  return PLATFORM_REQUIREMENTS.find((item) => item.platform === platform)?.label || platform;
+}
+
+function permissionRequestPlatformBatchStatus(items: ClipperPermissionRequestPackItem[]): ClipperPermissionRequestPackStatus {
+  if (items.some((item) => item.packStatus === "blocked")) return "blocked";
+  if (items.some((item) => item.packStatus === "partial")) return "partial";
+  return "ready";
+}
+
+function permissionRequestEvidenceRow(platform: ClipperPlatform, scope: string, status: "requested" | "approved"): string {
+  const proof = status === "approved"
+    ? "<permission approval URL/screenshot + approval date>"
+    : "<permission request/review URL + screenshot/proof path>";
+  return ["permission", "", platform, status, scope, "", "", proof].map(csvEscape).join(",");
+}
+
+function buildPermissionRequestPlatformBatches(items: ClipperPermissionRequestPackItem[]): ClipperPermissionRequestPlatformBatch[] {
+  return (["tiktok", "instagram", "youtube"] as ClipperPlatform[])
+    .map((platform) => {
+      const platformItems = items.filter((item) => item.platform === platform);
+      if (!platformItems.length) return null;
+      const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform);
+      const status = permissionRequestPlatformBatchStatus(platformItems);
+      const blockers = Array.from(new Set(platformItems.flatMap((item) => item.blockers.length ? item.blockers : item.missingEvidence)));
+      const requiredEvidence = Array.from(new Set(platformItems.flatMap((item) => item.reviewerEvidence)));
+      const docsUrls = Array.from(new Set(platformItems.flatMap((item) => [item.docsUrl, item.officialReferenceUrl]).filter(Boolean)));
+      const scopes = platformItems.map((item) => item.scope);
+      const requestedEvidenceRows = platformItems.map((item) => permissionRequestEvidenceRow(platform, item.scope, "requested"));
+      const approvedEvidenceRows = platformItems.map((item) => permissionRequestEvidenceRow(platform, item.scope, "approved"));
+      const requestedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `permission-${platform}-requested.csv`);
+      const approvedDropFilePath = path.join(LAUNCH_EVIDENCE_DROP_DIR, `permission-${platform}-approved.csv`);
+      const requestedTemplateFilePath = path.join(PERMISSION_DROP_TEMPLATE_DIR, `permission-${platform}-requested.csv`);
+      const approvedTemplateFilePath = path.join(PERMISSION_DROP_TEMPLATE_DIR, `permission-${platform}-approved.csv`);
+      const copyBlock = [
+        `${permissionRequestPlatformLabel(platform)} permission request`,
+        "",
+        "Requested scopes:",
+        ...platformItems.map((item) => `- ${item.scope}: ${item.requestReadiness}`),
+        "",
+        "Use case:",
+        ...platformItems.map((item) => `- ${item.scope}: ${item.requestedUseCase}`),
+        "",
+        "Reviewer instructions:",
+        ...platformItems.map((item) => `- ${item.scope}: ${item.reviewerInstructions}`),
+        "",
+        "Evidence to attach:",
+        ...requiredEvidence.map((evidence) => `- ${evidence}`),
+      ].join("\n");
+      const submissionSteps = [
+        `Open ${requirement?.developerPortalUrl || platformItems[0].developerPortalUrl}.`,
+        `Select the Clippers app/project for ${permissionRequestPlatformLabel(platform)}.`,
+        `Request or confirm scopes: ${scopes.join(", ")}.`,
+        "Paste the platform copy block and attach required evidence.",
+        "Submit the request/app review and capture the final portal URL or screenshot.",
+        "Import the requested evidence rows, then replace them with approved rows after review approval.",
+      ];
+      return {
+        id: `permission-batch-${platform}`,
+        platform,
+        label: `${permissionRequestPlatformLabel(platform)} permissions`,
+        status,
+        permissions: platformItems.length,
+        ready: platformItems.filter((item) => item.packStatus === "ready").length,
+        partial: platformItems.filter((item) => item.packStatus === "partial").length,
+        blocked: platformItems.filter((item) => item.packStatus === "blocked").length,
+        approved: platformItems.filter((item) => item.status === "approved").length,
+        requested: platformItems.filter((item) => item.status === "requested").length,
+        developerPortalUrl: requirement?.developerPortalUrl || platformItems[0].developerPortalUrl,
+        docsUrls,
+        scopes,
+        scopeRequestLines: platformItems.map((item) => item.scopeRequestLine),
+        copyBlock,
+        evidenceRecipeRows: platformItems.map((item) => item.evidenceRecipeRow),
+        requestedEvidenceRows,
+        approvedEvidenceRows,
+        requestedDropFilePath,
+        approvedDropFilePath,
+        requestedTemplateFilePath,
+        approvedTemplateFilePath,
+        requestedDropTemplate: renderLaunchEvidenceImportTemplate(requestedEvidenceRows),
+        approvedDropTemplate: renderLaunchEvidenceImportTemplate(approvedEvidenceRows),
+        requiredEvidence,
+        blockers,
+        submissionSteps,
+        doneCriteria: [
+          "Portal shows every requested scope as submitted/requested or approved.",
+          "Permission Tracker has real evidence notes for every scope, not placeholders.",
+          "Launch Evidence Batch accepts the platform evidence rows with zero rejected records.",
+          "OAuth Go-Live remains blocked until credentials, redirect URL, app review and token vault are all valid.",
+        ],
+        nextStep: status === "ready"
+          ? "All platform permissions are approved; keep evidence and continue OAuth/publishing QA."
+          : status === "partial"
+            ? "Finish pending app review/permission decisions and import requested/approved evidence rows."
+            : blockers[0] || "Resolve account, app, credential and public URL blockers before submitting this platform.",
+      };
+    })
+    .filter((item): item is ClipperPermissionRequestPlatformBatch => Boolean(item));
 }
 
 async function buildPermissionRequestPackSummary(permissionTracker: ClipperPermissionTrackerSummary): Promise<ClipperPermissionRequestPackSummary> {
@@ -10494,7 +16013,7 @@ async function buildPermissionRequestPackSummary(permissionTracker: ClipperPermi
           : item.nextStep,
     };
   });
-  const totals = items.reduce<ClipperPermissionRequestPackSummary["totals"]>((sum, item) => {
+  const baseTotals = items.reduce<Omit<ClipperPermissionRequestPackSummary["totals"], "platformBatches">>((sum, item) => {
     sum.permissions += 1;
     if (item.packStatus === "ready") sum.ready += 1;
     if (item.packStatus === "partial") sum.partial += 1;
@@ -10504,16 +16023,21 @@ async function buildPermissionRequestPackSummary(permissionTracker: ClipperPermi
     return sum;
   }, { permissions: 0, ready: 0, partial: 0, blocked: 0, approved: 0, requested: 0 });
   const generatedAt = await stat(PERMISSION_REQUEST_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const platformBatches = buildPermissionRequestPlatformBatches(items);
+  const totals = { ...baseTotals, platformBatches: platformBatches.length };
   return {
-    status: !generatedAt ? "not_prepared" : totals.blocked > 0 ? "blocked" : totals.partial > 0 ? "partial" : "ready",
+    status: !generatedAt ? "not_prepared" : baseTotals.blocked > 0 ? "blocked" : baseTotals.partial > 0 ? "partial" : "ready",
     generatedAt,
     manifestPath: PERMISSION_REQUEST_PACK_PATH,
     markdownPath: PERMISSION_REQUEST_PACK_MARKDOWN_PATH,
     csvPath: PERMISSION_REQUEST_PACK_CSV_PATH,
     sourceTrackerPath: permissionTracker.trackerPath,
     items,
+    platformBatches,
     totals,
-    nextStep: items.find((item) => item.packStatus === "blocked")?.nextStep
+    nextStep: platformBatches.find((batch) => batch.status === "blocked")?.nextStep
+      || items.find((item) => item.packStatus === "blocked")?.nextStep
+      || platformBatches.find((batch) => batch.status === "partial")?.nextStep
       || items.find((item) => item.packStatus === "partial")?.nextStep
       || "Permission Request Pack listo; todos los permisos estan aprobados o listos para OAuth/publishing QA.",
   };
@@ -10526,11 +16050,61 @@ function renderPermissionRequestPackMarkdown(summary: ClipperPermissionRequestPa
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Source tracker: ${summary.sourceTrackerPath}`,
-    `Totals: ${summary.totals.ready}/${summary.totals.permissions} ready; ${summary.totals.partial} partial; ${summary.totals.blocked} blocked; ${summary.totals.approved} approved; ${summary.totals.requested} requested`,
+    `Totals: ${summary.totals.ready}/${summary.totals.permissions} ready; ${summary.totals.partial} partial; ${summary.totals.blocked} blocked; ${summary.totals.approved} approved; ${summary.totals.requested} requested; ${summary.totals.platformBatches} platform batches`,
     "",
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Platform Submission Batches",
+    "",
+    ...summary.platformBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Status: ${batch.status}`,
+      `- Scopes: ${batch.scopes.join(", ")}`,
+      `- Developer portal: ${batch.developerPortalUrl}`,
+      `- Docs: ${batch.docsUrls.join(", ")}`,
+      `- Evidence recipe rows: ${batch.evidenceRecipeRows.length}`,
+      `- Requested rows: ${batch.requestedEvidenceRows.length}`,
+      `- Approved rows: ${batch.approvedEvidenceRows.length}`,
+      `- Requested template file: ${batch.requestedTemplateFilePath}`,
+      `- Approved template file: ${batch.approvedTemplateFilePath}`,
+      `- Requested drop file: ${batch.requestedDropFilePath}`,
+      `- Approved drop file: ${batch.approvedDropFilePath}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Copy block:",
+      "```",
+      batch.copyBlock,
+      "```",
+      "",
+      "Submission steps:",
+      ...batch.submissionSteps.map((step) => `- [ ] ${step}`),
+      "",
+      "Done criteria:",
+      ...batch.doneCriteria.map((step) => `- [ ] ${step}`),
+      "",
+      batch.blockers.length ? "Blockers:" : "Blockers: none",
+      ...batch.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Evidence recipe rows:",
+      "```csv",
+      ...batch.evidenceRecipeRows,
+      "```",
+      "",
+      "Requested drop template:",
+      "```csv",
+      batch.requestedDropTemplate.trim(),
+      "```",
+      "",
+      "Approved drop template:",
+      "```csv",
+      batch.approvedDropTemplate.trim(),
+      "```",
+      "",
+    ]),
     "",
     "## Requests",
     "",
@@ -10589,11 +16163,13 @@ function renderPermissionRequestPackMarkdown(summary: ClipperPermissionRequestPa
 }
 
 function renderPermissionRequestPackCsv(summary: ClipperPermissionRequestPackSummary): string {
-  const header = ["id", "platform", "scope", "tracker_status", "pack_status", "request_readiness", "official_verification", "developer_portal", "docs_url", "official_reference_url", "scope_request_line", "use_case", "reviewer_instructions", "platform_constraints", "official_approval_checklist", "missing_evidence", "audit_warnings", "evidence_batch_row", "evidence_recipe_row", "next_step"];
+  const batchByPlatform = new Map(summary.platformBatches.map((batch) => [batch.platform, batch]));
+  const header = ["id", "platform_batch_id", "platform", "scope", "tracker_status", "pack_status", "request_readiness", "official_verification", "developer_portal", "docs_url", "official_reference_url", "requested_template_file_path", "approved_template_file_path", "requested_drop_file_path", "approved_drop_file_path", "scope_request_line", "use_case", "reviewer_instructions", "platform_constraints", "official_approval_checklist", "missing_evidence", "audit_warnings", "evidence_batch_row", "evidence_recipe_row", "next_step"];
   return [
     header.map(csvEscape).join(","),
     ...summary.items.map((item) => [
       item.id,
+      batchByPlatform.get(item.platform)?.id || "",
       item.platform,
       item.scope,
       item.status,
@@ -10603,6 +16179,10 @@ function renderPermissionRequestPackCsv(summary: ClipperPermissionRequestPackSum
       item.developerPortalUrl,
       item.docsUrl,
       item.officialReferenceUrl,
+      batchByPlatform.get(item.platform)?.requestedTemplateFilePath || "",
+      batchByPlatform.get(item.platform)?.approvedTemplateFilePath || "",
+      batchByPlatform.get(item.platform)?.requestedDropFilePath || "",
+      batchByPlatform.get(item.platform)?.approvedDropFilePath || "",
       item.scopeRequestLine,
       item.requestedUseCase,
       item.reviewerInstructions,
@@ -10615,6 +16195,31 @@ function renderPermissionRequestPackCsv(summary: ClipperPermissionRequestPackSum
       item.nextStep,
     ].map(csvEscape).join(",")),
   ].join("\n");
+}
+
+async function writePermissionRequestDropTemplates(summary: ClipperPermissionRequestPackSummary): Promise<void> {
+  await mkdir(PERMISSION_DROP_TEMPLATE_DIR, { recursive: true });
+  await writeFile(PERMISSION_DROP_TEMPLATE_README_PATH, [
+    "# Clippers Permission Drop Templates",
+    "",
+    "These files are safe templates only. Do not copy them into evidence-drop until every placeholder has been replaced with real permission proof.",
+    "",
+    "Workflow:",
+    "1. Open the platform portal and request or approve the scopes.",
+    "2. Replace each <...> placeholder with a real URL, ticket, screenshot path, approval date, or proof note.",
+    "3. Copy the completed CSV to the matching evidence-drop path from Permission Request Pack.",
+    "4. Run Local sync or Import drop after the file contains only real evidence.",
+    "",
+  ].join("\n"));
+  const writeTemplateIfSafe = async (filePath: string, template: string) => {
+    const existing = await readFile(filePath, "utf8").catch(() => "");
+    if (existing.trim() && !hasTemplatePlaceholder(existing)) return;
+    await writeFile(filePath, template);
+  };
+  await Promise.all(summary.platformBatches.flatMap((batch) => [
+    writeTemplateIfSafe(batch.requestedTemplateFilePath, batch.requestedDropTemplate),
+    writeTemplateIfSafe(batch.approvedTemplateFilePath, batch.approvedDropTemplate),
+  ]));
 }
 
 export async function prepareClipperPermissionRequestPack(userId = getSystemUserId()): Promise<{ permissionRequestPack: ClipperPermissionRequestPackSummary; status: ClipperStatus }> {
@@ -10636,6 +16241,7 @@ export async function prepareClipperPermissionRequestPack(userId = getSystemUser
     status: draftSummary.totals.blocked > 0 ? "blocked" : draftSummary.totals.partial > 0 ? "partial" : "ready",
   };
   await writeFile(PERMISSION_REQUEST_PACK_PATH, JSON.stringify(permissionRequestPack, null, 2));
+  await writePermissionRequestDropTemplates(permissionRequestPack);
   await writeFile(PERMISSION_REQUEST_PACK_MARKDOWN_PATH, renderPermissionRequestPackMarkdown(permissionRequestPack));
   await writeFile(PERMISSION_REQUEST_PACK_CSV_PATH, renderPermissionRequestPackCsv(permissionRequestPack));
   return { permissionRequestPack, status: await getClipperStatus(userId) };
@@ -11488,6 +17094,12 @@ function renderLaunchEvidenceImportTemplate(rows: string[]): string {
   ].join("\n");
 }
 
+async function writeLaunchEvidenceTemplateIfSafe(filePath: string, template: string): Promise<void> {
+  const existing = await readFile(filePath, "utf8").catch(() => "");
+  if (existing.trim() && !hasTemplatePlaceholder(existing)) return;
+  await writeFile(filePath, template);
+}
+
 function buildExternalExecutionUnlockBoard(items: ClipperExternalExecutionSessionItem[]): ClipperExternalExecutionUnlockBoardItem[] {
   return (["tiktok", "instagram", "youtube"] as ClipperPlatform[]).map((platform) => {
     const platformItems = items.filter((item) => item.platform === platform);
@@ -11622,6 +17234,109 @@ function buildExternalExecutionPortalBatches(items: ClipperExternalExecutionSess
   });
 }
 
+function externalFocusRunMinutes(item: ClipperExternalExecutionSessionItem): number {
+  if (item.type === "credential") return 5;
+  if (item.type === "account") return 12;
+  if (item.type === "developer_app") return 20;
+  if (item.type === "permission") return 15;
+  if (item.type === "oauth") return 10;
+  return 8;
+}
+
+function externalFocusRunDoneCriteria(item: ClipperExternalExecutionSessionItem): string[] {
+  if (item.type === "credential") {
+    return [
+      "Credential batch preview accepts the env names.",
+      "Reload keys no longer reports the same missing env group.",
+      "Credential Doctor shows progress without exposing raw values.",
+    ];
+  }
+  if (item.type === "account") {
+    return [
+      "Real account exists in the external platform.",
+      "Profile URL/handle and 2FA proof note are ready.",
+      "Completed account evidence row is imported with Strict on.",
+    ];
+  }
+  if (item.type === "developer_app") {
+    return [
+      "Developer app or cloud project exists in the official portal.",
+      "Public HTTPS URL/redirect URI is saved in the portal.",
+      "Developer app evidence row has real app identifier and proof note.",
+    ];
+  }
+  if (item.type === "permission") {
+    return [
+      "Scope request is submitted or approved in the official portal.",
+      "Evidence includes ticket, review URL, email, or screenshot/proof note.",
+      "Permission evidence row imports cleanly with Strict on.",
+    ];
+  }
+  if (item.type === "oauth") {
+    return [
+      "OAuth URL opens from Clippers.",
+      "Callback completes successfully.",
+      "Token vault has an encrypted token record for the platform.",
+    ];
+  }
+  return ["Action completed and evidence imported or refreshed."];
+}
+
+function buildExternalExecutionFocusRun(items: ClipperExternalExecutionSessionItem[]): ClipperExternalExecutionFocusRun {
+  const typeRank: Record<ClipperExternalSetupQueueItemType, number> = {
+    credential: 0,
+    account: 1,
+    developer_app: 2,
+    permission: 3,
+    oauth: 4,
+  };
+  const platformRank: Record<ClipperPlatform, number> = { instagram: 0, tiktok: 1, youtube: 2 };
+  const focusItems = items
+    .filter((item) => item.lane === "do_now")
+    .sort((a, b) => typeRank[a.type] - typeRank[b.type] || platformRank[a.platform] - platformRank[b.platform] || a.rank - b.rank)
+    .slice(0, 7)
+    .map<ClipperExternalExecutionFocusRunItem>((item, index) => {
+      const evidenceRow = item.evidenceBatchRow || item.evidenceRecipeRow || "";
+      return {
+        id: `focus-${item.id}`,
+        rank: index + 1,
+        sourceItemId: item.id,
+        platform: item.platform,
+        type: item.type,
+        label: item.label,
+        actionMode: item.actionMode,
+        estimatedMinutes: externalFocusRunMinutes(item),
+        portalUrl: item.portalUrl,
+        executionUrl: item.executionUrl,
+        evidenceRow,
+        credentialTemplate: item.credentialTemplate,
+        checklist: [
+          item.laneReason,
+          item.nextStep,
+          item.completionHint,
+          ...item.requiredInputs.slice(0, 3).map((input) => `Prepare: ${input}`),
+        ].filter(Boolean),
+        doneCriteria: externalFocusRunDoneCriteria(item),
+        nextStep: item.nextStep,
+      };
+    });
+  const evidenceRows = focusItems.map((item) => item.evidenceRow).filter(Boolean);
+  const credentialTemplates = focusItems.map((item) => item.credentialTemplate).filter(Boolean);
+  const portalUrls = Array.from(new Set(focusItems.map((item) => item.portalUrl).filter(Boolean)));
+  const estimatedMinutes = focusItems.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+
+  return {
+    status: focusItems.length > 0 ? "ready" : "empty",
+    label: focusItems.length > 0 ? `Next ${focusItems.length} external actions` : "No do_now external actions",
+    estimatedMinutes,
+    items: focusItems,
+    evidenceRows,
+    credentialTemplates,
+    portalUrls,
+    nextStep: focusItems[0]?.nextStep || "No do_now external action is available; resolve blockers or regenerate the external session.",
+  };
+}
+
 async function buildExternalExecutionSessionSummary(input: {
   externalExecutionHandoff: ClipperExternalExecutionHandoffSummary;
 }): Promise<ClipperExternalExecutionSessionSummary> {
@@ -11657,6 +17372,7 @@ async function buildExternalExecutionSessionSummary(input: {
   const evidenceImportTemplate = renderLaunchEvidenceImportTemplate(importableEvidenceRows);
   const unlockBoard = buildExternalExecutionUnlockBoard(items);
   const portalBatches = buildExternalExecutionPortalBatches(items);
+  const focusRun = buildExternalExecutionFocusRun(items);
   const totals = items.reduce<ClipperExternalExecutionSessionSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.lane === "do_now") sum.doNow += 1;
@@ -11686,11 +17402,440 @@ async function buildExternalExecutionSessionSummary(input: {
     items,
     unlockBoard,
     portalBatches,
+    focusRun,
     totals,
     nextStep: items.find((item) => item.lane === "do_now")?.nextStep
       || items.find((item) => item.lane === "blocked")?.nextStep
       || input.externalExecutionHandoff.nextStep,
   };
+}
+
+function buildPlatformAccountConnectionRow(task: ClipperAccountLaunchTask): ClipperPlatformAccountConnectionRow {
+  const accountEvidenceRow = [
+    "account",
+    task.accountId,
+    task.platform,
+    "verified",
+    "",
+    "",
+    "",
+    "",
+  ].map(csvEscape).join(",");
+  const proofRequirements = [
+    `Profile URL opens publicly or from logged-in review: ${task.profileLink}.`,
+    `Handle matches planned handle ${task.handle}.`,
+    "2FA is enabled and recovery codes are stored outside this repository.",
+    "Screenshot/proof link or internal evidence note is ready for Launch Evidence Batch.",
+  ];
+  const postConnectActions = [
+    `Import account evidence row for ${task.accountName} on ${task.platform}.`,
+    "Connect OAuth after developer app credentials, redirect URL and scopes are ready.",
+    "Confirm token vault has an encrypted token before enabling publisher connector.",
+  ];
+  return {
+    id: `${task.accountId}-${task.platform}-connection`,
+    accountId: task.accountId,
+    accountName: task.accountName,
+    category: task.category,
+    platform: task.platform,
+    handle: task.handle,
+    profileLink: task.profileLink,
+    accountCreationUrl: task.accountCreationUrl,
+    developerPortalUrl: task.developerPortalUrl,
+    status: task.status,
+    evidenceStatus: task.evidenceStatus,
+    evidencePath: task.evidencePath,
+    accountEvidenceRow,
+    proofRequirements,
+    checklist: task.checklist,
+    postConnectActions,
+    blockers: task.blockers,
+    nextStep: task.nextStep,
+  };
+}
+
+function warRoomSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function buildPlatformPermissionApprovalRows(input: {
+  permissionTracker: ClipperPermissionTrackerSummary;
+  permissionRequestPack: ClipperPermissionRequestPackSummary;
+}): ClipperPlatformPermissionApprovalRow[] {
+  return input.permissionTracker.items.map((permission) => {
+    const requestItem = input.permissionRequestPack.items.find((item) => item.platform === permission.platform && item.scope === permission.scope);
+    const requestedEvidenceRow = ["permission", "", permission.platform, "requested", permission.scope, "", "", ""].map(csvEscape).join(",");
+    const approvedEvidenceRow = ["permission", "", permission.platform, "approved", permission.scope, "", "", ""].map(csvEscape).join(",");
+    const proofRequirements = [
+      "Developer portal shows the scope request, review ticket, approval status, or app review screen.",
+      "Evidence note includes a real portal URL, ticket/case ID, screenshot/proof link, or approval note.",
+      "App identifier and production HTTPS redirect URL match the app used for OAuth.",
+      "No client secrets, OAuth tokens, passwords, recovery codes, or private keys are pasted into evidence.",
+    ];
+    return {
+      id: `${permission.platform}-${warRoomSlug(permission.scope)}-approval`,
+      platform: permission.platform,
+      scope: permission.scope,
+      label: permission.label,
+      status: permission.status,
+      requestReadiness: requestItem?.requestReadiness || "missing",
+      developerPortalUrl: permission.developerPortalUrl,
+      docsUrl: permission.docsUrl,
+      officialReferenceUrl: requestItem?.officialReferenceUrl || permission.docsUrl,
+      evidenceBatchRow: permission.evidenceBatchRow,
+      evidenceRecipeRow: permission.evidenceRecipeRow,
+      requestedEvidenceRow,
+      approvedEvidenceRow,
+      proofRequirements,
+      portalSteps: requestItem?.submissionSteps || permission.humanSteps,
+      reviewerEvidence: requestItem?.reviewerEvidence || permission.evidenceRequired,
+      blockers: Array.from(new Set([
+        ...permission.blockers,
+        ...(requestItem?.blockers || []),
+        ...(requestItem?.missingEvidence || []),
+      ])),
+      nextStep: requestItem?.nextStep || permission.nextStep,
+    };
+  });
+}
+
+function buildPlatformWarRoomSummary(input: {
+  accountLaunchKit: ClipperAccountLaunchKitSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+  permissionRequestPack: ClipperPermissionRequestPackSummary;
+  credentialChecks: ClipperCredentialCheck[];
+  connectActions: ClipperConnectAction[];
+  tokenRecords: ClipperTokenSummary[];
+  oauthConnections: ClipperOAuthConnection[];
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+}): ClipperPlatformWarRoomSummary {
+  const accountConnectionRows = input.accountLaunchKit.tasks.map(buildPlatformAccountConnectionRow);
+  const permissionApprovalRows = buildPlatformPermissionApprovalRows({
+    permissionTracker: input.permissionTracker,
+    permissionRequestPack: input.permissionRequestPack,
+  });
+  const items = PLATFORM_REQUIREMENTS.map<ClipperPlatformWarRoomItem>((requirement) => {
+    const platform = requirement.platform;
+    const accountTasks = input.accountLaunchKit.tasks.filter((task) => task.platform === platform);
+    const accountsVerified = accountTasks.filter((task) => task.evidenceStatus === "verified").length;
+    const developerApp = input.developerAppEvidence.items.find((item) => item.platform === platform);
+    const permissions = input.permissionTracker.items.filter((item) => item.platform === platform);
+    const permissionBatch = input.permissionRequestPack.platformBatches.find((batch) => batch.platform === platform);
+    const permissionsApproved = permissions.filter((item) => item.status === "approved").length;
+    const permissionsRequested = permissions.filter((item) => item.status === "requested").length;
+    const credential = input.credentialChecks.find((item) => item.platform === platform);
+    const connectAction = input.connectActions.find((item) => item.platform === platform);
+    const tokenSaved = input.tokenRecords.some((record) => record.platform === platform);
+    const oauthConnection = input.oauthConnections.find((item) => item.platform === platform);
+    const platformBatches = input.externalExecutionSession.portalBatches.filter((batch) => batch.platform === platform);
+    const accountBatches = platformBatches.filter((batch) => batch.type === "account");
+    const permissionBatches = platformBatches.filter((batch) => batch.type === "permission");
+    const portalUrls = Array.from(new Set([
+      requirement.accountCreationUrl,
+      requirement.developerPortalUrl,
+      ...platformBatches.flatMap((batch) => batch.portalUrls),
+    ].filter(Boolean)));
+    const executionUrls = Array.from(new Set(platformBatches.flatMap((batch) => batch.executionUrls).filter(Boolean)));
+    const evidenceRows = Array.from(new Set(platformBatches.flatMap((batch) => batch.evidenceRows).filter(Boolean)));
+    const credentialTemplates = Array.from(new Set(platformBatches.flatMap((batch) => batch.credentialTemplates).filter(Boolean)));
+    const accountEvidenceRows = Array.from(new Set(accountBatches.flatMap((batch) => batch.evidenceRows).filter(Boolean)));
+    const permissionEvidenceRows = Array.from(new Set([
+      ...(permissionBatch?.evidenceRecipeRows || []),
+      ...permissionBatches.flatMap((batch) => batch.evidenceRows),
+    ].filter(Boolean)));
+    const missingEnvVars = credential?.missingEnvVars || [];
+    const blockers = [
+      accountsVerified < accountTasks.length ? `${accountTasks.length - accountsVerified}/${accountTasks.length} account evidence rows missing or not verified.` : "",
+      developerApp?.status !== "approved" ? `Developer app evidence is ${developerApp?.status || "missing"}.` : "",
+      permissionsApproved < permissions.length ? `${permissions.length - permissionsApproved}/${permissions.length} permissions not approved.` : "",
+      credential?.status !== "ready" ? `Credentials missing: ${missingEnvVars.join(", ") || "credential group"}.` : "",
+      !tokenSaved ? `No encrypted token saved for ${platform}.` : "",
+    ].filter(Boolean);
+    const status: ClipperPlatformWarRoomStatus = blockers.length === 0
+      ? "ready"
+      : accountsVerified > 0 || developerApp || permissionsRequested > 0 || credential?.status === "partial" || oauthConnection
+        ? "in_progress"
+        : "blocked";
+    const operatorSteps = [
+      `Open ${requirement.accountCreationUrl} and verify all ${platform} brand accounts.`,
+      `Open ${requirement.developerPortalUrl} and create/update the developer app.`,
+      "Paste the listed evidence rows into Launch Evidence Batch after replacing placeholders with real proof.",
+      "Submit or update permission requests using the prepared scope copy.",
+      "After credentials and approvals are ready, run OAuth connect and confirm token vault shows a saved token.",
+    ];
+    const connectionChecklist = [
+      `Create or log into every ${platform} account from the account rows.`,
+      "Enable 2FA and store recovery codes outside this repo.",
+      `Create or update the ${platform} developer app in the official portal.`,
+      credential?.status === "ready"
+        ? "Credentials are already detected; confirm the redirect URL matches the app."
+        : `Load missing env groups before OAuth: ${missingEnvVars.join(", ") || "credential group"}.`,
+      "Start OAuth only after accounts, developer app, requested scopes and redirect URLs are aligned.",
+    ];
+    const evidenceChecklist = [
+      accountEvidenceRows.length
+        ? `${accountEvidenceRows.length} account evidence rows are ready to load once handles/profile proof are real.`
+        : "No account evidence rows remain for this platform.",
+      permissionEvidenceRows.length
+        ? `${permissionEvidenceRows.length} permission evidence rows are ready once review tickets or approvals exist.`
+        : "No permission evidence rows remain for this platform.",
+      evidenceRows.length
+        ? "Use Launch Evidence Batch; do not edit generated JSON files by hand."
+        : "No import rows are currently pending for this platform.",
+    ];
+    const safetyRules = [
+      "Never paste passwords, recovery codes, client secrets or OAuth tokens into evidence notes.",
+      "Evidence must include a real handle/profile URL, portal ticket, screenshot/proof link or approval note.",
+      "Use owned/licensed/permissioned sources only; viral discovery is for leads, not automatic repost rights.",
+    ];
+    const afterConnectionSteps = [
+      "Reload credentials and regenerate OAuth Go-Live after saving new env values.",
+      "Use the Connect/OAuth action for the platform and confirm token vault has one encrypted record.",
+      "Run Command Center and Go-Live Autopilot after all gates turn ready or in progress.",
+    ];
+    const doneCriteria = [
+      `${accountsVerified}/${accountTasks.length} accounts verified.`,
+      `Developer app evidence approved for ${platform}.`,
+      `${permissionsApproved}/${permissions.length} permissions approved.`,
+      `Credential status is ready for ${platform}.`,
+      `Encrypted token saved for ${platform}.`,
+    ];
+    return {
+      platform,
+      label: requirement.label,
+      status,
+      accountTasks: accountTasks.length,
+      accountsVerified,
+      developerAppStatus: developerApp?.status || "missing",
+      permissionsApproved,
+      permissionsRequested,
+      permissionsTotal: permissions.length,
+      credentialStatus: credential?.status || "missing",
+      oauthStatus: connectAction?.status || "blocked",
+      tokenSaved,
+      portalUrls,
+      executionUrls,
+      evidenceRows,
+      credentialTemplates,
+      accountEvidenceRows,
+      permissionEvidenceRows,
+      missingEnvVars,
+      blockers,
+      operatorSteps,
+      connectionChecklist,
+      evidenceChecklist,
+      safetyRules,
+      afterConnectionSteps,
+      doneCriteria,
+      nextStep: blockers[0] || `Platform ${platform} is ready for guarded publishing.`,
+    };
+  });
+  const totals = items.reduce<ClipperPlatformWarRoomSummary["totals"]>((sum, item) => {
+    sum.platforms += 1;
+    if (item.status === "ready") sum.ready += 1;
+    if (item.status === "in_progress") sum.inProgress += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    sum.accountEvidenceRows += item.accountEvidenceRows.length;
+    sum.permissionEvidenceRows += item.permissionEvidenceRows.length;
+    sum.credentialTemplates += item.credentialTemplates.length;
+    return sum;
+  }, {
+    platforms: 0,
+    ready: 0,
+    inProgress: 0,
+    blocked: 0,
+    accountConnections: accountConnectionRows.length,
+    accountConnectionsReady: accountConnectionRows.filter((row) => row.status === "ready").length,
+    accountConnectionsPending: accountConnectionRows.filter((row) => row.status === "pending").length,
+    accountConnectionsBlocked: accountConnectionRows.filter((row) => row.status === "blocked").length,
+    permissionApprovals: permissionApprovalRows.length,
+    permissionApprovalsApproved: permissionApprovalRows.filter((row) => row.status === "approved").length,
+    permissionApprovalsRequested: permissionApprovalRows.filter((row) => row.status === "requested").length,
+    permissionApprovalsBlocked: permissionApprovalRows.filter((row) => row.status === "blocked").length,
+    accountEvidenceRows: 0,
+    permissionEvidenceRows: 0,
+    credentialTemplates: 0,
+  });
+  return {
+    status: totals.ready === totals.platforms ? "ready" : totals.inProgress > 0 ? "in_progress" : "blocked",
+    manifestPath: PLATFORM_WAR_ROOM_PATH,
+    markdownPath: PLATFORM_WAR_ROOM_MARKDOWN_PATH,
+    items,
+    accountConnectionRows,
+    permissionApprovalRows,
+    totals,
+    nextStep: items.find((item) => item.status === "blocked")?.nextStep
+      || items.find((item) => item.status === "in_progress")?.nextStep
+      || "All platform war room gates are ready.",
+  };
+}
+
+async function buildGoLiveEvidenceBundleSummary(input: {
+  platformWarRoom: ClipperPlatformWarRoomSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+}): Promise<ClipperGoLiveEvidenceBundleSummary> {
+  const accountRows = input.platformWarRoom.accountConnectionRows.map((row) => row.accountEvidenceRow);
+  const developerSubmittedRows = input.developerAppEvidence.connectionKitItems.map((item) => item.submittedEvidenceRow);
+  const developerApprovedRows = input.developerAppEvidence.connectionKitItems.map((item) => item.approvedEvidenceRow);
+  const permissionRequestedRows = input.platformWarRoom.permissionApprovalRows.map((row) => row.requestedEvidenceRow);
+  const permissionApprovedRows = input.platformWarRoom.permissionApprovalRows.map((row) => row.approvedEvidenceRow);
+  const starterRows = [...accountRows, ...developerSubmittedRows, ...permissionRequestedRows].filter(Boolean);
+  const approvalRows = [...developerApprovedRows, ...permissionApprovedRows].filter(Boolean);
+  const sections: ClipperGoLiveEvidenceBundleSection[] = [
+    {
+      id: "account_connections",
+      label: "Account connection evidence",
+      rows: accountRows,
+      count: accountRows.length,
+      checklist: [
+        "Create or log into each real external account before importing these rows.",
+        "Replace the blank notes column with handle, profile URL and proof link.",
+        "Use verified only when 2FA, bio/branding and recovery controls are confirmed.",
+      ],
+      nextStep: accountRows.length ? "Complete account proof for every row, then preview/import starter rows." : "No account evidence rows pending.",
+    },
+    {
+      id: "developer_apps",
+      label: "Developer app submission evidence",
+      rows: developerSubmittedRows,
+      count: developerSubmittedRows.length,
+      checklist: [
+        "Create each developer app in the official portal.",
+        "Use the submitted row after portal submission exists.",
+        "Use approval rows only after the platform approves app review or app access.",
+      ],
+      nextStep: developerSubmittedRows.length ? "Submit developer apps and replace placeholders with app IDs/proof." : "No developer app rows pending.",
+    },
+    {
+      id: "permission_requests",
+      label: "Permission request evidence",
+      rows: permissionRequestedRows,
+      count: permissionRequestedRows.length,
+      checklist: [
+        "Request only the scopes needed for upload/publishing.",
+        "Attach ticket, review screen, case ID or portal screenshot proof.",
+        "Move to approval rows only after the platform confirms access.",
+      ],
+      nextStep: permissionRequestedRows.length ? "Request scopes from official portals and import requested rows with proof." : "No permission request rows pending.",
+    },
+    {
+      id: "approval_rows",
+      label: "Approval evidence rows",
+      rows: approvalRows,
+      count: approvalRows.length,
+      checklist: [
+        "Do not import approval rows until the portal shows approved access.",
+        "Keep proof links in notes; never paste client secrets or OAuth tokens.",
+        "After approvals, regenerate OAuth Go-Live and connect accounts.",
+      ],
+      nextStep: approvalRows.length ? "Hold approval rows until app review/scopes are genuinely approved." : "No approval rows pending.",
+    },
+  ];
+  const generatedAt = await stat(GO_LIVE_EVIDENCE_BUNDLE_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const importTemplate = renderLaunchEvidenceImportTemplate(starterRows);
+  return {
+    status: generatedAt ? "ready" : "not_prepared",
+    generatedAt,
+    manifestPath: GO_LIVE_EVIDENCE_BUNDLE_PATH,
+    markdownPath: GO_LIVE_EVIDENCE_BUNDLE_MARKDOWN_PATH,
+    csvPath: GO_LIVE_EVIDENCE_BUNDLE_CSV_PATH,
+    importTemplate,
+    starterRows,
+    approvalRows,
+    sections,
+    totals: {
+      rows: starterRows.length + approvalRows.length,
+      starterRows: starterRows.length,
+      approvalRows: approvalRows.length,
+      accountRows: accountRows.length,
+      developerAppRows: developerSubmittedRows.length + developerApprovedRows.length,
+      permissionRows: permissionRequestedRows.length + permissionApprovedRows.length,
+    },
+    checklist: [
+      "Start with starter rows: accounts verified, developer apps submitted, permissions requested.",
+      "Run Preview batch before importing; fix rejected rows before writing evidence.",
+      "Import approval rows only after a real portal approval exists.",
+      "Never paste passwords, client secrets, OAuth codes, access tokens or refresh tokens into notes.",
+      "Regenerate Command Center after importing evidence so blockers recalculate.",
+    ],
+    nextStep: starterRows.length
+      ? "Load starter rows into Launch Evidence Batch, replace placeholders with real proof, then Preview batch."
+      : "No starter evidence rows pending.",
+  };
+}
+
+function renderGoLiveEvidenceBundleMarkdown(summary: ClipperGoLiveEvidenceBundleSummary): string {
+  return [
+    "# Clippers Go-Live Evidence Bundle",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `CSV: ${summary.csvPath}`,
+    `Starter rows: ${summary.totals.starterRows}`,
+    `Approval rows: ${summary.totals.approvalRows}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Starter Import Template",
+    "",
+    "Complete placeholders with real proof before importing.",
+    "",
+    "```csv",
+    summary.importTemplate.trim(),
+    "```",
+    "",
+    "## Checklist",
+    "",
+    ...summary.checklist.map((step) => `- [ ] ${step}`),
+    "",
+    "## Sections",
+    "",
+    ...summary.sections.flatMap((section) => [
+      `### ${section.label}`,
+      "",
+      `- Rows: ${section.count}`,
+      `- Next step: ${section.nextStep}`,
+      "",
+      "Checklist:",
+      ...section.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      section.rows.length ? "Rows:" : "Rows: none",
+      ...section.rows.map((row) => `- ${row}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderGoLiveEvidenceBundleCsv(summary: ClipperGoLiveEvidenceBundleSummary): string {
+  const header = ["section_id", "section_label", "row_type", "row"];
+  const rows = summary.sections.flatMap((section) => section.rows.map((row) => [
+    section.id,
+    section.label,
+    section.id === "approval_rows" ? "approval" : "starter",
+    row,
+  ]));
+  return [
+    header.map(csvEscape).join(","),
+    ...rows.map((row) => row.map(csvEscape).join(",")),
+    "",
+  ].join("\n");
+}
+
+export async function prepareClipperGoLiveEvidenceBundle(userId = getSystemUserId()): Promise<{ goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary; status: ClipperStatus }> {
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary = {
+    ...statusBefore.goLiveEvidenceBundle,
+    generatedAt: new Date().toISOString(),
+    status: "ready",
+  };
+  await writeFile(GO_LIVE_EVIDENCE_BUNDLE_PATH, JSON.stringify(goLiveEvidenceBundle, null, 2));
+  await writeFile(GO_LIVE_EVIDENCE_BUNDLE_MARKDOWN_PATH, renderGoLiveEvidenceBundleMarkdown(goLiveEvidenceBundle));
+  await writeFile(GO_LIVE_EVIDENCE_BUNDLE_CSV_PATH, renderGoLiveEvidenceBundleCsv(goLiveEvidenceBundle));
+  return { goLiveEvidenceBundle, status: await getClipperStatus(userId) };
 }
 
 function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutionSessionSummary): string {
@@ -11700,6 +17845,7 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Totals: ${summary.totals.doNow} do_now, ${summary.totals.blocked} blocked, ${summary.totals.waiting} waiting`,
+    `Portal batches: ${summary.totals.portalBatches}`,
     `CSV: ${summary.csvPath}`,
     `Evidence import CSV: ${summary.evidenceImportPath}`,
     "",
@@ -11714,6 +17860,39 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
     "```csv",
     summary.evidenceImportTemplate.trim(),
     "```",
+    "",
+    "## Focus Run",
+    "",
+    `Status: ${summary.focusRun.status}`,
+    `Label: ${summary.focusRun.label}`,
+    `Estimated minutes: ${summary.focusRun.estimatedMinutes}`,
+    `Next step: ${summary.focusRun.nextStep}`,
+    "",
+    summary.focusRun.portalUrls.length ? "Portal URLs:" : "Portal URLs: none",
+    ...summary.focusRun.portalUrls.map((url) => `- ${url}`),
+    "",
+    summary.focusRun.credentialTemplates.length ? "Credential templates:" : "Credential templates: none",
+    ...summary.focusRun.credentialTemplates.map((template) => `- ${template.replace(/\n/g, " | ")}`),
+    "",
+    summary.focusRun.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+    ...summary.focusRun.evidenceRows.map((row) => `- ${row}`),
+    "",
+    ...summary.focusRun.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- Platform: ${item.platform}`,
+      `- Type: ${item.type}`,
+      `- Action mode: ${item.actionMode}`,
+      `- Estimated minutes: ${item.estimatedMinutes}`,
+      `- Portal: ${item.portalUrl || "n/a"}`,
+      `- Execution URL: ${item.executionUrl || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "Checklist:",
+      ...item.checklist.map((step) => `- [ ] ${step}`),
+      "Done criteria:",
+      ...item.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+      "",
+    ]),
     "",
     "## Unlock Board",
     "",
@@ -11731,6 +17910,32 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
       ...item.portalUrls.map((url) => `  - ${url}`),
       item.nextEvidenceRows.length ? "- Next evidence rows:" : "- Next evidence rows: none",
       ...item.nextEvidenceRows.map((row) => `  - ${row}`),
+      "",
+    ]),
+    "",
+    "## Portal Batches",
+    "",
+    ...summary.portalBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Type: ${batch.type}`,
+      `- Status: ${batch.status}`,
+      `- Items: ${batch.total}`,
+      `- Do now: ${batch.doNow}`,
+      `- Blocked: ${batch.blocked}`,
+      `- Waiting: ${batch.waiting}`,
+      `- Next step: ${batch.nextStep}`,
+      batch.portalUrls.length ? "- Portal URLs:" : "- Portal URLs: none",
+      ...batch.portalUrls.map((url) => `  - ${url}`),
+      batch.executionUrls.length ? "- Execution URLs:" : "- Execution URLs: none",
+      ...batch.executionUrls.map((url) => `  - ${url}`),
+      "Operator checklist:",
+      ...batch.operatorChecklist.map((step) => `- [ ] ${step}`),
+      batch.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...batch.evidenceRows.map((row) => `- ${row}`),
+      batch.credentialTemplates.length ? "Credential templates:" : "Credential templates: none",
+      ...batch.credentialTemplates.map((template) => `- ${template.replace(/\n/g, " | ")}`),
       "",
     ]),
     "",
@@ -11762,8 +17967,116 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
   ].join("\n");
 }
 
+function renderPlatformWarRoomMarkdown(summary: ClipperPlatformWarRoomSummary): string {
+  return [
+    "# Clippers Platform War Room",
+    "",
+    `Status: ${summary.status}`,
+    `Manifest: ${summary.manifestPath}`,
+    `Markdown: ${summary.markdownPath}`,
+    `Totals: ${summary.totals.ready} ready, ${summary.totals.inProgress} in_progress, ${summary.totals.blocked} blocked`,
+    `Account connections: ${summary.totals.accountConnectionsReady} ready, ${summary.totals.accountConnectionsPending} pending, ${summary.totals.accountConnectionsBlocked} blocked`,
+    `Permission approvals: ${summary.totals.permissionApprovalsApproved} approved, ${summary.totals.permissionApprovalsRequested} requested, ${summary.totals.permissionApprovalsBlocked} blocked`,
+    `Account evidence rows: ${summary.totals.accountEvidenceRows}`,
+    `Permission evidence rows: ${summary.totals.permissionEvidenceRows}`,
+    `Credential templates: ${summary.totals.credentialTemplates}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Account Connection Matrix",
+    "",
+    ...summary.accountConnectionRows.flatMap((row) => [
+      `### ${row.accountName} / ${row.platform}`,
+      "",
+      `- Account ID: ${row.accountId}`,
+      `- Category: ${row.category}`,
+      `- Handle: ${row.handle}`,
+      `- Profile: ${row.profileLink}`,
+      `- Status: ${row.status}`,
+      `- Evidence: ${row.evidenceStatus}${row.evidencePath ? ` (${row.evidencePath})` : ""}`,
+      `- Create account: ${row.accountCreationUrl}`,
+      `- Developer portal: ${row.developerPortalUrl}`,
+      `- Next step: ${row.nextStep}`,
+      "Proof requirements:",
+      ...row.proofRequirements.map((requirement) => `- [ ] ${requirement}`),
+      "Account evidence row:",
+      `- ${row.accountEvidenceRow}`,
+      row.blockers.length ? "Blockers:" : "Blockers: none",
+      ...row.blockers.map((blocker) => `- ${blocker}`),
+      "After connection:",
+      ...row.postConnectActions.map((step) => `- [ ] ${step}`),
+      "",
+    ]),
+    "",
+    "## Permission Approval Matrix",
+    "",
+    ...summary.permissionApprovalRows.flatMap((row) => [
+      `### ${row.label}`,
+      "",
+      `- Platform: ${row.platform}`,
+      `- Scope: ${row.scope}`,
+      `- Status: ${row.status}`,
+      `- Request readiness: ${row.requestReadiness}`,
+      `- Developer portal: ${row.developerPortalUrl}`,
+      `- Docs: ${row.docsUrl}`,
+      `- Official reference: ${row.officialReferenceUrl}`,
+      `- Next step: ${row.nextStep}`,
+      "Proof requirements:",
+      ...row.proofRequirements.map((requirement) => `- [ ] ${requirement}`),
+      "Portal steps:",
+      ...row.portalSteps.map((step) => `- [ ] ${step}`),
+      "Reviewer evidence:",
+      ...row.reviewerEvidence.map((evidence) => `- [ ] ${evidence}`),
+      "Evidence rows:",
+      `- requested: ${row.requestedEvidenceRow}`,
+      `- approved: ${row.approvedEvidenceRow}`,
+      `- recipe: ${row.evidenceRecipeRow}`,
+      row.blockers.length ? "Blockers:" : "Blockers: none",
+      ...row.blockers.map((blocker) => `- ${blocker}`),
+      "",
+    ]),
+    "",
+    "## Platforms",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- Platform: ${item.platform}`,
+      `- Status: ${item.status}`,
+      `- Accounts verified: ${item.accountsVerified}/${item.accountTasks}`,
+      `- Developer app: ${item.developerAppStatus}`,
+      `- Permissions: ${item.permissionsApproved}/${item.permissionsTotal}`,
+      `- Credentials: ${item.credentialStatus}`,
+      `- OAuth: ${item.oauthStatus}`,
+      `- Token saved: ${item.tokenSaved ? "yes" : "no"}`,
+      `- Next step: ${item.nextStep}`,
+      item.portalUrls.length ? "- Portals:" : "- Portals: none",
+      ...item.portalUrls.map((url) => `  - ${url}`),
+      item.blockers.length ? "- Blockers:" : "- Blockers: none",
+      ...item.blockers.map((blocker) => `  - ${blocker}`),
+      "Connection checklist:",
+      ...item.connectionChecklist.map((step) => `- [ ] ${step}`),
+      "Evidence checklist:",
+      ...item.evidenceChecklist.map((step) => `- [ ] ${step}`),
+      "Safety rules:",
+      ...item.safetyRules.map((rule) => `- ${rule}`),
+      "After connection:",
+      ...item.afterConnectionSteps.map((step) => `- [ ] ${step}`),
+      item.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...item.evidenceRows.map((row) => `- ${row}`),
+      item.credentialTemplates.length ? "Credential templates:" : "Credential templates: none",
+      ...item.credentialTemplates.map((template) => `- ${template.replace(/\n/g, " | ")}`),
+      "Done criteria:",
+      ...item.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
 function renderExternalExecutionSessionCsv(summary: ClipperExternalExecutionSessionSummary): string {
-  const header = ["rank", "id", "lane", "lane_reason", "type", "platform", "action_mode", "status", "portal_url", "execution_url", "evidence_import_ready", "next_step", "completion_hint", "required_inputs", "evidence_batch_row", "evidence_recipe_row", "credential_template", "blockers"];
+  const header = ["rank", "id", "lane", "lane_reason", "type", "platform", "portal_batch_id", "action_mode", "status", "portal_url", "execution_url", "evidence_import_ready", "next_step", "completion_hint", "required_inputs", "evidence_batch_row", "evidence_recipe_row", "credential_template", "blockers"];
   return [
     header.map(csvEscape).join(","),
     ...summary.items.map((item) => [
@@ -11773,6 +18086,7 @@ function renderExternalExecutionSessionCsv(summary: ClipperExternalExecutionSess
       item.laneReason,
       item.type,
       item.platform,
+      `portal-batch-${item.platform}-${item.type}`,
       item.actionMode,
       item.status,
       item.portalUrl,
@@ -11832,6 +18146,9 @@ export async function prepareClipperExternalExecutionSession(userId = getSystemU
   await writeFile(EXTERNAL_EXECUTION_SESSION_MARKDOWN_PATH, renderExternalExecutionSessionMarkdown(externalExecutionSession));
   await writeFile(EXTERNAL_EXECUTION_SESSION_CSV_PATH, renderExternalExecutionSessionCsv(externalExecutionSession));
   await writeFile(EXTERNAL_EXECUTION_SESSION_EVIDENCE_PATH, externalExecutionSession.evidenceImportTemplate);
+  const status = await getClipperStatus(userId);
+  await writeFile(PLATFORM_WAR_ROOM_PATH, JSON.stringify(status.platformWarRoom, null, 2));
+  await writeFile(PLATFORM_WAR_ROOM_MARKDOWN_PATH, renderPlatformWarRoomMarkdown(status.platformWarRoom));
   return { externalExecutionSession, status: await getClipperStatus(userId) };
 }
 
@@ -12787,12 +19104,12 @@ function developerApplicationAppName(platform: ClipperPlatform): string {
 
 function developerApplicationOfficialVerification(platform: ClipperPlatform): string {
   if (platform === "tiktok") {
-    return "Official docs checked 2026-06-17: TikTok Content Posting API requires a registered app, Content Posting API product, Direct Post configuration for direct posting, approval for video.publish, user authorization for video.publish, and client audit to lift unaudited visibility restrictions.";
+    return `Official docs checked ${OFFICIAL_PERMISSION_DOCS_CHECKED_AT}: TikTok Content Posting API requires a registered app, Content Posting API product, Direct Post configuration for direct posting, approval for video.publish, user authorization for video.publish, and client audit to lift unaudited visibility restrictions.`;
   }
   if (platform === "instagram") {
-    return "Official docs checked 2026-06-17: Meta Instagram Content Publishing and permission reference pages are official developer URLs but require Meta login for full access; draft keeps instagram_content_publish, instagram_basic and pages_show_list gated behind App Review and professional IG/Page prerequisites.";
+    return `Official docs checked ${OFFICIAL_PERMISSION_DOCS_CHECKED_AT}: Meta Instagram Content Publishing and permission reference pages are official developer URLs but require Meta login for full access; draft keeps instagram_content_publish, instagram_basic and pages_show_list gated behind App Review and professional IG/Page prerequisites.`;
   }
-  return "Official docs checked 2026-06-17: YouTube videos.insert requires OAuth authorization such as youtube.upload, uploads through unverified API projects can be restricted to private, and projects may need API compliance audit to lift restrictions.";
+  return `Official docs checked ${OFFICIAL_PERMISSION_DOCS_CHECKED_AT}: YouTube videos.insert requires OAuth authorization such as youtube.upload, uploads through unverified API projects can be restricted to private, and projects may need API compliance audit to lift restrictions.`;
 }
 
 function developerApplicationRequiredInputs(input: {
@@ -13117,7 +19434,7 @@ async function buildDeveloperApplicationDraftsSummary(input: {
     generatedAt,
     manifestPath: DEVELOPER_APPLICATION_DRAFTS_PATH,
     markdownPath: DEVELOPER_APPLICATION_DRAFTS_MARKDOWN_PATH,
-    sourceCheckedAt: "2026-06-17",
+    sourceCheckedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
     items,
     creationSession,
     totals,
@@ -13279,7 +19596,7 @@ async function buildOfficialPermissionMatrixSummary(): Promise<ClipperOfficialPe
   await ensureClipperDirs();
   const generatedAt = await stat(OFFICIAL_PERMISSION_MATRIX_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const items = enrichOfficialPermissionMatrixItems(OFFICIAL_PERMISSION_MATRIX_ITEMS);
-  const totals = items.reduce<ClipperOfficialPermissionMatrixSummary["totals"]>((sum, item) => {
+  const baseTotals = items.reduce<Omit<ClipperOfficialPermissionMatrixSummary["totals"], "sourceBatches">>((sum, item) => {
     sum.platforms += 1;
     if (item.sourceStatus === "official_verified") sum.officialVerified += 1;
     if (item.sourceStatus === "official_login_required") sum.loginRequired += 1;
@@ -13287,27 +19604,155 @@ async function buildOfficialPermissionMatrixSummary(): Promise<ClipperOfficialPe
     sum.appReviewRequired += item.scopes.filter((scope) => scope.appReviewRequired).length;
     return sum;
   }, { platforms: 0, officialVerified: 0, loginRequired: 0, scopes: 0, appReviewRequired: 0 });
+  const sourceBatches = buildOfficialPermissionSourceBatches(items);
+  const webProofTrail = buildOfficialPermissionWebProofTrail(sourceBatches);
+  const totals = { ...baseTotals, sourceBatches: sourceBatches.length };
   return {
     status: !generatedAt
       ? "not_prepared"
-      : totals.loginRequired > 0
+      : baseTotals.loginRequired > 0
         ? "needs_review"
         : "verified",
     generatedAt,
     manifestPath: OFFICIAL_PERMISSION_MATRIX_PATH,
     markdownPath: OFFICIAL_PERMISSION_MATRIX_MARKDOWN_PATH,
+    csvPath: OFFICIAL_PERMISSION_MATRIX_CSV_PATH,
     verifiedAt: new Date().toISOString(),
     items,
+    sourceBatches,
+    webProofTrail,
     totals,
-    nextStep: totals.loginRequired > 0
+    nextStep: baseTotals.loginRequired > 0
       ? "Revisar Meta con sesion iniciada y confirmar que los permisos siguen iguales antes de enviar App Review."
       : "Matriz oficial lista; usarla para completar developer apps, scopes y OAuth.",
   };
 }
 
+function buildOfficialPermissionWebProofTrail(sourceBatches: ClipperOfficialPermissionSourceBatch[]): ClipperOfficialPermissionWebProof[] {
+  return sourceBatches.map((batch) => ({
+    platform: batch.platform,
+    sourceStatus: batch.sourceStatus,
+    checkedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
+    accessMode: batch.accessMode,
+    officialUrls: batch.officialUrls,
+    verifiedClaims: batch.verifiedClaims,
+    reviewerEvidence: batch.reviewerEvidence,
+    nextHumanAction: batch.accessMode === "login_required"
+      ? "Log in to the official developer portal, capture the permission/app-review screen, then import requested evidence rows."
+      : "Attach this public official proof pack to the permission request, then import requested evidence rows.",
+  }));
+}
+
+function renderOfficialPermissionMatrixCsv(summary: ClipperOfficialPermissionMatrixSummary): string {
+  const header = [
+    "platform",
+    "label",
+    "source_status",
+    "scope",
+    "purpose",
+    "portal_product",
+    "request_mode",
+    "owner_action",
+    "human_blocker",
+    "required_for_autopost",
+    "app_review_required",
+    "verification_status",
+    "verified_at",
+    "access_mode",
+    "go_live_decision",
+    "submit_decision",
+    "official_reference_url",
+    "request_portal_url",
+    "request_action",
+    "launch_evidence_batch_row",
+    "approval_evidence_batch_row",
+    "verified_claims",
+    "reviewer_evidence",
+    "blocker",
+    "web_proof_access_mode",
+    "web_proof_claims",
+    "web_proof_next_human_action",
+    "public_launch_blockers",
+    "minimum_approval_evidence",
+    "next_step",
+  ];
+  const webProofByPlatform = new Map(summary.webProofTrail.map((proof) => [proof.platform, proof]));
+  const rows = summary.items.flatMap((item) => item.scopes.map((scope) => [
+    item.platform,
+    item.label,
+    item.sourceStatus,
+    scope.scope,
+    scope.purpose,
+    scope.portalProduct,
+    scope.requestMode,
+    scope.ownerAction,
+    scope.humanBlocker || "",
+    scope.requiredForAutopost ? "yes" : "no",
+    scope.appReviewRequired ? "yes" : "no",
+    scope.verificationStatus,
+    scope.verifiedAt,
+    scope.sourceAudit?.accessMode || "",
+    scope.sourceAudit?.goLiveDecision || "",
+    scope.sourceProofPack?.submitDecision || "",
+    scope.officialReferenceUrl,
+    scope.requestPortalUrl,
+    scope.requestAction,
+    scope.launchEvidenceBatchRow,
+    scope.approvalEvidenceBatchRow || "",
+    (scope.sourceProofPack?.verifiedClaims || []).join(" | "),
+    (scope.sourceProofPack?.reviewerEvidence || []).join(" | "),
+    scope.sourceProofPack?.blocker || "",
+    webProofByPlatform.get(item.platform)?.accessMode || "",
+    (webProofByPlatform.get(item.platform)?.verifiedClaims || []).join(" | "),
+    webProofByPlatform.get(item.platform)?.nextHumanAction || "",
+    (item.publicLaunchBlockers || []).join(" | "),
+    (item.minimumApprovalEvidence || []).join(" | "),
+    item.nextStep,
+  ]));
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function buildOfficialPermissionSourceBatches(items: ClipperOfficialPermissionMatrixItem[]): ClipperOfficialPermissionSourceBatch[] {
+  return items.map((item) => {
+    const loginRequired = item.sourceStatus === "official_login_required" || item.scopes.some((scope) => scope.sourceAudit?.accessMode === "login_required");
+    const verifiedClaims = Array.from(new Set(item.scopes.flatMap((scope) => scope.sourceProofPack?.verifiedClaims || [])));
+    const reviewerEvidence = Array.from(new Set(item.scopes.flatMap((scope) => scope.sourceProofPack?.reviewerEvidence || [])));
+    const blocker = item.scopes.find((scope) => scope.sourceProofPack?.blocker)?.sourceProofPack?.blocker || (loginRequired ? "Official source requires developer login before final submission." : null);
+    return {
+      id: `official-source-batch-${item.platform}`,
+      platform: item.platform,
+      label: `${item.label} source verification`,
+      sourceStatus: item.sourceStatus,
+      accessMode: loginRequired ? "login_required" : "public",
+      scopes: item.scopes.map((scope) => scope.scope),
+      officialUrls: Array.from(new Set(item.scopes.flatMap((scope) => scope.sourceProofPack?.officialUrls || item.officialDocs))),
+      canonicalUrls: Array.from(new Set(item.scopes.map((scope) => scope.sourceAudit?.canonicalUrl || scope.officialReferenceUrl))),
+      verifiedClaims,
+      blocker,
+      submitDecision: loginRequired ? "human_login_recheck" : "request_now",
+      launchEvidenceRows: item.scopes.map((scope) => scope.launchEvidenceBatchRow),
+      approvalEvidenceRows: item.scopes.map((scope) => scope.approvalEvidenceBatchRow || `permission,,${item.platform},approved,${scope.scope},,,Official permission approved; attach approval screenshot or review URL`),
+      reviewerEvidence,
+      recheckSteps: [
+        ...item.scopes.flatMap((scope) => scope.verificationChecklist.slice(0, 2)),
+        loginRequired
+          ? "Log in to the developer portal and capture the permission reference or app-review screen."
+          : "Open the public official docs and confirm the scope wording before submission.",
+        "Attach the source proof pack to the permission/app-review evidence.",
+        "Import requested evidence rows after submission and approved evidence rows after approval.",
+      ],
+      nextStep: loginRequired
+        ? "Human login recheck required before submitting app review for this platform."
+        : "Official source is public; attach proof pack and request the listed scopes.",
+    };
+  });
+}
+
 function officialPermissionPortalSubmissionSteps(item: ClipperOfficialPermissionMatrixItem, scope: ClipperOfficialPermissionMatrixItem["scopes"][number]): string[] {
   return [
     `Open ${scope.requestPortalUrl} and select the developer app for ${item.label}.`,
+    `Open/enable product or capability: ${scope.portalProduct}.`,
+    scope.humanBlocker ? `Resolve human blocker first: ${scope.humanBlocker}.` : `Submission mode: ${scope.requestMode}.`,
     `Confirm account prerequisites before submission: ${item.accountPrerequisites.join(" | ")}.`,
     `Confirm developer prerequisites before submission: ${item.developerPrerequisites.join(" | ")}.`,
     `Request ${scope.scope} with this purpose: ${scope.purpose}.`,
@@ -13341,6 +19786,51 @@ function officialPermissionFallbackPlan(item: ClipperOfficialPermissionMatrixIte
   return "Use TikTok manual/draft posting package until Direct Post audit lifts visibility restrictions.";
 }
 
+function officialPermissionPublicLaunchBlockers(item: ClipperOfficialPermissionMatrixItem): string[] {
+  if (item.platform === "tiktok") return [
+    "Content Posting API product added to the developer app.",
+    "Direct Post configuration enabled for the TikTok app.",
+    "video.publish approved and authorized by the target TikTok user.",
+    "TikTok client audit/app review evidence recorded before counting public visibility as ready.",
+    "First publishing run remains approval_required until rights-safe sample posts pass QA.",
+  ];
+  if (item.platform === "instagram") return [
+    "Professional Instagram account exists and is connected to a managed Facebook Page.",
+    "Meta App Review approves instagram_content_publish, instagram_basic and pages_show_list.",
+    "OAuth token is granted by the correct Page/Instagram account user.",
+    "Media container + publish flow is verified with a rights-cleared Reel package.",
+    "Manual posting fallback remains active until Meta review and destination QA are complete.",
+  ];
+  return [
+    "YouTube Data API v3 is enabled in the Google Cloud project.",
+    "OAuth consent/client is configured with the production redirect URI and youtube.upload.",
+    "Each target channel authorizes youtube.upload and token vault stores encrypted tokens.",
+    "OAuth verification/API compliance/private-upload restrictions are resolved or documented.",
+    "Upload quota monitoring is in place before high-volume Shorts scheduling.",
+  ];
+}
+
+function officialPermissionMinimumApprovalEvidence(item: ClipperOfficialPermissionMatrixItem): string[] {
+  if (item.platform === "tiktok") return [
+    "Developer portal screenshot showing Content Posting API and Direct Post enabled.",
+    "Scope approval/request proof for video.publish and fallback video.upload.",
+    "OAuth authorization proof for each TikTok account without exposing tokens.",
+    "Audit/review status proof confirming public visibility restrictions are lifted or acknowledged.",
+  ];
+  if (item.platform === "instagram") return [
+    "Meta App Review screenshot for each requested permission.",
+    "Professional Instagram account and connected Facebook Page proof.",
+    "OAuth proof for the managed Page/Instagram account without exposing tokens.",
+    "Screencast showing approval_required Reels publishing and rights gate.",
+  ];
+  return [
+    "Google Cloud screenshot showing YouTube Data API v3 enabled.",
+    "OAuth consent/client screenshot with redirect URI and youtube.upload scope.",
+    "Channel authorization proof and encrypted token vault status.",
+    "Verification/compliance/quota status note for public Shorts uploads.",
+  ];
+}
+
 function officialPermissionSourceAudit(item: ClipperOfficialPermissionMatrixItem, scope: ClipperOfficialPermissionMatrixItem["scopes"][number]): NonNullable<ClipperOfficialPermissionMatrixItem["scopes"][number]["sourceAudit"]> {
   const loginRequired = item.sourceStatus === "official_login_required" || scope.verificationStatus === "official_login_required";
   const publicEvidence = item.platform === "tiktok"
@@ -13360,7 +19850,7 @@ function officialPermissionSourceAudit(item: ClipperOfficialPermissionMatrixItem
         "Confirm instagram_content_publish, instagram_basic and pages_show_list inside Meta App Review before submitting.",
       ];
   return {
-    lastCheckedAt: "2026-06-17",
+    lastCheckedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
     accessMode: loginRequired ? "login_required" : "public",
     canonicalUrl: scope.officialReferenceUrl,
     publicEvidence,
@@ -13384,7 +19874,7 @@ function officialPermissionSourceProofPack(item: ClipperOfficialPermissionMatrix
       ];
     return {
       status: "ready_to_attach",
-      checkedAt: "2026-06-17",
+      checkedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
       officialUrls: item.officialDocs,
       verifiedClaims,
       submitDecision: "request_now",
@@ -13399,7 +19889,7 @@ function officialPermissionSourceProofPack(item: ClipperOfficialPermissionMatrix
   if (item.platform === "youtube") {
     return {
       status: "ready_to_attach",
-      checkedAt: "2026-06-17",
+      checkedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
       officialUrls: item.officialDocs,
       verifiedClaims: [
         "Official YouTube videos.insert reference supports uploading videos through the YouTube Data API.",
@@ -13417,7 +19907,7 @@ function officialPermissionSourceProofPack(item: ClipperOfficialPermissionMatrix
   }
   return {
     status: "login_required",
-    checkedAt: "2026-06-17",
+    checkedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
     officialUrls: item.officialDocs,
     verifiedClaims: [
       "Meta developer documentation was reachable only as an authenticated/login-required developer surface in the current check.",
@@ -13437,6 +19927,8 @@ function officialPermissionSourceProofPack(item: ClipperOfficialPermissionMatrix
 function enrichOfficialPermissionMatrixItems(items: ClipperOfficialPermissionMatrixItem[]): ClipperOfficialPermissionMatrixItem[] {
   return items.map((item) => ({
     ...item,
+    publicLaunchBlockers: officialPermissionPublicLaunchBlockers(item),
+    minimumApprovalEvidence: officialPermissionMinimumApprovalEvidence(item),
     scopes: item.scopes.map((scope) => ({
       ...scope,
       portalSubmissionSteps: officialPermissionPortalSubmissionSteps(item, scope),
@@ -13457,11 +19949,67 @@ function renderOfficialPermissionMatrixMarkdown(summary: ClipperOfficialPermissi
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || summary.verifiedAt}`,
     `Verified at: ${summary.verifiedAt}`,
-    `Totals: ${summary.totals.platforms} platforms, ${summary.totals.scopes} scopes, ${summary.totals.appReviewRequired} app-review scopes`,
+    `Totals: ${summary.totals.platforms} platforms, ${summary.totals.scopes} scopes, ${summary.totals.appReviewRequired} app-review scopes, ${summary.totals.sourceBatches} source batches`,
     "",
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Web Proof Trail",
+    "",
+    ...summary.webProofTrail.flatMap((proof) => [
+      `### ${proof.platform}`,
+      "",
+      `- Source status: ${proof.sourceStatus}`,
+      `- Checked at: ${proof.checkedAt}`,
+      `- Access mode: ${proof.accessMode}`,
+      `- Next human action: ${proof.nextHumanAction}`,
+      "",
+      "Official URLs:",
+      ...proof.officialUrls.map((url) => `- ${url}`),
+      "",
+      "Verified claims:",
+      ...proof.verifiedClaims.map((claim) => `- ${claim}`),
+      "",
+      "Reviewer evidence:",
+      ...proof.reviewerEvidence.map((evidence) => `- [ ] ${evidence}`),
+      "",
+    ]),
+    "",
+    "## Source Verification Batches",
+    "",
+    ...summary.sourceBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Source status: ${batch.sourceStatus}`,
+      `- Access mode: ${batch.accessMode}`,
+      `- Submit decision: ${batch.submitDecision}`,
+      `- Scopes: ${batch.scopes.join(", ")}`,
+      `- Blocker: ${batch.blocker || "none"}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Official URLs:",
+      ...batch.officialUrls.map((url) => `- ${url}`),
+      "",
+      "Canonical URLs:",
+      ...batch.canonicalUrls.map((url) => `- ${url}`),
+      "",
+      "Verified claims:",
+      ...batch.verifiedClaims.map((claim) => `- ${claim}`),
+      "",
+      "Reviewer evidence:",
+      ...batch.reviewerEvidence.map((evidence) => `- [ ] ${evidence}`),
+      "",
+      "Recheck steps:",
+      ...batch.recheckSteps.map((step) => `- [ ] ${step}`),
+      "",
+      "Launch evidence rows:",
+      "```csv",
+      ...batch.launchEvidenceRows,
+      "```",
+      "",
+    ]),
     "",
     "## Platforms",
     "",
@@ -13479,6 +20027,10 @@ function renderOfficialPermissionMatrixMarkdown(summary: ClipperOfficialPermissi
       "Scopes:",
       ...item.scopes.flatMap((scope) => [
         `- ${scope.scope}: ${scope.purpose} Autopost: ${scope.requiredForAutopost ? "yes" : "no"}. App review: ${scope.appReviewRequired ? "yes" : "no"}.`,
+        `  - Portal product: ${scope.portalProduct}`,
+        `  - Request mode: ${scope.requestMode}`,
+        `  - Owner action: ${scope.ownerAction}`,
+        `  - Human blocker: ${scope.humanBlocker || "none"}`,
         `  - Verification: ${scope.verificationStatus} at ${scope.verifiedAt}`,
         `  - Official reference: ${scope.officialReferenceUrl}`,
         `  - Verification note: ${scope.verificationNote}`,
@@ -13521,6 +20073,12 @@ function renderOfficialPermissionMatrixMarkdown(summary: ClipperOfficialPermissi
       "Review risks:",
       ...item.reviewRisks.map((risk) => `- ${risk}`),
       "",
+      "Public launch blockers:",
+      ...(item.publicLaunchBlockers || []).map((blocker) => `- [ ] ${blocker}`),
+      "",
+      "Minimum approval evidence:",
+      ...(item.minimumApprovalEvidence || []).map((evidence) => `- [ ] ${evidence}`),
+      "",
       "Evidence to prepare:",
       ...item.evidenceToPrepare.map((evidence) => `- [ ] ${evidence}`),
       "",
@@ -13539,7 +20097,292 @@ export async function prepareClipperOfficialPermissionMatrix(userId = getSystemU
   };
   await writeFile(OFFICIAL_PERMISSION_MATRIX_PATH, JSON.stringify(officialPermissionMatrix, null, 2));
   await writeFile(OFFICIAL_PERMISSION_MATRIX_MARKDOWN_PATH, renderOfficialPermissionMatrixMarkdown(officialPermissionMatrix));
+  await writeFile(OFFICIAL_PERMISSION_MATRIX_CSV_PATH, renderOfficialPermissionMatrixCsv(officialPermissionMatrix));
   return { officialPermissionMatrix, status: await getClipperStatus(userId) };
+}
+
+function permissionSubmissionDossierItemStatus(batch: ClipperPermissionRequestPlatformBatch, sourceBatch?: ClipperOfficialPermissionSourceBatch): ClipperPermissionSubmissionDossierStatus {
+  if (batch.permissions > 0 && batch.approved === batch.permissions) return "ready";
+  if (sourceBatch?.submitDecision === "human_login_recheck") return "needs_login_recheck";
+  if (batch.blocked > 0 || batch.status === "blocked") return "blocked";
+  return "ready_to_submit";
+}
+
+function permissionSubmissionDossierNextStep(item: ClipperPermissionSubmissionDossierItem): string {
+  if (item.status === "ready") return "Permission set approved; keep evidence and continue OAuth/publisher QA.";
+  if (item.status === "needs_login_recheck") return "Log in to the developer portal, verify the exact permission screen, then submit or import requested rows.";
+  if (item.status === "ready_to_submit") return "Open the portal, submit the listed scopes with the copy block, then import requested evidence rows.";
+  return item.blockers[0] || "Resolve account, credential, app, public URL or evidence blockers before submitting.";
+}
+
+function derivePermissionSubmissionDossierStatus(generatedAt: string | null, totals: ClipperPermissionSubmissionDossierSummary["totals"]): ClipperPermissionSubmissionDossierStatus {
+  if (!generatedAt) return "not_prepared";
+  if (totals.blocked > 0) return "blocked";
+  if (totals.needsLoginRecheck > 0) return "needs_login_recheck";
+  if (totals.readyToSubmit > 0) return "ready_to_submit";
+  return "ready";
+}
+
+async function buildPermissionSubmissionDossierSummary(input: {
+  permissionRequestPack: ClipperPermissionRequestPackSummary;
+  officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
+  goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary;
+}): Promise<ClipperPermissionSubmissionDossierSummary> {
+  await ensureClipperDirs();
+  const generatedAt = await stat(PERMISSION_SUBMISSION_DOSSIER_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const officialBatchByPlatform = new Map(input.officialPermissionMatrix.sourceBatches.map((batch) => [batch.platform, batch]));
+  const items = input.permissionRequestPack.platformBatches.map((batch) => {
+    const sourceBatch = officialBatchByPlatform.get(batch.platform);
+    const status = permissionSubmissionDossierItemStatus(batch, sourceBatch);
+    const blockers = [
+      ...batch.blockers,
+      ...(sourceBatch?.blocker ? [sourceBatch.blocker] : []),
+      ...(status === "needs_login_recheck" ? ["Official permission source requires authenticated developer portal recheck before submission."] : []),
+    ];
+    const item: ClipperPermissionSubmissionDossierItem = {
+      id: `permission-submission-${batch.platform}`,
+      platform: batch.platform,
+      label: batch.label,
+      status,
+      sourceStatus: sourceBatch?.sourceStatus || "official_login_required",
+      submitDecision: sourceBatch?.submitDecision || "human_login_recheck",
+      accessMode: sourceBatch?.accessMode || "login_required",
+      developerPortalUrl: batch.developerPortalUrl,
+      scopes: batch.scopes,
+      officialUrls: sourceBatch?.officialUrls || batch.docsUrls,
+      verifiedClaims: sourceBatch?.verifiedClaims || [],
+      copyBlock: batch.copyBlock,
+      requestedTemplateFilePath: batch.requestedTemplateFilePath,
+      approvedTemplateFilePath: batch.approvedTemplateFilePath,
+      requestedDropFilePath: batch.requestedDropFilePath,
+      approvedDropFilePath: batch.approvedDropFilePath,
+      requestedDropTemplate: batch.requestedDropTemplate,
+      approvedDropTemplate: batch.approvedDropTemplate,
+      requestedEvidenceRows: batch.requestedEvidenceRows,
+      approvedEvidenceRows: batch.approvedEvidenceRows,
+      reviewerEvidence: Array.from(new Set([
+        ...batch.requiredEvidence,
+        ...(sourceBatch?.reviewerEvidence || []),
+        "Developer Application Drafts reviewer copy and redirect URI proof.",
+        "Go-Live Evidence Bundle requested/approval row templates.",
+      ])),
+      blockers,
+      submissionSteps: [
+        `Open developer portal: ${batch.developerPortalUrl}`,
+        sourceBatch?.accessMode === "login_required"
+          ? "Log in and confirm the exact official permission/app-review screen before submitting."
+          : "Attach public official source proof from the verified URLs.",
+        ...batch.submissionSteps,
+        "After submission, import requested evidence rows or complete the requested drop CSV.",
+        "After approval, import approved evidence rows and rerun Command Center.",
+      ],
+      doneCriteria: [
+        ...batch.doneCriteria,
+        "Dossier requested rows imported with real evidence and zero placeholders.",
+        "Dossier approved rows imported after platform approval.",
+        "Publisher Connector for this platform moves past permission blocker.",
+      ],
+      nextStep: "",
+    };
+    return { ...item, nextStep: permissionSubmissionDossierNextStep(item) };
+  });
+  const totals = items.reduce<ClipperPermissionSubmissionDossierSummary["totals"]>((sum, item) => {
+    sum.platforms += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.status === "needs_login_recheck") sum.needsLoginRecheck += 1;
+    if (item.status === "ready_to_submit") sum.readyToSubmit += 1;
+    if (item.status === "ready") sum.ready += 1;
+    sum.scopes += item.scopes.length;
+    sum.requestedRows += item.requestedEvidenceRows.length;
+    sum.approvedRows += item.approvedEvidenceRows.length;
+    sum.officialUrls += item.officialUrls.length;
+    return sum;
+  }, { platforms: 0, blocked: 0, needsLoginRecheck: 0, readyToSubmit: 0, ready: 0, scopes: 0, requestedRows: 0, approvedRows: 0, officialUrls: 0 });
+  const status = derivePermissionSubmissionDossierStatus(generatedAt, totals);
+  return {
+    status,
+    generatedAt,
+    manifestPath: PERMISSION_SUBMISSION_DOSSIER_PATH,
+    markdownPath: PERMISSION_SUBMISSION_DOSSIER_MARKDOWN_PATH,
+    csvPath: PERMISSION_SUBMISSION_DOSSIER_CSV_PATH,
+    items,
+    sourceArtifacts: {
+      permissionRequestPackPath: input.permissionRequestPack.markdownPath,
+      officialPermissionMatrixPath: input.officialPermissionMatrix.markdownPath,
+      developerApplicationDraftsPath: input.developerApplicationDrafts.markdownPath,
+      goLiveEvidenceBundlePath: input.goLiveEvidenceBundle.markdownPath,
+    },
+    totals,
+    nextStep: items.find((item) => item.status === "blocked")?.nextStep
+      || items.find((item) => item.status === "needs_login_recheck")?.nextStep
+      || items.find((item) => item.status === "ready_to_submit")?.nextStep
+      || "All platform permission submissions are approved; continue OAuth and publishing verification.",
+  };
+}
+
+function renderPermissionSubmissionDossierMarkdown(summary: ClipperPermissionSubmissionDossierSummary): string {
+  return [
+    "# Clippers Permission Submission Dossier",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.platforms} platforms; ${summary.totals.scopes} scopes; ${summary.totals.blocked} blocked; ${summary.totals.needsLoginRecheck} login recheck; ${summary.totals.readyToSubmit} ready to submit; ${summary.totals.ready} ready`,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Permission Request Pack: ${summary.sourceArtifacts.permissionRequestPackPath}`,
+    `- Official Permission Matrix: ${summary.sourceArtifacts.officialPermissionMatrixPath}`,
+    `- Developer Application Drafts: ${summary.sourceArtifacts.developerApplicationDraftsPath}`,
+    `- Go-Live Evidence Bundle: ${summary.sourceArtifacts.goLiveEvidenceBundlePath}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Platform Dossiers",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- Platform: ${item.platform}`,
+      `- Status: ${item.status}`,
+      `- Source status: ${item.sourceStatus}`,
+      `- Submit decision: ${item.submitDecision}`,
+      `- Access mode: ${item.accessMode}`,
+      `- Developer portal: ${item.developerPortalUrl}`,
+      `- Scopes: ${item.scopes.join(", ")}`,
+      `- Requested template: ${item.requestedTemplateFilePath}`,
+      `- Approved template: ${item.approvedTemplateFilePath}`,
+      `- Requested drop: ${item.requestedDropFilePath}`,
+      `- Approved drop: ${item.approvedDropFilePath}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Official URLs:",
+      ...item.officialUrls.map((url) => `- ${url}`),
+      "",
+      "Verified claims:",
+      ...(item.verifiedClaims.length ? item.verifiedClaims.map((claim) => `- ${claim}`) : ["- none recorded"]),
+      "",
+      "Copy block:",
+      "```",
+      item.copyBlock,
+      "```",
+      "",
+      "Submission steps:",
+      ...item.submissionSteps.map((step) => `- [ ] ${step}`),
+      "",
+      "Reviewer evidence:",
+      ...item.reviewerEvidence.map((evidence) => `- [ ] ${evidence}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Done criteria:",
+      ...item.doneCriteria.map((criteria) => `- [ ] ${criteria}`),
+      "",
+      "Requested evidence rows:",
+      "```csv",
+      ...item.requestedEvidenceRows,
+      "```",
+      "",
+      "Requested drop template:",
+      "```csv",
+      item.requestedDropTemplate.trim(),
+      "```",
+      "",
+      "Approved evidence rows:",
+      "```csv",
+      ...item.approvedEvidenceRows,
+      "```",
+      "",
+      "Approved drop template:",
+      "```csv",
+      item.approvedDropTemplate.trim(),
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderPermissionSubmissionDossierCsv(summary: ClipperPermissionSubmissionDossierSummary): string {
+  const header = [
+    "id",
+    "platform",
+    "label",
+    "status",
+    "source_status",
+    "submit_decision",
+    "access_mode",
+    "developer_portal_url",
+    "scopes",
+    "official_urls",
+    "verified_claims",
+    "submission_steps",
+    "reviewer_evidence",
+    "requested_rows",
+    "approved_rows",
+    "requested_template_file_path",
+    "approved_template_file_path",
+    "requested_drop_file_path",
+    "approved_drop_file_path",
+    "requested_drop_template",
+    "approved_drop_template",
+    "blockers",
+    "done_criteria",
+    "next_step",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => [
+      item.id,
+      item.platform,
+      item.label,
+      item.status,
+      item.sourceStatus,
+      item.submitDecision,
+      item.accessMode,
+      item.developerPortalUrl,
+      item.scopes.join(" | "),
+      item.officialUrls.join(" | "),
+      item.verifiedClaims.join(" | "),
+      item.submissionSteps.join(" | "),
+      item.reviewerEvidence.join(" | "),
+      item.requestedEvidenceRows.length,
+      item.approvedEvidenceRows.length,
+      item.requestedTemplateFilePath,
+      item.approvedTemplateFilePath,
+      item.requestedDropFilePath,
+      item.approvedDropFilePath,
+      item.requestedDropTemplate,
+      item.approvedDropTemplate,
+      item.blockers.join(" | "),
+      item.doneCriteria.join(" | "),
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+export async function prepareClipperPermissionSubmissionDossier(userId = getSystemUserId()): Promise<{ permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = await buildPermissionSubmissionDossierSummary({
+    permissionRequestPack: statusBefore.permissionRequestPack,
+    officialPermissionMatrix: statusBefore.officialPermissionMatrix,
+    developerApplicationDrafts: statusBefore.developerApplicationDrafts,
+    goLiveEvidenceBundle: statusBefore.goLiveEvidenceBundle,
+  });
+  const generatedAt = new Date().toISOString();
+  const permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary = {
+    ...draftSummary,
+    generatedAt,
+    status: derivePermissionSubmissionDossierStatus(generatedAt, draftSummary.totals),
+  };
+  await writeFile(PERMISSION_SUBMISSION_DOSSIER_PATH, JSON.stringify(permissionSubmissionDossier, null, 2));
+  await writeFile(PERMISSION_SUBMISSION_DOSSIER_MARKDOWN_PATH, renderPermissionSubmissionDossierMarkdown(permissionSubmissionDossier));
+  await writeFile(PERMISSION_SUBMISSION_DOSSIER_CSV_PATH, renderPermissionSubmissionDossierCsv(permissionSubmissionDossier));
+  return { permissionSubmissionDossier, status: await getClipperStatus(userId) };
 }
 
 async function buildPublisherConnectorSummary(input: {
@@ -13744,6 +20587,258 @@ export async function prepareClipperPublisherConnectors(userId = getSystemUserId
   await writeFile(PUBLISHER_CONNECTORS_PATH, JSON.stringify(publisherConnectors, null, 2));
   await writeFile(PUBLISHER_CONNECTORS_MARKDOWN_PATH, renderPublisherConnectorMarkdown(publisherConnectors));
   return { publisherConnectors, status: await getClipperStatus(userId) };
+}
+
+function buildPublisherExecutionRequestSpec(
+  connector: ClipperPublisherConnectorItem | undefined,
+  post: ClipperScheduledPost
+): ClipperPublisherExecutionQueueItem["requestSpec"] {
+  return {
+    headers: connector?.payloadFields.some((field) => field.toLowerCase().includes("authorization"))
+      ? ["Authorization: Bearer <encrypted token from vault>", "Content-Type: platform-specific"]
+      : ["Authorization/access_token: <encrypted token from vault>"],
+    payloadFields: connector?.payloadFields || ["platform payload fields unavailable until connector is prepared"],
+    mediaSource: post.sourcePath || "<missing source video>",
+    tokenSource: connector?.tokenSaved ? "encrypted_vault" : "missing",
+  };
+}
+
+function buildPublisherExecutionQueueSummary(input: {
+  automation: ClipperAutomationSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+}): ClipperPublisherExecutionQueueSummary {
+  const latestRun = input.automation.lastRun;
+  const realPublishEnabled = process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true";
+  const items = (latestRun?.posts || []).map<ClipperPublisherExecutionQueueItem>((post) => {
+    const connector = input.publisherConnectors.items.find((item) => item.platform === post.platform);
+    const approvalRequired = latestRun?.publishMode !== "auto_after_connection";
+    const gates = [
+      {
+        id: "post-not-blocked",
+        label: "Post sin blocker del automation cycle",
+        done: !post.blocker,
+        evidence: post.blocker || "Automation cycle no reporto blocker para este post.",
+      },
+      {
+        id: "connector-ready",
+        label: "Publisher connector listo",
+        done: connector?.status === "ready",
+        evidence: connector ? `${connector.label}: ${connector.status}` : "Connector no encontrado.",
+      },
+      {
+        id: "approval-mode",
+        label: "Aprobacion humana antes de enviar",
+        done: approvalRequired || realPublishEnabled,
+        evidence: approvalRequired
+          ? "Publish mode mantiene approval_required."
+          : realPublishEnabled
+            ? "Real publish habilitado explicitamente por CLIPPERS_ENABLE_REAL_PUBLISH=true."
+            : "Auto publish solicitado pero CLIPPERS_ENABLE_REAL_PUBLISH no esta habilitado.",
+      },
+      {
+        id: "token-source",
+        label: "Token cifrado disponible",
+        done: Boolean(connector?.tokenSaved),
+        evidence: connector?.tokenSaved ? "Token disponible solo desde vault cifrado." : "Token OAuth cifrado no encontrado.",
+      },
+      {
+        id: "source-video",
+        label: "Source video adjunto",
+        done: Boolean(post.sourcePath),
+        evidence: post.sourcePath || "Source video faltante.",
+      },
+    ];
+    const blockers = [
+      ...(post.blocker ? [post.blocker] : []),
+      ...(connector?.blockers || ["Publisher connector no preparado."]),
+      ...(!approvalRequired && !realPublishEnabled ? ["Auto publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true."] : []),
+    ].filter((blocker, index, all) => blocker && all.indexOf(blocker) === index);
+    const canSendNow = blockers.length === 0 && realPublishEnabled && latestRun?.publishMode === "auto_after_connection";
+    const status: ClipperPublisherExecutionItemStatus = blockers.length > 0
+      ? "blocked"
+      : canSendNow
+        ? "ready_to_send"
+        : "queued_for_approval";
+    return {
+      id: hashId(`${latestRun?.id || "no-run"}-${post.id}-${post.platform}-publisher-execution`),
+      postId: post.id,
+      queueItemId: post.queueItemId,
+      accountId: post.accountId,
+      accountName: post.accountName,
+      platform: post.platform,
+      status,
+      approvalRequired,
+      canSendNow,
+      publishAt: post.publishAt,
+      endpoint: connector?.endpoint || "unprepared",
+      method: "POST",
+      mode: connector?.mode || "direct_post",
+      sourcePath: post.sourcePath,
+      hook: post.hook,
+      captionSeed: post.captionSeed,
+      requestSpec: buildPublisherExecutionRequestSpec(connector, post),
+      gates,
+      blockers,
+      nextStep: status === "ready_to_send"
+        ? "Real publish habilitado y gates listos; ejecutar adaptador de plataforma."
+        : status === "queued_for_approval"
+          ? "Revisar y aprobar manualmente antes de habilitar envio real."
+          : blockers[0] || "Resolver blockers de publicacion.",
+    };
+  });
+  const totals = items.reduce<ClipperPublisherExecutionQueueSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.status === "queued_for_approval") sum.queuedForApproval += 1;
+    if (item.status === "ready_to_send") sum.readyToSend += 1;
+    if (item.approvalRequired) sum.approvalRequired += 1;
+    return sum;
+  }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
+  const status: ClipperPublisherExecutionStatus = !latestRun
+    ? "not_prepared"
+    : totals.blocked > 0
+      ? "blocked"
+      : totals.readyToSend > 0 && totals.readyToSend === totals.items
+        ? "ready"
+        : "approval_required";
+  return {
+    status,
+    generatedAt: null,
+    manifestPath: PUBLISHER_EXECUTION_QUEUE_PATH,
+    markdownPath: PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH,
+    csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
+    sourceAutomationRunId: latestRun?.id || null,
+    publishMode: latestRun?.publishMode || "approval_required",
+    realPublishEnabled,
+    items,
+    totals,
+    nextStep: !latestRun
+      ? "Correr Automation Cycle para generar posts antes de preparar publisher execution queue."
+      : totals.blocked > 0
+        ? items.find((item) => item.status === "blocked")?.nextStep || "Resolver blockers antes de enviar."
+        : totals.readyToSend > 0
+          ? "Queue lista para envio real; mantener monitoreo y evidence capture."
+          : "Queue lista para aprobacion humana; no se enviara nada externo hasta aprobar y habilitar real publish.",
+  };
+}
+
+function renderPublisherExecutionQueueMarkdown(summary: ClipperPublisherExecutionQueueSummary): string {
+  return [
+    "# Clippers Publisher Execution Queue",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Source automation run: ${summary.sourceAutomationRunId || "none"}`,
+    `Publish mode: ${summary.publishMode}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Queued for approval: ${summary.totals.queuedForApproval}`,
+    `- Ready to send: ${summary.totals.readyToSend}`,
+    `- Approval required: ${summary.totals.approvalRequired}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.accountName} / ${item.platform} / ${item.status}`,
+      "",
+      `- Post ID: ${item.postId}`,
+      `- Publish at: ${item.publishAt}`,
+      `- Endpoint: ${item.endpoint}`,
+      `- Method: ${item.method}`,
+      `- Mode: ${item.mode}`,
+      `- Source: ${item.sourcePath || "missing"}`,
+      `- Token source: ${item.requestSpec.tokenSource}`,
+      `- Approval required: ${item.approvalRequired ? "yes" : "no"}`,
+      `- Can send now: ${item.canSendNow ? "yes" : "no"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Gates:",
+      ...item.gates.map((gate) => `- [${gate.done ? "x" : " "}] ${gate.label}: ${gate.evidence}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Request spec:",
+      ...item.requestSpec.headers.map((header) => `- Header: ${header}`),
+      ...item.requestSpec.payloadFields.map((field) => `- Payload: ${field}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderPublisherExecutionQueueCsv(summary: ClipperPublisherExecutionQueueSummary): string {
+  const headers = ["id", "post_id", "account_id", "account_name", "platform", "status", "approval_required", "can_send_now", "publish_at", "endpoint", "mode", "source_path", "token_source", "blockers", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.id,
+    item.postId,
+    item.accountId,
+    item.accountName,
+    item.platform,
+    item.status,
+    item.approvalRequired ? "yes" : "no",
+    item.canSendNow ? "yes" : "no",
+    item.publishAt,
+    item.endpoint,
+    item.mode,
+    item.sourcePath || "",
+    item.requestSpec.tokenSource,
+    item.blockers.join(" | "),
+    item.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+async function readPublisherExecutionQueueSummary(): Promise<ClipperPublisherExecutionQueueSummary> {
+  try {
+    const raw = await readFile(PUBLISHER_EXECUTION_QUEUE_PATH, "utf8");
+    const parsed = JSON.parse(raw) as ClipperPublisherExecutionQueueSummary;
+    return {
+      ...parsed,
+      manifestPath: PUBLISHER_EXECUTION_QUEUE_PATH,
+      markdownPath: PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH,
+      csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
+    };
+  } catch {
+    return {
+      status: "not_prepared",
+      generatedAt: null,
+      manifestPath: PUBLISHER_EXECUTION_QUEUE_PATH,
+      markdownPath: PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH,
+      csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
+      sourceAutomationRunId: null,
+      publishMode: "approval_required",
+      realPublishEnabled: process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true",
+      items: [],
+      totals: { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
+      nextStep: "Correr Automation Cycle para generar posts antes de preparar publisher execution queue.",
+    };
+  }
+}
+
+export async function prepareClipperPublisherExecutionQueue(userId = getSystemUserId()): Promise<{ publisherExecutionQueue: ClipperPublisherExecutionQueueSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = buildPublisherExecutionQueueSummary({
+    automation: statusBefore.automation,
+    publisherConnectors: statusBefore.publisherConnectors,
+  });
+  const publisherExecutionQueue: ClipperPublisherExecutionQueueSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(PUBLISHER_EXECUTION_QUEUE_PATH, JSON.stringify(publisherExecutionQueue, null, 2));
+  await writeFile(PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH, renderPublisherExecutionQueueMarkdown(publisherExecutionQueue));
+  await writeFile(PUBLISHER_EXECUTION_QUEUE_CSV_PATH, renderPublisherExecutionQueueCsv(publisherExecutionQueue));
+  return { publisherExecutionQueue, status: await getClipperStatus(userId) };
 }
 
 async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSetupSummary> {
@@ -14057,6 +21152,85 @@ function buildProductionDnsPropagationChecks(host: string | null, publicBaseUrl:
   ];
 }
 
+function buildProductionDnsProviderRecipes(host: string | null): ClipperProductionDnsProviderRecipe[] {
+  const target = host || "<your-domain>";
+  return [
+    {
+      provider: "Cloudflare",
+      bestRecordId: "cloudflare-tunnel-cname",
+      portalUrl: "https://dash.cloudflare.com/",
+      steps: [
+        `Open the Cloudflare DNS zone for ${target}.`,
+        "Create or update the Cloudflare Tunnel route for the app host.",
+        "Add a CNAME record that points the host to <cloudflare-tunnel-id>.cfargotunnel.com.",
+        "If this is the apex/root domain, enable CNAME flattening or use the provider-supported apex mapping.",
+        "Keep proxy/tunnel behavior stable for OAuth callback routes and rerun Production URL Verification.",
+      ],
+      doneCriteria: [
+        `dig +short ${target} CNAME returns a Cloudflare tunnel or flattened target, or A/AAAA returns public Cloudflare addresses.`,
+        `https://${target}/clippers loads without DNS errors.`,
+        `OAuth callback URLs under https://${target}/api/clippers/oauth/... return an HTTP response instead of ENOTFOUND.`,
+      ],
+    },
+    {
+      provider: "Generic registrar DNS",
+      bestRecordId: "deploy-host-cname",
+      portalUrl: "https://www.google.com/search?q=domain+registrar+dns+settings",
+      steps: [
+        `Open the DNS management page for ${target}.`,
+        "Remove stale records that point this host to localhost, private IPs, parking pages, or old hosting.",
+        "Add a CNAME to the managed deploy hostname when the host supports CNAME records.",
+        "For apex/root domains that cannot use CNAME, add the A/AAAA records supplied by the hosting provider.",
+        "Wait for TTL/propagation and rerun Production URL Verification before app review.",
+      ],
+      doneCriteria: [
+        `dig +short ${target} A or CNAME returns at least one public target.`,
+        "The registrar record matches the hosting/tunnel target exactly.",
+        "Production URL Verification reports DNS resolved and endpoint checks no longer fail with ENOTFOUND.",
+      ],
+    },
+    {
+      provider: "Managed deploy host",
+      bestRecordId: "deploy-host-cname",
+      portalUrl: "https://www.google.com/search?q=custom+domain+deployment+DNS+CNAME",
+      steps: [
+        "Open the custom-domain settings for the deploy host.",
+        `Add ${target} as a verified custom domain.`,
+        "Copy the host-provided CNAME/A/AAAA target exactly into DNS.",
+        "Complete any TXT/domain ownership verification required by the host.",
+        "Keep PUBLIC_BASE_URL set to the final HTTPS origin after the host issues TLS.",
+      ],
+      doneCriteria: [
+        "Deploy host shows the custom domain as active/verified.",
+        `https://${target}/clippers returns a browser-visible page with a valid TLS certificate.`,
+        "Production URL Verification passes the root app, legal, demo and callback checks.",
+      ],
+    },
+  ];
+}
+
+function buildProductionDnsRepairRunbook(host: string | null, publicBaseUrl: string): string[] {
+  const target = host || "<your-domain>";
+  return [
+    `Confirm ${publicBaseUrl} is the final origin you want in TikTok, Meta and Google app review.`,
+    `Pick one DNS route for ${target}: Cloudflare Tunnel CNAME, deploy-host CNAME, or public deploy A/AAAA records.`,
+    "Apply exactly one active route for this hostname; remove conflicting stale records.",
+    "Wait for DNS propagation, then run the listed dig commands until at least one public record resolves.",
+    "Open /clippers, /clippers/legal/privacy, /clippers/legal/terms and /clippers/review-demo over HTTPS.",
+    "Only after endpoint verification passes, register redirect URIs in developer portals and submit app review.",
+  ];
+}
+
+function buildProductionAppReviewHoldChecklist(host: string | null): string[] {
+  const target = host || "<your-domain>";
+  return [
+    `Hold TikTok Content Posting API review until ${target} resolves and callback endpoints answer over HTTPS.`,
+    `Hold Meta App Review until privacy, terms, demo and redirect URLs on ${target} are browser-accessible.`,
+    `Hold Google OAuth verification/youtube.upload review until ${target} is verified and YouTube callback URL is reachable.`,
+    "Do not mark OAuth Go-Live ready while Production URL Verification status is fail or blocked.",
+  ];
+}
+
 function buildProductionDnsBlockedActions(host: string | null): string[] {
   const target = host || "<your-domain>";
   return [
@@ -14081,6 +21255,9 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
   const host = productionUrlHost(publicBaseUrl);
   const rootDomain = productionUrlRootDomain(host);
   const recordCandidates = buildProductionDnsRecordCandidates(host);
+  const providerRecipes = buildProductionDnsProviderRecipes(host);
+  const repairRunbook = buildProductionDnsRepairRunbook(host, publicBaseUrl);
+  const appReviewHoldChecklist = buildProductionAppReviewHoldChecklist(host);
   const propagationChecks = buildProductionDnsPropagationChecks(host, publicBaseUrl);
   const blockedUntilResolved = buildProductionDnsBlockedActions(host);
   const suggestedRecords = host
@@ -14097,6 +21274,9 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
       error: "PUBLIC_BASE_URL is not a valid URL.",
       suggestedRecords,
       recordCandidates,
+      providerRecipes,
+      repairRunbook,
+      appReviewHoldChecklist,
       propagationChecks,
       registrarChecklist: buildDnsRegistrarChecklist(host),
       blockedUntilResolved,
@@ -14115,6 +21295,9 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
       error: null,
       suggestedRecords,
       recordCandidates,
+      providerRecipes,
+      repairRunbook,
+      appReviewHoldChecklist,
       propagationChecks,
       registrarChecklist: buildDnsRegistrarChecklist(host),
       blockedUntilResolved,
@@ -14133,6 +21316,9 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
       error: productionUrlFetchErrorMessage(error),
       suggestedRecords,
       recordCandidates,
+      providerRecipes,
+      repairRunbook,
+      appReviewHoldChecklist,
       propagationChecks,
       registrarChecklist: buildDnsRegistrarChecklist(host),
       blockedUntilResolved,
@@ -14154,6 +21340,9 @@ function normalizeProductionDnsDiagnostic(input: unknown, fallback: ClipperProdu
     recordTypesChecked: Array.isArray(parsed.recordTypesChecked) ? parsed.recordTypesChecked : fallback.recordTypesChecked,
     suggestedRecords: Array.isArray(parsed.suggestedRecords) ? parsed.suggestedRecords : fallback.suggestedRecords,
     recordCandidates: Array.isArray(parsed.recordCandidates) ? parsed.recordCandidates : fallback.recordCandidates,
+    providerRecipes: Array.isArray(parsed.providerRecipes) ? parsed.providerRecipes : fallback.providerRecipes,
+    repairRunbook: Array.isArray(parsed.repairRunbook) ? parsed.repairRunbook : fallback.repairRunbook,
+    appReviewHoldChecklist: Array.isArray(parsed.appReviewHoldChecklist) ? parsed.appReviewHoldChecklist : fallback.appReviewHoldChecklist,
     propagationChecks: Array.isArray(parsed.propagationChecks) ? parsed.propagationChecks : fallback.propagationChecks,
     registrarChecklist: Array.isArray(parsed.registrarChecklist) ? parsed.registrarChecklist : fallback.registrarChecklist,
     blockedUntilResolved: Array.isArray(parsed.blockedUntilResolved) ? parsed.blockedUntilResolved : fallback.blockedUntilResolved,
@@ -14320,6 +21509,9 @@ function renderProductionUrlVerificationMarkdown(summary: ClipperProductionUrlVe
     "Registrar checklist:",
     ...summary.dnsDiagnostic.registrarChecklist.map((step) => `- [ ] ${step}`),
     "",
+    "DNS repair runbook:",
+    ...summary.dnsDiagnostic.repairRunbook.map((step) => `- [ ] ${step}`),
+    "",
     "Record candidates:",
     ...summary.dnsDiagnostic.recordCandidates.flatMap((record) => [
       `- ${record.label}`,
@@ -14333,8 +21525,23 @@ function renderProductionUrlVerificationMarkdown(summary: ClipperProductionUrlVe
       `  - When to use: ${record.whenToUse}`,
     ]),
     "",
+    "Provider recipes:",
+    ...summary.dnsDiagnostic.providerRecipes.flatMap((recipe) => [
+      `### ${recipe.provider}`,
+      "",
+      `- Best record: ${recipe.bestRecordId}`,
+      `- Portal: ${recipe.portalUrl}`,
+      "Steps:",
+      ...recipe.steps.map((step) => `- [ ] ${step}`),
+      "Done criteria:",
+      ...recipe.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+      "",
+    ]),
     "Propagation checks:",
     ...summary.dnsDiagnostic.propagationChecks.map((command) => `- ${command}`),
+    "",
+    "App review hold checklist:",
+    ...summary.dnsDiagnostic.appReviewHoldChecklist.map((action) => `- ${action}`),
     "",
     "Blocked until DNS resolves:",
     ...summary.dnsDiagnostic.blockedUntilResolved.map((action) => `- ${action}`),
@@ -15354,6 +22561,7 @@ async function buildOAuthConnectionPackSummary(input: {
         : blockers[0] || connectAction?.nextStep || "Completar conexion OAuth para esta cuenta.",
     };
   }));
+  const platformBatches = buildOAuthConnectionPlatformBatches(items, input.connectActions);
   const totals = items.reduce<ClipperOAuthConnectionPackSummary["totals"]>((sum, item) => {
     sum.connections += 1;
     if (item.status === "ready") sum.ready += 1;
@@ -15379,9 +22587,66 @@ async function buildOAuthConnectionPackSummary(input: {
     publicBaseUrl,
     productionUrlReady,
     items,
+    platformBatches,
     totals,
     nextStep: items.find((item) => item.status !== "ready")?.nextStep || "OAuth Connection Pack listo; correr dry-run por cuenta.",
   };
+}
+
+function oauthConnectionBatchStatus(items: ClipperOAuthConnectionPackItem[]): ClipperOAuthConnectionPackStatus {
+  if (items.every((item) => item.status === "ready")) return "ready";
+  if (items.some((item) => item.status === "partial" || item.status === "ready")) return "partial";
+  return "blocked";
+}
+
+function buildOAuthConnectionPlatformBatches(
+  items: ClipperOAuthConnectionPackItem[],
+  connectActions: ClipperConnectAction[],
+): ClipperOAuthConnectionPackPlatformBatch[] {
+  return (["tiktok", "instagram", "youtube"] as ClipperPlatform[]).map((platform) => {
+    const platformItems = items.filter((item) => item.platform === platform);
+    const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform);
+    const connectAction = connectActions.find((item) => item.platform === platform);
+    const status = platformItems.length ? oauthConnectionBatchStatus(platformItems) : "blocked";
+    const blockers = Array.from(new Set(platformItems.flatMap((item) => item.blockers.length ? item.blockers : [item.nextStep]))).slice(0, 8);
+    const requestedScopes = Array.from(new Set(platformItems.flatMap((item) => item.requestedScopes)));
+    const ready = platformItems.filter((item) => item.status === "ready").length;
+    const partial = platformItems.filter((item) => item.status === "partial").length;
+    const blocked = platformItems.filter((item) => item.status === "blocked").length;
+    const tokensSaved = platformItems.filter((item) => item.tokenSaved).length;
+    const authUrlsReady = platformItems.filter((item) => item.authUrl).length;
+    const redirectUri = buildRedirectUri(platform);
+    const callbackPath = connectAction?.callbackPath || `/api/clippers/oauth/${platform}/callback`;
+    return {
+      id: `oauth-connection-batch-${platform}`,
+      platform,
+      label: `${requirement?.label || platform} OAuth connections`,
+      status,
+      connections: platformItems.length,
+      ready,
+      partial,
+      blocked,
+      tokensSaved,
+      authUrlsReady,
+      handles: platformItems.map((item) => item.handle),
+      redirectUri,
+      callbackPath,
+      developerPortalUrl: requirement?.developerPortalUrl || "",
+      authUrl: connectAction?.authUrl || null,
+      requestedScopes,
+      blockers,
+      checklist: [
+        `Complete account evidence for ${platformItems.length} ${requirement?.label || platform} account(s).`,
+        `Confirm developer app is approved and redirect URI is registered: ${redirectUri}.`,
+        `Confirm scopes are approved/requested: ${requestedScopes.join(", ")}.`,
+        "Open OAuth URL only while logged into the intended account/channel.",
+        "Verify callback saves encrypted token and never paste raw tokens into evidence or reports.",
+      ],
+      nextStep: ready === platformItems.length && platformItems.length > 0
+        ? `${requirement?.label || platform} OAuth ready; run approval_required dry-run.`
+        : blockers[0] || connectAction?.nextStep || `Complete ${requirement?.label || platform} OAuth setup.`,
+    };
+  });
 }
 
 function renderOAuthConnectionPackMarkdown(summary: ClipperOAuthConnectionPackSummary): string {
@@ -15398,6 +22663,35 @@ function renderOAuthConnectionPackMarkdown(summary: ClipperOAuthConnectionPackSu
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Platform Batches",
+    "",
+    ...summary.platformBatches.flatMap((batch) => [
+      `### ${batch.label}`,
+      "",
+      `- Platform: ${batch.platform}`,
+      `- Status: ${batch.status}`,
+      `- Connections: ${batch.connections}`,
+      `- Ready: ${batch.ready}`,
+      `- Partial: ${batch.partial}`,
+      `- Blocked: ${batch.blocked}`,
+      `- Tokens saved: ${batch.tokensSaved}`,
+      `- OAuth URLs ready: ${batch.authUrlsReady}`,
+      `- Handles: ${batch.handles.join(", ") || "none"}`,
+      `- Redirect URI: ${batch.redirectUri}`,
+      `- Callback path: ${batch.callbackPath}`,
+      `- Developer portal: ${batch.developerPortalUrl}`,
+      `- OAuth URL ready: ${batch.authUrl ? "yes" : "no"}`,
+      `- Scopes: ${batch.requestedScopes.join(", ")}`,
+      `- Next step: ${batch.nextStep}`,
+      "",
+      "Checklist:",
+      ...batch.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      batch.blockers.length ? "Blockers:" : "Blockers: none",
+      ...batch.blockers.map((blocker) => `- ${blocker}`),
+      "",
+    ]),
     "",
     "## Account Connections",
     "",
@@ -15436,7 +22730,9 @@ function renderOAuthConnectionPackMarkdown(summary: ClipperOAuthConnectionPackSu
 }
 
 function renderOAuthConnectionPackCsv(summary: ClipperOAuthConnectionPackSummary): string {
+  const batchByPlatform = new Map(summary.platformBatches.map((batch) => [batch.platform, batch]));
   const header = [
+    "platform_batch_id",
     "id",
     "account",
     "category",
@@ -15456,6 +22752,7 @@ function renderOAuthConnectionPackCsv(summary: ClipperOAuthConnectionPackSummary
   return [
     header.map(csvEscape).join(","),
     ...summary.items.map((item) => [
+      batchByPlatform.get(item.platform)?.id || "",
       item.id,
       item.accountName,
       item.category,
@@ -15613,6 +22910,227 @@ export async function ingestClipperMetrics(userId = getSystemUserId()): Promise<
   return { metrics, status: await getClipperStatus(userId) };
 }
 
+const analyticsMinimumFields = [
+  "account_id",
+  "platform",
+  "clip_id",
+  "hook",
+  "published_at",
+  "views",
+  "likes",
+  "comments",
+  "shares",
+  "saves",
+  "retention",
+  "watch_time_seconds",
+];
+
+function platformAnalyticsExportSource(platform: ClipperPlatform): string {
+  if (platform === "tiktok") return "TikTok Studio / Analytics export";
+  if (platform === "instagram") return "Meta Business Suite / Instagram insights export";
+  return "YouTube Studio / Shorts analytics export";
+}
+
+async function buildAnalyticsReportingPackSummary(
+  accounts: ClipperAccount[],
+  metrics: ClipperMetricsSummary,
+  automationSchedule: ClipperAutomationScheduleSummary,
+): Promise<ClipperAnalyticsReportingPackSummary> {
+  const items = accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => {
+    const platform = platformAccount.platform;
+    const targetFileName = `${account.id}-${platform}-analytics.csv`;
+    const targetPath = path.join(METRICS_DIR, targetFileName);
+    const importRowTemplate = [
+      account.id,
+      platform,
+      `PASTE_${account.id}_${platform}_clip_id`,
+      "PASTE_HOOK_OR_CAPTION",
+      new Date().toISOString(),
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0%",
+      "0",
+    ].map(csvEscape).join(",");
+
+    return {
+      id: `${account.id}-${platform}`,
+      accountId: account.id,
+      accountName: account.name,
+      category: account.category,
+      platform,
+      handle: platformAccount.handle,
+      exportCadence: "daily" as const,
+      exportSource: platformAnalyticsExportSource(platform),
+      targetFileName,
+      targetPath,
+      minimumFields: analyticsMinimumFields,
+      kpiTargets: [
+        `${account.weeklyViewsGoal.toLocaleString("en-US")} views/week account goal.`,
+        "Track views, share rate, retention and saves for every posted clip.",
+        "Promote hooks above account average; pause formats below 35% of goal trajectory.",
+      ],
+      evidenceChecklist: [
+        `Export analytics for ${platformAccount.handle} from ${platformAnalyticsExportSource(platform)}.`,
+        `Save CSV/JSON to ${targetPath}.`,
+        "Do not paste access tokens, cookies, passwords or private account recovery data.",
+        "Run Ingerir metricas after the file is saved.",
+      ],
+      importRowTemplate,
+      nextStep: `Export ${platform} analytics for ${platformAccount.handle} into ${targetPath}, then run metrics ingest.`,
+    };
+  }));
+  const generatedAt = await stat(ANALYTICS_REPORTING_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const importTemplate = [
+    analyticsMinimumFields.join(","),
+    ...items.map((item) => item.importRowTemplate),
+  ].join("\n") + "\n";
+  const status: ClipperAnalyticsReportingPackStatus = metrics.records.length > 0
+    ? "ready"
+    : metrics.files.length > 0
+      ? "needs_data"
+      : "needs_data";
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: ANALYTICS_REPORTING_PACK_PATH,
+    markdownPath: ANALYTICS_REPORTING_PACK_MARKDOWN_PATH,
+    csvPath: ANALYTICS_REPORTING_PACK_CSV_PATH,
+    metricsDir: METRICS_DIR,
+    items,
+    totals: {
+      exports: items.length,
+      accounts: accounts.length,
+      platforms: Array.from(new Set(items.map((item) => item.platform))).length,
+      metricsFiles: metrics.files.length,
+      metricRecords: metrics.records.length,
+      weeklyViewsGoal: accounts.reduce((sum, account) => sum + account.weeklyViewsGoal, 0),
+    },
+    importTemplate,
+    runbook: [
+      `Daily ${automationSchedule.dailyRunTime} ${automationSchedule.timezone}: export analytics for every active account/platform.`,
+      "Save platform exports into clippers_workspace/metrics using the target filenames from this pack.",
+      "Run Ingerir metricas, then review top clips, account performance and recommendations.",
+      "Move volume toward hooks/accounts with higher views, shares, saves and retention.",
+      "Keep approval_required until accounts, rights, OAuth and platform permissions are fully verified.",
+    ],
+    nextStep: metrics.records.length > 0
+      ? "Metrics imported; use Optimizer recommendations in the next automation cycle."
+      : "Export platform analytics into clippers_workspace/metrics and run Ingerir metricas.",
+  };
+}
+
+async function writeAnalyticsMetricExportStarters(summary: ClipperAnalyticsReportingPackSummary): Promise<void> {
+  const starterTemplate = `${analyticsMinimumFields.join(",")}\n`;
+  await Promise.all(summary.items.map((item) => writeFileIfMissing(item.targetPath, starterTemplate)));
+}
+
+function renderAnalyticsReportingPackCsv(summary: ClipperAnalyticsReportingPackSummary): string {
+  const header = [
+    "account_id",
+    "account_name",
+    "category",
+    "platform",
+    "handle",
+    "export_cadence",
+    "export_source",
+    "target_file_name",
+    "target_path",
+    "minimum_fields",
+    "kpi_targets",
+    "evidence_checklist",
+    "import_row_template",
+    "next_step",
+  ];
+  const rows = summary.items.map((item) => [
+    item.accountId,
+    item.accountName,
+    item.category,
+    item.platform,
+    item.handle,
+    item.exportCadence,
+    item.exportSource,
+    item.targetFileName,
+    item.targetPath,
+    item.minimumFields.join(" | "),
+    item.kpiTargets.join(" | "),
+    item.evidenceChecklist.join(" | "),
+    item.importRowTemplate,
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
+}
+
+function renderAnalyticsReportingPackMarkdown(summary: ClipperAnalyticsReportingPackSummary): string {
+  return [
+    "# Clippers Analytics Reporting Pack",
+    "",
+    `Status: ${summary.status}`,
+    `Generated at: ${summary.generatedAt || new Date().toISOString()}`,
+    `Metrics dir: ${summary.metricsDir}`,
+    `Exports: ${summary.totals.exports}`,
+    `Metrics files: ${summary.totals.metricsFiles}`,
+    `Metric records: ${summary.totals.metricRecords}`,
+    `Weekly views goal: ${summary.totals.weeklyViewsGoal.toLocaleString("en-US")}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Runbook",
+    "",
+    ...summary.runbook.map((step) => `- ${step}`),
+    "",
+    "## Import Template",
+    "",
+    "```csv",
+    summary.importTemplate.trim(),
+    "```",
+    "",
+    "## Exports",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.accountName} / ${item.platform}`,
+      "",
+      `- Handle: ${item.handle}`,
+      `- Source: ${item.exportSource}`,
+      `- Target file: ${item.targetPath}`,
+      `- Cadence: ${item.exportCadence}`,
+      "Minimum fields:",
+      ...item.minimumFields.map((field) => `- ${field}`),
+      "KPI targets:",
+      ...item.kpiTargets.map((target) => `- ${target}`),
+      "Evidence checklist:",
+      ...item.evidenceChecklist.map((check) => `- [ ] ${check}`),
+      `- Next step: ${item.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+export async function prepareClipperAnalyticsReportingPack(userId = getSystemUserId()): Promise<{ analyticsReportingPack: ClipperAnalyticsReportingPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const automationSchedule = await buildAutomationScheduleSummary(accounts);
+  const draftSummary = await buildAnalyticsReportingPackSummary(accounts, await buildMetricsSummary(accounts), automationSchedule);
+  await writeAnalyticsMetricExportStarters(draftSummary);
+  const metrics = await buildMetricsSummary(accounts);
+  const preparedSummary = await buildAnalyticsReportingPackSummary(accounts, metrics, automationSchedule);
+  const analyticsReportingPack: ClipperAnalyticsReportingPackSummary = {
+    ...preparedSummary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(ANALYTICS_REPORTING_PACK_PATH, JSON.stringify(analyticsReportingPack, null, 2));
+  await writeFile(ANALYTICS_REPORTING_PACK_MARKDOWN_PATH, renderAnalyticsReportingPackMarkdown(analyticsReportingPack));
+  await writeFile(ANALYTICS_REPORTING_PACK_CSV_PATH, renderAnalyticsReportingPackCsv(analyticsReportingPack));
+  return { analyticsReportingPack, status: await getClipperStatus(userId) };
+}
+
 function normalizePlatformLabel(value: string): ClipperPlatform | null {
   const normalized = value.toLowerCase();
   if (normalized.includes("tiktok")) return "tiktok";
@@ -15690,12 +23208,46 @@ function buildScheduledPosts(
   );
 }
 
-function buildAutomationRecommendations(queue: ClipperProductionQueueSummary, posts: ClipperScheduledPost[]): string[] {
+function selectDailyAutomationPosts(posts: ClipperScheduledPost[], dailyTargetPosts: number): ClipperScheduledPost[] {
+  const target = Math.max(1, Math.round(dailyTargetPosts));
+  if (posts.length <= target) return posts;
+  const buckets = new Map<string, ClipperScheduledPost[]>();
+  for (const post of posts) {
+    const key = `${post.accountId}:${post.platform}`;
+    const bucket = buckets.get(key) || [];
+    bucket.push(post);
+    buckets.set(key, bucket);
+  }
+  const selected: ClipperScheduledPost[] = [];
+  const keys = Array.from(buckets.keys()).sort();
+  while (selected.length < target && keys.length > 0) {
+    for (const key of [...keys]) {
+      const bucket = buckets.get(key) || [];
+      const next = bucket.shift();
+      if (next) selected.push(next);
+      if (bucket.length === 0) {
+        const index = keys.indexOf(key);
+        if (index >= 0) keys.splice(index, 1);
+      }
+      if (selected.length >= target) break;
+    }
+  }
+  return selected;
+}
+
+function buildAutomationRecommendations(
+  queue: ClipperProductionQueueSummary,
+  posts: ClipperScheduledPost[],
+  target?: { dailyTargetPosts: number; weeklyTargetClips: number; backlogPosts: number; gapToDailyTarget: number }
+): string[] {
   const blockers = posts.filter((post) => post.blocker);
   const sourceBlockers = posts.filter((post) => post.status === "blocked_source").length;
   const rightsBlockers = posts.filter((post) => post.status === "blocked_rights").length;
   const connectionBlockers = posts.filter((post) => post.status === "blocked_connection").length;
   return [
+    target
+      ? `Ciclo diario apunta a ${target.dailyTargetPosts} posts para sostener ${target.weeklyTargetClips}/semana; backlog fuera del ciclo: ${target.backlogPosts}; gap diario: ${target.gapToDailyTarget}.`
+      : `Ciclo evaluo ${posts.length} posts.`,
     sourceBlockers > 0
       ? `Agregar fuentes reales para ${sourceBlockers} slots bloqueados por falta de video.`
       : "Fuentes suficientes para los items detectados.",
@@ -16129,6 +23681,7 @@ function buildGrowthAudit(input: {
   oauthConnectionPack: ClipperOAuthConnectionPackSummary;
   driveWorkspace: ClipperDriveWorkspaceSummary;
   metrics: ClipperMetricsSummary;
+  analyticsReportingPack: ClipperAnalyticsReportingPackSummary;
   trendRadar: ClipperTrendRadarSummary;
   accountEvidence: ClipperAccountEvidenceSummary;
   developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
@@ -16365,6 +23918,15 @@ function buildGrowthAudit(input: {
       nextStep: input.metrics.nextStep,
     },
     {
+      id: "analytics-reporting-pack",
+      label: "Reporting diario/semanal de analytics",
+      status: input.analyticsReportingPack.status === "ready" ? "ready" : input.analyticsReportingPack.generatedAt ? "warning" : "critical",
+      impact: "medium",
+      owner: "Optimizer",
+      evidence: `${input.analyticsReportingPack.totals.exports} exports planificados; ${input.analyticsReportingPack.totals.metricRecords} registros importados.`,
+      nextStep: input.analyticsReportingPack.nextStep,
+    },
+    {
       id: "creative-testing",
       label: "Testing creativo",
       status: readyQueueItems >= dailyClipTarget ? "ready" : readyQueueItems > 0 ? "warning" : "critical",
@@ -16413,6 +23975,7 @@ async function buildLaunchCommandCenterSummary(input: {
   permissionPack: ClipperPermissionPackSummary;
   productionQueue: ClipperProductionQueueSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
   sourceHunt: ClipperSourceHuntSummary;
   rightsOutreach: ClipperRightsOutreachSummary;
   draftSpecs: ClipperDraftSpecSummary;
@@ -16422,6 +23985,7 @@ async function buildLaunchCommandCenterSummary(input: {
   automationSchedule: ClipperAutomationScheduleSummary;
   driveWorkspace: ClipperDriveWorkspaceSummary;
   metrics: ClipperMetricsSummary;
+  analyticsReportingPack: ClipperAnalyticsReportingPackSummary;
   trendRadar: ClipperTrendRadarSummary;
   trendRightsOutreach: ClipperTrendRightsOutreachSummary;
   intakeKit: ClipperIntakeKitSummary;
@@ -16441,6 +24005,7 @@ async function buildLaunchCommandCenterSummary(input: {
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
+  publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
   productionUrlVerification: ClipperProductionUrlVerificationSummary;
   httpsTunnelPlan: ClipperHttpsTunnelPlanSummary;
@@ -16454,6 +24019,7 @@ async function buildLaunchCommandCenterSummary(input: {
   const readyQueueItems = input.productionQueue.items.filter((item) => item.status === "draft_ready").length;
   const missingCredentialCount = input.credentialChecks.reduce((sum, check) => sum + check.missingEnvVars.length, 0);
   const commandGeneratedAt = await stat(LAUNCH_COMMAND_CENTER_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const operatorBriefGeneratedAt = await stat(GO_LIVE_OPERATOR_BRIEF_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const productionUrlVerified = input.productionUrlVerification.status === "pass";
   const productionUrlAccessLabel = !input.productionUrlSetup.productionUrlReady
     ? "not configured"
@@ -16706,6 +24272,18 @@ async function buildLaunchCommandCenterSummary(input: {
       actionUrl: "/api/clippers/prepare-go-live-execution-pack",
     },
     {
+      id: "go-live-operator-brief",
+      label: "Go-Live Operator Brief",
+      owner: "Clippers Core",
+      status: operatorBriefGeneratedAt ? "needs_action" : "blocked",
+      evidence: operatorBriefGeneratedAt
+        ? `Operator brief generado; refrescar para sincronizar cuentas, keys, DNS, sources y OAuth con el estado actual.`
+        : "Operator brief pendiente; genera los 5 carriles operativos para completar go-live.",
+      nextStep: "Refrescar Operator Brief y trabajar el primer carril bloqueado.",
+      artifactPath: GO_LIVE_OPERATOR_BRIEF_MARKDOWN_PATH,
+      actionUrl: "/api/clippers/prepare-go-live-operator-brief",
+    },
+    {
       id: "permission-approvals",
       label: "Permisos de publicacion",
       owner: "Permission Ops",
@@ -16744,6 +24322,16 @@ async function buildLaunchCommandCenterSummary(input: {
       nextStep: input.sourceAcquisition.nextStep,
       artifactPath: input.sourceAcquisition.markdownPath,
       actionUrl: "/api/clippers/prepare-source-acquisition",
+    },
+    {
+      id: "source-supply-drop-kit",
+      label: "Source Supply Drop Kit",
+      owner: "Trend Scout",
+      status: input.sourceSupplyDropKit.status === "ready" ? "done" : input.sourceSupplyDropKit.generatedAt ? "needs_action" : "blocked",
+      evidence: `${input.sourceSupplyDropKit.totals.items} source rows needed; CSV ${input.sourceSupplyDropKit.csvPath}.`,
+      nextStep: input.sourceSupplyDropKit.nextStep,
+      artifactPath: input.sourceSupplyDropKit.markdownPath,
+      actionUrl: "/api/clippers/prepare-source-supply-drop-kit",
     },
     {
       id: "daily-source-hunt",
@@ -16806,6 +24394,16 @@ async function buildLaunchCommandCenterSummary(input: {
       actionUrl: null,
     },
     {
+      id: "analytics-reporting-pack",
+      label: "Analytics Reporting Pack",
+      owner: "Optimizer",
+      status: input.analyticsReportingPack.status === "ready" ? "done" : input.analyticsReportingPack.generatedAt ? "needs_action" : "blocked",
+      evidence: `${input.analyticsReportingPack.totals.exports} exports planificados; ${input.analyticsReportingPack.totals.metricRecords} registros importados.`,
+      nextStep: input.analyticsReportingPack.nextStep,
+      artifactPath: input.analyticsReportingPack.markdownPath,
+      actionUrl: "/api/clippers/prepare-analytics-reporting-pack",
+    },
+    {
       id: "daily-publishing-cycle",
       label: "Ciclo diario de publicacion",
       owner: "Publisher",
@@ -16844,6 +24442,16 @@ async function buildLaunchCommandCenterSummary(input: {
       nextStep: input.publisherConnectors.nextStep,
       artifactPath: input.publisherConnectors.markdownPath,
       actionUrl: "/api/clippers/prepare-publisher-connectors",
+    },
+    {
+      id: "publisher-execution-queue",
+      label: "Publisher Execution Queue",
+      owner: "Publisher",
+      status: input.publisherExecutionQueue.status === "ready" ? "done" : input.publisherExecutionQueue.status === "approval_required" ? "needs_action" : "blocked",
+      evidence: `${input.publisherExecutionQueue.totals.items} items; ${input.publisherExecutionQueue.totals.blocked} bloqueados; ${input.publisherExecutionQueue.totals.readyToSend} ready; real publish ${input.publisherExecutionQueue.realPublishEnabled ? "on" : "off"}.`,
+      nextStep: input.publisherExecutionQueue.nextStep,
+      artifactPath: input.publisherExecutionQueue.markdownPath,
+      actionUrl: "/api/clippers/prepare-publisher-execution-queue",
     },
   ];
 
@@ -17133,7 +24741,9 @@ async function buildBlockerResolutionPackSummary(input: {
   }).sort((a, b) => {
     const statusWeight = (status: ClipperBlockerResolutionActionStatus) => status === "blocked" ? 0 : status === "next" ? 1 : 2;
     const severityWeight = (severity: ClipperBlockerResolutionAction["severity"]) => severity === "critical" ? 0 : severity === "high" ? 1 : 2;
+    const priorityWeight = (action: ClipperBlockerResolutionAction) => action.sourceStepId === "go-live-operator-brief" ? -1 : 0;
     return statusWeight(a.status) - statusWeight(b.status)
+      || priorityWeight(a) - priorityWeight(b)
       || BLOCKER_UNLOCK_PHASE_ORDER[a.unlockPhase] - BLOCKER_UNLOCK_PHASE_ORDER[b.unlockPhase]
       || severityWeight(a.severity) - severityWeight(b.severity)
       || a.label.localeCompare(b.label);
@@ -17386,6 +24996,62 @@ function enrichGoLiveAutopilotAction(action: Omit<ClipperGoLiveAutopilotAction, 
   };
 }
 
+function buildGoLiveAutopilotAgentSessions(actions: ClipperGoLiveAutopilotAction[]): ClipperGoLiveAutopilotAgentSession[] {
+  const grouped = actions.reduce<Map<string, ClipperGoLiveAutopilotAction[]>>((map, action) => {
+    const current = map.get(action.agentId) || [];
+    current.push(action);
+    map.set(action.agentId, current);
+    return map;
+  }, new Map());
+
+  return Array.from(grouped.entries())
+    .map(([agentId, groupedActions]) => {
+      const sorted = groupedActions.slice().sort((a, b) => a.rank - b.rank);
+      const first = sorted[0];
+      const inAppReady = sorted.filter((action) => action.status === "run_in_app").length;
+      const externalRequired = sorted.filter((action) => action.status === "external_required").length;
+      const waiting = sorted.filter((action) => action.status === "waiting").length;
+      const blocked = sorted.filter((action) => action.blockers.length > 0).length;
+      const platforms = Array.from(new Set(sorted.map((action) => action.platform)));
+      const portalUrls = Array.from(new Set(sorted.flatMap((action) => action.portalUrl ? [action.portalUrl] : [])));
+      const localActionUrls = Array.from(new Set(sorted.flatMap((action) => action.localActionUrl ? [action.localActionUrl] : [])));
+      const evidenceRows = Array.from(new Set(sorted.flatMap((action) => action.evidenceRows))).slice(0, 12);
+      const riskControls = Array.from(new Set(sorted.flatMap((action) => action.riskControls))).slice(0, 8);
+      const next = sorted.find((action) => action.status === "run_in_app")
+        || sorted.find((action) => action.status === "external_required")
+        || sorted.find((action) => action.status === "waiting")
+        || first;
+
+      const status: ClipperGoLiveAutopilotBriefStatus = externalRequired > 0 || blocked > 0
+        ? "blocked"
+        : inAppReady > 0 || waiting > 0
+          ? "in_progress"
+          : "ready";
+      return {
+        id: `agent-session-${agentId}`,
+        agentId,
+        subAgentName: first.subAgentName,
+        owner: first.owner,
+        status,
+        actionIds: sorted.map((action) => action.id),
+        actionCount: sorted.length,
+        inAppReady,
+        externalRequired,
+        waiting,
+        blocked,
+        platforms,
+        portalUrls,
+        localActionUrls,
+        evidenceRows,
+        riskControls,
+        firstActionRank: first.rank,
+        mission: `${first.subAgentName} ejecuta ${sorted.length} acciones para desbloquear ${platforms.join(", ")}.`,
+        nextStep: next.nextStep,
+      };
+    })
+    .sort((a, b) => a.firstActionRank - b.firstActionRank);
+}
+
 async function buildGoLiveAutopilotBriefSummary(input: {
   blockerResolutionPack: ClipperBlockerResolutionPackSummary;
   externalLaunchDossier: ClipperExternalLaunchDossierSummary;
@@ -17394,6 +25060,7 @@ async function buildGoLiveAutopilotBriefSummary(input: {
   viralDiscovery: ClipperViralDiscoverySummary;
   trendRightsOutreach: ClipperTrendRightsOutreachSummary;
 }): Promise<ClipperGoLiveAutopilotBriefSummary> {
+  const localDropSync = await buildLocalDropSyncSummary();
   const blockerActions = input.blockerResolutionPack.actions.slice(0, 18).map((action, index) => enrichGoLiveAutopilotAction({
     id: `autopilot-${action.id}`,
     rank: index + 1,
@@ -17433,9 +25100,26 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     }));
 
   const systemActions = [
+    (localDropSync.status !== "completed" || localDropSync.totals.skipped > 0) && enrichGoLiveAutopilotAction({
+      id: "autopilot-local-drop-sync",
+      rank: blockerActions.length + platformActions.length + 1,
+      lane: "in_app",
+      platform: "system",
+      owner: "Operator",
+      status: "run_in_app",
+      label: "Local Drop Sync",
+      localActionUrl: "/api/clippers/run-local-drop-sync",
+      portalUrl: null,
+      artifactPath: localDropSync.markdownPath,
+      evidenceTemplate: "Place credentials in credentials/ or secrets/, launch evidence CSV in evidence-drop/, and source videos in source-drop/ before running sync.",
+      reason: `Local Drop Sync status: ${localDropSync.status}; ${localDropSync.totals.completed} completed, ${localDropSync.totals.skipped} skipped, ${localDropSync.totals.failed} failed.`,
+      nextStep: localDropSync.nextStep,
+      blockers: [],
+      unblockCondition: "Local Drop Sync completes, imports available local drops and refreshes go-live artifacts.",
+    }),
     input.driveWorkspace.status !== "ready" && enrichGoLiveAutopilotAction({
       id: "autopilot-drive-workspace",
-      rank: blockerActions.length + platformActions.length + 1,
+      rank: blockerActions.length + platformActions.length + 2,
       lane: input.driveWorkspace.status === "missing_keys" ? "external" : "in_app",
       platform: "system",
       owner: "Content Ops",
@@ -17452,7 +25136,7 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     }),
     input.viralDiscovery.status !== "ready" && enrichGoLiveAutopilotAction({
       id: "autopilot-viral-discovery",
-      rank: blockerActions.length + platformActions.length + 2,
+      rank: blockerActions.length + platformActions.length + 3,
       lane: "in_app",
       platform: "system",
       owner: "Trend Scout",
@@ -17469,7 +25153,7 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     }),
     input.trendRightsOutreach.status !== "ready" && input.trendRightsOutreach.totals.candidates > 0 && enrichGoLiveAutopilotAction({
       id: "autopilot-trend-rights",
-      rank: blockerActions.length + platformActions.length + 3,
+      rank: blockerActions.length + platformActions.length + 4,
       lane: "evidence",
       platform: "system",
       owner: "Rights Gate",
@@ -17502,6 +25186,7 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     return sum;
   }, { in_app: 0, external: 0, evidence: 0, publish: 0 });
   const platformSet = new Set(actions.filter((action) => action.platform !== "system").map((action) => action.platform));
+  const agentSessions = buildGoLiveAutopilotAgentSessions(actions);
   const totals = actions.reduce<ClipperGoLiveAutopilotBriefSummary["totals"]>((sum, action) => {
     sum.actions += 1;
     if (action.status === "run_in_app") sum.inAppReady += 1;
@@ -17510,8 +25195,9 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     if (action.status === "done") sum.done += 1;
     if (action.blockers.length > 0) sum.blocked += 1;
     return sum;
-  }, { actions: 0, inAppReady: 0, externalRequired: 0, waiting: 0, done: 0, blocked: 0, platformsCovered: platformSet.size });
+  }, { actions: 0, inAppReady: 0, externalRequired: 0, waiting: 0, done: 0, blocked: 0, platformsCovered: platformSet.size, agentSessions: agentSessions.length });
   totals.platformsCovered = platformSet.size;
+  totals.agentSessions = agentSessions.length;
 
   const generatedAt = await stat(GO_LIVE_AUTOPILOT_BRIEF_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
@@ -17527,6 +25213,7 @@ async function buildGoLiveAutopilotBriefSummary(input: {
     markdownPath: GO_LIVE_AUTOPILOT_BRIEF_MARKDOWN_PATH,
     csvPath: GO_LIVE_AUTOPILOT_BRIEF_CSV_PATH,
     actions,
+    agentSessions,
     totals,
     lanes,
     nextStep: actions.find((action) => action.status === "run_in_app")?.nextStep
@@ -17542,7 +25229,7 @@ function renderGoLiveAutopilotBriefMarkdown(summary: ClipperGoLiveAutopilotBrief
     "",
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
-    `Totals: ${summary.totals.actions} actions, ${summary.totals.inAppReady} in-app ready, ${summary.totals.externalRequired} external required, ${summary.totals.blocked} blocked`,
+    `Totals: ${summary.totals.actions} actions, ${summary.totals.agentSessions} agent sessions, ${summary.totals.inAppReady} in-app ready, ${summary.totals.externalRequired} external required, ${summary.totals.blocked} blocked`,
     `CSV: ${summary.csvPath}`,
     "",
     "## Next Step",
@@ -17555,6 +25242,32 @@ function renderGoLiveAutopilotBriefMarkdown(summary: ClipperGoLiveAutopilotBrief
     `- External: ${summary.lanes.external}`,
     `- Evidence: ${summary.lanes.evidence}`,
     `- Publish: ${summary.lanes.publish}`,
+    "",
+    "## Agent Sessions",
+    "",
+    ...summary.agentSessions.flatMap((session) => [
+      `### ${session.subAgentName}`,
+      "",
+      `- Status: ${session.status}`,
+      `- Owner: ${session.owner}`,
+      `- Mission: ${session.mission}`,
+      `- Actions: ${session.actionCount}`,
+      `- In-app: ${session.inAppReady}`,
+      `- External: ${session.externalRequired}`,
+      `- Waiting: ${session.waiting}`,
+      `- Blocked: ${session.blocked}`,
+      `- Platforms: ${session.platforms.join(", ")}`,
+      session.localActionUrls.length ? `- Local actions: ${session.localActionUrls.join(" | ")}` : null,
+      session.portalUrls.length ? `- Portals: ${session.portalUrls.join(" | ")}` : null,
+      `- Next step: ${session.nextStep}`,
+      "",
+      "Evidence rows:",
+      ...session.evidenceRows.map((row) => `- ${row}`),
+      "",
+      "Risk controls:",
+      ...session.riskControls.map((control) => `- ${control}`),
+      "",
+    ].filter((line): line is string => Boolean(line))),
     "",
     "## Actions",
     "",
@@ -17598,7 +25311,7 @@ function renderGoLiveAutopilotBriefMarkdown(summary: ClipperGoLiveAutopilotBrief
 }
 
 function renderGoLiveAutopilotBriefCsv(summary: ClipperGoLiveAutopilotBriefSummary): string {
-  const header = ["rank", "id", "status", "lane", "platform", "agent_id", "sub_agent", "owner", "label", "local_action_url", "portal_url", "artifact", "mission", "next_step", "evidence_template", "evidence_rows", "operator_steps", "success_signals", "risk_controls", "unblock_condition"];
+  const header = ["rank", "id", "status", "lane", "platform", "agent_session_id", "agent_id", "sub_agent", "owner", "label", "local_action_url", "portal_url", "artifact", "mission", "next_step", "evidence_template", "evidence_rows", "operator_steps", "success_signals", "risk_controls", "unblock_condition"];
   return [
     header.map(csvEscape).join(","),
     ...summary.actions.map((action) => [
@@ -17607,6 +25320,7 @@ function renderGoLiveAutopilotBriefCsv(summary: ClipperGoLiveAutopilotBriefSumma
       action.status,
       action.lane,
       action.platform,
+      `agent-session-${action.agentId}`,
       action.agentId,
       action.subAgentName,
       action.owner,
@@ -17673,6 +25387,10 @@ async function buildGoLiveAutopilotRunSummary(): Promise<ClipperGoLiveAutopilotR
     markdownPath: GO_LIVE_AUTOPILOT_RUN_MARKDOWN_PATH,
     requestedActionId: null,
     maxActions: 0,
+    resetCompleted: false,
+    availableInAppActions: 0,
+    alreadyCompletedInAppActions: 0,
+    remainingInAppActions: 0,
     completedActionIds: [],
     items: [],
     totals: { attempted: 0, completed: 0, skipped: 0, failed: 0 },
@@ -17688,6 +25406,8 @@ function renderGoLiveAutopilotRunMarkdown(summary: ClipperGoLiveAutopilotRunSumm
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Requested action: ${summary.requestedActionId || "next"}`,
     `Max actions: ${summary.maxActions}`,
+    `Reset completed memory: ${summary.resetCompleted ? "yes" : "no"}`,
+    `In-app actions: ${summary.availableInAppActions} available, ${summary.alreadyCompletedInAppActions} already completed, ${summary.remainingInAppActions} remaining`,
     `Completed memory: ${summary.completedActionIds.length} action ids`,
     `Totals: ${summary.totals.completed} completed, ${summary.totals.skipped} skipped, ${summary.totals.failed} failed`,
     "",
@@ -17782,6 +25502,9 @@ async function executeGoLiveAutopilotLocalAction(actionUrl: string, userId: stri
     case "/api/clippers/prepare-go-live-execution-pack":
       await prepareClipperGoLiveExecutionPack(userId);
       return "Go-Live Execution Pack regenerated.";
+    case "/api/clippers/prepare-go-live-operator-brief":
+      await prepareClipperGoLiveOperatorBrief(userId);
+      return "Go-Live Operator Brief regenerated.";
     case "/api/clippers/prepare-permission-request-pack":
       await prepareClipperPermissionRequestPack(userId);
       return "Permission Request Pack regenerated.";
@@ -17791,9 +25514,15 @@ async function executeGoLiveAutopilotLocalAction(actionUrl: string, userId: stri
     case "/api/clippers/prepare-source-acquisition":
       await prepareClipperSourceAcquisitionPlan(userId);
       return "Source Acquisition Plan regenerated.";
+    case "/api/clippers/prepare-source-supply-drop-kit":
+      await prepareClipperSourceSupplyDropKit(userId);
+      return "Source Supply Drop Kit regenerated.";
     case "/api/clippers/import-source-drop-files":
       await importClipperSourceDropFiles(userId);
       return "Source drop files imported.";
+    case "/api/clippers/run-local-drop-sync":
+      await runClipperLocalDropSync(userId);
+      return "Local Drop Sync completed.";
     case "/api/clippers/prepare-source-hunt":
       await prepareClipperSourceHuntSheet({}, userId);
       return "Source Hunt Sheet regenerated.";
@@ -17809,6 +25538,9 @@ async function executeGoLiveAutopilotLocalAction(actionUrl: string, userId: stri
     case "/api/clippers/prepare-viral-discovery":
       await prepareClipperViralDiscoveryPack({}, userId);
       return "Viral Discovery Pack regenerated.";
+    case "/api/clippers/prepare-analytics-reporting-pack":
+      await prepareClipperAnalyticsReportingPack(userId);
+      return "Analytics Reporting Pack regenerated.";
     case "/api/clippers/run-automation-cycle":
       await runClipperAutomationCycle({ publishMode: "approval_required", riskTolerance: "growth" }, userId);
       return "Automation cycle dry-run completed in approval_required mode.";
@@ -17821,6 +25553,9 @@ async function executeGoLiveAutopilotLocalAction(actionUrl: string, userId: stri
     case "/api/clippers/prepare-publisher-connectors":
       await prepareClipperPublisherConnectors(userId);
       return "Publisher Connectors regenerated.";
+    case "/api/clippers/prepare-publisher-execution-queue":
+      await prepareClipperPublisherExecutionQueue(userId);
+      return "Publisher Execution Queue regenerated.";
     default:
       throw new Error(`Action URL is not allowlisted for Autopilot execution: ${actionUrl}`);
   }
@@ -17833,15 +25568,17 @@ export async function runClipperGoLiveAutopilot(input: unknown = {}, userId = ge
     : null;
   const rawMaxActions = Number((input as { maxActions?: unknown })?.maxActions ?? 1);
   const maxActions = Math.max(1, Math.min(5, Number.isFinite(rawMaxActions) ? Math.floor(rawMaxActions) : 1));
+  const resetCompleted = (input as { resetCompleted?: unknown })?.resetCompleted === true;
   const previousRun = await buildGoLiveAutopilotRunSummary();
-  const completedMemory = new Set(previousRun.completedActionIds);
+  const completedMemory = resetCompleted ? new Set<string>() : new Set(previousRun.completedActionIds);
   const { goLiveAutopilotBrief: beforeBrief } = await prepareClipperGoLiveAutopilotBrief(userId);
   const requestedAction = requestedActionId ? beforeBrief.actions.find((action) => action.id === requestedActionId) || null : null;
+  const availableInAppActions = beforeBrief.actions.filter((action) => action.status === "run_in_app" && action.localActionUrl);
+  const alreadyCompletedInAppActions = availableInAppActions.filter((action) => completedMemory.has(action.id));
+  const remainingInAppActions = availableInAppActions.filter((action) => !completedMemory.has(action.id));
   const selected = requestedAction
     ? [requestedAction]
-    : beforeBrief.actions
-      .filter((action) => action.status === "run_in_app" && action.localActionUrl && !completedMemory.has(action.id))
-      .slice(0, maxActions);
+    : remainingInAppActions.slice(0, maxActions);
 
   const items: ClipperGoLiveAutopilotRunItem[] = [];
   if (requestedActionId && !requestedAction) {
@@ -17866,7 +25603,9 @@ export async function runClipperGoLiveAutopilot(input: unknown = {}, userId = ge
       status: "skipped",
       startedAt: now,
       finishedAt: now,
-      message: "No current Autopilot actions are marked run_in_app.",
+      message: availableInAppActions.length > 0
+        ? "All current in-app Autopilot actions are already completed in local memory. Send resetCompleted=true to regenerate them."
+        : "No current Autopilot actions are marked run_in_app.",
     });
   }
 
@@ -17922,9 +25661,11 @@ export async function runClipperGoLiveAutopilot(input: unknown = {}, userId = ge
       : "blocked";
   const nextBrief = (await prepareClipperGoLiveAutopilotBrief(userId)).goLiveAutopilotBrief;
   const completedActionIds = Array.from(new Set([
-    ...previousRun.completedActionIds,
+    ...(resetCompleted ? [] : previousRun.completedActionIds),
     ...items.filter((item) => item.status === "completed" && item.actionId !== "none").map((item) => item.actionId),
   ])).slice(-100);
+  const completedActionIdSet = new Set(completedActionIds);
+  const finalRemainingInAppActions = availableInAppActions.filter((action) => !completedActionIdSet.has(action.id)).length;
   const goLiveAutopilotRun: ClipperGoLiveAutopilotRunSummary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -17932,6 +25673,10 @@ export async function runClipperGoLiveAutopilot(input: unknown = {}, userId = ge
     markdownPath: GO_LIVE_AUTOPILOT_RUN_MARKDOWN_PATH,
     requestedActionId,
     maxActions,
+    resetCompleted,
+    availableInAppActions: availableInAppActions.length,
+    alreadyCompletedInAppActions: alreadyCompletedInAppActions.length,
+    remainingInAppActions: finalRemainingInAppActions,
     completedActionIds,
     items,
     totals,
@@ -17942,11 +25687,4111 @@ export async function runClipperGoLiveAutopilot(input: unknown = {}, userId = ge
   return { goLiveAutopilotRun, goLiveAutopilotBrief: nextBrief, status: await getClipperStatus(userId) };
 }
 
+async function buildLocalDropSyncSummary(): Promise<ClipperLocalDropSyncSummary> {
+  const raw = await readFile(LOCAL_DROP_SYNC_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperLocalDropSyncSummary;
+      const items = Array.isArray(parsed.items) ? parsed.items : [];
+      return {
+        status: parsed.status || "not_run",
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: LOCAL_DROP_SYNC_PATH,
+        markdownPath: LOCAL_DROP_SYNC_MARKDOWN_PATH,
+        items,
+        missingInputs: buildLocalDropSyncMissingInputs(items),
+        launchEvidenceDrop: parsed.launchEvidenceDrop || null,
+        totals: parsed.totals || { attempted: 0, completed: 0, skipped: 0, failed: 0 },
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Local Drop Sync after adding credentials, evidence or source videos.",
+      };
+    } catch {
+      // Fall through to a clean not_run summary.
+    }
+  }
+  return {
+    status: "not_run",
+    generatedAt: null,
+    manifestPath: LOCAL_DROP_SYNC_PATH,
+    markdownPath: LOCAL_DROP_SYNC_MARKDOWN_PATH,
+    items: [],
+    missingInputs: buildLocalDropSyncMissingInputs([]),
+    launchEvidenceDrop: null,
+    totals: { attempted: 0, completed: 0, skipped: 0, failed: 0 },
+    nextStep: "Run Local Drop Sync after adding credentials, evidence or source videos.",
+  };
+}
+
+function buildLocalDropSyncMissingInputs(
+  items: ClipperLocalDropSyncItem[],
+  diagnostics: {
+    launchEvidenceDropDiagnostic?: ClipperLaunchEvidenceDropDiagnosticSummary;
+    sourceDropDiagnostic?: ClipperSourceDropDiagnosticSummary;
+  } = {}
+): ClipperLocalDropSyncMissingInput[] {
+  const itemStatus = (id: ClipperLocalDropSyncItem["id"]) => items.find((item) => item.id === id)?.status;
+  const credentialStatus = itemStatus("credential_drop");
+  const launchEvidenceStatus = itemStatus("launch_evidence_drop");
+  const sourceStatus = itemStatus("source_drop");
+  const credentialExamples = CREDENTIAL_ENV_REQUIREMENTS.flatMap((requirement) => requirement.requiredEnvVars);
+  const launchEvidenceNeedsRepair = Boolean(diagnostics.launchEvidenceDropDiagnostic
+    && (
+      diagnostics.launchEvidenceDropDiagnostic.totals.pendingRows > 0
+      || diagnostics.launchEvidenceDropDiagnostic.totals.rejectedRows > 0
+      || diagnostics.launchEvidenceDropDiagnostic.totals.fileErrors > 0
+    ));
+  const sourceNeedsRepair = Boolean(diagnostics.sourceDropDiagnostic
+    && (
+      diagnostics.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0
+      || diagnostics.sourceDropDiagnostic.totals.manifestMissingFiles > 0
+      || diagnostics.sourceDropDiagnostic.totals.missingSourceAssets > 0
+    ));
+
+  return [
+    {
+      id: "credentials",
+      label: "Credential drop",
+      status: credentialStatus === "completed" ? "ready" : "needed",
+      dropDirs: [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR].map((dir) => path.relative(process.cwd(), dir)),
+      acceptedFormats: [
+        ".env / KEY=value files",
+        "Google OAuth client JSON with Web/Desktop OAuth fields",
+        "Refresh-token env text for already authorized OAuth clients",
+      ],
+      requiredExamples: credentialExamples,
+      actionLabel: "Local sync -> Credential doctor -> Reload keys",
+      actionUrl: "/api/clippers/run-local-drop-sync",
+      nextStep: credentialStatus === "completed"
+        ? "Credential drop imported; run Credential doctor/Reload keys if runtime still reports missing keys."
+        : "Place TikTok, Meta and Google/YouTube OAuth env or JSON files in credentials/ or secrets/, then run Local sync.",
+    },
+    {
+      id: "launch_evidence",
+      label: "Launch evidence drop",
+      status: launchEvidenceStatus === "completed" && !launchEvidenceNeedsRepair ? "ready" : "needed",
+      dropDirs: [path.relative(process.cwd(), LAUNCH_EVIDENCE_DROP_DIR)],
+      acceptedFormats: [
+        "CSV with kind, account_id, platform, status, scope, app_identifier, public_base_url, notes",
+        "JSON array/object accepted by Launch Evidence Batch",
+        "Completed permission CSVs copied from permission-drop-templates after placeholders are replaced",
+        "Rows copied from Go-Live Evidence Bundle after placeholders are replaced with real proof",
+      ],
+      requiredExamples: [
+        "account verified rows for every account/platform pair",
+        "developer_app submitted/approved rows for TikTok, Meta and Google/YouTube",
+        "permission requested/approved rows for every publish scope",
+      ],
+      actionLabel: "Local sync or Import drop",
+      actionUrl: "/api/clippers/import-launch-evidence-drop",
+      nextStep: launchEvidenceNeedsRepair && diagnostics.launchEvidenceDropDiagnostic
+        ? `${diagnostics.launchEvidenceDropDiagnostic.nextStep} Repair CSV: ${diagnostics.launchEvidenceDropDiagnostic.repairWorksheetCsvPath}`
+        : launchEvidenceStatus === "completed"
+        ? "Launch evidence drop imported; run Completion audit to confirm which external gates moved."
+        : "Put completed evidence CSV/JSON files in clippers_workspace/evidence-drop/, then run Local sync or Import drop.",
+    },
+    {
+      id: "source_videos",
+      label: "Source video drop",
+      status: sourceStatus === "completed" && !sourceNeedsRepair ? "ready" : "needed",
+      dropDirs: [
+        path.relative(process.cwd(), path.join(SOURCE_DROP_DIR, "sports")),
+        path.relative(process.cwd(), path.join(SOURCE_DROP_DIR, "memes")),
+        path.relative(process.cwd(), path.join(SOURCE_DROP_DIR, "streamers")),
+      ],
+      acceptedFormats: [
+        ".mp4, .mov, .m4v, .webm video files",
+        "Sidecar notes/proof kept separate from secrets",
+        "Only owned, licensed or permissioned sources should be promoted to publishable",
+      ],
+      requiredExamples: [
+        "sports source clips with rights proof",
+        "memes source clips with rights proof",
+        "streamer source clips with rights proof",
+      ],
+      actionLabel: "Local sync -> Production queue",
+      actionUrl: "/api/clippers/import-source-drop",
+      nextStep: sourceNeedsRepair && diagnostics.sourceDropDiagnostic
+        ? `${diagnostics.sourceDropDiagnostic.nextStep} Repair CSV: ${diagnostics.sourceDropDiagnostic.repairWorksheetCsvPath}`
+        : sourceStatus === "completed"
+        ? "Source videos imported; continue rights evidence and draft rendering."
+        : "Put rights-cleared source videos in the category folders under source-drop/, then run Local sync.",
+    },
+  ];
+}
+
+function renderLocalDropSyncMarkdown(summary: ClipperLocalDropSyncSummary): string {
+  return [
+    "# Clippers Local Drop Sync",
+    "",
+    "Safe local sync: imports only files already placed under the approved local drop folders, then refreshes Clippers artifacts. It does not create external accounts, approve permissions or publish content.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.completed} completed, ${summary.totals.skipped} skipped, ${summary.totals.failed} failed`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Missing Input Checklist",
+    "",
+    ...summary.missingInputs.flatMap((input) => [
+      `### ${input.label}`,
+      "",
+      `- Status: ${input.status}`,
+      `- Drop dirs: ${input.dropDirs.join(", ")}`,
+      `- Accepted formats: ${input.acceptedFormats.join(" | ")}`,
+      `- Required examples: ${input.requiredExamples.join(" | ")}`,
+      `- Action: ${input.actionLabel} (${input.actionUrl})`,
+      `- Next step: ${input.nextStep}`,
+      "",
+    ]),
+    ...(summary.launchEvidenceDrop ? [
+      "## Launch Evidence Drop",
+      "",
+      `- Source files: ${summary.launchEvidenceDrop.sourceFiles.length ? summary.launchEvidenceDrop.sourceFiles.join(", ") : "none"}`,
+      `- Accepted: ${summary.launchEvidenceDrop.accepted.accountEvidence} account, ${summary.launchEvidenceDrop.accepted.developerApps} app, ${summary.launchEvidenceDrop.accepted.permissions} permission, ${summary.launchEvidenceDrop.accepted.sourceRights} source_rights`,
+      `- Rejected: ${summary.launchEvidenceDrop.rejected.length}`,
+      `- File errors: ${summary.launchEvidenceDrop.fileErrors.length}`,
+      `- Next step: ${summary.launchEvidenceDrop.nextStep}`,
+      "",
+      ...(summary.launchEvidenceDrop.rejected.length ? [
+        "### Rejected Rows",
+        "",
+        ...summary.launchEvidenceDrop.rejected.slice(0, 12).map((item) => `- Row ${item.index}: ${item.kind}${item.identifier ? ` (${item.identifier})` : ""} - ${item.reason}`),
+        ...(summary.launchEvidenceDrop.rejected.length > 12 ? [`- ...${summary.launchEvidenceDrop.rejected.length - 12} more rejected rows.`] : []),
+        "",
+      ] : []),
+      ...(summary.launchEvidenceDrop.fileErrors.length ? [
+        "### File Errors",
+        "",
+        ...summary.launchEvidenceDrop.fileErrors.slice(0, 8).map((item) => `- ${item.relativePath}: ${item.reason}`),
+        ...(summary.launchEvidenceDrop.fileErrors.length > 8 ? [`- ...${summary.launchEvidenceDrop.fileErrors.length - 8} more file errors.`] : []),
+        "",
+      ] : []),
+    ] : []),
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Status: ${item.status}`,
+      `- Started: ${item.startedAt}`,
+      `- Finished: ${item.finishedAt}`,
+      `- Message: ${item.message}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+function localDropSyncSkipMessage(message: string): boolean {
+  return /No encontre|No completed launch evidence templates|Coloca( un| CSV\/JSON)?|No hay|0 archivo|0 files|filesScanned\":0/i.test(message);
+}
+
+async function promoteCompletedLaunchEvidenceTemplates(userId = getSystemUserId()): Promise<string> {
+  await ensureClipperDirs();
+  const templateDirs = [
+    {
+      dir: ACCOUNT_DROP_TEMPLATE_DIR,
+      pattern: /^accounts-(tiktok|instagram|youtube)-(submitted|verified)\.csv$/i,
+    },
+    {
+      dir: DEVELOPER_APP_DROP_TEMPLATE_DIR,
+      pattern: /^developer-app-(tiktok|instagram|youtube)-(submitted|approved)\.csv$/i,
+    },
+    {
+      dir: PERMISSION_DROP_TEMPLATE_DIR,
+      pattern: /^permission-(tiktok|instagram|youtube)-(requested|approved)\.csv$/i,
+    },
+  ];
+  const templateFiles: Array<{ fileName: string; templatePath: string; dropPath: string }> = [];
+  for (const templateDir of templateDirs) {
+    const entries = await readdir(templateDir.dir, { withFileTypes: true }).catch(() => []);
+    templateFiles.push(...entries
+      .filter((entry) => entry.isFile() && templateDir.pattern.test(entry.name))
+      .map((entry) => ({
+        fileName: entry.name,
+        templatePath: path.join(templateDir.dir, entry.name),
+        dropPath: path.join(LAUNCH_EVIDENCE_DROP_DIR, entry.name),
+      })));
+  }
+  templateFiles.sort((a, b) => a.fileName.localeCompare(b.fileName));
+  if (!templateFiles.length) {
+    throw new Error("No encontre launch evidence templates de cuentas, apps o permisos.");
+  }
+
+  const copied: string[] = [];
+  const skipped: string[] = [];
+  const rejected: string[] = [];
+  for (const { fileName, templatePath, dropPath } of templateFiles) {
+    const raw = await readFile(templatePath, "utf8").catch(() => "");
+    if (!raw.trim() || hasTemplatePlaceholder(raw)) {
+      skipped.push(fileName);
+      continue;
+    }
+    const preview = await processClipperLaunchEvidenceBatch({ batchText: raw, strict: true }, { dryRun: true, strict: true }, userId);
+    const acceptedRows = preview.accepted.accountEvidence + preview.accepted.developerApps + preview.accepted.permissions + preview.accepted.sourceRights;
+    if (preview.rejected.length > 0 || acceptedRows === 0) {
+      rejected.push(`${fileName}: ${preview.rejected.length || "0 accepted"} rejected`);
+      continue;
+    }
+    await copyFile(templatePath, dropPath);
+    copied.push(path.relative(process.cwd(), dropPath));
+  }
+
+  if (!copied.length) {
+    if (rejected.length) {
+      throw new Error(`Launch evidence templates completed but rejected: ${rejected.join(" | ")}.`);
+    }
+    throw new Error(`No completed launch evidence templates ready; ${skipped.length} template(s) still contain placeholders.`);
+  }
+  return `${copied.length} completed launch evidence template(s) copied to evidence-drop; ${skipped.length} skipped with placeholders; ${rejected.length} rejected.`;
+}
+
+export async function runClipperLocalDropSync(userId = getSystemUserId()): Promise<{ localDropSync: ClipperLocalDropSyncSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const items: ClipperLocalDropSyncItem[] = [];
+  let launchEvidenceDrop: ClipperLocalDropSyncLaunchEvidenceDrop | null = null;
+  const runItem = async (
+    id: ClipperLocalDropSyncItem["id"],
+    label: string,
+    action: () => Promise<string>,
+    options: { skipOnNoFiles?: boolean } = {}
+  ) => {
+    const startedAt = new Date().toISOString();
+    try {
+      const message = await action();
+      items.push({ id, label, status: "completed", startedAt, finishedAt: new Date().toISOString(), message });
+    } catch (error: any) {
+      const message = error?.message || "Local drop sync step failed.";
+      const status: ClipperLocalDropSyncItemStatus = options.skipOnNoFiles && localDropSyncSkipMessage(message) ? "skipped" : "failed";
+      items.push({ id, label, status, startedAt, finishedAt: new Date().toISOString(), message });
+    }
+  };
+
+  await prepareClipperCredentialSetupCenter(userId);
+  await prepareClipperAccountEvidenceVault(userId);
+  await prepareClipperDeveloperAppEvidenceVault(userId);
+  await prepareClipperPermissionRequestPack(userId);
+  await runItem("credential_drop", "Import credential drop files", async () => {
+    const result = await importClipperCredentialDropFiles(userId);
+    return `${result.credentialDropImport.filesImported || 0}/${result.credentialDropImport.filesScanned || 0} credential files imported; accepted ${result.credentialDropImport.acceptedEnvVars.length} env names.`;
+  }, { skipOnNoFiles: true });
+  await runItem("permission_template_drop", "Promote completed launch evidence templates", async () => {
+    return promoteCompletedLaunchEvidenceTemplates(userId);
+  }, { skipOnNoFiles: true });
+  await runItem("launch_evidence_drop", "Import launch evidence drop files", async () => {
+    const result = await importClipperLaunchEvidenceDropFiles(userId);
+    launchEvidenceDrop = {
+      accepted: result.launchEvidenceDropImport.accepted,
+      rejected: result.launchEvidenceDropImport.rejected,
+      sourceFiles: result.launchEvidenceDropImport.sourceFiles || [],
+      fileErrors: result.launchEvidenceDropImport.fileErrors || [],
+      nextStep: result.launchEvidenceDropImport.nextStep,
+    };
+    return launchEvidenceDropSyncMessage(result.launchEvidenceDropImport);
+  }, { skipOnNoFiles: true });
+  await runItem("source_drop", "Import source videos from source-drop", async () => {
+    const result = await importClipperSourceDropFiles(userId);
+    if (result.sourceDropImport.filesScanned === 0) throw new Error("No hay videos en source-drop para importar.");
+    return `${result.sourceDropImport.imported}/${result.sourceDropImport.filesScanned} source video files imported; ${result.sourceDropImport.skipped} skipped.`;
+  }, { skipOnNoFiles: true });
+  await runItem("state_refresh", "Refresh go-live artifacts", async () => {
+    await reloadClipperCredentials(userId);
+    await prepareClipperCredentialDoctor(userId);
+    await prepareClipperPlatformReadinessMatrix(userId);
+    await prepareClipperProductionQueue(userId);
+    await prepareClipperSourceAcquisitionPlan(userId);
+    await prepareClipperPublisherConnectors(userId);
+    await prepareClipperOAuthGoLivePreflight(userId);
+    await prepareClipperOAuthConnectionPack(userId);
+    await prepareClipperBlockerResolutionPack(userId);
+    await prepareClipperLaunchCommandCenter(userId);
+    await prepareClipperGoLiveCompletionAudit(userId);
+    await prepareClipperGoLiveOperatorBrief(userId);
+    await prepareClipperGoLiveAutopilotBrief(userId);
+    return "Credential, evidence, source, connector, command center, completion and operator artifacts refreshed.";
+  });
+
+  const totals = items.reduce<ClipperLocalDropSyncSummary["totals"]>((sum, item) => {
+    sum.attempted += 1;
+    if (item.status === "completed") sum.completed += 1;
+    if (item.status === "skipped") sum.skipped += 1;
+    if (item.status === "failed") sum.failed += 1;
+    return sum;
+  }, { attempted: 0, completed: 0, skipped: 0, failed: 0 });
+  const status: ClipperLocalDropSyncStatus = totals.failed > 0
+    ? totals.completed > 0 ? "partial" : "blocked"
+    : totals.skipped > 0
+      ? "partial"
+    : totals.completed > 0
+      ? "completed"
+      : "blocked";
+  const refreshedConfig = await readConfig();
+  const refreshedAccounts = (Array.isArray(refreshedConfig.accounts) && refreshedConfig.accounts.length ? refreshedConfig.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const refreshedProductionQueue = await buildProductionQueueSummary(refreshedAccounts);
+  const refreshedSourceAcquisition = await buildSourceAcquisitionSummary(refreshedAccounts, refreshedProductionQueue);
+  const refreshedSourceDropDiagnostic = await writeSourceDropDiagnosticArtifacts(await buildSourceDropDiagnosticSummary({
+    sourceAcquisition: refreshedSourceAcquisition,
+    productionQueue: refreshedProductionQueue,
+  }));
+  const refreshedLaunchEvidenceDropDiagnostic = await writeLaunchEvidenceDropDiagnosticArtifacts(await buildLaunchEvidenceDropDiagnosticSummary());
+  const localDropSync: ClipperLocalDropSyncSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: LOCAL_DROP_SYNC_PATH,
+    markdownPath: LOCAL_DROP_SYNC_MARKDOWN_PATH,
+    items,
+    missingInputs: buildLocalDropSyncMissingInputs(items, {
+      launchEvidenceDropDiagnostic: refreshedLaunchEvidenceDropDiagnostic,
+      sourceDropDiagnostic: refreshedSourceDropDiagnostic,
+    }),
+    launchEvidenceDrop,
+    totals,
+    nextStep: totals.failed > 0
+      ? "Fix failed local drop item(s), then rerun Local Drop Sync."
+      : totals.skipped > 0
+        ? "Add missing credentials/evidence/source files to local drop folders, then rerun Local Drop Sync."
+        : "Local drops imported/refreshed; continue external account, app review and OAuth steps.",
+  };
+  await writeFile(LOCAL_DROP_SYNC_PATH, JSON.stringify(localDropSync, null, 2));
+  await writeFile(LOCAL_DROP_SYNC_MARKDOWN_PATH, renderLocalDropSyncMarkdown(localDropSync));
+  return { localDropSync, status: await getClipperStatus(userId) };
+}
+
+async function buildGoLivePrepSweepSummary(): Promise<ClipperGoLivePrepSweepSummary> {
+  const raw = await readFile(GO_LIVE_PREP_SWEEP_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperGoLivePrepSweepSummary;
+      return {
+        status: parsed.status || "not_run",
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: GO_LIVE_PREP_SWEEP_PATH,
+        markdownPath: GO_LIVE_PREP_SWEEP_MARKDOWN_PATH,
+        items: Array.isArray(parsed.items) ? parsed.items : [],
+        localDropSync: parsed.localDropSync || null,
+        totals: parsed.totals || { attempted: 0, completed: 0, skipped: 0, failed: 0 },
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Prep sweep to refresh every local go-live package before connecting external accounts.",
+      };
+    } catch {
+      // Fall through to a clean not_run summary.
+    }
+  }
+  return {
+    status: "not_run",
+    generatedAt: null,
+    manifestPath: GO_LIVE_PREP_SWEEP_PATH,
+    markdownPath: GO_LIVE_PREP_SWEEP_MARKDOWN_PATH,
+    items: [],
+    localDropSync: null,
+    totals: { attempted: 0, completed: 0, skipped: 0, failed: 0 },
+    nextStep: "Run Prep sweep to refresh every local go-live package before connecting external accounts.",
+  };
+}
+
+function renderGoLivePrepSweepMarkdown(summary: ClipperGoLivePrepSweepSummary): string {
+  return [
+    "# Clippers Go-Live Prep Sweep",
+    "",
+    "One-command local preparation sweep. It regenerates local artifacts, scans approved drop folders, refreshes blockers and keeps external account/app/OAuth gates visible. It does not create external accounts, approve platform permissions or publish content.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.completed} completed, ${summary.totals.skipped} skipped, ${summary.totals.failed} failed`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Local Drop Sync",
+    "",
+    summary.localDropSync
+      ? [
+        `- Status: ${summary.localDropSync.status}`,
+        `- Totals: ${summary.localDropSync.totals.completed} completed, ${summary.localDropSync.totals.skipped} skipped, ${summary.localDropSync.totals.failed} failed`,
+        `- Manifest: ${summary.localDropSync.manifestPath}`,
+        `- Next step: ${summary.localDropSync.nextStep}`,
+      ].join("\n")
+      : "- Not run yet",
+    "",
+    "## Sweep Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Status: ${item.status}`,
+      `- Started: ${item.startedAt}`,
+      `- Finished: ${item.finishedAt}`,
+      `- Message: ${item.message}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+export async function runClipperGoLivePrepSweep(userId = getSystemUserId()): Promise<{ goLivePrepSweep: ClipperGoLivePrepSweepSummary; localDropSync: ClipperLocalDropSyncSummary | null; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+
+  const items: ClipperGoLivePrepSweepItem[] = [];
+  let localDropSync: ClipperLocalDropSyncSummary | null = null;
+  const runItem = async (id: string, label: string, action: () => Promise<string>) => {
+    const startedAt = new Date().toISOString();
+    try {
+      const message = await action();
+      items.push({ id, label, status: "completed", startedAt, finishedAt: new Date().toISOString(), message });
+    } catch (error: any) {
+      items.push({ id, label, status: "failed", startedAt, finishedAt: new Date().toISOString(), message: error?.message || "Prep sweep step failed." });
+    }
+  };
+
+  await runItem("bootstrap", "Bootstrap default accounts and workspace", async () => {
+    await bootstrapClipperAccounts(userId);
+    await bootstrapClipperWorkspace(userId);
+    await prepareClipperDriveWorkspace(userId);
+    return "Default Clippers accounts, folders and workspace manifests refreshed.";
+  });
+
+  await runItem("identity_and_accounts", "Prepare account identity and launch packs", async () => {
+    await prepareClipperAccountIdentityKit(userId);
+    await prepareClipperAccountLaunchKit(userId);
+    await prepareClipperAccountCreationPack(userId);
+    await prepareClipperAccountEvidenceVault(userId);
+    return "Account identities, handle suggestions, creation pack and evidence templates refreshed.";
+  });
+
+  await runItem("credentials_and_apps", "Prepare credentials and developer app packs", async () => {
+    await prepareClipperCredentialSetupCenter(userId);
+    await reloadClipperCredentials(userId);
+    await prepareClipperCredentialDoctor(userId);
+    await prepareClipperDeveloperAppEvidenceVault(userId);
+    await prepareClipperDeveloperApplicationDrafts(userId);
+    return "Credential setup, doctor, developer app evidence vault and app drafts refreshed.";
+  });
+
+  await runItem("permissions", "Prepare permission matrix and request packs", async () => {
+    await prepareClipperPermissionPack(userId);
+    await prepareClipperOfficialPermissionMatrix(userId);
+    await prepareClipperPermissionTracker(userId);
+    await prepareClipperPermissionRequestPack(userId);
+    return "Permission pack, official matrix, tracker and request templates refreshed.";
+  });
+
+  await runItem("legal_review_oauth", "Prepare legal, review, tunnel and OAuth packs", async () => {
+    await prepareClipperProductionUrlSetup(userId);
+    await prepareClipperHttpsTunnelPlan(userId);
+    await prepareClipperLegalPolicyPack(userId);
+    await prepareClipperAppReviewDemoPack(userId);
+    await prepareClipperAppReviewSubmissionPack(userId);
+    await prepareClipperOAuthGoLivePreflight(userId);
+    await prepareClipperOAuthConnectionPack(userId);
+    return "Production URL setup, tunnel plan, legal pages, app review demo/submission and OAuth packs refreshed.";
+  });
+
+  await runItem("sources_publish", "Prepare source, discovery, publishing and reporting packs", async () => {
+    await prepareClipperIntakeKit(userId);
+    await prepareClipperSourceAcquisitionPlan(userId);
+    await prepareClipperSourceSupplyDropKit(userId);
+    await prepareClipperSourceHuntSheet(userId);
+    await prepareClipperViralDiscoveryPack(userId);
+    await prepareClipperRightsOutreachPack(userId);
+    await prepareClipperDraftSpecs(userId);
+    await prepareClipperManualPostingPack(userId);
+    await prepareClipperPublishingPackage(userId);
+    await prepareClipperPublisherConnectors(userId);
+    await prepareClipperPublisherExecutionQueue(userId);
+    await prepareClipperAutomationSchedule(userId);
+    await prepareClipperAnalyticsReportingPack(userId);
+    return "Source intake, viral discovery, rights outreach, drafts, manual posting, publishing, publisher execution queue, schedule and reporting packs refreshed.";
+  });
+
+  await runItem("local_drop_sync", "Run Local Drop Sync", async () => {
+    const result = await runClipperLocalDropSync(userId);
+    localDropSync = result.localDropSync;
+    return `Local Drop Sync ${result.localDropSync.status}: ${result.localDropSync.totals.completed} completed, ${result.localDropSync.totals.skipped} skipped, ${result.localDropSync.totals.failed} failed.`;
+  });
+
+  await runItem("go_live_refresh", "Refresh go-live command center and completion packs", async () => {
+    await prepareClipperPlatformReadinessMatrix(userId);
+    await prepareClipperExternalSetupQueue(userId);
+    await prepareClipperExternalExecutionHandoff(userId);
+    await prepareClipperExternalExecutionSession(userId);
+    await prepareClipperGoLiveEvidenceBundle(userId);
+    await prepareClipperExternalLaunchDossier(userId);
+    await prepareClipperPlatformPortalChecklist(userId);
+    await prepareClipperGoLiveExecutionPack(userId);
+    await prepareClipperBlockerResolutionPack(userId);
+    await prepareClipperLaunchCommandCenter(userId);
+    await prepareClipperGoLiveCompletionAudit(userId);
+    await prepareClipperGoLiveOperatorBrief(userId);
+    await prepareClipperGoLiveAutopilotBrief(userId);
+    await prepareClipperOwnerConnectPack(userId);
+    await prepareClipperAccountSetupSession(userId);
+    await prepareClipperDropzoneReadyPack(userId);
+    await prepareClipperLaunchEvidenceFixPack(userId);
+    await prepareClipperPermissionSubmissionDossier(userId);
+    await prepareClipperRobertNextActions(userId);
+    return "Readiness matrix, external queue/session, evidence bundle, launch dossier, execution pack, blockers, command center, audit, operator, autopilot, owner, account setup session, dropzone, evidence fix pack, permission dossier and Robert next actions refreshed.";
+  });
+
+  const totals = items.reduce<ClipperGoLivePrepSweepSummary["totals"]>((sum, item) => {
+    sum.attempted += 1;
+    if (item.status === "completed") sum.completed += 1;
+    if (item.status === "skipped") sum.skipped += 1;
+    if (item.status === "failed") sum.failed += 1;
+    return sum;
+  }, { attempted: 0, completed: 0, skipped: 0, failed: 0 });
+  const completedLocalDropSync = localDropSync as ClipperLocalDropSyncSummary | null;
+  const status: ClipperGoLivePrepSweepStatus = totals.failed > 0
+    ? totals.completed > 0 ? "partial" : "blocked"
+    : completedLocalDropSync && completedLocalDropSync.status !== "completed"
+      ? "partial"
+      : "completed";
+  const goLivePrepSweep: ClipperGoLivePrepSweepSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: GO_LIVE_PREP_SWEEP_PATH,
+    markdownPath: GO_LIVE_PREP_SWEEP_MARKDOWN_PATH,
+    items,
+    localDropSync: completedLocalDropSync,
+    totals,
+    nextStep: totals.failed > 0
+      ? "Fix failed prep sweep item(s), then rerun Prep sweep."
+      : completedLocalDropSync && completedLocalDropSync.status !== "completed"
+        ? "Add missing credentials, account/app/permission evidence and source videos to local drop folders; then rerun Prep sweep before connecting accounts."
+        : "Local prep is refreshed; connect external accounts, submit app permissions and complete OAuth tokens.",
+  };
+  await writeFile(GO_LIVE_PREP_SWEEP_PATH, JSON.stringify(goLivePrepSweep, null, 2));
+  await writeFile(GO_LIVE_PREP_SWEEP_MARKDOWN_PATH, renderGoLivePrepSweepMarkdown(goLivePrepSweep));
+  return { goLivePrepSweep, localDropSync: completedLocalDropSync, status: await getClipperStatus(userId) };
+}
+
+function ownerConnectStatusFromExternal(item: ClipperExternalExecutionSessionItem): ClipperOwnerConnectPackItemStatus {
+  if (item.status === "done") return "done";
+  if (item.lane === "do_now") return "ready_to_execute";
+  if (item.lane === "waiting") return "waiting";
+  return "blocked";
+}
+
+function ownerConnectLaneFromExternalType(type: ClipperExternalSetupQueueItemType): ClipperOwnerConnectPackLane {
+  if (type === "account") return "account";
+  if (type === "developer_app") return "developer_app";
+  if (type === "permission") return "permission";
+  if (type === "credential") return "credential";
+  return "oauth";
+}
+
+function ownerConnectLaneFromMissingInput(id: ClipperLocalDropSyncMissingInput["id"]): ClipperOwnerConnectPackLane {
+  if (id === "credentials") return "credential";
+  if (id === "source_videos") return "source_video";
+  return "launch_evidence";
+}
+
+async function readOwnerConnectProgressRecords(): Promise<ClipperOwnerConnectProgressRecord[]> {
+  const raw = await readFile(OWNER_CONNECT_PROGRESS_PATH, "utf8").catch(() => null);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as { records?: unknown };
+    const records = Array.isArray(parsed.records) ? parsed.records : [];
+    return records
+      .map((record) => record as Partial<ClipperOwnerConnectProgressRecord>)
+      .filter((record): record is ClipperOwnerConnectProgressRecord => (
+        typeof record.itemId === "string"
+        && ["ready_to_execute", "blocked", "waiting", "done"].includes(String(record.status))
+        && typeof record.recordedAt === "string"
+      ))
+      .map((record) => ({
+        itemId: record.itemId,
+        status: record.status,
+        notes: typeof record.notes === "string" ? record.notes : "",
+        evidenceRows: Array.isArray(record.evidenceRows) ? record.evidenceRows.filter((row): row is string => typeof row === "string") : [],
+        recordedAt: record.recordedAt,
+        source: "clippers-ui",
+      }));
+  } catch {
+    return [];
+  }
+}
+
+const OWNER_CONNECT_PROGRESS_STATUSES: ClipperOwnerConnectPackItemStatus[] = ["ready_to_execute", "blocked", "waiting", "done"];
+
+function isOwnerConnectProgressStatus(value: unknown): value is ClipperOwnerConnectPackItemStatus {
+  return typeof value === "string" && OWNER_CONNECT_PROGRESS_STATUSES.includes(value as ClipperOwnerConnectPackItemStatus);
+}
+
+function ownerConnectProgressText(value: unknown, maxLength = 2000): string {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function ownerConnectProgressEvidenceRows(value: unknown): string[] {
+  const rawRows = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  return Array.from(new Set(
+    rawRows
+      .map((row) => ownerConnectProgressText(row, 4000))
+      .filter(Boolean),
+  )).slice(0, 50);
+}
+
+function ownerConnectAccountItemId(accountId: string, platform: ClipperPlatform): string {
+  return `external-session-handoff-account-${accountId}-${platform}`;
+}
+
+function ownerConnectDeveloperAppItemId(platform: ClipperPlatform): string {
+  return `external-session-handoff-developer-app-${platform}`;
+}
+
+function ownerConnectPermissionItemId(platform: ClipperPlatform, scope: string): string {
+  return `external-session-handoff-permission-${platform}-${scope}`;
+}
+
+function launchEvidenceProgressRow(record: Record<string, unknown>, kind: string): string {
+  const row = [
+    kind,
+    firstString(record, ["account_id", "accountId"]),
+    firstString(record, ["platform"]),
+    firstString(record, ["status"]),
+    firstString(record, ["scope", "permission"]),
+    firstString(record, ["app_identifier", "appIdentifier", "app_id", "client_key", "project_id"]),
+    firstString(record, ["public_base_url", "publicBaseUrl", "base_url"]),
+    firstString(record, ["notes", "review_notes", "evidence", "url", "profile_url"]),
+  ];
+  return row.map(csvEscape).join(",");
+}
+
+function ownerConnectProgressRecordForEvidence(input: {
+  itemId: string;
+  status: ClipperOwnerConnectPackItemStatus;
+  notes: string;
+  evidenceRow: string;
+}): ClipperOwnerConnectProgressRecord {
+  return {
+    itemId: input.itemId,
+    status: input.status,
+    notes: input.notes,
+    evidenceRows: ownerConnectProgressEvidenceRows([input.evidenceRow]),
+    recordedAt: new Date().toISOString(),
+    source: "clippers-ui",
+  };
+}
+
+async function upsertOwnerConnectProgressRecords(recordsToUpsert: ClipperOwnerConnectProgressRecord[]): Promise<void> {
+  if (!recordsToUpsert.length) return;
+  const existing = await readOwnerConnectProgressRecords();
+  const byItemId = new Map(existing.map((record) => [record.itemId, record]));
+  for (const record of recordsToUpsert) byItemId.set(record.itemId, record);
+  const records = Array.from(byItemId.values()).sort((a, b) => a.itemId.localeCompare(b.itemId));
+  await writeFile(OWNER_CONNECT_PROGRESS_PATH, JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    records,
+  }, null, 2));
+}
+
+function applyOwnerConnectProgress(item: ClipperOwnerConnectPackItem, record: ClipperOwnerConnectProgressRecord | undefined): ClipperOwnerConnectPackItem {
+  if (!record) return {
+    ...item,
+    progressStatus: null,
+    progressNotes: null,
+    progressRecordedAt: null,
+    progressEvidenceRows: [],
+  };
+  const progressNote = record.notes ? `Progress note: ${record.notes}` : `Progress status recorded as ${record.status}.`;
+  return {
+    ...item,
+    status: record.status,
+    blockers: record.status === "done" || record.status === "waiting"
+      ? item.blockers
+      : Array.from(new Set([...item.blockers, progressNote])),
+    checklist: Array.from(new Set([...item.checklist, progressNote])),
+    evidenceRows: Array.from(new Set([...item.evidenceRows, ...record.evidenceRows])),
+    progressStatus: record.status,
+    progressNotes: record.notes,
+    progressRecordedAt: record.recordedAt,
+    progressEvidenceRows: record.evidenceRows,
+  };
+}
+
+function ownerConnectProgressFallbackLane(itemId: string): ClipperOwnerConnectPackLane {
+  if (itemId.includes("-account-")) return "account";
+  if (itemId.includes("-developer-app-")) return "developer_app";
+  if (itemId.includes("-permission-")) return "permission";
+  if (itemId.includes("-credential-")) return "credential";
+  if (itemId.includes("-oauth-")) return "oauth";
+  return "launch_evidence";
+}
+
+function ownerConnectProgressFallbackPlatform(itemId: string): ClipperPlatform | "system" {
+  if (itemId.includes("-instagram")) return "instagram";
+  if (itemId.includes("-tiktok")) return "tiktok";
+  if (itemId.includes("-youtube")) return "youtube";
+  return "system";
+}
+
+function ownerConnectProgressFallbackLabel(record: ClipperOwnerConnectProgressRecord): string {
+  const lane = ownerConnectProgressFallbackLane(record.itemId);
+  const platform = ownerConnectProgressFallbackPlatform(record.itemId);
+  if (lane === "account") return `Completed account portal step: ${record.itemId}`;
+  if (lane === "developer_app") return `Completed developer app portal step: ${platform}`;
+  if (lane === "permission") return `Completed permission portal step: ${record.itemId.replace(/^external-session-handoff-permission-/, "")}`;
+  return `Completed owner connect step: ${record.itemId}`;
+}
+
+function ownerConnectProgressFallbackItem(record: ClipperOwnerConnectProgressRecord, rank: number): ClipperOwnerConnectPackItem {
+  return {
+    id: record.itemId,
+    rank,
+    lane: ownerConnectProgressFallbackLane(record.itemId),
+    platform: ownerConnectProgressFallbackPlatform(record.itemId),
+    label: ownerConnectProgressFallbackLabel(record),
+    status: record.status,
+    owner: "Robert",
+    portalUrl: null,
+    executionUrl: "/clippers#launch-evidence-batch",
+    artifactPath: OWNER_CONNECT_PROGRESS_PATH,
+    dropDirs: [],
+    evidenceRows: record.evidenceRows,
+    credentialTemplate: null,
+    checklist: [
+      record.notes || `Progress status recorded as ${record.status}.`,
+      "This item is no longer in the active external queue but is preserved for audit/history.",
+    ],
+    blockers: [],
+    doneCriteria: [
+      "Progress record exists in Owner Connect history.",
+      "Related evidence is imported in account/app/permission evidence stores.",
+      "Rerun Prep sweep to keep go-live artifacts aligned.",
+    ],
+    progressStatus: null,
+    progressNotes: null,
+    progressRecordedAt: null,
+    progressEvidenceRows: [],
+    nextStep: record.status === "done"
+      ? "Completed locally; continue with the remaining Owner Connect blockers."
+      : "Review historical Owner Connect progress and continue the next active blocker.",
+  };
+}
+
+async function buildOwnerConnectPackSummary(input: {
+  accountCreationPack: ClipperAccountCreationPackSummary;
+  developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
+  permissionRequestPack: ClipperPermissionRequestPackSummary;
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+  officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  localDropSync: ClipperLocalDropSyncSummary;
+  credentialDoctor: ClipperCredentialDoctorSummary;
+}): Promise<ClipperOwnerConnectPackSummary> {
+  const generatedAt = await stat(OWNER_CONNECT_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const progressRecords = await readOwnerConnectProgressRecords();
+  const progressByItemId = new Map(progressRecords.map((record) => [record.itemId, record]));
+  const externalItems = input.externalExecutionSession.items
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map<ClipperOwnerConnectPackItem>((item) => ({
+      id: `external-${item.id}`,
+      rank: item.rank,
+      lane: ownerConnectLaneFromExternalType(item.type),
+      platform: item.platform,
+      label: item.label,
+      status: ownerConnectStatusFromExternal(item),
+      owner: "Robert",
+      portalUrl: item.portalUrl,
+      executionUrl: item.executionUrl,
+      artifactPath: input.externalExecutionSession.markdownPath,
+      dropDirs: [],
+      evidenceRows: item.evidenceBatchRow ? [item.evidenceBatchRow] : [],
+      credentialTemplate: item.credentialTemplate || null,
+      checklist: [
+        `Action mode: ${item.actionMode}`,
+        `Required inputs: ${item.requiredInputs.join(" | ") || "none"}`,
+        item.completionHint,
+      ],
+      blockers: item.blockers,
+      doneCriteria: [
+        item.completionHint,
+        item.evidenceImportReady
+          ? "Import evidence row through Launch Evidence Batch or evidence-drop."
+          : "Replace placeholders with real proof before importing evidence.",
+        "Rerun Prep sweep after this portal step is complete.",
+      ],
+      progressStatus: null,
+      progressNotes: null,
+      progressRecordedAt: null,
+      progressEvidenceRows: [],
+      nextStep: item.nextStep,
+    }));
+
+  const localInputItems = input.localDropSync.missingInputs.map<ClipperOwnerConnectPackItem>((item, index) => ({
+    id: `local-${item.id}`,
+    rank: externalItems.length + index + 1,
+    lane: ownerConnectLaneFromMissingInput(item.id),
+    platform: "system",
+    label: item.label,
+    status: item.status === "ready" ? "done" : "blocked",
+    owner: "Robert",
+    portalUrl: null,
+    executionUrl: item.actionUrl,
+    artifactPath: input.localDropSync.markdownPath,
+    dropDirs: item.dropDirs,
+    evidenceRows: [],
+    credentialTemplate: null,
+    checklist: [
+      `Accepted formats: ${item.acceptedFormats.join(" | ")}`,
+      `Required examples: ${item.requiredExamples.join(" | ")}`,
+      item.nextStep,
+    ],
+    blockers: item.status === "ready" ? [] : [`Missing ${item.label.toLowerCase()} input.`],
+    doneCriteria: [
+      `Put real files in: ${item.dropDirs.join(" | ")}`,
+      "Run Local Drop Sync or Prep sweep.",
+      "Confirm this missing input turns ready.",
+    ],
+    progressStatus: null,
+    progressNotes: null,
+    progressRecordedAt: null,
+    progressEvidenceRows: [],
+    nextStep: item.nextStep,
+  }));
+
+  const officialRecheckItems = input.officialPermissionMatrix.webProofTrail
+    .filter((proof) => proof.accessMode === "login_required")
+    .map<ClipperOwnerConnectPackItem>((proof, index) => ({
+      id: `official-recheck-${proof.platform}`,
+      rank: externalItems.length + localInputItems.length + index + 1,
+      lane: "official_recheck",
+      platform: proof.platform,
+      label: `${proof.platform} official permission recheck`,
+      status: "blocked",
+      owner: "Robert",
+      portalUrl: proof.officialUrls[0] || null,
+      executionUrl: proof.officialUrls[0] || null,
+      artifactPath: input.officialPermissionMatrix.markdownPath,
+      dropDirs: [],
+      evidenceRows: [],
+      credentialTemplate: null,
+      checklist: [
+        proof.nextHumanAction,
+        ...proof.reviewerEvidence,
+      ],
+      blockers: ["Official developer docs require authenticated portal access before final submission."],
+      doneCriteria: [
+        "Open the official developer portal while logged in.",
+        "Capture the real permission/app-review screen.",
+        "Record requested or approved evidence in Launch Evidence Batch.",
+      ],
+      progressStatus: null,
+      progressNotes: null,
+      progressRecordedAt: null,
+      progressEvidenceRows: [],
+      nextStep: proof.nextHumanAction,
+    }));
+
+  const baseItems = [...externalItems, ...localInputItems, ...officialRecheckItems];
+  const baseItemIds = new Set(baseItems.map((item) => item.id));
+  const progressOnlyItems = progressRecords
+    .filter((record) => !baseItemIds.has(record.itemId))
+    .map((record, index) => ownerConnectProgressFallbackItem(record, baseItems.length + index + 1));
+  const items = [...baseItems, ...progressOnlyItems]
+    .map((item) => applyOwnerConnectProgress(item, progressByItemId.get(item.id)))
+    .sort((a, b) => {
+      const rankStatus = (status: ClipperOwnerConnectPackItemStatus) => status === "ready_to_execute" ? 0 : status === "blocked" ? 1 : status === "waiting" ? 2 : 3;
+      return rankStatus(a.status) - rankStatus(b.status) || a.rank - b.rank;
+    })
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+  const totals = items.reduce<ClipperOwnerConnectPackSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "ready_to_execute") sum.readyToExecute += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.status === "waiting") sum.waiting += 1;
+    if (item.status === "done") sum.done += 1;
+    if (item.portalUrl) sum.portalUrls += 1;
+    sum.evidenceRows += item.evidenceRows.length;
+    if (item.credentialTemplate) sum.credentialTemplates += 1;
+    sum.dropDirs += item.dropDirs.length;
+    if (item.progressStatus) sum.progressRecords += 1;
+    if (item.progressStatus === "done") sum.progressDone += 1;
+    return sum;
+  }, { items: 0, readyToExecute: 0, blocked: 0, waiting: 0, done: 0, portalUrls: 0, evidenceRows: 0, credentialTemplates: 0, dropDirs: 0, progressRecords: 0, progressDone: 0 });
+  const status: ClipperOwnerConnectPackStatus = !generatedAt
+    ? "not_prepared"
+    : totals.blocked > 0
+      ? "blocked"
+      : totals.readyToExecute > 0 || totals.waiting > 0
+        ? "in_progress"
+        : "ready";
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: OWNER_CONNECT_PACK_PATH,
+    markdownPath: OWNER_CONNECT_PACK_MARKDOWN_PATH,
+    csvPath: OWNER_CONNECT_PACK_CSV_PATH,
+    progressRecordsPath: OWNER_CONNECT_PROGRESS_PATH,
+    items,
+    progressRecords,
+    sourceArtifacts: {
+      accountCreationPackPath: input.accountCreationPack.markdownPath,
+      developerApplicationDraftsPath: input.developerApplicationDrafts.markdownPath,
+      permissionRequestPackPath: input.permissionRequestPack.markdownPath,
+      externalExecutionSessionPath: input.externalExecutionSession.markdownPath,
+      officialPermissionMatrixPath: input.officialPermissionMatrix.markdownPath,
+      localDropSyncPath: input.localDropSync.markdownPath,
+      ownerConnectEvidenceDropPath: OWNER_CONNECT_EVIDENCE_DROP_PATH,
+    },
+    totals,
+    nextStep: items.find((item) => item.status === "ready_to_execute")?.nextStep
+      || items.find((item) => item.status === "blocked")?.nextStep
+      || items.find((item) => item.status === "waiting")?.nextStep
+      || "Owner Connect Pack listo; mantener evidencia y rerun Prep sweep despues de cada portal.",
+  };
+}
+
+function renderOwnerConnectPackMarkdown(summary: ClipperOwnerConnectPackSummary): string {
+  return [
+    "# Clippers Owner Connect Pack",
+    "",
+    "Compact operator queue for the external work Robert must complete in platform portals. It does not create accounts, submit reviews or connect OAuth by itself; it packages the exact portal links, evidence rows, drop folders and done criteria.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.readyToExecute} ready_to_execute, ${summary.totals.blocked} blocked, ${summary.totals.waiting} waiting, ${summary.totals.done} done`,
+    `Portal URLs: ${summary.totals.portalUrls}`,
+    `Evidence rows: ${summary.totals.evidenceRows}`,
+    `Credential templates: ${summary.totals.credentialTemplates}`,
+    `Drop dirs: ${summary.totals.dropDirs}`,
+    `Progress records: ${summary.totals.progressRecords}`,
+    `Progress done: ${summary.totals.progressDone}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Account Creation Pack: ${summary.sourceArtifacts.accountCreationPackPath}`,
+    `- Developer Application Drafts: ${summary.sourceArtifacts.developerApplicationDraftsPath}`,
+    `- Permission Request Pack: ${summary.sourceArtifacts.permissionRequestPackPath}`,
+    `- External Execution Session: ${summary.sourceArtifacts.externalExecutionSessionPath}`,
+    `- Official Permission Matrix: ${summary.sourceArtifacts.officialPermissionMatrixPath}`,
+    `- Local Drop Sync: ${summary.sourceArtifacts.localDropSyncPath}`,
+    `- Owner Connect Evidence Drop: ${summary.sourceArtifacts.ownerConnectEvidenceDropPath}`,
+    `- Progress Records: ${summary.progressRecordsPath}`,
+    "",
+    "## Execution Queue",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Lane: ${item.lane}`,
+      `- Platform: ${item.platform}`,
+      `- Status: ${item.status}`,
+      `- Owner: ${item.owner}`,
+      `- Portal URL: ${item.portalUrl || "n/a"}`,
+      `- Execution URL: ${item.executionUrl || "n/a"}`,
+      `- Artifact: ${item.artifactPath || "n/a"}`,
+      `- Progress status: ${item.progressStatus || "not_recorded"}`,
+      `- Progress recorded at: ${item.progressRecordedAt || "n/a"}`,
+      `- Progress notes: ${item.progressNotes || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      item.dropDirs.length ? "Drop dirs:" : "Drop dirs: none",
+      ...item.dropDirs.map((dir) => `- ${dir}`),
+      "",
+      item.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...item.evidenceRows.map((row) => `- ${row}`),
+      "",
+      item.progressEvidenceRows.length ? "Progress evidence rows:" : "Progress evidence rows: none",
+      ...item.progressEvidenceRows.map((row) => `- ${row}`),
+      "",
+      item.credentialTemplate ? "Credential template:" : "Credential template: none",
+      ...(item.credentialTemplate ? ["```", item.credentialTemplate, "```"] : []),
+      "",
+      "Checklist:",
+      ...item.checklist.map((step) => `- [ ] ${step}`),
+      "",
+      "Done criteria:",
+      ...item.doneCriteria.map((step) => `- [ ] ${step}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderOwnerConnectPackCsv(summary: ClipperOwnerConnectPackSummary): string {
+  const header = [
+    "rank",
+    "id",
+    "lane",
+    "platform",
+    "status",
+    "label",
+    "owner",
+    "portal_url",
+    "execution_url",
+    "artifact_path",
+    "drop_dirs",
+    "evidence_rows",
+    "progress_status",
+    "progress_recorded_at",
+    "progress_notes",
+    "progress_evidence_rows",
+    "credential_template",
+    "checklist",
+    "blockers",
+    "done_criteria",
+    "next_step",
+  ];
+  const rows = summary.items.map((item) => [
+    String(item.rank),
+    item.id,
+    item.lane,
+    item.platform,
+    item.status,
+    item.label,
+    item.owner,
+    item.portalUrl || "",
+    item.executionUrl || "",
+    item.artifactPath || "",
+    item.dropDirs.join(" | "),
+    item.evidenceRows.join(" | "),
+    item.progressStatus || "",
+    item.progressRecordedAt || "",
+    item.progressNotes || "",
+    item.progressEvidenceRows.join(" | "),
+    item.credentialTemplate || "",
+    item.checklist.join(" | "),
+    item.blockers.join(" | "),
+    item.doneCriteria.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+async function writeOwnerConnectEvidenceDropStarter(summary: ClipperOwnerConnectPackSummary): Promise<void> {
+  const rows = Array.from(new Set(summary.items.flatMap((item) => item.evidenceRows).filter(Boolean)));
+  await writeFileIfMissing(OWNER_CONNECT_EVIDENCE_DROP_PATH, renderLaunchEvidenceImportTemplate(rows));
+}
+
+export async function prepareClipperOwnerConnectPack(userId = getSystemUserId()): Promise<{ ownerConnectPack: ClipperOwnerConnectPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = await buildOwnerConnectPackSummary({
+    accountCreationPack: statusBefore.accountCreationPack,
+    developerApplicationDrafts: statusBefore.developerApplicationDrafts,
+    permissionRequestPack: statusBefore.permissionRequestPack,
+    externalExecutionSession: statusBefore.externalExecutionSession,
+    officialPermissionMatrix: statusBefore.officialPermissionMatrix,
+    localDropSync: statusBefore.localDropSync,
+    credentialDoctor: statusBefore.credentialDoctor,
+  });
+  const totals = draftSummary.totals;
+  const ownerConnectPack: ClipperOwnerConnectPackSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+    status: totals.blocked > 0
+      ? "blocked"
+      : totals.readyToExecute > 0 || totals.waiting > 0
+        ? "in_progress"
+        : "ready",
+  };
+  await writeFile(OWNER_CONNECT_PACK_PATH, JSON.stringify(ownerConnectPack, null, 2));
+  await writeFile(OWNER_CONNECT_PACK_MARKDOWN_PATH, renderOwnerConnectPackMarkdown(ownerConnectPack));
+  await writeFile(OWNER_CONNECT_PACK_CSV_PATH, renderOwnerConnectPackCsv(ownerConnectPack));
+  await writeOwnerConnectEvidenceDropStarter(ownerConnectPack);
+  return { ownerConnectPack, status: await getClipperStatus(userId) };
+}
+
+export async function recordClipperOwnerConnectProgress(input: unknown, userId = getSystemUserId()): Promise<{ ownerConnectPack: ClipperOwnerConnectPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const payload = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const itemId = ownerConnectProgressText(payload.itemId, 300);
+  if (!itemId) throw new Error("itemId is required to record Owner Connect progress.");
+  if (!isOwnerConnectProgressStatus(payload.status)) throw new Error("status must be ready_to_execute, blocked, waiting or done.");
+
+  const statusBefore = await getClipperStatus(userId);
+  const currentItem = statusBefore.ownerConnectPack.items.find((item) => item.id === itemId);
+  if (!currentItem) throw new Error(`Owner Connect item not found: ${itemId}`);
+
+  const evidenceRows = ownerConnectProgressEvidenceRows(payload.evidenceRows);
+  const notes = ownerConnectProgressText(payload.notes)
+    || (payload.status === "done"
+      ? "Marked done locally in Owner Connect Pack; real go-live still requires imported evidence and platform verification."
+      : `Marked ${payload.status} locally in Owner Connect Pack.`);
+  const record: ClipperOwnerConnectProgressRecord = {
+    itemId,
+    status: payload.status,
+    notes,
+    evidenceRows,
+    recordedAt: new Date().toISOString(),
+    source: "clippers-ui",
+  };
+  await upsertOwnerConnectProgressRecords([record]);
+  return prepareClipperOwnerConnectPack(userId);
+}
+
+function dropzoneStatusFromMissingInput(input: ClipperLocalDropSyncMissingInput | undefined, partial: boolean): ClipperDropzoneReadyPackItemStatus {
+  if (input?.status === "ready") return "ready";
+  return partial ? "partial" : "missing";
+}
+
+async function buildDropzoneReadyPackSummary(input: {
+  localDropSync: ClipperLocalDropSyncSummary;
+  credentialSetup: ClipperCredentialSetupSummary;
+  credentialDoctor: ClipperCredentialDoctorSummary;
+  goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary;
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
+  sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+}): Promise<ClipperDropzoneReadyPackSummary> {
+  const generatedAt = await stat(DROPZONE_READY_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const missingById = new Map(input.localDropSync.missingInputs.map((item) => [item.id, item]));
+  const credentialMissing = input.credentialSetup.credentialTransferKitItems
+    .filter((item) => item.missingSuggestedEnvVars.length > 0);
+  const credentialTemplateOnly = input.credentialSetup.credentialDropDiagnostic.totals.templateFiles > 0
+    && input.credentialSetup.credentialDropDiagnostic.totals.importEligible === 0
+    && input.credentialSetup.credentialDropDiagnostic.totals.files === 0;
+  const credentialPendingValues = input.credentialSetup.credentialDropDiagnostic.totals.pendingEnvVars > 0;
+  const launchEvidenceRows = Array.from(new Set([
+    ...input.ownerConnectPack.items.flatMap((item) => item.evidenceRows),
+    ...(input.goLiveEvidenceBundle.starterRows || []),
+  ].filter(Boolean)));
+  const launchEvidenceDropPendingValues = input.launchEvidenceDropDiagnostic.totals.pendingRows > 0;
+  const launchEvidenceDropRejected = input.launchEvidenceDropDiagnostic.totals.rejectedRows > 0 || input.launchEvidenceDropDiagnostic.totals.fileErrors > 0;
+  const sourceBatches = input.sourceSupplyDropKit.categoryBatches || [];
+  const sourceDropDirs = Array.from(new Set(sourceBatches.map((batch) => batch.sourceDropDir)));
+  const sourceManifestBlockers = [
+    ...(input.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0 ? [`${input.sourceDropDiagnostic.totals.manifestPlaceholderRows} source manifest rows still have placeholders.`] : []),
+    ...(input.sourceDropDiagnostic.totals.manifestMissingFiles > 0 ? [`${input.sourceDropDiagnostic.totals.manifestMissingFiles} expected source files are missing from source-drop.`] : []),
+    ...(input.sourceDropDiagnostic.totals.missingSourceAssets > 0 ? [`${input.sourceDropDiagnostic.totals.missingSourceAssets} rights-ready source assets missing for weekly coverage.`] : []),
+  ];
+
+  const items: ClipperDropzoneReadyPackItem[] = [
+    {
+      id: "credentials",
+      rank: 1,
+      lane: "credentials",
+      label: "Credential drop intake",
+      status: dropzoneStatusFromMissingInput(missingById.get("credentials"), input.credentialSetup.status === "partial"),
+      priority: "critical",
+      dropDirs: input.credentialSetup.credentialDropDirs,
+      acceptedFormats: ["KEY=value .env text", "Google OAuth client JSON", "Google refresh token JSON", "JSON with allowed env vars or key/value pairs"],
+      expectedFiles: input.credentialSetup.credentialTransferKitItems.flatMap((item) => item.localDropFileNames),
+      copyReadyTemplate: input.credentialSetup.credentialTransferTemplate || input.credentialSetup.credentialPasteTemplate || "",
+      sourceArtifactPath: credentialMissing.length || credentialTemplateOnly || credentialPendingValues
+        ? input.credentialDoctor.repairWorksheetCsvPath
+        : input.credentialSetup.credentialTransferKitMarkdownPath || input.credentialSetup.readmePath,
+      localActionUrl: "/api/clippers/import-credential-drop-files",
+      actionLabel: "Import credential drop files",
+      blockers: [
+        ...(credentialTemplateOnly ? ["Solo hay templates de credenciales; falta un archivo real sin .template/example/sample."] : []),
+        ...(credentialPendingValues ? [`${input.credentialSetup.credentialDropDiagnostic.totals.pendingEnvVars} credential values pending in starter files.`] : []),
+        ...credentialMissing.map((item) => `${item.label}: ${item.missingSuggestedEnvVars.join(", ")}`),
+      ],
+      unlocks: [
+        "Credential Doctor ready/partial",
+        "OAuth connect URLs can be generated",
+        "YouTube/Google Drive keys can be reused for Drive workspace and Shorts upload",
+      ],
+      nextStep: credentialMissing.length
+        ? credentialTemplateOnly || credentialPendingValues
+          ? input.credentialSetup.credentialDropDiagnostic.nextStep
+          : "Place real credential files in credentials/ or secrets/, then Import drop files, Reload keys and run Credential Doctor."
+        : "Credential drop is ready; reload keys and continue OAuth/app review.",
+    },
+    {
+      id: "launch_evidence",
+      rank: 2,
+      lane: "launch_evidence",
+      label: "Launch evidence drop intake",
+      status: dropzoneStatusFromMissingInput(missingById.get("launch_evidence"), launchEvidenceRows.length > 0),
+      priority: "critical",
+      dropDirs: [LAUNCH_EVIDENCE_DROP_DIR],
+      acceptedFormats: ["CSV with launch evidence header", "JSON evidence batch"],
+      expectedFiles: [
+        path.join(path.relative(process.cwd(), LAUNCH_EVIDENCE_DROP_DIR), "launch-evidence-completed.csv"),
+        path.relative(process.cwd(), OWNER_CONNECT_EVIDENCE_DROP_PATH),
+      ],
+      copyReadyTemplate: input.goLiveEvidenceBundle.importTemplate || [
+        LAUNCH_EVIDENCE_BATCH_HEADER,
+        ...launchEvidenceRows,
+      ].join("\n"),
+      sourceArtifactPath: launchEvidenceDropPendingValues || launchEvidenceDropRejected
+        ? input.launchEvidenceDropDiagnostic.repairWorksheetCsvPath
+        : input.goLiveEvidenceBundle.markdownPath,
+      localActionUrl: "/api/clippers/import-launch-evidence-drop-files",
+      actionLabel: "Import launch evidence drop",
+      blockers: [
+        ...(launchEvidenceDropPendingValues ? [`${input.launchEvidenceDropDiagnostic.totals.pendingRows} launch evidence rows still have blanks/placeholders.`] : []),
+        ...(launchEvidenceDropRejected ? [`${input.launchEvidenceDropDiagnostic.totals.rejectedRows + input.launchEvidenceDropDiagnostic.totals.fileErrors} launch evidence rows/files need review.`] : []),
+        ...(missingById.get("launch_evidence")?.status === "ready" ? [] : ["No completed launch evidence batch has been imported yet."]),
+      ],
+      unlocks: [
+        "Account evidence",
+        "Developer app evidence",
+        "Permission tracker",
+        "Owner Connect done criteria",
+      ],
+      nextStep: launchEvidenceDropPendingValues || launchEvidenceDropRejected
+        ? input.launchEvidenceDropDiagnostic.nextStep
+        : "Use Owner Connect Pack evidence rows, replace blanks/placeholders with real proof, then import through Launch Evidence Batch.",
+    },
+    {
+      id: "source_videos",
+      rank: 3,
+      lane: "source_videos",
+      label: "Rights-cleared source video drop intake",
+      status: dropzoneStatusFromMissingInput(missingById.get("source_videos"), input.sourceSupplyDropKit.totals.rightsReadyAssets > 0),
+      priority: "high",
+      dropDirs: sourceDropDirs.length ? sourceDropDirs : [SOURCE_DROP_DIR],
+      acceptedFormats: ["mp4", "mov", "m4v", "webm", "CSV/JSON source intake rows"],
+      expectedFiles: sourceBatches.flatMap((batch) => batch.sourceDropPaths).slice(0, 60),
+      copyReadyTemplate: input.sourceSupplyDropKit.intakeBatchTemplate || "",
+      sourceArtifactPath: sourceManifestBlockers.length
+        ? input.sourceDropDiagnostic.repairWorksheetCsvPath
+        : input.sourceSupplyDropKit.markdownPath,
+      localActionUrl: "/api/clippers/import-source-drop-files",
+      actionLabel: "Import source drop files",
+      blockers: sourceManifestBlockers,
+      unlocks: [
+        "Production queue source availability",
+        "Draft rendering",
+        "Manual/automated posting packages",
+      ],
+      nextStep: input.sourceDropDiagnostic.nextStep,
+    },
+  ];
+
+  const totals = items.reduce<ClipperDropzoneReadyPackSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "ready") sum.ready += 1;
+    if (item.status === "partial") sum.partial += 1;
+    if (item.status === "missing") sum.missing += 1;
+    if (item.priority === "critical") sum.critical += 1;
+    sum.dropDirs += item.dropDirs.length;
+    sum.expectedFiles += item.expectedFiles.length;
+    return sum;
+  }, { items: 0, ready: 0, partial: 0, missing: 0, critical: 0, dropDirs: 0, expectedFiles: 0 });
+  const status: ClipperDropzoneReadyPackStatus = !generatedAt
+    ? "not_prepared"
+    : totals.missing > 0
+      ? "blocked"
+      : totals.partial > 0
+        ? "partial"
+        : "ready";
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: DROPZONE_READY_PACK_PATH,
+    markdownPath: DROPZONE_READY_PACK_MARKDOWN_PATH,
+    csvPath: DROPZONE_READY_PACK_CSV_PATH,
+    items,
+    sourceArtifacts: {
+      localDropSyncPath: input.localDropSync.markdownPath,
+      credentialSetupPath: input.credentialSetup.readmePath,
+      credentialTransferKitPath: input.credentialSetup.credentialTransferKitMarkdownPath,
+      goLiveEvidenceBundlePath: input.goLiveEvidenceBundle.markdownPath,
+      ownerConnectPackPath: input.ownerConnectPack.markdownPath,
+      sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
+    },
+    totals,
+    nextStep: items.find((item) => item.status === "missing")?.nextStep
+      || items.find((item) => item.status === "partial")?.nextStep
+      || "All dropzones are ready; run Local sync and Prep sweep before OAuth/publishing.",
+  };
+}
+
+function renderDropzoneReadyPackMarkdown(summary: ClipperDropzoneReadyPackSummary): string {
+  return [
+    "# Clippers Dropzone Ready Pack",
+    "",
+    "Safe intake board for the three things that still must arrive locally before go-live: credentials, launch evidence and source videos. It contains paths, templates and actions only; no secret values.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.ready} ready, ${summary.totals.partial} partial, ${summary.totals.missing} missing`,
+    `Drop dirs: ${summary.totals.dropDirs}`,
+    `Expected files: ${summary.totals.expectedFiles}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Local Drop Sync: ${summary.sourceArtifacts.localDropSyncPath}`,
+    `- Credential Setup: ${summary.sourceArtifacts.credentialSetupPath}`,
+    `- Credential Transfer Kit: ${summary.sourceArtifacts.credentialTransferKitPath}`,
+    `- Go-Live Evidence Bundle: ${summary.sourceArtifacts.goLiveEvidenceBundlePath}`,
+    `- Owner Connect Pack: ${summary.sourceArtifacts.ownerConnectPackPath}`,
+    `- Source Supply Drop Kit: ${summary.sourceArtifacts.sourceSupplyDropKitPath}`,
+    "",
+    "## Dropzones",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Lane: ${item.lane}`,
+      `- Status: ${item.status}`,
+      `- Priority: ${item.priority}`,
+      `- Local action: ${item.actionLabel} (${item.localActionUrl})`,
+      `- Artifact: ${item.sourceArtifactPath || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Drop dirs:",
+      ...item.dropDirs.map((dir) => `- ${dir}`),
+      "",
+      "Accepted formats:",
+      ...item.acceptedFormats.map((format) => `- ${format}`),
+      "",
+      item.expectedFiles.length ? "Expected files:" : "Expected files: none",
+      ...item.expectedFiles.slice(0, 40).map((file) => `- ${file}`),
+      item.expectedFiles.length > 40 ? `- ...${item.expectedFiles.length - 40} more` : "",
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Unlocks:",
+      ...item.unlocks.map((unlock) => `- ${unlock}`),
+      "",
+      item.copyReadyTemplate ? "Copy-ready template:" : "Copy-ready template: none",
+      ...(item.copyReadyTemplate ? ["```", item.copyReadyTemplate, "```"] : []),
+      "",
+    ].filter(Boolean)),
+  ].join("\n");
+}
+
+function renderDropzoneReadyPackCsv(summary: ClipperDropzoneReadyPackSummary): string {
+  const header = ["rank", "id", "lane", "status", "priority", "label", "drop_dirs", "accepted_formats", "expected_files", "artifact_path", "local_action_url", "action_label", "blockers", "unlocks", "next_step"];
+  const rows = summary.items.map((item) => [
+    String(item.rank),
+    item.id,
+    item.lane,
+    item.status,
+    item.priority,
+    item.label,
+    item.dropDirs.join(" | "),
+    item.acceptedFormats.join(" | "),
+    item.expectedFiles.join(" | "),
+    item.sourceArtifactPath || "",
+    item.localActionUrl,
+    item.actionLabel,
+    item.blockers.join(" | "),
+    item.unlocks.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+export async function prepareClipperDropzoneReadyPack(userId = getSystemUserId()): Promise<{ dropzoneReadyPack: ClipperDropzoneReadyPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = await buildDropzoneReadyPackSummary({
+    localDropSync: statusBefore.localDropSync,
+    credentialSetup: statusBefore.credentialSetup,
+    credentialDoctor: statusBefore.credentialDoctor,
+    goLiveEvidenceBundle: statusBefore.goLiveEvidenceBundle,
+    ownerConnectPack: statusBefore.ownerConnectPack,
+    launchEvidenceDropDiagnostic: statusBefore.launchEvidenceDropDiagnostic,
+    sourceDropDiagnostic: statusBefore.sourceDropDiagnostic,
+    sourceSupplyDropKit: statusBefore.sourceSupplyDropKit,
+  });
+  const totals = draftSummary.totals;
+  const dropzoneReadyPack: ClipperDropzoneReadyPackSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+    status: totals.missing > 0 ? "blocked" : totals.partial > 0 ? "partial" : "ready",
+  };
+  await writeFile(DROPZONE_READY_PACK_PATH, JSON.stringify(dropzoneReadyPack, null, 2));
+  await writeFile(DROPZONE_READY_PACK_MARKDOWN_PATH, renderDropzoneReadyPackMarkdown(dropzoneReadyPack));
+  await writeFile(DROPZONE_READY_PACK_CSV_PATH, renderDropzoneReadyPackCsv(dropzoneReadyPack));
+  return { dropzoneReadyPack, status: await getClipperStatus(userId) };
+}
+
+function extractPendingEnvVarsFromTemplate(template: string): string[] {
+  const envVars = template
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^[A-Z0-9_]+=/.test(line))
+    .map((line) => line.split("=")[0])
+    .filter(Boolean);
+  return Array.from(new Set(envVars));
+}
+
+function buildRobertEvidenceCloseoutQueue(fixPack: ClipperLaunchEvidenceFixPackSummary): ClipperRobertEvidenceCloseoutQueue {
+  const nextItems = fixPack.items
+    .filter((item) => item.suggestedReplacementRow.trim().length > 0)
+    .slice(0, 10)
+    .map<ClipperRobertEvidenceCloseoutQueue["nextItems"][number]>((item, index) => ({
+      id: item.id,
+      rank: index + 1,
+      evidenceSource: item.evidenceSource,
+      kind: item.kind,
+      identifier: item.identifier,
+      fixCategory: item.fixCategory,
+      requiredFix: item.requiredFix,
+      suggestedReplacementRow: item.suggestedReplacementRow,
+      importTarget: item.importTarget,
+    }));
+  const importBridgeMap = new Map<string, ClipperRobertEvidenceCloseoutQueue["importBridge"][number]>();
+  nextItems.forEach((item) => {
+    const rowCells = parseCsvLine(item.suggestedReplacementRow);
+    const platformCandidate = rowCells[2] as ClipperPlatform | undefined;
+    const platform: ClipperPlatform | "system" | "mixed" = platformCandidate && ["tiktok", "instagram", "youtube"].includes(platformCandidate)
+      ? platformCandidate
+      : "system";
+    const key = `${item.kind || "unknown"}:${platform}`;
+    const current = importBridgeMap.get(key) || {
+      id: key.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase(),
+      label: `${item.kind || "unknown"}${platform !== "system" ? ` / ${platform}` : ""}`,
+      kind: item.kind || "unknown",
+      platform,
+      count: 0,
+      rows: [],
+      requiredFixes: [],
+      identifiers: [],
+      importTarget: item.importTarget,
+      priority: item.evidenceSource === "drop_rejected" || item.evidenceSource === "current_state_gap" ? "critical" : "high",
+      nextStep: "Complete real proof values, paste rows into Launch Evidence Batch, then run Local Drop Sync and Prep Sweep.",
+    } satisfies ClipperRobertEvidenceCloseoutQueue["importBridge"][number];
+    current.count += 1;
+    current.rows.push(item.suggestedReplacementRow);
+    current.requiredFixes = uniqueStrings([...current.requiredFixes, item.requiredFix]);
+    current.identifiers = uniqueStrings([...current.identifiers, item.identifier || item.id].filter(Boolean));
+    if (item.evidenceSource === "drop_rejected" || item.evidenceSource === "current_state_gap") current.priority = "critical";
+    importBridgeMap.set(key, current);
+  });
+  const importBridge = Array.from(importBridgeMap.values()).sort((a, b) => {
+    const priorityScore = { critical: 0, high: 1, medium: 2 };
+    return priorityScore[a.priority] - priorityScore[b.priority] || b.count - a.count || a.label.localeCompare(b.label);
+  });
+
+  return {
+    total: fixPack.totals.items,
+    importTarget: fixPack.sourceArtifacts.ownerConnectEvidencePath || OWNER_CONNECT_EVIDENCE_DROP_PATH,
+    fixpackPath: fixPack.suggestedImportCsvPath || LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH,
+    byCategory: {
+      accountProof: fixPack.totals.accountProof || 0,
+      developerApps: fixPack.totals.developerApps || 0,
+      permissionProof: fixPack.totals.permissionProof || 0,
+      publicUrl: fixPack.totals.publicUrl || 0,
+      sourceRights: fixPack.totals.sourceRights || 0,
+      format: fixPack.totals.format || 0,
+      currentStateGaps: fixPack.totals.currentStateGaps || 0,
+      rejectedRows: fixPack.totals.rejectedRows || 0,
+    },
+    nextRows: nextItems.map((item) => item.suggestedReplacementRow),
+    importBridge,
+    nextItems,
+    nextStep: nextItems.length
+      ? "Complete the suggested rows with real proof, then copy or rename the fixpack CSV to owner-connect-evidence.csv and run Local Drop Sync."
+      : fixPack.nextStep,
+  };
+}
+
+function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSetupSummary): ClipperRobertCredentialCloseoutQueue {
+  const diagnostic = credentialSetup.credentialDropDiagnostic;
+  const pendingEnvVars = uniqueStrings(diagnostic.files.flatMap((file) => file.pendingEnvVars)).sort();
+  const checkedEnvVars = uniqueStrings([
+    ...diagnostic.acceptedEnvVars,
+    ...pendingEnvVars,
+    ...CREDENTIAL_ENV_REQUIREMENTS.flatMap((requirement) => requirement.requiredEnvVars),
+    "GOOGLE_DRIVE_REFRESH_TOKEN",
+  ]).sort();
+  const configuredEnvVars = checkedEnvVars.filter((envVar) => hasRealValue(process.env[envVar]));
+  const localEnvFiles = LOCAL_ENV_FILES.filter((fileName) => existsSync(path.join(process.cwd(), fileName)));
+  return {
+    status: diagnostic.status,
+    diagnosticPath: diagnostic.markdownPath || credentialSetup.credentialDropDiagnosticMarkdownPath,
+    importReady: diagnostic.status === "ready_to_import" && diagnostic.acceptedEnvVars.length > 0,
+    dropDirs: diagnostic.dropDirs.length ? diagnostic.dropDirs : credentialSetup.credentialDropDirs,
+    runtimeEnv: {
+      checkedEnvVars,
+      configuredEnvVars,
+      missingEnvVars: checkedEnvVars.filter((envVar) => !configuredEnvVars.includes(envVar)),
+      localEnvFiles,
+    },
+    acceptedEnvVars: diagnostic.acceptedEnvVars,
+    pendingEnvVars,
+    rejectedEnvVars: diagnostic.rejectedEnvVars,
+    driveCredentialBridge: credentialSetup.credentialTransferKitItems
+      .filter((item) => item.missingSuggestedEnvVars.length > 0 || item.driveSearchUrls.length > 0 || item.localDropFileNames.length > 0)
+      .slice(0, 10)
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        platform: item.platform,
+        status: item.status,
+        missingSuggestedEnvVars: item.missingSuggestedEnvVars,
+        driveSearchQueries: item.driveSearchQueries.slice(0, 4),
+        driveSearchUrls: item.driveSearchUrls.slice(0, 4),
+        localDropFileNames: item.localDropFileNames.slice(0, 5),
+        portalUrl: item.portalUrl,
+        docsUrl: item.docsUrl,
+        nextStep: item.nextStep,
+      })),
+    totals: {
+      files: diagnostic.totals.files,
+      dropCandidates: diagnostic.totals.dropCandidates,
+      rootCandidates: diagnostic.totals.rootCandidates,
+      importEligible: diagnostic.totals.importEligible,
+      templateFiles: diagnostic.totals.templateFiles,
+      pendingEnvVars: diagnostic.totals.pendingEnvVars,
+      fileErrors: diagnostic.totals.fileErrors,
+    },
+    files: diagnostic.files.slice(0, 10).map((file) => ({
+      fileName: file.fileName,
+      relativePath: file.relativePath,
+      kind: file.kind,
+      location: file.location,
+      importEligible: file.importEligible,
+      detectedEnvVars: file.detectedEnvVars,
+      pendingEnvVars: file.pendingEnvVars,
+      issue: file.issue,
+      nextStep: file.nextStep,
+    })),
+    nextStep: diagnostic.nextStep,
+  };
+}
+
+function buildRobertSourceCloseoutQueue(sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary): ClipperRobertSourceCloseoutQueue {
+  const nextItems = sourceSupplyDropKit.items.slice(0, 10).map<ClipperRobertSourceCloseoutQueue["nextItems"][number]>((item) => ({
+    id: item.id,
+    rank: item.rank,
+    category: item.category,
+    label: item.label,
+    priority: item.priority,
+    targetFileName: item.targetFileName,
+    sourceDropPath: item.sourceDropPath,
+    intakeBatchRow: item.intakeBatchRow,
+    rightsEvidenceBatchRow: item.rightsEvidenceBatchRow,
+    viralSearchQueries: item.viralSearchQueries.slice(0, 5),
+    requiredProof: item.requiredProof,
+    nextStep: item.nextStep,
+  }));
+
+  return {
+    status: sourceSupplyDropKit.status,
+    manifestPath: sourceSupplyDropKit.manifestPath,
+    markdownPath: sourceSupplyDropKit.markdownPath,
+    csvPath: sourceSupplyDropKit.csvPath,
+    sourceDropDir: sourceSupplyDropKit.sourceDropDir,
+    total: sourceSupplyDropKit.totals.items,
+    nextRows: nextItems.map((item) => item.intakeBatchRow),
+    rightsRows: nextItems.map((item) => item.rightsEvidenceBatchRow),
+    trendRows: sourceSupplyDropKit.items.slice(0, 10).map((item) => item.trendCandidateBatchRow),
+    batches: sourceSupplyDropKit.categoryBatches.map((batch) => ({
+      category: batch.category,
+      label: batch.label,
+      priority: batch.priority,
+      items: batch.items,
+      sourceDropDir: batch.sourceDropDir,
+      sourceDropManifestPath: batch.sourceDropManifestPath,
+      sourceDropReadmePath: batch.sourceDropReadmePath,
+      intakeRows: batch.intakeBatchRows.slice(0, 5),
+      rightsRows: batch.rightsEvidenceBatchRows.slice(0, 5),
+      viralSearchQueries: batch.viralSearchQueries.slice(0, 5),
+      requiredProof: batch.requiredProof,
+      nextStep: batch.nextStep,
+    })),
+    nextItems,
+    totals: sourceSupplyDropKit.totals,
+    nextStep: sourceSupplyDropKit.nextStep,
+  };
+}
+
+function buildRobertAccountCloseoutQueue(ownerConnectPack: ClipperOwnerConnectPackSummary): ClipperRobertAccountCloseoutQueue {
+  const targetLanes: ClipperOwnerConnectPackLane[] = ["account", "developer_app", "permission", "oauth", "official_recheck"];
+  const closeoutItems = ownerConnectPack.items.filter((item) => targetLanes.includes(item.lane));
+  const accountProofBridge = closeoutItems
+    .filter((item) => item.lane === "account" && item.status !== "done" && item.evidenceRows.length > 0)
+    .slice(0, 12)
+    .map<ClipperRobertAccountCloseoutQueue["accountProofBridge"][number]>((item) => {
+      const evidenceRow = item.evidenceRows[0] || "";
+      const evidenceCells = parseCsvLine(evidenceRow);
+      const accountId = evidenceCells[1] || "";
+      const platform = (evidenceCells[2] || item.platform) as ClipperPlatform | "system";
+      const handle = item.label.match(/@[a-z0-9._-]+/i)?.[0] || accountId || item.label;
+      return {
+        id: item.id,
+        rank: item.rank,
+        accountId,
+        platform,
+        handle,
+        label: item.label,
+        status: item.status,
+        portalUrl: item.portalUrl,
+        evidenceRow,
+        requiredProof: [
+          "Profile URL or channel URL for the created account.",
+          "Screenshot/proof link showing logged-in ownership or profile settings.",
+          "Account category/handle matches the Clippers identity kit.",
+        ],
+        checklist: item.checklist,
+        doneCriteria: item.doneCriteria,
+        nextStep: item.nextStep,
+      };
+    });
+  const appPermissionBridge = closeoutItems
+    .filter((item) => ["developer_app", "permission", "official_recheck"].includes(item.lane) && item.status !== "done")
+    .slice(0, 14)
+    .map<ClipperRobertAccountCloseoutQueue["appPermissionBridge"][number]>((item) => {
+      const parsedRows = item.evidenceRows.map((row) => parseCsvLine(row));
+      const scopes = uniqueStrings(parsedRows.map((cells) => cells[4]).filter(Boolean));
+      const appIdentifiers = uniqueStrings(parsedRows.map((cells) => cells[5]).filter(Boolean));
+      const publicBaseUrls = uniqueStrings(parsedRows.map((cells) => cells[6]).filter(Boolean));
+      return {
+        id: item.id,
+        rank: item.rank,
+        lane: item.lane as Extract<ClipperOwnerConnectPackLane, "developer_app" | "permission" | "official_recheck">,
+        platform: item.platform,
+        label: item.label,
+        status: item.status,
+        portalUrl: item.portalUrl,
+        evidenceRows: item.evidenceRows.slice(0, 4),
+        scopes,
+        appIdentifiers,
+        publicBaseUrls,
+        requiredProof: item.lane === "developer_app"
+          ? [
+            "Developer app/project id or client key from the official portal.",
+            "Public HTTPS redirect/base URL configured in the portal.",
+            "Screenshot, review ticket or approval email proving submitted/approved state.",
+          ]
+          : item.lane === "permission"
+            ? [
+              "Requested or approved scope shown in the official developer portal.",
+              "Review ticket, approval email, portal URL or screenshot proof.",
+              "Associated app identifier/client key/project id when available.",
+            ]
+            : [
+              "Logged-in official docs/portal screen confirming current permission requirements.",
+              "Screenshot/proof link of the recheck result.",
+              "Update requested/approved evidence rows after recheck.",
+            ],
+        checklist: item.checklist,
+        blockers: item.blockers,
+        doneCriteria: item.doneCriteria,
+        nextStep: item.nextStep,
+      };
+    });
+  const nextItems = closeoutItems
+    .filter((item) => item.status !== "done")
+    .slice(0, 12)
+    .map<ClipperRobertAccountCloseoutQueue["nextItems"][number]>((item) => ({
+      id: item.id,
+      rank: item.rank,
+      lane: item.lane,
+      platform: item.platform,
+      label: item.label,
+      status: item.status,
+      portalUrl: item.portalUrl,
+      executionUrl: item.executionUrl,
+      artifactPath: item.artifactPath,
+      evidenceRows: item.evidenceRows.slice(0, 4),
+      checklist: item.checklist,
+      blockers: item.blockers,
+      doneCriteria: item.doneCriteria,
+      nextStep: item.nextStep,
+    }));
+  const portalUrls = closeoutItems
+    .filter((item) => item.portalUrl)
+    .map((item) => ({
+      label: item.label,
+      lane: item.lane,
+      platform: item.platform,
+      url: item.portalUrl || "",
+    }))
+    .slice(0, 20);
+  const evidenceRows = uniqueStrings(nextItems.flatMap((item) => item.evidenceRows)).slice(0, 20);
+
+  return {
+    status: ownerConnectPack.status,
+    manifestPath: ownerConnectPack.manifestPath,
+    markdownPath: ownerConnectPack.markdownPath,
+    csvPath: ownerConnectPack.csvPath,
+    evidenceDropPath: ownerConnectPack.sourceArtifacts.ownerConnectEvidenceDropPath,
+    totals: {
+      items: closeoutItems.length,
+      readyToExecute: closeoutItems.filter((item) => item.status === "ready_to_execute").length,
+      blocked: closeoutItems.filter((item) => item.status === "blocked").length,
+      waiting: closeoutItems.filter((item) => item.status === "waiting").length,
+      done: closeoutItems.filter((item) => item.status === "done").length,
+      portalUrls: portalUrls.length,
+      evidenceRows: closeoutItems.reduce((total, item) => total + item.evidenceRows.length, 0),
+      accounts: closeoutItems.filter((item) => item.lane === "account").length,
+      developerApps: closeoutItems.filter((item) => item.lane === "developer_app").length,
+      permissions: closeoutItems.filter((item) => item.lane === "permission").length,
+      oauth: closeoutItems.filter((item) => item.lane === "oauth").length,
+      officialRechecks: closeoutItems.filter((item) => item.lane === "official_recheck").length,
+    },
+    portalUrls,
+    evidenceRows,
+    accountProofBridge,
+    appPermissionBridge,
+    nextItems,
+    nextStep: nextItems[0]?.nextStep || ownerConnectPack.nextStep,
+  };
+}
+
+function buildRobertOfficialPermissionCloseoutQueue(officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary): ClipperRobertOfficialPermissionCloseoutQueue {
+  const sourceBatches = officialPermissionMatrix.sourceBatches.map((batch) => ({
+    id: batch.id,
+    platform: batch.platform,
+    label: batch.label,
+    sourceStatus: batch.sourceStatus,
+    accessMode: batch.accessMode,
+    submitDecision: batch.submitDecision,
+    scopes: batch.scopes,
+    officialUrls: batch.officialUrls,
+    verifiedClaims: batch.verifiedClaims,
+    reviewerEvidence: batch.reviewerEvidence,
+    blocker: batch.blocker,
+    nextStep: batch.nextStep,
+  }));
+  return {
+    status: officialPermissionMatrix.status,
+    matrixPath: officialPermissionMatrix.markdownPath,
+    csvPath: officialPermissionMatrix.csvPath,
+    verifiedAt: officialPermissionMatrix.verifiedAt,
+    totals: {
+      platforms: officialPermissionMatrix.totals.platforms,
+      scopes: officialPermissionMatrix.totals.scopes,
+      appReviewRequired: officialPermissionMatrix.totals.appReviewRequired,
+      officialVerified: officialPermissionMatrix.totals.officialVerified,
+      loginRequired: officialPermissionMatrix.totals.loginRequired,
+      sourceBatches: officialPermissionMatrix.totals.sourceBatches,
+    },
+    nextRows: uniqueStrings(officialPermissionMatrix.sourceBatches.flatMap((batch) => batch.launchEvidenceRows)).slice(0, 20),
+    approvalRows: uniqueStrings(officialPermissionMatrix.sourceBatches.flatMap((batch) => batch.approvalEvidenceRows)).slice(0, 20),
+    sourceBatches,
+    webProofTrail: officialPermissionMatrix.webProofTrail.map((proof) => ({
+      platform: proof.platform,
+      accessMode: proof.accessMode,
+      officialUrls: proof.officialUrls,
+      verifiedClaims: proof.verifiedClaims,
+      nextHumanAction: proof.nextHumanAction,
+    })),
+    nextStep: officialPermissionMatrix.nextStep,
+  };
+}
+
+function summarizeOwnerTunnelLane(
+  ownerConnectPack: ClipperOwnerConnectPackSummary,
+  lanes: ClipperOwnerConnectPackLane[],
+  fallbackNextStep: string,
+): {
+  done: number;
+  total: number;
+  blockers: number;
+  ready: number;
+  waiting: number;
+  actionUrl: string | null;
+  artifactPath: string | null;
+  nextStep: string;
+} {
+  const laneItems = ownerConnectPack.items.filter((item) => lanes.includes(item.lane));
+  const nextItem = laneItems.find((item) => item.status === "ready_to_execute")
+    || laneItems.find((item) => item.status === "blocked")
+    || laneItems.find((item) => item.status === "waiting")
+    || laneItems[0];
+  return {
+    done: laneItems.filter((item) => item.status === "done").length,
+    total: laneItems.length,
+    blockers: laneItems.filter((item) => item.status === "blocked").length,
+    ready: laneItems.filter((item) => item.status === "ready_to_execute").length,
+    waiting: laneItems.filter((item) => item.status === "waiting").length,
+    actionUrl: nextItem?.portalUrl || nextItem?.executionUrl || null,
+    artifactPath: nextItem?.artifactPath || ownerConnectPack.markdownPath,
+    nextStep: nextItem?.nextStep || fallbackNextStep,
+  };
+}
+
+function tunnelGateStatus(input: { done: number; total: number; blockers: number; ready?: number; waiting?: number }): ClipperRobertConnectionTunnelGate["status"] {
+  if (input.total > 0 && input.done >= input.total) return "done";
+  if (input.blockers > 0) return "blocked";
+  if ((input.ready || 0) > 0) return "ready_to_execute";
+  if ((input.waiting || 0) > 0) return "waiting";
+  return input.total === 0 ? "done" : "blocked";
+}
+
+function buildRobertConnectionTunnel(input: {
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  credentialCloseout: ClipperRobertCredentialCloseoutQueue;
+  sourceCloseout: ClipperRobertSourceCloseoutQueue;
+  accountCloseout: ClipperRobertAccountCloseoutQueue;
+  evidenceCloseout: ClipperRobertEvidenceCloseoutQueue;
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+}): ClipperRobertConnectNowHandoff["connectionTunnel"] {
+  const credentialTotal = Math.max(input.credentialCloseout.runtimeEnv.checkedEnvVars.length, input.credentialCloseout.pendingEnvVars.length);
+  const credentialDone = input.credentialCloseout.runtimeEnv.configuredEnvVars.length;
+  const credentialBlockers = input.credentialCloseout.runtimeEnv.missingEnvVars.length || input.credentialCloseout.pendingEnvVars.length;
+  const credentialReady = input.credentialCloseout.importReady ? 1 : 0;
+  const accountLane = summarizeOwnerTunnelLane(input.ownerConnectPack, ["account"], input.accountCloseout.nextStep);
+  const appLane = summarizeOwnerTunnelLane(input.ownerConnectPack, ["developer_app"], input.accountCloseout.nextStep);
+  const permissionLane = summarizeOwnerTunnelLane(input.ownerConnectPack, ["permission", "official_recheck"], input.accountCloseout.nextStep);
+  const oauthLane = summarizeOwnerTunnelLane(input.ownerConnectPack, ["oauth"], input.accountCloseout.nextStep);
+  const evidenceDone = input.evidenceCloseout.total > 0 ? Math.max(0, input.evidenceCloseout.total - input.evidenceCloseout.nextRows.length) : 1;
+  const evidenceTotal = input.evidenceCloseout.total > 0 ? input.evidenceCloseout.total : 1;
+  const sourceDone = input.sourceCloseout.totals.rightsReadyAssets;
+  const sourceTotal = Math.max(input.sourceCloseout.totals.minimumWeeklySourceAssets, input.sourceCloseout.total, 1);
+  const goLiveBlocked = input.goLiveCompletionAudit.totals.blocked + input.goLiveCompletionAudit.totals.needsEvidence;
+
+  const gates: ClipperRobertConnectionTunnelGate[] = [
+    {
+      id: "credentials",
+      rank: 1,
+      label: "Credentials",
+      status: tunnelGateStatus({ done: credentialDone, total: credentialTotal, blockers: credentialBlockers, ready: credentialReady }),
+      done: credentialDone,
+      total: credentialTotal,
+      blockers: credentialBlockers,
+      actionLabel: input.credentialCloseout.importReady ? "Import credential files" : "Fill credential values",
+      actionUrl: input.credentialCloseout.importReady ? "/api/clippers/import-credential-drop-files" : null,
+      artifactPath: input.credentialCloseout.diagnosticPath,
+      nextStep: input.credentialCloseout.nextStep,
+      unlocks: ["Developer apps", "OAuth connection", "Publisher connectors"],
+    },
+    {
+      id: "accounts",
+      rank: 2,
+      label: "Accounts",
+      status: tunnelGateStatus(accountLane),
+      done: accountLane.total === 0 ? 1 : accountLane.done,
+      total: Math.max(accountLane.total, 1),
+      blockers: accountLane.blockers,
+      actionLabel: "Open account portals",
+      actionUrl: accountLane.actionUrl,
+      artifactPath: accountLane.artifactPath,
+      nextStep: accountLane.nextStep,
+      unlocks: ["Profile evidence", "OAuth account selection", "Publishing identity"],
+    },
+    {
+      id: "developer_apps",
+      rank: 3,
+      label: "Developer apps",
+      status: tunnelGateStatus(appLane),
+      done: appLane.total === 0 ? 1 : appLane.done,
+      total: Math.max(appLane.total, 1),
+      blockers: appLane.blockers,
+      actionLabel: "Open developer portals",
+      actionUrl: appLane.actionUrl,
+      artifactPath: appLane.artifactPath,
+      nextStep: appLane.nextStep,
+      unlocks: ["Permission review", "Redirect URI setup", "OAuth clients"],
+    },
+    {
+      id: "permissions",
+      rank: 4,
+      label: "Permissions",
+      status: tunnelGateStatus(permissionLane),
+      done: permissionLane.total === 0 ? 1 : permissionLane.done,
+      total: Math.max(permissionLane.total, 1),
+      blockers: permissionLane.blockers,
+      actionLabel: "Submit permission proof",
+      actionUrl: permissionLane.actionUrl,
+      artifactPath: permissionLane.artifactPath,
+      nextStep: permissionLane.nextStep,
+      unlocks: ["Automated posting", "Publisher execution", "Go-live audit"],
+    },
+    {
+      id: "oauth",
+      rank: 5,
+      label: "OAuth",
+      status: tunnelGateStatus(oauthLane),
+      done: oauthLane.total === 0 ? 1 : oauthLane.done,
+      total: Math.max(oauthLane.total, 1),
+      blockers: oauthLane.blockers,
+      actionLabel: "Connect OAuth",
+      actionUrl: oauthLane.actionUrl,
+      artifactPath: oauthLane.artifactPath,
+      nextStep: oauthLane.nextStep,
+      unlocks: ["Token vault", "Scheduled publishing", "Metrics imports"],
+    },
+    {
+      id: "evidence",
+      rank: 6,
+      label: "Evidence",
+      status: tunnelGateStatus({
+        done: evidenceDone,
+        total: evidenceTotal,
+        blockers: input.evidenceCloseout.total,
+        ready: input.evidenceCloseout.nextRows.length,
+      }),
+      done: evidenceDone,
+      total: evidenceTotal,
+      blockers: input.evidenceCloseout.total,
+      actionLabel: "Fix evidence rows",
+      actionUrl: null,
+      artifactPath: input.evidenceCloseout.fixpackPath,
+      nextStep: input.evidenceCloseout.nextStep,
+      unlocks: ["Completion audit", "External proof ledger", "Go-live readiness"],
+    },
+    {
+      id: "sources",
+      rank: 7,
+      label: "Sources",
+      status: tunnelGateStatus({
+        done: sourceDone,
+        total: sourceTotal,
+        blockers: input.sourceCloseout.total,
+        ready: input.sourceCloseout.nextRows.length,
+      }),
+      done: sourceDone,
+      total: sourceTotal,
+      blockers: input.sourceCloseout.total,
+      actionLabel: "Load source rows",
+      actionUrl: "/api/clippers/record-source-intake-batch",
+      artifactPath: input.sourceCloseout.markdownPath,
+      nextStep: input.sourceCloseout.nextStep,
+      unlocks: ["Draft rendering", "100 clips/week queue", "Trend optimizer"],
+    },
+    {
+      id: "publish",
+      rank: 8,
+      label: "Publish",
+      status: input.goLiveCompletionAudit.readyToPublish ? "done" : goLiveBlocked > 0 ? "blocked" : "ready_to_execute",
+      done: input.goLiveCompletionAudit.totals.verified,
+      total: Math.max(input.goLiveCompletionAudit.totals.requirements, 1),
+      blockers: goLiveBlocked,
+      actionLabel: "Run completion audit",
+      actionUrl: "/api/clippers/prepare-go-live-completion-audit",
+      artifactPath: input.goLiveCompletionAudit.markdownPath,
+      nextStep: input.goLiveCompletionAudit.nextStep,
+      unlocks: ["Autopost enablement", "Daily reports", "Growth loop"],
+    },
+  ];
+  const doneGates = gates.filter((gate) => gate.status === "done").length;
+  const readyGates = gates.filter((gate) => gate.status === "ready_to_execute").length;
+  const blockedGates = gates.filter((gate) => gate.status === "blocked").length;
+  const progressUnits = gates.reduce((sum, gate) => sum + Math.min(gate.done, gate.total), 0);
+  const totalUnits = gates.reduce((sum, gate) => sum + Math.max(gate.total, 1), 0);
+  const nextGate = gates.find((gate) => gate.status === "ready_to_execute")
+    || gates.find((gate) => gate.status === "blocked")
+    || gates.find((gate) => gate.status === "waiting")
+    || null;
+  const status: ClipperRobertConnectNowHandoff["connectionTunnel"]["status"] = doneGates === gates.length
+    ? "done"
+    : readyGates > 0
+      ? "ready_to_execute"
+      : blockedGates > 0
+        ? "blocked"
+        : "waiting";
+
+  return {
+    status,
+    progress: Math.round((progressUnits / Math.max(totalUnits, 1)) * 100),
+    blockedGates,
+    readyGates,
+    doneGates,
+    gates,
+    nextGate,
+    nextStep: nextGate?.nextStep || "All connection gates are complete; keep running daily reports and optimizer.",
+  };
+}
+
+function buildRobertOwnershipSplit(input: {
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  credentialCloseout: ClipperRobertCredentialCloseoutQueue;
+  sourceCloseout: ClipperRobertSourceCloseoutQueue;
+  accountCloseout: ClipperRobertAccountCloseoutQueue;
+  evidenceCloseout: ClipperRobertEvidenceCloseoutQueue;
+  connectionTunnel: ClipperRobertConnectNowHandoff["connectionTunnel"];
+}): ClipperRobertConnectNowHandoff["ownershipSplit"] {
+  const oauthItems = input.ownerConnectPack.items.filter((item) => item.lane === "oauth" && item.status !== "done");
+  const sourceReadyRows = input.sourceCloseout.nextRows.length + input.sourceCloseout.rightsRows.length + input.sourceCloseout.trendRows.length;
+  const robertReady = [
+    input.credentialCloseout.importReady
+      ? {
+        label: "Import credential drop files",
+        count: input.credentialCloseout.totals.importEligible,
+        nextStep: "Run the credential drop import after files are placed locally.",
+      }
+      : null,
+    input.evidenceCloseout.nextRows.length
+      ? {
+        label: "Prepare evidence batch rows",
+        count: input.evidenceCloseout.nextRows.length,
+        nextStep: "Append ready evidence rows into the batch importer.",
+      }
+      : null,
+    sourceReadyRows
+      ? {
+        label: "Queue source and trend rows",
+        count: sourceReadyRows,
+        nextStep: "Load source intake, rights and trend candidate rows from Connect Now.",
+      }
+      : null,
+    {
+      label: "Refresh prep/audit packs",
+      count: input.connectionTunnel.gates.length,
+      nextStep: "Rerun prep sweep and completion audit after each external proof import.",
+    },
+  ].filter((item): item is ClipperRobertConnectNowHandoff["ownershipSplit"]["robertReady"][number] => Boolean(item));
+
+  const userRequired = [
+    input.credentialCloseout.runtimeEnv.missingEnvVars.length
+      ? {
+        label: "Connect real credentials",
+        count: input.credentialCloseout.runtimeEnv.missingEnvVars.length,
+        nextStep: "Add missing env values or drop credential files, then import/reload.",
+      }
+      : null,
+    input.accountCloseout.accountProofBridge.length
+      ? {
+        label: "Create/verify platform accounts",
+        count: input.accountCloseout.accountProofBridge.length,
+        nextStep: "Save profile URLs and ownership screenshots/proof for each handle.",
+      }
+      : null,
+    input.accountCloseout.appPermissionBridge.length
+      ? {
+        label: "Submit apps and permissions",
+        count: input.accountCloseout.appPermissionBridge.length,
+        nextStep: "Use official portals to create apps, request scopes and save review proof.",
+      }
+      : null,
+    oauthItems.length
+      ? {
+        label: "Complete OAuth connections",
+        count: oauthItems.length,
+        nextStep: "Connect each account only after app credentials and scopes are approved.",
+      }
+      : null,
+    input.sourceCloseout.total
+      ? {
+        label: "Provide rights-cleared source supply",
+        count: input.sourceCloseout.total,
+        nextStep: "Drop recent/viral source videos plus usage-rights proof into the source folders.",
+      }
+      : null,
+  ].filter((item): item is ClipperRobertConnectNowHandoff["ownershipSplit"]["userRequired"][number] => Boolean(item));
+
+  return {
+    robertReady,
+    userRequired,
+    automationUnlockedBy: [
+      "Runtime credentials loaded",
+      "Real account proof imported",
+      "Developer apps approved",
+      "Posting/upload scopes approved",
+      "OAuth tokens connected",
+      "Rights-cleared source inventory loaded",
+      "Completion audit shows zero blocked requirements",
+    ],
+    nextRobertAction: robertReady[0]?.nextStep || "No local-only action is ready; wait for the next external proof drop.",
+    nextUserAction: userRequired[0]?.nextStep || "External setup is complete; Robert can keep running publishing and reporting.",
+  };
+}
+
+function buildRobertWeeklyRunway(input: {
+  accounts: ClipperAccount[];
+  sourceCloseout: ClipperRobertSourceCloseoutQueue;
+  connectionTunnel: ClipperRobertConnectNowHandoff["connectionTunnel"];
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+}): ClipperRobertConnectNowHandoff["weeklyRunway"] {
+  const configuredDailyClipTarget = input.accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
+  const targetWeeklyClips = Math.max(100, input.sourceCloseout.totals.weeklyMissingSourceSlots);
+  const targetDailyClips = Math.ceil(targetWeeklyClips / 7);
+  const platformAccountCount = input.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
+  const weeklyReadySlots = Math.max(0, targetWeeklyClips - input.sourceCloseout.totals.weeklyMissingSourceSlots);
+  const weeklyMissingSlots = Math.max(0, targetWeeklyClips - weeklyReadySlots);
+  const sourceAssetGap = Math.max(0, input.sourceCloseout.totals.minimumWeeklySourceAssets - input.sourceCloseout.totals.rightsReadyAssets);
+  const categories = (["sports", "memes", "streamers"] as ClipperAccountCategory[]).map((category) => {
+    const categoryAccounts = input.accounts.filter((account) => account.category === category);
+    const batch = input.sourceCloseout.batches.find((item) => item.category === category);
+    const dailyTarget = categoryAccounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
+    const sourceAssetGapForCategory = batch?.items || 0;
+    const minimumWeeklySourceAssets = sourceAssetGapForCategory;
+    const rightsReadyAssets = 0;
+    const weeklyTargetSlots = sourceAssetGapForCategory * 3 || dailyTarget * 7;
+    return {
+      category,
+      label: categoryLabelsForBackend(category),
+      accountCount: categoryAccounts.length,
+      dailyTarget,
+      weeklyTargetSlots,
+      rightsReadyAssets,
+      minimumWeeklySourceAssets,
+      sourceAssetGap: sourceAssetGapForCategory,
+      nextStep: batch?.nextStep || (sourceAssetGapForCategory > 0
+        ? `Agregar ${sourceAssetGapForCategory} fuente(s) rights-ready para cubrir ${weeklyTargetSlots} clips/semana.`
+        : "Mantener fuentes recientes, virales y con derechos para esta categoria."),
+    };
+  });
+  const status: ClipperRobertConnectNowHandoff["weeklyRunway"]["status"] = input.goLiveCompletionAudit.readyToPublish
+    ? "ready"
+    : weeklyMissingSlots > 0 || sourceAssetGap > 0
+      ? "needs_sources"
+      : input.connectionTunnel.blockedGates > 0
+        ? "needs_connections"
+        : "ready";
+  const nextStep = status === "ready"
+    ? "Run the daily automation cycle in approval mode, monitor reports and scale only after metrics improve."
+    : status === "needs_sources"
+      ? "Load rights-cleared source inventory until weekly missing slots and source asset gap reach zero."
+      : "Finish credentials, accounts, app permissions and OAuth; source runway is covered enough to move into publishing checks.";
+
+  return {
+    status,
+    targetWeeklyClips,
+    targetDailyClips,
+    configuredDailyClipTarget,
+    plannedDailyClips: Math.ceil(targetWeeklyClips / 7),
+    accountCount: input.accounts.length,
+    platformAccountCount,
+    weeklyReadySlots,
+    weeklyMissingSlots,
+    rightsReadyAssets: input.sourceCloseout.totals.rightsReadyAssets,
+    minimumWeeklySourceAssets: input.sourceCloseout.totals.minimumWeeklySourceAssets,
+    sourceAssetGap,
+    blockedGates: input.connectionTunnel.blockedGates,
+    readyToPublish: input.goLiveCompletionAudit.readyToPublish,
+    nextStep,
+    categories,
+  };
+}
+
+function buildRobertPlatformLaunchBridge(input: {
+  accounts: ClipperAccount[];
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  credentialCloseout: ClipperRobertCredentialCloseoutQueue;
+  accountCloseout: ClipperRobertAccountCloseoutQueue;
+  officialPermissionCloseout: ClipperRobertOfficialPermissionCloseoutQueue;
+}): ClipperRobertConnectNowHandoff["platformLaunchBridge"] {
+  return PLATFORM_REQUIREMENTS.map((requirement) => {
+    const credentialBridgeItems = input.credentialCloseout.driveCredentialBridge.filter((item) => item.platform === requirement.platform);
+    const missingEnvVars = uniqueStrings(credentialBridgeItems.flatMap((item) => item.missingSuggestedEnvVars));
+    const accountProofItems = input.accountCloseout.accountProofBridge.filter((item) => item.platform === requirement.platform);
+    const appPermissionItems = input.accountCloseout.appPermissionBridge.filter((item) => item.platform === requirement.platform);
+    const oauthItems = input.ownerConnectPack.items.filter((item) => item.platform === requirement.platform && item.lane === "oauth" && item.status !== "done");
+    const officialBatches = input.officialPermissionCloseout.sourceBatches.filter((item) => item.platform === requirement.platform);
+    const cleanScope = (scope: string) => scope.replace(/^"+|"+$/g, "").trim();
+    const handles = uniqueStrings(input.accounts.flatMap((account) =>
+      account.platformAccounts
+        .filter((platformAccount) => platformAccount.platform === requirement.platform)
+        .map((platformAccount) => platformAccount.handle)
+    ));
+    const scopes = uniqueStrings([
+      ...requirement.scopes,
+      ...appPermissionItems.flatMap((item) => item.scopes),
+      ...officialBatches.flatMap((item) => item.scopes),
+    ].map(cleanScope).filter((scope) => /[a-z0-9]/i.test(scope)));
+    const evidenceRows = uniqueStrings([
+      ...accountProofItems.map((item) => item.evidenceRow),
+      ...appPermissionItems.flatMap((item) => item.evidenceRows),
+      ...oauthItems.flatMap((item) => item.evidenceRows),
+      ...officialBatches.flatMap((item) => item.reviewerEvidence),
+    ]).filter(Boolean).slice(0, 8);
+    const portalUrlMap = new Map<string, { label: string; url: string }>();
+    [
+      { label: `${requirement.label} account`, url: requirement.accountCreationUrl },
+      { label: `${requirement.label} developer`, url: requirement.developerPortalUrl },
+      ...accountProofItems.map((item) => ({ label: item.label, url: item.portalUrl || requirement.accountCreationUrl })),
+      ...appPermissionItems.map((item) => ({ label: item.label, url: item.portalUrl || requirement.developerPortalUrl })),
+      ...oauthItems.map((item) => ({ label: item.label, url: item.portalUrl || requirement.developerPortalUrl })),
+    ].forEach((item) => {
+      if (item.url && !portalUrlMap.has(item.url)) portalUrlMap.set(item.url, item);
+    });
+    const portalUrls = Array.from(portalUrlMap.values()).slice(0, 6);
+    const blockers = uniqueStrings([
+      ...missingEnvVars.map((envVar) => `Missing credential env var ${envVar}.`),
+      ...accountProofItems.flatMap((item) => item.doneCriteria.length ? [] : [`Missing account proof for ${item.handle}.`]),
+      ...appPermissionItems.flatMap((item) => item.blockers),
+      ...oauthItems.flatMap((item) => item.blockers.length ? item.blockers : [`OAuth not connected for ${requirement.label}.`]),
+      ...officialBatches.flatMap((item) => item.blocker ? [item.blocker] : []),
+    ]);
+    const status: ClipperRobertConnectNowHandoff["platformLaunchBridge"][number]["status"] = !missingEnvVars.length
+      && !accountProofItems.length
+      && !appPermissionItems.length
+      && !oauthItems.length
+      ? "done"
+      : accountProofItems.length || appPermissionItems.length
+        ? "ready_to_execute"
+        : missingEnvVars.length
+          ? "blocked"
+          : "waiting";
+    const nextStep = accountProofItems.length
+      ? `Create/verify ${requirement.label} handles (${handles.join(", ") || "configured accounts"}) and import account proof rows.`
+      : appPermissionItems.length
+        ? `Submit ${requirement.label} app/permission proof for ${scopes.join(", ")}.`
+        : missingEnvVars.length
+          ? `Load ${missingEnvVars.join(", ")} before OAuth/token exchange.`
+          : oauthItems.length
+            ? `Complete OAuth for ${requirement.label} after credentials and permissions are approved.`
+            : `${requirement.label} launch bridge is clear; keep monitoring audit and metrics.`;
+
+    return {
+      platform: requirement.platform,
+      label: requirement.label,
+      status,
+      accountType: requirement.requiredAccountType,
+      accountCreationUrl: requirement.accountCreationUrl,
+      developerPortalUrl: requirement.developerPortalUrl,
+      docsUrls: requirement.docs,
+      handles,
+      scopes,
+      missingEnvVars,
+      accountProofCount: accountProofItems.length,
+      appPermissionCount: appPermissionItems.length,
+      oauthCount: oauthItems.length,
+      evidenceRows,
+      portalUrls,
+      blockers,
+      doneCriteria: [
+        `Real ${requirement.label} account/profile proof imported for every configured handle.`,
+        `${requirement.label} developer app/project is created and evidence is imported without secrets.`,
+        `Scopes approved or requested with proof: ${scopes.join(", ")}.`,
+        `OAuth callback/token vault proof exists before enabling autopost.`,
+      ],
+      nextStep,
+    };
+  });
+}
+
+async function buildRobertConnectNowHandoff(input: {
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
+  launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary;
+  credentialSetup: ClipperCredentialSetupSummary;
+  officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+}): Promise<ClipperRobertConnectNowHandoff> {
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const credentialDrop = input.dropzoneReadyPack.items.find((item) => item.lane === "credentials");
+  const launchEvidenceDrop = input.dropzoneReadyPack.items.find((item) => item.lane === "launch_evidence");
+  const sourceVideosDrop = input.dropzoneReadyPack.items.find((item) => item.lane === "source_videos");
+  const publicBaseUrl = isProductionPublicBaseUrl(process.env.PUBLIC_BASE_URL || "") ? process.env.PUBLIC_BASE_URL || "https://sportclipsr.com" : "https://sportclipsr.com";
+  const portalUrls = new Map<string, { label: string; url: string }>();
+  input.ownerConnectPack.items.forEach((item) => {
+    if (item.portalUrl) portalUrls.set(`${item.label}:${item.portalUrl}`, { label: item.label, url: item.portalUrl });
+  });
+  PLATFORM_REQUIREMENTS.forEach((requirement) => {
+    portalUrls.set(`${requirement.label}:${requirement.developerPortalUrl}`, { label: `${requirement.label} developer portal`, url: requirement.developerPortalUrl });
+    portalUrls.set(`${requirement.label}:${requirement.accountCreationUrl}`, { label: `${requirement.label} account creation`, url: requirement.accountCreationUrl });
+  });
+  const evidenceCloseout = buildRobertEvidenceCloseoutQueue(input.launchEvidenceFixPack);
+  const credentialCloseout = buildRobertCredentialCloseoutQueue(input.credentialSetup);
+  const sourceCloseout = buildRobertSourceCloseoutQueue(input.sourceSupplyDropKit);
+  const accountCloseout = buildRobertAccountCloseoutQueue(input.ownerConnectPack);
+  const officialPermissionCloseout = buildRobertOfficialPermissionCloseoutQueue(input.officialPermissionMatrix);
+  const connectionTunnel = buildRobertConnectionTunnel({
+    ownerConnectPack: input.ownerConnectPack,
+    credentialCloseout,
+    sourceCloseout,
+    accountCloseout,
+    evidenceCloseout,
+    goLiveCompletionAudit: input.goLiveCompletionAudit,
+  });
+  const ownershipSplit = buildRobertOwnershipSplit({
+    ownerConnectPack: input.ownerConnectPack,
+    credentialCloseout,
+    sourceCloseout,
+    accountCloseout,
+    evidenceCloseout,
+    connectionTunnel,
+  });
+  const weeklyRunway = buildRobertWeeklyRunway({
+    accounts,
+    sourceCloseout,
+    connectionTunnel,
+    goLiveCompletionAudit: input.goLiveCompletionAudit,
+  });
+  const platformLaunchBridge = buildRobertPlatformLaunchBridge({
+    accounts,
+    ownerConnectPack: input.ownerConnectPack,
+    credentialCloseout,
+    accountCloseout,
+    officialPermissionCloseout,
+  });
+
+  return {
+    markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
+    focusRun: input.externalExecutionSession.focusRun,
+    evidenceCloseout,
+    credentialCloseout,
+    sourceCloseout,
+    accountCloseout,
+    officialPermissionCloseout,
+    connectionTunnel,
+    ownershipSplit,
+    weeklyRunway,
+    platformLaunchBridge,
+    recommendedOrder: [
+      "Fill real credential values in the credential starter files, then import credential drop files.",
+      "Create or verify each external TikTok, Instagram and YouTube account with the configured handles.",
+      "Create or complete developer apps in TikTok, Meta and Google Cloud.",
+      "Request official posting/upload scopes and save review tickets or approval proof.",
+      "Use Official Permission Closeout to attach public proof packs or perform Meta login recheck before requesting scopes.",
+      "Complete owner-connect evidence with real profile URLs, app IDs, public HTTPS URL and proof notes.",
+      "Copy/rename the completed fixpack CSV to owner-connect-evidence.csv and run Local Drop Sync.",
+      "Upload rights-cleared source videos plus manifest proof into the source-drop folders.",
+      "Run Prep Sweep and Completion Audit; continue until blocked is 0.",
+      "Connect OAuth for each platform/account, then enable publishing only after the audit is ready.",
+    ],
+    pendingCredentialEnvVars: extractPendingEnvVarsFromTemplate(credentialDrop?.copyReadyTemplate || "").filter((envVar) => envVar !== "PUBLIC_BASE_URL"),
+    credentialTemplate: credentialDrop?.copyReadyTemplate || "",
+    credentialDropDirs: credentialDrop?.dropDirs.length ? credentialDrop.dropDirs : [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
+    credentialCandidateFiles: credentialDrop?.expectedFiles || [],
+    evidenceTemplatePath: LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH,
+    evidenceImportPath: OWNER_CONNECT_EVIDENCE_DROP_PATH,
+    launchEvidenceTemplate: launchEvidenceDrop?.copyReadyTemplate || "",
+    sourceDropDirs: sourceVideosDrop?.dropDirs.length ? sourceVideosDrop.dropDirs : [path.join(SOURCE_DROP_DIR, "sports"), path.join(SOURCE_DROP_DIR, "memes"), path.join(SOURCE_DROP_DIR, "streamers")],
+    sourceIntakeTemplate: input.sourceSupplyDropKit.intakeBatchTemplate || sourceVideosDrop?.copyReadyTemplate || "",
+    sourceAssetsRequired: sourceVideosDrop?.expectedFiles.length || input.sourceSupplyDropKit.totals.items || 0,
+    accountHandles: accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => ({
+      accountId: account.id,
+      accountName: account.name,
+      platform: platformAccount.platform,
+      handle: platformAccount.handle,
+    }))),
+    portalUrls: Array.from(portalUrls.values()).slice(0, 30),
+    publicUrls: [
+      { label: "PUBLIC_BASE_URL", url: publicBaseUrl },
+      { label: "Privacy Policy", url: `${publicBaseUrl}/clippers/legal/privacy` },
+      { label: "Terms of Service", url: `${publicBaseUrl}/clippers/legal/terms` },
+      { label: "App Review Demo", url: `${publicBaseUrl}/clippers/review-demo` },
+      { label: "TikTok OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/tiktok/callback` },
+      { label: "Instagram OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/instagram/callback` },
+      { label: "YouTube OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/youtube/callback` },
+    ],
+    blockers: [
+      credentialDrop ? { label: credentialDrop.label, count: credentialDrop.blockers.length, nextStep: credentialDrop.nextStep } : null,
+      launchEvidenceDrop ? { label: launchEvidenceDrop.label, count: launchEvidenceDrop.blockers.length, nextStep: launchEvidenceDrop.nextStep } : null,
+      sourceVideosDrop ? { label: sourceVideosDrop.label, count: sourceVideosDrop.blockers.length, nextStep: sourceVideosDrop.nextStep } : null,
+      { label: "Go-live requirements", count: input.goLiveCompletionAudit.totals.blocked + input.goLiveCompletionAudit.totals.needsEvidence, nextStep: input.goLiveCompletionAudit.nextStep },
+      { label: "Official permissions", count: input.officialPermissionMatrix.totals.loginRequired, nextStep: input.officialPermissionMatrix.nextStep },
+    ].filter((item): item is ClipperRobertConnectNowHandoff["blockers"][number] => Boolean(item)),
+  };
+}
+
+async function buildRobertNextActionsSummary(input: {
+  commandCenter: ClipperLaunchCommandCenterSummary;
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
+  launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary;
+  credentialSetup: ClipperCredentialSetupSummary;
+  officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+}): Promise<ClipperRobertNextActionsSummary> {
+  const generatedAt = await stat(ROBERT_NEXT_ACTIONS_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const dropItems = input.dropzoneReadyPack.items
+    .filter((item) => item.status !== "ready")
+    .map<ClipperRobertNextActionItem>((item, index) => ({
+      id: `dropzone-${item.id}`,
+      rank: index + 1,
+      lane: "local_drop",
+      label: item.label,
+      status: item.status === "missing" ? "blocked" : "ready_to_execute",
+      priority: item.priority === "medium" ? "medium" : item.priority,
+      estimatedMinutes: item.lane === "source_videos" ? 45 : 15,
+      platform: item.lane === "credentials" ? "mixed" : "system",
+      actionUrl: item.localActionUrl,
+      artifactPath: item.sourceArtifactPath,
+      portalUrl: null,
+      dropDirs: item.dropDirs,
+      evidenceRows: item.copyReadyTemplate ? item.copyReadyTemplate.split("\n").filter((row) => row.includes(",") && !row.startsWith("#")).slice(0, 5) : [],
+      operatorSteps: [
+        item.sourceArtifactPath ? `Open the repair/source artifact: ${item.sourceArtifactPath}.` : "Open the related Clippers local artifact.",
+        item.dropDirs.length ? `Place completed real files in: ${item.dropDirs.slice(0, 3).join(" | ")}.` : "Paste the completed rows into the matching Clippers import field.",
+        `Run ${item.actionLabel}.`,
+        "Refresh Robert Next Actions and Completion Audit after import.",
+      ],
+      blockers: item.blockers,
+      doneCriteria: [
+        `Place real files in ${item.dropDirs.slice(0, 3).join(" | ")}.`,
+        `Run ${item.actionLabel}.`,
+        "Run Prep sweep and Completion audit after import.",
+      ],
+      nextStep: item.nextStep,
+    }));
+
+  const ownerItems = input.ownerConnectPack.items
+    .filter((item) => item.status === "ready_to_execute" || item.status === "waiting")
+    .slice(0, 9)
+    .map<ClipperRobertNextActionItem>((item, index) => ({
+      id: `owner-${item.id}`,
+      rank: dropItems.length + index + 1,
+      lane: item.lane === "source_video" ? "source_supply" : item.lane === "launch_evidence" ? "evidence" : "external_portal",
+      label: item.label,
+      status: item.status,
+      priority: item.lane === "credential" || item.lane === "account" || item.lane === "developer_app" ? "critical" : "high",
+      estimatedMinutes: item.lane === "credential" ? 10 : item.lane === "account" ? 12 : 18,
+      platform: item.platform,
+      actionUrl: item.executionUrl,
+      artifactPath: item.artifactPath,
+      portalUrl: item.portalUrl,
+      dropDirs: item.dropDirs,
+      evidenceRows: item.evidenceRows.slice(0, 5),
+      operatorSteps: item.checklist.length ? item.checklist : [
+        item.portalUrl ? `Open ${item.portalUrl}.` : "Open the platform portal from the linked artifact.",
+        "Complete the external account/app/permission step.",
+        "Save proof URL, screenshot path, ticket ID or approval note.",
+        "Paste the evidence row into Launch Evidence Batch or evidence-drop.",
+      ],
+      blockers: item.blockers,
+      doneCriteria: item.doneCriteria,
+      nextStep: item.nextStep,
+    }));
+
+  const auditItems = input.goLiveCompletionAudit.externalSession
+    .filter((item) => item.status !== "verified")
+    .slice(0, 6)
+    .map<ClipperRobertNextActionItem>((item, index) => ({
+      id: `audit-${item.id}`,
+      rank: dropItems.length + ownerItems.length + index + 1,
+      lane: item.lane === "evidence_upload" ? "evidence" : item.lane === "verification" ? "verification" : "external_portal",
+      label: item.label,
+      status: item.status === "blocked" ? "blocked" : "ready_to_execute",
+      priority: item.status === "blocked" ? "critical" : "high",
+      estimatedMinutes: item.lane === "verification" ? 8 : 15,
+      platform: "mixed",
+      actionUrl: item.actionUrl,
+      artifactPath: item.artifactPath,
+      portalUrl: item.portalUrls[0] || null,
+      dropDirs: [],
+      evidenceRows: item.evidenceRows.slice(0, 5),
+      operatorSteps: item.operatorSteps.length ? item.operatorSteps : [
+        item.portalUrls[0] ? `Open ${item.portalUrls[0]}.` : "Open the linked verification artifact.",
+        "Collect the required evidence.",
+        "Paste the evidence row into the correct import/drop workflow.",
+      ],
+      blockers: item.blockers,
+      doneCriteria: item.doneCriteria,
+      nextStep: item.nextStep,
+    }));
+
+  const sourceItems = input.sourceSupplyDropKit.categoryBatches
+    .filter((batch) => batch.items > 0)
+    .slice(0, 3)
+    .map<ClipperRobertNextActionItem>((batch, index) => ({
+      id: `source-${batch.category}`,
+      rank: dropItems.length + ownerItems.length + auditItems.length + index + 1,
+      lane: "source_supply",
+      label: `${batch.label} source batch`,
+      status: "ready_to_execute",
+      priority: batch.priority === "watch" ? "medium" : batch.priority,
+      estimatedMinutes: Math.max(20, batch.items * 4),
+      platform: "mixed",
+      actionUrl: "/api/clippers/record-source-intake-batch",
+      artifactPath: input.sourceSupplyDropKit.markdownPath,
+      portalUrl: null,
+      dropDirs: [batch.sourceDropDir],
+      evidenceRows: batch.intakeBatchRows.slice(0, 5),
+      operatorSteps: batch.checklist,
+      blockers: [],
+      doneCriteria: batch.checklist,
+      nextStep: batch.nextStep,
+    }));
+
+  const deduped = new Map<string, ClipperRobertNextActionItem>();
+  [...dropItems, ...ownerItems, ...auditItems, ...sourceItems].forEach((item) => {
+    const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
+    if (!deduped.has(key)) deduped.set(key, item);
+  });
+  const items = Array.from(deduped.values())
+    .sort((a, b) => {
+      const priorityScore = { critical: 0, high: 1, medium: 2 };
+      const statusScore = { ready_to_execute: 0, waiting: 1, blocked: 2, done: 3 };
+      return priorityScore[a.priority] - priorityScore[b.priority] || statusScore[a.status] - statusScore[b.status] || a.rank - b.rank;
+    })
+    .slice(0, 24)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+
+  const totals = items.reduce<ClipperRobertNextActionsSummary["totals"]>((sum, item) => {
+    sum.actions += 1;
+    if (item.priority === "critical") sum.critical += 1;
+    if (item.priority === "high") sum.high += 1;
+    if (item.lane === "local_drop") sum.localDrop += 1;
+    if (item.lane === "external_portal") sum.externalPortal += 1;
+    if (item.lane === "evidence") sum.evidence += 1;
+    if (item.lane === "source_supply") sum.sourceSupply += 1;
+    if (item.lane === "verification") sum.verification += 1;
+    sum.estimatedMinutes += item.estimatedMinutes;
+    return sum;
+  }, { actions: 0, critical: 0, high: 0, localDrop: 0, externalPortal: 0, evidence: 0, sourceSupply: 0, verification: 0, estimatedMinutes: 0 });
+
+  const status: ClipperRobertNextActionsStatus = !generatedAt
+    ? "not_prepared"
+    : input.goLiveCompletionAudit.readyToPublish
+      ? "ready"
+      : totals.critical > 0
+        ? "blocked"
+        : "needs_action";
+  const connectNow = await buildRobertConnectNowHandoff(input);
+
+  return {
+    status,
+    generatedAt,
+    manifestPath: ROBERT_NEXT_ACTIONS_PATH,
+    markdownPath: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
+    csvPath: ROBERT_NEXT_ACTIONS_CSV_PATH,
+    connectNow,
+    items,
+    sourceArtifacts: {
+      commandCenterPath: input.commandCenter.markdownPath,
+      ownerConnectPackPath: input.ownerConnectPack.markdownPath,
+      dropzoneReadyPackPath: input.dropzoneReadyPack.markdownPath,
+      goLiveCompletionAuditPath: input.goLiveCompletionAudit.markdownPath,
+      externalExecutionSessionPath: input.externalExecutionSession.markdownPath,
+      sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
+    },
+    totals,
+    nextStep: items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.",
+  };
+}
+
+function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummary): string {
+  return [
+    "# Clippers - Robert Next Actions",
+    "",
+    "Dynamic next-action pack generated from the current Clippers status. It does not contain raw secrets and does not claim external accounts are complete until evidence is imported.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Actions: ${summary.totals.actions}`,
+    `Critical: ${summary.totals.critical}`,
+    `High: ${summary.totals.high}`,
+    `Estimated minutes: ${summary.totals.estimatedMinutes}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Connect now handoff: ${summary.connectNow.markdownPath}`,
+    `- Command Center: ${summary.sourceArtifacts.commandCenterPath}`,
+    `- Owner Connect Pack: ${summary.sourceArtifacts.ownerConnectPackPath}`,
+    `- Dropzone Ready Pack: ${summary.sourceArtifacts.dropzoneReadyPackPath}`,
+    `- Completion Audit: ${summary.sourceArtifacts.goLiveCompletionAuditPath}`,
+    `- External Execution Session: ${summary.sourceArtifacts.externalExecutionSessionPath}`,
+    `- Source Supply Drop Kit: ${summary.sourceArtifacts.sourceSupplyDropKitPath}`,
+    "",
+    "## Lanes",
+    "",
+    `- Local drop: ${summary.totals.localDrop}`,
+    `- External portal: ${summary.totals.externalPortal}`,
+    `- Evidence: ${summary.totals.evidence}`,
+    `- Source supply: ${summary.totals.sourceSupply}`,
+    `- Verification: ${summary.totals.verification}`,
+    "",
+    "## Connect Now Handoff",
+    "",
+    `- Evidence template: ${summary.connectNow.evidenceTemplatePath}`,
+    `- Evidence import target: ${summary.connectNow.evidenceImportPath}`,
+    `- Pending credential env vars: ${summary.connectNow.pendingCredentialEnvVars.join(", ") || "none"}`,
+    `- Credential closeout: ${summary.connectNow.credentialCloseout.status}; ${summary.connectNow.credentialCloseout.pendingEnvVars.length} pending env names; ${summary.connectNow.credentialCloseout.acceptedEnvVars.length} import-ready env names`,
+    `- Account closeout: ${summary.connectNow.accountCloseout.status}; ${summary.connectNow.accountCloseout.totals.items} external items; ${summary.connectNow.accountCloseout.totals.evidenceRows} evidence rows`,
+    `- Official permission closeout: ${summary.connectNow.officialPermissionCloseout.status}; ${summary.connectNow.officialPermissionCloseout.totals.scopes} scopes; ${summary.connectNow.officialPermissionCloseout.totals.loginRequired} login-required platforms`,
+    `- Source assets required: ${summary.connectNow.sourceAssetsRequired}`,
+    `- Source closeout: ${summary.connectNow.sourceCloseout.status}; ${summary.connectNow.sourceCloseout.total} source rows; ${summary.connectNow.sourceCloseout.batches.length} category batches`,
+    `- Focus run: ${summary.connectNow.focusRun.label} (${summary.connectNow.focusRun.status}, ${summary.connectNow.focusRun.estimatedMinutes} min)`,
+    `- Evidence closeout: ${summary.connectNow.evidenceCloseout.total} open items; next rows ${summary.connectNow.evidenceCloseout.nextRows.length}`,
+    `- Connection tunnel: ${summary.connectNow.connectionTunnel.status}; ${summary.connectNow.connectionTunnel.progress}% progress; ${summary.connectNow.connectionTunnel.blockedGates} blocked gates`,
+    `- Handoff file: ${summary.connectNow.markdownPath}`,
+    "",
+    "## Priority Actions",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Lane: ${item.lane}`,
+      `- Status: ${item.status}`,
+      `- Priority: ${item.priority}`,
+      `- Platform: ${item.platform}`,
+      `- Estimated minutes: ${item.estimatedMinutes}`,
+      `- Action URL: ${item.actionUrl || "n/a"}`,
+      `- Portal URL: ${item.portalUrl || "n/a"}`,
+      `- Artifact: ${item.artifactPath || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      item.dropDirs.length ? "Drop dirs:" : "Drop dirs: none",
+      ...item.dropDirs.map((dir) => `- ${dir}`),
+      "",
+      item.evidenceRows.length ? "Evidence/import rows:" : "Evidence/import rows: none",
+      ...item.evidenceRows.map((row) => `- ${row}`),
+      "",
+      item.operatorSteps.length ? "Operator steps:" : "Operator steps: none",
+      ...item.operatorSteps.map((step) => `- [ ] ${step}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      item.doneCriteria.length ? "Done criteria:" : "Done criteria: none",
+      ...item.doneCriteria.map((criteria) => `- [ ] ${criteria}`),
+      "",
+    ].filter(Boolean)),
+  ].join("\n");
+}
+
+function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary): string {
+  const handoff = summary.connectNow;
+  return [
+    "# Clippers: conectar cuentas y desbloquear go-live",
+    "",
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    "",
+    "Este archivo se genera desde el estado actual de Clippers. No contiene secretos y no marca nada externo como listo hasta que exista evidencia real importada.",
+    "",
+    "## Estado actual",
+    "",
+    `- Robert Next Actions: ${summary.status}`,
+    `- Acciones: ${summary.totals.actions}`,
+    `- Criticas: ${summary.totals.critical}`,
+    `- High: ${summary.totals.high}`,
+    `- Minutos estimados: ${summary.totals.estimatedMinutes}`,
+    `- Source assets requeridos: ${handoff.sourceAssetsRequired}`,
+    `- Focus run: ${handoff.focusRun.label} (${handoff.focusRun.status}, ${handoff.focusRun.estimatedMinutes} min)`,
+    "",
+    "## Orden recomendado",
+    "",
+    ...handoff.recommendedOrder.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "## Connection Tunnel",
+    "",
+    `- Status: ${handoff.connectionTunnel.status}`,
+    `- Progress: ${handoff.connectionTunnel.progress}%`,
+    `- Done gates: ${handoff.connectionTunnel.doneGates}`,
+    `- Ready gates: ${handoff.connectionTunnel.readyGates}`,
+    `- Blocked gates: ${handoff.connectionTunnel.blockedGates}`,
+    `- Next gate: ${handoff.connectionTunnel.nextGate?.label || "none"}`,
+    `- Next step: ${handoff.connectionTunnel.nextStep}`,
+    "",
+    ...handoff.connectionTunnel.gates.flatMap((gate) => [
+      `### ${gate.rank}. ${gate.label}`,
+      "",
+      `- Status: ${gate.status}`,
+      `- Progress: ${gate.done}/${gate.total}`,
+      `- Blockers: ${gate.blockers}`,
+      `- Action: ${gate.actionLabel}${gate.actionUrl ? ` (${gate.actionUrl})` : ""}`,
+      `- Artifact: ${gate.artifactPath || "n/a"}`,
+      `- Next step: ${gate.nextStep}`,
+      gate.unlocks.length ? `- Unlocks: ${gate.unlocks.join(" | ")}` : "- Unlocks: none",
+      "",
+    ]),
+    "",
+    "## Ownership Split",
+    "",
+    `- Next Robert action: ${handoff.ownershipSplit.nextRobertAction}`,
+    `- Next user action: ${handoff.ownershipSplit.nextUserAction}`,
+    "",
+    handoff.ownershipSplit.robertReady.length ? "Robert-ready local actions:" : "Robert-ready local actions: none",
+    ...handoff.ownershipSplit.robertReady.map((item) => `- ${item.label}: ${item.count}; ${item.nextStep}`),
+    "",
+    handoff.ownershipSplit.userRequired.length ? "User-required external actions:" : "User-required external actions: none",
+    ...handoff.ownershipSplit.userRequired.map((item) => `- ${item.label}: ${item.count}; ${item.nextStep}`),
+    "",
+    "Automation unlocks:",
+    ...handoff.ownershipSplit.automationUnlockedBy.map((item) => `- ${item}`),
+    "",
+    "## Weekly Clip Runway",
+    "",
+    `- Status: ${handoff.weeklyRunway.status}`,
+    `- Target weekly clips: ${handoff.weeklyRunway.targetWeeklyClips}`,
+    `- Planned daily clips: ${handoff.weeklyRunway.plannedDailyClips}`,
+    `- Configured daily clip target: ${handoff.weeklyRunway.configuredDailyClipTarget}`,
+    `- Weekly ready slots: ${handoff.weeklyRunway.weeklyReadySlots}`,
+    `- Weekly missing slots: ${handoff.weeklyRunway.weeklyMissingSlots}`,
+    `- Rights-ready assets: ${handoff.weeklyRunway.rightsReadyAssets}`,
+    `- Minimum weekly source assets: ${handoff.weeklyRunway.minimumWeeklySourceAssets}`,
+    `- Source asset gap: ${handoff.weeklyRunway.sourceAssetGap}`,
+    `- Blocked tunnel gates: ${handoff.weeklyRunway.blockedGates}`,
+    `- Ready to publish: ${handoff.weeklyRunway.readyToPublish ? "yes" : "no"}`,
+    `- Next step: ${handoff.weeklyRunway.nextStep}`,
+    "",
+    handoff.weeklyRunway.categories.length ? "Category runway:" : "Category runway: none",
+    ...handoff.weeklyRunway.categories.flatMap((category) => [
+      `- ${category.label}: ${category.weeklyTargetSlots} weekly slots; ${category.sourceAssetGap} source asset gap; daily target ${category.dailyTarget}`,
+      `  next: ${category.nextStep}`,
+    ]),
+    "",
+    "## Platform Launch Bridge",
+    "",
+    ...handoff.platformLaunchBridge.flatMap((platform) => [
+      `### ${platform.label}`,
+      "",
+      `- Status: ${platform.status}`,
+      `- Account type: ${platform.accountType}`,
+      `- Handles: ${platform.handles.join(", ") || "none"}`,
+      `- Missing env vars: ${platform.missingEnvVars.join(", ") || "none"}`,
+      `- Scopes: ${platform.scopes.join(", ") || "none"}`,
+      `- Account proof tasks: ${platform.accountProofCount}`,
+      `- App/permission tasks: ${platform.appPermissionCount}`,
+      `- OAuth tasks: ${platform.oauthCount}`,
+      `- Next step: ${platform.nextStep}`,
+      platform.portalUrls.length ? "Portal URLs:" : "Portal URLs: none",
+      ...platform.portalUrls.map((portal) => `- ${portal.label}: ${portal.url}`),
+      platform.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...platform.evidenceRows.map((row) => `- ${row}`),
+      platform.blockers.length ? "Blockers:" : "Blockers: none",
+      ...platform.blockers.map((blocker) => `- ${blocker}`),
+      "Done criteria:",
+      ...platform.doneCriteria.map((criteria) => `- ${criteria}`),
+      "",
+    ]),
+    "",
+    "## Credenciales pendientes",
+    "",
+    handoff.pendingCredentialEnvVars.length ? handoff.pendingCredentialEnvVars.map((envVar) => `- ${envVar}`).join("\n") : "- none",
+    "",
+    handoff.credentialTemplate ? "Copy-ready credential template is embedded in the JSON/API handoff for the UI loader." : "Copy-ready credential template: none",
+    "",
+    "## Credential Closeout",
+    "",
+    `- Status: ${handoff.credentialCloseout.status}`,
+    `- Import ready: ${handoff.credentialCloseout.importReady ? "yes" : "no"}`,
+    `- Diagnostic: ${handoff.credentialCloseout.diagnosticPath}`,
+    `- Drop files: ${handoff.credentialCloseout.totals.dropCandidates}`,
+    `- Import eligible files: ${handoff.credentialCloseout.totals.importEligible}`,
+    `- Template files ignored: ${handoff.credentialCloseout.totals.templateFiles}`,
+    `- Pending env names: ${handoff.credentialCloseout.pendingEnvVars.join(", ") || "none"}`,
+    `- Accepted env names: ${handoff.credentialCloseout.acceptedEnvVars.join(", ") || "none"}`,
+    `- Rejected env names: ${handoff.credentialCloseout.rejectedEnvVars.join(", ") || "none"}`,
+    `- Next step: ${handoff.credentialCloseout.nextStep}`,
+    "",
+    handoff.credentialCloseout.files.length ? "Credential files:" : "Credential files: none",
+    ...handoff.credentialCloseout.files.flatMap((file) => [
+      `- ${file.relativePath} (${file.kind}/${file.location}${file.importEligible ? ", eligible" : ""})`,
+      `  detected: ${file.detectedEnvVars.join(", ") || "none"}; pending: ${file.pendingEnvVars.join(", ") || "none"}; issue: ${file.issue || "none"}`,
+    ]),
+    "",
+    handoff.credentialCloseout.driveCredentialBridge.length ? "Drive credential bridge:" : "Drive credential bridge: none",
+    ...handoff.credentialCloseout.driveCredentialBridge.flatMap((item) => [
+      `- ${item.label} (${item.platform}/${item.status})`,
+      `  missing: ${item.missingSuggestedEnvVars.join(", ") || "none"}`,
+      `  local targets: ${item.localDropFileNames.join(" | ") || "none"}`,
+      `  drive search: ${item.driveSearchQueries.join(" | ") || "none"}`,
+    ]),
+    "",
+    "## Official Permission Closeout",
+    "",
+    `- Status: ${handoff.officialPermissionCloseout.status}`,
+    `- Verified at: ${handoff.officialPermissionCloseout.verifiedAt}`,
+    `- Matrix: ${handoff.officialPermissionCloseout.matrixPath}`,
+    `- CSV: ${handoff.officialPermissionCloseout.csvPath}`,
+    `- Platforms: ${handoff.officialPermissionCloseout.totals.platforms}`,
+    `- Scopes: ${handoff.officialPermissionCloseout.totals.scopes}`,
+    `- App-review required: ${handoff.officialPermissionCloseout.totals.appReviewRequired}`,
+    `- Official public verified: ${handoff.officialPermissionCloseout.totals.officialVerified}`,
+    `- Login-required: ${handoff.officialPermissionCloseout.totals.loginRequired}`,
+    `- Next step: ${handoff.officialPermissionCloseout.nextStep}`,
+    "",
+    handoff.officialPermissionCloseout.sourceBatches.length ? "Source batches:" : "Source batches: none",
+    ...handoff.officialPermissionCloseout.sourceBatches.flatMap((batch) => [
+      `- ${batch.label} (${batch.platform}/${batch.accessMode}/${batch.submitDecision})`,
+      `  scopes: ${batch.scopes.join(", ")}`,
+      `  blocker: ${batch.blocker || "none"}`,
+      `  next: ${batch.nextStep}`,
+    ]),
+    "",
+    handoff.officialPermissionCloseout.nextRows.length ? "Requested permission evidence rows:" : "Requested permission evidence rows: none",
+    ...handoff.officialPermissionCloseout.nextRows.map((row) => `- ${row}`),
+    "",
+    handoff.officialPermissionCloseout.approvalRows.length ? "Approved permission evidence rows:" : "Approved permission evidence rows: none",
+    ...handoff.officialPermissionCloseout.approvalRows.map((row) => `- ${row}`),
+    "",
+    "## Account/App/Permission Closeout",
+    "",
+    `- Status: ${handoff.accountCloseout.status}`,
+    `- External items: ${handoff.accountCloseout.totals.items}`,
+    `- Ready to execute: ${handoff.accountCloseout.totals.readyToExecute}`,
+    `- Blocked: ${handoff.accountCloseout.totals.blocked}`,
+    `- Waiting: ${handoff.accountCloseout.totals.waiting}`,
+    `- Done: ${handoff.accountCloseout.totals.done}`,
+    `- Accounts: ${handoff.accountCloseout.totals.accounts}`,
+    `- Developer apps: ${handoff.accountCloseout.totals.developerApps}`,
+    `- Permissions: ${handoff.accountCloseout.totals.permissions}`,
+    `- OAuth: ${handoff.accountCloseout.totals.oauth}`,
+    `- Official rechecks: ${handoff.accountCloseout.totals.officialRechecks}`,
+    `- Evidence drop: ${handoff.accountCloseout.evidenceDropPath}`,
+    `- Owner Connect Pack: ${handoff.accountCloseout.markdownPath}`,
+    `- Next step: ${handoff.accountCloseout.nextStep}`,
+    "",
+    handoff.accountCloseout.portalUrls.length ? "Portals:" : "Portals: none",
+    ...handoff.accountCloseout.portalUrls.map((item) => `- ${item.label} (${item.platform}/${item.lane}): ${item.url}`),
+    "",
+    handoff.accountCloseout.evidenceRows.length ? "Next account/app/permission evidence rows:" : "Next account/app/permission evidence rows: none",
+    ...handoff.accountCloseout.evidenceRows.map((row) => `- ${row}`),
+    "",
+    handoff.accountCloseout.accountProofBridge.length ? "Account proof bridge:" : "Account proof bridge: none",
+    ...handoff.accountCloseout.accountProofBridge.flatMap((item) => [
+      `- ${item.handle} (${item.accountId}/${item.platform}/${item.status})`,
+      `  portal: ${item.portalUrl || "n/a"}`,
+      `  evidence: ${item.evidenceRow}`,
+      `  proof: ${item.requiredProof.join(" | ")}`,
+    ]),
+    "",
+    handoff.accountCloseout.appPermissionBridge.length ? "App/permission bridge:" : "App/permission bridge: none",
+    ...handoff.accountCloseout.appPermissionBridge.flatMap((item) => [
+      `- ${item.label} (${item.lane}/${item.platform}/${item.status})`,
+      `  portal: ${item.portalUrl || "n/a"}`,
+      `  scopes: ${item.scopes.join(", ") || "none"}`,
+      `  app ids: ${item.appIdentifiers.join(", ") || "none"}`,
+      `  blockers: ${item.blockers.join(" | ") || "none"}`,
+      `  proof: ${item.requiredProof.join(" | ")}`,
+    ]),
+    "",
+    handoff.accountCloseout.nextItems.length ? "Next account/app/permission items:" : "Next account/app/permission items: none",
+    ...handoff.accountCloseout.nextItems.flatMap((item) => [
+      `- ${item.rank}. ${item.label} (${item.platform}/${item.lane}/${item.status})`,
+      `  portal: ${item.portalUrl || "n/a"}`,
+      `  next: ${item.nextStep}`,
+    ]),
+    "",
+    "## Focus Run",
+    "",
+    `- Status: ${handoff.focusRun.status}`,
+    `- Label: ${handoff.focusRun.label}`,
+    `- Estimated minutes: ${handoff.focusRun.estimatedMinutes}`,
+    `- Evidence rows: ${handoff.focusRun.evidenceRows.length}`,
+    `- Credential templates: ${handoff.focusRun.credentialTemplates.length}`,
+    `- Portal URLs: ${handoff.focusRun.portalUrls.length}`,
+    `- Next step: ${handoff.focusRun.nextStep}`,
+    "",
+    ...handoff.focusRun.items.map((item) => `- ${item.rank}. ${item.label} (${item.platform}/${item.type}, ${item.estimatedMinutes}m): ${item.nextStep}`),
+    "",
+    "## Evidence Closeout",
+    "",
+    `- Open items: ${handoff.evidenceCloseout.total}`,
+    `- Fixpack CSV: ${handoff.evidenceCloseout.fixpackPath}`,
+    `- Final import CSV: ${handoff.evidenceCloseout.importTarget}`,
+    `- Account proof: ${handoff.evidenceCloseout.byCategory.accountProof}`,
+    `- Developer apps: ${handoff.evidenceCloseout.byCategory.developerApps}`,
+    `- Permission proof: ${handoff.evidenceCloseout.byCategory.permissionProof}`,
+    `- Public URLs: ${handoff.evidenceCloseout.byCategory.publicUrl}`,
+    `- Source rights: ${handoff.evidenceCloseout.byCategory.sourceRights}`,
+    `- Current-state gaps: ${handoff.evidenceCloseout.byCategory.currentStateGaps}`,
+    `- Rejected rows: ${handoff.evidenceCloseout.byCategory.rejectedRows}`,
+    `- Next step: ${handoff.evidenceCloseout.nextStep}`,
+    "",
+    handoff.evidenceCloseout.importBridge.length ? "Evidence import bridge:" : "Evidence import bridge: none",
+    ...handoff.evidenceCloseout.importBridge.flatMap((batch) => [
+      `- ${batch.label} (${batch.platform}/${batch.priority}): ${batch.count} row(s)`,
+      `  import target: ${batch.importTarget}`,
+      `  identifiers: ${batch.identifiers.join(", ") || "none"}`,
+      `  fixes: ${batch.requiredFixes.join(" | ") || "none"}`,
+      `  next: ${batch.nextStep}`,
+    ]),
+    "",
+    handoff.evidenceCloseout.nextItems.length ? "Next rows to complete/import:" : "Next rows to complete/import: none",
+    ...handoff.evidenceCloseout.nextItems.flatMap((item) => [
+      `- ${item.rank}. ${item.kind}/${item.fixCategory}: ${item.requiredFix}`,
+      `  ${item.suggestedReplacementRow}`,
+    ]),
+    "",
+    "## Source Closeout",
+    "",
+    `- Status: ${handoff.sourceCloseout.status}`,
+    `- Source rows required: ${handoff.sourceCloseout.total}`,
+    `- Weekly missing source slots: ${handoff.sourceCloseout.totals.weeklyMissingSourceSlots}`,
+    `- Rights-ready assets: ${handoff.sourceCloseout.totals.rightsReadyAssets}`,
+    `- Minimum weekly source assets: ${handoff.sourceCloseout.totals.minimumWeeklySourceAssets}`,
+    `- Source drop root: ${handoff.sourceCloseout.sourceDropDir}`,
+    `- Source Supply Kit: ${handoff.sourceCloseout.markdownPath}`,
+    `- CSV: ${handoff.sourceCloseout.csvPath}`,
+    `- Next step: ${handoff.sourceCloseout.nextStep}`,
+    "",
+    handoff.sourceCloseout.batches.length ? "Category batches:" : "Category batches: none",
+    ...handoff.sourceCloseout.batches.flatMap((batch) => [
+      `- ${batch.label} (${batch.category}/${batch.priority}): ${batch.items} file(s) -> ${batch.sourceDropDir}`,
+      `  queries: ${batch.viralSearchQueries.join(" | ") || "none"}`,
+      `  proof: ${batch.requiredProof.join(" | ") || "none"}`,
+    ]),
+    "",
+    handoff.sourceCloseout.nextItems.length ? "Next source rows:" : "Next source rows: none",
+    ...handoff.sourceCloseout.nextItems.flatMap((item) => [
+      `- ${item.rank}. ${item.targetFileName} (${item.category}/${item.priority})`,
+      `  ${item.intakeBatchRow}`,
+    ]),
+    "",
+    handoff.sourceCloseout.trendRows.length ? "Trend candidate rows:" : "Trend candidate rows: none",
+    ...handoff.sourceCloseout.trendRows.map((row) => `- ${row}`),
+    "",
+    "Drop dirs:",
+    ...handoff.credentialDropDirs.map((dir) => `- ${dir}`),
+    "",
+    "Candidate files:",
+    ...handoff.credentialCandidateFiles.map((file) => `- ${file}`),
+    "",
+    "## Evidencia de cuentas, apps y permisos",
+    "",
+    `- Editable fixpack CSV: ${handoff.evidenceTemplatePath}`,
+    `- Final import CSV: ${handoff.evidenceImportPath}`,
+    handoff.launchEvidenceTemplate ? "- Copy-ready launch evidence template is embedded in the JSON/API handoff for the UI loader." : "- Copy-ready launch evidence template: none",
+    "",
+    "Importante: el `.fixpack.csv` es una plantilla segura. Local Drop Sync lo ignora hasta que este completo y copiado/renombrado como `owner-connect-evidence.csv`.",
+    "",
+    "## Handles configurados",
+    "",
+    ...handoff.accountHandles.map((item) => `- ${item.accountName} / ${item.platform}: ${item.handle}`),
+    "",
+    "## Portales",
+    "",
+    ...handoff.portalUrls.map((item) => `- ${item.label}: ${item.url}`),
+    "",
+    "## URLs publicas para app review/OAuth",
+    "",
+    ...handoff.publicUrls.map((item) => `- ${item.label}: ${item.url}`),
+    "",
+    "## Videos/fuentes",
+    "",
+    ...handoff.sourceDropDirs.map((dir) => `- ${dir}`),
+    "",
+    handoff.sourceIntakeTemplate ? "Copy-ready source intake template is embedded in the JSON/API handoff for the UI loader." : "Copy-ready source intake template: none",
+    "",
+    "Cada source necesita archivo de video, source URL real, owner/creator/rightsholder y proof de permiso/licencia/owned content.",
+    "",
+    "## Bloqueos actuales",
+    "",
+    ...handoff.blockers.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- Count: ${item.count}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+    ]),
+    "## Regla de go-live",
+    "",
+    "No activar publishing real hasta que Completion Audit diga ready y blocked sea 0.",
+  ].join("\n");
+}
+
+function renderRobertNextActionsCsv(summary: ClipperRobertNextActionsSummary): string {
+  const header = ["rank", "id", "lane", "status", "priority", "platform", "estimated_minutes", "label", "action_url", "portal_url", "artifact_path", "drop_dirs", "evidence_rows", "operator_steps", "blockers", "done_criteria", "next_step"];
+  const rows = summary.items.map((item) => [
+    String(item.rank),
+    item.id,
+    item.lane,
+    item.status,
+    item.priority,
+    item.platform,
+    String(item.estimatedMinutes),
+    item.label,
+    item.actionUrl || "",
+    item.portalUrl || "",
+    item.artifactPath || "",
+    item.dropDirs.join(" | "),
+    item.evidenceRows.join(" | "),
+    item.operatorSteps.join(" | "),
+    item.blockers.join(" | "),
+    item.doneCriteria.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+export async function prepareClipperRobertNextActions(userId = getSystemUserId()): Promise<{ robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = await buildRobertNextActionsSummary({
+    commandCenter: statusBefore.commandCenter,
+    ownerConnectPack: statusBefore.ownerConnectPack,
+    dropzoneReadyPack: statusBefore.dropzoneReadyPack,
+    launchEvidenceFixPack: statusBefore.launchEvidenceFixPack,
+    credentialSetup: statusBefore.credentialSetup,
+    officialPermissionMatrix: statusBefore.officialPermissionMatrix,
+    goLiveCompletionAudit: statusBefore.goLiveCompletionAudit,
+    externalExecutionSession: statusBefore.externalExecutionSession,
+    sourceSupplyDropKit: statusBefore.sourceSupplyDropKit,
+  });
+  const robertNextActions: ClipperRobertNextActionsSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+    status: statusBefore.goLiveCompletionAudit.readyToPublish
+      ? "ready"
+      : draftSummary.totals.critical > 0
+        ? "blocked"
+        : "needs_action",
+  };
+  await writeFile(ROBERT_NEXT_ACTIONS_PATH, JSON.stringify(robertNextActions, null, 2));
+  await writeFile(ROBERT_NEXT_ACTIONS_MARKDOWN_PATH, renderRobertNextActionsMarkdown(robertNextActions));
+  await writeFile(ROBERT_NEXT_ACTIONS_CSV_PATH, renderRobertNextActionsCsv(robertNextActions));
+  await writeFile(ROBERT_CONNECT_NOW_MARKDOWN_PATH, renderRobertConnectNowMarkdown(robertNextActions));
+  return { robertNextActions, status: await getClipperStatus(userId) };
+}
+
+function launchEvidenceFixCategory(reason: string): ClipperLaunchEvidenceFixPackItem["fixCategory"] {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("account evidence")) return "account_proof";
+  if (normalized.includes("permission notes")) return "permission_proof";
+  if (normalized.includes("public url") || normalized.includes("https")) return "public_url";
+  if (normalized.includes("source") || normalized.includes("rights")) return "source_rights";
+  return "format";
+}
+
+function launchEvidenceRequiredFix(item: ClipperLaunchEvidenceBatchRejectedItem): string {
+  const category = launchEvidenceFixCategory(item.reason);
+  if (category === "account_proof") return "Add real profile URL, handle, 2FA/proof note or screenshot/proof path in the notes column.";
+  if (category === "permission_proof") return "Add concrete portal proof: permission request/approval note, review ticket, screenshot/proof path or scope approval note.";
+  if (category === "public_url") return "Replace placeholder/local URL with a real public HTTPS production URL used in the platform app review.";
+  if (category === "source_rights") return "Add source rights proof: creator permission, license, owned-content note, proof URL/path and target source file.";
+  return "Fix row format, required columns or placeholder values, then rerun Launch Evidence Drop import.";
+}
+
+function launchEvidenceSuggestedNotes(item: ClipperLaunchEvidenceBatchRejectedItem): string {
+  const identifier = item.identifier && item.identifier !== "\"" ? item.identifier : "<platform/account/scope>";
+  const category = launchEvidenceFixCategory(item.reason);
+  if (category === "account_proof") return `${identifier} verified with profile URL <profile_url>, handle <handle>, 2FA enabled, proof stored at <proof_path_or_url>.`;
+  if (category === "permission_proof") return `${identifier} permission requested/approved in platform portal; review ticket <ticket_id>; proof stored at <proof_path_or_url>.`;
+  if (category === "public_url") return "Developer app uses public HTTPS URL <https://your-domain.example> for privacy/terms/redirect/app review proof.";
+  if (category === "source_rights") return `${identifier} source is owned/licensed/permissioned; rights proof <proof_path_or_url>; allowed for reposting and editing.`;
+  return "Replace placeholders with real evidence and keep secrets/tokens out of this row.";
+}
+
+function launchEvidenceSuggestedReplacementRow(item: ClipperLaunchEvidenceBatchRejectedItem): string {
+  const kind = item.kind || "<kind>";
+  const normalizedKind = kind.toLowerCase();
+  const isAccount = normalizedKind === "account" || normalizedKind === "account_evidence" || normalizedKind === "account_platform";
+  const isDeveloperApp = normalizedKind === "developer_app" || normalizedKind === "developer" || normalizedKind === "app";
+  const isPermission = normalizedKind === "permission" || normalizedKind === "scope" || normalizedKind === "app_review";
+  const isSourceRights = normalizedKind === "source_rights" || normalizedKind === "source" || normalizedKind === "rights" || normalizedKind === "source_asset";
+  const accountId = isAccount
+    ? item.accountId || item.identifier || "<account_id>"
+    : isSourceRights
+      ? item.assetId || item.sourcePath || item.fileName || item.identifier || "<asset_id_or_file_name>"
+      : "";
+  const platform = item.platform
+    || (isDeveloperApp && item.identifier && ["tiktok", "instagram", "youtube"].includes(item.identifier) ? item.identifier : "")
+    || (isAccount || isDeveloperApp || isPermission ? "<platform>" : "");
+  const status = item.status
+    || (isDeveloperApp ? "submitted" : isPermission ? "requested" : isSourceRights ? "owned_or_permissioned" : "verified");
+  const scope = isPermission ? item.scope || item.identifier || "<scope>" : "";
+  const appIdentifier = isDeveloperApp ? item.appIdentifier || "<app_identifier>" : "";
+  const publicBaseUrl = isDeveloperApp ? item.publicBaseUrl || "<https://your-domain.example>" : "";
+  return [kind, accountId, platform, status, scope, appIdentifier, publicBaseUrl, launchEvidenceSuggestedNotes(item)].map(csvCell).join(",");
+}
+
+async function buildCurrentStateLaunchEvidenceFixItems(startRank: number): Promise<ClipperLaunchEvidenceFixPackItem[]> {
+  const config = await readConfig();
+  const oauthConnections = await readOAuthConnections();
+  const tokenRecords = await readTokenVaultRecords();
+  const accounts = applyOAuthStateToAccounts(
+    (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape),
+    oauthConnections,
+    tokenRecords
+  );
+  const credentialChecks = buildCredentialChecks();
+  const permissionPack = await buildPermissionPackSummary();
+  const accountEvidence = await buildAccountEvidenceSummary(accounts);
+  const developerAppEvidence = await buildDeveloperAppEvidenceSummary();
+  const accountLaunchKit = await buildAccountLaunchKitSummary(accounts, accountEvidence);
+  const permissionTracker = await buildPermissionTrackerSummary({ accounts, credentialChecks, tokenRecords, oauthConnections, permissionPack, accountLaunchKit });
+  const importTarget = path.relative(process.cwd(), path.join(LAUNCH_EVIDENCE_DROP_DIR, "owner-connect-evidence.csv"));
+  const items: ClipperLaunchEvidenceFixPackItem[] = [];
+
+  for (const row of accountEvidence.quickBatchRows.filter((item) => item.status !== "verified")) {
+    const suggestedNotes = `${row.accountId}/${row.platform} verified with profile URL <profile_url>, handle ${row.handle}, 2FA enabled and proof stored at <proof_path_or_url>.`;
+    items.push({
+      id: hashId(`launch-evidence-state-account-${row.accountId}-${row.platform}-${row.status}`),
+      rank: startRank + items.length,
+      rowIndex: 0,
+      evidenceSource: "current_state_gap",
+      kind: "account",
+      identifier: `${row.accountId}/${row.platform}`,
+      reason: `Current state gap: account evidence is ${row.status}.`,
+      fixCategory: "account_proof",
+      requiredFix: row.requiredProof.join(" "),
+      suggestedNotes,
+      suggestedReplacementRow: ["account", row.accountId, row.platform, "verified", "", "", "", suggestedNotes].map(csvCell).join(","),
+      importTarget,
+    });
+  }
+
+  for (const item of developerAppEvidence.connectionKitItems.filter((app) => app.status !== "approved")) {
+    const publicBaseUrl = item.publicBaseUrl && !evidenceDropValueLooksPlaceholder(item.publicBaseUrl) ? item.publicBaseUrl : "<https://your-domain.example>";
+    const appIdentifier = item.appIdentifier && !evidenceDropValueLooksPlaceholder(item.appIdentifier) ? item.appIdentifier : `<${item.platform}_app_identifier>`;
+    const suggestedNotes = `${item.label} app approved/submitted in developer portal; app identifier ${appIdentifier}; redirect URI ${item.redirectUri}; proof stored at <proof_path_or_url>.`;
+    items.push({
+      id: hashId(`launch-evidence-state-developer-app-${item.platform}-${item.status}`),
+      rank: startRank + items.length,
+      rowIndex: 0,
+      evidenceSource: "current_state_gap",
+      kind: "developer_app",
+      identifier: item.platform,
+      reason: `Current state gap: developer app evidence is ${item.status}.`,
+      fixCategory: "developer_app",
+      requiredFix: "Record real developer portal evidence: app/project identifier, public HTTPS URL, redirect URI, app review/submission proof and no secrets.",
+      suggestedNotes,
+      suggestedReplacementRow: ["developer_app", "", item.platform, "approved", "", appIdentifier, publicBaseUrl, suggestedNotes].map(csvCell).join(","),
+      importTarget,
+    });
+  }
+
+  for (const item of permissionTracker.items.filter((permission) => permission.status !== "approved")) {
+    const suggestedNotes = `${item.platform}/${item.scope} permission requested/approved in platform portal; review ticket <ticket_id>; proof stored at <proof_path_or_url>.`;
+    items.push({
+      id: hashId(`launch-evidence-state-permission-${item.platform}-${item.scope}-${item.status}`),
+      rank: startRank + items.length,
+      rowIndex: 0,
+      evidenceSource: "current_state_gap",
+      kind: "permission",
+      identifier: `${item.platform}/${item.scope}`,
+      reason: `Current state gap: permission status is ${item.status}.`,
+      fixCategory: "permission_proof",
+      requiredFix: item.evidenceRequired.join(" "),
+      suggestedNotes,
+      suggestedReplacementRow: ["permission", "", item.platform, item.status === "approved" ? "approved" : "requested", item.scope, "", "", suggestedNotes].map(csvCell).join(","),
+      importTarget,
+    });
+  }
+
+  return items;
+}
+
+async function buildLaunchEvidenceFixPackSummary(localDropSyncInput?: ClipperLocalDropSyncSummary): Promise<ClipperLaunchEvidenceFixPackSummary> {
+  const localDropSync = localDropSyncInput || await buildLocalDropSyncSummary();
+  const generatedAt = await stat(LAUNCH_EVIDENCE_FIX_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const rejected = localDropSync.launchEvidenceDrop?.rejected || [];
+  const rejectedItems = rejected.map<ClipperLaunchEvidenceFixPackItem>((item, index) => {
+    const fixCategory = launchEvidenceFixCategory(item.reason);
+    return {
+      id: hashId(`launch-evidence-fix-${item.index}-${item.kind}-${item.identifier || index}`),
+      rank: index + 1,
+      rowIndex: item.index,
+      evidenceSource: "drop_rejected",
+      kind: item.kind,
+      identifier: item.identifier,
+      reason: item.reason,
+      fixCategory,
+      requiredFix: launchEvidenceRequiredFix(item),
+      suggestedNotes: launchEvidenceSuggestedNotes(item),
+      suggestedReplacementRow: launchEvidenceSuggestedReplacementRow(item),
+      importTarget: path.relative(process.cwd(), path.join(LAUNCH_EVIDENCE_DROP_DIR, "owner-connect-evidence.csv")),
+    };
+  });
+  const currentStateItems = await buildCurrentStateLaunchEvidenceFixItems(rejectedItems.length + 1);
+  const items = [...rejectedItems, ...currentStateItems];
+  const totals = items.reduce<ClipperLaunchEvidenceFixPackSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.fixCategory === "account_proof") sum.accountProof += 1;
+    if (item.fixCategory === "developer_app") sum.developerApps += 1;
+    if (item.fixCategory === "permission_proof") sum.permissionProof += 1;
+    if (item.fixCategory === "public_url") sum.publicUrl += 1;
+    if (item.fixCategory === "source_rights") sum.sourceRights += 1;
+    if (item.fixCategory === "format") sum.format += 1;
+    if (item.evidenceSource === "current_state_gap") sum.currentStateGaps += 1;
+    if (item.evidenceSource === "drop_rejected") sum.rejectedRows += 1;
+    return sum;
+  }, { items: 0, accountProof: 0, developerApps: 0, permissionProof: 0, publicUrl: 0, sourceRights: 0, format: 0, currentStateGaps: 0, rejectedRows: 0 });
+  return {
+    status: !generatedAt ? "not_prepared" : items.length ? "needs_fix" : "ready",
+    generatedAt,
+    manifestPath: LAUNCH_EVIDENCE_FIX_PACK_PATH,
+    markdownPath: LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH,
+    csvPath: LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH,
+    suggestedImportCsvPath: LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH,
+    sourceArtifacts: {
+      localDropSyncPath: localDropSync.markdownPath,
+      evidenceDropDir: LAUNCH_EVIDENCE_DROP_DIR,
+      ownerConnectEvidencePath: path.join(LAUNCH_EVIDENCE_DROP_DIR, "owner-connect-evidence.csv"),
+    },
+    items,
+    totals,
+    nextStep: items.length
+      ? "Fix rejected/missing launch evidence rows in evidence-drop, then rerun Local Drop Sync."
+      : localDropSync.launchEvidenceDrop
+        ? "Launch evidence drop and current state have no evidence fixes; continue credentials, sources and OAuth."
+        : "Run Local Drop Sync to import evidence and generate rejected/missing evidence fixes.",
+  };
+}
+
+function renderLaunchEvidenceFixPackMarkdown(summary: ClipperLaunchEvidenceFixPackSummary): string {
+  return [
+    "# Clippers Launch Evidence Fix Pack",
+    "",
+    "Safe correction queue for rejected launch evidence rows. It does not contain secrets, tokens or OAuth values.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || "pending"}`,
+    `Totals: ${summary.totals.items} items; ${summary.totals.rejectedRows} rejected rows; ${summary.totals.currentStateGaps} current-state gaps; ${summary.totals.accountProof} account proof; ${summary.totals.developerApps} developer apps; ${summary.totals.permissionProof} permission proof; ${summary.totals.publicUrl} public URL; ${summary.totals.sourceRights} source rights; ${summary.totals.format} format`,
+    `Suggested import CSV (safe template; ignored by Local Sync until completed and copied/renamed to owner-connect-evidence.csv): ${summary.suggestedImportCsvPath}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Artifacts",
+    "",
+    `- Local Drop Sync: ${summary.sourceArtifacts.localDropSyncPath}`,
+    `- Evidence drop dir: ${summary.sourceArtifacts.evidenceDropDir}`,
+    `- Owner connect evidence: ${summary.sourceArtifacts.ownerConnectEvidencePath}`,
+    `- Suggested import CSV (ignored by Local Sync until completed): ${summary.suggestedImportCsvPath}`,
+    "",
+    "## Fix Queue",
+    "",
+    ...(summary.items.length ? summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.evidenceSource === "drop_rejected" ? `Row ${item.rowIndex}` : "Current state"}: ${item.kind}${item.identifier ? ` / ${item.identifier}` : ""}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Source: ${item.evidenceSource}`,
+      `- Category: ${item.fixCategory}`,
+      `- Reason: ${item.reason}`,
+      `- Required fix: ${item.requiredFix}`,
+      `- Suggested notes: ${item.suggestedNotes}`,
+      `- Suggested replacement row: ${item.suggestedReplacementRow}`,
+      `- Import target: ${item.importTarget}`,
+      "",
+    ]) : ["No rejected launch evidence rows currently recorded."]),
+  ].join("\n");
+}
+
+function renderLaunchEvidenceFixPackCsv(summary: ClipperLaunchEvidenceFixPackSummary): string {
+  const header = ["rank", "row_index", "evidence_source", "kind", "identifier", "fix_category", "reason", "required_fix", "suggested_notes", "suggested_replacement_row", "import_target"];
+  const rows = summary.items.map((item) => [
+    String(item.rank),
+    String(item.rowIndex),
+    item.evidenceSource,
+    item.kind,
+    item.identifier || "",
+    item.fixCategory,
+    item.reason,
+    item.requiredFix,
+    item.suggestedNotes,
+    item.suggestedReplacementRow,
+    item.importTarget,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderLaunchEvidenceFixPackSuggestedImportCsv(summary: ClipperLaunchEvidenceFixPackSummary): string {
+  const header = "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes";
+  const rows = summary.items.map((item) => item.suggestedReplacementRow.trim()).filter(Boolean);
+  return [header, ...rows].join("\n") + "\n";
+}
+
+export async function prepareClipperLaunchEvidenceFixPack(userId = getSystemUserId()): Promise<{ launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const draftSummary = await buildLaunchEvidenceFixPackSummary();
+  const launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+    status: draftSummary.items.length ? "needs_fix" : "ready",
+  };
+  await writeFile(LAUNCH_EVIDENCE_FIX_PACK_PATH, JSON.stringify(launchEvidenceFixPack, null, 2));
+  await writeFile(LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH, renderLaunchEvidenceFixPackMarkdown(launchEvidenceFixPack));
+  await writeFile(LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH, renderLaunchEvidenceFixPackCsv(launchEvidenceFixPack));
+  await writeFile(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH, renderLaunchEvidenceFixPackSuggestedImportCsv(launchEvidenceFixPack));
+  return { launchEvidenceFixPack, status: await getClipperStatus(userId) };
+}
+
+function completionStatusFromReady(ready: boolean, progress: boolean): ClipperGoLiveCompletionRequirementStatus {
+  if (ready) return "verified";
+  return progress ? "needs_evidence" : "blocked";
+}
+
+function goLiveExternalTypesForRequirement(requirement: ClipperGoLiveCompletionRequirement): ClipperExternalSetupQueueItemType[] {
+  if (requirement.id === "accounts-created-verified") return ["account"];
+  if (requirement.id === "developer-apps-approved") return ["developer_app"];
+  if (requirement.id === "permissions-approved") return ["permission"];
+  if (requirement.id === "credentials-loaded") return ["credential"];
+  if (requirement.id === "production-url-compliance") return ["developer_app"];
+  if (requirement.id === "oauth-tokens-saved") return ["oauth"];
+  if (requirement.id === "publisher-connectors-ready") return ["oauth", "permission"];
+  if (requirement.phase === "accounts") return ["account"];
+  if (requirement.phase === "developer_apps") return ["developer_app"];
+  if (requirement.phase === "permissions") return ["permission"];
+  if (requirement.phase === "credentials") return ["credential"];
+  if (requirement.phase === "oauth") return ["oauth"];
+  return [];
+}
+
+function uniqueGoLiveStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => (value || "").trim()).filter(Boolean)));
+}
+
+function goLiveExternalLane(requirement: ClipperGoLiveCompletionRequirement, evidenceRows: string[], portalUrls: string[]): ClipperGoLiveCompletionExternalSessionItem["lane"] {
+  if (requirement.status === "verified") return "done";
+  if (requirement.blockers.length > 0 || portalUrls.length > 0) return "external_portal";
+  if (evidenceRows.length > 0 || requirement.status === "needs_evidence") return "evidence_upload";
+  return "verification";
+}
+
+function goLiveVerificationCommand(requirementId: string): string {
+  return `node --import tsx -e "import { prepareClipperGoLiveCompletionAudit } from './server/clippers-agent.ts'; const result = await prepareClipperGoLiveCompletionAudit(); console.log(result.goLiveCompletionAudit.requirements.find((item) => item.id === '${requirementId}')?.status)"`;
+}
+
+function goLiveEvidenceDropFileName(requirement: ClipperGoLiveCompletionRequirement): string {
+  return `${String(requirement.phase).replace(/_/g, "-")}-${warRoomSlug(requirement.id || requirement.label)}-evidence.md`;
+}
+
+function goLiveEvidenceDropPath(fileName: string): string {
+  return path.join(GO_LIVE_EVIDENCE_CAPTURE_DIR, fileName);
+}
+
+function goLiveEvidenceCaptureTemplate(input: {
+  requirement: ClipperGoLiveCompletionRequirement;
+  portalUrls: string[];
+  evidenceRows: string[];
+}): string {
+  return [
+    `# Clippers Evidence Capture - ${input.requirement.label}`,
+    "",
+    `Requirement ID: ${input.requirement.id}`,
+    `Phase: ${input.requirement.phase}`,
+    `Owner: ${input.requirement.owner}`,
+    `Status before capture: ${input.requirement.status}`,
+    "",
+    "## Portal / Proof",
+    "",
+    `Portal URL: ${input.portalUrls[0] || "<portal/review/proof URL>"}`,
+    "Proof link or screenshot path: <paste redacted proof URL/path>",
+    "External ticket/case/app/account id: <non-secret identifier>",
+    "Captured at: <ISO timestamp>",
+    "",
+    "## Required Evidence",
+    "",
+    ...input.requirement.requiredEvidence.map((evidence) => `- [ ] ${evidence}`),
+    "",
+    "## Evidence Rows To Complete",
+    "",
+    ...(input.evidenceRows.length ? input.evidenceRows.map((row) => `- ${row}`) : ["- <no launch evidence row for this requirement>"]),
+    "",
+    "## Notes",
+    "",
+    "- Do not paste passwords, client secrets, OAuth tokens, private keys, cookies, recovery codes or full phone/email values.",
+    "- Replace placeholders in evidence rows before importing Launch Evidence Batch.",
+    "- Re-run Go-Live Completion Audit after saving/importing proof.",
+    "",
+  ].join("\n");
+}
+
+function buildGoLiveCompletionExternalSession(input: {
+  requirements: ClipperGoLiveCompletionRequirement[];
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+}): ClipperGoLiveCompletionExternalSessionItem[] {
+  return input.requirements
+    .map((requirement, index) => {
+      const externalTypes = goLiveExternalTypesForRequirement(requirement);
+      const matchedExternalItems = input.externalExecutionSession.items.filter((item) => externalTypes.includes(item.type));
+      const evidenceRows = uniqueGoLiveStrings(matchedExternalItems.map((item) => item.evidenceRecipeRow || item.evidenceBatchRow));
+      const portalUrls = uniqueGoLiveStrings([
+        requirement.portalUrl,
+        requirement.actionUrl?.startsWith("http") ? requirement.actionUrl : null,
+        ...matchedExternalItems.flatMap((item) => [item.portalUrl, item.executionUrl]),
+      ]);
+      const evidenceDropFileName = goLiveEvidenceDropFileName(requirement);
+      const evidenceDropPath = goLiveEvidenceDropPath(evidenceDropFileName);
+
+      return {
+        id: `go-live-session-${requirement.id}`,
+        rank: index + 1,
+        requirementId: requirement.id,
+        label: requirement.label,
+        phase: requirement.phase,
+        status: requirement.status,
+        owner: requirement.owner,
+        lane: goLiveExternalLane(requirement, evidenceRows, portalUrls),
+        portalUrls,
+        actionUrl: requirement.actionUrl,
+        artifactPath: requirement.proofSource,
+        evidenceDropFileName,
+        evidenceDropPath,
+        evidenceCaptureTemplate: goLiveEvidenceCaptureTemplate({ requirement, portalUrls, evidenceRows }),
+        evidenceRows,
+        requiredEvidence: requirement.requiredEvidence,
+        blockers: requirement.blockers,
+        operatorSteps: uniqueGoLiveStrings([
+          portalUrls.length ? "Open the relevant external portal URL and complete the required account/app/scope action." : null,
+          requirement.actionUrl?.startsWith("/api/clippers/") ? `Run local action ${requirement.actionUrl} before external evidence review.` : null,
+          ...matchedExternalItems.slice(0, 4).flatMap((item) => [
+            item.label,
+            item.nextStep,
+            item.completionHint,
+          ]),
+          evidenceRows.length ? "Paste completed evidence rows into Launch Evidence Batch after replacing placeholders with real proof." : null,
+          "Re-run the go-live completion audit after evidence is saved.",
+        ]),
+        doneCriteria: requirement.requiredEvidence,
+        verificationCommand: goLiveVerificationCommand(requirement.id),
+        nextStep: requirement.nextStep,
+      };
+    });
+}
+
+function renderGoLiveCompletionExternalSessionCsv(items: ClipperGoLiveCompletionExternalSessionItem[]): string {
+  const header = ["rank", "id", "requirement_id", "lane", "phase", "status", "owner", "portal_urls", "action_url", "artifact_path", "evidence_drop_file_name", "evidence_drop_path", "evidence_capture_template", "required_evidence", "evidence_rows", "blockers", "operator_steps", "done_criteria", "verification_command", "next_step"];
+  return [
+    header.map(csvEscape).join(","),
+    ...items.map((item) => [
+      item.rank,
+      item.id,
+      item.requirementId,
+      item.lane,
+      item.phase,
+      item.status,
+      item.owner,
+      item.portalUrls.join(" | "),
+      item.actionUrl || "",
+      item.artifactPath,
+      item.evidenceDropFileName,
+      item.evidenceDropPath,
+      item.evidenceCaptureTemplate,
+      item.requiredEvidence.join(" | "),
+      item.evidenceRows.join(" | "),
+      item.blockers.join(" | "),
+      item.operatorSteps.join(" | "),
+      item.doneCriteria.join(" | "),
+      item.verificationCommand,
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+    "",
+  ].join("\n");
+}
+
+async function buildGoLiveCompletionAuditSummary(input: {
+  accounts: ClipperAccount[];
+  credentialChecks: ClipperCredentialCheck[];
+  tokenVault: ClipperTokenVaultSummary;
+  accountEvidence: ClipperAccountEvidenceSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+  productionUrlSetup: ClipperProductionUrlSetupSummary;
+  productionUrlVerification: ClipperProductionUrlVerificationSummary;
+  legalPolicyPack: ClipperLegalPolicyPackSummary;
+  appReviewDemoPack: ClipperAppReviewDemoPackSummary;
+  oauthConnectionPack: ClipperOAuthConnectionPackSummary;
+  oauthGoLive: ClipperOAuthGoLiveSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+  sourceAcquisition: ClipperSourceAcquisitionSummary;
+  productionQueue: ClipperProductionQueueSummary;
+  manualPostingPack: ClipperManualPostingPackSummary;
+  publishingPackage: ClipperPublishingPackageSummary;
+  automationSchedule: ClipperAutomationScheduleSummary;
+  automation: ClipperAutomationSummary;
+  metrics: ClipperMetricsSummary;
+  platformWarRoom: ClipperPlatformWarRoomSummary;
+  goLiveExecutionPack: ClipperGoLiveExecutionPackSummary;
+  externalExecutionSession: ClipperExternalExecutionSessionSummary;
+}): Promise<ClipperGoLiveCompletionAuditSummary> {
+  const totalPlatformAccounts = input.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
+  const dailyClipTarget = input.accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
+  const weeklyTargetClips = dailyClipTarget * 7;
+  const credentialReady = input.credentialChecks.filter((check) => check.status === "ready").length;
+  const credentialTotal = input.credentialChecks.length;
+  const tokenRecords = input.tokenVault.records.length;
+  const readyQueueItems = input.productionQueue.items.filter((item) => item.status === "draft_ready").length;
+  const productionUrlVerified = input.productionUrlSetup.productionUrlReady && input.productionUrlVerification.status === "pass";
+  const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
+  const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
+  const requirements: ClipperGoLiveCompletionRequirement[] = [
+    {
+      id: "accounts-created-verified",
+      label: "Real platform accounts created and verified",
+      phase: "accounts",
+      status: completionStatusFromReady(
+        input.accountEvidence.totals.verified >= input.accountEvidence.totals.expected && input.platformWarRoom.totals.accountConnectionsReady >= input.platformWarRoom.totals.accountConnections,
+        input.accountEvidence.totals.submitted > 0 || input.accountEvidence.totals.verified > 0,
+      ),
+      owner: "Account Ops",
+      requiredEvidence: [
+        "One verified account evidence row for every account/platform pair.",
+        "Real handle/profile URL or screenshot/proof note for each account.",
+        "2FA/recovery-code confirmation kept outside this repository.",
+      ],
+      currentEvidence: `${input.accountEvidence.totals.verified}/${input.accountEvidence.totals.expected} account evidence records verified; ${input.platformWarRoom.totals.accountConnectionsReady}/${input.platformWarRoom.totals.accountConnections} War Room account connections ready.`,
+      proofSource: input.accountEvidence.evidenceDir,
+      actionUrl: "/api/clippers/prepare-account-evidence-vault",
+      portalUrl: null,
+      blockers: input.platformWarRoom.accountConnectionRows.filter((row) => row.status !== "ready").slice(0, 5).map((row) => `${row.accountName}/${row.platform}: ${row.nextStep}`),
+      nextStep: input.accountEvidence.nextStep,
+    },
+    {
+      id: "developer-apps-approved",
+      label: "Developer apps created and approved",
+      phase: "developer_apps",
+      status: completionStatusFromReady(
+        input.developerAppEvidence.totals.approved >= input.developerAppEvidence.totals.expected,
+        input.developerAppEvidence.totals.submitted > 0 || input.developerAppEvidence.totals.approved > 0,
+      ),
+      owner: "Permission Ops",
+      requiredEvidence: [
+        "Approved developer app evidence for TikTok, Meta and Google/YouTube.",
+        "Non-secret app identifier and public HTTPS base URL recorded.",
+        "App review result or portal approval proof recorded without secrets.",
+      ],
+      currentEvidence: `${input.developerAppEvidence.totals.approved}/${input.developerAppEvidence.totals.expected} developer apps approved; ${input.developerAppEvidence.totals.missing} missing.`,
+      proofSource: input.developerAppEvidence.evidenceDir,
+      actionUrl: "/api/clippers/prepare-developer-app-evidence-vault",
+      portalUrl: null,
+      blockers: input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
+      nextStep: input.developerAppEvidence.nextStep,
+    },
+    {
+      id: "permissions-approved",
+      label: "Publishing permissions and scopes approved",
+      phase: "permissions",
+      status: completionStatusFromReady(
+        input.permissionTracker.totals.approved >= input.permissionTracker.totals.permissions && input.permissionTracker.totals.permissions > 0,
+        input.permissionTracker.totals.requested > 0 || input.permissionTracker.totals.approved > 0,
+      ),
+      owner: "Permission Ops",
+      requiredEvidence: [
+        "Requested/approved evidence rows for every publish scope.",
+        "Scope names match official docs and developer app configuration.",
+        "Approval ticket, portal status, or reviewer note captured without tokens.",
+      ],
+      currentEvidence: `${input.permissionTracker.totals.approved}/${input.permissionTracker.totals.permissions} permissions approved; ${input.permissionTracker.totals.blocked} blocked.`,
+      proofSource: input.permissionTracker.markdownPath,
+      actionUrl: "/api/clippers/prepare-permission-tracker",
+      portalUrl: null,
+      blockers: input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
+      nextStep: input.permissionTracker.nextStep,
+    },
+    {
+      id: "credentials-loaded",
+      label: "OAuth credentials loaded safely",
+      phase: "credentials",
+      status: completionStatusFromReady(
+        credentialReady >= credentialTotal && input.tokenVault.status !== "missing_key",
+        credentialReady > 0 || input.tokenVault.status !== "missing_key",
+      ),
+      owner: "Systems",
+      requiredEvidence: [
+        "Required env vars present for TikTok, Meta and Google/YouTube.",
+        "CLIPPERS_TOKEN_ENCRYPTION_KEY detected.",
+        "Credential Doctor reports no placeholder or missing runtime keys.",
+      ],
+      currentEvidence: `${credentialReady}/${credentialTotal} platform credential groups ready; token vault status ${input.tokenVault.status}.`,
+      proofSource: input.tokenVault.vaultPath,
+      actionUrl: "/api/clippers/prepare-credential-doctor",
+      portalUrl: null,
+      blockers: input.credentialChecks.filter((check) => check.status !== "ready").map((check) => `${check.label}: ${check.missingEnvVars.join(", ") || check.nextStep}`),
+      nextStep: input.credentialChecks.find((check) => check.status !== "ready")?.nextStep || input.tokenVault.nextStep,
+    },
+    {
+      id: "production-url-compliance",
+      label: "Public URL, legal pages and review demo verified",
+      phase: "public_url",
+      status: completionStatusFromReady(
+        productionUrlVerified && input.legalPolicyPack.status === "ready" && input.appReviewDemoPack.status === "ready",
+        input.productionUrlSetup.productionUrlReady || input.legalPolicyPack.generatedAt !== null || input.appReviewDemoPack.generatedAt !== null,
+      ),
+      owner: "Systems",
+      requiredEvidence: [
+        "PUBLIC_BASE_URL is public HTTPS, not localhost.",
+        "Privacy policy, terms and review demo URLs resolve from the public base URL.",
+        "Endpoint verification pass recorded for callback/legal/demo URLs.",
+      ],
+      currentEvidence: `Production URL ready=${input.productionUrlSetup.productionUrlReady}; verification=${input.productionUrlVerification.status}; legal=${input.legalPolicyPack.status}; demo=${input.appReviewDemoPack.status}.`,
+      proofSource: input.productionUrlVerification.markdownPath,
+      actionUrl: "/api/clippers/verify-production-url",
+      portalUrl: null,
+      blockers: [
+        ...input.productionUrlSetup.blockers,
+        ...input.productionUrlVerification.items.filter((item) => item.status !== "pass").map((item) => `${item.label}: ${item.evidence}`),
+        ...input.legalPolicyPack.blockers,
+        ...input.appReviewDemoPack.blockers,
+      ].slice(0, 8),
+      nextStep: input.productionUrlVerification.nextStep || input.productionUrlSetup.nextStep,
+    },
+    {
+      id: "oauth-tokens-saved",
+      label: "OAuth connected and tokens encrypted",
+      phase: "oauth",
+      status: completionStatusFromReady(
+        input.oauthConnectionPack.totals.ready >= input.oauthConnectionPack.totals.connections && input.oauthConnectionPack.totals.connections > 0 && tokenRecords >= 3,
+        input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0,
+      ),
+      owner: "Publisher",
+      requiredEvidence: [
+        "OAuth auth URL generated and completed for every platform/account connection.",
+        "No raw OAuth token appears in evidence or markdown.",
+        "Encrypted token vault contains saved records for required platforms.",
+      ],
+      currentEvidence: `${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} OAuth connections ready; ${input.oauthConnectionPack.totals.tokensSaved} connection tokens; ${tokenRecords} token vault records.`,
+      proofSource: input.oauthConnectionPack.markdownPath,
+      actionUrl: "/api/clippers/prepare-oauth-connection-pack",
+      portalUrl: null,
+      blockers: input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
+      nextStep: input.oauthConnectionPack.nextStep || input.oauthGoLive.nextStep,
+    },
+    {
+      id: "publisher-connectors-ready",
+      label: "Publishing connectors ready for guarded posting",
+      phase: "publishing",
+      status: completionStatusFromReady(
+        input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready",
+        input.publisherConnectors.status === "partial" || input.goLiveExecutionPack.status === "in_progress",
+      ),
+      owner: "Publisher",
+      requiredEvidence: [
+        "TikTok, Instagram and YouTube connector preflights pass.",
+        "Go-live phases are done for all platforms.",
+        "Publish gate is ready and manual approval mode is still respected for new accounts.",
+      ],
+      currentEvidence: `${input.publisherConnectors.totals.ready}/${input.publisherConnectors.totals.platforms} publisher connectors ready; go-live pack ${input.goLiveExecutionPack.status}.`,
+      proofSource: input.publisherConnectors.markdownPath,
+      actionUrl: "/api/clippers/prepare-publisher-connectors",
+      portalUrl: null,
+      blockers: input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
+      nextStep: input.publisherConnectors.nextStep || input.goLiveExecutionPack.nextStep,
+    },
+    {
+      id: "content-rights-supply",
+      label: "Weekly clip supply has source and rights coverage",
+      phase: "content_supply",
+      status: completionStatusFromReady(
+        input.sourceAcquisition.totals.weeklyReadySlots >= weeklyTargetClips && input.sourceAcquisition.totals.rightsReviewSlots === 0 && readyQueueItems >= dailyClipTarget,
+        input.sourceAcquisition.totals.weeklyReadySlots > 0 || input.sourceAcquisition.totals.sourceAssets > 0,
+      ),
+      owner: "Content Ops",
+      requiredEvidence: [
+        "Enough owned/licensed/permissioned source assets for the weekly clip target.",
+        "Rights review blockers cleared before drafts become publishable.",
+        "Daily queue has draft-ready slots for configured account volume.",
+      ],
+      currentEvidence: `${input.sourceAcquisition.totals.weeklyReadySlots}/${weeklyTargetClips} weekly ready slots; ${readyQueueItems}/${dailyClipTarget} daily draft-ready queue items; ${input.sourceAcquisition.totals.rightsReviewSlots} rights-review slots.`,
+      proofSource: input.sourceAcquisition.markdownPath,
+      actionUrl: "/api/clippers/prepare-source-acquisition",
+      portalUrl: null,
+      blockers: input.sourceAcquisition.categories.filter((category) => category.weeklyMissingSourceSlots > 0 || category.rightsReviewSlots > 0).map((category) => `${category.label}: ${category.nextStep}`),
+      nextStep: input.sourceAcquisition.nextStep,
+    },
+    {
+      id: "posting-packages-ready",
+      label: "Posting packages ready for review or scheduling",
+      phase: "publishing",
+      status: completionStatusFromReady(
+        input.manualPostingPack.totals.readyToPost >= dailyClipTarget && input.publishingPackage.totals.readyForManual >= dailyClipTarget,
+        input.manualPostingPack.totals.readyToPost > 0 || input.publishingPackage.totals.readyForManual > 0,
+      ),
+      owner: "Publisher",
+      requiredEvidence: [
+        "Manual posting pack has ready posts for the daily target.",
+        "Rendered clip publishing package includes captions, hooks and checklist.",
+        "Any account/source/rights blockers are resolved before scheduling.",
+      ],
+      currentEvidence: `${input.manualPostingPack.totals.readyToPost}/${dailyClipTarget} manual posts ready; ${input.publishingPackage.totals.readyForManual}/${dailyClipTarget} publishing package items ready.`,
+      proofSource: input.manualPostingPack.markdownPath,
+      actionUrl: "/api/clippers/prepare-manual-posting-pack",
+      portalUrl: null,
+      blockers: input.manualPostingPack.unblockSession.slice(0, 6).map((item) => `${item.accountName}/${item.platform}: ${item.nextStep}`),
+      nextStep: input.manualPostingPack.nextStep || input.publishingPackage.nextStep,
+    },
+    {
+      id: "automation-reporting-ready",
+      label: "Automation schedule, reporting and optimizer loop ready",
+      phase: "optimization",
+      status: completionStatusFromReady(
+        scheduledReady && automationRanClean && input.metrics.status === "ready",
+        input.automationSchedule.status === "prepared" || input.metrics.files.length > 0 || input.automation.lastRun !== null,
+      ),
+      owner: "Optimizer",
+      requiredEvidence: [
+        "Automation schedule prepared for at least 100 clips/week.",
+        "Daily run report exists with no blocking posts before autopost.",
+        "Metrics import is ready so the optimizer can improve hooks, timing and volume.",
+      ],
+      currentEvidence: `Schedule=${input.automationSchedule.status}, weeklyTarget=${input.automationSchedule.weeklyTargetClips}; automation=${input.automation.status}; metrics=${input.metrics.status}.`,
+      proofSource: input.automationSchedule.manifestPath,
+      actionUrl: "/api/clippers/prepare-automation-schedule",
+      portalUrl: null,
+      blockers: [
+        scheduledReady ? "" : "Automation schedule is not prepared for the 100 clips/week baseline.",
+        automationRanClean ? "" : input.automation.nextStep,
+        input.metrics.status === "ready" ? "" : input.metrics.nextStep,
+      ].filter(Boolean),
+      nextStep: scheduledReady && automationRanClean ? input.metrics.nextStep : input.automation.nextStep,
+    },
+  ];
+  const externalSession = buildGoLiveCompletionExternalSession({ requirements, externalExecutionSession: input.externalExecutionSession });
+  const totals = requirements.reduce<ClipperGoLiveCompletionAuditSummary["totals"]>((sum, requirement) => {
+    sum.requirements += 1;
+    if (requirement.status === "verified") sum.verified += 1;
+    if (requirement.status === "needs_evidence") sum.needsEvidence += 1;
+    if (requirement.status === "blocked") sum.blocked += 1;
+    if (requirement.blockers.length > 0 || requirement.status !== "verified") sum.externalRequired += 1;
+    return sum;
+  }, {
+    requirements: 0,
+    verified: 0,
+    needsEvidence: 0,
+    blocked: 0,
+    externalRequired: 0,
+    externalSessionItems: externalSession.length,
+    externalSessionPortalUrls: externalSession.reduce((sum, item) => sum + item.portalUrls.length, 0),
+    externalSessionEvidenceRows: externalSession.reduce((sum, item) => sum + item.evidenceRows.length, 0),
+  });
+  const readyToPublish = totals.verified === totals.requirements && totals.requirements > 0;
+  const generatedAt = await stat(GO_LIVE_COMPLETION_AUDIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const score = totals.requirements ? Math.round((totals.verified / totals.requirements) * 100) : 0;
+  return {
+    status: readyToPublish ? "ready" : totals.needsEvidence > 0 ? "partial" : "blocked",
+    generatedAt,
+    manifestPath: GO_LIVE_COMPLETION_AUDIT_PATH,
+    markdownPath: GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH,
+    externalSessionCsvPath: GO_LIVE_COMPLETION_EXTERNAL_SESSION_CSV_PATH,
+    readyToPublish,
+    score,
+    requirements,
+    externalSession,
+    totals,
+    nextStep: requirements.find((item) => item.status === "blocked")?.nextStep
+      || requirements.find((item) => item.status === "needs_evidence")?.nextStep
+      || "Go-live completion audit is fully verified; publish remains gated by manual approval controls.",
+  };
+}
+
+function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAuditSummary): string {
+  return [
+    "# Clippers Go-Live Completion Audit",
+    "",
+    `Status: ${summary.status}`,
+    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Score: ${summary.score}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.verified}/${summary.totals.requirements} verified, ${summary.totals.needsEvidence} needs_evidence, ${summary.totals.blocked} blocked`,
+    `External session: ${summary.totals.externalSessionItems} items, ${summary.totals.externalSessionPortalUrls} portal URLs, ${summary.totals.externalSessionEvidenceRows} evidence rows`,
+    `External session CSV: ${summary.externalSessionCsvPath}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Requirements",
+    "",
+    ...summary.requirements.flatMap((item) => [
+      `### ${item.label}`,
+      "",
+      `- ID: ${item.id}`,
+      `- Phase: ${item.phase}`,
+      `- Status: ${item.status}`,
+      `- Owner: ${item.owner}`,
+      `- Current evidence: ${item.currentEvidence}`,
+      `- Proof source: ${item.proofSource}`,
+      `- Action URL: ${item.actionUrl || "n/a"}`,
+      `- Portal URL: ${item.portalUrl || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "Required evidence:",
+      ...item.requiredEvidence.map((evidence) => `- [ ] ${evidence}`),
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+    ]),
+    "## External Go-Live Session",
+    "",
+    ...summary.externalSession.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- Requirement ID: ${item.requirementId}`,
+      `- Phase: ${item.phase}`,
+      `- Status: ${item.status}`,
+      `- Lane: ${item.lane}`,
+      `- Owner: ${item.owner}`,
+      `- Artifact: ${item.artifactPath}`,
+      `- Evidence drop file: ${item.evidenceDropFileName}`,
+      `- Evidence drop path: ${item.evidenceDropPath}`,
+      `- Action URL: ${item.actionUrl || "n/a"}`,
+      item.portalUrls.length ? "Portal URLs:" : "Portal URLs: none",
+      ...item.portalUrls.map((url) => `- ${url}`),
+      item.operatorSteps.length ? "Operator steps:" : "Operator steps: none",
+      ...item.operatorSteps.map((step) => `- ${step}`),
+      item.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...item.evidenceRows.map((row) => `- ${row}`),
+      "Evidence capture template:",
+      "```md",
+      item.evidenceCaptureTemplate.trim(),
+      "```",
+      "Verification:",
+      `- ${item.verificationCommand}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeGoLiveEvidenceCaptureTemplates(items: ClipperGoLiveCompletionExternalSessionItem[]) {
+  await mkdir(GO_LIVE_EVIDENCE_CAPTURE_DIR, { recursive: true });
+  await Promise.all(items.map((item) =>
+    writeFile(item.evidenceDropPath, item.evidenceCaptureTemplate.trimEnd() + "\n")
+  ));
+  await writeFile(path.join(GO_LIVE_EVIDENCE_CAPTURE_DIR, "README.md"), [
+    "# Clippers Go-Live Proof Templates",
+    "",
+    "Rellena estos archivos despues de crear cuentas, apps, permisos, OAuth, videos fuente o pruebas de publicacion.",
+    "",
+    "Reglas:",
+    "",
+    "- No pegues passwords, client secrets, OAuth tokens, cookies, recovery codes ni datos completos de telefono/email.",
+    "- Usa URLs de portal, ticket/case ID, screenshot/proof path o notas redacted.",
+    "- Despues de rellenar evidencia real, importa las rows sugeridas desde Launch Evidence Batch y corre Completion Audit otra vez.",
+    "",
+    "Archivos:",
+    "",
+    ...items.map((item) => `- ${item.evidenceDropFileName}: ${item.label}`),
+    "",
+  ].join("\n"));
+}
+
+function operatorBriefLaneStatus(done: number, total: number, blockers: string[]): ClipperGoLiveOperatorBriefStatus {
+  if (total > 0 && done >= total && blockers.length === 0) return "ready";
+  if (done > 0 || blockers.length === 0) return "needs_action";
+  return "blocked";
+}
+
+async function buildGoLiveOperatorBriefSummary(input: {
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  platformWarRoom: ClipperPlatformWarRoomSummary;
+  credentialSetup: ClipperCredentialSetupSummary;
+  sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
+  productionUrlVerification: ClipperProductionUrlVerificationSummary;
+  oauthConnectionPack: ClipperOAuthConnectionPackSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+}): Promise<ClipperGoLiveOperatorBriefSummary> {
+  const accountSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "accounts-created-verified");
+  const credentialSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "credentials-loaded");
+  const publicUrlSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "production-url-compliance");
+  const contentSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "content-rights-supply");
+  const oauthSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "oauth-tokens-saved");
+  const publishSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "publisher-connectors-ready");
+
+  const lanes: ClipperGoLiveOperatorBriefLane[] = [
+    {
+      id: "accounts",
+      label: "Cuentas + permisos",
+      status: operatorBriefLaneStatus(input.platformWarRoom.totals.accountConnectionsReady + input.platformWarRoom.totals.permissionApprovalsApproved, input.platformWarRoom.totals.accountConnections + input.platformWarRoom.totals.permissionApprovals, accountSession?.blockers || []),
+      owner: "Operator",
+      priority: "critical",
+      done: input.platformWarRoom.totals.accountConnectionsReady + input.platformWarRoom.totals.permissionApprovalsApproved,
+      total: input.platformWarRoom.totals.accountConnections + input.platformWarRoom.totals.permissionApprovals,
+      artifactPath: input.platformWarRoom.markdownPath,
+      actionUrl: "/api/clippers/prepare-platform-portal-checklist",
+      portalUrls: Array.from(new Set(input.platformWarRoom.items.flatMap((item) => item.portalUrls).filter(Boolean))).slice(0, 6),
+      evidenceRows: input.platformWarRoom.accountConnectionRows.map((row) => row.accountEvidenceRow),
+      blockers: [
+        ...input.platformWarRoom.accountConnectionRows.filter((row) => row.status !== "ready").slice(0, 3).map((row) => `${row.accountName}/${row.platform}: ${row.nextStep}`),
+        ...input.platformWarRoom.permissionApprovalRows.filter((row) => row.status !== "approved").slice(0, 3).map((row) => `${row.platform}/${row.scope}: ${row.nextStep}`),
+      ],
+      checklist: [
+        "Crear/verificar las 9 cuentas externas con 2FA.",
+        "Registrar evidencia verified por cuenta en Launch Evidence Batch.",
+        "Solicitar permisos oficiales y registrar requested/approved por scope.",
+      ],
+      nextStep: accountSession?.nextStep || input.platformWarRoom.nextStep,
+    },
+    {
+      id: "credentials",
+      label: "Keys + secrets",
+      status: input.credentialSetup.credentialDropDiagnostic.totals.importEligible > 0 ? "needs_action" : input.credentialSetup.totals.ready >= input.credentialSetup.totals.items ? "ready" : "blocked",
+      owner: "Operator",
+      priority: "critical",
+      done: input.credentialSetup.totals.ready,
+      total: input.credentialSetup.totals.items,
+      artifactPath: input.credentialSetup.credentialDropDiagnosticMarkdownPath,
+      actionUrl: "/api/clippers/prepare-credential-setup",
+      portalUrls: input.credentialSetup.items.map((item) => item.docsUrl).filter(Boolean).slice(0, 6),
+      evidenceRows: [],
+      blockers: input.credentialSetup.items.filter((item) => item.status !== "ready").slice(0, 6).map((item) => `${item.label}: ${item.nextStep}`),
+      checklist: [
+        "Poner .env/JSON en credentials/ o secrets/.",
+        "Importar solo env vars permitidas, sin exponer valores en reportes.",
+        "Correr doctor y verificar que TikTok, Meta y Google queden ready.",
+      ],
+      nextStep: credentialSession?.nextStep || input.credentialSetup.credentialDropDiagnostic.nextStep,
+    },
+    {
+      id: "public_url",
+      label: "URL publica + DNS",
+      status: input.productionUrlVerification.status === "pass" ? "ready" : input.productionUrlVerification.status === "blocked" || input.productionUrlVerification.status === "not_run" ? "blocked" : "needs_action",
+      owner: "Infrastructure",
+      priority: "high",
+      done: input.productionUrlVerification.status === "pass" ? 1 : 0,
+      total: 1,
+      artifactPath: input.productionUrlVerification.markdownPath,
+      actionUrl: "/api/clippers/verify-production-url",
+      portalUrls: [],
+      evidenceRows: [],
+      blockers: input.productionUrlVerification.items.filter((item) => item.status !== "pass").slice(0, 5).map((item) => `${item.label}: ${item.error || item.evidence || item.status}`),
+      checklist: [
+        "Apuntar DNS de dominio publico al host correcto.",
+        "Verificar /clippers, politicas legales y OAuth callbacks.",
+        "Usar la misma URL en developer apps antes de app review.",
+      ],
+      nextStep: publicUrlSession?.nextStep || input.productionUrlVerification.nextStep,
+    },
+    {
+      id: "content_supply",
+      label: "Videos fuente + derechos",
+      status: input.sourceDropDiagnostic.totals.missingSourceAssets === 0 ? "ready" : input.sourceDropDiagnostic.totals.importEligible > 0 ? "needs_action" : "blocked",
+      owner: "Content Ops",
+      priority: "critical",
+      done: input.sourceDropDiagnostic.totals.rightsReadyAssets,
+      total: input.sourceDropDiagnostic.totals.minimumWeeklySourceAssets,
+      artifactPath: input.sourceDropDiagnostic.markdownPath,
+      actionUrl: "/api/clippers/import-source-drop",
+      portalUrls: [],
+      evidenceRows: [],
+      blockers: input.sourceDropDiagnostic.categories.filter((category) => category.missingSourceAssets > 0).map((category) => `${category.label}: faltan ${category.missingSourceAssets} assets`),
+      checklist: [
+        "Subir videos reales a source-drop/sports, source-drop/memes o source-drop/streamers.",
+        "Agregar evidencia de derechos antes de publicar.",
+        "Importar source drop y regenerar production queue.",
+      ],
+      nextStep: contentSession?.nextStep || input.sourceDropDiagnostic.nextStep,
+    },
+    {
+      id: "oauth_publish",
+      label: "OAuth + publish",
+      status: operatorBriefLaneStatus(input.oauthConnectionPack.totals.ready + input.publisherConnectors.totals.ready, input.oauthConnectionPack.totals.connections + input.publisherConnectors.totals.platforms, [...(oauthSession?.blockers || []), ...(publishSession?.blockers || [])]),
+      owner: "Publisher",
+      priority: "high",
+      done: input.oauthConnectionPack.totals.ready + input.publisherConnectors.totals.ready,
+      total: input.oauthConnectionPack.totals.connections + input.publisherConnectors.totals.platforms,
+      artifactPath: input.oauthConnectionPack.markdownPath,
+      actionUrl: "/api/clippers/prepare-oauth-connection-pack",
+      portalUrls: input.oauthConnectionPack.items.flatMap((item) => item.authUrl ? [item.authUrl] : []).slice(0, 6),
+      evidenceRows: [],
+      blockers: [
+        ...input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 4).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
+        ...input.publisherConnectors.items.filter((item) => item.status !== "ready").slice(0, 3).flatMap((item) => item.blockers.map((blocker) => `${item.platform}: ${blocker}`)),
+      ],
+      checklist: [
+        "Completar OAuth por cuenta/plataforma despues de keys, app review y permisos.",
+        "Guardar tokens cifrados en Token Vault.",
+        "Mantener approval_required hasta que las cuentas nuevas prueben calidad y riesgo.",
+      ],
+      nextStep: oauthSession?.nextStep || publishSession?.nextStep || input.oauthConnectionPack.nextStep,
+    },
+  ];
+
+  const totals = lanes.reduce<ClipperGoLiveOperatorBriefSummary["totals"]>((sum, lane) => {
+    sum.lanes += 1;
+    if (lane.status === "ready") sum.ready += 1;
+    if (lane.status === "needs_action") sum.needsAction += 1;
+    if (lane.status === "blocked") sum.blocked += 1;
+    sum.portalUrls += lane.portalUrls.length;
+    sum.evidenceRows += lane.evidenceRows.length;
+    return sum;
+  }, {
+    lanes: 0,
+    ready: 0,
+    needsAction: 0,
+    blocked: 0,
+    portalUrls: 0,
+    evidenceRows: 0,
+    accountConnectionsReady: input.platformWarRoom.totals.accountConnectionsReady,
+    accountConnectionsTotal: input.platformWarRoom.totals.accountConnections,
+    credentialFiles: input.credentialSetup.credentialDropDiagnostic.totals.files,
+    sourceAssetsMissing: input.sourceDropDiagnostic.totals.missingSourceAssets,
+  });
+  const status: ClipperGoLiveOperatorBriefStatus = totals.blocked > 0 ? "blocked" : totals.needsAction > 0 ? "needs_action" : "ready";
+  const currentFocus = lanes.find((lane) => lane.status === "blocked")?.label || lanes.find((lane) => lane.status === "needs_action")?.label || "Ready for guarded publish";
+  const generatedAt = await stat(GO_LIVE_OPERATOR_BRIEF_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status,
+    generatedAt,
+    manifestPath: GO_LIVE_OPERATOR_BRIEF_PATH,
+    markdownPath: GO_LIVE_OPERATOR_BRIEF_MARKDOWN_PATH,
+    currentFocus,
+    lanes,
+    totals,
+    nextStep: lanes.find((lane) => lane.status === "blocked")?.nextStep || lanes.find((lane) => lane.status === "needs_action")?.nextStep || "Todo el brief esta listo; mantener approval_required y monitorear analytics.",
+  };
+}
+
+function renderGoLiveOperatorBriefMarkdown(summary: ClipperGoLiveOperatorBriefSummary): string {
+  return [
+    "# Clippers Go-Live Operator Brief",
+    "",
+    `Status: ${summary.status}`,
+    `Current focus: ${summary.currentFocus}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Totals: ${summary.totals.ready}/${summary.totals.lanes} lanes ready, ${summary.totals.needsAction} needs_action, ${summary.totals.blocked} blocked`,
+    `Account connections: ${summary.totals.accountConnectionsReady}/${summary.totals.accountConnectionsTotal}`,
+    `Credential files detected: ${summary.totals.credentialFiles}`,
+    `Missing source assets: ${summary.totals.sourceAssetsMissing}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Lanes",
+    "",
+    ...summary.lanes.flatMap((lane) => [
+      `### ${lane.label}`,
+      "",
+      `- ID: ${lane.id}`,
+      `- Status: ${lane.status}`,
+      `- Owner: ${lane.owner}`,
+      `- Priority: ${lane.priority}`,
+      `- Progress: ${lane.done}/${lane.total}`,
+      `- Artifact: ${lane.artifactPath}`,
+      `- Action URL: ${lane.actionUrl || "n/a"}`,
+      `- Next step: ${lane.nextStep}`,
+      lane.portalUrls.length ? "Portal URLs:" : "Portal URLs: none",
+      ...lane.portalUrls.map((url) => `- ${url}`),
+      lane.checklist.length ? "Checklist:" : "Checklist: none",
+      ...lane.checklist.map((step) => `- [ ] ${step}`),
+      lane.blockers.length ? "Blockers:" : "Blockers: none",
+      ...lane.blockers.map((blocker) => `- ${blocker}`),
+      lane.evidenceRows.length ? "Evidence rows:" : "Evidence rows: none",
+      ...lane.evidenceRows.slice(0, 12).map((row) => `- ${row}`),
+      lane.evidenceRows.length > 12 ? `- ...${lane.evidenceRows.length - 12} more rows` : "",
+      "",
+    ]),
+  ].filter((line) => line !== "").join("\n");
+}
+
+async function writeGoLiveOperatorBriefManifest(summary: ClipperGoLiveOperatorBriefSummary) {
+  const generatedAt = new Date().toISOString();
+  const manifest: ClipperGoLiveOperatorBriefSummary = { ...summary, generatedAt };
+  await writeFile(GO_LIVE_OPERATOR_BRIEF_PATH, JSON.stringify(manifest, null, 2));
+  await writeFile(GO_LIVE_OPERATOR_BRIEF_MARKDOWN_PATH, renderGoLiveOperatorBriefMarkdown(manifest));
+  return manifest;
+}
+
+export async function prepareClipperGoLiveCompletionAudit(userId = getSystemUserId()): Promise<{ goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary = {
+    ...statusBefore.goLiveCompletionAudit,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(GO_LIVE_COMPLETION_AUDIT_PATH, JSON.stringify(goLiveCompletionAudit, null, 2));
+  await writeFile(GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH, renderGoLiveCompletionAuditMarkdown(goLiveCompletionAudit));
+  await writeFile(GO_LIVE_COMPLETION_EXTERNAL_SESSION_CSV_PATH, renderGoLiveCompletionExternalSessionCsv(goLiveCompletionAudit.externalSession));
+  await writeGoLiveEvidenceCaptureTemplates(goLiveCompletionAudit.externalSession);
+  const statusAfterAudit = await getClipperStatus(userId);
+  await writeGoLiveOperatorBriefManifest(statusAfterAudit.goLiveOperatorBrief);
+  return { goLiveCompletionAudit, status: await getClipperStatus(userId) };
+}
+
+export async function prepareClipperGoLiveOperatorBrief(userId = getSystemUserId()): Promise<{ goLiveOperatorBrief: ClipperGoLiveOperatorBriefSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const goLiveOperatorBrief = await writeGoLiveOperatorBriefManifest(statusBefore.goLiveOperatorBrief);
+  return { goLiveOperatorBrief, status: await getClipperStatus(userId) };
+}
+
+async function writeTextFileAtomic(filePath: string, contents: string) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomBytes(4).toString("hex")}.tmp`;
+  await writeFile(tempPath, contents);
+  await rename(tempPath, filePath);
+}
+
 async function writeLaunchCommandCenterManifest(summary: ClipperLaunchCommandCenterSummary) {
   const generatedAt = new Date().toISOString();
   const manifest: ClipperLaunchCommandCenterSummary = { ...summary, generatedAt };
-  await writeFile(LAUNCH_COMMAND_CENTER_PATH, JSON.stringify(manifest, null, 2));
-  await writeFile(LAUNCH_COMMAND_CENTER_MARKDOWN_PATH, renderLaunchCommandCenterMarkdown(manifest));
+  await writeTextFileAtomic(LAUNCH_COMMAND_CENTER_PATH, JSON.stringify(manifest, null, 2));
+  await writeTextFileAtomic(LAUNCH_COMMAND_CENTER_MARKDOWN_PATH, renderLaunchCommandCenterMarkdown(manifest));
   return manifest;
 }
 
@@ -17980,16 +29825,21 @@ export async function prepareClipperLaunchCommandCenter(userId = getSystemUserId
   await prepareClipperIntakeKit(userId);
   await prepareClipperProductionQueue(userId);
   await prepareClipperSourceAcquisitionPlan(userId);
+  await prepareClipperSourceSupplyDropKit(userId);
   await prepareClipperViralDiscoveryPack({}, userId);
   await prepareClipperSourceHuntSheet({}, userId);
   await prepareClipperRightsOutreachPack(userId);
   await prepareClipperManualPostingPack(userId);
   await prepareClipperPublishingPackage(userId);
+  await prepareClipperPublisherExecutionQueue(userId);
   await prepareClipperGoLiveExecutionPack(userId);
   await prepareClipperPlatformPortalChecklist(userId);
+  await prepareClipperGoLiveEvidenceBundle(userId);
+  await prepareClipperLaunchEvidenceFixPack(userId);
   await ingestClipperTrends(userId);
   await prepareClipperTrendRightsOutreachPack(userId);
   await ingestClipperMetrics(userId);
+  await prepareClipperAnalyticsReportingPack(userId);
   await prepareClipperAutomationSchedule(scheduleInput, userId);
 
   const statusBeforeManifest = await getClipperStatus(userId);
@@ -18035,6 +29885,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const permissionPack = await buildPermissionPackSummary();
   const productionQueue = await buildProductionQueueSummary(accounts);
   const sourceAcquisition = await buildSourceAcquisitionSummary(accounts, productionQueue);
+  const sourceDropDiagnostic = await buildSourceDropDiagnosticSummary({ sourceAcquisition, productionQueue });
+  const sourceSupplyDropKit = await buildSourceSupplyDropKitSummary(sourceAcquisition);
   const sourceHunt = await readLatestSourceHuntSummary() || buildSourceHuntSummary(productionQueue, new Date().toISOString().slice(0, 10));
   const rightsOutreach = await buildRightsOutreachSummary(sourceHunt);
   const draftSpecs = await buildDraftSpecsSummary(productionQueue);
@@ -18042,6 +29894,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const automationSchedule = await buildAutomationScheduleSummary(accounts);
   const driveWorkspace = await buildDriveWorkspaceSummary();
   const metrics = await buildMetricsSummary(accounts);
+  const analyticsReportingPack = await buildAnalyticsReportingPackSummary(accounts, metrics, automationSchedule);
   const trendRadar = await buildTrendRadarSummary();
   const trendRightsOutreach = await buildTrendRightsOutreachSummary(trendRadar);
   const viralDiscovery = await buildViralDiscoverySummary();
@@ -18060,6 +29913,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const externalSetupQueue = await buildExternalSetupQueueSummary({ accountLaunchKit, developerAppEvidence, permissionTracker, credentialChecks, connectActions, tokenRecords });
   const officialPermissionMatrix = await buildOfficialPermissionMatrixSummary();
   const publisherConnectors = await buildPublisherConnectorSummary({ tokenRecords, permissionTracker, platformReadiness, productionQueue });
+  const publisherExecutionQueue = await readPublisherExecutionQueueSummary();
   const productionUrlSetup = await buildProductionUrlSetupSummary();
   const productionUrlVerification = await buildProductionUrlVerificationSummary(productionUrlSetup);
   const httpsTunnelPlan = await buildHttpsTunnelPlanSummary();
@@ -18074,13 +29928,111 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack });
   const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const publishingPackage = await buildPublishingPackageSummary(accounts);
-  const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
-  const commandCenter = await buildLaunchCommandCenterSummary({ accounts, credentialChecks, tokenVault, credentialSetup, credentialDoctor, platformReadiness, permissionPack, productionQueue, sourceAcquisition, sourceHunt, rightsOutreach, draftSpecs, manualPostingPack, publishingPackage, automation, automationSchedule, driveWorkspace, metrics, trendRadar, trendRightsOutreach, intakeKit, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, accountCreationPack, permissionTracker, permissionRequestPack, oauthConnectionPack, externalSetupQueue, externalLaunchDossier, platformPortalChecklist, appReviewSubmissionPack, appReviewDemoPack, developerApplicationDrafts, officialPermissionMatrix, publisherConnectors, productionUrlSetup, productionUrlVerification, httpsTunnelPlan, legalPolicyPack, oauthGoLive, goLiveExecutionPack });
+  const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, analyticsReportingPack, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
+  const commandCenter = await buildLaunchCommandCenterSummary({ accounts, credentialChecks, tokenVault, credentialSetup, credentialDoctor, platformReadiness, permissionPack, productionQueue, sourceAcquisition, sourceSupplyDropKit, sourceHunt, rightsOutreach, draftSpecs, manualPostingPack, publishingPackage, automation, automationSchedule, driveWorkspace, metrics, analyticsReportingPack, trendRadar, trendRightsOutreach, intakeKit, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, accountCreationPack, permissionTracker, permissionRequestPack, oauthConnectionPack, externalSetupQueue, externalLaunchDossier, platformPortalChecklist, appReviewSubmissionPack, appReviewDemoPack, developerApplicationDrafts, officialPermissionMatrix, publisherConnectors, publisherExecutionQueue, productionUrlSetup, productionUrlVerification, httpsTunnelPlan, legalPolicyPack, oauthGoLive, goLiveExecutionPack });
   const blockerResolutionPack = await buildBlockerResolutionPackSummary({ commandCenter, growthAudit });
   const goLiveAutopilotBrief = await buildGoLiveAutopilotBriefSummary({ blockerResolutionPack, externalLaunchDossier, goLiveExecutionPack, driveWorkspace, viralDiscovery, trendRightsOutreach });
   const goLiveAutopilotRun = await buildGoLiveAutopilotRunSummary();
+  const launchEvidenceDropDiagnostic = await writeLaunchEvidenceDropDiagnosticArtifacts(await buildLaunchEvidenceDropDiagnosticSummary());
+  const localDropSyncDraft = await buildLocalDropSyncSummary();
+  const localDropSync: ClipperLocalDropSyncSummary = {
+    ...localDropSyncDraft,
+    missingInputs: buildLocalDropSyncMissingInputs(localDropSyncDraft.items, {
+      launchEvidenceDropDiagnostic,
+      sourceDropDiagnostic,
+    }),
+  };
+  const launchEvidenceFixPack = await buildLaunchEvidenceFixPackSummary(localDropSync);
+  const goLivePrepSweep = await buildGoLivePrepSweepSummary();
   const externalExecutionHandoff = await buildExternalExecutionHandoffSummary({ externalSetupQueue, goLiveAutopilotBrief });
   const externalExecutionSession = await buildExternalExecutionSessionSummary({ externalExecutionHandoff });
+  const ownerConnectPack = await buildOwnerConnectPackSummary({
+    accountCreationPack,
+    developerApplicationDrafts,
+    permissionRequestPack,
+    externalExecutionSession,
+    officialPermissionMatrix,
+    localDropSync,
+    credentialDoctor,
+  });
+  const accountSetupSession = await buildAccountSetupSessionSummary({
+    accountCreationPack,
+    accountEvidence,
+    ownerConnectPack,
+  });
+  const platformWarRoom = buildPlatformWarRoomSummary({
+    accountLaunchKit,
+    developerAppEvidence,
+    permissionTracker,
+    permissionRequestPack,
+    credentialChecks,
+    connectActions,
+    tokenRecords,
+    oauthConnections,
+    externalExecutionSession,
+  });
+  const goLiveEvidenceBundle = await buildGoLiveEvidenceBundleSummary({ platformWarRoom, developerAppEvidence });
+  const permissionSubmissionDossier = await buildPermissionSubmissionDossierSummary({
+    permissionRequestPack,
+    officialPermissionMatrix,
+    developerApplicationDrafts,
+    goLiveEvidenceBundle,
+  });
+  const dropzoneReadyPack = await buildDropzoneReadyPackSummary({
+    localDropSync,
+    credentialSetup,
+    credentialDoctor,
+    goLiveEvidenceBundle,
+    ownerConnectPack,
+    launchEvidenceDropDiagnostic,
+    sourceDropDiagnostic,
+    sourceSupplyDropKit,
+  });
+  const goLiveCompletionAudit = await buildGoLiveCompletionAuditSummary({
+    accounts,
+    credentialChecks,
+    tokenVault,
+    accountEvidence,
+    developerAppEvidence,
+    permissionTracker,
+    productionUrlSetup,
+    productionUrlVerification,
+    legalPolicyPack,
+    appReviewDemoPack,
+    oauthConnectionPack,
+    oauthGoLive,
+    publisherConnectors,
+    sourceAcquisition,
+    productionQueue,
+    manualPostingPack,
+    publishingPackage,
+    automationSchedule,
+    automation,
+    metrics,
+    platformWarRoom,
+    goLiveExecutionPack,
+    externalExecutionSession,
+  });
+  const goLiveOperatorBrief = await buildGoLiveOperatorBriefSummary({
+    goLiveCompletionAudit,
+    platformWarRoom,
+    credentialSetup,
+    sourceDropDiagnostic,
+    productionUrlVerification,
+    oauthConnectionPack,
+    publisherConnectors,
+  });
+  const robertNextActions = await buildRobertNextActionsSummary({
+    commandCenter,
+    ownerConnectPack,
+    dropzoneReadyPack,
+    launchEvidenceFixPack,
+    credentialSetup,
+    officialPermissionMatrix,
+    goLiveCompletionAudit,
+    externalExecutionSession,
+    sourceSupplyDropKit,
+  });
 
   return {
     rootDir: ROOT_DIR,
@@ -18099,7 +30051,9 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     platformReadiness,
     permissionPack,
     productionQueue,
+    sourceDropDiagnostic,
     sourceAcquisition,
+    sourceSupplyDropKit,
     sourceHunt,
     rightsOutreach,
     draftSpecs,
@@ -18109,6 +30063,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     automationSchedule,
     driveWorkspace,
     metrics,
+    analyticsReportingPack,
     trendRadar,
     trendRightsOutreach,
     viralDiscovery,
@@ -18117,6 +30072,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     accountIdentityKit,
     accountLaunchKit,
     accountCreationPack,
+    accountSetupSession,
     accountEvidence,
     developerAppEvidence,
     permissionTracker,
@@ -18124,13 +30080,16 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     externalSetupQueue,
     externalExecutionHandoff,
     externalExecutionSession,
+    platformWarRoom,
     externalLaunchDossier,
     platformPortalChecklist,
     appReviewSubmissionPack,
     appReviewDemoPack,
     developerApplicationDrafts,
     officialPermissionMatrix,
+    permissionSubmissionDossier,
     publisherConnectors,
+    publisherExecutionQueue,
     productionUrlSetup,
     productionUrlVerification,
     httpsTunnelPlan,
@@ -18138,10 +30097,20 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     oauthGoLive,
     oauthConnectionPack,
     goLiveExecutionPack,
+    goLiveCompletionAudit,
+    goLiveOperatorBrief,
+    goLiveEvidenceBundle,
     commandCenter,
     blockerResolutionPack,
     goLiveAutopilotBrief,
     goLiveAutopilotRun,
+    localDropSync,
+    goLivePrepSweep,
+    ownerConnectPack,
+    dropzoneReadyPack,
+    launchEvidenceDropDiagnostic,
+    robertNextActions,
+    launchEvidenceFixPack,
     growthAudit,
     platformRequirements: PLATFORM_REQUIREMENTS,
     permissionQueue: PERMISSION_QUEUE,
@@ -18168,7 +30137,7 @@ export async function recordClipperOAuthCallback(input: {
   code?: unknown;
   state?: unknown;
   error?: unknown;
-}): Promise<ClipperOAuthConnection> {
+}, ownerUserId = getSystemUserId()): Promise<ClipperOAuthConnection> {
   if (input.platform !== "tiktok" && input.platform !== "instagram" && input.platform !== "youtube") {
     throw new Error("Plataforma no soportada.");
   }
@@ -18177,9 +30146,10 @@ export async function recordClipperOAuthCallback(input: {
   const code = typeof input.code === "string" ? input.code : "";
   const error = typeof input.error === "string" ? input.error : null;
   const accountId = accountIdFromOAuthState(platform, input.state);
-  const tokenResult = code && !error ? await tryExchangeAndStoreClipperToken(platform, code, accountId) : null;
+  const tokenResult = code && !error ? await tryExchangeAndStoreClipperToken(platform, code, ownerUserId, accountId) : null;
   const connection: ClipperOAuthConnection = {
     platform,
+    ownerUserId,
     accountId,
     status: error ? "error" : code ? "code_received" : "pending",
     receivedAt: new Date().toISOString(),
@@ -18199,7 +30169,11 @@ export async function recordClipperOAuthCallback(input: {
   const previous = await readOAuthConnections();
   const next = [
     connection,
-    ...previous.filter((item) => !(item.platform === platform && (item.accountId || null) === (accountId || null))),
+    ...previous.filter((item) => !(
+      item.platform === platform &&
+      item.ownerUserId === ownerUserId &&
+      (item.accountId || null) === (accountId || null)
+    )),
   ].slice(0, 12);
   await writeOAuthConnections(next);
   return connection;
@@ -18280,6 +30254,293 @@ function sourceDropCategoryFromPath(filePath: string): ClipperAccountCategory | 
   return category === "sports" || category === "memes" || category === "streamers" ? category : null;
 }
 
+interface ClipperSourceDropManifestRecord {
+  id: string;
+  manifestPath: string;
+  index: number;
+  category: ClipperAccountCategory | null;
+  targetFileName: string;
+  sourceFileName: string | null;
+  rightsStatus: ClipperAssetRightsStatus;
+  evidenceLink: string | null;
+  title: string;
+  url: string | null;
+  sourceName: string | null;
+  platform: string | null;
+  notes: string | null;
+}
+
+function isSourceDropIgnoredFileName(fileName: string): boolean {
+  return SOURCE_DROP_IGNORED_FILE_NAMES.has(fileName) || SOURCE_DROP_IGNORED_FILE_NAMES.has(fileName.toLowerCase());
+}
+
+function isSourceDropManifestFile(filePath: string): boolean {
+  return isSourceDropIgnoredFileName(path.basename(filePath));
+}
+
+async function listSourceDropManifestFiles(): Promise<string[]> {
+  await ensureClipperDirs();
+  const files: string[] = [];
+  const walk = async (dir: string, depth: number) => {
+    if (depth > 2) return;
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const absolutePath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(absolutePath, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const ext = path.extname(entry.name).toLowerCase();
+      if (![".csv", ".json"].includes(ext)) continue;
+      if (isSourceDropManifestFile(absolutePath)) files.push(absolutePath);
+    }
+  };
+  await walk(SOURCE_DROP_DIR, 0);
+  return files.sort();
+}
+
+function sourceDropFileMatchKeys(fileName: string): string[] {
+  const direct = path.basename(fileName).trim().toLowerCase();
+  const safe = safeSourceFileName(direct, "source").toLowerCase();
+  return Array.from(new Set([direct, safe].filter(Boolean)));
+}
+
+function normalizeSourceDropManifestRecord(record: Record<string, unknown>, manifestPath: string, index: number): ClipperSourceDropManifestRecord | null {
+  const categoryHint = firstString(record, ["category", "vertical", "account_category", "niche"]);
+  const category = categoryHint ? normalizeTrendCategory(categoryHint) : sourceDropCategoryFromPath(manifestPath);
+  const targetFileNameRaw = firstString(record, [
+    "target_file_name",
+    "file_name",
+    "filename",
+    "asset",
+    "source_file",
+    "video_file",
+    "local_file",
+    "path",
+    "source_path",
+  ]);
+  if (!targetFileNameRaw || hasTemplatePlaceholder(targetFileNameRaw)) return null;
+
+  const targetFileName = safeSourceFileName(path.basename(targetFileNameRaw), `${category || "source"}-${index + 1}`);
+  const sourceFileNameRaw = firstString(record, ["source_file_name", "drop_file_name", "drop_file", "original_file_name"]);
+  const sourceFileName = sourceFileNameRaw && !hasTemplatePlaceholder(sourceFileNameRaw)
+    ? safeSourceFileName(path.basename(sourceFileNameRaw), targetFileName)
+    : null;
+  const rightsHint = firstString(record, ["rights", "rights_status", "permission", "license"]).toLowerCase();
+  const rightsStatus: ClipperAssetRightsStatus = /owned|licensed|permission|approved|allowlist|official/.test(rightsHint)
+    ? "owned_or_permissioned"
+    : "review_required";
+  const evidenceRaw = firstString(record, ["evidence_link", "evidence", "proof", "permission_proof", "drive_link", "license", "notes", "rights_notes"]);
+  let evidenceLink: string | null = null;
+  if (evidenceRaw && !hasTemplatePlaceholder(evidenceRaw)) {
+    try {
+      evidenceLink = requireSourceRightsEvidence(evidenceRaw);
+    } catch {
+      evidenceLink = null;
+    }
+  }
+  const title = firstString(record, ["title", "hook", "caption", "topic"]) || targetFileName;
+  const url = firstString(record, ["url", "link", "source_url", "video_url", "post_url"]) || null;
+  const sourceName = firstString(record, ["source", "creator", "handle", "channel", "rightsholder"]) || null;
+  const platform = firstString(record, ["platform", "network"]) || null;
+  const notes = firstString(record, ["notes", "rights_notes", "permission_note"]) || null;
+  return {
+    id: hashId(`${manifestPath}-${targetFileName}-${index}`),
+    manifestPath,
+    index,
+    category,
+    targetFileName,
+    sourceFileName,
+    rightsStatus,
+    evidenceLink,
+    title,
+    url,
+    sourceName,
+    platform,
+    notes,
+  };
+}
+
+async function readSourceDropManifestRecords(): Promise<{ files: string[]; records: ClipperSourceDropManifestRecord[] }> {
+  const files = await listSourceDropManifestFiles();
+  const batches = await Promise.all(files.map(async (filePath) => {
+    try {
+      const raw = await readFile(filePath, "utf8");
+      const ext = path.extname(filePath).toLowerCase();
+      const rows = ext === ".json" ? parseJsonMetricRecords(raw) : parseCsvRecords(raw);
+      return rows
+        .map((record, index) => normalizeSourceDropManifestRecord(record, filePath, index))
+        .filter((record): record is ClipperSourceDropManifestRecord => Boolean(record));
+    } catch {
+      return [];
+    }
+  }));
+  return { files, records: batches.flat() };
+}
+
+function sourceDropManifestTargetFileName(record: Record<string, unknown>, category: ClipperAccountCategory | null, index: number): string | null {
+  const targetFileNameRaw = firstString(record, [
+    "target_file_name",
+    "file_name",
+    "filename",
+    "asset",
+    "source_file",
+    "video_file",
+    "local_file",
+    "path",
+    "source_path",
+  ]);
+  if (!targetFileNameRaw || hasTemplatePlaceholder(targetFileNameRaw)) return null;
+  return safeSourceFileName(path.basename(targetFileNameRaw), `${category || "source"}-${index + 1}`);
+}
+
+function sourceDropManifestRowHasPlaceholders(record: Record<string, unknown>): boolean {
+  return [
+    firstString(record, ["title", "hook", "caption", "topic"]),
+    firstString(record, ["url", "link", "source_url", "video_url", "post_url"]),
+    firstString(record, ["source", "creator", "handle", "channel", "rightsholder"]),
+    firstString(record, ["platform", "network"]),
+    firstString(record, ["rights", "rights_status", "permission", "license"]),
+    firstString(record, ["evidence_link", "evidence", "proof", "permission_proof", "drive_link", "license", "notes", "rights_notes"]),
+  ].filter(Boolean).some(hasTemplatePlaceholder);
+}
+
+async function buildSourceDropDiagnosticManifests(input: {
+  manifestFiles: string[];
+  manifestRecords: ClipperSourceDropManifestRecord[];
+  candidateFiles: string[];
+}): Promise<ClipperSourceDropDiagnosticManifest[]> {
+  const candidateFileKeysByCategory = new Map<ClipperAccountCategory, Set<string>>();
+  for (const category of ["sports", "memes", "streamers"] as ClipperAccountCategory[]) {
+    candidateFileKeysByCategory.set(category, new Set());
+  }
+  input.candidateFiles.forEach((filePath) => {
+    const category = sourceDropCategoryFromPath(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    if (!category || !VIDEO_EXTENSIONS.has(ext)) return;
+    const keys = candidateFileKeysByCategory.get(category);
+    sourceDropFileMatchKeys(path.basename(filePath)).forEach((key) => keys?.add(key));
+  });
+
+  return Promise.all(input.manifestFiles.map(async (manifestPath): Promise<ClipperSourceDropDiagnosticManifest> => {
+    try {
+      const raw = await readFile(manifestPath, "utf8");
+      const ext = path.extname(manifestPath).toLowerCase();
+      const rawRows = ext === ".json" ? parseJsonMetricRecords(raw) : parseCsvRecords(raw);
+      const category = sourceDropCategoryFromPath(manifestPath);
+      const expectedFiles = rawRows
+        .map((record, index) => sourceDropManifestTargetFileName(record, category, index))
+        .filter((fileName): fileName is string => Boolean(fileName));
+      const manifestRecords = input.manifestRecords.filter((record) => record.manifestPath === manifestPath);
+      const readyRows = manifestRecords.filter((record) => sourceDropManifestRightsReady(record)).length;
+      const placeholderRows = rawRows.filter(sourceDropManifestRowHasPlaceholders).length;
+      const evidenceReadyRows = manifestRecords.filter((record) => Boolean(record.evidenceLink)).length;
+      const categoryKeys = category ? candidateFileKeysByCategory.get(category) || new Set<string>() : new Set<string>();
+      const missingFiles = expectedFiles.filter((fileName) => !sourceDropFileMatchKeys(fileName).some((key) => categoryKeys.has(key)));
+      const issue = rawRows.length === 0
+        ? "Manifest vacio o sin filas parseables."
+        : placeholderRows > 0
+          ? `${placeholderRows} fila(s) tienen placeholders pendientes.`
+          : missingFiles.length > 0
+            ? `${missingFiles.length} archivo(s) esperado(s) no estan en source-drop.`
+            : readyRows === 0
+              ? "Faltan evidencias concretas de derechos."
+              : null;
+      return {
+        relativePath: path.relative(SOURCE_DROP_DIR, manifestPath) || path.basename(manifestPath),
+        fileName: path.basename(manifestPath),
+        category,
+        rows: rawRows.length,
+        readyRows,
+        placeholderRows,
+        expectedFiles,
+        missingFiles,
+        evidenceReadyRows,
+        issue,
+        nextStep: issue
+          ? "Rellena placeholders, sube los archivos esperados y agrega evidencia real antes de importar."
+          : "Manifest listo; importa source-drop para copiar videos y crear allowlist cuando aplique.",
+      };
+    } catch {
+      return {
+        relativePath: path.relative(SOURCE_DROP_DIR, manifestPath) || path.basename(manifestPath),
+        fileName: path.basename(manifestPath),
+        category: sourceDropCategoryFromPath(manifestPath),
+        rows: 0,
+        readyRows: 0,
+        placeholderRows: 0,
+        expectedFiles: [],
+        missingFiles: [],
+        evidenceReadyRows: 0,
+        issue: "No se pudo leer el manifest.",
+        nextStep: "Corrige el manifest y vuelve a preparar Source Drop Diagnostic.",
+      };
+    }
+  }));
+}
+
+function sourceDropManifestRecordForFile(
+  filePath: string,
+  records: ClipperSourceDropManifestRecord[]
+): ClipperSourceDropManifestRecord | null {
+  const category = sourceDropCategoryFromPath(filePath);
+  const fileKeys = new Set(sourceDropFileMatchKeys(path.basename(filePath)));
+  return records.find((record) => {
+    if (record.category && category && record.category !== category) return false;
+    const recordKeys = [
+      ...sourceDropFileMatchKeys(record.targetFileName),
+      ...(record.sourceFileName ? sourceDropFileMatchKeys(record.sourceFileName) : []),
+    ];
+    return recordKeys.some((key) => fileKeys.has(key));
+  }) || null;
+}
+
+function sourceDropManifestRightsReady(record: ClipperSourceDropManifestRecord | null): record is ClipperSourceDropManifestRecord {
+  return Boolean(record && record.rightsStatus === "owned_or_permissioned" && record.evidenceLink);
+}
+
+async function writeSourceRightsFromDropManifest(input: {
+  record: ClipperSourceDropManifestRecord;
+  category: ClipperAccountCategory;
+  targetPath: string;
+  fileName: string;
+}): Promise<string> {
+  const notes = [
+    `Manifest: ${input.record.manifestPath}`,
+    `Title: ${input.record.title}`,
+    input.record.url ? `URL: ${input.record.url}` : null,
+    input.record.sourceName ? `Source: ${input.record.sourceName}` : null,
+    input.record.platform ? `Platform: ${input.record.platform}` : null,
+    `Evidence: ${input.record.evidenceLink}`,
+    input.record.notes ? `Notes: ${input.record.notes}` : null,
+  ].filter((line): line is string => Boolean(line)).join("\n");
+  const sourceRightsRecord: ClipperSourceRightsRecord = {
+    assetId: hashId(input.targetPath),
+    category: input.category,
+    fileName: input.fileName,
+    sourcePath: input.targetPath,
+    rightsStatus: "owned_or_permissioned",
+    evidencePath: sourceRightsEvidencePath({
+      id: hashId(input.targetPath),
+      category: input.category,
+      fileName: input.fileName,
+      path: input.targetPath,
+      sizeBytes: 0,
+      updatedAt: new Date().toISOString(),
+      rightsStatus: "owned_or_permissioned",
+      evidencePath: null,
+      notes: "",
+    }),
+    notes,
+    recordedAt: new Date().toISOString(),
+    source: "source-drop-manifest",
+  };
+  await writeFile(sourceRightsRecord.evidencePath, renderSourceRightsEvidence(sourceRightsRecord));
+  return sourceRightsRecord.evidencePath;
+}
+
 async function listSourceDropVideoFiles(): Promise<string[]> {
   await ensureClipperDirs();
   const categories: ClipperAccountCategory[] = ["sports", "memes", "streamers"];
@@ -18295,6 +30556,404 @@ async function listSourceDropVideoFiles(): Promise<string[]> {
     }
   }
   return files.sort();
+}
+
+async function listSourceDropCandidateFiles(): Promise<string[]> {
+  await ensureClipperDirs();
+  const files: string[] = [];
+  const walk = async (dir: string, depth: number) => {
+    if (depth > 2) return;
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      if (isSourceDropIgnoredFileName(entry.name)) continue;
+      const absolutePath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(absolutePath, depth + 1);
+        continue;
+      }
+      if (entry.isFile()) files.push(absolutePath);
+    }
+  };
+  await walk(SOURCE_DROP_DIR, 0);
+  return files.sort();
+}
+
+function sourceDropDiagnosticLocation(filePath: string, category: ClipperAccountCategory | null): ClipperSourceDropDiagnosticFile["location"] {
+  const relative = path.relative(SOURCE_DROP_DIR, filePath).split(path.sep).filter(Boolean);
+  if (category && relative.length >= 2) return "category_dir";
+  if (relative.length === 1) return "root";
+  return "unsupported_dir";
+}
+
+async function buildSourceDropDiagnosticSummary(input: {
+  sourceAcquisition: ClipperSourceAcquisitionSummary;
+  productionQueue: ClipperProductionQueueSummary;
+}): Promise<ClipperSourceDropDiagnosticSummary> {
+  const candidateFiles = await listSourceDropCandidateFiles();
+  const sourceDropManifests = await readSourceDropManifestRecords();
+  const manifests = await buildSourceDropDiagnosticManifests({
+    manifestFiles: sourceDropManifests.files,
+    manifestRecords: sourceDropManifests.records,
+    candidateFiles,
+  });
+  const files = await Promise.all(candidateFiles.map(async (filePath): Promise<ClipperSourceDropDiagnosticFile> => {
+    const ext = path.extname(filePath).toLowerCase();
+    const isVideo = VIDEO_EXTENSIONS.has(ext);
+    const category = sourceDropCategoryFromPath(filePath);
+    const location = sourceDropDiagnosticLocation(filePath, category);
+    const importEligible = Boolean(category && isVideo && location === "category_dir");
+    const targetFolder = category ? getSourceFolderForCategory(category) : null;
+    const manifestRecord = importEligible ? sourceDropManifestRecordForFile(filePath, sourceDropManifests.records) : null;
+    const manifestEvidenceReady = sourceDropManifestRightsReady(manifestRecord);
+    const rightsEvidencePath = importEligible
+      ? await findRightsEvidence(filePath) || (manifestEvidenceReady ? manifestRecord.manifestPath : null)
+      : null;
+    const issue = !isVideo
+      ? `Extension no soportada (${ext || "sin extension"}). Usa ${Array.from(VIDEO_EXTENSIONS).join(", ")}.`
+      : !category
+        ? "Archivo fuera de sports/, memes/ o streamers/."
+        : location !== "category_dir"
+          ? "Archivo en ubicacion incorrecta; debe estar dentro de una carpeta de categoria."
+          : null;
+    return {
+      relativePath: path.relative(SOURCE_DROP_DIR, filePath) || path.basename(filePath),
+      fileName: path.basename(filePath),
+      category,
+      location,
+      isVideo,
+      importEligible,
+      targetFolder,
+      rightsEvidencePath,
+      manifestPath: manifestRecord?.manifestPath || null,
+      manifestEvidenceReady,
+      issue,
+      nextStep: issue
+        ? "Mover/corregir el archivo y volver a importar source-drop."
+        : manifestEvidenceReady
+          ? "Listo para importar; el manifiesto tiene evidencia concreta y creara allowlist."
+          : rightsEvidencePath
+            ? "Listo para importar con evidencia de derechos detectada."
+          : "Listo para importar; despues agrega allowlist/evidencia de derechos antes de producir.",
+    };
+  }));
+  const categories = input.sourceAcquisition.categories.map<ClipperSourceDropDiagnosticCategory>((category) => {
+    const categoryFiles = files.filter((file) => file.category === category.category);
+    const categoryManifests = manifests.filter((manifest) => manifest.category === category.category);
+    const importEligible = categoryFiles.filter((file) => file.importEligible).length;
+    const manifestReady = categoryFiles.filter((file) => file.manifestEvidenceReady).length;
+    const missingSourceAssets = Math.max(0, category.minimumWeeklySourceAssets - category.rightsReadyAssets);
+    return {
+      category: category.category,
+      label: category.label,
+      dropPath: path.join(SOURCE_DROP_DIR, category.category),
+      sourceFolder: category.sourceFolder,
+      dropFiles: categoryFiles.length,
+      importEligible,
+      manifestReady,
+      manifestFiles: categoryManifests.length,
+      manifestRows: categoryManifests.reduce((sum, manifest) => sum + manifest.rows, 0),
+      manifestReadyRows: categoryManifests.reduce((sum, manifest) => sum + manifest.readyRows, 0),
+      manifestPlaceholderRows: categoryManifests.reduce((sum, manifest) => sum + manifest.placeholderRows, 0),
+      manifestMissingFiles: categoryManifests.reduce((sum, manifest) => sum + manifest.missingFiles.length, 0),
+      sourceAssets: category.sourceAssets,
+      rightsReadyAssets: category.rightsReadyAssets,
+      minimumWeeklySourceAssets: category.minimumWeeklySourceAssets,
+      missingSourceAssets,
+      nextStep: categoryManifests.some((manifest) => manifest.placeholderRows > 0)
+        ? `Rellenar ${categoryManifests.reduce((sum, manifest) => sum + manifest.placeholderRows, 0)} fila(s) placeholder en source-drop-manifest.csv y subir archivos reales.`
+        : missingSourceAssets > 0
+        ? `Agregar ${missingSourceAssets} video(s) con permiso/evidencia para cubrir ${category.weeklyTargetSlots} clips/semana.`
+        : "Categoria cubierta para la meta semanal actual; mantener frescura y derechos.",
+    };
+  });
+  const totals = categories.reduce<ClipperSourceDropDiagnosticSummary["totals"]>((sum, category) => {
+    sum.minimumWeeklySourceAssets += category.minimumWeeklySourceAssets;
+    sum.currentSourceAssets += category.sourceAssets;
+    sum.rightsReadyAssets += category.rightsReadyAssets;
+    sum.missingSourceAssets += category.missingSourceAssets;
+    sum.manifestReady += category.manifestReady;
+    sum.manifestFiles += category.manifestFiles;
+    sum.manifestRows += category.manifestRows;
+    sum.manifestReadyRows += category.manifestReadyRows;
+    sum.manifestPlaceholderRows += category.manifestPlaceholderRows;
+    sum.manifestMissingFiles += category.manifestMissingFiles;
+    if (category.missingSourceAssets === 0) sum.categoriesReady += 1;
+    return sum;
+  }, {
+    files: files.length,
+    importEligible: files.filter((file) => file.importEligible).length,
+    manifestReady: 0,
+    manifestFiles: 0,
+    manifestRows: 0,
+    manifestReadyRows: 0,
+    manifestPlaceholderRows: 0,
+    manifestMissingFiles: 0,
+    unsupported: files.filter((file) => !file.importEligible).length,
+    categoriesReady: 0,
+    minimumWeeklySourceAssets: 0,
+    currentSourceAssets: 0,
+    rightsReadyAssets: 0,
+    missingSourceAssets: 0,
+  });
+  const status: ClipperSourceDropDiagnosticStatus = totals.missingSourceAssets === 0
+    ? "ready"
+    : totals.importEligible > 0
+      ? "ready_to_import"
+      : totals.currentSourceAssets > 0
+        ? "needs_rights"
+        : "needs_files";
+  const generatedAt = await stat(SOURCE_DROP_DIAGNOSTIC_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status,
+    generatedAt,
+    manifestPath: SOURCE_DROP_DIAGNOSTIC_PATH,
+    markdownPath: SOURCE_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+    repairWorksheetCsvPath: SOURCE_DROP_REPAIR_WORKSHEET_CSV_PATH,
+    dropDir: SOURCE_DROP_DIR,
+    files,
+    manifests,
+    categories,
+    totals,
+    nextStep: status === "ready"
+      ? "Source supply listo para la meta semanal actual; preparar drafts y mantener rights gate."
+      : status === "ready_to_import"
+        ? "Hay videos en source-drop listos para importar; ejecuta Import source-drop y luego agrega evidencia de derechos."
+        : status === "needs_rights"
+          ? "Hay assets fuente, pero faltan permisos/evidencia suficientes para cubrir la meta semanal."
+          : totals.manifestPlaceholderRows > 0
+            ? `Hay ${totals.manifestPlaceholderRows} fila(s) pendientes en source-drop manifests; rellena URLs, source, proof y sube los videos.`
+          : `Coloca videos reales en ${SOURCE_DROP_DIR}/sports, ${SOURCE_DROP_DIR}/memes o ${SOURCE_DROP_DIR}/streamers.`,
+  };
+}
+
+function renderSourceDropRepairWorksheetCsv(summary: ClipperSourceDropDiagnosticSummary): string {
+  const header = [
+    "type",
+    "category",
+    "source_file",
+    "expected_file",
+    "current_status",
+    "issue",
+    "proof_needed",
+    "viral_search_query",
+    "viral_search_url",
+    "recency_window",
+    "minimum_views",
+    "viral_signal",
+    "rights_gate",
+    "next_step",
+  ];
+  const sourceSearchProfile = (category: ClipperAccountCategory | null, fileName = "") => {
+    const safeCategory = category || "memes";
+    const platform: ClipperPlatform = safeCategory === "streamers" ? "youtube" : safeCategory === "memes" ? "instagram" : "tiktok";
+    const categoryLabel = categoryLabelsForBackend(safeCategory);
+    const query = safeCategory === "sports"
+      ? `today viral sports highlight official clip ${categoryLabel} ${fileName}`.trim()
+      : safeCategory === "streamers"
+        ? `streamer clip viral today funny clutch reaction ${categoryLabel} ${fileName}`.trim()
+        : `viral meme today relatable template trending sound ${categoryLabel} ${fileName}`.trim();
+    return {
+      query,
+      url: viralDiscoverySearchUrl(platform, query),
+      recencyWindow: "0-12h",
+      minimumViews: String(viralDiscoveryMinimumViews(platform, "must_scan")),
+      viralSignal: "High velocity: visible comments/shares/reposts, same format copied by multiple accounts, or official/creator source accelerating today.",
+      rightsGate: "Use owned/licensed/permissioned source only; save creator approval, official source URL, license, or Drive proof before import.",
+    };
+  };
+  const withSearch = (base: string[], category: ClipperAccountCategory | null, fileName = "", nextStep = "") => {
+    const search = sourceSearchProfile(category, fileName);
+    return [
+      ...base,
+      search.query,
+      search.url,
+      search.recencyWindow,
+      search.minimumViews,
+      search.viralSignal,
+      search.rightsGate,
+      nextStep,
+    ];
+  };
+  const rows: string[][] = [];
+  for (const manifest of summary.manifests) {
+    if (manifest.placeholderRows > 0) {
+      rows.push(withSearch([
+        "manifest_placeholders",
+        manifest.category || "",
+        manifest.relativePath,
+        manifest.expectedFiles.slice(0, 20).join(" | "),
+        `${manifest.placeholderRows} placeholder row(s)`,
+        manifest.issue || "Manifest has placeholder values.",
+        "Real source URL, creator/source handle, platform, rights status and proof link/path for every row.",
+      ], manifest.category, manifest.expectedFiles[0] || "", "Replace template values in source-drop-manifest.csv before importing."));
+    }
+    for (const missingFile of manifest.missingFiles) {
+      rows.push(withSearch([
+        "missing_expected_file",
+        manifest.category || "",
+        manifest.relativePath,
+        missingFile,
+        "missing",
+        "Manifest expects a video file that is not present in source-drop.",
+        "Upload the exact video file or update target_file_name/source_file_name to match the uploaded file.",
+      ], manifest.category, missingFile, `Place ${missingFile} inside ${manifest.category || "the matching category"} source-drop folder.`));
+    }
+    if (manifest.rows > 0 && manifest.readyRows === 0 && manifest.placeholderRows === 0 && manifest.missingFiles.length === 0) {
+      rows.push(withSearch([
+        "manifest_needs_rights",
+        manifest.category || "",
+        manifest.relativePath,
+        manifest.expectedFiles.slice(0, 20).join(" | "),
+        "needs proof",
+        manifest.issue || "Manifest rows are not rights-ready.",
+        "Creator approval, license, owned-content note, official source URL, contract/proof path or Drive proof URL.",
+      ], manifest.category, manifest.expectedFiles[0] || "", "Add concrete evidence_link/rights notes before treating these videos as production-ready."));
+    }
+  }
+  for (const file of summary.files) {
+    if (!file.importEligible) {
+      rows.push(withSearch([
+        "file_issue",
+        file.category || "",
+        file.relativePath,
+        file.fileName,
+        file.location,
+        file.issue || "File cannot be imported from source-drop.",
+        "A supported video file inside source-drop/sports, source-drop/memes or source-drop/streamers.",
+      ], file.category, file.fileName, file.nextStep));
+      continue;
+    }
+    if (!file.rightsEvidencePath && !file.manifestEvidenceReady) {
+      rows.push(withSearch([
+        "file_needs_rights",
+        file.category || "",
+        file.relativePath,
+        file.fileName,
+        "importable_without_proof",
+        "Video can be imported, but still needs rights evidence before scaled publishing.",
+        "Creator approval, license, owned-content note, official source URL, contract/proof path or Drive proof URL.",
+      ], file.category, file.fileName, "Add this file to source-drop-manifest.csv with rights_status=owned_or_permissioned and a concrete evidence_link."));
+    }
+  }
+  for (const category of summary.categories) {
+    if (category.missingSourceAssets > 0) {
+      rows.push(withSearch([
+        "category_gap",
+        category.category,
+        category.dropPath,
+        "",
+        `${category.rightsReadyAssets}/${category.minimumWeeklySourceAssets} rights-ready`,
+        `${category.missingSourceAssets} rights-ready source asset(s) missing for weekly target.`,
+        "Enough recent, viral, rights-cleared source videos to cover the weekly clip plan.",
+      ], category.category, "", category.nextStep));
+    }
+  }
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceDropDiagnosticMarkdown(summary: ClipperSourceDropDiagnosticSummary): string {
+  return [
+    "# Clippers Source Drop Diagnostic",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Drop dir: ${summary.dropDir}`,
+    `Repair worksheet: ${summary.repairWorksheetCsvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Files: ${summary.totals.files}`,
+    `- Import eligible: ${summary.totals.importEligible}`,
+    `- Manifest evidence ready: ${summary.totals.manifestReady}`,
+    `- Manifest files: ${summary.totals.manifestFiles}`,
+    `- Manifest rows: ${summary.totals.manifestRows}`,
+    `- Manifest ready rows: ${summary.totals.manifestReadyRows}`,
+    `- Manifest placeholder rows: ${summary.totals.manifestPlaceholderRows}`,
+    `- Manifest missing files: ${summary.totals.manifestMissingFiles}`,
+    `- Unsupported/location issues: ${summary.totals.unsupported}`,
+    `- Categories ready: ${summary.totals.categoriesReady}/${summary.categories.length}`,
+    `- Minimum weekly source assets: ${summary.totals.minimumWeeklySourceAssets}`,
+    `- Current source assets: ${summary.totals.currentSourceAssets}`,
+    `- Rights-ready assets: ${summary.totals.rightsReadyAssets}`,
+    `- Missing source assets: ${summary.totals.missingSourceAssets}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Category Coverage",
+    "",
+    ...summary.categories.flatMap((category) => [
+      `### ${category.label}`,
+      "",
+      `- Drop path: ${category.dropPath}`,
+      `- Source folder: ${category.sourceFolder}`,
+      `- Drop files: ${category.dropFiles}`,
+      `- Import eligible: ${category.importEligible}`,
+      `- Manifest evidence ready: ${category.manifestReady}`,
+      `- Manifest files: ${category.manifestFiles}`,
+      `- Manifest rows: ${category.manifestRows}`,
+      `- Manifest ready rows: ${category.manifestReadyRows}`,
+      `- Manifest placeholder rows: ${category.manifestPlaceholderRows}`,
+      `- Manifest missing files: ${category.manifestMissingFiles}`,
+      `- Source assets: ${category.sourceAssets}`,
+      `- Rights-ready assets: ${category.rightsReadyAssets}`,
+      `- Minimum weekly source assets: ${category.minimumWeeklySourceAssets}`,
+      `- Missing source assets: ${category.missingSourceAssets}`,
+      `- Next step: ${category.nextStep}`,
+      "",
+    ]),
+    "## Manifests",
+    "",
+    ...(summary.manifests.length ? summary.manifests.flatMap((manifest) => [
+      `### ${manifest.relativePath}`,
+      "",
+      `- Category: ${manifest.category || "none"}`,
+      `- Rows: ${manifest.rows}`,
+      `- Ready rows: ${manifest.readyRows}`,
+      `- Placeholder rows: ${manifest.placeholderRows}`,
+      `- Evidence-ready rows: ${manifest.evidenceReadyRows}`,
+      `- Expected files: ${manifest.expectedFiles.length}`,
+      `- Missing files: ${manifest.missingFiles.length}`,
+      `- Issue: ${manifest.issue || "none"}`,
+      `- Next step: ${manifest.nextStep}`,
+      "",
+      ...(manifest.missingFiles.length ? [
+        "Missing files:",
+        ...manifest.missingFiles.slice(0, 20).map((fileName) => `- ${fileName}`),
+        "",
+      ] : []),
+    ]) : ["No source-drop manifests found.", ""]),
+    "## Files",
+    "",
+    ...(summary.files.length ? summary.files.flatMap((file) => [
+      `### ${file.relativePath}`,
+      "",
+      `- Category: ${file.category || "none"}`,
+      `- Location: ${file.location}`,
+      `- Video: ${file.isVideo ? "yes" : "no"}`,
+      `- Import eligible: ${file.importEligible ? "yes" : "no"}`,
+      `- Target folder: ${file.targetFolder || "n/a"}`,
+      `- Rights evidence: ${file.rightsEvidencePath || "none"}`,
+      `- Manifest: ${file.manifestPath || "none"}`,
+      `- Manifest evidence ready: ${file.manifestEvidenceReady ? "yes" : "no"}`,
+      `- Issue: ${file.issue || "none"}`,
+      `- Next step: ${file.nextStep}`,
+      "",
+    ]) : ["No files found in source-drop.", ""]),
+  ].join("\n");
+}
+
+async function writeSourceDropDiagnosticArtifacts(summary: ClipperSourceDropDiagnosticSummary): Promise<ClipperSourceDropDiagnosticSummary> {
+  const withGeneratedAt: ClipperSourceDropDiagnosticSummary = {
+    ...summary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(SOURCE_DROP_DIAGNOSTIC_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_DROP_DIAGNOSTIC_MARKDOWN_PATH, renderSourceDropDiagnosticMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_DROP_REPAIR_WORKSHEET_CSV_PATH, renderSourceDropRepairWorksheetCsv(withGeneratedAt));
+  return withGeneratedAt;
 }
 
 async function uniqueSourceTargetPath(category: ClipperAccountCategory, fileName: string): Promise<{ targetPath: string; fileName: string }> {
@@ -18315,7 +30974,10 @@ export async function importClipperSourceDropFiles(userId = getSystemUserId()): 
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const files = await listSourceDropVideoFiles();
+  const sourceDropManifests = await readSourceDropManifestRecords();
   const items: ClipperSourceDropImportItem[] = [];
+  let manifestMatched = 0;
+  let rightsEvidenceWritten = 0;
   for (const sourcePath of files) {
     const category = sourceDropCategoryFromPath(sourcePath);
     if (!category) {
@@ -18326,13 +30988,26 @@ export async function importClipperSourceDropFiles(userId = getSystemUserId()): 
         fileName: path.basename(sourcePath),
         status: "skipped",
         rightsStatus: "review_required",
+        rightsEvidencePath: null,
+        manifestPath: null,
         reason: "Categoria no soportada; usa sports, memes o streamers.",
       });
       continue;
     }
     const { targetPath, fileName } = await uniqueSourceTargetPath(category, path.basename(sourcePath));
     await copyFile(sourcePath, targetPath);
-    const evidencePath = await findRightsEvidence(targetPath);
+    const manifestRecord = sourceDropManifestRecordForFile(sourcePath, sourceDropManifests.records);
+    if (manifestRecord) manifestMatched += 1;
+    let evidencePath = await findRightsEvidence(targetPath);
+    if (!evidencePath && sourceDropManifestRightsReady(manifestRecord)) {
+      evidencePath = await writeSourceRightsFromDropManifest({
+        record: manifestRecord,
+        category,
+        targetPath,
+        fileName,
+      });
+      rightsEvidenceWritten += 1;
+    }
     items.push({
       sourcePath,
       targetPath,
@@ -18340,23 +31015,41 @@ export async function importClipperSourceDropFiles(userId = getSystemUserId()): 
       fileName,
       status: "imported",
       rightsStatus: evidencePath ? "owned_or_permissioned" : "review_required",
-      reason: evidencePath ? null : "Importado; falta evidencia en allowlist para desbloquear derechos.",
+      rightsEvidencePath: evidencePath,
+      manifestPath: manifestRecord?.manifestPath || null,
+      reason: evidencePath
+        ? manifestRecord
+          ? "Importado; allowlist creada o detectada desde manifiesto/evidencia."
+          : null
+        : manifestRecord
+          ? "Importado; manifiesto encontrado, pero falta evidencia concreta para desbloquear derechos."
+          : "Importado; falta evidencia en allowlist para desbloquear derechos.",
     });
   }
 
   const queueResult = await prepareClipperProductionQueue(userId);
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const sourceAcquisition = await buildSourceAcquisitionSummary(accounts, queueResult.queue);
+  await writeSourceDropDiagnosticArtifacts(await buildSourceDropDiagnosticSummary({ sourceAcquisition, productionQueue: queueResult.queue }));
   const imported = items.filter((item) => item.status === "imported").length;
   const skipped = items.filter((item) => item.status === "skipped").length;
   const sourceDropImport: ClipperSourceDropImportSummary = {
     importedAt: new Date().toISOString(),
     dropDir: SOURCE_DROP_DIR,
     filesScanned: files.length,
+    manifestFilesScanned: sourceDropManifests.files.length,
+    manifestRows: sourceDropManifests.records.length,
+    manifestMatched,
+    rightsEvidenceWritten,
     imported,
     skipped,
     items,
     queue: queueResult.queue,
     nextStep: imported > 0
-      ? "Source drop importado; agrega evidencia en allowlist o Launch evidence batch para pasar assets a draft_ready."
+      ? rightsEvidenceWritten > 0
+        ? "Source drop importado con allowlist creada desde manifiesto; regenera Draft Specs para los assets draft_ready."
+        : "Source drop importado; agrega evidencia en allowlist o Launch evidence batch para pasar assets a draft_ready."
       : `Coloca videos reales en ${SOURCE_DROP_DIR}/sports, memes o streamers y vuelve a importar.`,
   };
   return { sourceDropImport, status: queueResult.status };
@@ -18375,7 +31068,27 @@ export async function prepareClipperSourceAcquisitionPlan(userId = getSystemUser
   };
   await writeFile(SOURCE_ACQUISITION_PLAN_PATH, JSON.stringify(sourceAcquisition, null, 2));
   await writeFile(SOURCE_ACQUISITION_PLAN_MARKDOWN_PATH, renderSourceAcquisitionMarkdown(sourceAcquisition));
+  await writeSourceDropDiagnosticArtifacts(await buildSourceDropDiagnosticSummary({ sourceAcquisition, productionQueue: queue }));
   return { sourceAcquisition, status: await getClipperStatus(userId) };
+}
+
+export async function prepareClipperSourceSupplyDropKit(userId = getSystemUserId()): Promise<{ sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const queue = await buildProductionQueueSummary(accounts);
+  const sourceAcquisition = await buildSourceAcquisitionSummary(accounts, queue);
+  const currentSummary = await buildSourceSupplyDropKitSummary(sourceAcquisition);
+  const sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary = {
+    ...currentSummary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(SOURCE_SUPPLY_DROP_KIT_PATH, JSON.stringify(sourceSupplyDropKit, null, 2));
+  await writeFile(SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH, renderSourceSupplyDropKitMarkdown(sourceSupplyDropKit));
+  await writeFile(SOURCE_SUPPLY_DROP_KIT_CSV_PATH, renderSourceSupplyDropKitCsv(sourceSupplyDropKit));
+  await writeSourceSupplyDropManifestStarters(sourceSupplyDropKit);
+  return { sourceSupplyDropKit, status: await getClipperStatus(userId) };
 }
 
 export async function prepareClipperSourceHuntSheet(input: unknown = {}, userId = getSystemUserId()): Promise<{ sourceHunt: ClipperSourceHuntSummary; status: ClipperStatus }> {
@@ -18408,9 +31121,12 @@ export async function recordClipperSourceRights(input: {
   const asset = assets.find((item) => item.id === assetId);
   if (!asset) throw new Error("Source asset no encontrado en las carpetas de Clippers.");
   const rightsStatus: ClipperAssetRightsStatus = input.rightsStatus === "review_required" ? "review_required" : "owned_or_permissioned";
-  const notes = typeof input.notes === "string" && input.notes.trim()
+  const rawNotes = typeof input.notes === "string" && input.notes.trim()
     ? input.notes.trim()
     : "Registrado desde Clippers UI; permiso/ownership confirmado sin guardar datos sensibles.";
+  const notes = rightsStatus === "owned_or_permissioned"
+    ? requireSourceRightsEvidence(rawNotes)
+    : rawNotes;
   const record: ClipperSourceRightsRecord = {
     assetId: asset.id,
     category: asset.category,
@@ -18782,10 +31498,16 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
   const options = normalizeRunOptions(input);
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const automationSchedule = await buildAutomationScheduleSummary(accounts);
+  const weeklyTargetClips = Math.max(7, automationSchedule.weeklyTargetClips || defaultAutomationSchedule(accounts).weeklyTargetClips);
+  const dailyTargetPosts = Math.max(1, Math.ceil(weeklyTargetClips / 7));
   const tokenRecords = await readTokenVaultRecords();
   const assets = await listSourceAssets();
   const queueItems = buildProductionQueueItems(accounts, assets);
-  const posts = buildScheduledPosts(queueItems, tokenRecords, options.publishMode);
+  const allPosts = buildScheduledPosts(queueItems, tokenRecords, options.publishMode);
+  const posts = selectDailyAutomationPosts(allPosts, dailyTargetPosts);
+  const backlogPosts = Math.max(0, allPosts.length - posts.length);
+  const gapToDailyTarget = Math.max(0, dailyTargetPosts - posts.length);
   const id = new Date().toISOString().replace(/[:.]/g, "-");
   const queuePath = path.join(DRAFTS_DIR, `production-queue-${id}.json`);
   const schedulePath = path.join(SCHEDULED_DIR, `automation-cycle-${id}.json`);
@@ -18806,6 +31528,10 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
     reportPath,
     totals: {
       posts: posts.length,
+      dailyTargetPosts,
+      weeklyTargetClips,
+      backlogPosts,
+      gapToDailyTarget,
       scheduled,
       readyForManual,
       blocked,
@@ -18824,7 +31550,8 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
         items: queueItems,
         nextStep: "",
       },
-      posts
+      posts,
+      { dailyTargetPosts, weeklyTargetClips, backlogPosts, gapToDailyTarget }
     ),
   };
   const queue: ClipperProductionQueueSummary = {
@@ -18844,7 +31571,7 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
     id,
     userId,
     createdAt: automation.createdAt,
-    summary: `Ciclo diario Clippers: ${automation.totals.posts} posts evaluados, ${automation.totals.blocked} bloqueados, ${automation.totals.scheduled} programados.`,
+    summary: `Ciclo diario Clippers: ${automation.totals.posts}/${automation.totals.dailyTargetPosts} posts evaluados para ${automation.totals.weeklyTargetClips}/semana, ${automation.totals.blocked} bloqueados, ${automation.totals.scheduled} programados.`,
     automation,
   }, null, 2));
   return { automation, status: await getClipperStatus(userId) };

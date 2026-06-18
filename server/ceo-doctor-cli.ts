@@ -11,12 +11,33 @@ export type CeoDoctorCheck = {
   detail: string;
 };
 
-function hasRealValue(value: string | undefined): value is string {
+export function hasRealValue(value: string | undefined): value is string {
   if (!value) return false;
-  return !/^(replace-|<|your-|tu-|example|changeme|todo)/i.test(value.trim());
+  const normalized = value.trim().toLowerCase();
+  if (/^(replace-|<|your-|tu-|example|changeme|todo)/i.test(normalized)) return false;
+  if (/^postgres(?:ql)?:\/\/user:password@host(?::\d+)?\//i.test(normalized)) return false;
+  if ([
+    "key",
+    "api-key",
+    "token",
+    "bot-token",
+    "secret",
+    "password",
+    "dummy",
+    "sample",
+    "test",
+  ].includes(normalized)) return false;
+  return ![
+    "your-domain.example",
+    "tu-dominio",
+    "<real-user-id>",
+    "<telegram-chat-id>",
+    "postgres://example",
+    "postgresql://example",
+  ].some((placeholder) => normalized.includes(placeholder));
 }
 
-function hasStrongSecret(value: string | undefined, minLength = 32): boolean {
+export function hasStrongSecret(value: string | undefined, minLength = 32): boolean {
   return hasRealValue(value) && value.trim().length >= minLength;
 }
 
@@ -48,7 +69,12 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
   const briefHour = Number(env.CEO_BRIEF_HOUR ?? "7");
   const briefMinute = Number(env.CEO_BRIEF_MINUTE ?? "0");
   const publicUrl = env.TELEGRAM_WEBHOOK_URL || env.PUBLIC_APP_URL;
-  const defaultUserMatches = Boolean(options.userId) && env.DEFAULT_USER_ID === options.userId;
+  const databaseReady = hasRealValue(env.DATABASE_URL);
+  const aiReady = hasRealValue(env.AI_INTEGRATIONS_GEMINI_API_KEY);
+  const telegramTokenReady = hasRealValue(env.TELEGRAM_BOT_TOKEN);
+  const realUserIdReady = hasRealValue(options.userId);
+  const realChatIdReady = hasRealValue(options.chatId);
+  const defaultUserMatches = realUserIdReady && env.DEFAULT_USER_ID === options.userId;
   const schedulerValid = Boolean(env.SCHEDULER_TIMEZONE)
     && Number.isFinite(briefHour)
     && briefHour >= 0
@@ -61,14 +87,14 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "database",
       label: "Database",
-      ok: hasRealValue(env.DATABASE_URL),
-      detail: env.DATABASE_URL ? "DATABASE_URL configured." : "Set DATABASE_URL for app data and persistent sessions.",
+      ok: databaseReady,
+      detail: databaseReady ? "DATABASE_URL configured." : "Set DATABASE_URL to a real production Postgres URL.",
     },
     {
       id: "ai",
       label: "Assistant AI",
-      ok: hasRealValue(env.AI_INTEGRATIONS_GEMINI_API_KEY),
-      detail: env.AI_INTEGRATIONS_GEMINI_API_KEY ? "AI key configured." : "Set AI_INTEGRATIONS_GEMINI_API_KEY for app and Telegram chat.",
+      ok: aiReady,
+      detail: aiReady ? "AI key configured." : "Set AI_INTEGRATIONS_GEMINI_API_KEY to a real API key for app and Telegram chat.",
     },
     {
       id: "session",
@@ -93,8 +119,8 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "telegram_token",
       label: "Telegram token",
-      ok: hasRealValue(env.TELEGRAM_BOT_TOKEN),
-      detail: env.TELEGRAM_BOT_TOKEN ? "TELEGRAM_BOT_TOKEN configured." : "Set TELEGRAM_BOT_TOKEN from BotFather.",
+      ok: telegramTokenReady,
+      detail: telegramTokenReady ? "TELEGRAM_BOT_TOKEN configured." : "Set TELEGRAM_BOT_TOKEN to a real BotFather token.",
     },
     {
       id: "telegram_url",
@@ -115,8 +141,8 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "user_id",
       label: "Real user id",
-      ok: Boolean(options.userId),
-      detail: options.userId ? `Using user id ${options.userId}.` : "Pass --user-id=<real-user-id> after creating/migrating the user.",
+      ok: realUserIdReady,
+      detail: realUserIdReady ? `Using user id ${options.userId}.` : "Set REAL_USER_ID after creating/migrating the user, then pass --user-id=\"$REAL_USER_ID\".",
     },
     {
       id: "default_user",
@@ -129,8 +155,8 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
     {
       id: "chat_id",
       label: "Telegram chat id",
-      ok: Boolean(options.chatId),
-      detail: options.chatId ? `Using chat id ${options.chatId}.` : "Pass --chat-id=<telegram-chat-id> to print the configure command.",
+      ok: realChatIdReady,
+      detail: realChatIdReady ? `Using chat id ${options.chatId}.` : "Set TELEGRAM_CHAT_ID after /start, then pass --chat-id=\"$TELEGRAM_CHAT_ID\".",
     },
     {
       id: "scheduler",
@@ -144,19 +170,40 @@ export function buildCeoDoctorChecks(env: NodeJS.ProcessEnv, options: CeoDoctorO
 }
 
 export function buildCeoDoctorNextCommands(options: CeoDoctorOptions): string[] {
-  const userId = options.userId || "<real-user-id>";
-  const chatId = options.chatId || "<telegram-chat-id>";
+  const userId = hasRealValue(options.userId) ? options.userId : "$REAL_USER_ID";
+  const chatId = hasRealValue(options.chatId) ? options.chatId : "$TELEGRAM_CHAT_ID";
   return [
-    "npm run auth:create-user -- --username=<username> --password=<password> --print-user-id",
-    `npm run user:migrate -- --from=mock-user-123 --to=${userId} --execute`,
-    `npm run telegram:configure -- --user-id=${userId} --chat-id=${chatId} --execute`,
-    `npm run telegram:configure -- --user-id=${userId} --latest --execute`,
+    "export LOCAL_AUTH_USERNAME=ceo-admin",
+    "export REAL_USER_ID=replace-after-auth-create-user",
+    "export TELEGRAM_CHAT_ID=replace-after-telegram-start",
+    "export BACKUP_LABEL=$(date +%F)",
+    "export BACKUP_DIR=$CEO_BACKUP_DIR/$BACKUP_LABEL",
+    "export RESTORE_DATABASE_URL=replace-with-staging-postgres-url",
+    "read -r -s LOCAL_AUTH_PASSWORD",
+    "export LOCAL_AUTH_PASSWORD",
+    "npm run auth:create-user -- --username=\"$LOCAL_AUTH_USERNAME\" --password-env=LOCAL_AUTH_PASSWORD --print-user-id",
+    "unset LOCAL_AUTH_PASSWORD",
+    `npm run user:migrate -- --from=mock-user-123 --to="${userId}" --execute`,
+    `npm run telegram:configure -- --user-id="${userId}" --chat-id="${chatId}" --execute`,
+    `npm run telegram:configure -- --user-id="${userId}" --latest --execute`,
     "npm run telegram:webhook -- setup --execute",
+    "npm run telegram:webhook -- status",
+    "npm run db:push",
     "npm run ceo:db-check -- --json",
     "npm run ceo:backup-check -- --json",
-    `npm run ceo:readiness -- --user-id=${userId}`,
-    `npm run ceo:smoke -- --user-id=${userId} --chat-id=${chatId}`,
-    `npm run ceo:send-brief -- --user-id=${userId} --execute`,
+    "npm run ceo:backup -- --label=\"$BACKUP_LABEL\" --execute",
+    "RESTORE_DATABASE_URL=\"$RESTORE_DATABASE_URL\" npm run ceo:restore -- --dump=\"$BACKUP_DIR/postgres.dump\" --artifacts=\"$BACKUP_DIR/local-artifacts.tgz\" --manifest=\"$BACKUP_DIR/backup-manifest.json\" --artifacts-output-dir=\"restored-artifacts/$BACKUP_LABEL\" --confirm-restore --execute",
+    `npm run ceo:readiness -- --user-id="${userId}"`,
+    `npm run ceo:smoke -- --user-id="${userId}" --chat-id="${chatId}"`,
+    `npm run ceo:send-brief -- --user-id="${userId}" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --confirm-check=backup_executed --note="backup manifest verified" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --confirm-check=restore_verified --note="restore probado en staging" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --confirm-check=brief_verified --note="brief recibido en Telegram" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --confirm-check=telegram_commands_verified --note="comandos Telegram verificados" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --confirm-check=conversation_history_verified --note="historial visible en dashboard" --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --revoke-check=backup_executed --execute`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}"`,
+    `npm run ceo:go-live -- --user-id="${userId}" --chat-id="${chatId}" --smoke-ready --backup-executed --restore-verified --brief-verified --telegram-commands-verified --conversation-history-verified`,
   ];
 }
 
@@ -169,6 +216,7 @@ export function formatCeoDoctorReport(checks: CeoDoctorCheck[], commands: string
     ...checks.map((check) => `- [${check.ok ? "ok" : "missing"}] ${check.label}: ${check.detail}`),
     "",
     "Next commands:",
+    "Run these in order after replacing placeholder variable values with real values.",
     ...commands.map((command) => `- ${command}`),
   ];
   return lines.join("\n");

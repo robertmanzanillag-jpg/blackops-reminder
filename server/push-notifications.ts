@@ -1,17 +1,36 @@
 import webpush from "web-push";
 import { storage } from "./storage";
+import { hasRealValue } from "./ceo-doctor-cli";
 
-// Configure web-push with VAPID keys
-const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
-const vapidSubject = process.env.VAPID_SUBJECT || "mailto:blackops@reminder.app";
+let configuredVapidSignature: string | null = null;
 
-if (vapidPublicKey && vapidPrivateKey) {
-  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+function getVapidConfig(): { publicKey: string; privateKey: string; subject: string } | null {
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!hasRealValue(publicKey) || !hasRealValue(privateKey)) return null;
+
+  const subject = hasRealValue(process.env.VAPID_SUBJECT)
+    ? process.env.VAPID_SUBJECT!
+    : "mailto:blackops@reminder.app";
+
+  return { publicKey, privateKey, subject };
+}
+
+function configureWebPush(): boolean {
+  const config = getVapidConfig();
+  if (!config) return false;
+
+  const signature = `${config.subject}:${config.publicKey}:${config.privateKey}`;
+  if (configuredVapidSignature !== signature) {
+    webpush.setVapidDetails(config.subject, config.publicKey, config.privateKey);
+    configuredVapidSignature = signature;
+  }
+
+  return true;
 }
 
 export function getVapidPublicKey(): string {
-  return vapidPublicKey;
+  return getVapidConfig()?.publicKey || "";
 }
 
 interface NotificationPayload {
@@ -26,6 +45,10 @@ export async function sendPushNotification(
   userId: string,
   payload: NotificationPayload
 ): Promise<{ success: number; failed: number }> {
+  if (!configureWebPush()) {
+    return { success: 0, failed: 0 };
+  }
+
   const subscriptions = await storage.getPushSubscriptions(userId);
   
   let success = 0;
@@ -59,6 +82,10 @@ export async function sendPushNotification(
 export async function sendNotificationToAll(
   payload: NotificationPayload
 ): Promise<{ success: number; failed: number }> {
+  if (!configureWebPush()) {
+    return { success: 0, failed: 0 };
+  }
+
   const subscriptions = await storage.getAllPushSubscriptions();
   
   let success = 0;

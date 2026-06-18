@@ -3,6 +3,72 @@ import { Octokit } from '@octokit/rest';
 
 let connectionSettings: any;
 
+const MAX_GITHUB_FILE_WRITE_BYTES = 1024 * 1024;
+const BLOCKED_GITHUB_PATH_SEGMENTS = new Set([
+  '.git',
+  '.ssh',
+  'credentials',
+  'secrets',
+  'node_modules',
+]);
+const BLOCKED_GITHUB_FILE_NAMES = new Set([
+  '.env',
+  '.env.local',
+  '.env.production',
+  'id_rsa',
+  'id_ed25519',
+]);
+
+function githubInputError(message: string): Error & { status?: number; statusCode?: number } {
+  const error = new Error(message) as Error & { status?: number; statusCode?: number };
+  error.status = 400;
+  error.statusCode = 400;
+  return error;
+}
+
+export function validateGitHubRepoNamePart(value: string, label: string): string | null {
+  if (!/^[A-Za-z0-9_.-]+$/.test(value) || value === '.' || value === '..') {
+    return `${label} invalido`;
+  }
+  return null;
+}
+
+export function validateGitHubFilePath(filePath: string): string | null {
+  const normalized = filePath.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+  if (!normalized) return 'Path requerido';
+  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return 'Path absoluto no permitido';
+  const segments = normalized.split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return 'Path traversal no permitido';
+  if (segments.some((segment) => BLOCKED_GITHUB_PATH_SEGMENTS.has(segment.toLowerCase()))) {
+    return 'Path bloqueado por politica de seguridad';
+  }
+  const fileName = segments[segments.length - 1]?.toLowerCase();
+  if (BLOCKED_GITHUB_FILE_NAMES.has(fileName)) return 'Archivo sensible no permitido';
+  return null;
+}
+
+export function validateGitHubCommitMessage(message: string): string | null {
+  const trimmed = message.trim();
+  if (trimmed.length < 8) return 'Commit message demasiado corto';
+  if (trimmed.length > 200) return 'Commit message demasiado largo';
+  if (/[\r\n]/.test(trimmed)) return 'Commit message multilinea no permitido';
+  return null;
+}
+
+export function validateGitHubFileWriteInput(input: {
+  owner: string;
+  repo: string;
+  path: string;
+  content: string;
+  message: string;
+}): string | null {
+  return validateGitHubRepoNamePart(input.owner, 'Owner')
+    || validateGitHubRepoNamePart(input.repo, 'Repo')
+    || validateGitHubFilePath(input.path)
+    || validateGitHubCommitMessage(input.message)
+    || (Buffer.byteLength(input.content, 'utf8') > MAX_GITHUB_FILE_WRITE_BYTES ? 'Archivo demasiado grande para escritura remota desde el asistente' : null);
+}
+
 async function getAccessToken() {
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
     return connectionSettings.settings.access_token;
@@ -107,6 +173,11 @@ export async function getRepositoryOverview(owner: string, repo: string) {
 
 // Get repository contents (files/folders)
 export async function getRepoContents(owner: string, repo: string, path: string = '') {
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const pathError = path ? validateGitHubFilePath(path) : null;
+  if (ownerError || repoError || pathError) throw githubInputError(ownerError || repoError || pathError || 'GitHub input invalido');
+
   const octokit = await getGitHubClient();
   try {
     const { data } = await octokit.repos.getContent({
@@ -144,6 +215,11 @@ export async function getRepoContents(owner: string, repo: string, path: string 
 
 // Get file content
 export async function getFileContent(owner: string, repo: string, path: string) {
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const pathError = validateGitHubFilePath(path);
+  if (ownerError || repoError || pathError) throw githubInputError(ownerError || repoError || pathError || 'GitHub input invalido');
+
   const octokit = await getGitHubClient();
   const { data } = await octokit.repos.getContent({
     owner,
@@ -176,6 +252,9 @@ export async function updateFile(
   message: string,
   sha?: string
 ) {
+  const validationError = validateGitHubFileWriteInput({ owner, repo, path, content, message });
+  if (validationError) throw githubInputError(validationError);
+
   const octokit = await getGitHubClient();
   
   // If no SHA provided, try to get it (for updates)
@@ -216,6 +295,14 @@ export async function deleteFile(
   message: string,
   sha: string
 ) {
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const pathError = validateGitHubFilePath(path);
+  const messageError = validateGitHubCommitMessage(message);
+  if (ownerError || repoError || pathError || messageError) {
+    throw githubInputError(ownerError || repoError || pathError || messageError || 'GitHub input invalido');
+  }
+
   const octokit = await getGitHubClient();
   
   const { data } = await octokit.repos.deleteFile({

@@ -1528,11 +1528,12 @@ export default function AgentsOfficePage() {
     reply: true,
     break: true,
   });
-  const { data: projects = [] } = useQuery<MonitoredProject[]>({
+  const { data: projectsResponse = [] } = useQuery<MonitoredProject[] | { error?: string }>({
     queryKey: ["projects"],
     queryFn: () => fetch("/api/projects").then((response) => response.json()),
     refetchInterval: 30000,
   });
+  const projects = Array.isArray(projectsResponse) ? projectsResponse : [];
   const { data: githubOverview = {} } = useQuery<GitHubOverview>({
     queryKey: ["projects-github-overview", projects.map((project) => project.githubRepo).filter(Boolean).join(",")],
     queryFn: () => fetch("/api/projects/github-overview").then((response) => response.json()),

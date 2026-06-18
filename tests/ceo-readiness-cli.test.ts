@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatCeoReadinessText, parseCeoReadinessArgs } from "../server/ceo-readiness-cli";
+import { formatCeoReadinessText, parseCeoReadinessArgs, validateCeoReadinessOptions } from "../server/ceo-readiness-cli";
 
 test("parses CEO readiness CLI options", () => {
   assert.deepEqual(parseCeoReadinessArgs([]), { userId: "", json: false });
   assert.deepEqual(parseCeoReadinessArgs(["--user-id=user-123", "--json"]), { userId: "user-123", json: true });
+});
+
+test("validates CEO readiness CLI user id placeholders", () => {
+  assert.deepEqual(validateCeoReadinessOptions(parseCeoReadinessArgs([])), []);
+  assert.deepEqual(validateCeoReadinessOptions(parseCeoReadinessArgs(["--user-id=user-123"])), []);
+  assert.deepEqual(validateCeoReadinessOptions(parseCeoReadinessArgs(["--user-id=<real-user-id>"])), [
+    "--user-id must be a real value, not a placeholder.",
+  ]);
 });
 
 test("formats CEO readiness text output", () => {

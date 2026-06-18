@@ -118,8 +118,13 @@ test("limits mock fallback to dev/test unless explicitly enabled", () => {
 test("requires DEFAULT_USER_ID for system jobs when dev fallback is disabled", () => {
   assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: "system-user", ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), "system-user");
+  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: "<real-user-id>", ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
   assert.throws(
     () => withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()),
+    /DEFAULT_USER_ID is required/,
+  );
+  assert.throws(
+    () => withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: "<real-user-id>", ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()),
     /DEFAULT_USER_ID is required/,
   );
 });

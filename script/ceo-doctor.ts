@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { buildCeoDoctorChecks, buildCeoDoctorNextCommands, formatCeoDoctorJson, formatCeoDoctorReport, parseCeoDoctorArgs } from "../server/ceo-doctor-cli";
 
 const options = parseCeoDoctorArgs(process.argv.slice(2));

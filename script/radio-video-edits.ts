@@ -2,16 +2,24 @@ import path from "node:path";
 import os from "node:os";
 import { processRadioVideos } from "../server/radio-video-edit-agent";
 import { getSystemUserId } from "../server/user-context";
+import { hasRealValue } from "../server/ceo-doctor-cli";
 
 function envFlag(name: string): boolean {
   return ["1", "true", "yes"].includes(String(process.env[name] || "").toLowerCase());
 }
 
+function resolveOptionalPathEnv(name: string, fallback: string): string {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  if (hasRealValue(value)) return value;
+  throw new Error(`${name} must be a real filesystem path, not a placeholder.`);
+}
+
 async function main() {
-  const userId = process.env.USER_ID || getSystemUserId();
-  const sourceDir = process.env.SOURCE_DIR || path.join(os.homedir(), "Movies");
-  const fallbackInputDir = process.env.FALLBACK_INPUT_DIR || path.join(process.cwd(), "radio_video_edits", "01_originales");
-  const outputDir = process.env.OUTPUT_DIR || path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
+  const userId = hasRealValue(process.env.USER_ID) ? process.env.USER_ID : getSystemUserId();
+  const sourceDir = resolveOptionalPathEnv("SOURCE_DIR", path.join(os.homedir(), "Movies"));
+  const fallbackInputDir = resolveOptionalPathEnv("FALLBACK_INPUT_DIR", path.join(process.cwd(), "radio_video_edits", "01_originales"));
+  const outputDir = resolveOptionalPathEnv("OUTPUT_DIR", path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir"));
   const searchDepth = Number.parseInt(process.env.SEARCH_DEPTH || "3", 10);
   const force = envFlag("FORCE");
 

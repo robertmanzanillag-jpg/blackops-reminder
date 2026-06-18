@@ -17,8 +17,15 @@ test("requires explicit user id and execute flag before sending CEO brief", () =
     userId: "",
     execute: false,
   }), [
-    "--user-id is required.",
+    "--user-id must be a real value, not a placeholder.",
     "--execute is required to send a real Telegram CEO brief.",
+  ]);
+
+  assert.deepEqual(validateSendCeoBriefOptions({
+    userId: "<real-user-id>",
+    execute: true,
+  }), [
+    "--user-id must be a real value, not a placeholder.",
   ]);
 
   assert.deepEqual(validateSendCeoBriefOptions({

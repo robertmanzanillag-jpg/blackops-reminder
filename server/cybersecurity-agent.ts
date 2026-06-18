@@ -2,10 +2,15 @@ import type { AppIncident, AppProject, MonitoredProject } from "@shared/schema";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage } from "./telegram";
+import { hasRealValue } from "./ceo-doctor-cli";
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const lastAutomaticAlertByUser = new Map<string, { signature: string; sentAt: number }>();
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 export type CyberThreatSeverity = "critical" | "high" | "medium" | "low";
 
@@ -64,6 +69,18 @@ export type CybersecurityScanResult = {
   skills: CyberSkill[];
 };
 
+export type CyberInventoryImportResult = {
+  imported: number;
+  skipped: number;
+  totalGithubRepos: number;
+  githubConnected: boolean;
+  apps: AppProject[];
+  skippedRepos: Array<{
+    fullName: string;
+    reason: string;
+  }>;
+};
+
 function severityRank(severity: CyberThreatSeverity): number {
   return { critical: 4, high: 3, medium: 2, low: 1 }[severity];
 }
@@ -76,6 +93,31 @@ function normalizeRepo(app: AppProject): string | null {
   if (app.githubRepo) return app.githubRepo;
   if (app.repoOwner && app.repoName) return `${app.repoOwner}/${app.repoName}`;
   return null;
+}
+
+function normalizeRepoValue(repo: string | null | undefined): string | null {
+  return repo?.trim().toLowerCase() || null;
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "app";
+}
+
+function friendlyRepoName(repoName: string): string {
+  return repoName
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function inferPriorityFromRepo(repo: GithubRepo): AppProject["priority"] {
+  const text = `${repo.full_name} ${repo.description || ""} ${repo.homepage || ""}`.toLowerCase();
+  if (text.includes("blackops") || text.includes("kong") || text.includes("blackroom") || text.includes("br-website")) {
+    return "high";
+  }
+  if (text.includes("production") || text.includes("prod") || text.includes("website") || text.includes("app")) {
+    return "normal";
+  }
+  return "normal";
 }
 
 function createThreat(
@@ -131,6 +173,18 @@ export function analyzeAppProject(app: AppProject, incidents: AppIncident[]): Cy
     ));
   }
 
+  if (app.environment === "production" && ["high", "critical"].includes(app.priority) && !app.publicUrl) {
+    threats.push(createThreat(
+      app.name,
+      url,
+      "coverage",
+      app.priority === "critical" ? "high" : "medium",
+      "App importante sin URL pública",
+      "Está en producción con prioridad alta, pero no tiene publicUrl para revisar superficie externa.",
+      "Agregar el dominio/deploy público real para que Cybersecurity pueda mapear HTTPS, uptime y exposición."
+    ));
+  }
+
   if (url && !url.startsWith("https://")) {
     threats.push(createThreat(
       app.name,
@@ -143,6 +197,18 @@ export function analyzeAppProject(app: AppProject, incidents: AppIncident[]): Cy
     ));
   }
 
+  if (app.environment === "production" && ["high", "critical"].includes(app.priority) && !app.healthUrl) {
+    threats.push(createThreat(
+      app.name,
+      url,
+      "coverage",
+      app.priority === "critical" ? "high" : "medium",
+      "App importante sin health URL",
+      "Está marcada como prioridad alta o crítica pero no tiene endpoint de salud dedicado.",
+      "Crear /health o endpoint equivalente para monitoreo rápido y alertas confiables."
+    ));
+  }
+
   if (app.environment === "production" && !repo) {
     threats.push(createThreat(
       app.name,
@@ -152,18 +218,6 @@ export function analyzeAppProject(app: AppProject, incidents: AppIncident[]): Cy
       "Repo no conectado",
       "No hay repo GitHub asociado a esta app de producción.",
       "Conectar repo para que Cybersecurity pueda revisar cambios, PRs y trazabilidad."
-    ));
-  }
-
-  if (app.priority === "critical" && !app.healthUrl) {
-    threats.push(createThreat(
-      app.name,
-      url,
-      "coverage",
-      "high",
-      "App crítica sin health URL",
-      "Está marcada como crítica pero no tiene endpoint de salud dedicado.",
-      "Crear /health o endpoint equivalente para monitoreo rápido y alertas confiables."
     ));
   }
 
@@ -234,6 +288,15 @@ function connectedRepoSet(apps: AppProject[], legacyProjects: MonitoredProject[]
   }
   for (const project of legacyProjects) {
     if (project.githubRepo) repos.add(project.githubRepo.toLowerCase());
+  }
+  return repos;
+}
+
+function appRepoSet(apps: AppProject[]): Set<string> {
+  const repos = new Set<string>();
+  for (const app of apps) {
+    const repo = normalizeRepo(app);
+    if (repo) repos.add(repo.toLowerCase());
   }
   return repos;
 }
@@ -346,6 +409,82 @@ function analyzeGithubRepo(repo: GithubRepo, connectedRepos: Set<string>): { che
       notes,
     },
     threats,
+  };
+}
+
+function githubRepoToAppProjectInput(repo: GithubRepo) {
+  const [repoOwner, repoName] = repo.full_name.split("/");
+  const homepage = repo.homepage?.trim();
+  const publicUrl = homepage && /^https?:\/\//i.test(homepage) ? homepage : null;
+
+  return {
+    name: friendlyRepoName(repo.name),
+    slug: slugify(repo.name),
+    description: repo.description || `Inventario importado desde GitHub: ${repo.full_name}`,
+    environment: "production" as const,
+    publicUrl,
+    healthUrl: null,
+    repoOwner: repoOwner || null,
+    repoName: repoName || repo.name,
+    githubRepo: repo.full_name,
+    deploymentProvider: publicUrl ? "github-homepage" : null,
+    deploymentId: null,
+    sentryProjectId: null,
+    stripeAccountId: null,
+    stripeWebhookEndpointId: null,
+    logSource: null,
+    priority: inferPriorityFromRepo(repo),
+    ownerLabel: "Robert",
+    tags: [
+      "github-import",
+      ...(publicUrl ? [] : ["needs-public-url"]),
+      "needs-health-url",
+    ],
+  };
+}
+
+export async function importMissingGithubApps(userId: string): Promise<CyberInventoryImportResult> {
+  const [apps, repos] = await Promise.all([
+    storage.getAppProjects(userId),
+    listRepositories(),
+  ]);
+  const existingAppRepos = appRepoSet(apps);
+  const importedApps: AppProject[] = [];
+  const skippedRepos: CyberInventoryImportResult["skippedRepos"] = [];
+  let skipped = 0;
+
+  for (const repo of repos) {
+    const repoKey = normalizeRepoValue(repo.full_name);
+    if (!repoKey) {
+      skipped++;
+      skippedRepos.push({ fullName: repo.full_name, reason: "Repo invalido" });
+      continue;
+    }
+
+    if (existingAppRepos.has(repoKey)) {
+      skipped++;
+      skippedRepos.push({ fullName: repo.full_name, reason: "Ya existe en Developer Health" });
+      continue;
+    }
+
+    if (repo.archived || repo.disabled || repo.fork || !isLikelyAppRepo(repo)) {
+      skipped++;
+      skippedRepos.push({ fullName: repo.full_name, reason: "No parece una app activa para monitoreo" });
+      continue;
+    }
+
+    const created = await storage.createAppProject(userId, githubRepoToAppProjectInput(repo));
+    existingAppRepos.add(repoKey);
+    importedApps.push(created);
+  }
+
+  return {
+    imported: importedApps.length,
+    skipped,
+    totalGithubRepos: repos.length,
+    githubConnected: true,
+    apps: importedApps,
+    skippedRepos,
   };
 }
 
@@ -503,8 +642,9 @@ export async function runCybersecurityScan(userId: string, notify = false): Prom
 
   if (notify || shouldSendAutomaticAlert(userId, result)) {
     const telegramConfig = await storage.getTelegramConfig(userId);
-    if (telegramConfig?.enabled && telegramConfig.chatId && TELEGRAM_BOT_TOKEN) {
-      result.telegramSent = await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, formatTelegramReport(result));
+    const botToken = getTelegramBotToken();
+    if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
+      result.telegramSent = await sendTelegramMessage(botToken, telegramConfig.chatId, formatTelegramReport(result));
     }
   }
 

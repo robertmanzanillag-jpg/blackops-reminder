@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import type { Request } from "express";
+import { hasRealValue } from "./ceo-doctor-cli";
 import { storage } from "./storage";
 
 const CANVA_AUTH_URL = "https://www.canva.com/api/oauth/authorize";
@@ -31,7 +32,7 @@ function getCanvaClientConfig() {
   const clientId = process.env.CANVA_CLIENT_ID;
   const clientSecret = process.env.CANVA_CLIENT_SECRET;
 
-  if (!clientId || !clientSecret) {
+  if (!hasRealValue(clientId) || !hasRealValue(clientSecret)) {
     throw new Error("Canva OAuth is not configured. Add CANVA_CLIENT_ID and CANVA_CLIENT_SECRET.");
   }
 
@@ -47,9 +48,9 @@ function getBasicAuthHeader(clientId: string, clientSecret: string): string {
 }
 
 export function resolveCanvaRedirectUri(req: Request): string {
-  if (process.env.CANVA_REDIRECT_URI) return process.env.CANVA_REDIRECT_URI;
+  if (hasRealValue(process.env.CANVA_REDIRECT_URI)) return process.env.CANVA_REDIRECT_URI;
 
-  const publicAppUrl = process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN;
+  const publicAppUrl = [process.env.PUBLIC_APP_URL, process.env.EXPO_PUBLIC_DOMAIN].find(hasRealValue);
   if (publicAppUrl) {
     const origin = publicAppUrl.startsWith("http") ? publicAppUrl : `https://${publicAppUrl}`;
     return `${origin.replace(/\/$/, "")}/api/canva/oauth/callback`;
@@ -66,7 +67,7 @@ export function createCanvaAuthorizationUrl(userId: string, req: Request): strin
   const codeChallenge = base64UrlSha256(codeVerifier);
   const state = randomBytes(48).toString("base64url");
   const redirectUri = resolveCanvaRedirectUri(req);
-  const scope = process.env.CANVA_SCOPES || DEFAULT_CANVA_SCOPES;
+  const scope = hasRealValue(process.env.CANVA_SCOPES) ? process.env.CANVA_SCOPES : DEFAULT_CANVA_SCOPES;
 
   pendingAuth.set(state, {
     userId,
@@ -142,7 +143,7 @@ export async function exchangeCanvaAuthorizationCode(params: {
 }
 
 export async function getCanvaAccessToken(userId: string): Promise<string> {
-  if (process.env.CANVA_ACCESS_TOKEN) return process.env.CANVA_ACCESS_TOKEN;
+  if (hasRealValue(process.env.CANVA_ACCESS_TOKEN)) return process.env.CANVA_ACCESS_TOKEN;
 
   const existing = await storage.getCanvaOAuthToken(userId);
   if (!existing) {
@@ -163,11 +164,14 @@ export async function getCanvaAccessToken(userId: string): Promise<string> {
 
 export async function getCanvaOAuthStatus(userId: string) {
   const token = await storage.getCanvaOAuthToken(userId);
+  const envTokenConfigured = hasRealValue(process.env.CANVA_ACCESS_TOKEN);
+  const clientConfigured = hasRealValue(process.env.CANVA_CLIENT_ID)
+    && hasRealValue(process.env.CANVA_CLIENT_SECRET);
   return {
-    configured: Boolean(process.env.CANVA_ACCESS_TOKEN || (process.env.CANVA_CLIENT_ID && process.env.CANVA_CLIENT_SECRET)),
-    connected: Boolean(process.env.CANVA_ACCESS_TOKEN || token),
+    configured: envTokenConfigured || clientConfigured,
+    connected: envTokenConfigured || Boolean(token),
     expiresAt: token?.expiresAt || null,
     scope: token?.scope || null,
-    redirectUri: process.env.CANVA_REDIRECT_URI || null,
+    redirectUri: hasRealValue(process.env.CANVA_REDIRECT_URI) ? process.env.CANVA_REDIRECT_URI : null,
   };
 }

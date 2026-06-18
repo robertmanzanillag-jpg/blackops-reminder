@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT_DIR="${INPUT_SOURCE_DIR:-$ROOT_DIR/promo_video_edits/01_originales}"
-OUTPUT_DIR="$ROOT_DIR/promo_video_edits/03_listos_para_subir"
+OUTPUT_DIR="${PROMO_OUTPUT_DIR:-$ROOT_DIR/promo_video_edits/03_listos_para_subir}"
 
 OBJECTIVE="${OBJECTIVE:-nightlife}"
 MAX_VIDEOS="${MAX_VIDEOS:-0}"

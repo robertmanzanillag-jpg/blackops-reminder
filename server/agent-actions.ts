@@ -6,7 +6,12 @@ import { getPrice } from "./finance";
 import { format, addDays, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { getSystemUserId } from "./user-context";
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+import { hasRealValue } from "./ceo-doctor-cli";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 export interface AgentAction {
   id: string;
@@ -32,11 +37,12 @@ export interface ScheduledAction {
 
 async function sendNotification(userId: string, message: string): Promise<boolean> {
   const telegramConfig = await storage.getTelegramConfig(userId);
-  if (!telegramConfig || !telegramConfig.chatId || !TELEGRAM_BOT_TOKEN) {
+  const botToken = getTelegramBotToken();
+  if (!telegramConfig || !telegramConfig.chatId || !botToken) {
     console.log("Telegram not configured for notifications");
     return false;
   }
-  return await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+  return await sendTelegramMessage(botToken, telegramConfig.chatId, message);
 }
 
 export const availableActions: AgentAction[] = [

@@ -1,8 +1,12 @@
 import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
 import { getStockPrice, getCryptoPrice } from "./finance";
+import { hasRealValue } from "./ceo-doctor-cli";
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 interface PortfolioSummary {
   totalValue: number;
   dailyChange: number;
@@ -92,7 +96,8 @@ async function savePortfolioSnapshot(userId: string, summary: PortfolioSummary):
 
 async function sendDailyMarketUpdateForUser(userId: string): Promise<boolean> {
   const telegramConfig = await storage.getTelegramConfig(userId);
-  if (!telegramConfig?.enabled) {
+  const botToken = getTelegramBotToken();
+  if (!telegramConfig?.enabled || !telegramConfig.chatId || !botToken) {
     console.log(`[Market] Telegram not configured or disabled for ${userId}, skipping market update`);
     return false;
   }
@@ -133,7 +138,7 @@ async function sendDailyMarketUpdateForUser(userId: string): Promise<boolean> {
 
   message += `⏰ ${new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "short" })}`;
 
-  await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+  await sendTelegramMessage(botToken, telegramConfig.chatId, message);
   console.log(`[Market] Daily market update sent successfully for ${userId}`);
   return true;
 }

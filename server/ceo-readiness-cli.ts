@@ -1,3 +1,5 @@
+import { hasRealValue } from "./ceo-doctor-cli";
+
 export type CeoReadinessCliOptions = {
   userId: string;
   json: boolean;
@@ -14,6 +16,11 @@ export function parseCeoReadinessArgs(argv: string[]): CeoReadinessCliOptions {
     userId: getValue("--user-id"),
     json: argv.includes("--json"),
   };
+}
+
+export function validateCeoReadinessOptions(options: CeoReadinessCliOptions): string[] {
+  if (!options.userId) return [];
+  return hasRealValue(options.userId) ? [] : ["--user-id must be a real value, not a placeholder."];
 }
 
 export function formatCeoReadinessText(report: {

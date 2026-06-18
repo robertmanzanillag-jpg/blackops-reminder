@@ -9,6 +9,8 @@ const PROJECT_ROOT = process.cwd();
 // Allowed directories for file operations (security)
 const ALLOWED_DIRS = ['client/src', 'server', 'shared'];
 const ALLOWED_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.css', '.json', '.sql'];
+const SQL_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/;
+const MUTATING_SQL_PATTERN = /\b(ALTER|ANALYZE|CALL|COPY|CREATE|DELETE|DO|DROP|EXECUTE|GRANT|INSERT|LOCK|MERGE|REFRESH|REINDEX|REVOKE|TRUNCATE|UPDATE|VACUUM)\b/i;
 
 interface FileChange {
   filePath: string;
@@ -21,14 +23,14 @@ interface FileChange {
 // In-memory change history (could be persisted to DB later)
 const changeHistory: FileChange[] = [];
 
-function isPathAllowed(filePath: string): boolean {
+export function isCodeAgentPathAllowed(filePath: string): boolean {
   const normalizedPath = path.normalize(filePath);
   
   // Prevent directory traversal
   if (normalizedPath.includes('..')) return false;
   
   // Check if path starts with allowed directory
-  const isInAllowedDir = ALLOWED_DIRS.some(dir => normalizedPath.startsWith(dir));
+  const isInAllowedDir = ALLOWED_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}${path.sep}`));
   if (!isInAllowedDir) return false;
   
   // Check extension
@@ -36,6 +38,34 @@ function isPathAllowed(filePath: string): boolean {
   if (!ALLOWED_EXTENSIONS.includes(ext)) return false;
   
   return true;
+}
+
+function isSqlIdentifier(value: string): boolean {
+  return SQL_IDENTIFIER_PATTERN.test(value);
+}
+
+function isSafeSqlDefaultValue(value: string): boolean {
+  const trimmed = value.trim();
+  return /^(NULL|TRUE|FALSE|CURRENT_TIMESTAMP|NOW\(\))$/i.test(trimmed)
+    || /^-?\d+(\.\d+)?$/.test(trimmed)
+    || /^'([^']|'')*'$/.test(trimmed);
+}
+
+function validateReadOnlySelectQuery(query: string): string | null {
+  const trimmed = query.trim();
+  if (!/^SELECT\b/i.test(trimmed)) {
+    return 'Solo se permiten consultas SELECT por seguridad';
+  }
+  if (trimmed.includes(';')) {
+    return 'Solo se permite una consulta SELECT sin múltiples statements';
+  }
+  if (/--|\/\*/.test(trimmed)) {
+    return 'No se permiten comentarios SQL en consultas del Code Agent';
+  }
+  if (MUTATING_SQL_PATTERN.test(trimmed)) {
+    return 'La consulta contiene una palabra reservada no permitida para modo lectura';
+  }
+  return null;
 }
 
 function ensureBackupDir(): void {
@@ -65,7 +95,7 @@ function createBackup(filePath: string): string | null {
 }
 
 export async function readFile(filePath: string): Promise<{ success: boolean; content?: string; error?: string }> {
-  if (!isPathAllowed(filePath)) {
+  if (!isCodeAgentPathAllowed(filePath)) {
     return { success: false, error: `Acceso denegado: ${filePath}` };
   }
   
@@ -88,7 +118,7 @@ export async function writeFile(
   content: string,
   description: string = 'Cambio de archivo'
 ): Promise<{ success: boolean; backupPath?: string; error?: string }> {
-  if (!isPathAllowed(filePath)) {
+  if (!isCodeAgentPathAllowed(filePath)) {
     return { success: false, error: `Acceso denegado: ${filePath}` };
   }
   
@@ -140,7 +170,7 @@ export async function listFiles(directory: string): Promise<{ success: boolean; 
     return { success: false, error: `Acceso denegado: path traversal detectado` };
   }
   
-  if (!ALLOWED_DIRS.some(dir => normalizedDir.startsWith(dir))) {
+  if (!ALLOWED_DIRS.some(dir => normalizedDir === dir || normalizedDir.startsWith(`${dir}${path.sep}`))) {
     return { success: false, error: `Acceso denegado: ${directory}` };
   }
   
@@ -224,10 +254,9 @@ export async function getTableSchema(): Promise<{ success: boolean; tables?: any
 }
 
 export async function executeQuery(query: string): Promise<{ success: boolean; result?: any; error?: string }> {
-  // Only allow SELECT queries for safety
-  const trimmedQuery = query.trim().toUpperCase();
-  if (!trimmedQuery.startsWith('SELECT')) {
-    return { success: false, error: 'Solo se permiten consultas SELECT por seguridad' };
+  const validationError = validateReadOnlySelectQuery(query);
+  if (validationError) {
+    return { success: false, error: validationError };
   }
   
   try {
@@ -270,6 +299,16 @@ export async function addColumnToTable(
   tableName: string, 
   column: ColumnDefinition
 ): Promise<{ success: boolean; error?: string }> {
+  if (!isSqlIdentifier(tableName)) {
+    return { success: false, error: 'Nombre de tabla inválido' };
+  }
+  if (!isSqlIdentifier(column.name)) {
+    return { success: false, error: 'Nombre de columna inválido' };
+  }
+  if (column.defaultValue && !isSafeSqlDefaultValue(column.defaultValue)) {
+    return { success: false, error: 'Default SQL no permitido; usa un literal simple, NULL, TRUE/FALSE, NOW() o CURRENT_TIMESTAMP' };
+  }
+
   // Validate table name
   const validTables = await db.execute(sql`
     SELECT table_name FROM information_schema.tables 
@@ -319,8 +358,19 @@ export async function createTable(
   definition: TableDefinition
 ): Promise<{ success: boolean; error?: string }> {
   // Validate table name (alphanumeric and underscore only)
-  if (!/^[a-z_][a-z0-9_]*$/.test(definition.name)) {
+  if (!isSqlIdentifier(definition.name)) {
     return { success: false, error: 'Nombre de tabla inválido' };
+  }
+  if (!Array.isArray(definition.columns) || definition.columns.length === 0) {
+    return { success: false, error: 'Se requiere al menos una columna' };
+  }
+  for (const column of definition.columns) {
+    if (!isSqlIdentifier(column.name)) {
+      return { success: false, error: `Nombre de columna inválido: ${column.name}` };
+    }
+    if (column.defaultValue && !isSafeSqlDefaultValue(column.defaultValue)) {
+      return { success: false, error: `Default SQL no permitido para columna: ${column.name}` };
+    }
   }
   
   const pgTypeMap: Record<string, string> = {

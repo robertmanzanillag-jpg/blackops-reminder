@@ -1,14 +1,15 @@
+import "../server/env-loader";
 import { storage } from "../server/storage";
 import { hashPassword } from "../server/local-auth-core";
-import { parseCreateLocalUserArgs, validateCreateLocalUserOptions } from "../server/local-auth-cli";
+import { parseCreateLocalUserArgs, resolveCreateLocalUserOptions, validateCreateLocalUserOptions } from "../server/local-auth-cli";
 
 async function main() {
-  const options = parseCreateLocalUserArgs(process.argv.slice(2));
+  const options = resolveCreateLocalUserOptions(parseCreateLocalUserArgs(process.argv.slice(2)));
   const errors = validateCreateLocalUserOptions(options);
 
   if (errors.length > 0) {
     console.error(errors.join("\n"));
-    console.error("Usage: npm run auth:create-user -- --username=<username> --password=<password> [--print-user-id]");
+    console.error("Usage: read -r -s LOCAL_AUTH_PASSWORD; export LOCAL_AUTH_PASSWORD; npm run auth:create-user -- --username=<username> --password-env=LOCAL_AUTH_PASSWORD [--print-user-id]; unset LOCAL_AUTH_PASSWORD");
     process.exit(1);
   }
 

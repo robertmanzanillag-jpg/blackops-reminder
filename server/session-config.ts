@@ -1,5 +1,6 @@
 import session, { type SessionOptions } from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { resolveDatabaseConnectionString } from "./database-url";
 import { resolveSessionRuntimeSettings, type SessionRuntimeSettings } from "./session-config-core";
 
 export { resolveSessionRuntimeSettings };
@@ -25,7 +26,7 @@ export function createSessionMiddleware(settings = resolveSessionRuntimeSettings
   if (settings.storeKind === "postgres") {
     const PgSession = connectPgSimple(session);
     options.store = new PgSession({
-      conString: process.env.DATABASE_URL,
+      conString: resolveDatabaseConnectionString(),
       createTableIfMissing: true,
       tableName: "user_sessions",
     });

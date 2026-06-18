@@ -2,6 +2,68 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { addBlackRoomCountdown, deactivateBlackRoomLink, formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "../server/blackroom-links";
 
+test("Black Room admin headers reject placeholder credentials", async () => {
+  const originalFetch = globalThis.fetch;
+  const snapshot = {
+    BLACKROOM_ADMIN_COOKIE: process.env.BLACKROOM_ADMIN_COOKIE,
+    BLACKROOM_ADMIN_BEARER_TOKEN: process.env.BLACKROOM_ADMIN_BEARER_TOKEN,
+    BLACKROOM_ADMIN_API_KEY: process.env.BLACKROOM_ADMIN_API_KEY,
+  };
+  let capturedHeaders: HeadersInit | undefined;
+
+  process.env.BLACKROOM_ADMIN_COOKIE = "replace-with-admin-cookie";
+  process.env.BLACKROOM_ADMIN_BEARER_TOKEN = "your-admin-token";
+  process.env.BLACKROOM_ADMIN_API_KEY = "replace-with-api-key";
+
+  globalThis.fetch = (async (_url: any, init: any = {}) => {
+    capturedHeaders = init.headers;
+    return new Response(JSON.stringify({ totals: {}, links: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    await getBlackRoomLinkPerformance({});
+    assert.equal((capturedHeaders as Record<string, string>)?.Cookie, undefined);
+    assert.equal((capturedHeaders as Record<string, string>)?.Authorization, undefined);
+    assert.equal((capturedHeaders as Record<string, string>)?.["X-API-Key"], undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("Black Room admin base URL rejects placeholders before fetching", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalBaseUrl = process.env.BLACKROOM_ADMIN_BASE_URL;
+  let fetched = false;
+
+  process.env.BLACKROOM_ADMIN_BASE_URL = "https://your-domain.example";
+  globalThis.fetch = (async () => {
+    fetched = true;
+    return new Response(JSON.stringify({ totals: {}, links: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => getBlackRoomLinkPerformance({}),
+      /BLACKROOM_ADMIN_BASE_URL must be a real admin URL/,
+    );
+    assert.equal(fetched, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalBaseUrl === undefined) delete process.env.BLACKROOM_ADMIN_BASE_URL;
+    else process.env.BLACKROOM_ADMIN_BASE_URL = originalBaseUrl;
+  }
+});
+
 test("deactivateBlackRoomLink soft-disables bio link and builder element without DELETE", async () => {
   const calls: Array<{ url: string; method: string; body?: any }> = [];
   const originalFetch = globalThis.fetch;

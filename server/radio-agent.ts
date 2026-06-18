@@ -4,6 +4,12 @@ import { format, addDays, endOfMonth, isAfter } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Task, DjContact } from "@shared/schema";
 import { getSystemUserId } from "./user-context";
+import { hasRealValue } from "./ceo-doctor-cli";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 export interface RadioSlot {
   eventId: string;
@@ -245,7 +251,7 @@ export async function sendRadioSlotsSummary(userId = getSystemUserId()): Promise
     }
   }
 
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = getTelegramBotToken();
   if (!botToken) {
     return { sent: false, message: "No bot token" };
   }

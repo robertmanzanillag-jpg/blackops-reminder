@@ -1,19 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
-import { readFile, writeFile, listFiles, getProjectStructure, getTableSchema, createTable, addColumnToTable } from "./code-agent";
+import { isCodeAgentPathAllowed, readFile, writeFile, listFiles, getProjectStructure, getTableSchema, createTable, addColumnToTable } from "./code-agent";
+import { getGeminiClient } from "./gemini-client";
 import * as fs from 'fs';
 import * as path from 'path';
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
 
 interface CodeGenerationResult {
   success: boolean;
   files?: { path: string; content: string; action: 'create' | 'modify' }[];
+  rejectedFiles?: { path: string; reason: string }[];
   tables?: { name: string; action: 'create' | 'modify'; columns?: any[] }[];
   explanation?: string;
   error?: string;
@@ -137,6 +130,50 @@ function sanitizeAndParseJSON(jsonStr: string): any {
   }
 }
 
+type GeneratedFilePlan = { path: string; content: string; action: 'create' | 'modify' };
+
+export function validateGeneratedFilePlan(files: unknown): {
+  files: GeneratedFilePlan[];
+  rejectedFiles: { path: string; reason: string }[];
+} {
+  if (!Array.isArray(files)) return { files: [], rejectedFiles: [] };
+
+  const accepted: GeneratedFilePlan[] = [];
+  const rejectedFiles: { path: string; reason: string }[] = [];
+
+  for (const file of files) {
+    if (!file || typeof file !== "object") {
+      rejectedFiles.push({ path: "unknown", reason: "file item is not an object" });
+      continue;
+    }
+    const item = file as Record<string, unknown>;
+    const filePath = typeof item.path === "string" ? item.path : "";
+    const content = typeof item.content === "string" ? item.content : null;
+    const action = item.action === "modify" ? "modify" : item.action === "create" ? "create" : null;
+
+    if (!filePath) {
+      rejectedFiles.push({ path: "unknown", reason: "path is required" });
+      continue;
+    }
+    if (!isCodeAgentPathAllowed(filePath)) {
+      rejectedFiles.push({ path: filePath, reason: "path is outside the Code Agent allowlist" });
+      continue;
+    }
+    if (content === null) {
+      rejectedFiles.push({ path: filePath, reason: "content must be a string" });
+      continue;
+    }
+    if (!action) {
+      rejectedFiles.push({ path: filePath, reason: "action must be create or modify" });
+      continue;
+    }
+
+    accepted.push({ path: filePath, content, action });
+  }
+
+  return { files: accepted, rejectedFiles };
+}
+
 const SYSTEM_PROMPT = `Eres un agente de código para BlackOps Reminder (TypeScript/React).
 
 RESPONDE SOLO JSON VÁLIDO, sin texto antes o después.
@@ -190,7 +227,7 @@ export async function generateCode(request: GenerationRequest): Promise<CodeGene
     }
     
     // Generate code
-    const response = await ai.models.generateContent({
+    const response = await getGeminiClient().models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
         { role: "user", parts: [{ text: fullContext + '\n\n## SOLICITUD:\n' + request.prompt + '\n\nResponde SOLO con JSON válido.' }] }
@@ -237,11 +274,24 @@ export async function generateCode(request: GenerationRequest): Promise<CodeGene
       };
     }
     
+    const generatedFilePlan = validateGeneratedFilePlan(parsed.files || []);
+    if (generatedFilePlan.rejectedFiles.length > 0) {
+      return {
+        success: false,
+        files: generatedFilePlan.files,
+        rejectedFiles: generatedFilePlan.rejectedFiles,
+        tables: parsed.tables || [],
+        explanation: parsed.explanation || 'Plan rechazado por seguridad',
+        error: `El plan generado incluye archivos no permitidos: ${generatedFilePlan.rejectedFiles.map((file) => file.path).join(", ")}`,
+      };
+    }
+
     // If preview mode, just return the plan
     if (request.preview) {
       return {
         success: true,
-        files: parsed.files || [],
+        files: generatedFilePlan.files,
+        rejectedFiles: [],
         tables: parsed.tables || [],
         explanation: parsed.explanation || 'Sin explicación'
       };
@@ -252,8 +302,8 @@ export async function generateCode(request: GenerationRequest): Promise<CodeGene
     const appliedTables: { name: string; action: 'create' | 'modify'; columns?: any[] }[] = [];
     
     // Apply file changes
-    if (parsed.files) {
-      for (const file of parsed.files) {
+    if (generatedFilePlan.files) {
+      for (const file of generatedFilePlan.files) {
         const result = await writeFile(file.path, file.content, `Generado: ${request.prompt.slice(0, 50)}...`);
         if (result.success) {
           appliedFiles.push(file);

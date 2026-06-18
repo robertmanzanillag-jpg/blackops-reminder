@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { sql } from "drizzle-orm";
 import { db } from "../server/db";
 import {

@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 export const DEFAULT_DEV_USER_ID = "mock-user-123";
 export const LOCAL_AUTH_USER_COOKIE_NAME = "blackops.uid";
@@ -172,15 +173,14 @@ export function requireAppUser(req: Request, res: Response, next: NextFunction):
 
 /**
  * User context for background jobs and connector callbacks that do not receive
- * an Express request yet. Robert's existing data remains under mock-user-123
- * until real auth maps jobs/webhooks to a stored user owner.
- *
- * TODO(auth): Route each scheduler, webhook, and integration event to the user
- * who owns the subscription/configuration instead of this single-user fallback.
+ * an Express request. Request-bound APIs should use the authenticated request
+ * user; schedulers and webhooks should prefer the owner from their stored
+ * subscription/configuration. This fallback is only for explicit single-user
+ * system jobs and local/dev data migration.
  */
 export function getSystemUserId(): string {
   const configuredUserId = cleanUserId(process.env.DEFAULT_USER_ID);
-  if (configuredUserId) return configuredUserId;
+  if (configuredUserId && hasRealValue(configuredUserId)) return configuredUserId;
   if (allowsDevUserFallback()) return DEFAULT_DEV_USER_ID;
 
   const error = new Error("DEFAULT_USER_ID is required for system jobs when dev fallback is disabled") as Error & { status?: number; statusCode?: number };

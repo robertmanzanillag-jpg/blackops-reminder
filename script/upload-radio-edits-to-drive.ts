@@ -2,21 +2,30 @@ import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
 import { google } from "googleapis";
+import { hasRealValue } from "../server/ceo-doctor-cli";
 
 const DEFAULT_FOLDER_ID = "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW";
-const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_IG_EDITS_FOLDER_ID || DEFAULT_FOLDER_ID;
-const SOURCE_DIR =
-  process.env.RADIO_EDIT_OUTPUT_DIR ||
-  path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
+
+function resolveSourceDir(): string {
+  if (!process.env.RADIO_EDIT_OUTPUT_DIR) return path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
+  if (hasRealValue(process.env.RADIO_EDIT_OUTPUT_DIR)) return process.env.RADIO_EDIT_OUTPUT_DIR;
+  throw new Error("RADIO_EDIT_OUTPUT_DIR must be a real filesystem path, not a placeholder.");
+}
+
+function resolveDriveFolderId(): string {
+  if (!process.env.GOOGLE_DRIVE_IG_EDITS_FOLDER_ID) return DEFAULT_FOLDER_ID;
+  if (hasRealValue(process.env.GOOGLE_DRIVE_IG_EDITS_FOLDER_ID)) return process.env.GOOGLE_DRIVE_IG_EDITS_FOLDER_ID;
+  throw new Error("GOOGLE_DRIVE_IG_EDITS_FOLDER_ID must be a real Google Drive folder id, not a placeholder.");
+}
 
 function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function findExistingFile(drive: any, filename: string): Promise<string | null> {
+async function findExistingFile(drive: any, driveFolderId: string, filename: string): Promise<string | null> {
   const response = await drive.files.list({
     q: [
-      `'${escapeDriveQueryValue(DRIVE_FOLDER_ID)}' in parents`,
+      `'${escapeDriveQueryValue(driveFolderId)}' in parents`,
       `name = '${escapeDriveQueryValue(filename)}'`,
       "trashed = false",
     ].join(" and "),
@@ -28,9 +37,9 @@ async function findExistingFile(drive: any, filename: string): Promise<string | 
   return response.data.files?.[0]?.id || null;
 }
 
-async function uploadFile(drive: any, filePath: string) {
+async function uploadFile(drive: any, driveFolderId: string, filePath: string) {
   const filename = path.basename(filePath);
-  const existingFileId = await findExistingFile(drive, filename);
+  const existingFileId = await findExistingFile(drive, driveFolderId, filename);
   const media = {
     mimeType: "video/mp4",
     body: Readable.from(fs.readFileSync(filePath)),
@@ -46,7 +55,7 @@ async function uploadFile(drive: any, filePath: string) {
     : await drive.files.create({
         requestBody: {
           name: filename,
-          parents: [DRIVE_FOLDER_ID],
+          parents: [driveFolderId],
         },
         media,
         fields: "id, webViewLink",
@@ -57,17 +66,20 @@ async function uploadFile(drive: any, filePath: string) {
 }
 
 async function main() {
-  if (!fs.existsSync(SOURCE_DIR)) {
-    throw new Error(`No existe la carpeta de edits: ${SOURCE_DIR}`);
+  const driveFolderId = resolveDriveFolderId();
+  const sourceDir = resolveSourceDir();
+
+  if (!fs.existsSync(sourceDir)) {
+    throw new Error(`No existe la carpeta de edits: ${sourceDir}`);
   }
 
   const files = fs
-    .readdirSync(SOURCE_DIR)
+    .readdirSync(sourceDir)
     .filter((file) => file.toLowerCase().endsWith(".mp4"))
-    .map((file) => path.join(SOURCE_DIR, file));
+    .map((file) => path.join(sourceDir, file));
 
   if (files.length === 0) {
-    console.log(`No hay .mp4 para subir en ${SOURCE_DIR}`);
+    console.log(`No hay .mp4 para subir en ${sourceDir}`);
     return;
   }
 
@@ -77,7 +89,7 @@ async function main() {
   const drive = google.drive({ version: "v3", auth });
 
   for (const file of files) {
-    await uploadFile(drive, file);
+    await uploadFile(drive, driveFolderId, file);
   }
 }
 

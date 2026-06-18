@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  ArrowRight,
   BarChart3,
   Bot,
   CalendarClock,
   CheckCircle2,
   Clapperboard,
+  Copy,
   ExternalLink,
   Eye,
   Flame,
@@ -16,9 +18,13 @@ import {
   Loader2,
   Network,
   Play,
+  Plus,
   Radar,
   RefreshCw,
+  Rocket,
   FolderOpen,
+  Search,
+  Send,
   ShieldCheck,
   Sparkles,
   Target,
@@ -68,6 +74,7 @@ type ClipperAutomationRunStatus = "blocked" | "partial" | "ready";
 type ClipperGrowthAuditStatus = "critical" | "warning" | "ready";
 type ClipperDriveWorkspaceStatus = "missing_keys" | "needs_oauth" | "ready" | "error";
 type ClipperMetricsStatus = "empty" | "needs_records" | "ready";
+type ClipperAnalyticsReportingPackStatus = "not_prepared" | "needs_data" | "ready";
 type ClipperBudgetScenarioId = "lean" | "growth" | "aggressive";
 type ClipperTrendRadarStatus = "empty" | "needs_review" | "ready";
 type ClipperTrendRightsOutreachStatus = "not_prepared" | "blocked" | "partial" | "ready";
@@ -79,6 +86,8 @@ type ClipperAccountIdentityKitStatus = "not_prepared" | "ready";
 type ClipperAccountLaunchKitStatus = "not_ready" | "partial" | "ready";
 type ClipperAccountLaunchTaskStatus = "blocked" | "pending" | "ready";
 type ClipperAccountCreationPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
+type ClipperAccountSetupSessionStatus = "not_prepared" | "blocked" | "ready_to_create" | "in_progress" | "ready";
+type ClipperAccountSetupSessionItemStatus = "blocked" | "ready_to_create" | "in_progress" | "ready";
 type ClipperPermissionRequestPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperPermissionRequestReadiness = "blocked" | "ready_to_submit" | "submitted" | "approved";
 type ClipperPermissionTrackerStatus = "not_prepared" | "blocked" | "in_review" | "ready";
@@ -96,11 +105,15 @@ type ClipperExternalSetupQueueStatus = "not_prepared" | "blocked" | "in_progress
 type ClipperExternalSetupQueueItemType = "account" | "developer_app" | "permission" | "credential" | "oauth";
 type ClipperExternalSetupQueuePriority = "critical" | "high" | "medium";
 type ClipperExternalExecutionHandoffStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
+type ClipperPlatformWarRoomStatus = "blocked" | "in_progress" | "ready";
 type ClipperExternalLaunchDossierStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperAppReviewSubmissionPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperOfficialPermissionMatrixStatus = "not_prepared" | "verified" | "needs_review";
 type ClipperOfficialPermissionSourceStatus = "official_verified" | "official_login_required";
+type ClipperPermissionSubmissionDossierStatus = "not_prepared" | "blocked" | "needs_login_recheck" | "ready_to_submit" | "ready";
 type ClipperPublisherConnectorStatus = "not_prepared" | "blocked" | "partial" | "ready";
+type ClipperPublisherExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
+type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approval" | "ready_to_send";
 type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
 type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
@@ -112,14 +125,31 @@ type ClipperGoLiveAutopilotActionStatus = "run_in_app" | "external_required" | "
 type ClipperGoLiveAutopilotActionLane = "in_app" | "external" | "evidence" | "publish";
 type ClipperGoLiveAutopilotRunStatus = "not_run" | "completed" | "partial" | "blocked";
 type ClipperGoLiveAutopilotRunItemStatus = "completed" | "skipped" | "failed";
+type ClipperLocalDropSyncStatus = "not_run" | "completed" | "partial" | "blocked";
+type ClipperLocalDropSyncItemStatus = "completed" | "skipped" | "failed";
+type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "blocked";
+type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
+type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
+type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
+type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
+type ClipperDropzoneReadyPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
+type ClipperDropzoneReadyPackLane = "credentials" | "launch_evidence" | "source_videos";
+type ClipperDropzoneReadyPackItemStatus = "missing" | "partial" | "ready";
+type ClipperRobertNextActionsStatus = "not_prepared" | "blocked" | "needs_action" | "ready";
+type ClipperRobertNextActionsLane = "local_drop" | "external_portal" | "evidence" | "source_supply" | "verification";
+type ClipperLaunchEvidenceFixPackStatus = "not_prepared" | "needs_fix" | "ready";
 type ClipperBlockerUnlockPhase = "credentials" | "accounts" | "public_url" | "developer_apps" | "permissions" | "oauth" | "content_supply" | "publishing" | "optimization";
 type ClipperGoLiveExecutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperGoLiveExecutionPhaseStatus = "blocked" | "ready_to_execute" | "done";
+type ClipperGoLiveCompletionAuditStatus = "blocked" | "partial" | "ready";
+type ClipperGoLiveCompletionRequirementStatus = "blocked" | "needs_evidence" | "verified";
+type ClipperGoLiveOperatorBriefStatus = "blocked" | "needs_action" | "ready";
 type ClipperPlatformPortalChecklistStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperHttpsTunnelPlanStatus = "not_prepared" | "blocked" | "ready";
 type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
+type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -329,6 +359,8 @@ interface ClipperSourceDropImportItem {
   fileName: string;
   status: "imported" | "skipped";
   rightsStatus: ClipperAssetRightsStatus;
+  rightsEvidencePath: string | null;
+  manifestPath: string | null;
   reason: string | null;
 }
 
@@ -336,10 +368,94 @@ interface ClipperSourceDropImportSummary {
   importedAt: string;
   dropDir: string;
   filesScanned: number;
+  manifestFilesScanned: number;
+  manifestRows: number;
+  manifestMatched: number;
+  rightsEvidenceWritten: number;
   imported: number;
   skipped: number;
   items: ClipperSourceDropImportItem[];
   queue: ClipperProductionQueueSummary;
+  nextStep: string;
+}
+
+type ClipperSourceDropDiagnosticStatus = "ready_to_import" | "needs_files" | "needs_rights" | "ready";
+
+interface ClipperSourceDropDiagnosticFile {
+  relativePath: string;
+  fileName: string;
+  category: ClipperAccountCategory | null;
+  location: "category_dir" | "root" | "unsupported_dir";
+  isVideo: boolean;
+  importEligible: boolean;
+  targetFolder: string | null;
+  rightsEvidencePath: string | null;
+  manifestPath: string | null;
+  manifestEvidenceReady: boolean;
+  issue: string | null;
+  nextStep: string;
+}
+
+interface ClipperSourceDropDiagnosticManifest {
+  relativePath: string;
+  fileName: string;
+  category: ClipperAccountCategory | null;
+  rows: number;
+  readyRows: number;
+  placeholderRows: number;
+  expectedFiles: string[];
+  missingFiles: string[];
+  evidenceReadyRows: number;
+  issue: string | null;
+  nextStep: string;
+}
+
+interface ClipperSourceDropDiagnosticCategory {
+  category: ClipperAccountCategory;
+  label: string;
+  dropPath: string;
+  sourceFolder: string;
+  dropFiles: number;
+  importEligible: number;
+  manifestReady: number;
+  manifestFiles: number;
+  manifestRows: number;
+  manifestReadyRows: number;
+  manifestPlaceholderRows: number;
+  manifestMissingFiles: number;
+  sourceAssets: number;
+  rightsReadyAssets: number;
+  minimumWeeklySourceAssets: number;
+  missingSourceAssets: number;
+  nextStep: string;
+}
+
+interface ClipperSourceDropDiagnosticSummary {
+  status: ClipperSourceDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  repairWorksheetCsvPath: string;
+  dropDir: string;
+  files: ClipperSourceDropDiagnosticFile[];
+  manifests: ClipperSourceDropDiagnosticManifest[];
+  categories: ClipperSourceDropDiagnosticCategory[];
+  totals: {
+    files: number;
+    importEligible: number;
+    manifestReady: number;
+    manifestFiles: number;
+    manifestRows: number;
+    manifestReadyRows: number;
+    manifestPlaceholderRows: number;
+    manifestMissingFiles: number;
+    unsupported: number;
+    categoriesReady: number;
+    minimumWeeklySourceAssets: number;
+    currentSourceAssets: number;
+    rightsReadyAssets: number;
+    missingSourceAssets: number;
+  };
   nextStep: string;
 }
 
@@ -387,6 +503,78 @@ interface ClipperSourceAcquisitionSummary {
   nextStep: string;
 }
 
+interface ClipperSourceSupplyDropKitItem {
+  id: string;
+  rank: number;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  targetFileName: string;
+  sourceDropPath: string;
+  targetSourcePath: string;
+  platformHint: string;
+  suggestedTitle: string;
+  suggestedSource: string;
+  sourceUrlPlaceholder: string;
+  evidenceLinkPlaceholder: string;
+  intakeBatchRow: string;
+  trendCandidateBatchRow: string;
+  rightsEvidenceBatchRow: string;
+  requiredProof: string[];
+  searchBrief: string[];
+  viralSearchQueries: string[];
+  viralScoreChecklist: string[];
+  rejectIf: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceSupplyDropKitCategoryBatch {
+  id: string;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  items: number;
+  sourceDropDir: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  sourceDropPaths: string[];
+  targetSourcePaths: string[];
+  intakeBatchRows: string[];
+  trendCandidateBatchRows: string[];
+  rightsEvidenceBatchRows: string[];
+  intakeBatchTemplate: string;
+  trendCandidateBatchTemplate: string;
+  rightsEvidenceBatchTemplate: string;
+  requiredProof: string[];
+  viralSearchQueries: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceSupplyDropKitSummary {
+  status: ClipperSourceSupplyDropKitStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  items: ClipperSourceSupplyDropKitItem[];
+  categoryBatches: ClipperSourceSupplyDropKitCategoryBatch[];
+  totals: {
+    items: number;
+    critical: number;
+    high: number;
+    watch: number;
+    categories: number;
+    weeklyMissingSourceSlots: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+  };
+  intakeBatchTemplate: string;
+  nextStep: string;
+}
+
 interface ClipperSourceHuntItem {
   id: string;
   huntDate: string;
@@ -400,10 +588,20 @@ interface ClipperSourceHuntItem {
   clipObjective: string;
   publishWindow: string;
   platforms: string[];
+  targetFileName: string;
+  sourceDropPath: string;
+  sourceDropManifestPath: string;
+  sourceDropManifestRow: string;
   sourceFolder: string;
   sourcePath: string | null;
   rightsStatus: ClipperAssetRightsStatus | "missing";
   suggestedSearch: string;
+  viralSearchQueries: string[];
+  viralSearchUrls: string[];
+  recencyWindow: string;
+  minimumViralSignal: string;
+  viralScoreChecklist: string[];
+  rejectIf: string[];
   evidenceNeeded: string;
   requiredInputs: string[];
   completionHint: string;
@@ -609,6 +807,10 @@ interface ClipperAutomationRun {
   reportPath: string;
   totals: {
     posts: number;
+    dailyTargetPosts: number;
+    weeklyTargetClips: number;
+    backlogPosts: number;
+    gapToDailyTarget: number;
     scheduled: number;
     readyForManual: number;
     blocked: number;
@@ -716,6 +918,7 @@ interface ClipperAccountIdentityPlatform {
   profileLink: string;
   bio: string;
   usernameAlternatives: string[];
+  handleCheckUrls: string[];
   profileImagePrompt: string;
   bannerPrompt: string;
   firstPostIdeas: string[];
@@ -795,6 +998,7 @@ interface ClipperAccountCreationPackItem {
   officialHelpUrl: string;
   bio: string;
   usernameAlternatives: string[];
+  handleCheckUrls: string[];
   profileImagePrompt: string;
   bannerPrompt: string;
   firstPostIdeas: string[];
@@ -837,6 +1041,7 @@ interface ClipperAccountCreationSessionItem {
   priority: ClipperAccountCreationSessionPriority;
   copyPackage: Array<{ label: string; value: string }>;
   portalFormFields: Array<{ field: string; value: string; note: string }>;
+  handleCheckUrls: string[];
   handleReservationPlan: string[];
   browserSessionChecklist: string[];
   evidenceCapturePlan: string[];
@@ -860,6 +1065,7 @@ interface ClipperAccountClaimSheetItem {
   priority: ClipperAccountCreationSessionPriority;
   signupUrl: string;
   profileLink: string;
+  handleCheckUrls: string[];
   browserProfileLabel: string;
   vaultItemName: string;
   loginIdentifierLabel: string;
@@ -878,6 +1084,33 @@ interface ClipperAccountClaimSheetItem {
   blockedUntil: string[];
 }
 
+interface ClipperAccountCreationPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperAccountCreationPackStatus;
+  profiles: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  evidenceMissing: number;
+  signupUrl: string;
+  officialHelpUrl: string;
+  handles: string[];
+  accountIds: string[];
+  copyBlock: string;
+  evidenceBatchTemplate: string;
+  submittedEvidenceRows: string[];
+  verifiedEvidenceRows: string[];
+  evidenceRecipeRows: string[];
+  browserSessionChecklist: string[];
+  operatorVaultChecklist: string[];
+  requiredProof: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 interface ClipperAccountCreationPackSummary {
   status: ClipperAccountCreationPackStatus;
   generatedAt: string | null;
@@ -890,6 +1123,7 @@ interface ClipperAccountCreationPackSummary {
   items: ClipperAccountCreationPackItem[];
   sessionOrder: ClipperAccountCreationSessionItem[];
   claimSheet: ClipperAccountClaimSheetItem[];
+  platformBatches: ClipperAccountCreationPlatformBatch[];
   evidenceBatchTemplate: string;
   totals: {
     profiles: number;
@@ -897,6 +1131,67 @@ interface ClipperAccountCreationPackSummary {
     partial: number;
     blocked: number;
     evidenceMissing: number;
+    platformBatches: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperAccountSetupSessionItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  handle: string;
+  status: ClipperAccountSetupSessionItemStatus;
+  priority: ClipperAccountCreationSessionPriority;
+  signupUrl: string;
+  profileLink: string;
+  handleCheckUrls: string[];
+  vaultItemName: string;
+  loginIdentifierLabel: string;
+  passwordVaultSlot: string;
+  twoFactorSlot: string;
+  recoverySlot: string;
+  copyPackage: Array<{ label: string; value: string }>;
+  portalFormFields: Array<{ field: string; value: string; note: string }>;
+  claimSteps: string[];
+  verificationSteps: string[];
+  evidenceCapturePlan: string[];
+  submittedEvidenceBatchRow: string;
+  verifiedEvidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  evidenceRows: string[];
+  evidencePath: string | null;
+  evidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperAccountSetupSessionSummary {
+  status: ClipperAccountSetupSessionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperAccountSetupSessionItem[];
+  sourceArtifacts: {
+    accountCreationPackPath: string;
+    accountClaimSheetPath: string;
+    accountEvidenceConnectionKitPath: string;
+    accountSetupEvidenceTemplatePath: string;
+    ownerConnectPackPath: string;
+  };
+  totals: {
+    accounts: number;
+    blocked: number;
+    readyToCreate: number;
+    inProgress: number;
+    ready: number;
+    portalUrls: number;
+    evidenceRows: number;
+    vaultSlots: number;
   };
   nextStep: string;
 }
@@ -916,15 +1211,72 @@ interface ClipperAccountEvidenceItem {
   nextStep: string;
 }
 
+interface ClipperAccountEvidenceQuickBatchRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  displayName: string;
+  profileLink: string;
+  signupUrl: string;
+  developerPortalUrl: string;
+  status: ClipperAccountEvidenceItemStatus | "missing";
+  evidencePath: string | null;
+  evidenceJsonPath: string;
+  evidenceMarkdownPath: string;
+  templatePath: string;
+  batchRow: string;
+  verifiedBatchRow: string;
+  requiredProof: string[];
+  operatorSteps: string[];
+  doneCriteria: string;
+  nextStep: string;
+}
+
+interface ClipperAccountEvidencePlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperAccountEvidenceStatus;
+  accounts: number;
+  verified: number;
+  submitted: number;
+  rejected: number;
+  missing: number;
+  signupUrl: string;
+  developerPortalUrl: string;
+  handles: string[];
+  submittedEvidenceRows: string[];
+  verifiedEvidenceRows: string[];
+  submittedDropFilePath: string;
+  verifiedDropFilePath: string;
+  submittedTemplateFilePath: string;
+  verifiedTemplateFilePath: string;
+  submittedDropTemplate: string;
+  verifiedDropTemplate: string;
+  checklist: string[];
+  nextStep: string;
+}
+
 interface ClipperAccountEvidenceSummary {
   status: ClipperAccountEvidenceStatus;
   evidenceDir: string;
   templateDir: string;
   readmePath: string;
+  connectionKitManifestPath: string;
+  connectionKitMarkdownPath: string;
+  connectionKitCsvPath: string;
+  connectionKitGeneratedAt: string | null;
   launchEvidenceDropDir: string;
   launchEvidenceTemplatePath: string;
   launchEvidenceTemplateRows: number;
   launchEvidenceDropChecklist: string[];
+  quickBatchRows: ClipperAccountEvidenceQuickBatchRow[];
+  connectionKitPlatformBatches: ClipperAccountEvidencePlatformBatch[];
+  quickBatchTemplate: string;
+  quickBatchChecklist: string[];
   generatedAt: string | null;
   items: ClipperAccountEvidenceItem[];
   totals: {
@@ -952,11 +1304,68 @@ interface ClipperDeveloperAppEvidenceItem {
   nextStep: string;
 }
 
+interface ClipperDeveloperAppConnectionKitItem {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  appIdentifier: string | null;
+  publicBaseUrl: string | null;
+  redirectUri: string;
+  requiredEnvVars: string[];
+  configuredEnvVars: string[];
+  missingEnvVars: string[];
+  scopes: string[];
+  evidencePath: string | null;
+  templatePath: string;
+  draftEvidenceRow: string;
+  submittedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  copyChecklist: string[];
+  reviewerChecklist: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperDeveloperAppConnectionKitPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  appIdentifier: string | null;
+  publicBaseUrl: string | null;
+  redirectUri: string;
+  requiredEnvVars: string[];
+  missingEnvVars: string[];
+  scopes: string[];
+  submittedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  submittedDropFilePath: string;
+  approvedDropFilePath: string;
+  submittedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  submittedDropTemplate: string;
+  approvedDropTemplate: string;
+  checklist: string[];
+  nextStep: string;
+}
+
 interface ClipperDeveloperAppEvidenceSummary {
   status: ClipperDeveloperAppEvidenceStatus;
   evidenceDir: string;
   templateDir: string;
   readmePath: string;
+  connectionKitManifestPath: string;
+  connectionKitMarkdownPath: string;
+  connectionKitCsvPath: string;
+  connectionKitGeneratedAt: string | null;
+  connectionKitItems: ClipperDeveloperAppConnectionKitItem[];
+  connectionKitPlatformBatches: ClipperDeveloperAppConnectionKitPlatformBatch[];
+  connectionKitTemplate: string;
+  connectionKitChecklist: string[];
   generatedAt: string | null;
   items: ClipperDeveloperAppEvidenceItem[];
   totals: {
@@ -1013,9 +1422,126 @@ interface ClipperCredentialSetupEnvFileScan {
 interface ClipperCredentialSetupFileScan {
   fileName: string;
   relativePath: string;
-  kind: "google_oauth_json" | "env_file" | "unknown";
+  kind: "google_oauth_json" | "credential_json" | "env_file" | "credential_text" | "unknown";
   suggestedImportTarget: string;
   supportedInputFormat: string;
+  nextStep: string;
+}
+
+type ClipperCredentialDropDiagnosticStatus = "ready_to_import" | "needs_review" | "move_candidates_to_drop_dir" | "no_candidates";
+
+interface ClipperCredentialDropDiagnosticFile {
+  fileName: string;
+  relativePath: string;
+  kind: ClipperCredentialSetupFileScan["kind"];
+  location: "drop_dir" | "workspace_root";
+  importEligible: boolean;
+  suggestedImportTarget: string;
+  supportedInputFormat: string;
+  detectedEnvVars: string[];
+  pendingEnvVars: string[];
+  issue: string | null;
+  nextStep: string;
+}
+
+interface ClipperCredentialDropDiagnosticTemplateFile {
+  fileName: string;
+  relativePath: string;
+  location: "drop_dir" | "workspace_root";
+  nextStep: string;
+}
+
+interface ClipperCredentialDropDiagnosticSummary {
+  status: ClipperCredentialDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  dropDirs: string[];
+  allowedEnvVars: string[];
+  files: ClipperCredentialDropDiagnosticFile[];
+  acceptedEnvVars: string[];
+  rejectedEnvVars: string[];
+  skippedLines: number;
+  sourceFiles: string[];
+  fileErrors: Array<{ relativePath: string; reason: string }>;
+  ignoredTemplateFiles: ClipperCredentialDropDiagnosticTemplateFile[];
+  totals: {
+    files: number;
+    dropCandidates: number;
+    rootCandidates: number;
+    importEligible: number;
+    acceptedEnvVars: number;
+    rejectedEnvVars: number;
+    fileErrors: number;
+    templateFiles: number;
+    pendingEnvVars: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperCredentialPastePackItem {
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  importOrder: number;
+  docsUrl: string;
+  portalUrl: string | null;
+  configuredEnvVars: string[];
+  missingSuggestedEnvVars: string[];
+  acceptedEnvVarGroups: string[][];
+  localDropFileNames?: string[];
+  envTemplate: string;
+  verificationCommand: string;
+  nextStep: string;
+}
+
+interface ClipperCredentialTransferKitItem {
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  portalUrl: string | null;
+  docsUrl: string;
+  missingSuggestedEnvVars: string[];
+  acceptedEnvVarGroups: string[][];
+  driveSearchQueries: string[];
+  driveSearchUrls: string[];
+  localDropFileNames: string[];
+  envTemplate: string;
+  importSteps: string[];
+  verificationSteps: string[];
+  nextStep: string;
+}
+
+type ClipperCredentialDropStarterStatus = "not_prepared" | "prepared" | "ready";
+type ClipperCredentialDropStarterFileStatus = "missing" | "created" | "exists" | "not_needed";
+
+interface ClipperCredentialDropStarterFile {
+  id: string;
+  label: string;
+  relativePath: string;
+  absolutePath: string;
+  status: ClipperCredentialDropStarterFileStatus;
+  envVars: string[];
+  sourceItemIds: string[];
+  nextStep: string;
+}
+
+interface ClipperCredentialDropStarterSummary {
+  status: ClipperCredentialDropStarterStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  files: ClipperCredentialDropStarterFile[];
+  totals: {
+    files: number;
+    created: number;
+    existing: number;
+    missing: number;
+    notNeeded: number;
+    envVars: number;
+  };
   nextStep: string;
 }
 
@@ -1030,8 +1556,26 @@ interface ClipperCredentialSetupSummary {
   credentialDropDirs: string[];
   envFileScans: ClipperCredentialSetupEnvFileScan[];
   credentialFileScans: ClipperCredentialSetupFileScan[];
+  credentialDropDiagnosticPath: string;
+  credentialDropDiagnosticMarkdownPath: string;
+  credentialDropDiagnosticGeneratedAt: string | null;
+  credentialDropDiagnostic: ClipperCredentialDropDiagnosticSummary;
   items: ClipperCredentialSetupItem[];
   importPlan: ClipperCredentialImportPlanItem[];
+  credentialPastePack: ClipperCredentialPastePackItem[];
+  credentialPasteTemplate: string;
+  credentialPasteChecklist: string[];
+  credentialTransferKitManifestPath: string;
+  credentialTransferKitMarkdownPath: string;
+  credentialTransferKitEnvPath: string;
+  credentialTransferKitGeneratedAt: string | null;
+  credentialTransferKitItems: ClipperCredentialTransferKitItem[];
+  credentialTransferTemplate: string;
+  credentialTransferChecklist: string[];
+  credentialDropStarterPath: string;
+  credentialDropStarterMarkdownPath: string;
+  credentialDropStarterGeneratedAt: string | null;
+  credentialDropStarter: ClipperCredentialDropStarterSummary;
   totals: {
     items: number;
     ready: number;
@@ -1077,6 +1621,8 @@ interface ClipperCredentialSecretBatchWriteSummary {
 
 interface ClipperLaunchEvidenceBatchSummary {
   updatedAt: string;
+  strictImport?: boolean;
+  strictBlocked?: boolean;
   accepted: {
     accountEvidence: number;
     developerApps: number;
@@ -1099,6 +1645,58 @@ interface ClipperLaunchEvidenceBatchSummary {
   nextStep: string;
 }
 
+type ClipperLaunchEvidenceDropDiagnosticStatus = "empty" | "needs_values" | "needs_review" | "ready_to_import";
+
+interface ClipperLaunchEvidenceDropDiagnosticRow {
+  sourceFile: string;
+  index: number;
+  kind: string;
+  identifier: string | null;
+  platform: ClipperPlatform | null;
+  scope: string | null;
+  appIdentifier: string | null;
+  status: "ready" | "pending_values" | "rejected";
+  pendingFields: string[];
+  issue: string | null;
+  nextStep: string;
+}
+
+interface ClipperLaunchEvidenceDropDiagnosticFile {
+  relativePath: string;
+  rows: number;
+  readyRows: number;
+  pendingRows: number;
+  rejectedRows: number;
+  kinds: Record<string, number>;
+  issue: string | null;
+  nextStep: string;
+}
+
+interface ClipperLaunchEvidenceDropDiagnosticSummary {
+  status: ClipperLaunchEvidenceDropDiagnosticStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  repairWorksheetCsvPath: string;
+  dropDir: string;
+  files: ClipperLaunchEvidenceDropDiagnosticFile[];
+  rows: ClipperLaunchEvidenceDropDiagnosticRow[];
+  fileErrors: Array<{ relativePath: string; reason: string }>;
+  totals: {
+    files: number;
+    rows: number;
+    readyRows: number;
+    pendingRows: number;
+    rejectedRows: number;
+    fileErrors: number;
+    accountRows: number;
+    developerAppRows: number;
+    permissionRows: number;
+    sourceRightsRows: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperCredentialDoctorEnvFile {
   fileName: string;
   exists: boolean;
@@ -1114,6 +1712,14 @@ interface ClipperCredentialDoctorItem {
   configuredEnvVars: string[];
   missingEnvVarGroups: string[];
   envFilesWithRelevantKeys: string[];
+  dropTarget: string;
+  portalUrl: string;
+  dropFileExists: boolean;
+  dropFileEnvVars: string[];
+  dropFileReadyEnvVars: string[];
+  dropFilePendingEnvVars: string[];
+  dropFileStatus: "missing" | "empty" | "pending_values" | "ready";
+  dropFileNextStep: string;
   nextStep: string;
 }
 
@@ -1122,6 +1728,7 @@ interface ClipperCredentialDoctorSummary {
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
+  repairWorksheetCsvPath: string;
   envFiles: ClipperCredentialDoctorEnvFile[];
   items: ClipperCredentialDoctorItem[];
   totals: {
@@ -1282,6 +1889,55 @@ interface ClipperExternalExecutionUnlockBoardItem {
   nextStep: string;
 }
 
+interface ClipperExternalExecutionPortalBatch {
+  id: string;
+  platform: ClipperPlatform;
+  type: ClipperExternalSetupQueueItemType;
+  label: string;
+  status: ClipperExternalExecutionHandoffStatus;
+  total: number;
+  doNow: number;
+  blocked: number;
+  waiting: number;
+  portalUrls: string[];
+  executionUrls: string[];
+  evidenceRows: string[];
+  credentialTemplates: string[];
+  firstItemRank: number;
+  nextStep: string;
+  operatorChecklist: string[];
+  importTemplate: string;
+}
+
+interface ClipperExternalExecutionFocusRunItem {
+  id: string;
+  rank: number;
+  sourceItemId: string;
+  platform: ClipperPlatform;
+  type: ClipperExternalSetupQueueItemType;
+  label: string;
+  actionMode: ClipperExternalExecutionSessionItem["actionMode"];
+  estimatedMinutes: number;
+  portalUrl: string;
+  executionUrl: string;
+  evidenceRow: string;
+  credentialTemplate: string;
+  checklist: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperExternalExecutionFocusRun {
+  status: "ready" | "empty";
+  label: string;
+  estimatedMinutes: number;
+  items: ClipperExternalExecutionFocusRunItem[];
+  evidenceRows: string[];
+  credentialTemplates: string[];
+  portalUrls: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalExecutionSessionSummary {
   status: ClipperExternalExecutionHandoffStatus;
   generatedAt: string | null;
@@ -1292,6 +1948,8 @@ interface ClipperExternalExecutionSessionSummary {
   evidenceImportTemplate: string;
   items: ClipperExternalExecutionSessionItem[];
   unlockBoard: ClipperExternalExecutionUnlockBoardItem[];
+  portalBatches: ClipperExternalExecutionPortalBatch[];
+  focusRun: ClipperExternalExecutionFocusRun;
   totals: {
     items: number;
     doNow: number;
@@ -1300,7 +1958,138 @@ interface ClipperExternalExecutionSessionSummary {
     evidenceRows: number;
     envTemplates: number;
     importableEvidenceRows: number;
+    portalBatches: number;
   };
+  nextStep: string;
+}
+
+interface ClipperPlatformWarRoomItem {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPlatformWarRoomStatus;
+  accountTasks: number;
+  accountsVerified: number;
+  developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  permissionsApproved: number;
+  permissionsRequested: number;
+  permissionsTotal: number;
+  credentialStatus: ClipperReadinessStatus;
+  oauthStatus: ClipperConnectActionStatus;
+  tokenSaved: boolean;
+  portalUrls: string[];
+  executionUrls: string[];
+  evidenceRows: string[];
+  credentialTemplates: string[];
+  accountEvidenceRows: string[];
+  permissionEvidenceRows: string[];
+  missingEnvVars: string[];
+  blockers: string[];
+  operatorSteps: string[];
+  connectionChecklist: string[];
+  evidenceChecklist: string[];
+  safetyRules: string[];
+  afterConnectionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperPlatformAccountConnectionRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  profileLink: string;
+  accountCreationUrl: string;
+  developerPortalUrl: string;
+  status: ClipperAccountLaunchTaskStatus;
+  evidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  evidencePath: string | null;
+  accountEvidenceRow: string;
+  proofRequirements: string[];
+  checklist: string[];
+  postConnectActions: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperPlatformPermissionApprovalRow {
+  id: string;
+  platform: ClipperPlatform;
+  scope: string;
+  label: string;
+  status: ClipperPermissionTrackerItemStatus;
+  requestReadiness: ClipperPermissionRequestReadiness | "missing";
+  developerPortalUrl: string;
+  docsUrl: string;
+  officialReferenceUrl: string;
+  evidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  requestedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  proofRequirements: string[];
+  portalSteps: string[];
+  reviewerEvidence: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperPlatformWarRoomSummary {
+  status: ClipperPlatformWarRoomStatus;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperPlatformWarRoomItem[];
+  accountConnectionRows: ClipperPlatformAccountConnectionRow[];
+  permissionApprovalRows: ClipperPlatformPermissionApprovalRow[];
+  totals: {
+    platforms: number;
+    ready: number;
+    inProgress: number;
+    blocked: number;
+    accountConnections: number;
+    accountConnectionsReady: number;
+    accountConnectionsPending: number;
+    accountConnectionsBlocked: number;
+    permissionApprovals: number;
+    permissionApprovalsApproved: number;
+    permissionApprovalsRequested: number;
+    permissionApprovalsBlocked: number;
+    accountEvidenceRows: number;
+    permissionEvidenceRows: number;
+    credentialTemplates: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperGoLiveEvidenceBundleSection {
+  id: "account_connections" | "developer_apps" | "permission_requests" | "approval_rows";
+  label: string;
+  rows: string[];
+  count: number;
+  checklist: string[];
+  nextStep: string;
+}
+
+interface ClipperGoLiveEvidenceBundleSummary {
+  status: "not_prepared" | "ready";
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  importTemplate: string;
+  starterRows: string[];
+  approvalRows: string[];
+  sections: ClipperGoLiveEvidenceBundleSection[];
+  totals: {
+    rows: number;
+    starterRows: number;
+    approvalRows: number;
+    accountRows: number;
+    developerAppRows: number;
+    permissionRows: number;
+  };
+  checklist: string[];
   nextStep: string;
 }
 
@@ -1457,6 +2246,28 @@ interface ClipperGoLiveAutopilotAction {
   unblockCondition: string;
 }
 
+interface ClipperGoLiveAutopilotAgentSession {
+  id: string;
+  agentId: string;
+  subAgentName: string;
+  owner: string;
+  status: ClipperGoLiveAutopilotBriefStatus;
+  actionIds: string[];
+  actionCount: number;
+  inAppReady: number;
+  externalRequired: number;
+  waiting: number;
+  blocked: number;
+  platforms: Array<ClipperPlatform | "system">;
+  portalUrls: string[];
+  localActionUrls: string[];
+  evidenceRows: string[];
+  riskControls: string[];
+  firstActionRank: number;
+  mission: string;
+  nextStep: string;
+}
+
 interface ClipperGoLiveAutopilotBriefSummary {
   status: ClipperGoLiveAutopilotBriefStatus;
   generatedAt: string | null;
@@ -1464,6 +2275,7 @@ interface ClipperGoLiveAutopilotBriefSummary {
   markdownPath: string;
   csvPath: string;
   actions: ClipperGoLiveAutopilotAction[];
+  agentSessions: ClipperGoLiveAutopilotAgentSession[];
   totals: {
     actions: number;
     inAppReady: number;
@@ -1472,6 +2284,7 @@ interface ClipperGoLiveAutopilotBriefSummary {
     done: number;
     blocked: number;
     platformsCovered: number;
+    agentSessions: number;
   };
   lanes: Record<ClipperGoLiveAutopilotActionLane, number>;
   nextStep: string;
@@ -1494,6 +2307,10 @@ interface ClipperGoLiveAutopilotRunSummary {
   markdownPath: string;
   requestedActionId: string | null;
   maxActions: number;
+  resetCompleted: boolean;
+  availableInAppActions: number;
+  alreadyCompletedInAppActions: number;
+  remainingInAppActions: number;
   completedActionIds: string[];
   items: ClipperGoLiveAutopilotRunItem[];
   totals: {
@@ -1501,6 +2318,245 @@ interface ClipperGoLiveAutopilotRunSummary {
     completed: number;
     skipped: number;
     failed: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperLocalDropSyncItem {
+  id: "credential_drop" | "permission_template_drop" | "launch_evidence_drop" | "source_drop" | "state_refresh";
+  label: string;
+  status: ClipperLocalDropSyncItemStatus;
+  startedAt: string;
+  finishedAt: string;
+  message: string;
+}
+
+interface ClipperLocalDropSyncMissingInput {
+  id: "credentials" | "launch_evidence" | "source_videos";
+  label: string;
+  status: "ready" | "needed";
+  dropDirs: string[];
+  acceptedFormats: string[];
+  requiredExamples: string[];
+  actionLabel: string;
+  actionUrl: string;
+  nextStep: string;
+}
+
+interface ClipperLocalDropSyncLaunchEvidenceDrop {
+  accepted: ClipperLaunchEvidenceBatchSummary["accepted"];
+  rejected: ClipperLaunchEvidenceBatchSummary["rejected"];
+  sourceFiles: string[];
+  fileErrors: NonNullable<ClipperLaunchEvidenceBatchSummary["fileErrors"]>;
+  nextStep: string;
+}
+
+interface ClipperLocalDropSyncSummary {
+  status: ClipperLocalDropSyncStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperLocalDropSyncItem[];
+  missingInputs: ClipperLocalDropSyncMissingInput[];
+  launchEvidenceDrop: ClipperLocalDropSyncLaunchEvidenceDrop | null;
+  totals: {
+    attempted: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperGoLivePrepSweepItem {
+  id: string;
+  label: string;
+  status: ClipperGoLivePrepSweepItemStatus;
+  startedAt: string;
+  finishedAt: string;
+  message: string;
+}
+
+interface ClipperGoLivePrepSweepSummary {
+  status: ClipperGoLivePrepSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  items: ClipperGoLivePrepSweepItem[];
+  localDropSync: ClipperLocalDropSyncSummary | null;
+  totals: {
+    attempted: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperOwnerConnectPackItem {
+  id: string;
+  rank: number;
+  lane: ClipperOwnerConnectPackLane;
+  platform: ClipperPlatform | "system";
+  label: string;
+  status: ClipperOwnerConnectPackItemStatus;
+  owner: string;
+  portalUrl: string | null;
+  executionUrl: string | null;
+  artifactPath: string | null;
+  dropDirs: string[];
+  evidenceRows: string[];
+  credentialTemplate: string | null;
+  checklist: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  progressStatus: ClipperOwnerConnectPackItemStatus | null;
+  progressNotes: string | null;
+  progressRecordedAt: string | null;
+  progressEvidenceRows: string[];
+  nextStep: string;
+}
+
+interface ClipperOwnerConnectProgressRecord {
+  itemId: string;
+  status: ClipperOwnerConnectPackItemStatus;
+  notes: string;
+  evidenceRows: string[];
+  recordedAt: string;
+  source: "clippers-ui";
+}
+
+interface ClipperOwnerConnectPackSummary {
+  status: ClipperOwnerConnectPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  progressRecordsPath: string;
+  items: ClipperOwnerConnectPackItem[];
+  progressRecords: ClipperOwnerConnectProgressRecord[];
+  sourceArtifacts: {
+    accountCreationPackPath: string;
+    developerApplicationDraftsPath: string;
+    permissionRequestPackPath: string;
+    externalExecutionSessionPath: string;
+    officialPermissionMatrixPath: string;
+    localDropSyncPath: string;
+    ownerConnectEvidenceDropPath: string;
+  };
+  totals: {
+    items: number;
+    readyToExecute: number;
+    blocked: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    credentialTemplates: number;
+    dropDirs: number;
+    progressRecords: number;
+    progressDone: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperGoLiveCompletionRequirement {
+  id: string;
+  label: string;
+  phase: ClipperBlockerUnlockPhase | "go_live";
+  status: ClipperGoLiveCompletionRequirementStatus;
+  owner: string;
+  requiredEvidence: string[];
+  currentEvidence: string;
+  proofSource: string;
+  actionUrl: string | null;
+  portalUrl: string | null;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperGoLiveCompletionExternalSessionItem {
+  id: string;
+  rank: number;
+  requirementId: string;
+  label: string;
+  phase: ClipperBlockerUnlockPhase | "go_live";
+  status: ClipperGoLiveCompletionRequirementStatus;
+  owner: string;
+  lane: "external_portal" | "evidence_upload" | "verification" | "done";
+  portalUrls: string[];
+  actionUrl: string | null;
+  artifactPath: string;
+  evidenceDropFileName: string;
+  evidenceDropPath: string;
+  evidenceCaptureTemplate: string;
+  evidenceRows: string[];
+  requiredEvidence: string[];
+  blockers: string[];
+  operatorSteps: string[];
+  doneCriteria: string[];
+  verificationCommand: string;
+  nextStep: string;
+}
+
+interface ClipperGoLiveCompletionAuditSummary {
+  status: ClipperGoLiveCompletionAuditStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  externalSessionCsvPath: string;
+  readyToPublish: boolean;
+  score: number;
+  requirements: ClipperGoLiveCompletionRequirement[];
+  externalSession: ClipperGoLiveCompletionExternalSessionItem[];
+  totals: {
+    requirements: number;
+    verified: number;
+    needsEvidence: number;
+    blocked: number;
+    externalRequired: number;
+    externalSessionItems: number;
+    externalSessionPortalUrls: number;
+    externalSessionEvidenceRows: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperGoLiveOperatorBriefLane {
+  id: "accounts" | "credentials" | "public_url" | "content_supply" | "oauth_publish";
+  label: string;
+  status: ClipperGoLiveOperatorBriefStatus;
+  owner: string;
+  priority: "critical" | "high" | "medium";
+  done: number;
+  total: number;
+  artifactPath: string;
+  actionUrl: string | null;
+  portalUrls: string[];
+  evidenceRows: string[];
+  blockers: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
+interface ClipperGoLiveOperatorBriefSummary {
+  status: ClipperGoLiveOperatorBriefStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  currentFocus: string;
+  lanes: ClipperGoLiveOperatorBriefLane[];
+  totals: {
+    lanes: number;
+    ready: number;
+    needsAction: number;
+    blocked: number;
+    portalUrls: number;
+    evidenceRows: number;
+    accountConnectionsReady: number;
+    accountConnectionsTotal: number;
+    credentialFiles: number;
+    sourceAssetsMissing: number;
   };
   nextStep: string;
 }
@@ -1513,6 +2569,10 @@ interface ClipperOfficialPermissionMatrixItem {
   scopes: Array<{
     scope: string;
     purpose: string;
+    portalProduct: string;
+    requestMode: "request_now" | "human_login_recheck";
+    ownerAction: string;
+    humanBlocker: string | null;
     requiredForAutopost: boolean;
     appReviewRequired: boolean;
     officialReferenceUrl: string;
@@ -1551,8 +2611,40 @@ interface ClipperOfficialPermissionMatrixItem {
   developerPrerequisites: string[];
   reviewRisks: string[];
   evidenceToPrepare: string[];
+  publicLaunchBlockers?: string[];
+  minimumApprovalEvidence?: string[];
   apiEndpointHint: string;
   nextStep: string;
+}
+
+interface ClipperOfficialPermissionSourceBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  accessMode: "public" | "login_required";
+  scopes: string[];
+  officialUrls: string[];
+  canonicalUrls: string[];
+  verifiedClaims: string[];
+  blocker: string | null;
+  submitDecision: "request_now" | "human_login_recheck";
+  launchEvidenceRows: string[];
+  approvalEvidenceRows: string[];
+  reviewerEvidence: string[];
+  recheckSteps: string[];
+  nextStep: string;
+}
+
+interface ClipperOfficialPermissionWebProof {
+  platform: ClipperPlatform;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  checkedAt: string;
+  accessMode: "public" | "login_required";
+  officialUrls: string[];
+  verifiedClaims: string[];
+  reviewerEvidence: string[];
+  nextHumanAction: string;
 }
 
 interface ClipperOfficialPermissionMatrixSummary {
@@ -1560,14 +2652,73 @@ interface ClipperOfficialPermissionMatrixSummary {
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
+  csvPath: string;
   verifiedAt: string;
   items: ClipperOfficialPermissionMatrixItem[];
+  sourceBatches: ClipperOfficialPermissionSourceBatch[];
+  webProofTrail: ClipperOfficialPermissionWebProof[];
   totals: {
     platforms: number;
     officialVerified: number;
     loginRequired: number;
     scopes: number;
     appReviewRequired: number;
+    sourceBatches: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperPermissionSubmissionDossierItem {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPermissionSubmissionDossierStatus;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  submitDecision: "request_now" | "human_login_recheck";
+  accessMode: "public" | "login_required";
+  developerPortalUrl: string;
+  scopes: string[];
+  officialUrls: string[];
+  verifiedClaims: string[];
+  copyBlock: string;
+  requestedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  requestedDropFilePath: string;
+  approvedDropFilePath: string;
+  requestedDropTemplate: string;
+  approvedDropTemplate: string;
+  requestedEvidenceRows: string[];
+  approvedEvidenceRows: string[];
+  reviewerEvidence: string[];
+  blockers: string[];
+  submissionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperPermissionSubmissionDossierSummary {
+  status: ClipperPermissionSubmissionDossierStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperPermissionSubmissionDossierItem[];
+  sourceArtifacts: {
+    permissionRequestPackPath: string;
+    officialPermissionMatrixPath: string;
+    developerApplicationDraftsPath: string;
+    goLiveEvidenceBundlePath: string;
+  };
+  totals: {
+    platforms: number;
+    blocked: number;
+    needsLoginRecheck: number;
+    readyToSubmit: number;
+    ready: number;
+    scopes: number;
+    requestedRows: number;
+    approvedRows: number;
+    officialUrls: number;
   };
   nextStep: string;
 }
@@ -1610,6 +2761,59 @@ interface ClipperPublisherConnectorSummary {
     ready: number;
     partial: number;
     blocked: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperPublisherExecutionQueueItem {
+  id: string;
+  postId: string;
+  queueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  status: ClipperPublisherExecutionItemStatus;
+  approvalRequired: boolean;
+  canSendNow: boolean;
+  publishAt: string;
+  endpoint: string;
+  method: "POST";
+  mode: ClipperPublisherConnectorItem["mode"];
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  requestSpec: {
+    headers: string[];
+    payloadFields: string[];
+    mediaSource: string;
+    tokenSource: "encrypted_vault" | "missing";
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    done: boolean;
+    evidence: string;
+  }>;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperPublisherExecutionQueueSummary {
+  status: ClipperPublisherExecutionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceAutomationRunId: string | null;
+  publishMode: ClipperReport["publishMode"];
+  realPublishEnabled: boolean;
+  items: ClipperPublisherExecutionQueueItem[];
+  totals: {
+    items: number;
+    blocked: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
   };
   nextStep: string;
 }
@@ -1742,6 +2946,551 @@ interface ClipperBlockerResolutionPackSummary {
   nextStep: string;
 }
 
+interface ClipperDropzoneReadyPackItem {
+  id: string;
+  rank: number;
+  lane: ClipperDropzoneReadyPackLane;
+  label: string;
+  status: ClipperDropzoneReadyPackItemStatus;
+  priority: "critical" | "high" | "medium";
+  dropDirs: string[];
+  acceptedFormats: string[];
+  expectedFiles: string[];
+  copyReadyTemplate: string;
+  sourceArtifactPath: string | null;
+  localActionUrl: string;
+  actionLabel: string;
+  blockers: string[];
+  unlocks: string[];
+  nextStep: string;
+}
+
+interface ClipperDropzoneReadyPackSummary {
+  status: ClipperDropzoneReadyPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperDropzoneReadyPackItem[];
+  sourceArtifacts: {
+    localDropSyncPath: string;
+    credentialSetupPath: string;
+    credentialTransferKitPath: string;
+    goLiveEvidenceBundlePath: string;
+    ownerConnectPackPath: string;
+    sourceSupplyDropKitPath: string;
+  };
+  totals: {
+    items: number;
+    ready: number;
+    partial: number;
+    missing: number;
+    critical: number;
+    dropDirs: number;
+    expectedFiles: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperRobertNextActionItem {
+  id: string;
+  rank: number;
+  lane: ClipperRobertNextActionsLane;
+  label: string;
+  status: "blocked" | "ready_to_execute" | "waiting" | "done";
+  priority: "critical" | "high" | "medium";
+  estimatedMinutes: number;
+  platform: ClipperPlatform | "system" | "mixed";
+  actionUrl: string | null;
+  artifactPath: string | null;
+  portalUrl: string | null;
+  dropDirs: string[];
+  evidenceRows: string[];
+  operatorSteps: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperRobertConnectionTunnelGate {
+  id: string;
+  rank: number;
+  label: string;
+  status: "blocked" | "ready_to_execute" | "waiting" | "done";
+  done: number;
+  total: number;
+  blockers: number;
+  actionLabel: string;
+  actionUrl: string | null;
+  artifactPath: string | null;
+  nextStep: string;
+  unlocks: string[];
+}
+
+interface ClipperRobertOfficialPermissionCloseoutQueue {
+  status: ClipperOfficialPermissionMatrixStatus;
+  matrixPath: string;
+  csvPath: string;
+  verifiedAt: string;
+  totals: {
+    platforms: number;
+    scopes: number;
+    appReviewRequired: number;
+    officialVerified: number;
+    loginRequired: number;
+    sourceBatches: number;
+  };
+  nextRows: string[];
+  approvalRows: string[];
+  sourceBatches: Array<{
+    id: string;
+    platform: ClipperPlatform;
+    label: string;
+    sourceStatus: ClipperOfficialPermissionSourceStatus;
+    accessMode: "public" | "login_required";
+    submitDecision: "request_now" | "human_login_recheck";
+    scopes: string[];
+    officialUrls: string[];
+    verifiedClaims: string[];
+    reviewerEvidence: string[];
+    blocker: string | null;
+    nextStep: string;
+  }>;
+  webProofTrail: Array<{
+    platform: ClipperPlatform;
+    accessMode: "public" | "login_required";
+    officialUrls: string[];
+    verifiedClaims: string[];
+    nextHumanAction: string;
+  }>;
+  nextStep: string;
+}
+
+interface ClipperRobertConnectNowHandoff {
+  markdownPath: string;
+  focusRun: ClipperExternalExecutionFocusRun;
+  evidenceCloseout?: ClipperRobertEvidenceCloseoutQueue;
+  credentialCloseout?: ClipperRobertCredentialCloseoutQueue;
+  sourceCloseout?: ClipperRobertSourceCloseoutQueue;
+  accountCloseout?: ClipperRobertAccountCloseoutQueue;
+  officialPermissionCloseout?: ClipperRobertOfficialPermissionCloseoutQueue;
+  connectionTunnel?: {
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    progress: number;
+    blockedGates: number;
+    readyGates: number;
+    doneGates: number;
+    gates: ClipperRobertConnectionTunnelGate[];
+    nextGate: ClipperRobertConnectionTunnelGate | null;
+    nextStep: string;
+  };
+  ownershipSplit?: {
+    robertReady: Array<{
+      label: string;
+      count: number;
+      nextStep: string;
+    }>;
+    userRequired: Array<{
+      label: string;
+      count: number;
+      nextStep: string;
+    }>;
+    automationUnlockedBy: string[];
+    nextRobertAction: string;
+    nextUserAction: string;
+  };
+  weeklyRunway?: {
+    status: "blocked" | "needs_sources" | "needs_connections" | "ready";
+    targetWeeklyClips: number;
+    targetDailyClips: number;
+    configuredDailyClipTarget: number;
+    plannedDailyClips: number;
+    accountCount: number;
+    platformAccountCount: number;
+    weeklyReadySlots: number;
+    weeklyMissingSlots: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+    sourceAssetGap: number;
+    blockedGates: number;
+    readyToPublish: boolean;
+    nextStep: string;
+    categories: Array<{
+      category: ClipperAccountCategory;
+      label: string;
+      accountCount: number;
+      dailyTarget: number;
+      weeklyTargetSlots: number;
+      rightsReadyAssets: number;
+      minimumWeeklySourceAssets: number;
+      sourceAssetGap: number;
+      nextStep: string;
+    }>;
+  };
+  platformLaunchBridge?: Array<{
+    platform: ClipperPlatform;
+    label: string;
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    accountType: string;
+    accountCreationUrl: string;
+    developerPortalUrl: string;
+    docsUrls: string[];
+    handles: string[];
+    scopes: string[];
+    missingEnvVars: string[];
+    accountProofCount: number;
+    appPermissionCount: number;
+    oauthCount: number;
+    evidenceRows: string[];
+    portalUrls: Array<{
+      label: string;
+      url: string;
+    }>;
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  postConnectActivationBridge?: Array<{
+    id: string;
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    label: string;
+    handle: string;
+    status: "blocked" | "waiting" | "activation_ready" | "ready";
+    activationScore: number;
+    accountProofStatus: ClipperAccountEvidenceItemStatus | "missing";
+    developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing";
+    permissionsApproved: number;
+    permissionsTotal: number;
+    tokenSaved: boolean;
+    tokenSavedAt: string | null;
+    oauthStatus: ClipperOAuthConnectionStatus | "token_saved" | "missing";
+    publisherConnectorStatus: ClipperPublisherConnectorStatus;
+    publishGate: "blocked" | "dry_run_ready" | "approval_required_ready";
+    readyQueueItems: number;
+    blockedQueueItems: number;
+    blockers: string[];
+    nextLocalActions: string[];
+    nextStep: string;
+  }>;
+  recommendedOrder: string[];
+  pendingCredentialEnvVars: string[];
+  credentialTemplate: string;
+  credentialDropDirs: string[];
+  credentialCandidateFiles: string[];
+  evidenceTemplatePath: string;
+  evidenceImportPath: string;
+  launchEvidenceTemplate: string;
+  sourceDropDirs: string[];
+  sourceIntakeTemplate: string;
+  sourceAssetsRequired: number;
+  accountHandles: Array<{
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    handle: string;
+  }>;
+  portalUrls: Array<{
+    label: string;
+    url: string;
+  }>;
+  publicUrls: Array<{
+    label: string;
+    url: string;
+  }>;
+  blockers: Array<{
+    label: string;
+    count: number;
+    nextStep: string;
+  }>;
+}
+
+interface ClipperRobertNextActionsSummary {
+  status: ClipperRobertNextActionsStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  connectNow: ClipperRobertConnectNowHandoff;
+  items: ClipperRobertNextActionItem[];
+  sourceArtifacts: {
+    commandCenterPath: string;
+    ownerConnectPackPath: string;
+    dropzoneReadyPackPath: string;
+    goLiveCompletionAuditPath: string;
+    externalExecutionSessionPath: string;
+    sourceSupplyDropKitPath: string;
+  };
+  totals: {
+    actions: number;
+    critical: number;
+    high: number;
+    localDrop: number;
+    externalPortal: number;
+    evidence: number;
+    sourceSupply: number;
+    verification: number;
+    estimatedMinutes: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperLaunchEvidenceFixPackItem {
+  id: string;
+  rank: number;
+  rowIndex: number;
+  evidenceSource: "drop_rejected" | "current_state_gap";
+  kind: string;
+  identifier: string | null;
+  reason: string;
+  fixCategory: "account_proof" | "developer_app" | "permission_proof" | "public_url" | "source_rights" | "format";
+  requiredFix: string;
+  suggestedNotes: string;
+  suggestedReplacementRow: string;
+  importTarget: string;
+}
+
+interface ClipperLaunchEvidenceFixPackSummary {
+  status: ClipperLaunchEvidenceFixPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  suggestedImportCsvPath: string;
+  sourceArtifacts: {
+    localDropSyncPath: string;
+    evidenceDropDir: string;
+    ownerConnectEvidencePath: string;
+  };
+  items: ClipperLaunchEvidenceFixPackItem[];
+  totals: {
+    items: number;
+    accountProof: number;
+    developerApps: number;
+    permissionProof: number;
+    publicUrl: number;
+    sourceRights: number;
+    format: number;
+    currentStateGaps: number;
+    rejectedRows: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperRobertEvidenceCloseoutQueue {
+  total: number;
+  importTarget: string;
+  fixpackPath: string;
+  byCategory: {
+    accountProof: number;
+    developerApps: number;
+    permissionProof: number;
+    publicUrl: number;
+    sourceRights: number;
+    format: number;
+    currentStateGaps: number;
+    rejectedRows: number;
+  };
+  nextRows: string[];
+  importBridge: Array<{
+    id: string;
+    label: string;
+    kind: string;
+    platform: ClipperPlatform | "system" | "mixed";
+    count: number;
+    rows: string[];
+    requiredFixes: string[];
+    identifiers: string[];
+    importTarget: string;
+    priority: "critical" | "high" | "medium";
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    evidenceSource: ClipperLaunchEvidenceFixPackItem["evidenceSource"];
+    kind: string;
+    identifier: string | null;
+    fixCategory: ClipperLaunchEvidenceFixPackItem["fixCategory"];
+    requiredFix: string;
+    suggestedReplacementRow: string;
+    importTarget: string;
+  }>;
+  nextStep: string;
+}
+
+interface ClipperRobertCredentialCloseoutQueue {
+  status: ClipperCredentialDropDiagnosticStatus;
+  diagnosticPath: string;
+  importReady: boolean;
+  dropDirs: string[];
+  runtimeEnv: {
+    checkedEnvVars: string[];
+    configuredEnvVars: string[];
+    missingEnvVars: string[];
+    localEnvFiles: string[];
+  };
+  acceptedEnvVars: string[];
+  pendingEnvVars: string[];
+  rejectedEnvVars: string[];
+  driveCredentialBridge: Array<{
+    id: string;
+    label: string;
+    platform: ClipperPlatform | "system";
+    status: ClipperCredentialSetupStatus;
+    missingSuggestedEnvVars: string[];
+    driveSearchQueries: string[];
+    driveSearchUrls: string[];
+    localDropFileNames: string[];
+    portalUrl: string | null;
+    docsUrl: string;
+    nextStep: string;
+  }>;
+  totals: {
+    files: number;
+    dropCandidates: number;
+    rootCandidates: number;
+    importEligible: number;
+    templateFiles: number;
+    pendingEnvVars: number;
+    fileErrors: number;
+  };
+  files: Array<{
+    fileName: string;
+    relativePath: string;
+    kind: ClipperCredentialSetupFileScan["kind"];
+    location: ClipperCredentialDropDiagnosticFile["location"];
+    importEligible: boolean;
+    detectedEnvVars: string[];
+    pendingEnvVars: string[];
+    issue: string | null;
+    nextStep: string;
+  }>;
+  nextStep: string;
+}
+
+interface ClipperRobertSourceCloseoutQueue {
+  status: ClipperSourceSupplyDropKitStatus;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  total: number;
+  nextRows: string[];
+  rightsRows: string[];
+  trendRows: string[];
+  batches: Array<{
+    category: ClipperAccountCategory;
+    label: string;
+    priority: ClipperSourceSupplyDropKitCategoryBatch["priority"];
+    items: number;
+    sourceDropDir: string;
+    sourceDropManifestPath: string;
+    sourceDropReadmePath: string;
+    intakeRows: string[];
+    rightsRows: string[];
+    viralSearchQueries: string[];
+    requiredProof: string[];
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    category: ClipperAccountCategory;
+    label: string;
+    priority: ClipperSourceSupplyDropKitItem["priority"];
+    targetFileName: string;
+    sourceDropPath: string;
+    intakeBatchRow: string;
+    rightsEvidenceBatchRow: string;
+    viralSearchQueries: string[];
+    requiredProof: string[];
+    nextStep: string;
+  }>;
+  totals: ClipperSourceSupplyDropKitSummary["totals"];
+  nextStep: string;
+}
+
+interface ClipperRobertAccountCloseoutQueue {
+  status: ClipperOwnerConnectPackStatus;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  evidenceDropPath: string;
+  totals: {
+    items: number;
+    readyToExecute: number;
+    blocked: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+    oauth: number;
+    officialRechecks: number;
+  };
+  portalUrls: Array<{
+    label: string;
+    lane: ClipperOwnerConnectPackLane;
+    platform: ClipperPlatform | "system";
+    url: string;
+  }>;
+  evidenceRows: string[];
+  accountProofBridge: Array<{
+    id: string;
+    rank: number;
+    accountId: string;
+    platform: ClipperPlatform | "system";
+    handle: string;
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    evidenceRow: string;
+    requiredProof: string[];
+    checklist: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  appPermissionBridge: Array<{
+    id: string;
+    rank: number;
+    lane: Extract<ClipperOwnerConnectPackLane, "developer_app" | "permission" | "official_recheck">;
+    platform: ClipperPlatform | "system";
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    evidenceRows: string[];
+    scopes: string[];
+    appIdentifiers: string[];
+    publicBaseUrls: string[];
+    requiredProof: string[];
+    checklist: string[];
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  nextItems: Array<{
+    id: string;
+    rank: number;
+    lane: ClipperOwnerConnectPackLane;
+    platform: ClipperPlatform | "system";
+    label: string;
+    status: ClipperOwnerConnectPackItemStatus;
+    portalUrl: string | null;
+    executionUrl: string | null;
+    artifactPath: string | null;
+    evidenceRows: string[];
+    checklist: string[];
+    blockers: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  nextStep: string;
+}
+
 interface ClipperPermissionTrackerItem {
   id: string;
   platform: ClipperPlatform;
@@ -1814,6 +3563,38 @@ interface ClipperPermissionRequestPackItem {
   nextStep: string;
 }
 
+interface ClipperPermissionRequestPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperPermissionRequestPackStatus;
+  permissions: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  approved: number;
+  requested: number;
+  developerPortalUrl: string;
+  docsUrls: string[];
+  scopes: string[];
+  scopeRequestLines: string[];
+  copyBlock: string;
+  evidenceRecipeRows: string[];
+  requestedEvidenceRows: string[];
+  approvedEvidenceRows: string[];
+  requestedDropFilePath: string;
+  approvedDropFilePath: string;
+  requestedTemplateFilePath: string;
+  approvedTemplateFilePath: string;
+  requestedDropTemplate: string;
+  approvedDropTemplate: string;
+  requiredEvidence: string[];
+  blockers: string[];
+  submissionSteps: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 interface ClipperPermissionRequestPackSummary {
   status: ClipperPermissionRequestPackStatus;
   generatedAt: string | null;
@@ -1822,6 +3603,7 @@ interface ClipperPermissionRequestPackSummary {
   csvPath: string;
   sourceTrackerPath: string;
   items: ClipperPermissionRequestPackItem[];
+  platformBatches: ClipperPermissionRequestPlatformBatch[];
   totals: {
     permissions: number;
     ready: number;
@@ -1829,6 +3611,7 @@ interface ClipperPermissionRequestPackSummary {
     blocked: number;
     approved: number;
     requested: number;
+    platformBatches: number;
   };
   nextStep: string;
 }
@@ -1963,6 +3746,45 @@ interface ClipperMetricsSummary {
   nextStep: string;
 }
 
+interface ClipperAnalyticsReportingPackItem {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  exportCadence: "daily";
+  exportSource: string;
+  targetFileName: string;
+  targetPath: string;
+  minimumFields: string[];
+  kpiTargets: string[];
+  evidenceChecklist: string[];
+  importRowTemplate: string;
+  nextStep: string;
+}
+
+interface ClipperAnalyticsReportingPackSummary {
+  status: ClipperAnalyticsReportingPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  metricsDir: string;
+  items: ClipperAnalyticsReportingPackItem[];
+  totals: {
+    exports: number;
+    accounts: number;
+    platforms: number;
+    metricsFiles: number;
+    metricRecords: number;
+    weeklyViewsGoal: number;
+  };
+  importTemplate: string;
+  runbook: string[];
+  nextStep: string;
+}
+
 interface ClipperBudgetRole {
   role: string;
   weeklyHours: number;
@@ -2065,6 +3887,10 @@ interface ClipperTrendRightsOutreachItem {
   outreachSubject: string;
   outreachMessage: string;
   permissionRecordTemplate: string;
+  remixBrief: string;
+  ownedAssetPlan: string[];
+  scriptBeats: string[];
+  publishSafetyChecklist: string[];
   evidenceFileName: string;
   nextStep: string;
 }
@@ -2214,6 +4040,28 @@ interface ClipperOAuthConnectionPackItem {
   nextStep: string;
 }
 
+interface ClipperOAuthConnectionPackPlatformBatch {
+  id: string;
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperOAuthConnectionPackStatus;
+  connections: number;
+  ready: number;
+  partial: number;
+  blocked: number;
+  tokensSaved: number;
+  authUrlsReady: number;
+  handles: string[];
+  redirectUri: string;
+  callbackPath: string;
+  developerPortalUrl: string;
+  authUrl: string | null;
+  requestedScopes: string[];
+  blockers: string[];
+  checklist: string[];
+  nextStep: string;
+}
+
 interface ClipperOAuthConnectionPackSummary {
   status: ClipperOAuthConnectionPackStatus;
   generatedAt: string | null;
@@ -2223,6 +4071,7 @@ interface ClipperOAuthConnectionPackSummary {
   publicBaseUrl: string;
   productionUrlReady: boolean;
   items: ClipperOAuthConnectionPackItem[];
+  platformBatches: ClipperOAuthConnectionPackPlatformBatch[];
   totals: {
     connections: number;
     ready: number;
@@ -2315,6 +4164,14 @@ interface ClipperProductionDnsRecordCandidate {
   validationCommand: string;
 }
 
+interface ClipperProductionDnsProviderRecipe {
+  provider: string;
+  bestRecordId: string;
+  portalUrl: string;
+  steps: string[];
+  doneCriteria: string[];
+}
+
 interface ClipperProductionDnsDiagnostic {
   host: string | null;
   rootDomain: string | null;
@@ -2325,6 +4182,9 @@ interface ClipperProductionDnsDiagnostic {
   error: string | null;
   suggestedRecords: string[];
   recordCandidates: ClipperProductionDnsRecordCandidate[];
+  providerRecipes: ClipperProductionDnsProviderRecipe[];
+  repairRunbook: string[];
+  appReviewHoldChecklist: string[];
   propagationChecks: string[];
   registrarChecklist: string[];
   blockedUntilResolved: string[];
@@ -2568,6 +4428,19 @@ interface ClipperPipelineItem {
   status: ClipperAgentStatus;
 }
 
+type ClipperGoLiveTunnelStageStatus = "ready" | "in_progress" | "blocked";
+
+interface ClipperGoLiveTunnelStage {
+  id: string;
+  label: string;
+  status: ClipperGoLiveTunnelStageStatus;
+  done: number;
+  total: number;
+  detail: string;
+  nextStep: string;
+  artifactPath: string;
+}
+
 interface ClipperPlannedClip {
   accountId: string;
   title: string;
@@ -2611,7 +4484,9 @@ interface ClipperStatus {
   platformReadiness: ClipperPlatformReadinessSummary;
   permissionPack: ClipperPermissionPackSummary;
   productionQueue: ClipperProductionQueueSummary;
+  sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
+  sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
   sourceHunt: ClipperSourceHuntSummary;
   rightsOutreach: ClipperRightsOutreachSummary;
   draftSpecs: ClipperDraftSpecSummary;
@@ -2621,6 +4496,7 @@ interface ClipperStatus {
   automationSchedule: ClipperAutomationScheduleSummary;
   driveWorkspace: ClipperDriveWorkspaceSummary;
   metrics: ClipperMetricsSummary;
+  analyticsReportingPack: ClipperAnalyticsReportingPackSummary;
   trendRadar: ClipperTrendRadarSummary;
   trendRightsOutreach: ClipperTrendRightsOutreachSummary;
   viralDiscovery: ClipperViralDiscoverySummary;
@@ -2629,6 +4505,7 @@ interface ClipperStatus {
   accountIdentityKit: ClipperAccountIdentityKitSummary;
   accountLaunchKit: ClipperAccountLaunchKitSummary;
   accountCreationPack: ClipperAccountCreationPackSummary;
+  accountSetupSession: ClipperAccountSetupSessionSummary;
   accountEvidence: ClipperAccountEvidenceSummary;
   developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
   permissionTracker: ClipperPermissionTrackerSummary;
@@ -2636,13 +4513,16 @@ interface ClipperStatus {
   externalSetupQueue: ClipperExternalSetupQueueSummary;
   externalExecutionHandoff: ClipperExternalExecutionHandoffSummary;
   externalExecutionSession: ClipperExternalExecutionSessionSummary;
+  platformWarRoom: ClipperPlatformWarRoomSummary;
   externalLaunchDossier: ClipperExternalLaunchDossierSummary;
   platformPortalChecklist: ClipperPlatformPortalChecklistSummary;
   appReviewSubmissionPack: ClipperAppReviewSubmissionPackSummary;
   appReviewDemoPack: ClipperAppReviewDemoPackSummary;
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
+  publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
   productionUrlVerification: ClipperProductionUrlVerificationSummary;
   httpsTunnelPlan: ClipperHttpsTunnelPlanSummary;
@@ -2650,10 +4530,20 @@ interface ClipperStatus {
   oauthGoLive: ClipperOAuthGoLiveSummary;
   oauthConnectionPack: ClipperOAuthConnectionPackSummary;
   goLiveExecutionPack: ClipperGoLiveExecutionPackSummary;
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  goLiveOperatorBrief: ClipperGoLiveOperatorBriefSummary;
+  goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary;
   commandCenter: ClipperLaunchCommandCenterSummary;
   blockerResolutionPack: ClipperBlockerResolutionPackSummary;
   goLiveAutopilotBrief: ClipperGoLiveAutopilotBriefSummary;
   goLiveAutopilotRun: ClipperGoLiveAutopilotRunSummary;
+  localDropSync: ClipperLocalDropSyncSummary;
+  goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+  ownerConnectPack: ClipperOwnerConnectPackSummary;
+  dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
+  launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
+  robertNextActions: ClipperRobertNextActionsSummary;
+  launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary;
   growthAudit: ClipperGrowthAudit;
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
@@ -2700,6 +4590,12 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function platformLabel(platform: string) {
+  if (platform.toLowerCase() === "tiktok") return "TikTok";
+  if (platform.toLowerCase() === "youtube") return "YouTube";
+  return platform.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusBadge(status: ClipperAgentStatus | ClipperAccountStatus | ClipperSource["status"]) {
@@ -2783,9 +4679,24 @@ function officialPermissionMatrixBadge(status: ClipperOfficialPermissionMatrixSt
   return "border-zinc-600 bg-zinc-900 text-zinc-300";
 }
 
+function clipperPlatformLabel(platform: ClipperPlatform) {
+  return {
+    tiktok: "TikTok",
+    instagram: "Instagram",
+    youtube: "YouTube",
+  }[platform];
+}
+
 function publisherConnectorBadge(status: ClipperPublisherConnectorStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function publisherExecutionBadge(status: ClipperPublisherExecutionStatus | ClipperPublisherExecutionItemStatus) {
+  if (status === "ready" || status === "ready_to_send") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "approval_required" || status === "queued_for_approval") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -2808,6 +4719,18 @@ function goLiveExecutionBadge(status: ClipperGoLiveExecutionPackStatus | Clipper
   if (status === "ready" || status === "done") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "in_progress" || status === "ready_to_execute") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function goLiveCompletionAuditBadge(status: ClipperGoLiveCompletionAuditStatus | ClipperGoLiveCompletionRequirementStatus) {
+  if (status === "ready" || status === "verified") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "partial" || status === "needs_evidence") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function goLiveOperatorBriefBadge(status: ClipperGoLiveOperatorBriefStatus) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "needs_action") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
@@ -2842,6 +4765,18 @@ function permissionPackBadge(status: ClipperPermissionPackStatus) {
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
+function platformWarRoomBadge(status: ClipperPlatformWarRoomStatus) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "in_progress") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function goLiveTunnelBadge(status: ClipperGoLiveTunnelStageStatus) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "in_progress") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
 function productionBadge(status: ClipperProductionQueueStatus | ClipperProductionQueueSummary["status"] | ClipperAssetRightsStatus | "missing") {
   if (status === "ready" || status === "draft_ready" || status === "owned_or_permissioned") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "rights_review" || status === "needs_rights" || status === "review_required") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
@@ -2854,7 +4789,7 @@ function draftSpecBadge(status: ClipperDraftSpecStatus | ClipperDraftSpecItemSta
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function sourceAcquisitionBadge(status: ClipperSourceAcquisitionStatus | ClipperSourceAcquisitionCategory["priority"]) {
+function sourceAcquisitionBadge(status: ClipperSourceAcquisitionStatus | ClipperSourceSupplyDropKitStatus | ClipperSourceAcquisitionCategory["priority"]) {
   if (status === "ready" || status === "watch") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial" || status === "high") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -2905,9 +4840,9 @@ function accountLaunchBadge(status: ClipperAccountLaunchKitStatus | ClipperAccou
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function accountCreationPackBadge(status: ClipperAccountCreationPackStatus) {
+function accountCreationPackBadge(status: ClipperAccountCreationPackStatus | ClipperAccountSetupSessionStatus | ClipperAccountSetupSessionItemStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
-  if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "partial" || status === "ready_to_create" || status === "in_progress") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -2918,7 +4853,7 @@ function accountEvidenceBadge(status: ClipperAccountEvidenceStatus | ClipperAcco
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function developerAppEvidenceBadge(status: ClipperDeveloperAppEvidenceStatus | ClipperDeveloperAppEvidenceItemStatus) {
+function developerAppEvidenceBadge(status: ClipperDeveloperAppEvidenceStatus | ClipperDeveloperAppEvidenceItemStatus | "missing") {
   if (status === "ready" || status === "approved") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial" || status === "submitted" || status === "draft") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
@@ -2950,6 +4885,16 @@ function credentialDoctorBadge(status: ClipperCredentialDoctorStatus | ClipperCr
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
+function credentialDropFileBadge(status: ClipperCredentialDoctorItem["dropFileStatus"]) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "pending_values" || status === "empty") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function googleDriveSearchUrl(query: string) {
+  return `https://drive.google.com/drive/search?q=${encodeURIComponent(query)}`;
+}
+
 function intakeKitBadge(status: ClipperIntakeKitStatus) {
   if (status === "prepared") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   return "border-amber-300/30 bg-amber-300/10 text-amber-200";
@@ -2968,9 +4913,9 @@ function permissionRequestPackBadge(status: ClipperPermissionRequestPackStatus) 
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus) {
+function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
   if (status === "ready" || status === "done" || status === "completed") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
-  if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped" || status === "ready_to_execute" || status === "needs_action" || status === "needs_fix" || status === "needs_login_recheck" || status === "ready_to_submit") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared" || status === "not_run") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -2991,6 +4936,12 @@ function metricsBadge(status: ClipperMetricsStatus | ClipperAccountMetricPerform
   if (status === "ready" || status === "scaling") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "needs_records" || status === "watch") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function analyticsReportingPackBadge(status: ClipperAnalyticsReportingPackStatus) {
+  if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "needs_data") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-zinc-600 bg-zinc-900 text-zinc-300";
 }
 
 function trendRadarBadge(status: ClipperTrendRadarStatus | ClipperAssetRightsStatus) {
@@ -3091,6 +5042,7 @@ export default function ClippersPage() {
   const [credentialBatchPreview, setCredentialBatchPreview] = useState<ClipperCredentialSecretBatchWriteSummary | null>(null);
   const [launchEvidenceBatchText, setLaunchEvidenceBatchText] = useState("");
   const [launchEvidenceBatchPreview, setLaunchEvidenceBatchPreview] = useState<ClipperLaunchEvidenceBatchSummary | null>(null);
+  const [launchEvidenceStrictImport, setLaunchEvidenceStrictImport] = useState(true);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceIntakeBatch, setSourceIntakeBatch] = useState<ClipperSourceIntakeBatchSummary | null>(null);
@@ -3256,6 +5208,25 @@ export default function ClippersPage() {
     },
   });
 
+  const accountSetupSessionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-account-setup-session", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar account setup session");
+      return data as { accountSetupSession: ClipperAccountSetupSessionSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Account setup listo",
+        description: `${data.accountSetupSession.totals.readyToCreate} cuentas listas para crear; ${data.accountSetupSession.totals.ready} verificadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar account setup", description: error.message, variant: "destructive" });
+    },
+  });
+
   const accountEvidenceMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-account-evidence-vault", { method: "POST" });
@@ -3345,7 +5316,7 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/preview-launch-evidence-batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batchText: launchEvidenceBatchText }),
+        body: JSON.stringify({ batchText: launchEvidenceBatchText, strict: launchEvidenceStrictImport }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude previsualizar evidencia batch");
@@ -3370,17 +5341,25 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/record-launch-evidence-batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batchText: launchEvidenceBatchText }),
+        body: JSON.stringify({ batchText: launchEvidenceBatchText, strict: launchEvidenceStrictImport }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude importar evidencia batch");
       return data as { launchEvidenceBatch: ClipperLaunchEvidenceBatchSummary; status: ClipperStatus };
     },
     onSuccess: (data) => {
-      setLaunchEvidenceBatchText("");
       setLaunchEvidenceBatchPreview(data.launchEvidenceBatch);
       queryClient.setQueryData(["/api/clippers/status"], data.status);
       const accepted = data.launchEvidenceBatch.accepted;
+      if (data.launchEvidenceBatch.strictBlocked) {
+        toast({
+          title: "Strict import bloqueado",
+          description: `${data.launchEvidenceBatch.rejected.length} row(s) rechazados. No escribi evidencia parcial.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setLaunchEvidenceBatchText("");
       toast({
         title: "Evidencia batch importada",
         description: `${accepted.accountEvidence} cuentas, ${accepted.developerApps} apps, ${accepted.permissions} permisos, ${accepted.sourceRights} derechos; ${data.launchEvidenceBatch.rejected.length} rechazados.`,
@@ -3402,6 +5381,14 @@ export default function ClippersPage() {
       setLaunchEvidenceBatchPreview(data.launchEvidenceDropImport);
       queryClient.setQueryData(["/api/clippers/status"], data.status);
       const accepted = data.launchEvidenceDropImport.accepted;
+      if (data.launchEvidenceDropImport.strictBlocked) {
+        toast({
+          title: "Evidence drop bloqueado",
+          description: data.launchEvidenceDropImport.nextStep,
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Evidence drop importado",
         description: `${accepted.accountEvidence} cuentas, ${accepted.developerApps} apps, ${accepted.permissions} permisos; ${data.launchEvidenceDropImport.filesImported || 0}/${data.launchEvidenceDropImport.filesScanned || 0} archivos.`,
@@ -3475,6 +5462,25 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar credenciales", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const credentialDropStarterMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-credential-drop-starter", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude crear starter files de credenciales");
+      return data as { credentialDropStarter: ClipperCredentialDropStarterSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Starter files listos",
+        description: `${data.credentialDropStarter.totals.created} creados, ${data.credentialDropStarter.totals.existing} existentes; rellena valores reales antes de importar.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude crear starter files", description: error.message, variant: "destructive" });
     },
   });
 
@@ -3781,6 +5787,25 @@ export default function ClippersPage() {
     },
   });
 
+  const publisherExecutionQueueMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-publisher-execution-queue", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar publisher execution queue");
+      return data as { publisherExecutionQueue: ClipperPublisherExecutionQueueSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Execution queue lista",
+        description: `${data.publisherExecutionQueue.totals.items} items; ${data.publisherExecutionQueue.totals.blocked} bloqueados; ${data.publisherExecutionQueue.totals.queuedForApproval} en approval.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar execution queue", description: error.message, variant: "destructive" });
+    },
+  });
+
   const productionUrlSetupMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-production-url-setup", { method: "POST" });
@@ -3976,6 +6001,123 @@ export default function ClippersPage() {
     },
   });
 
+  const goLiveCompletionAuditMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-go-live-completion-audit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar el completion audit");
+      return data as { goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Completion audit listo",
+        description: `${data.goLiveCompletionAudit.totals.verified}/${data.goLiveCompletionAudit.totals.requirements} requisitos verificados; ${data.goLiveCompletionAudit.totals.blocked} bloqueados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar completion audit", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goLiveOperatorBriefMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-go-live-operator-brief", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar el operator brief");
+      return data as { goLiveOperatorBrief: ClipperGoLiveOperatorBriefSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Operator brief listo",
+        description: `${data.goLiveOperatorBrief.totals.ready}/${data.goLiveOperatorBrief.totals.lanes} carriles ready; foco: ${data.goLiveOperatorBrief.currentFocus}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar operator brief", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goLiveEvidenceBundleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-go-live-evidence-bundle", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar el go-live evidence bundle");
+      return data as { goLiveEvidenceBundle: ClipperGoLiveEvidenceBundleSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Evidence bundle listo",
+        description: `${data.goLiveEvidenceBundle.totals.starterRows} starter rows y ${data.goLiveEvidenceBundle.totals.approvalRows} approval rows preparados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar evidence bundle", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goLiveAuditActionMutation = useMutation({
+    mutationFn: async (requirement: ClipperGoLiveCompletionRequirement) => {
+      if (!requirement.actionUrl?.startsWith("/api/clippers/")) {
+        throw new Error("Esta accion requiere portal externo o no esta permitida como accion local.");
+      }
+      const actionResponse = await fetch(requirement.actionUrl, { method: "POST" });
+      const actionData = await actionResponse.json().catch(() => ({}));
+      if (!actionResponse.ok) throw new Error(actionData.error || `No pude ejecutar ${requirement.actionUrl}`);
+      const auditResponse = await fetch("/api/clippers/prepare-go-live-completion-audit", { method: "POST" });
+      const auditData = await auditResponse.json();
+      if (!auditResponse.ok) throw new Error(auditData.error || "La accion corrio, pero no pude refrescar el audit");
+      return { requirement, actionData, auditData: auditData as { goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary; status: ClipperStatus } };
+    },
+    onSuccess: ({ requirement, auditData }) => {
+      queryClient.setQueryData(["/api/clippers/status"], auditData.status);
+      toast({
+        title: "Accion local ejecutada",
+        description: `${requirement.label}: audit ${auditData.goLiveCompletionAudit.totals.verified}/${auditData.goLiveCompletionAudit.totals.requirements} verificados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude ejecutar accion local", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goLiveAuditActionsMutation = useMutation({
+    mutationFn: async (requirements: ClipperGoLiveCompletionRequirement[]) => {
+      const localActionUrls = Array.from(new Set(
+        requirements
+          .map((requirement) => requirement.actionUrl)
+          .filter((actionUrl): actionUrl is string => Boolean(actionUrl?.startsWith("/api/clippers/"))),
+      ));
+      if (localActionUrls.length === 0) {
+        throw new Error("No hay acciones locales permitidas en este audit.");
+      }
+      for (const actionUrl of localActionUrls) {
+        const actionResponse = await fetch(actionUrl, { method: "POST" });
+        const actionData = await actionResponse.json().catch(() => ({}));
+        if (!actionResponse.ok) throw new Error(actionData.error || `No pude ejecutar ${actionUrl}`);
+      }
+      const auditResponse = await fetch("/api/clippers/prepare-go-live-completion-audit", { method: "POST" });
+      const auditData = await auditResponse.json();
+      if (!auditResponse.ok) throw new Error(auditData.error || "Las acciones corrieron, pero no pude refrescar el audit");
+      return {
+        actionsRun: localActionUrls.length,
+        auditData: auditData as { goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary; status: ClipperStatus },
+      };
+    },
+    onSuccess: ({ actionsRun, auditData }) => {
+      queryClient.setQueryData(["/api/clippers/status"], auditData.status);
+      toast({
+        title: "Acciones locales ejecutadas",
+        description: `${actionsRun} acciones; audit ${auditData.goLiveCompletionAudit.totals.verified}/${auditData.goLiveCompletionAudit.totals.requirements} verificados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude ejecutar acciones locales", description: error.message, variant: "destructive" });
+    },
+  });
+
   const goLiveAutopilotBriefMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-go-live-autopilot-brief", { method: "POST" });
@@ -3996,11 +6138,11 @@ export default function ClippersPage() {
   });
 
   const goLiveAutopilotRunMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (input?: { resetCompleted?: boolean }) => {
       const response = await fetch("/api/clippers/run-go-live-autopilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maxActions: 3 }),
+        body: JSON.stringify({ maxActions: 3, resetCompleted: input?.resetCompleted === true }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude correr el go-live autopilot");
@@ -4009,12 +6151,149 @@ export default function ClippersPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
-        title: "Autopilot ejecutado",
-        description: `${data.goLiveAutopilotRun.totals.completed} completadas, ${data.goLiveAutopilotRun.totals.skipped} saltadas, ${data.goLiveAutopilotRun.totals.failed} fallidas.`,
+        title: data.goLiveAutopilotRun.resetCompleted ? "Autopilot reset ejecutado" : "Autopilot ejecutado",
+        description: `${data.goLiveAutopilotRun.totals.completed} completadas, ${data.goLiveAutopilotRun.totals.skipped} saltadas, ${data.goLiveAutopilotRun.remainingInAppActions} restantes.`,
       });
     },
     onError: (error: Error) => {
       toast({ title: "No pude correr Autopilot", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goLivePrepSweepMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/run-go-live-prep-sweep", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude correr el Prep sweep");
+      return data as { goLivePrepSweep: ClipperGoLivePrepSweepSummary; localDropSync: ClipperLocalDropSyncSummary | null; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Prep sweep listo",
+        description: `${data.goLivePrepSweep.totals.completed} completados, ${data.goLivePrepSweep.totals.failed} fallidos; estado ${data.goLivePrepSweep.status}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr Prep sweep", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const ownerConnectPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-owner-connect-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Owner Connect Pack");
+      return data as { ownerConnectPack: ClipperOwnerConnectPackSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Owner Connect Pack listo",
+        description: `${data.ownerConnectPack.totals.readyToExecute} listos, ${data.ownerConnectPack.totals.blocked} bloqueados, ${data.ownerConnectPack.totals.evidenceRows} evidence rows.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Owner Connect Pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const ownerConnectProgressMutation = useMutation({
+    mutationFn: async (input: { itemId: string; status: ClipperOwnerConnectPackItemStatus; notes?: string; evidenceRows?: string[] }) => {
+      const response = await fetch("/api/clippers/record-owner-connect-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude guardar el progreso de Owner Connect");
+      return data as { ownerConnectPack: ClipperOwnerConnectPackSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Progreso guardado",
+        description: `${data.ownerConnectPack.totals.progressDone} done local, ${data.ownerConnectPack.totals.progressRecords} records guardados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude guardar progreso", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const dropzoneReadyPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-dropzone-ready-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Dropzone Ready Pack");
+      return data as { dropzoneReadyPack: ClipperDropzoneReadyPackSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Dropzone pack listo",
+        description: `${data.dropzoneReadyPack.totals.missing} missing, ${data.dropzoneReadyPack.totals.partial} partial, ${data.dropzoneReadyPack.totals.ready} ready.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Dropzone pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const robertNextActionsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-robert-next-actions", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Robert Next Actions");
+      return data as { robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Next actions listo",
+        description: `${data.robertNextActions.totals.actions} acciones, ${data.robertNextActions.totals.critical} criticas, ${data.robertNextActions.totals.estimatedMinutes} min estimados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Next Actions", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const launchEvidenceFixPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-launch-evidence-fix-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Launch Evidence Fix Pack");
+      return data as { launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Evidence fix pack listo",
+        description: `${data.launchEvidenceFixPack.totals.items} filas para corregir; ${data.launchEvidenceFixPack.csvPath}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Evidence Fix Pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const localDropSyncMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/run-local-drop-sync", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude correr Local Drop Sync");
+      return data as { localDropSync: ClipperLocalDropSyncSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Local Drop Sync listo",
+        description: `${data.localDropSync.totals.completed} completados, ${data.localDropSync.totals.skipped} sin archivos, ${data.localDropSync.totals.failed} fallidos.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr Local Drop Sync", description: error.message, variant: "destructive" });
     },
   });
 
@@ -4072,6 +6351,25 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar request pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const permissionSubmissionDossierMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-permission-submission-dossier", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar permission submission dossier");
+      return data as { permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Permission dossier listo",
+        description: `${data.permissionSubmissionDossier.totals.platforms} plataformas; ${data.permissionSubmissionDossier.totals.blocked} bloqueadas; ${data.permissionSubmissionDossier.totals.needsLoginRecheck} login recheck.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar dossier", description: error.message, variant: "destructive" });
     },
   });
 
@@ -4155,6 +6453,25 @@ export default function ClippersPage() {
     },
   });
 
+  const sourceSupplyDropKitMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-source-supply-drop-kit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar source drop kit");
+      return data as { sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Source drop kit listo",
+        description: `${data.sourceSupplyDropKit.totals.items} filas para cubrir supply semanal.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar source drop kit", description: error.message, variant: "destructive" });
+    },
+  });
+
   const sourceHuntMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-source-hunt", { method: "POST" });
@@ -4233,6 +6550,25 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude ingerir metricas", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const analyticsReportingPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-analytics-reporting-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar analytics reporting pack");
+      return data as { analyticsReportingPack: ClipperAnalyticsReportingPackSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Analytics reporting listo",
+        description: `${data.analyticsReportingPack.totals.exports} exports diarios; ${formatNumber(data.analyticsReportingPack.totals.weeklyViewsGoal)} views/week objetivo.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar reporting", description: error.message, variant: "destructive" });
     },
   });
 
@@ -4509,9 +6845,171 @@ export default function ClippersPage() {
     }, {});
   }, [status?.accounts]);
   const accountLaunchTasks = status?.accountLaunchKit?.tasks || [];
+  const ownerAccountConnectItems = useMemo(() => {
+    return (status?.ownerConnectPack?.items || []).filter((item) => item.lane === "account");
+  }, [status?.ownerConnectPack?.items]);
+  const findOwnerAccountConnectItem = (setupItem: ClipperAccountSetupSessionItem) => {
+    const expectedId = `external-session-handoff-account-${setupItem.accountId}-${setupItem.platform}`;
+    return ownerAccountConnectItems.find((item) => item.id === expectedId)
+      || ownerAccountConnectItems.find((item) => item.platform === setupItem.platform
+        && item.evidenceRows.some((row) => row.includes(`"${setupItem.accountId}"`) && row.includes(`"${setupItem.platform}"`)));
+  };
   const selectedAccountEvidenceTask = accountLaunchTasks.find((task) => task.id === accountEvidenceTaskId) || accountLaunchTasks[0] || null;
   const permissionRecordItems = status?.permissionTracker?.items || [];
   const selectedPermissionRecord = permissionRecordItems.find((item) => item.id === permissionRecordId) || permissionRecordItems[0] || null;
+  const goLiveTunnelStages = useMemo<ClipperGoLiveTunnelStage[]>(() => {
+    if (!status) return [];
+    const buildStage = (
+      id: string,
+      label: string,
+      done: number,
+      total: number,
+      detail: string,
+      nextStep: string,
+      artifactPath: string,
+    ): ClipperGoLiveTunnelStage => ({
+      id,
+      label,
+      done,
+      total,
+      detail,
+      nextStep,
+      artifactPath,
+      status: total > 0 && done >= total ? "ready" : done > 0 ? "in_progress" : "blocked",
+    });
+    const localSyncDone = (status.localDropSync?.items || []).filter((item) => item.status === "completed").length;
+    const localSyncTotal = status.localDropSync?.totals?.attempted || 5;
+    const credentialReady = status.credentialChecks.filter((item) => item.status === "ready").length;
+    const accountReady = status.accountEvidence?.totals?.verified || 0;
+    const accountTotal = status.accountEvidence?.totals?.expected || status.accountLaunchKit?.totals?.tasks || 0;
+    const developerReady = status.developerAppEvidence?.totals?.approved || 0;
+    const developerTotal = status.developerAppEvidence?.totals?.expected || status.platformRequirements.length;
+    const permissionReady = status.permissionTracker?.totals?.approved || 0;
+    const permissionTotal = status.permissionTracker?.totals?.permissions || status.permissionQueue.length;
+    const oauthReady = status.tokenVault?.records?.length || 0;
+    const oauthTotal = status.platformRequirements.length;
+    const sourceReady = status.productionQueue?.sourceAssets?.filter((asset) => asset.rightsStatus === "owned_or_permissioned").length || 0;
+    const sourceTotal = Math.max(status.sourceDropDiagnostic?.totals?.minimumWeeklySourceAssets || 0, status.sourceSupplyDropKit?.totals?.minimumWeeklySourceAssets || 0, 1);
+    const publishReady = status.publisherConnectors?.totals?.ready || 0;
+    const publishTotal = status.publisherConnectors?.totals?.platforms || status.platformRequirements.length;
+    const metricsReady = status.metrics?.totals?.clips || 0;
+    const metricsTotal = Math.max(status.accounts.length, 1);
+
+    return [
+      buildStage(
+        "local-sync",
+        "Local sync",
+        localSyncDone,
+        localSyncTotal,
+        `${status.localDropSync?.totals?.skipped || 0} inputs pendientes, ${status.localDropSync?.totals?.failed || 0} fallos reales.`,
+        status.localDropSync?.nextStep || "Agregar credenciales/evidencias/videos y correr Local sync.",
+        status.localDropSync?.markdownPath || "",
+      ),
+      buildStage(
+        "credentials",
+        "Keys",
+        credentialReady,
+        status.credentialChecks.length,
+        `${credentialReady}/${status.credentialChecks.length} grupos OAuth detectados.`,
+        status.credentialSetup?.credentialDropDiagnostic?.nextStep || status.credentialSetup?.nextStep || "Cargar credenciales y recargar.",
+        status.credentialSetup?.credentialDropDiagnosticMarkdownPath || status.credentialDoctor?.markdownPath || "",
+      ),
+      buildStage(
+        "accounts",
+        "Cuentas",
+        accountReady,
+        accountTotal,
+        `${accountReady}/${accountTotal} cuentas con evidencia verified.`,
+        status.accountEvidence?.nextStep || status.accountCreationPack?.nextStep || "Crear cuentas externas e importar evidencia.",
+        status.accountCreationPack?.claimSheetPath || status.accountEvidence?.connectionKitMarkdownPath || "",
+      ),
+      buildStage(
+        "developer-apps",
+        "Apps",
+        developerReady,
+        developerTotal,
+        `${developerReady}/${developerTotal} apps developer aprobadas.`,
+        status.developerAppEvidence?.nextStep || status.developerApplicationDrafts?.nextStep || "Crear apps developer y app review.",
+        status.developerApplicationDrafts?.markdownPath || status.developerAppEvidence?.connectionKitMarkdownPath || "",
+      ),
+      buildStage(
+        "permissions",
+        "Permisos",
+        permissionReady,
+        permissionTotal,
+        `${permissionReady}/${permissionTotal} scopes aprobados.`,
+        status.permissionTracker?.nextStep || status.permissionRequestPack?.nextStep || "Solicitar permisos oficiales e importar evidencia.",
+        status.permissionRequestPack?.markdownPath || status.officialPermissionMatrix?.markdownPath || "",
+      ),
+      buildStage(
+        "oauth",
+        "OAuth",
+        oauthReady,
+        oauthTotal,
+        `${oauthReady}/${oauthTotal} tokens cifrados guardados.`,
+        status.oauthConnectionPack?.nextStep || status.oauthGoLive?.nextStep || "Conectar OAuth cuando cuentas, apps y permisos esten listos.",
+        status.oauthConnectionPack?.markdownPath || status.oauthGoLive?.markdownPath || "",
+      ),
+      buildStage(
+        "sources",
+        "Fuentes",
+        sourceReady,
+        sourceTotal,
+        `${sourceReady}/${sourceTotal} fuentes listas con derechos.`,
+        status.sourceSupplyDropKit?.nextStep || status.sourceAcquisition?.nextStep || "Agregar fuentes con permiso/derechos y correr Source plan.",
+        status.sourceSupplyDropKit?.markdownPath || status.sourceAcquisition?.markdownPath || "",
+      ),
+      buildStage(
+        "publish",
+        "Publish",
+        publishReady,
+        publishTotal,
+        `${publishReady}/${publishTotal} conectores listos.`,
+        status.publisherConnectors?.nextStep || status.publishingPackage?.nextStep || "Preparar publish pack y mantener approval_required.",
+        status.publisherConnectors?.markdownPath || status.publishingPackage?.markdownPath || "",
+      ),
+      buildStage(
+        "analytics",
+        "Reportes",
+        metricsReady,
+        metricsTotal,
+        `${formatNumber(metricsReady)} clips con metricas importadas.`,
+        status.analyticsReportingPack?.nextStep || status.metrics?.nextStep || "Importar CSV de analytics diario para optimizar.",
+        status.analyticsReportingPack?.markdownPath || status.metrics?.summaryPath || "",
+      ),
+    ];
+  }, [status]);
+  const warRoomFlowStages = useMemo(() => {
+    if (!status?.platformWarRoom) return [];
+    const accountReady = status.platformWarRoom.totals.accountConnectionsReady;
+    const accountTotal = status.platformWarRoom.totals.accountConnections;
+    const developerReady = status.developerAppEvidence?.totals?.approved || 0;
+    const developerTotal = status.developerAppEvidence?.totals?.expected || status.platformWarRoom.totals.platforms;
+    const permissionReady = status.platformWarRoom.totals.permissionApprovalsApproved;
+    const permissionTotal = status.platformWarRoom.totals.permissionApprovals;
+    const credentialReady = status.credentialChecks.filter((item) => item.status === "ready").length;
+    const credentialTotal = status.credentialChecks.length;
+    const tokenReady = status.tokenVault?.records?.length || 0;
+    const tokenTotal = status.platformWarRoom.totals.platforms;
+    const publishReady = status.publisherConnectors?.totals?.ready || 0;
+    const publishTotal = status.publisherConnectors?.totals?.platforms || status.platformWarRoom.totals.platforms;
+    const buildStage = (id: string, label: string, done: number, total: number, nextStep: string) => ({
+      id,
+      label,
+      done,
+      total,
+      status: total > 0 && done >= total ? "ready" : done > 0 ? "in_progress" : "blocked",
+      nextStep,
+    });
+    return [
+      buildStage("accounts", "Cuentas", accountReady, accountTotal, "Crear/verificar cuentas y cargar evidencia real."),
+      buildStage("apps", "Apps", developerReady, developerTotal, "Crear apps developer, public URL y app review."),
+      buildStage("permissions", "Permisos", permissionReady, permissionTotal, "Solicitar scopes y registrar aprobaciones."),
+      buildStage("credentials", "Keys", credentialReady, credentialTotal, "Guardar env vars y recargar credenciales."),
+      buildStage("oauth", "OAuth", tokenReady, tokenTotal, "Conectar cada plataforma y guardar tokens cifrados."),
+      buildStage("publish", "Publish", publishReady, publishTotal, "Activar conectores y autopilot cuando todo este listo."),
+    ];
+  }, [status]);
 
   const recordAccountEvidence = (task: ClipperAccountLaunchTask, evidenceStatus: ClipperAccountEvidenceItemStatus) => {
     const notes = window.prompt("Notas de evidencia", evidenceStatus === "verified"
@@ -4554,11 +7052,12 @@ export default function ClippersPage() {
   };
 
   const submitDeveloperEvidenceForm = () => {
+    const fallbackPublicBaseUrl = status?.oauthGoLive?.productionUrlReady ? status.oauthGoLive.publicBaseUrl : "";
     recordDeveloperAppEvidenceMutation.mutate({
       platform: developerEvidencePlatform,
       status: developerEvidenceStatus,
       appIdentifier: developerEvidenceAppIdentifier.trim(),
-      publicBaseUrl: developerEvidencePublicBaseUrl.trim() || status?.oauthGoLive?.publicBaseUrl || "http://127.0.0.1:5010",
+      publicBaseUrl: developerEvidencePublicBaseUrl.trim() || fallbackPublicBaseUrl,
       notes: developerEvidenceNotes.trim() || "Registrado desde Clippers UI; no incluye client secrets ni tokens.",
     });
   };
@@ -4602,6 +7101,61 @@ export default function ClippersPage() {
       title: "Rows agregadas al batch",
       description: `${cleanRows.length} filas agregadas. Completa campos vacios con evidencia real y usa Preview batch.`,
     });
+  };
+
+  const appendSourceIntakeBatchRows = (rows: string[]) => {
+    const cleanRows = rows.map((row) => row.trim()).filter(Boolean);
+    if (!cleanRows.length) return;
+    setSourceIntakeBatch(null);
+    setSourceIntakeBatchText((current) => {
+      const cleanCurrent = current.trim();
+      const rowsText = cleanRows.join("\n");
+      if (!cleanCurrent) return `${sourceIntakeBatchHeader}\n${rowsText}`;
+      return `${cleanCurrent}\n${rowsText}`;
+    });
+    toast({
+      title: "Rows agregadas a Source Intake",
+      description: `${cleanRows.length} filas agregadas. Reemplaza placeholders con fuente y proof real antes de importar.`,
+    });
+  };
+
+  const copySourceDropManifestRows = async (rows: string[]) => {
+    const cleanRows = rows.map((row) => row.trim()).filter(Boolean);
+    if (!cleanRows.length) return;
+    const manifestText = `${sourceIntakeBatchHeader}\n${cleanRows.join("\n")}\n`;
+    try {
+      await navigator.clipboard.writeText(manifestText);
+      toast({
+        title: "Manifest CSV copiado",
+        description: "Guardalo como source-drop-manifest.csv junto a los videos y reemplaza placeholders con proof real.",
+      });
+    } catch {
+      setSourceIntakeBatch(null);
+      setSourceIntakeBatchText(manifestText);
+      toast({
+        title: "Manifest listo en Source Intake",
+        description: "Copia este CSV a source-drop-manifest.csv junto a los videos y reemplaza placeholders.",
+      });
+    }
+  };
+
+  const copyGoLiveEvidenceTemplate = async (template: string, fileName: string) => {
+    const cleanTemplate = template.trim();
+    if (!cleanTemplate) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanTemplate}\n`);
+      toast({
+        title: "Evidence template copiado",
+        description: fileName ? `Usalo como ${fileName} y reemplaza placeholders con proof real.` : "Reemplaza placeholders con proof real antes de importar evidencia.",
+      });
+    } catch {
+      setLaunchEvidenceBatchPreview(null);
+      setLaunchEvidenceBatchText(cleanTemplate);
+      toast({
+        title: "Evidence template cargado",
+        description: "No pude copiar al clipboard; lo deje en el area de Launch Evidence para copiarlo manualmente.",
+      });
+    }
   };
 
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
@@ -4662,6 +7216,21 @@ export default function ClippersPage() {
     toast({
       title: "Candidate row agregado",
       description: "Reemplaza PASTE_* y metricas reales antes de importar al Trend Radar.",
+    });
+  };
+
+  const appendTrendCandidateBatchRows = (rows: string[]) => {
+    const cleanRows = rows.map((row) => row.trim()).filter(Boolean);
+    if (!cleanRows.length) return;
+    setTrendCandidatesBatchText((current) => {
+      const cleanCurrent = current.trim();
+      const rowsText = cleanRows.join("\n");
+      if (!cleanCurrent) return `${trendCandidatesBatchHeader}\n${rowsText}`;
+      return `${cleanCurrent}\n${rowsText}`;
+    });
+    toast({
+      title: "Candidates agregados",
+      description: `${cleanRows.length} filas agregadas. Reemplaza placeholders y metricas reales antes de importar.`,
     });
   };
 
@@ -4830,6 +7399,33 @@ export default function ClippersPage() {
               Go-live pack
             </Button>
             <Button
+              onClick={() => goLiveCompletionAuditMutation.mutate()}
+              disabled={goLiveCompletionAuditMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-go-live-completion-audit-button"
+            >
+              {goLiveCompletionAuditMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Completion audit
+            </Button>
+            <Button
+              onClick={() => goLiveOperatorBriefMutation.mutate()}
+              disabled={goLiveOperatorBriefMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-go-live-operator-brief-button"
+            >
+              {goLiveOperatorBriefMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Target className="mr-2 h-4 w-4" />}
+              Operator brief
+            </Button>
+            <Button
+              onClick={() => goLiveEvidenceBundleMutation.mutate()}
+              disabled={goLiveEvidenceBundleMutation.isPending || isLoading}
+              className="bg-purple-200 text-zinc-950 hover:bg-purple-100"
+              data-testid="prepare-clippers-go-live-evidence-bundle-button"
+            >
+              {goLiveEvidenceBundleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+              Evidence bundle
+            </Button>
+            <Button
               onClick={() => goLiveAutopilotBriefMutation.mutate()}
               disabled={goLiveAutopilotBriefMutation.isPending || isLoading}
               className="bg-indigo-200 text-zinc-950 hover:bg-indigo-100"
@@ -4839,13 +7435,77 @@ export default function ClippersPage() {
               Autopilot brief
             </Button>
             <Button
-              onClick={() => goLiveAutopilotRunMutation.mutate()}
+              onClick={() => goLiveAutopilotRunMutation.mutate({})}
               disabled={goLiveAutopilotRunMutation.isPending || isLoading}
               className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
               data-testid="run-clippers-go-live-autopilot-button"
             >
               {goLiveAutopilotRunMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               Run Autopilot
+            </Button>
+            <Button
+              onClick={() => goLiveAutopilotRunMutation.mutate({ resetCompleted: true })}
+              disabled={goLiveAutopilotRunMutation.isPending || isLoading}
+              variant="outline"
+              className="border-emerald-300/30 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+              data-testid="reset-clippers-go-live-autopilot-button"
+            >
+              {goLiveAutopilotRunMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Reset local
+            </Button>
+            <Button
+              onClick={() => goLivePrepSweepMutation.mutate()}
+              disabled={goLivePrepSweepMutation.isPending || isLoading}
+              className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
+              data-testid="run-clippers-go-live-prep-sweep-button"
+            >
+              {goLivePrepSweepMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+              Prep sweep
+            </Button>
+            <Button
+              onClick={() => ownerConnectPackMutation.mutate()}
+              disabled={ownerConnectPackMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-owner-connect-pack-button"
+            >
+              {ownerConnectPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+              Owner pack
+            </Button>
+            <Button
+              onClick={() => dropzoneReadyPackMutation.mutate()}
+              disabled={dropzoneReadyPackMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-dropzone-ready-pack-button"
+            >
+              {dropzoneReadyPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+              Dropzone pack
+            </Button>
+            <Button
+              onClick={() => robertNextActionsMutation.mutate()}
+              disabled={robertNextActionsMutation.isPending || isLoading}
+              className="bg-amber-200 text-zinc-950 hover:bg-amber-100"
+              data-testid="prepare-clippers-robert-next-actions-button"
+            >
+              {robertNextActionsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Target className="mr-2 h-4 w-4" />}
+              Next actions
+            </Button>
+            <Button
+              onClick={() => launchEvidenceFixPackMutation.mutate()}
+              disabled={launchEvidenceFixPackMutation.isPending || isLoading}
+              className="bg-yellow-200 text-zinc-950 hover:bg-yellow-100"
+              data-testid="prepare-clippers-launch-evidence-fix-pack-button"
+            >
+              {launchEvidenceFixPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Evidence fixes
+            </Button>
+            <Button
+              onClick={() => localDropSyncMutation.mutate()}
+              disabled={localDropSyncMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="run-clippers-local-drop-sync-button"
+            >
+              {localDropSyncMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Local sync
             </Button>
             <Button
               onClick={() => externalSetupQueueMutation.mutate()}
@@ -4939,6 +7599,15 @@ export default function ClippersPage() {
               Create pack
             </Button>
             <Button
+              onClick={() => accountSetupSessionMutation.mutate()}
+              disabled={accountSetupSessionMutation.isPending || isLoading}
+              className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+              data-testid="prepare-clippers-account-setup-session-button"
+            >
+              {accountSetupSessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
+              Account setup
+            </Button>
+            <Button
               onClick={() => manualPostingPackMutation.mutate()}
               disabled={manualPostingPackMutation.isPending || isLoading}
               className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
@@ -5000,6 +7669,15 @@ export default function ClippersPage() {
             >
               {permissionRequestPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
               Request pack
+            </Button>
+            <Button
+              onClick={() => permissionSubmissionDossierMutation.mutate()}
+              disabled={permissionSubmissionDossierMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-permission-submission-dossier-button"
+            >
+              {permissionSubmissionDossierMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
+              Permission dossier
             </Button>
             <Button
               onClick={() => officialPermissionMatrixMutation.mutate()}
@@ -5128,6 +7806,15 @@ export default function ClippersPage() {
               Publisher connectors
             </Button>
             <Button
+              onClick={() => publisherExecutionQueueMutation.mutate()}
+              disabled={publisherExecutionQueueMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-publisher-execution-queue-button"
+            >
+              {publisherExecutionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Execution queue
+            </Button>
+            <Button
               onClick={() => intakeKitMutation.mutate()}
               disabled={intakeKitMutation.isPending || isLoading}
               className="bg-yellow-200 text-zinc-950 hover:bg-yellow-100"
@@ -5181,6 +7868,66 @@ export default function ClippersPage() {
           <StatCard icon={Users} label="Cuentas" value={String(status?.accounts.length || 0)} detail={`${status?.goals.connectedAccounts || 0} conectadas`} />
           <StatCard icon={Gauge} label="Modo" value={publishMode === "approval_required" ? "Aprobacion" : publishMode === "draft_only" ? "Drafts" : "Auto"} detail="control de publicacion" />
         </div>
+
+        {goLiveTunnelStages.length > 0 && (
+          <Card className="border-zinc-800 bg-zinc-950/70" data-testid="clippers-go-live-tunnel">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <Network className="h-4 w-4 text-cyan-200" />
+                Go-Live Tunnel
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-medium text-white">Mapa conectado de desbloqueo</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                      Cada caja depende de la anterior: primero inputs locales, luego cuentas/permisos/OAuth, despues fuentes, publish y reportes.
+                    </p>
+                  </div>
+                  <Badge className={cn("w-fit border", commandCenterBadge(status?.commandCenter?.status || "blocked"))}>
+                    {status?.commandCenter?.status || "blocked"}
+                  </Badge>
+                </div>
+              </div>
+              <div className="grid gap-x-3 gap-y-7 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-9">
+                {goLiveTunnelStages.map((stage, index) => {
+                  const progress = stage.total > 0 ? Math.min(100, Math.round((stage.done / stage.total) * 100)) : 0;
+                  return (
+                    <div key={stage.id} className="relative min-h-[186px] rounded-md border border-white/10 bg-black/30 p-3">
+                      {index < goLiveTunnelStages.length - 1 && (
+                        <>
+                          <div className="pointer-events-none absolute left-1/2 top-[calc(100%-1px)] z-10 flex h-7 w-4 -translate-x-1/2 flex-col items-center md:hidden">
+                            <div className="w-[2px] flex-1 rounded-full bg-cyan-300/30" />
+                            <ArrowRight className="h-3 w-3 rotate-90 text-cyan-200/80" />
+                          </div>
+                          <div className="pointer-events-none absolute left-[calc(100%-2px)] top-1/2 z-10 hidden h-3 w-7 -translate-y-1/2 items-center md:flex 2xl:w-6">
+                            <div className="h-[2px] flex-1 rounded-full bg-cyan-300/30" />
+                            <ArrowRight className="h-3 w-3 text-cyan-200/80" />
+                          </div>
+                        </>
+                      )}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold uppercase text-cyan-100">{stage.label}</p>
+                          <p className="mt-1 text-lg font-semibold text-white">{stage.done}/{stage.total}</p>
+                        </div>
+                        <Badge className={cn("shrink-0 border text-[10px]", goLiveTunnelBadge(stage.status))}>{stage.status}</Badge>
+                      </div>
+                      <Progress value={progress} className="mt-3 h-1.5 bg-white/10 [&>div]:bg-cyan-200" />
+                      <p className="mt-3 text-xs leading-5 text-zinc-400">{stage.detail}</p>
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-amber-200">{stage.nextStep}</p>
+                      {stage.artifactPath && (
+                        <p className="mt-2 truncate text-[11px] text-zinc-600">{stage.artifactPath}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-zinc-800 bg-zinc-950/70">
           <CardHeader>
@@ -5337,6 +8084,295 @@ export default function ClippersPage() {
           </Card>
         )}
 
+        {status?.goLiveOperatorBrief && (
+          <Card className="border-zinc-800 bg-zinc-950/70" data-testid="clippers-go-live-operator-brief">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <Target className="h-4 w-4 text-cyan-200" />
+                Go-Live Operator Brief
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{status.goLiveOperatorBrief.currentFocus}</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">{status.goLiveOperatorBrief.nextStep}</p>
+                    <p className="mt-2 break-all text-xs text-zinc-600">Brief: {status.goLiveOperatorBrief.markdownPath}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={cn("w-fit border", goLiveOperatorBriefBadge(status.goLiveOperatorBrief.status))}>{status.goLiveOperatorBrief.status}</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                      onClick={() => goLiveOperatorBriefMutation.mutate()}
+                      disabled={goLiveOperatorBriefMutation.isPending || isLoading}
+                      data-testid="refresh-clippers-go-live-operator-brief-button"
+                    >
+                      {goLiveOperatorBriefMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                  <p>Lanes: {status.goLiveOperatorBrief.totals.lanes}</p>
+                  <p>Ready: {status.goLiveOperatorBrief.totals.ready}</p>
+                  <p>Action: {status.goLiveOperatorBrief.totals.needsAction}</p>
+                  <p>Blocked: {status.goLiveOperatorBrief.totals.blocked}</p>
+                  <p>Accounts: {status.goLiveOperatorBrief.totals.accountConnectionsReady}/{status.goLiveOperatorBrief.totals.accountConnectionsTotal}</p>
+                  <p>Missing assets: {status.goLiveOperatorBrief.totals.sourceAssetsMissing}</p>
+                </div>
+                {status.goLiveOperatorBrief.generatedAt && (
+                  <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveOperatorBrief.generatedAt)}</p>
+                )}
+              </div>
+
+              <div className={cn(tunnelGridClass, "grid gap-3 md:grid-cols-2 xl:grid-cols-5")}>
+                {status.goLiveOperatorBrief.lanes.map((lane) => (
+                  <div key={lane.id} className={tunnelBoxClass}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-white">{lane.label}</p>
+                        <p className="mt-1 text-xs text-zinc-600">{lane.owner} · {lane.priority}</p>
+                      </div>
+                      <Badge className={cn("shrink-0 border text-[10px]", goLiveOperatorBriefBadge(lane.status))}>{lane.status}</Badge>
+                    </div>
+                    <p className="mt-3 text-lg font-semibold text-white">{lane.done}/{lane.total}</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          lane.status === "ready" ? "bg-emerald-300" : lane.status === "needs_action" ? "bg-amber-300" : "bg-red-300",
+                        )}
+                        style={{ width: `${lane.total ? Math.min(100, Math.round((lane.done / lane.total) * 100)) : 0}%` }}
+                      />
+                    </div>
+                    <p className="mt-3 line-clamp-3 text-xs leading-4 text-zinc-500">{lane.nextStep}</p>
+                    {lane.blockers[0] && (
+                      <p className="mt-3 line-clamp-3 text-xs leading-4 text-red-100/80">{lane.blockers[0]}</p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{lane.portalUrls.length} portals</Badge>
+                      <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{lane.evidenceRows.length} rows</Badge>
+                    </div>
+                    {lane.evidenceRows.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(lane.evidenceRows)}
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Usar rows
+                      </Button>
+                    )}
+                    {lane.portalUrls[0] && (
+                      <a href={lane.portalUrls[0]} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 break-all text-[11px] leading-4 text-cyan-200 hover:text-cyan-100">
+                        Open portal
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                    <p className="mt-3 break-all text-[11px] leading-4 text-zinc-600">{lane.artifactPath}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {status?.goLiveCompletionAudit && (
+          <Card className="border-zinc-800 bg-zinc-950/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base text-white">
+                <CheckCircle2 className="h-4 w-4 text-emerald-200" />
+                Go-Live Completion Audit
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{status.goLiveCompletionAudit.markdownPath}</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">{status.goLiveCompletionAudit.nextStep}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={cn("w-fit border", goLiveCompletionAuditBadge(status.goLiveCompletionAudit.status))}>{status.goLiveCompletionAudit.status}</Badge>
+                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                      {status.goLiveCompletionAudit.readyToPublish ? "ready_to_publish" : "not_ready"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                      onClick={() => goLiveAuditActionsMutation.mutate(status.goLiveCompletionAudit.requirements)}
+                      disabled={goLiveAuditActionsMutation.isPending || goLiveAuditActionMutation.isPending || isLoading}
+                      data-testid="run-all-clippers-completion-actions-button"
+                    >
+                      {goLiveAuditActionsMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                      Run all local actions
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                  <p>Score: {status.goLiveCompletionAudit.score}</p>
+                  <p>Reqs: {status.goLiveCompletionAudit.totals.requirements}</p>
+                  <p>Verified: {status.goLiveCompletionAudit.totals.verified}</p>
+                  <p>Needs evidence: {status.goLiveCompletionAudit.totals.needsEvidence}</p>
+                  <p>Blocked: {status.goLiveCompletionAudit.totals.blocked}</p>
+                  <p>External: {status.goLiveCompletionAudit.totals.externalRequired}</p>
+                </div>
+                {status.goLiveCompletionAudit.generatedAt && (
+                  <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveCompletionAudit.generatedAt)}</p>
+                )}
+              </div>
+
+              {status.goLiveCompletionAudit.externalSession?.length > 0 && (
+                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium text-white">External Go-Live Session</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Requisitos bloqueados conectados a portales, evidencia y verificacion.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="w-fit border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                        {status.goLiveCompletionAudit.totals.externalSessionItems} steps
+                      </Badge>
+                      <Badge className="w-fit border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                        {status.goLiveCompletionAudit.totals.externalSessionPortalUrls} portals
+                      </Badge>
+                      <Badge className="w-fit border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                        {status.goLiveCompletionAudit.totals.externalSessionEvidenceRows} evidence rows
+                      </Badge>
+                      {status.goLiveCompletionAudit.externalSession.some((item) => item.evidenceRows.length > 0) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                          onClick={() => appendLaunchEvidenceBatchRows(status.goLiveCompletionAudit.externalSession.flatMap((item) => item.evidenceRows))}
+                        >
+                          <UploadCloud className="mr-1 h-3 w-3" />
+                          Usar evidence rows
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.goLiveCompletionAudit.externalSessionCsvPath}</p>
+                  <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5")}>
+                    {status.goLiveCompletionAudit.externalSession.map((item) => (
+                      <div key={item.id} className={tunnelBoxClass}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                            <p className="mt-1 text-xs text-zinc-600">{item.phase} · {item.owner}</p>
+                          </div>
+                          <Badge className={cn("shrink-0 border text-[10px]", goLiveCompletionAuditBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.lane}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.portalUrls.length} portals</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.evidenceRows.length} rows</Badge>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-amber-200">{item.nextStep}</p>
+                        <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">Proof file: {item.evidenceDropFileName}</p>
+                        <p className="mt-1 break-all text-[11px] leading-4 text-zinc-700">Path: {item.evidenceDropPath}</p>
+                        {item.operatorSteps.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs leading-4 text-zinc-500">
+                            {item.operatorSteps.slice(0, 3).map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {item.portalUrls[0] && (
+                          <a href={item.portalUrls[0]} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 break-all text-[11px] leading-4 text-cyan-200 hover:text-cyan-100">
+                            Open portal
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        {item.evidenceRows.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3 h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                            onClick={() => appendLaunchEvidenceBatchRows(item.evidenceRows)}
+                          >
+                            <UploadCloud className="mr-1 h-3 w-3" />
+                            Usar rows
+                          </Button>
+                        )}
+                        {item.evidenceCaptureTemplate && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                            onClick={() => void copyGoLiveEvidenceTemplate(item.evidenceCaptureTemplate, item.evidenceDropFileName)}
+                          >
+                            <Copy className="mr-1 h-3 w-3" />
+                            Copy proof template
+                          </Button>
+                        )}
+                        <p className="mt-3 break-all text-[11px] leading-4 text-zinc-600">{item.artifactPath}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {status.goLiveCompletionAudit.requirements.map((requirement) => (
+                  <div key={requirement.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-white">{requirement.label}</p>
+                        <p className="mt-1 text-xs text-zinc-600">{requirement.phase} · {requirement.owner}</p>
+                      </div>
+                      <Badge className={cn("shrink-0 border text-[10px]", goLiveCompletionAuditBadge(requirement.status))}>{requirement.status}</Badge>
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-zinc-500">{requirement.currentEvidence}</p>
+                    <p className="mt-2 text-xs leading-5 text-amber-200">{requirement.nextStep}</p>
+                    {requirement.blockers.length > 0 && (
+                      <div className="mt-3 rounded-md border border-red-300/15 bg-red-950/10 p-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-red-200">Main blocker</p>
+                        <p className="mt-1 line-clamp-3 text-xs leading-4 text-red-100/80">{requirement.blockers[0]}</p>
+                      </div>
+                    )}
+                    {requirement.requiredEvidence.length > 0 && (
+                      <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-200">Evidence needed</p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-4 text-emerald-100/80">{requirement.requiredEvidence[0]}</p>
+                      </div>
+                    )}
+                    <p className="mt-3 break-all text-[11px] leading-4 text-zinc-600">{requirement.proofSource}</p>
+                    {requirement.actionUrl && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {requirement.actionUrl.startsWith("/api/clippers/") ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                            onClick={() => goLiveAuditActionMutation.mutate(requirement)}
+                            disabled={goLiveAuditActionMutation.isPending || goLiveAuditActionsMutation.isPending || isLoading}
+                            data-testid={`run-clippers-completion-action-${requirement.id}`}
+                          >
+                            {goLiveAuditActionMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                            Run local action
+                          </Button>
+                        ) : (
+                          <a href={requirement.actionUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                            Open action
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        <p className="break-all text-[11px] leading-4 text-cyan-200">{requirement.actionUrl}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {status?.goLiveAutopilotBrief && (
           <Card className="border-zinc-800 bg-zinc-950/70">
             <CardHeader>
@@ -5354,8 +8390,9 @@ export default function ClippersPage() {
                   </div>
                   <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.goLiveAutopilotBrief.status))}>{status.goLiveAutopilotBrief.status}</Badge>
                 </div>
-                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-7">
                   <p>Actions: {status.goLiveAutopilotBrief.totals.actions}</p>
+                  <p>Sessions: {status.goLiveAutopilotBrief.totals.agentSessions}</p>
                   <p>In-app: {status.goLiveAutopilotBrief.totals.inAppReady}</p>
                   <p>External: {status.goLiveAutopilotBrief.totals.externalRequired}</p>
                   <p>Waiting: {status.goLiveAutopilotBrief.totals.waiting}</p>
@@ -5371,6 +8408,1485 @@ export default function ClippersPage() {
                 <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.goLiveAutopilotBrief.csvPath}</p>
               </div>
 
+              {status.goLivePrepSweep && (
+                <div className="rounded-md border border-teal-300/20 bg-teal-950/10 p-3" data-testid="clippers-go-live-prep-sweep">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Prep Sweep: {status.goLivePrepSweep.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.goLivePrepSweep.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.goLivePrepSweep.status))}>{status.goLivePrepSweep.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                    <p>Attempted: {status.goLivePrepSweep.totals.attempted}</p>
+                    <p>Completed: {status.goLivePrepSweep.totals.completed}</p>
+                    <p>Skipped: {status.goLivePrepSweep.totals.skipped}</p>
+                    <p>Failed: {status.goLivePrepSweep.totals.failed}</p>
+                  </div>
+                  {status.goLivePrepSweep.localDropSync && (
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/30 p-2 text-xs text-zinc-500">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-medium text-teal-100">Local Drop Sync incluido</p>
+                        <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(status.goLivePrepSweep.localDropSync.status))}>{status.goLivePrepSweep.localDropSync.status}</Badge>
+                      </div>
+                      <div className="mt-2 grid gap-1 sm:grid-cols-4">
+                        <p>Attempted: {status.goLivePrepSweep.localDropSync.totals.attempted}</p>
+                        <p>Completed: {status.goLivePrepSweep.localDropSync.totals.completed}</p>
+                        <p>Skipped: {status.goLivePrepSweep.localDropSync.totals.skipped}</p>
+                        <p>Failed: {status.goLivePrepSweep.localDropSync.totals.failed}</p>
+                      </div>
+                    </div>
+                  )}
+                  {status.goLivePrepSweep.items.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {status.goLivePrepSweep.items.map((item) => (
+                        <div key={`${item.id}-${item.startedAt}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {status.ownerConnectPack && (
+                <div className="rounded-md border border-sky-300/20 bg-sky-950/10 p-3" data-testid="clippers-owner-connect-pack">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Owner Connect Pack: {status.ownerConnectPack.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.ownerConnectPack.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.ownerConnectPack.status))}>{status.ownerConnectPack.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-10">
+                    <p>Items: {status.ownerConnectPack.totals.items}</p>
+                    <p>Ready: {status.ownerConnectPack.totals.readyToExecute}</p>
+                    <p>Blocked: {status.ownerConnectPack.totals.blocked}</p>
+                    <p>Waiting: {status.ownerConnectPack.totals.waiting}</p>
+                    <p>Done: {status.ownerConnectPack.totals.done}</p>
+                    <p>Portals: {status.ownerConnectPack.totals.portalUrls}</p>
+                    <p>Rows: {status.ownerConnectPack.totals.evidenceRows}</p>
+                    <p>Drops: {status.ownerConnectPack.totals.dropDirs}</p>
+                    <p>Tracked: {status.ownerConnectPack.totals.progressRecords}</p>
+                    <p>Local done: {status.ownerConnectPack.totals.progressDone}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.ownerConnectPack.csvPath}</p>
+                  <p className="mt-1 break-all text-xs text-zinc-600">Progress: {status.ownerConnectPack.progressRecordsPath}</p>
+                  <div className="mt-3 grid gap-2 text-[11px] leading-4 text-sky-100/70 md:grid-cols-2">
+                    <p className="break-all">Account pack: {status.ownerConnectPack.sourceArtifacts.accountCreationPackPath}</p>
+                    <p className="break-all">Developer apps: {status.ownerConnectPack.sourceArtifacts.developerApplicationDraftsPath}</p>
+                    <p className="break-all">Permissions: {status.ownerConnectPack.sourceArtifacts.permissionRequestPackPath}</p>
+                    <p className="break-all">External session: {status.ownerConnectPack.sourceArtifacts.externalExecutionSessionPath}</p>
+                    <p className="break-all">Evidence drop: {status.ownerConnectPack.sourceArtifacts.ownerConnectEvidenceDropPath}</p>
+                  </div>
+                  {status.ownerConnectPack.items.length > 0 && (
+                    <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
+                      {status.ownerConnectPack.items.slice(0, 9).map((item) => (
+                        <div key={item.id} className={cn(tunnelBoxClass, "bg-black/30 p-2")}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <Badge className="border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">{item.lane}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.platform}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                          {item.progressStatus && (
+                            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-emerald-100/80">
+                              Progress: {item.progressStatus}{item.progressRecordedAt ? ` - ${item.progressRecordedAt}` : ""}{item.progressNotes ? ` - ${item.progressNotes}` : ""}
+                            </p>
+                          )}
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-sky-200 hover:text-white">
+                              Open portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.evidenceRows.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(item.evidenceRows)}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Use evidence row
+                              </Button>
+                              <p className="line-clamp-2 break-all font-mono text-[10px] leading-4 text-zinc-600">{item.evidenceRows[0]}</p>
+                            </div>
+                          )}
+                          {item.dropDirs.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{item.dropDirs.join(" | ")}</p>}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-amber-300/30 bg-amber-950/20 px-2 text-[11px] text-amber-100 hover:bg-amber-900/30"
+                              disabled={ownerConnectProgressMutation.isPending}
+                              onClick={() => ownerConnectProgressMutation.mutate({
+                                itemId: item.id,
+                                status: "waiting",
+                                notes: "Marcado en progreso desde UI; completar portal/evidencia real.",
+                                evidenceRows: item.evidenceRows.slice(0, 1),
+                              })}
+                            >
+                              {ownerConnectProgressMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                              Working
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-emerald-300/30 bg-emerald-950/20 px-2 text-[11px] text-emerald-100 hover:bg-emerald-900/30"
+                              disabled={ownerConnectProgressMutation.isPending}
+                              onClick={() => ownerConnectProgressMutation.mutate({
+                                itemId: item.id,
+                                status: "done",
+                                notes: "Marcado completado localmente; importar evidencia real para desbloquear go-live.",
+                                evidenceRows: item.evidenceRows.slice(0, 1),
+                              })}
+                            >
+                              {ownerConnectProgressMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                              Done local
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {status.dropzoneReadyPack && (
+                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-dropzone-ready-pack">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Dropzone Ready Pack: {status.dropzoneReadyPack.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.dropzoneReadyPack.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.dropzoneReadyPack.status))}>{status.dropzoneReadyPack.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-7">
+                    <p>Items: {status.dropzoneReadyPack.totals.items}</p>
+                    <p>Ready: {status.dropzoneReadyPack.totals.ready}</p>
+                    <p>Partial: {status.dropzoneReadyPack.totals.partial}</p>
+                    <p>Missing: {status.dropzoneReadyPack.totals.missing}</p>
+                    <p>Critical: {status.dropzoneReadyPack.totals.critical}</p>
+                    <p>Dirs: {status.dropzoneReadyPack.totals.dropDirs}</p>
+                    <p>Files: {status.dropzoneReadyPack.totals.expectedFiles}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.dropzoneReadyPack.csvPath}</p>
+                  <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-3")}>
+                    {status.dropzoneReadyPack.items.map((item) => (
+                      <div key={item.id} className={cn(tunnelBoxClass, "bg-black/30 p-2")}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Badge className="border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{item.lane}</Badge>
+                          <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.priority}</Badge>
+                        </div>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{item.dropDirs.join(" | ")}</p>
+                        {item.expectedFiles.length > 0 && <p className="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-zinc-600">{item.expectedFiles.slice(0, 3).join(" | ")}</p>}
+                        {item.copyReadyTemplate && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-3 h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
+                            onClick={() => {
+                              if (item.lane === "credentials") setCredentialBatchText(item.copyReadyTemplate);
+                              if (item.lane === "launch_evidence") {
+                                setLaunchEvidenceBatchPreview(null);
+                                setLaunchEvidenceBatchText(item.copyReadyTemplate);
+                              }
+                              if (item.lane === "source_videos") appendSourceIntakeBatchRows(item.copyReadyTemplate.split("\n").filter((row) => row.trim() && !row.startsWith("kind,")));
+                            }}
+                          >
+                            <UploadCloud className="mr-1 h-3 w-3" />
+                            Use template
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {status.robertNextActions && (
+                <div className="rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-robert-next-actions">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Robert Next Actions: {status.robertNextActions.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.robertNextActions.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.robertNextActions.status))}>{status.robertNextActions.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Actions: {status.robertNextActions.totals.actions}</p>
+                    <p>Critical: {status.robertNextActions.totals.critical}</p>
+                    <p>High: {status.robertNextActions.totals.high}</p>
+                    <p>Local: {status.robertNextActions.totals.localDrop}</p>
+                    <p>External: {status.robertNextActions.totals.externalPortal}</p>
+                    <p>Evidence: {status.robertNextActions.totals.evidence}</p>
+                    <p>Sources: {status.robertNextActions.totals.sourceSupply}</p>
+                    <p>Minutes: {status.robertNextActions.totals.estimatedMinutes}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.robertNextActions.csvPath}</p>
+                  {status.robertNextActions.connectNow && (
+                    <div className="mt-3 rounded-md border border-amber-300/15 bg-black/30 p-3 text-xs text-zinc-500">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium text-amber-100">Connect Now handoff</p>
+                          <p className="mt-1 break-all text-zinc-600">{status.robertNextActions.connectNow.markdownPath}</p>
+                        </div>
+                        <Badge className="w-fit border border-amber-300/20 bg-amber-950/30 text-amber-100">
+                          {status.robertNextActions.connectNow.sourceAssetsRequired} sources
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        <p className="break-all">Evidence template: {status.robertNextActions.connectNow.evidenceTemplatePath}</p>
+                        <p className="break-all">Import target: {status.robertNextActions.connectNow.evidenceImportPath}</p>
+                        <p className="break-all">Credentials: {status.robertNextActions.connectNow.pendingCredentialEnvVars.join(", ") || "none"}</p>
+                        <p className="break-all">Drop dirs: {status.robertNextActions.connectNow.credentialDropDirs.join(" | ")}</p>
+                      </div>
+                      {status.robertNextActions.connectNow.connectionTunnel && (
+                        <div className="mt-3 rounded-md border border-white/10 bg-zinc-950/40 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-white">Connection tunnel</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.connectionTunnel.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(status.robertNextActions.connectNow.connectionTunnel.status))}>
+                                {status.robertNextActions.connectNow.connectionTunnel.status}
+                              </Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.connectionTunnel.progress}%</Badge>
+                              <Badge className="border border-rose-300/20 bg-rose-950/30 text-[10px] text-rose-100">{status.robertNextActions.connectNow.connectionTunnel.blockedGates} blocked</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 overflow-x-auto pb-1">
+                            <div className="flex min-w-max items-stretch gap-2">
+                              {status.robertNextActions.connectNow.connectionTunnel.gates.map((gate, gateIndex, gates) => (
+                                <div key={`connect-now-tunnel-${gate.id}`} className="flex items-center gap-2">
+                                  <div className={cn(
+                                    "w-36 rounded-md border p-2",
+                                    gate.status === "done"
+                                      ? "border-emerald-300/25 bg-emerald-950/20"
+                                      : gate.status === "ready_to_execute"
+                                        ? "border-sky-300/25 bg-sky-950/20"
+                                        : gate.status === "waiting"
+                                          ? "border-amber-300/25 bg-amber-950/20"
+                                          : "border-rose-300/25 bg-rose-950/20",
+                                  )}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="truncate text-[11px] font-medium text-white">{gate.rank}. {gate.label}</p>
+                                      <Badge className={cn("shrink-0 border px-1 text-[9px]", goLiveAutopilotBadge(gate.status))}>{gate.status}</Badge>
+                                    </div>
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                      <div
+                                        className={cn(
+                                          "h-full rounded-full",
+                                          gate.status === "done" ? "bg-emerald-300" : gate.status === "ready_to_execute" ? "bg-sky-300" : gate.status === "waiting" ? "bg-amber-300" : "bg-rose-300",
+                                        )}
+                                        style={{ width: `${Math.min(100, Math.round((gate.done / Math.max(1, gate.total)) * 100))}%` }}
+                                      />
+                                    </div>
+                                    <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+                                      <span>{gate.done}/{gate.total}</span>
+                                      <span>{gate.blockers} blockers</span>
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{gate.actionLabel}</p>
+                                    {gate.actionUrl && /^https?:\/\//.test(gate.actionUrl) && (
+                                      <a href={gate.actionUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[10px] text-sky-200 hover:text-white">
+                                        Open
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                  {gateIndex < gates.length - 1 && (
+                                    <div className="flex h-full items-center text-zinc-600">
+                                      <div className="h-px w-6 bg-zinc-700" />
+                                      <ArrowRight className="h-3.5 w-3.5" />
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.ownershipSplit && (
+                        <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-cyan-100">Ownership split</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.ownershipSplit.nextRobertAction}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[10px] text-cyan-100">
+                                Robert {status.robertNextActions.connectNow.ownershipSplit.robertReady.length}
+                              </Badge>
+                              <Badge className="border border-amber-300/20 bg-amber-950/30 text-[10px] text-amber-100">
+                                User {status.robertNextActions.connectNow.ownershipSplit.userRequired.length}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                            <div className="rounded border border-cyan-300/10 bg-black/20 p-2">
+                              <p className="text-[11px] font-medium text-cyan-100">Robert can advance</p>
+                              <div className="mt-2 space-y-2">
+                                {status.robertNextActions.connectNow.ownershipSplit.robertReady.slice(0, 5).map((item) => (
+                                  <div key={`ownership-robert-${item.label}`} className="rounded border border-white/10 bg-zinc-950/40 p-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-[11px] font-medium text-white">{item.label}</p>
+                                      <Badge className="shrink-0 border border-white/10 bg-white/5 px-1 text-[9px] text-zinc-300">{item.count}</Badge>
+                                    </div>
+                                    <p className="mt-1 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="rounded border border-amber-300/10 bg-black/20 p-2">
+                              <p className="text-[11px] font-medium text-amber-100">User/account required</p>
+                              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.ownershipSplit.nextUserAction}</p>
+                              <div className="mt-2 space-y-2">
+                                {status.robertNextActions.connectNow.ownershipSplit.userRequired.slice(0, 5).map((item) => (
+                                  <div key={`ownership-user-${item.label}`} className="rounded border border-white/10 bg-zinc-950/40 p-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-[11px] font-medium text-white">{item.label}</p>
+                                      <Badge className="shrink-0 border border-white/10 bg-white/5 px-1 text-[9px] text-zinc-300">{item.count}</Badge>
+                                    </div>
+                                    <p className="mt-1 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {status.robertNextActions.connectNow.ownershipSplit.automationUnlockedBy.slice(0, 7).map((item) => (
+                              <Badge key={`ownership-unlock-${item}`} className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.weeklyRunway && (
+                        <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-lime-100">100/week runway</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.weeklyRunway.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn(
+                                "border text-[10px]",
+                                status.robertNextActions.connectNow.weeklyRunway.status === "ready"
+                                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                                  : status.robertNextActions.connectNow.weeklyRunway.status === "needs_connections"
+                                    ? "border-cyan-300/20 bg-cyan-950/30 text-cyan-100"
+                                    : "border-lime-300/20 bg-lime-950/30 text-lime-100",
+                              )}>
+                                {status.robertNextActions.connectNow.weeklyRunway.status}
+                              </Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                                {status.robertNextActions.connectNow.weeklyRunway.weeklyReadySlots}/{status.robertNextActions.connectNow.weeklyRunway.targetWeeklyClips}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-4">
+                            <p>Daily baseline: {status.robertNextActions.connectNow.weeklyRunway.plannedDailyClips}</p>
+                            <p>Configured/day: {status.robertNextActions.connectNow.weeklyRunway.configuredDailyClipTarget}</p>
+                            <p>Missing slots: {status.robertNextActions.connectNow.weeklyRunway.weeklyMissingSlots}</p>
+                            <p>Source gap: {status.robertNextActions.connectNow.weeklyRunway.sourceAssetGap}</p>
+                            <p>Rights OK: {status.robertNextActions.connectNow.weeklyRunway.rightsReadyAssets}</p>
+                            <p>Min assets: {status.robertNextActions.connectNow.weeklyRunway.minimumWeeklySourceAssets}</p>
+                            <p>Accounts: {status.robertNextActions.connectNow.weeklyRunway.accountCount}</p>
+                            <p>Platforms: {status.robertNextActions.connectNow.weeklyRunway.platformAccountCount}</p>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-3">
+                            {status.robertNextActions.connectNow.weeklyRunway.categories.map((category) => (
+                              <div key={`weekly-runway-${category.category}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-[11px] font-medium text-white">{category.label}</p>
+                                  <Badge className="shrink-0 border border-lime-300/20 bg-lime-950/30 px-1 text-[9px] text-lime-100">
+                                    gap {category.sourceAssetGap}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                  <div
+                                    className="h-full rounded-full bg-lime-300"
+                                    style={{ width: `${Math.min(100, Math.round(((category.minimumWeeklySourceAssets - category.sourceAssetGap) / Math.max(1, category.minimumWeeklySourceAssets)) * 100))}%` }}
+                                  />
+                                </div>
+                                <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+                                  <span>{category.weeklyTargetSlots} slots/wk</span>
+                                  <span>{category.dailyTarget}/day</span>
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{category.nextStep}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(status.robertNextActions.connectNow.platformLaunchBridge || []).length > 0 && (
+                        <div className="mt-3 rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-fuchsia-100">Platform launch bridge</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">Per-platform account, app, permission, OAuth and evidence checklist.</p>
+                            </div>
+                            <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-950/30 text-[10px] text-fuchsia-100">
+                              {(status.robertNextActions.connectNow.platformLaunchBridge || []).length} platforms
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                            {(status.robertNextActions.connectNow.platformLaunchBridge || []).map((platform) => (
+                              <div key={`platform-launch-bridge-${platform.platform}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11px] font-medium text-white">{platform.label}</p>
+                                    <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{platform.nextStep}</p>
+                                  </div>
+                                  <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(platform.status))}>{platform.status}</Badge>
+                                </div>
+                                <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500">
+                                  <p className="break-all">Handles: {platform.handles.join(", ") || "none"}</p>
+                                  <p className="break-all">Missing env: {platform.missingEnvVars.join(", ") || "none"}</p>
+                                  <p className="break-all">Scopes: {platform.scopes.join(", ") || "none"}</p>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">accounts {platform.accountProofCount}</Badge>
+                                  <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">apps/perms {platform.appPermissionCount}</Badge>
+                                  <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">oauth {platform.oauthCount}</Badge>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {platform.portalUrls.slice(0, 3).map((portal) => (
+                                    <a key={`platform-launch-portal-${platform.platform}-${portal.url}`} href={portal.url} target="_blank" rel="noreferrer" className="inline-flex h-6 max-w-full items-center gap-1 rounded-md border border-fuchsia-300/20 px-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-300/10">
+                                      <span className="truncate">{portal.label}</span>
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </a>
+                                  ))}
+                                  {platform.docsUrls[0] && (
+                                    <a href={platform.docsUrls[0]} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 px-1.5 text-[10px] text-sky-100 hover:bg-sky-300/10">
+                                      Docs
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </div>
+                                {platform.evidenceRows.length > 0 && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-2 h-7 border-fuchsia-300/20 bg-transparent px-2 text-[11px] text-fuchsia-100 hover:bg-fuchsia-300/10"
+                                    onClick={() => appendLaunchEvidenceBatchRows(platform.evidenceRows)}
+                                  >
+                                    <UploadCloud className="mr-1 h-3 w-3" />
+                                    Rows
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(status.robertNextActions.connectNow.postConnectActivationBridge || []).length > 0 && (
+                        <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-cyan-100">Post-connect activation bridge</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">What becomes local-actionable after accounts, permissions and OAuth are connected.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/30 text-[10px] text-cyan-100">
+                                {(status.robertNextActions.connectNow.postConnectActivationBridge || []).length} lanes
+                              </Badge>
+                              <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/30 text-[10px] text-emerald-100">
+                                {(status.robertNextActions.connectNow.postConnectActivationBridge || []).filter((lane) => lane.status === "ready" || lane.status === "activation_ready").length} ready
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                            {(status.robertNextActions.connectNow.postConnectActivationBridge || []).slice(0, 9).map((lane) => (
+                              <div key={`post-connect-activation-${lane.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11px] font-medium text-white">{lane.accountName}</p>
+                                    <p className="mt-1 truncate text-[10px] text-cyan-100/80">{lane.handle} / {lane.platform}</p>
+                                  </div>
+                                  <Badge className={cn(
+                                    "shrink-0 border text-[9px]",
+                                    lane.status === "ready"
+                                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                      : lane.status === "activation_ready"
+                                        ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                                        : lane.status === "waiting"
+                                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                          : "border-rose-300/30 bg-rose-300/10 text-rose-100",
+                                  )}>
+                                    {lane.status}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                  <div className="h-full rounded-full bg-cyan-300" style={{ width: `${Math.min(100, lane.activationScore)}%` }} />
+                                </div>
+                                <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500">
+                                  <p>Score: {lane.activationScore}%</p>
+                                  <p>Account: {lane.accountProofStatus}</p>
+                                  <p>App: {lane.developerAppStatus}</p>
+                                  <p>Perms: {lane.permissionsApproved}/{lane.permissionsTotal}</p>
+                                  <p>Token: {lane.tokenSaved ? "saved" : lane.oauthStatus}</p>
+                                  <p>Publisher: {lane.publisherConnectorStatus}</p>
+                                  <p>Queue: {lane.readyQueueItems} ready / {lane.blockedQueueItems} blocked</p>
+                                </div>
+                                <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-zinc-500">{lane.nextStep}</p>
+                                {lane.blockers.length > 0 && (
+                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-rose-100/80">{lane.blockers.slice(0, 2).join(" | ")}</p>
+                                )}
+                                {lane.nextLocalActions.length > 0 && (
+                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-cyan-100/75">{lane.nextLocalActions.slice(0, 2).join(" | ")}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.focusRun && (
+                        <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-emerald-100">Focus run: {status.robertNextActions.connectNow.focusRun.label}</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.focusRun.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="border border-emerald-300/20 bg-emerald-950/30 text-[10px] text-emerald-100">{status.robertNextActions.connectNow.focusRun.status}</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.focusRun.estimatedMinutes} min</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {status.robertNextActions.connectNow.focusRun.evidenceRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.focusRun.evidenceRows)}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Focus rows
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.focusRun.credentialTemplates.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
+                                onClick={() => {
+                                  setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${status.robertNextActions.connectNow.focusRun.credentialTemplates.join("\n\n")}`);
+                                  setCredentialBatchPreview(null);
+                                  toast({
+                                    title: "Focus env cargado",
+                                    description: "Pega valores reales antes de preview/import.",
+                                  });
+                                }}
+                              >
+                                <KeyRound className="mr-1 h-3 w-3" />
+                                Focus env
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.focusRun.portalUrls.slice(0, 3).map((portalUrl) => (
+                              <a key={`connect-now-focus-${portalUrl}`} href={portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border border-sky-300/20 px-2 text-[11px] text-sky-100 hover:bg-sky-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.credentialCloseout && (
+                        <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-cyan-100">Credential closeout queue</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.credentialCloseout.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("border text-[10px]", status.robertNextActions.connectNow.credentialCloseout.importReady ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-cyan-300/20 bg-cyan-950/30 text-cyan-100")}>
+                                {status.robertNextActions.connectNow.credentialCloseout.status}
+                              </Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.credentialCloseout.pendingEnvVars.length} pending</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-4">
+                            <p>Files: {status.robertNextActions.connectNow.credentialCloseout.totals.files}</p>
+                            <p>Drop: {status.robertNextActions.connectNow.credentialCloseout.totals.dropCandidates}</p>
+                            <p>Eligible: {status.robertNextActions.connectNow.credentialCloseout.totals.importEligible}</p>
+                            <p>Templates: {status.robertNextActions.connectNow.credentialCloseout.totals.templateFiles}</p>
+                            <p>Accepted: {status.robertNextActions.connectNow.credentialCloseout.acceptedEnvVars.length}</p>
+                            <p>Errors: {status.robertNextActions.connectNow.credentialCloseout.totals.fileErrors}</p>
+                            <p>Runtime: {status.robertNextActions.connectNow.credentialCloseout.runtimeEnv?.configuredEnvVars.length ?? 0}/{status.robertNextActions.connectNow.credentialCloseout.runtimeEnv?.checkedEnvVars.length ?? 0}</p>
+                            <p>Env files: {status.robertNextActions.connectNow.credentialCloseout.runtimeEnv?.localEnvFiles.length ?? 0}</p>
+                            <p className="break-all sm:col-span-2">Diagnostic: {status.robertNextActions.connectNow.credentialCloseout.diagnosticPath}</p>
+                          </div>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-emerald-100/75">
+                            Runtime configured: {status.robertNextActions.connectNow.credentialCloseout.runtimeEnv?.configuredEnvVars.join(", ") || "none"}
+                          </p>
+                          <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">
+                            Runtime missing: {status.robertNextActions.connectNow.credentialCloseout.runtimeEnv?.missingEnvVars.join(", ") || "none"}
+                          </p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/75">
+                            Pending env: {status.robertNextActions.connectNow.credentialCloseout.pendingEnvVars.join(", ") || "none"}
+                          </p>
+                          {(status.robertNextActions.connectNow.credentialCloseout.driveCredentialBridge || []).length > 0 && (
+                            <div className="mt-2 rounded-md border border-violet-300/15 bg-violet-950/10 p-2">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-[11px] font-medium text-violet-100">Drive credential bridge</p>
+                                <Badge className="w-fit border border-violet-300/20 bg-violet-950/40 text-[10px] text-violet-100">
+                                  {(status.robertNextActions.connectNow.credentialCloseout.driveCredentialBridge || []).length} searches
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {(status.robertNextActions.connectNow.credentialCloseout.driveCredentialBridge || []).slice(0, 6).map((item) => (
+                                  <div key={`connect-now-drive-credential-${item.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="truncate text-[11px] font-medium text-white">{item.label}</p>
+                                      <Badge className={cn("border text-[10px]", credentialSetupBadge(item.status))}>{item.status}</Badge>
+                                    </div>
+                                    <p className="mt-1 break-all text-[11px] leading-4 text-violet-100/75">{item.missingSuggestedEnvVars.join(", ") || "ready"}</p>
+                                    <p className="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-zinc-500">{item.localDropFileNames.join(" | ") || item.nextStep}</p>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {item.driveSearchQueries.slice(0, 2).map((query, queryIndex) => (
+                                        <a
+                                          key={`connect-now-drive-credential-${item.id}-${query}`}
+                                          href={item.driveSearchUrls[queryIndex] || googleDriveSearchUrl(query)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex h-6 max-w-full items-center gap-1 rounded-md border border-violet-300/20 px-1.5 text-[10px] text-violet-100 hover:bg-violet-300/10"
+                                        >
+                                          <span className="truncate">Drive {queryIndex + 1}</span>
+                                          <ExternalLink className="h-3 w-3 shrink-0" />
+                                        </a>
+                                      ))}
+                                      {item.portalUrl && (
+                                        <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 px-1.5 text-[10px] text-sky-100 hover:bg-sky-300/10">
+                                          Portal
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {status.robertNextActions.connectNow.credentialCloseout.files.length > 0 && (
+                            <div className="mt-2 grid gap-2 md:grid-cols-2">
+                              {status.robertNextActions.connectNow.credentialCloseout.files.slice(0, 4).map((file) => (
+                                <div key={`connect-now-credential-${file.relativePath}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-[11px] font-medium text-white">{file.fileName}</p>
+                                    <Badge className={cn("border text-[10px]", file.importEligible ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                      {file.importEligible ? "eligible" : file.location}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{file.relativePath}</p>
+                                  {file.pendingEnvVars.length > 0 && <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/80">Pending: {file.pendingEnvVars.join(", ")}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
+                            onClick={() => credentialDropImportMutation.mutate()}
+                            disabled={credentialDropImportMutation.isPending || !status.robertNextActions.connectNow.credentialCloseout.importReady}
+                          >
+                            {credentialDropImportMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <UploadCloud className="mr-1 h-3 w-3" />}
+                            Import credential files
+                          </Button>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.officialPermissionCloseout && (
+                        <div className="mt-3 rounded-md border border-indigo-300/15 bg-indigo-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-indigo-100">Official permission closeout</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.officialPermissionCloseout.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("border text-[10px]", status.robertNextActions.connectNow.officialPermissionCloseout.status === "verified" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-indigo-300/20 bg-indigo-950/30 text-indigo-100")}>
+                                {status.robertNextActions.connectNow.officialPermissionCloseout.status}
+                              </Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.officialPermissionCloseout.totals.scopes} scopes</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-5">
+                            <p>Platforms: {status.robertNextActions.connectNow.officialPermissionCloseout.totals.platforms}</p>
+                            <p>Public docs: {status.robertNextActions.connectNow.officialPermissionCloseout.totals.officialVerified}</p>
+                            <p>Login recheck: {status.robertNextActions.connectNow.officialPermissionCloseout.totals.loginRequired}</p>
+                            <p>App review: {status.robertNextActions.connectNow.officialPermissionCloseout.totals.appReviewRequired}</p>
+                            <p>Batches: {status.robertNextActions.connectNow.officialPermissionCloseout.totals.sourceBatches}</p>
+                            <p className="break-all sm:col-span-2">Matrix: {status.robertNextActions.connectNow.officialPermissionCloseout.matrixPath}</p>
+                            <p className="break-all sm:col-span-2">CSV: {status.robertNextActions.connectNow.officialPermissionCloseout.csvPath}</p>
+                            <p>Checked: {new Date(status.robertNextActions.connectNow.officialPermissionCloseout.verifiedAt).toLocaleDateString()}</p>
+                          </div>
+                          {status.robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.length > 0 && (
+                            <div className="mt-2 grid gap-2 md:grid-cols-3">
+                              {status.robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.slice(0, 3).map((batch) => (
+                                <div key={`connect-now-official-permission-${batch.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-[11px] font-medium text-white">{batch.label}</p>
+                                    <Badge className={cn("border text-[10px]", batch.accessMode === "public" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-200")}>
+                                      {batch.accessMode}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 break-all text-[11px] leading-4 text-indigo-100/75">{batch.scopes.join(", ")}</p>
+                                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{batch.nextStep}</p>
+                                  {batch.officialUrls[0] && (
+                                    <a href={batch.officialUrls[0]} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-sky-200 hover:text-white">
+                                      Official docs
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {status.robertNextActions.connectNow.officialPermissionCloseout.nextRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-indigo-300/20 bg-transparent px-2 text-[11px] text-indigo-100 hover:bg-indigo-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.officialPermissionCloseout?.nextRows || [])}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Permission rows
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.officialPermissionCloseout.approvalRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-emerald-300/20 bg-transparent px-2 text-[11px] text-emerald-100 hover:bg-emerald-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.officialPermissionCloseout?.approvalRows || [])}
+                              >
+                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                Approval rows
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.accountCloseout && (
+                        <div className="mt-3 rounded-md border border-violet-300/15 bg-violet-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-violet-100">Account closeout queue</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.accountCloseout.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(status.robertNextActions.connectNow.accountCloseout.status))}>{status.robertNextActions.connectNow.accountCloseout.status}</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.accountCloseout.totals.items} external</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-5">
+                            <p>Ready: {status.robertNextActions.connectNow.accountCloseout.totals.readyToExecute}</p>
+                            <p>Blocked: {status.robertNextActions.connectNow.accountCloseout.totals.blocked}</p>
+                            <p>Accounts: {status.robertNextActions.connectNow.accountCloseout.totals.accounts}</p>
+                            <p>Apps: {status.robertNextActions.connectNow.accountCloseout.totals.developerApps}</p>
+                            <p>Perms: {status.robertNextActions.connectNow.accountCloseout.totals.permissions}</p>
+                            <p>OAuth: {status.robertNextActions.connectNow.accountCloseout.totals.oauth}</p>
+                            <p>Rows: {status.robertNextActions.connectNow.accountCloseout.totals.evidenceRows}</p>
+                            <p className="break-all sm:col-span-3">Evidence drop: {status.robertNextActions.connectNow.accountCloseout.evidenceDropPath}</p>
+                          </div>
+                          {(status.robertNextActions.connectNow.accountCloseout.accountProofBridge || []).length > 0 && (
+                            <div className="mt-2 rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-2">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-[11px] font-medium text-fuchsia-100">Account proof bridge</p>
+                                <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-950/40 text-[10px] text-fuchsia-100">
+                                  {(status.robertNextActions.connectNow.accountCloseout.accountProofBridge || []).length} accounts
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {(status.robertNextActions.connectNow.accountCloseout.accountProofBridge || []).slice(0, 6).map((item) => (
+                                  <div key={`connect-now-account-proof-${item.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="truncate text-[11px] font-medium text-white">{item.handle}</p>
+                                      <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.platform}</Badge>
+                                    </div>
+                                    <p className="mt-1 truncate text-[11px] leading-4 text-fuchsia-100/75">{item.accountId}</p>
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{item.requiredProof.join(" | ")}</p>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {item.portalUrl && (
+                                        <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 px-1.5 text-[10px] text-sky-100 hover:bg-sky-300/10">
+                                          Portal
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 border-fuchsia-300/20 bg-transparent px-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-300/10"
+                                        onClick={() => appendLaunchEvidenceBatchRows([item.evidenceRow])}
+                                      >
+                                        <UploadCloud className="mr-1 h-3 w-3" />
+                                        Row
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {(status.robertNextActions.connectNow.accountCloseout.appPermissionBridge || []).length > 0 && (
+                            <div className="mt-2 rounded-md border border-indigo-300/15 bg-indigo-950/10 p-2">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-[11px] font-medium text-indigo-100">App/permission bridge</p>
+                                <Badge className="w-fit border border-indigo-300/20 bg-indigo-950/40 text-[10px] text-indigo-100">
+                                  {(status.robertNextActions.connectNow.accountCloseout.appPermissionBridge || []).length} items
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {(status.robertNextActions.connectNow.accountCloseout.appPermissionBridge || []).slice(0, 6).map((item) => (
+                                  <div key={`connect-now-app-permission-${item.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="truncate text-[11px] font-medium text-white">{item.label}</p>
+                                      <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.lane}</Badge>
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      <Badge className="border border-indigo-300/20 bg-indigo-950/40 text-[10px] text-indigo-100">{item.platform}</Badge>
+                                      {item.scopes.slice(0, 2).map((scope) => (
+                                        <Badge key={`${item.id}-${scope}`} className="max-w-full truncate border border-white/10 bg-white/5 text-[10px] text-zinc-300">{scope}</Badge>
+                                      ))}
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{item.requiredProof.join(" | ")}</p>
+                                    {item.blockers.length > 0 && (
+                                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-amber-100/75">{item.blockers.join(" | ")}</p>
+                                    )}
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {item.portalUrl && (
+                                        <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 px-1.5 text-[10px] text-sky-100 hover:bg-sky-300/10">
+                                          Portal
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      )}
+                                      {item.evidenceRows.length > 0 && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-6 border-indigo-300/20 bg-transparent px-1.5 text-[10px] text-indigo-100 hover:bg-indigo-300/10"
+                                          onClick={() => appendLaunchEvidenceBatchRows(item.evidenceRows)}
+                                        >
+                                          <UploadCloud className="mr-1 h-3 w-3" />
+                                          Rows
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {status.robertNextActions.connectNow.accountCloseout.nextItems.length > 0 && (
+                            <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                              {status.robertNextActions.connectNow.accountCloseout.nextItems.slice(0, 6).map((item) => (
+                                <div key={`connect-now-account-${item.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-[11px] font-medium text-white">{item.rank}. {item.label}</p>
+                                    <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    <Badge className="border border-violet-300/20 bg-violet-950/40 text-[10px] text-violet-100">{item.lane}</Badge>
+                                    <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.platform}</Badge>
+                                  </div>
+                                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{item.nextStep}</p>
+                                  {item.portalUrl && (
+                                    <a href={item.portalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-sky-200 hover:text-white">
+                                      Portal
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {status.robertNextActions.connectNow.accountCloseout.evidenceRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.accountCloseout?.evidenceRows || [])}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Account rows
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.accountCloseout.portalUrls.slice(0, 3).map((portal, portalIndex) => (
+                              <a key={`connect-now-account-portal-${portal.url}-${portal.lane}-${portalIndex}`} href={portal.url} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-300/20 px-2 text-[11px] text-violet-100 hover:bg-violet-300/10">
+                                {portal.platform}
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.evidenceCloseout && (
+                        <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-sky-100">Evidence closeout queue</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.evidenceCloseout.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="border border-sky-300/20 bg-sky-950/30 text-[10px] text-sky-100">{status.robertNextActions.connectNow.evidenceCloseout.total} open</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.evidenceCloseout.nextRows.length} rows</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-4">
+                            <p>Accounts: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.accountProof}</p>
+                            <p>Apps: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.developerApps}</p>
+                            <p>Perms: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.permissionProof}</p>
+                            <p>URLs: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.publicUrl}</p>
+                            <p>State gaps: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.currentStateGaps}</p>
+                            <p>Rejected: {status.robertNextActions.connectNow.evidenceCloseout.byCategory.rejectedRows}</p>
+                            <p className="break-all sm:col-span-2">Fixpack: {status.robertNextActions.connectNow.evidenceCloseout.fixpackPath}</p>
+                            <p className="break-all sm:col-span-2">Import: {status.robertNextActions.connectNow.evidenceCloseout.importTarget}</p>
+                          </div>
+                          {(status.robertNextActions.connectNow.evidenceCloseout.importBridge || []).length > 0 && (
+                            <div className="mt-2 rounded-md border border-sky-300/10 bg-black/20 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-medium text-sky-100">Evidence import bridge</p>
+                                <Badge className="border border-sky-300/20 bg-sky-950/30 text-[10px] text-sky-100">
+                                  {status.robertNextActions.connectNow.evidenceCloseout.importBridge.length} batches
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {status.robertNextActions.connectNow.evidenceCloseout.importBridge.slice(0, 6).map((batch) => (
+                                  <div key={`evidence-import-bridge-${batch.id}`} className="rounded border border-white/10 bg-zinc-950/40 p-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium text-white">{batch.label}</p>
+                                        <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{batch.nextStep}</p>
+                                      </div>
+                                      <Badge className={cn(
+                                        "shrink-0 border px-1 text-[9px]",
+                                        batch.priority === "critical"
+                                          ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                                          : batch.priority === "high"
+                                            ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                            : "border-zinc-600 bg-zinc-900 text-zinc-300",
+                                      )}>
+                                        {batch.count}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-1 break-all text-[10px] leading-4 text-sky-100/75">{batch.identifiers.slice(0, 3).join(", ") || batch.kind}</p>
+                                    <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{batch.requiredFixes.slice(0, 2).join(" | ")}</p>
+                                    {batch.rows.length > 0 && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="mt-2 h-7 border-sky-300/20 bg-transparent px-2 text-[11px] text-sky-100 hover:bg-sky-300/10"
+                                        onClick={() => appendLaunchEvidenceBatchRows(batch.rows)}
+                                      >
+                                        <UploadCloud className="mr-1 h-3 w-3" />
+                                        Rows
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {status.robertNextActions.connectNow.evidenceCloseout.nextRows.length > 0 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="mt-2 h-7 border-sky-300/20 bg-transparent px-2 text-[11px] text-sky-100 hover:bg-sky-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.evidenceCloseout?.nextRows || [])}
+                            >
+                              <UploadCloud className="mr-1 h-3 w-3" />
+                              Fix rows
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.sourceCloseout && (
+                        <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-lime-100">Source closeout queue</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.sourceCloseout.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={cn("border text-[10px]", sourceAcquisitionBadge(status.robertNextActions.connectNow.sourceCloseout.status))}>{status.robertNextActions.connectNow.sourceCloseout.status}</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.sourceCloseout.total} rows</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-500 sm:grid-cols-2 xl:grid-cols-4">
+                            <p>Missing/wk: {status.robertNextActions.connectNow.sourceCloseout.totals.weeklyMissingSourceSlots}</p>
+                            <p>Rights OK: {status.robertNextActions.connectNow.sourceCloseout.totals.rightsReadyAssets}</p>
+                            <p>Min assets: {status.robertNextActions.connectNow.sourceCloseout.totals.minimumWeeklySourceAssets}</p>
+                            <p>Batches: {status.robertNextActions.connectNow.sourceCloseout.batches.length}</p>
+                            <p className="break-all sm:col-span-2">Drop root: {status.robertNextActions.connectNow.sourceCloseout.sourceDropDir}</p>
+                            <p className="break-all sm:col-span-2">Kit: {status.robertNextActions.connectNow.sourceCloseout.markdownPath}</p>
+                          </div>
+                          {status.robertNextActions.connectNow.sourceCloseout.batches.length > 0 && (
+                            <div className="mt-2 grid gap-2 md:grid-cols-3">
+                              {status.robertNextActions.connectNow.sourceCloseout.batches.slice(0, 3).map((batch) => (
+                                <div key={`connect-now-source-${batch.category}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-[11px] font-medium text-white">{batch.label}</p>
+                                    <Badge className={cn("border text-[10px]", sourceAcquisitionBadge(batch.priority))}>{batch.items}</Badge>
+                                  </div>
+                                  <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{batch.sourceDropDir}</p>
+                                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-lime-100/75">{batch.viralSearchQueries.slice(0, 2).join(" | ") || batch.nextStep}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {status.robertNextActions.connectNow.sourceCloseout.nextRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-lime-300/20 bg-transparent px-2 text-[11px] text-lime-100 hover:bg-lime-300/10"
+                                onClick={() => appendSourceIntakeBatchRows(status.robertNextActions.connectNow.sourceCloseout?.nextRows || [])}
+                              >
+                                <FolderOpen className="mr-1 h-3 w-3" />
+                                Source rows
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.sourceCloseout.rightsRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRows(status.robertNextActions.connectNow.sourceCloseout?.rightsRows || [])}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Rights rows
+                              </Button>
+                            )}
+                            {status.robertNextActions.connectNow.sourceCloseout.trendRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-orange-300/20 bg-transparent px-2 text-[11px] text-orange-100 hover:bg-orange-300/10"
+                                onClick={() => appendTrendCandidateBatchRows(status.robertNextActions.connectNow.sourceCloseout?.trendRows || [])}
+                              >
+                                <TrendingUp className="mr-1 h-3 w-3" />
+                                Trend rows
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-violet-300/20 bg-transparent px-2 text-[11px] text-violet-100 hover:bg-violet-300/10"
+                          onClick={() => {
+                            const template = (status.robertNextActions.connectNow.credentialTemplate || "").trim()
+                              || status.robertNextActions.connectNow.pendingCredentialEnvVars.map((envVar) => `${envVar}=`).join("\n");
+                            setCredentialBatchPreview(null);
+                            setCredentialBatchText(template);
+                            toast({
+                              title: "Credential template cargado",
+                              description: "Pega valores reales antes de preview/import; valores vacios no desbloquean OAuth.",
+                            });
+                          }}
+                          disabled={!(status.robertNextActions.connectNow.credentialTemplate || "").trim() && status.robertNextActions.connectNow.pendingCredentialEnvVars.length === 0}
+                        >
+                          <KeyRound className="mr-1 h-3 w-3" />
+                          Load keys
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                          onClick={() => {
+                            setLaunchEvidenceBatchPreview(null);
+                            setLaunchEvidenceBatchText(status.robertNextActions.connectNow.launchEvidenceTemplate || "");
+                            toast({
+                              title: "Launch evidence template cargado",
+                              description: "Reemplaza blanks/placeholders con proof real antes de Preview batch.",
+                            });
+                          }}
+                          disabled={!(status.robertNextActions.connectNow.launchEvidenceTemplate || "").trim()}
+                        >
+                          <UploadCloud className="mr-1 h-3 w-3" />
+                          Load evidence
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-lime-300/20 bg-transparent px-2 text-[11px] text-lime-100 hover:bg-lime-300/10"
+                          onClick={() => {
+                            setSourceIntakeBatch(null);
+                            setSourceIntakeBatchText(status.robertNextActions.connectNow.sourceIntakeTemplate || "");
+                            toast({
+                              title: "Source intake template cargado",
+                              description: "Agrega URLs, archivos y proof real antes de importar fuentes.",
+                            });
+                          }}
+                          disabled={!(status.robertNextActions.connectNow.sourceIntakeTemplate || "").trim()}
+                        >
+                          <FolderOpen className="mr-1 h-3 w-3" />
+                          Load sources
+                        </Button>
+                      </div>
+                      {status.robertNextActions.connectNow.accountHandles.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {status.robertNextActions.connectNow.accountHandles.slice(0, 9).map((item) => (
+                            <Badge key={`${item.accountId}-${item.platform}`} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                              {item.platform}: {item.handle}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-3 text-[11px] leading-4 text-amber-100/70">
+                        The .fixpack.csv is ignored until completed and copied/renamed to owner-connect-evidence.csv.
+                      </p>
+                    </div>
+                  )}
+                  {status.robertNextActions.items.length > 0 && (
+                    <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4")}>
+                      {status.robertNextActions.items.slice(0, 8).map((item) => (
+                        <div key={item.id} className={cn(tunnelBoxClass, "bg-black/30 p-2")}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <Badge className="border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{item.lane}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.priority}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.platform}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                          {(item.operatorSteps || []).length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {(item.operatorSteps || []).slice(0, 3).map((step, stepIndex) => (
+                                <p key={`${item.id}-step-${stepIndex}`} className="line-clamp-2 text-[11px] leading-4 text-zinc-400">
+                                  {stepIndex + 1}. {step}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          {item.artifactPath && <p className="mt-2 line-clamp-2 break-all text-[11px] leading-4 text-sky-100/70">{item.artifactPath}</p>}
+                          {item.dropDirs.length > 0 && <p className="mt-2 line-clamp-2 break-all text-[11px] leading-4 text-amber-100/70">{item.dropDirs.join(" | ")}</p>}
+                          {item.blockers.length > 0 && <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-red-100/80">{item.blockers[0]}</p>}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.portalUrl && (
+                              <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border border-sky-300/20 px-2 text-[11px] text-sky-100 hover:bg-sky-300/10">
+                                Open portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                            {item.evidenceRows.length > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-green-300/20 bg-transparent px-2 text-[11px] text-green-100 hover:bg-green-300/10"
+                                onClick={() => {
+                                  if (item.lane === "source_supply") appendSourceIntakeBatchRows(item.evidenceRows);
+                                  else appendLaunchEvidenceBatchRows(item.evidenceRows);
+                                }}
+                              >
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Use rows
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {status.localDropSync && (
+                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-local-drop-sync">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Local Drop Sync: {status.localDropSync.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.localDropSync.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.localDropSync.status))}>{status.localDropSync.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                    <p>Attempted: {status.localDropSync.totals.attempted}</p>
+                    <p>Completed: {status.localDropSync.totals.completed}</p>
+                    <p>Skipped: {status.localDropSync.totals.skipped}</p>
+                    <p>Failed: {status.localDropSync.totals.failed}</p>
+                  </div>
+                  {(status.localDropSync.missingInputs || []).length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="clippers-local-drop-missing-inputs">
+                      {status.localDropSync.missingInputs.map((input) => (
+                        <div key={input.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{input.label}</p>
+                            <Badge className={cn(
+                              "shrink-0 border text-[10px]",
+                              input.status === "ready"
+                                ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                                : "border-amber-300/30 bg-amber-300/10 text-amber-200",
+                            )}>
+                              {input.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">{input.nextStep}</p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/70">{input.dropDirs.join(" | ")}</p>
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-600">{input.acceptedFormats.join(" | ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {status.launchEvidenceDropDiagnostic && (
+                    <div className="mt-3 rounded-md border border-sky-300/20 bg-sky-950/10 p-3" data-testid="clippers-launch-evidence-drop-diagnostic">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-white">Launch evidence drop diagnostic</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{status.launchEvidenceDropDiagnostic.nextStep}</p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{status.launchEvidenceDropDiagnostic.markdownPath}</p>
+                          <p className="mt-1 break-all text-[11px] leading-4 text-sky-100/70">Repair CSV: {status.launchEvidenceDropDiagnostic.repairWorksheetCsvPath}</p>
+                        </div>
+                        <Badge className={cn(
+                          "w-fit border text-[10px]",
+                          status.launchEvidenceDropDiagnostic.status === "ready_to_import"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : status.launchEvidenceDropDiagnostic.status === "needs_values"
+                              ? "border-amber-300/30 bg-amber-300/10 text-amber-200"
+                              : status.launchEvidenceDropDiagnostic.status === "needs_review"
+                                ? "border-red-300/30 bg-red-300/10 text-red-200"
+                                : "border-zinc-600 bg-zinc-900 text-zinc-300",
+                        )}>
+                          {status.launchEvidenceDropDiagnostic.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-6">
+                        <p>Files: {status.launchEvidenceDropDiagnostic.totals.files}</p>
+                        <p>Rows: {status.launchEvidenceDropDiagnostic.totals.rows}</p>
+                        <p>Ready: {status.launchEvidenceDropDiagnostic.totals.readyRows}</p>
+                        <p>Pending: {status.launchEvidenceDropDiagnostic.totals.pendingRows}</p>
+                        <p>Rejected: {status.launchEvidenceDropDiagnostic.totals.rejectedRows}</p>
+                        <p>Errors: {status.launchEvidenceDropDiagnostic.totals.fileErrors}</p>
+                      </div>
+                      {status.launchEvidenceDropDiagnostic.files.length > 0 && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {status.launchEvidenceDropDiagnostic.files.slice(0, 6).map((file) => (
+                            <div key={file.relativePath} className="rounded-md border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-xs font-medium text-white">{file.relativePath}</p>
+                                <Badge className={cn("border text-[10px]", file.pendingRows || file.rejectedRows ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200")}>
+                                  {file.readyRows}/{file.rows}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] text-zinc-500">
+                                <p>Ready: {file.readyRows}</p>
+                                <p>Pending: {file.pendingRows}</p>
+                                <p>Rejected: {file.rejectedRows}</p>
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{file.issue || file.nextStep}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {status.launchEvidenceDropDiagnostic.rows.some((row) => row.status !== "ready") && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {status.launchEvidenceDropDiagnostic.rows.filter((row) => row.status !== "ready").slice(0, 6).map((row) => (
+                            <div key={`${row.sourceFile}-${row.index}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                              <p className="text-xs font-medium text-white">{row.sourceFile} row {row.index}: {row.kind}</p>
+                              <div className="mt-2 grid gap-1 text-[11px] leading-4 text-sky-100/70 sm:grid-cols-2">
+                                <p className="truncate">Identifier: {row.identifier || "pending"}</p>
+                                <p>Platform: {row.platform || "pending"}</p>
+                                <p>Scope: {row.scope || "n/a"}</p>
+                                <p className="truncate">App: {row.appIdentifier || "n/a"}</p>
+                              </div>
+                              <p className="mt-1 text-[11px] leading-4 text-zinc-500">{row.issue || row.nextStep}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {status.localDropSync.launchEvidenceDrop && (
+                    <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-local-drop-launch-evidence">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-white">Launch evidence drop</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{status.localDropSync.launchEvidenceDrop.nextStep}</p>
+                        </div>
+                        <Badge className={cn(
+                          "w-fit border text-[10px]",
+                          status.localDropSync.launchEvidenceDrop.rejected.length || status.localDropSync.launchEvidenceDrop.fileErrors.length
+                            ? "border-amber-300/30 bg-amber-300/10 text-amber-200"
+                            : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200",
+                        )}>
+                          {status.localDropSync.launchEvidenceDrop.rejected.length || status.localDropSync.launchEvidenceDrop.fileErrors.length ? "needs_fix" : "clean"}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                        <p>Accounts: {status.localDropSync.launchEvidenceDrop.accepted.accountEvidence}</p>
+                        <p>Apps: {status.localDropSync.launchEvidenceDrop.accepted.developerApps}</p>
+                        <p>Perms: {status.localDropSync.launchEvidenceDrop.accepted.permissions}</p>
+                        <p>Rights: {status.localDropSync.launchEvidenceDrop.accepted.sourceRights}</p>
+                        <p>Rejected: {status.localDropSync.launchEvidenceDrop.rejected.length}</p>
+                        <p>Errors: {status.localDropSync.launchEvidenceDrop.fileErrors.length}</p>
+                      </div>
+                      {status.localDropSync.launchEvidenceDrop.sourceFiles.length > 0 && (
+                        <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/70">{status.localDropSync.launchEvidenceDrop.sourceFiles.join(" | ")}</p>
+                      )}
+                      {status.localDropSync.launchEvidenceDrop.rejected.length > 0 && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {status.localDropSync.launchEvidenceDrop.rejected.slice(0, 6).map((item) => (
+                            <div key={`${item.index}-${item.kind}-${item.identifier || "row"}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                              <p className="text-xs font-medium text-white">Row {item.index}: {item.kind}{item.identifier ? ` / ${item.identifier}` : ""}</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{item.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {status.localDropSync.items.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {status.localDropSync.items.map((item) => (
+                        <div key={`${item.id}-${item.startedAt}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {status.launchEvidenceFixPack && (
+                <div className="rounded-md border border-yellow-300/20 bg-yellow-950/10 p-3" data-testid="clippers-launch-evidence-fix-pack">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Launch Evidence Fix Pack: {status.launchEvidenceFixPack.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.launchEvidenceFixPack.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.launchEvidenceFixPack.status))}>{status.launchEvidenceFixPack.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6 xl:grid-cols-9">
+                    <p>Items: {status.launchEvidenceFixPack.totals.items}</p>
+                    <p>Rejected: {status.launchEvidenceFixPack.totals.rejectedRows || 0}</p>
+                    <p>State gaps: {status.launchEvidenceFixPack.totals.currentStateGaps || 0}</p>
+                    <p>Accounts: {status.launchEvidenceFixPack.totals.accountProof}</p>
+                    <p>Apps: {status.launchEvidenceFixPack.totals.developerApps || 0}</p>
+                    <p>Perms: {status.launchEvidenceFixPack.totals.permissionProof}</p>
+                    <p>URLs: {status.launchEvidenceFixPack.totals.publicUrl}</p>
+                    <p>Rights: {status.launchEvidenceFixPack.totals.sourceRights}</p>
+                    <p>Format: {status.launchEvidenceFixPack.totals.format}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.launchEvidenceFixPack.csvPath}</p>
+                  <p className="mt-1 break-all text-xs text-cyan-100/70">Editable import CSV (ignored until completed/renamed): {status.launchEvidenceFixPack.suggestedImportCsvPath}</p>
+                  {status.launchEvidenceFixPack.items.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {status.launchEvidenceFixPack.items.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.evidenceSource === "current_state_gap" ? "Current state" : `Row ${item.rowIndex}`}: {item.kind}</p>
+                            <Badge className="shrink-0 border border-yellow-300/30 bg-yellow-300/10 text-[10px] text-yellow-100">{item.fixCategory}</Badge>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-4 text-zinc-600">{item.evidenceSource || "drop_rejected"}</p>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.requiredFix}</p>
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{item.suggestedNotes}</p>
+                          <p className="mt-2 break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{item.suggestedReplacementRow}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(status.goLiveAutopilotBrief.agentSessions || []).length > 0 && (
+                <div className="rounded-md border border-violet-300/20 bg-violet-950/10 p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">Agent session batches</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Cola agrupada por sub-agente para ejecutar cuentas, permisos, OAuth, fuentes y evidencia.</p>
+                    </div>
+                    <Badge className="w-fit border border-violet-300/20 bg-violet-950/40 text-[10px] text-violet-100">{status.goLiveAutopilotBrief.totals.agentSessions} sessions</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {status.goLiveAutopilotBrief.agentSessions.map((session) => (
+                      <div key={session.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{session.subAgentName}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(session.status))}>{session.status}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-violet-100/80">{session.mission}</p>
+                        <div className="mt-2 grid gap-1 text-xs text-zinc-500 sm:grid-cols-2">
+                          <p>Actions: {session.actionCount}</p>
+                          <p>Blocked: {session.blocked}</p>
+                          <p>In-app: {session.inAppReady}</p>
+                          <p>External: {session.externalRequired}</p>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-amber-200">{session.nextStep}</p>
+                        <p className="mt-2 truncate text-xs text-zinc-600">Platforms: {session.platforms.join(", ")}</p>
+                        {session.evidenceRows.length > 0 && (
+                          <div className="mt-2 rounded-md border border-green-300/15 bg-green-950/10 p-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-green-200">Next evidence row</p>
+                            <p className="mt-1 break-all text-xs leading-4 text-green-100/80">{session.evidenceRows[0]}</p>
+                          </div>
+                        )}
+                        {session.riskControls.length > 0 && (
+                          <p className="mt-2 text-xs leading-5 text-red-100/80">Control: {session.riskControls[0]}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {session.portalUrls.slice(0, 2).map((url, index) => (
+                            <a key={`${session.id}-portal-${index}`} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                              Portal {index + 1}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                          {session.localActionUrls.slice(0, 2).map((url, index) => (
+                            <Badge key={`${session.id}-local-${index}`} className="border border-white/10 bg-zinc-900 text-[10px] text-zinc-300">{url}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {status.goLiveAutopilotRun && (
                 <div className="rounded-md border border-white/10 bg-black/35 p-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -5380,12 +9896,15 @@ export default function ClippersPage() {
                     </div>
                     <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.goLiveAutopilotRun.status))}>{status.goLiveAutopilotRun.status}</Badge>
                   </div>
-                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-8">
                     <p>Attempted: {status.goLiveAutopilotRun.totals.attempted}</p>
                     <p>Completed: {status.goLiveAutopilotRun.totals.completed}</p>
                     <p>Skipped: {status.goLiveAutopilotRun.totals.skipped}</p>
                     <p>Failed: {status.goLiveAutopilotRun.totals.failed}</p>
                     <p>Memory: {status.goLiveAutopilotRun.completedActionIds.length}</p>
+                    <p>Available: {status.goLiveAutopilotRun.availableInAppActions}</p>
+                    <p>Remaining: {status.goLiveAutopilotRun.remainingInAppActions}</p>
+                    <p>Reset: {status.goLiveAutopilotRun.resetCompleted ? "yes" : "no"}</p>
                   </div>
                   {status.goLiveAutopilotRun.items.slice(0, 3).map((item) => (
                     <div key={`${item.actionId}-${item.startedAt}`} className="mt-3 rounded-md border border-white/10 bg-black/30 p-2">
@@ -5475,6 +9994,7 @@ export default function ClippersPage() {
                   <p>Waiting: {status.externalExecutionSession.totals.waiting}</p>
                   <p>Rows: {status.externalExecutionSession.totals.evidenceRows}</p>
                   <p>Env: {status.externalExecutionSession.totals.envTemplates}</p>
+                  <p>Batches: {status.externalExecutionSession.totals.portalBatches}</p>
                 </div>
                 <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.externalExecutionSession.csvPath}</p>
                 <div className="mt-3 rounded-md border border-green-300/15 bg-black/30 p-2">
@@ -5493,6 +10013,338 @@ export default function ClippersPage() {
                   </div>
                 </div>
               </div>
+
+              {status.externalExecutionSession.focusRun && (
+                <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3" data-testid="clippers-external-focus-run">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Focus run</p>
+                      <p className="mt-1 text-sm font-medium text-white">{status.externalExecutionSession.focusRun.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.externalExecutionSession.focusRun.nextStep}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/40 text-[10px] text-emerald-100">
+                        {status.externalExecutionSession.focusRun.estimatedMinutes} min
+                      </Badge>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        status.externalExecutionSession.focusRun.status === "ready"
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-200",
+                      )}>
+                        {status.externalExecutionSession.focusRun.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {status.externalExecutionSession.focusRun.evidenceRows.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.externalExecutionSession.focusRun.evidenceRows)}
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Focus rows
+                      </Button>
+                    )}
+                    {status.externalExecutionSession.focusRun.credentialTemplates.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                        onClick={() => {
+                          setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${status.externalExecutionSession.focusRun.credentialTemplates.join("\n\n")}`);
+                          setCredentialBatchPreview(null);
+                        }}
+                      >
+                        <KeyRound className="mr-1 h-3 w-3" />
+                        Focus env
+                      </Button>
+                    )}
+                    {status.externalExecutionSession.focusRun.portalUrls.slice(0, 3).map((portalUrl) => (
+                      <a key={portalUrl} href={portalUrl} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-md border border-sky-300/20 px-2 text-xs text-sky-100 hover:bg-sky-300/10">
+                        Portal
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {status.externalExecutionSession.focusRun.items.map((item) => (
+                      <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium text-white">{item.rank}. {item.label}</p>
+                          <Badge className="shrink-0 border border-white/10 bg-black/40 text-[10px] text-zinc-300">{item.estimatedMinutes}m</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.platform}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.type}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.actionMode}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        {item.checklist.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs leading-4 text-emerald-100/75">
+                            {item.checklist.slice(0, 3).map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.evidenceRow && (
+                            <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.evidenceRow)}>
+                              <UploadCloud className="mr-1 h-3 w-3" />
+                              Row
+                            </Button>
+                          )}
+                          {item.credentialTemplate && (
+                            <Button size="sm" variant="outline" className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10" onClick={() => {
+                              setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${item.credentialTemplate}`);
+                              setCredentialBatchPreview(null);
+                            }}>
+                              <KeyRound className="mr-1 h-3 w-3" />
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {status.platformWarRoom && (
+                <div className="rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-fuchsia-200">Platform war room</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.platformWarRoom.nextStep}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", platformWarRoomBadge(status.platformWarRoom.status))}>{status.platformWarRoom.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                    <p>Platforms: {status.platformWarRoom.totals.platforms}</p>
+                    <p>Ready: {status.platformWarRoom.totals.ready}</p>
+                    <p>Progress: {status.platformWarRoom.totals.inProgress}</p>
+                    <p>Blocked: {status.platformWarRoom.totals.blocked}</p>
+                    <p>Account rows: {status.platformWarRoom.totals.accountEvidenceRows}</p>
+                    <p>Permission rows: {status.platformWarRoom.totals.permissionEvidenceRows}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">War room: {status.platformWarRoom.markdownPath}</p>
+                  {warRoomFlowStages.length > 0 && (
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3">
+                      <div className="grid gap-x-2 gap-y-6 lg:grid-cols-6 lg:gap-y-2">
+                        {warRoomFlowStages.map((stage, index) => (
+                          <div key={stage.id} className="relative min-h-[116px] rounded-md border border-white/10 bg-zinc-950/70 p-3">
+                            {index < warRoomFlowStages.length - 1 && (
+                              <>
+                                <div className="pointer-events-none absolute left-1/2 top-[calc(100%-1px)] z-10 flex h-6 w-4 -translate-x-1/2 flex-col items-center lg:hidden">
+                                  <div className="w-[2px] flex-1 rounded-full bg-fuchsia-300/25" />
+                                  <ArrowRight className="h-3 w-3 rotate-90 text-fuchsia-200/70" />
+                                </div>
+                                <div className="pointer-events-none absolute left-[calc(100%-2px)] top-1/2 z-10 hidden h-3 w-8 -translate-y-1/2 items-center lg:flex">
+                                  <div className="h-[2px] flex-1 rounded-full bg-fuchsia-300/25" />
+                                  <ArrowRight className="h-3 w-3 text-fuchsia-200/70" />
+                                </div>
+                              </>
+                            )}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold uppercase tracking-wide text-fuchsia-100">{stage.label}</p>
+                                <p className="mt-1 text-lg font-semibold text-white">{stage.done}/{stage.total}</p>
+                              </div>
+                              <Badge className={cn("shrink-0 border text-[10px]", platformWarRoomBadge(stage.status as ClipperPlatformWarRoomStatus))}>{stage.status}</Badge>
+                            </div>
+                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  stage.status === "ready" ? "bg-emerald-300" : stage.status === "in_progress" ? "bg-amber-300" : "bg-red-300",
+                                )}
+                                style={{ width: `${stage.total ? Math.min(100, Math.round((stage.done / stage.total) * 100)) : 0}%` }}
+                              />
+                            </div>
+                            <p className="mt-3 line-clamp-2 text-xs leading-4 text-zinc-500">{stage.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(status.platformWarRoom.accountConnectionRows || []).length > 0 && (
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-fuchsia-100">Account connection matrix</p>
+                          <p className="mt-1 text-xs text-zinc-500">{status.platformWarRoom.totals.accountConnectionsBlocked} bloqueadas, {status.platformWarRoom.totals.accountConnectionsPending} pendientes, {status.platformWarRoom.totals.accountConnectionsReady} listas.</p>
+                        </div>
+                        <Button size="sm" variant="outline" className="h-8 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows((status.platformWarRoom.accountConnectionRows || []).map((row) => row.accountEvidenceRow))}>
+                          <UploadCloud className="mr-1 h-3 w-3" />
+                          Cargar 9 rows
+                        </Button>
+                      </div>
+                      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                        {(status.platformWarRoom.accountConnectionRows || []).map((row) => (
+                          <div key={row.id} className="rounded-md border border-white/10 bg-zinc-950/70 p-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-white">{row.accountName}</p>
+                                <a href={row.profileLink} target="_blank" rel="noreferrer" className="mt-1 block truncate text-xs text-cyan-100 hover:text-cyan-50">{row.handle}</a>
+                              </div>
+                              <Badge className={cn("shrink-0 border text-[10px]", accountLaunchBadge(row.status))}>{row.status}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{row.platform}</Badge>
+                              <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{row.evidenceStatus}</Badge>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-xs leading-4 text-zinc-500">{row.nextStep}</p>
+                            <p className="mt-2 line-clamp-2 text-xs leading-4 text-amber-100/80">{row.proofRequirements[0]}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <a href={row.accountCreationUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-fuchsia-300/20 px-2 py-1 text-xs text-fuchsia-100 hover:bg-fuchsia-300/10">
+                                Cuenta
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows([row.accountEvidenceRow])}>
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Row
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(status.platformWarRoom.permissionApprovalRows || []).length > 0 && (
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-sky-100">Permission approval matrix</p>
+                          <p className="mt-1 text-xs text-zinc-500">{status.platformWarRoom.totals.permissionApprovalsBlocked} bloqueados, {status.platformWarRoom.totals.permissionApprovalsRequested} solicitados, {status.platformWarRoom.totals.permissionApprovalsApproved} aprobados.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" className="h-8 border-sky-300/20 bg-transparent px-2 text-xs text-sky-100 hover:bg-sky-300/10" onClick={() => appendLaunchEvidenceBatchRows((status.platformWarRoom.permissionApprovalRows || []).map((row) => row.requestedEvidenceRow))}>
+                            <UploadCloud className="mr-1 h-3 w-3" />
+                            Requested rows
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows((status.platformWarRoom.permissionApprovalRows || []).map((row) => row.approvedEvidenceRow))}>
+                            <ShieldCheck className="mr-1 h-3 w-3" />
+                            Approved rows
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                        {(status.platformWarRoom.permissionApprovalRows || []).map((row) => (
+                          <div key={row.id} className="rounded-md border border-white/10 bg-zinc-950/70 p-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-white">{row.label}</p>
+                                <p className="mt-1 truncate text-xs text-zinc-500">{row.scope}</p>
+                              </div>
+                              <Badge className={cn("shrink-0 border text-[10px]", permissionTrackerBadge(row.status))}>{row.status}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{row.platform}</Badge>
+                              <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{row.requestReadiness}</Badge>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-xs leading-4 text-zinc-500">{row.nextStep}</p>
+                            <p className="mt-2 line-clamp-2 text-xs leading-4 text-sky-100/80">{row.proofRequirements[0]}</p>
+                            {row.blockers.length > 0 && (
+                              <p className="mt-2 line-clamp-2 text-xs leading-4 text-red-100/80">{row.blockers[0]}</p>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <a href={row.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button size="sm" variant="outline" className="h-7 border-sky-300/20 bg-transparent px-2 text-xs text-sky-100 hover:bg-sky-300/10" onClick={() => appendLaunchEvidenceBatchRows([row.requestedEvidenceRow])}>
+                                <UploadCloud className="mr-1 h-3 w-3" />
+                                Requested
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows([row.approvedEvidenceRow])}>
+                                <ShieldCheck className="mr-1 h-3 w-3" />
+                                Approved
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    {status.platformWarRoom.items.map((item) => (
+                      <div key={item.platform} className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", platformWarRoomBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                          <p>Accounts: {item.accountsVerified}/{item.accountTasks}</p>
+                          <p>App: {item.developerAppStatus}</p>
+                          <p>Perms: {item.permissionsApproved}/{item.permissionsTotal}</p>
+                          <p>Creds: {item.credentialStatus}</p>
+                          <p>OAuth: {item.oauthStatus}</p>
+                          <p>Token: {item.tokenSaved ? "yes" : "no"}</p>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-amber-200">{item.nextStep}</p>
+                        {item.blockers.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs leading-4 text-red-100/80">
+                            {item.blockers.slice(0, 3).map((blocker) => (
+                              <li key={blocker}>{blocker}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-3 grid gap-2 text-xs leading-4 text-zinc-400">
+                          <div className="rounded-md border border-white/10 bg-zinc-950/70 p-2">
+                            <p className="font-medium text-fuchsia-100">Conectar</p>
+                            <ul className="mt-1 space-y-1">
+                              {item.connectionChecklist.slice(0, 3).map((step) => (
+                                <li key={step}>{step}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="rounded-md border border-white/10 bg-zinc-950/70 p-2">
+                            <p className="font-medium text-green-100">Evidencia</p>
+                            <ul className="mt-1 space-y-1">
+                              {item.evidenceChecklist.slice(0, 2).map((step) => (
+                                <li key={step}>{step}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <p className="rounded-md border border-amber-300/15 bg-amber-950/10 p-2 text-amber-100/80">{item.safetyRules[0]}</p>
+                          <p className="rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2 text-cyan-100/80">{item.afterConnectionSteps[0]}</p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.portalUrls.slice(0, 2).map((portalUrl) => (
+                            <a key={portalUrl} href={portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-fuchsia-300/20 px-2 py-1 text-xs text-fuchsia-100 hover:bg-fuchsia-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                          {item.evidenceRows.length > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows(item.evidenceRows)}>
+                              <UploadCloud className="mr-1 h-3 w-3" />
+                              Rows
+                            </Button>
+                          )}
+                          {item.credentialTemplates.length > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10" onClick={() => {
+                              setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${item.credentialTemplates.join("\n\n")}`);
+                              setCredentialBatchPreview(null);
+                            }}>
+                              <KeyRound className="mr-1 h-3 w-3" />
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {status.externalExecutionSession.unlockBoard.length > 0 && (
                 <div className="grid gap-3 md:grid-cols-3">
@@ -5531,6 +10383,70 @@ export default function ClippersPage() {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {status.externalExecutionSession.portalBatches.length > 0 && (
+                <div className="rounded-md border border-sky-300/15 bg-sky-950/10 p-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-200">Portal batches</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Ordena cuentas, credenciales, developer apps, permisos y OAuth por plataforma.</p>
+                    </div>
+                    <Badge className="w-fit border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">{status.externalExecutionSession.portalBatches.length} batches</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {status.externalExecutionSession.portalBatches.slice(0, 9).map((batch) => (
+                      <div key={batch.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", externalSetupQueueBadge(batch.status))}>{batch.status}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.type}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.doNow} do_now</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.blocked} blocked</Badge>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-zinc-400">{batch.nextStep}</p>
+                        {batch.operatorChecklist.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs leading-4 text-sky-100/75">
+                            {batch.operatorChecklist.slice(0, 3).map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {batch.portalUrls.slice(0, 2).map((portalUrl) => (
+                            <a key={portalUrl} href={portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                          {batch.executionUrls.filter((url) => url.startsWith("/")).slice(0, 1).map((executionUrl) => (
+                            <a key={executionUrl} href={executionUrl} className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                              Local
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                          {batch.evidenceRows.length > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.evidenceRows)}>
+                              <UploadCloud className="mr-1 h-3 w-3" />
+                              Rows
+                            </Button>
+                          )}
+                          {batch.credentialTemplates.length > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10" onClick={() => {
+                              setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${batch.credentialTemplates.join("\n\n")}`);
+                              setCredentialBatchPreview(null);
+                            }}>
+                              <KeyRound className="mr-1 h-3 w-3" />
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -5959,6 +10875,259 @@ export default function ClippersPage() {
                   <p className="mt-1 break-all text-xs text-zinc-600">Drop dirs: {(status.credentialSetup.credentialDropDirs || []).join(", ")}</p>
                 </div>
 
+                {(status.credentialSetup.credentialPastePack || []).some((item) => item.status !== "ready") && (
+                  <div className="rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-credential-unlock-queue">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white">Credential Unlock Queue</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">Solo lo que falta para desbloquear OAuth/permisos; no muestra valores secretos.</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-amber-300/20 bg-transparent px-2 text-xs text-amber-100 hover:bg-amber-300/10"
+                        onClick={() => appendCredentialBatchText(
+                          (status.credentialSetup.credentialPastePack || [])
+                            .filter((item) => item.status !== "ready" && item.missingSuggestedEnvVars.length > 0)
+                            .map((item) => item.envTemplate)
+                            .join("\n\n"),
+                          "Missing credential queue cargada",
+                        )}
+                        data-testid="load-clippers-missing-credential-queue-button"
+                      >
+                        <KeyRound className="mr-1 h-3 w-3" />
+                        Load missing only
+                      </Button>
+                    </div>
+                    <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4")}>
+                      {(status.credentialSetup.credentialPastePack || []).filter((item) => item.status !== "ready").map((item) => (
+                        <div key={`unlock-${item.id}`} className={cn(tunnelBoxClass, "bg-black/30 p-3")}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", credentialSetupBadge(item.status))}>{item.status}</Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <Badge className="border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{item.platform}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.missingSuggestedEnvVars.length} env</Badge>
+                          </div>
+                          <p className="mt-2 break-all font-mono text-[11px] leading-4 text-amber-100/80">{item.missingSuggestedEnvVars.join(" | ")}</p>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                          {item.localDropFileNames?.[0] && (
+                            <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">Drop: {item.localDropFileNames[0]}</p>
+                          )}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.portalUrl && (
+                              <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-xs text-amber-100 hover:bg-amber-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                            {item.docsUrl && (
+                              <a href={item.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                Docs
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                              onClick={() => appendCredentialBatchText(item.envTemplate, `${item.label} env template agregado`)}
+                            >
+                              Env
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">All missing credentials paste pack</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Un solo template seguro para completar TikTok, Meta, Google/YouTube, Drive y token vault.</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="h-8 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => {
+                      setCredentialBatchText(status.credentialSetup.credentialPasteTemplate);
+                      setCredentialBatchPreview(null);
+                    }}>
+                      <KeyRound className="mr-1 h-3 w-3" />
+                      Cargar missing pack
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    {(status.credentialSetup.credentialPastePack || []).map((item) => (
+                      <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.importOrder}. {item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", credentialSetupBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs capitalize text-zinc-500">{item.platform}</p>
+                        <p className="mt-2 break-all font-mono text-[11px] leading-4 text-emerald-100/75">{item.missingSuggestedEnvVars.length ? item.missingSuggestedEnvVars.join(" | ") : "ready"}</p>
+                        <p className="mt-2 text-[11px] leading-4 text-zinc-500">{item.nextStep}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-300/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.missingSuggestedEnvVars.length > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10" onClick={() => {
+                              setCredentialBatchText((current) => `${current.trim() ? `${current.trim()}\n\n` : ""}${item.envTemplate}`);
+                              setCredentialBatchPreview(null);
+                            }}>
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {status.credentialSetup.credentialPasteChecklist.length > 0 && (
+                    <ul className="mt-3 grid gap-1 text-xs leading-5 text-emerald-100/75 md:grid-cols-2">
+                      {status.credentialSetup.credentialPasteChecklist.slice(0, 6).map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-md border border-violet-300/15 bg-violet-950/10 p-3" data-testid="clippers-credential-transfer-kit">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">Credential Transfer Kit</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Puente seguro para traer keys desde Drive o archivos locales hacia Credential Setup sin exponer valores.</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">Runbook: {status.credentialSetup.credentialTransferKitMarkdownPath}</p>
+                      <p className="mt-1 break-all text-xs text-zinc-600">Env: {status.credentialSetup.credentialTransferKitEnvPath}</p>
+                      {status.credentialSetup.credentialTransferKitGeneratedAt && (
+                        <p className="mt-1 text-xs text-zinc-600">actualizado: {formatDate(status.credentialSetup.credentialTransferKitGeneratedAt)}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-violet-300/20 bg-transparent px-2 text-xs text-violet-100 hover:bg-violet-300/10"
+                        onClick={() => appendCredentialBatchText(status.credentialSetup.credentialTransferTemplate, "Credential Transfer Kit cargado")}
+                        data-testid="load-credential-transfer-kit-button"
+                      >
+                        <KeyRound className="mr-1 h-3 w-3" />
+                        Cargar transfer kit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                        onClick={() => credentialDropStarterMutation.mutate()}
+                        disabled={credentialDropStarterMutation.isPending || isLoading}
+                        data-testid="prepare-clippers-credential-drop-starter-button"
+                      >
+                        {credentialDropStarterMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <FolderOpen className="mr-1 h-3 w-3" />}
+                        Starter files
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-violet-100/80 md:grid-cols-2">
+                    {(status.credentialSetup.credentialTransferChecklist || []).slice(0, 4).map((step) => (
+                      <p key={step} className="flex gap-2 leading-5">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-200" />
+                        {step}
+                      </p>
+                    ))}
+                  </div>
+                  {status.credentialSetup.credentialDropStarter && (
+                    <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2" data-testid="clippers-credential-drop-starter">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-cyan-100">Credential drop starter</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{status.credentialSetup.credentialDropStarter.nextStep}</p>
+                          <p className="mt-1 break-all text-[11px] text-zinc-600">Runbook: {status.credentialSetup.credentialDropStarterMarkdownPath}</p>
+                        </div>
+                        <Badge className={cn("w-fit border text-[10px]", status.credentialSetup.credentialDropStarter.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.credentialSetup.credentialDropStarter.status === "prepared" ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                          {status.credentialSetup.credentialDropStarter.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 sm:grid-cols-5">
+                        <p>Files: {status.credentialSetup.credentialDropStarter.totals.files}</p>
+                        <p>Created: {status.credentialSetup.credentialDropStarter.totals.created}</p>
+                        <p>Existing: {status.credentialSetup.credentialDropStarter.totals.existing}</p>
+                        <p>Missing: {status.credentialSetup.credentialDropStarter.totals.missing}</p>
+                        <p>Env: {status.credentialSetup.credentialDropStarter.totals.envVars}</p>
+                      </div>
+                      <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        {status.credentialSetup.credentialDropStarter.files.slice(0, 4).map((file) => (
+                          <div key={file.relativePath} className="rounded-md border border-white/10 bg-black/30 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{file.label}</p>
+                              <Badge className="shrink-0 border border-white/10 bg-white/5 text-[10px] text-zinc-300">{file.status}</Badge>
+                            </div>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{file.relativePath}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/75">{file.envVars.length ? file.envVars.join(", ") : "ready"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    {(status.credentialSetup.credentialTransferKitItems || []).map((item) => (
+                      <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", credentialSetupBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs capitalize text-zinc-500">{item.platform}</p>
+                        <div className="mt-2 rounded-md border border-violet-300/10 bg-violet-950/10 p-2">
+                          <p className="text-[10px] font-medium uppercase text-violet-200">Drive search</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {item.driveSearchQueries.slice(0, 3).map((query, index) => (
+                              <a
+                                key={`${item.id}-${query}`}
+                                href={item.driveSearchUrls?.[index] || googleDriveSearchUrl(query)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-full items-center gap-1 rounded-md border border-violet-300/20 px-1.5 py-0.5 text-[10px] text-violet-100 hover:bg-violet-300/10"
+                              >
+                                <span className="truncate">Query {index + 1}</span>
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                              </a>
+                            ))}
+                          </div>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-violet-100/75">{item.driveSearchQueries[0] || item.nextStep}</p>
+                        </div>
+                        <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2">
+                          <p className="text-[10px] font-medium uppercase text-zinc-400">Local drop targets</p>
+                          <ul className="mt-1 space-y-1 text-[11px] leading-4 text-zinc-500">
+                            {item.localDropFileNames.slice(0, 3).map((fileName) => (
+                              <li key={`${item.id}-${fileName}`} className="break-all">{fileName}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-300/20 px-2 py-1 text-xs text-violet-100 hover:bg-violet-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.missingSuggestedEnvVars.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-violet-300/20 bg-transparent px-2 text-xs text-violet-100 hover:bg-violet-300/10"
+                              onClick={() => appendCredentialBatchText(item.envTemplate, `${item.label} transfer template agregado`)}
+                            >
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="rounded-md border border-sky-300/15 bg-sky-950/10 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -6042,6 +11211,78 @@ export default function ClippersPage() {
                   )}
                 </div>
 
+                {status.credentialSetup.credentialDropDiagnostic && (
+                  <div className="rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-credential-drop-diagnostic">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white">Credential drop diagnostic</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.credentialSetup.credentialDropDiagnostic.nextStep}</p>
+                        <p className="mt-2 break-all text-xs text-zinc-600">Reporte: {status.credentialSetup.credentialDropDiagnosticMarkdownPath}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", status.credentialSetup.credentialDropDiagnostic.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.credentialSetup.credentialDropDiagnostic.status === "no_candidates" ? "border-zinc-600 bg-zinc-900 text-zinc-300" : "border-amber-300/30 bg-amber-300/10 text-amber-200")}>
+                        {status.credentialSetup.credentialDropDiagnostic.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                      <p>Files: {status.credentialSetup.credentialDropDiagnostic.totals.files}</p>
+                      <p>Drop: {status.credentialSetup.credentialDropDiagnostic.totals.dropCandidates}</p>
+                      <p>Root: {status.credentialSetup.credentialDropDiagnostic.totals.rootCandidates}</p>
+                      <p>Eligible: {status.credentialSetup.credentialDropDiagnostic.totals.importEligible}</p>
+                      <p>Templates: {status.credentialSetup.credentialDropDiagnostic.totals.templateFiles ?? 0}</p>
+                      <p>Pending: {status.credentialSetup.credentialDropDiagnostic.totals.pendingEnvVars ?? 0}</p>
+                      <p>Accepted: {status.credentialSetup.credentialDropDiagnostic.acceptedEnvVars.length}</p>
+                      <p>Errors: {status.credentialSetup.credentialDropDiagnostic.fileErrors.length}</p>
+                    </div>
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/30 p-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">Accepted env names</p>
+                      <p className="mt-1 break-all text-xs leading-4 text-amber-100/80">
+                        {status.credentialSetup.credentialDropDiagnostic.acceptedEnvVars.length ? status.credentialSetup.credentialDropDiagnostic.acceptedEnvVars.join(", ") : "ninguna detectada todavia"}
+                      </p>
+                    </div>
+                    {status.credentialSetup.credentialDropDiagnostic.fileErrors.length > 0 && (
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {status.credentialSetup.credentialDropDiagnostic.fileErrors.slice(0, 4).map((file) => (
+                          <div key={`${file.relativePath}-${file.reason}`} className="rounded-md border border-amber-300/15 bg-black/30 p-2">
+                            <p className="break-all text-xs font-medium text-amber-100">{file.relativePath}</p>
+                            <p className="mt-1 text-xs leading-4 text-amber-100/70">{file.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(status.credentialSetup.credentialDropDiagnostic.ignoredTemplateFiles ?? []).length > 0 && (
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {(status.credentialSetup.credentialDropDiagnostic.ignoredTemplateFiles ?? []).slice(0, 4).map((file) => (
+                          <div key={`template-${file.relativePath}`} className="rounded-md border border-sky-300/15 bg-black/30 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-sky-100">{file.fileName}</p>
+                              <Badge className="shrink-0 border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">{file.location}</Badge>
+                            </div>
+                            <p className="mt-2 break-all text-xs text-zinc-500">{file.relativePath}</p>
+                            <p className="mt-2 text-xs leading-4 text-sky-100/75">{file.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {status.credentialSetup.credentialDropDiagnostic.files.length > 0 && (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {status.credentialSetup.credentialDropDiagnostic.files.slice(0, 6).map((file) => (
+                          <div key={file.relativePath} className="rounded-md border border-white/10 bg-black/30 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{file.fileName}</p>
+                              <Badge className={cn("border text-[10px]", file.importEligible ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                {file.importEligible ? "eligible" : file.location}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 break-all text-xs text-zinc-500">{file.relativePath}</p>
+                            {(file.pendingEnvVars ?? []).length > 0 && <p className="mt-2 break-all text-xs leading-4 text-cyan-100/80">Pendiente: {file.pendingEnvVars.join(", ")}</p>}
+                            {file.issue && <p className="mt-2 text-xs leading-4 text-amber-200">{file.issue}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   {(status.credentialSetup.importPlan || []).map((item) => (
                     <div key={item.id} className="rounded-md border border-white/10 bg-black/35 p-3">
@@ -6112,7 +11353,7 @@ export default function ClippersPage() {
 
                   <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <Label htmlFor="clipper-credential-batch" className="text-xs text-zinc-400">Batch .env o Google OAuth JSON</Label>
+                      <Label htmlFor="clipper-credential-batch" className="text-xs text-zinc-400">Batch .env o credential JSON</Label>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
@@ -6214,6 +11455,7 @@ export default function ClippersPage() {
                       <div className="min-w-0">
                         <p className="truncate font-medium text-white">{status.credentialDoctor.markdownPath}</p>
                         <p className="mt-1 text-xs leading-5 text-zinc-500">{status.credentialDoctor.nextStep}</p>
+                        <p className="mt-1 break-all text-[11px] leading-4 text-sky-100/70">Repair CSV: {status.credentialDoctor.repairWorksheetCsvPath}</p>
                       </div>
                       <Badge className={cn("w-fit border", credentialDoctorBadge(status.credentialDoctor.status))}>{status.credentialDoctor.status}</Badge>
                     </div>
@@ -6232,6 +11474,18 @@ export default function ClippersPage() {
                           </div>
                           <p className="mt-2 text-xs text-zinc-500">Detectadas: {item.configuredEnvVars.length ? item.configuredEnvVars.join(", ") : "ninguna"}</p>
                           <p className="mt-1 text-xs text-zinc-600">Archivos: {item.envFilesWithRelevantKeys.length ? item.envFilesWithRelevantKeys.join(", ") : "ninguno"}</p>
+                          <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-[11px] font-medium text-zinc-300">{item.dropTarget || "drop target pending"}</p>
+                              <Badge className={cn("border text-[10px]", credentialDropFileBadge(item.dropFileStatus || "missing"))}>{item.dropFileStatus || "missing"}</Badge>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-500">Names: {item.dropFileEnvVars?.length ? item.dropFileEnvVars.join(", ") : "none"}</p>
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-500">Ready: {item.dropFileReadyEnvVars?.length ? item.dropFileReadyEnvVars.join(", ") : "none"}</p>
+                            {(item.dropFilePendingEnvVars?.length || 0) > 0 && (
+                              <p className="mt-1 text-[11px] leading-4 text-amber-200">Pending values: {item.dropFilePendingEnvVars?.join(", ")}</p>
+                            )}
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{item.dropFileNextStep || "Run Credential Doctor to refresh drop file diagnostics."}</p>
+                          </div>
                           <p className="mt-2 text-xs leading-5 text-amber-200">{item.nextStep}</p>
                         </div>
                       ))}
@@ -6412,6 +11666,34 @@ export default function ClippersPage() {
                                   </div>
                                   <p className="mt-1 break-all font-mono text-[11px] leading-4 text-cyan-100/80">{record.copyLine}</p>
                                   <p className="mt-1 break-all font-mono text-[11px] leading-4 text-zinc-500">{record.validationCommand}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {status.productionUrlVerification.dnsDiagnostic.repairRunbook.length > 0 && (
+                            <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-200">DNS repair runbook</p>
+                              <ul className="mt-2 space-y-1 text-[11px] leading-4 text-sky-100/80">
+                                {status.productionUrlVerification.dnsDiagnostic.repairRunbook.slice(0, 4).map((step) => (
+                                  <li key={step}>{step}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {status.productionUrlVerification.dnsDiagnostic.providerRecipes.length > 0 && (
+                            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                              {status.productionUrlVerification.dnsDiagnostic.providerRecipes.slice(0, 3).map((recipe) => (
+                                <div key={recipe.provider} className="rounded-md border border-white/10 bg-black/25 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-xs font-medium text-white">{recipe.provider}</p>
+                                    <a href={recipe.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-sky-100 hover:text-white">
+                                      Portal
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  </div>
+                                  <p className="mt-1 text-[11px] text-zinc-500">Record: {recipe.bestRecordId}</p>
+                                  <p className="mt-2 text-[11px] leading-4 text-sky-100/75">{recipe.steps[0]}</p>
+                                  <p className="mt-1 text-[11px] leading-4 text-emerald-100/70">{recipe.doneCriteria[0]}</p>
                                 </div>
                               ))}
                             </div>
@@ -6714,6 +11996,38 @@ export default function ClippersPage() {
                       <p>OAuth URLs: {status.oauthConnectionPack.totals.authUrlsReady}</p>
                     </div>
                     <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.oauthConnectionPack.csvPath}</p>
+                    {(status.oauthConnectionPack.platformBatches || []).length > 0 && (
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        {status.oauthConnectionPack.platformBatches.map((batch) => (
+                          <div key={batch.id} className="rounded-md border border-teal-300/15 bg-black/25 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", oauthConnectionPackBadge(batch.status))}>{batch.status}</Badge>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                              <p>Connections: {batch.connections}</p>
+                              <p>Ready: {batch.ready}</p>
+                              <p>Blocked: {batch.blocked}</p>
+                              <p>Tokens: {batch.tokensSaved}</p>
+                            </div>
+                            <p className="mt-2 break-all text-[11px] leading-4 text-teal-100/70">Redirect: {batch.redirectUri}</p>
+                            <p className="mt-2 text-xs leading-5 text-amber-200">{batch.nextStep}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {batch.authUrl && (
+                                <a href={batch.authUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                  OAuth
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                              <a href={batch.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-teal-300/20 px-2 py-1 text-xs text-teal-100 hover:bg-teal-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {status.oauthConnectionPack.items.map((item) => (
                         <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
@@ -7153,7 +12467,7 @@ export default function ClippersPage() {
                         id="developer-evidence-base-url"
                         value={developerEvidencePublicBaseUrl}
                         onChange={(event) => setDeveloperEvidencePublicBaseUrl(event.target.value)}
-                        placeholder={status.oauthGoLive?.publicBaseUrl || "http://127.0.0.1:5010"}
+                        placeholder={status.oauthGoLive?.productionUrlReady ? status.oauthGoLive.publicBaseUrl : "https://clippers.tu-dominio.com"}
                         className="border-zinc-800 bg-black"
                       />
                     </div>
@@ -7205,6 +12519,96 @@ export default function ClippersPage() {
                       </div>
                     ))}
                   </div>
+                  {(status.developerAppEvidence.connectionKitItems || []).length > 0 && (
+                    <div className="mt-3 rounded-md border border-blue-300/20 bg-blue-950/10 p-3" data-testid="clippers-developer-app-connection-kit">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium text-white">Developer App Connection Kit</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">Crea apps developer, registra redirect URIs y carga evidence rows sin pegar client secrets ni tokens.</p>
+                          <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.developerAppEvidence.connectionKitCsvPath}</p>
+                          <p className="mt-1 break-all text-xs text-zinc-600">Runbook: {status.developerAppEvidence.connectionKitMarkdownPath}</p>
+                          {status.developerAppEvidence.connectionKitGeneratedAt && (
+                            <p className="mt-1 text-xs text-zinc-600">actualizado: {formatDate(status.developerAppEvidence.connectionKitGeneratedAt)}</p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => appendLaunchEvidenceBatchRows(status.developerAppEvidence.connectionKitItems.map((item) => item.submittedEvidenceRow))}
+                          className="border-blue-300/30 text-blue-100 hover:bg-blue-300/10"
+                          data-testid="load-developer-app-connection-kit-button"
+                        >
+                          <UploadCloud className="mr-2 h-4 w-4" />
+                          Cargar apps
+                        </Button>
+                      </div>
+                      {(status.developerAppEvidence.connectionKitChecklist || []).length > 0 && (
+                        <div className="mt-3 grid gap-2 text-xs text-blue-100/80 md:grid-cols-2">
+                          {status.developerAppEvidence.connectionKitChecklist.slice(0, 4).map((step) => (
+                            <p key={step} className="flex gap-2 leading-5">
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-200" />
+                              {step}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {(status.developerAppEvidence.connectionKitPlatformBatches || []).length > 0 && (
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {status.developerAppEvidence.connectionKitPlatformBatches.map((batch) => (
+                            <div key={batch.id} className="rounded-md border border-blue-300/15 bg-black/25 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", developerAppEvidenceBadge(batch.status))}>{batch.status}</Badge>
+                              </div>
+                              <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                                <p>Scopes: {batch.scopes.length}</p>
+                                <p>Missing env: {batch.missingEnvVars.length}</p>
+                              </div>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-blue-100/70">Submitted template: {batch.submittedTemplateFilePath}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-teal-100/70">Approved template: {batch.approvedTemplateFilePath}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-blue-100/70">Submitted drop: {batch.submittedDropFilePath}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">Approved drop: {batch.approvedDropFilePath}</p>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{batch.nextStep}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <a href={batch.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-blue-300/20 px-2 py-1 text-xs text-blue-100 hover:bg-blue-300/10">
+                                  Portal
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                                <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => setLaunchEvidenceBatchText(batch.submittedDropTemplate || launchEvidenceBatchHeader)}>
+                                  Submitted CSV
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => setLaunchEvidenceBatchText(batch.approvedDropTemplate || launchEvidenceBatchHeader)}>
+                                  Approved CSV
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        {status.developerAppEvidence.connectionKitItems.map((item) => (
+                          <div key={item.platform} className="rounded-md border border-white/10 bg-black/30 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                              <Badge className={cn("shrink-0 border", developerAppEvidenceBadge(item.status))}>{item.status}</Badge>
+                            </div>
+                            <p className="mt-2 break-all text-xs text-zinc-500">Redirect: {item.redirectUri}</p>
+                            <p className="mt-2 text-xs text-zinc-500">Scopes: {item.scopes.length}</p>
+                            <p className="mt-1 text-xs text-zinc-500">Missing env: {item.missingEnvVars.length}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <a href={item.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-blue-200 hover:bg-white/5">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.submittedEvidenceRow)}>
+                                Row
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -7270,6 +12674,83 @@ export default function ClippersPage() {
                   )}
                 </div>
 
+                <div className="rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-permission-unlock-queue">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">Permission Unlock Queue</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Scopes exactos que bloquean autopost; usa estos rows solo despues de solicitar/aprobar en el portal real.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.permissionTracker.items.map((item) => item.evidenceBatchRow))}
+                        data-testid="append-clippers-permission-requested-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Requested rows
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.permissionTracker.items.map((item) => item.evidenceRecipeRow))}
+                        data-testid="append-clippers-permission-recipe-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Recipe rows
+                      </Button>
+                      {(status.platformWarRoom?.permissionApprovalRows || []).length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                          onClick={() => appendLaunchEvidenceBatchRows((status.platformWarRoom.permissionApprovalRows || []).map((row) => row.approvedEvidenceRow))}
+                          data-testid="append-clippers-permission-approved-rows-button"
+                        >
+                          <UploadCloud className="mr-1 h-3 w-3" />
+                          Approved rows
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
+                    {status.permissionTracker.items.map((item) => (
+                      <div key={`permission-unlock-${item.id}`} className={cn(tunnelBoxClass, "bg-black/30 p-3")}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.platform} · {item.scope}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", permissionTrackerBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Badge className="border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{item.appReviewRequired ? "app review" : "scope"}</Badge>
+                          <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.statusSource}</Badge>
+                        </div>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        {item.blockers.length > 0 && (
+                          <p className="mt-2 line-clamp-2 text-xs leading-4 text-amber-100/80">{item.blockers[0]}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <a href={item.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-xs text-amber-100 hover:bg-amber-300/10">
+                            Portal
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <a href={item.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                            Docs
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.evidenceBatchRow)}>
+                            Requested
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.evidenceRecipeRow)}>
+                            Recipe
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {status.permissionRequestPack && (
                   <div className="rounded-md border border-blue-300/20 bg-blue-950/10 p-3">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -7288,6 +12769,85 @@ export default function ClippersPage() {
                       <p>Requested: {status.permissionRequestPack.totals.requested}</p>
                     </div>
                     <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.permissionRequestPack.csvPath}</p>
+                    {(status.permissionRequestPack.platformBatches || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-sky-200">Platform submission batches</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">Agrupa scopes por portal para pedir permisos, adjuntar evidencia y registrar requested/approved.</p>
+                          </div>
+                          <Badge className="w-fit border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">{status.permissionRequestPack.totals.platformBatches} batches</Badge>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {status.permissionRequestPack.platformBatches.map((batch) => (
+                            <div key={batch.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", permissionRequestPackBadge(batch.status))}>{batch.status}</Badge>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.permissions} scopes</Badge>
+                                <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.requested} requested</Badge>
+                                <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.approved} approved</Badge>
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-400">{batch.nextStep}</p>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{batch.scopes.join(", ")}</p>
+                              <div className="mt-2 rounded-md border border-sky-300/10 bg-sky-950/10 p-2">
+                                <p className="break-all text-[11px] leading-4 text-blue-100/75">Requested template: {batch.requestedTemplateFilePath}</p>
+                                <p className="mt-1 break-all text-[11px] leading-4 text-teal-100/75">Approved template: {batch.approvedTemplateFilePath}</p>
+                                <p className="break-all text-[11px] leading-4 text-sky-100/75">Requested drop: {batch.requestedDropFilePath}</p>
+                                <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/75">Approved drop: {batch.approvedDropFilePath}</p>
+                              </div>
+                              {batch.submissionSteps.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs leading-4 text-sky-100/75">
+                                  {batch.submissionSteps.slice(0, 3).map((step) => (
+                                    <li key={step}>{step}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {batch.blockers.length > 0 && (
+                                <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-2">
+                                  <p className="text-[10px] font-medium uppercase text-amber-200">Blockers</p>
+                                  <ul className="mt-1 space-y-1 text-xs leading-4 text-amber-100/80">
+                                    {batch.blockers.slice(0, 3).map((blocker) => (
+                                      <li key={blocker}>{blocker}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <a href={batch.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                                  Portal
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                                {batch.docsUrls.slice(0, 1).map((docsUrl) => (
+                                  <a key={docsUrl} href={docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                                    Docs
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                                <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.evidenceRecipeRows)}>
+                                  <UploadCloud className="mr-1 h-3 w-3" />
+                                  Recipe rows
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.requestedEvidenceRows)}>
+                                  Requested
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => setLaunchEvidenceBatchText(batch.requestedDropTemplate || launchEvidenceBatchHeader)}>
+                                  Requested CSV
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.approvedEvidenceRows)}>
+                                  Approved
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => setLaunchEvidenceBatchText(batch.approvedDropTemplate || launchEvidenceBatchHeader)}>
+                                  Approved CSV
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {status.permissionRequestPack.items.map((item) => (
                         <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
@@ -7371,6 +12931,102 @@ export default function ClippersPage() {
                   </div>
                 )}
 
+                {status.permissionSubmissionDossier && (
+                  <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-permission-submission-dossier">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">Permission Submission Dossier: {status.permissionSubmissionDossier.markdownPath}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.permissionSubmissionDossier.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.permissionSubmissionDossier.status))}>{status.permissionSubmissionDossier.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                      <p>Platforms: {status.permissionSubmissionDossier.totals.platforms}</p>
+                      <p>Scopes: {status.permissionSubmissionDossier.totals.scopes}</p>
+                      <p>Blocked: {status.permissionSubmissionDossier.totals.blocked}</p>
+                      <p>Login: {status.permissionSubmissionDossier.totals.needsLoginRecheck}</p>
+                      <p>Submit: {status.permissionSubmissionDossier.totals.readyToSubmit}</p>
+                      <p>Ready: {status.permissionSubmissionDossier.totals.ready}</p>
+                      <p>Requested rows: {status.permissionSubmissionDossier.totals.requestedRows}</p>
+                      <p>Approved rows: {status.permissionSubmissionDossier.totals.approvedRows}</p>
+                    </div>
+                    <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.permissionSubmissionDossier.csvPath}</p>
+                    <div className="mt-3 rounded-md border border-cyan-300/15 bg-black/25 p-2 text-[11px] leading-4 text-zinc-500">
+                      <p className="break-all">Request pack: {status.permissionSubmissionDossier.sourceArtifacts.permissionRequestPackPath}</p>
+                      <p className="mt-1 break-all">Official matrix: {status.permissionSubmissionDossier.sourceArtifacts.officialPermissionMatrixPath}</p>
+                      <p className="mt-1 break-all">App drafts: {status.permissionSubmissionDossier.sourceArtifacts.developerApplicationDraftsPath}</p>
+                      <p className="mt-1 break-all">Evidence bundle: {status.permissionSubmissionDossier.sourceArtifacts.goLiveEvidenceBundlePath}</p>
+                    </div>
+                    {status.permissionSubmissionDossier.items.length > 0 && (
+                      <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
+                        {status.permissionSubmissionDossier.items.map((item) => (
+                          <div key={item.id} className={cn(tunnelBoxClass, "bg-black/30 p-3")}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge className="border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{item.accessMode}</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.submitDecision}</Badge>
+                              <Badge className={cn("border text-[10px]", officialPermissionMatrixBadge(item.sourceStatus))}>{item.sourceStatus}</Badge>
+                            </div>
+                            <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{item.scopes.join(", ")}</p>
+                            <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-400">{item.nextStep}</p>
+                            {item.verifiedClaims.length > 0 && (
+                              <p className="mt-2 line-clamp-2 text-xs leading-5 text-cyan-100/75">{item.verifiedClaims[0]}</p>
+                            )}
+                            {item.blockers.length > 0 && (
+                              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-2">
+                                <p className="text-[10px] font-medium uppercase text-amber-200">Blockers</p>
+                                <ul className="mt-1 space-y-1 text-xs leading-4 text-amber-100/80">
+                                  {item.blockers.slice(0, 3).map((blocker) => (
+                                    <li key={blocker}>{blocker}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {item.submissionSteps.length > 0 && (
+                              <ul className="mt-3 space-y-1 text-xs leading-4 text-zinc-400">
+                                {item.submissionSteps.slice(0, 4).map((step) => (
+                                  <li key={step}>{step}</li>
+                                ))}
+                              </ul>
+                            )}
+                            <div className="mt-3 rounded-md border border-cyan-300/10 bg-cyan-950/10 p-2">
+                              <p className="break-all text-[11px] leading-4 text-blue-100/75">Requested: {item.requestedDropFilePath}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/75">Approved: {item.approvedDropFilePath}</p>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <a href={item.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              {item.officialUrls.slice(0, 1).map((url) => (
+                                <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                                  Official
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ))}
+                              <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRows(item.requestedEvidenceRows)}>
+                                Requested
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => setLaunchEvidenceBatchText(item.requestedDropTemplate || launchEvidenceBatchHeader)}>
+                                Requested CSV
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows(item.approvedEvidenceRows)}>
+                                Approved
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => setLaunchEvidenceBatchText(item.approvedDropTemplate || launchEvidenceBatchHeader)}>
+                                Approved CSV
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="rounded-md border border-indigo-300/20 bg-indigo-950/10 p-3">
                   <div className="grid gap-3 lg:grid-cols-[1.15fr_0.65fr_1fr_auto] lg:items-end">
                     <div className="space-y-1">
@@ -7446,6 +13102,100 @@ export default function ClippersPage() {
                       <p>Verified: {status.officialPermissionMatrix.totals.officialVerified}</p>
                       <p>Login req: {status.officialPermissionMatrix.totals.loginRequired}</p>
                     </div>
+                    <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.officialPermissionMatrix.csvPath}</p>
+                    {(status.officialPermissionMatrix.webProofTrail || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="clippers-official-permission-web-proof-trail">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Web proof trail</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">Evidencia oficial ya revisada para sostener las solicitudes de permisos.</p>
+                          </div>
+                          <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/40 text-[10px] text-emerald-100">
+                            {status.officialPermissionMatrix.webProofTrail.length} platforms
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {status.officialPermissionMatrix.webProofTrail.map((proof) => (
+                            <div key={proof.platform} className="rounded-md border border-white/10 bg-black/30 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{clipperPlatformLabel(proof.platform)}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", officialPermissionMatrixBadge(proof.sourceStatus))}>{proof.accessMode}</Badge>
+                              </div>
+                              <p className="mt-2 text-xs text-zinc-600">{proof.checkedAt}</p>
+                              <p className="mt-2 text-xs leading-5 text-amber-100/85">{proof.nextHumanAction}</p>
+                              {proof.verifiedClaims.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs leading-4 text-emerald-100/80">
+                                  {proof.verifiedClaims.slice(0, 2).map((claim) => (
+                                    <li key={claim}>{claim}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {proof.reviewerEvidence.length > 0 && (
+                                <p className="mt-3 text-xs leading-5 text-zinc-400">{proof.reviewerEvidence[0]}</p>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {proof.officialUrls.slice(0, 2).map((url) => (
+                                  <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-300/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-300/10">
+                                    Docs
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(status.officialPermissionMatrix.sourceBatches || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Source verification batches</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">Confirma fuentes oficiales por plataforma antes de pedir scopes o app review.</p>
+                          </div>
+                          <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{status.officialPermissionMatrix.totals.sourceBatches} batches</Badge>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {status.officialPermissionMatrix.sourceBatches.map((batch) => (
+                            <div key={batch.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", officialPermissionMatrixBadge(batch.sourceStatus))}>{batch.accessMode}</Badge>
+                              </div>
+                              <p className="mt-2 break-all text-xs text-zinc-500">{batch.scopes.join(", ")}</p>
+                              <p className="mt-2 text-xs leading-5 text-zinc-400">{batch.nextStep}</p>
+                              {batch.verifiedClaims.length > 0 && (
+                                <p className="mt-2 text-xs leading-5 text-cyan-100/75">{batch.verifiedClaims[0]}</p>
+                              )}
+                              {batch.blocker && (
+                                <p className="mt-2 text-xs leading-5 text-amber-200">{batch.blocker}</p>
+                              )}
+                              {batch.recheckSteps.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs leading-4 text-zinc-400">
+                                  {batch.recheckSteps.slice(0, 3).map((step) => (
+                                    <li key={step}>{step}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {batch.officialUrls.slice(0, 2).map((url) => (
+                                  <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                    Docs
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                                <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.launchEvidenceRows)}>
+                                  Requested
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.approvalEvidenceRows)}>
+                                  Approved
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                       {status.officialPermissionMatrix.items.map((item) => (
                         <div key={item.platform} className="rounded-md border border-white/10 bg-black/30 p-2">
@@ -7465,6 +13215,16 @@ export default function ClippersPage() {
                                   </Badge>
                                 </div>
                                 <p className="mt-2 text-xs leading-5 text-zinc-500">{scope.requestAction}</p>
+                                <div className="mt-2 rounded-md border border-white/10 bg-black/25 p-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Portal product</p>
+                                  <p className="mt-1 text-xs leading-5 text-zinc-300">{scope.portalProduct}</p>
+                                  <p className={cn("mt-1 text-xs leading-5", scope.requestMode === "request_now" ? "text-emerald-200" : "text-amber-200")}>
+                                    {scope.requestMode}: {scope.ownerAction}
+                                  </p>
+                                  {scope.humanBlocker && (
+                                    <p className="mt-1 text-xs leading-5 text-amber-200">{scope.humanBlocker}</p>
+                                  )}
+                                </div>
                                 {scope.portalSubmissionSteps && scope.portalSubmissionSteps.length > 0 && (
                                   <div className="mt-2 rounded-md border border-amber-300/15 bg-amber-950/10 p-2">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">Portal submission</p>
@@ -8078,6 +13838,69 @@ export default function ClippersPage() {
                       <p>Missing evidence: {status.accountCreationPack.totals.evidenceMissing}</p>
                     </div>
                     <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.accountCreationPack.csvPath}</p>
+                    {(status.accountCreationPack.platformBatches || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-sky-200">Platform creation batches</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">Crea cuentas por portal, guarda vault privado y manda evidencia de todas las cuentas de esa plataforma.</p>
+                          </div>
+                          <Badge className="w-fit border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">{status.accountCreationPack.totals.platformBatches} batches</Badge>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {status.accountCreationPack.platformBatches.map((batch) => (
+                            <div key={batch.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", accountCreationPackBadge(batch.status))}>{batch.status}</Badge>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.profiles} profiles</Badge>
+                                <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{batch.evidenceMissing} missing evidence</Badge>
+                              </div>
+                              <p className="mt-2 break-all text-xs text-zinc-500">{batch.handles.join(", ")}</p>
+                              <p className="mt-2 text-xs leading-5 text-zinc-400">{batch.nextStep}</p>
+                              {batch.browserSessionChecklist.length > 0 && (
+                                <ul className="mt-3 space-y-1 text-xs leading-4 text-sky-100/75">
+                                  {batch.browserSessionChecklist.slice(0, 3).map((step) => (
+                                    <li key={step}>{step}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {batch.blockers.length > 0 && (
+                                <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-2">
+                                  <p className="text-[10px] font-medium uppercase text-amber-200">Blockers</p>
+                                  <ul className="mt-1 space-y-1 text-xs leading-4 text-amber-100/80">
+                                    {batch.blockers.slice(0, 3).map((blocker) => (
+                                      <li key={blocker}>{blocker}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <a href={batch.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                                  Signup
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                                <a href={batch.officialHelpUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                                  Help
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                                <Button size="sm" variant="outline" className="h-7 border-yellow-300/20 bg-transparent px-2 text-xs text-yellow-100 hover:bg-yellow-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.submittedEvidenceRows)}>
+                                  Submitted
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.verifiedEvidenceRows)}>
+                                  Verified
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-fuchsia-300/20 bg-transparent px-2 text-xs text-fuchsia-100 hover:bg-fuchsia-300/10" onClick={() => appendLaunchEvidenceBatchRows(batch.evidenceRecipeRows)}>
+                                  Recipe
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-2">
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div className="min-w-0">
@@ -8099,6 +13922,16 @@ export default function ClippersPage() {
                             <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">Login label: {item.loginIdentifierLabel}</p>
                             <p className="mt-1 text-[11px] leading-4 text-cyan-100/75">Claim: {item.claimSteps[0]}</p>
                             <p className="mt-1 text-[11px] leading-4 text-amber-100/75">Blocked: {item.blockedUntil[0]}</p>
+                            {(item.handleCheckUrls || []).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {item.handleCheckUrls.slice(0, 2).map((url, index) => (
+                                  <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-lime-300/20 px-2 py-1 text-[11px] text-lime-100 hover:bg-lime-300/10">
+                                    {index === 0 ? "Check handle" : "Search"}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -8135,6 +13968,16 @@ export default function ClippersPage() {
                                 <p className="mt-2 text-[11px] leading-4 text-amber-100/75">
                                   Handle: {item.handleReservationPlan[0]}
                                 </p>
+                              )}
+                              {(item.handleCheckUrls || []).length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {item.handleCheckUrls.slice(0, 2).map((url, index) => (
+                                    <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-[11px] text-amber-100 hover:bg-amber-300/10">
+                                      {index === 0 ? "Check handle" : "Search"}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ))}
+                                </div>
                               )}
                               {item.browserSessionChecklist.length > 0 && (
                                 <p className="mt-2 text-[11px] leading-4 text-cyan-100/75">
@@ -8209,6 +14052,16 @@ export default function ClippersPage() {
                                   <li key={step}>{step}</li>
                                 ))}
                               </ul>
+                              {(item.handleCheckUrls || []).length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {item.handleCheckUrls.slice(0, 2).map((url, index) => (
+                                    <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-[11px] text-amber-100 hover:bg-amber-300/10">
+                                      {index === 0 ? "Check handle" : "Search"}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                           {item.browserSessionChecklist.length > 0 && (
@@ -8290,6 +14143,201 @@ export default function ClippersPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {status.accountSetupSession && (
+                  <div className="rounded-md border border-lime-300/20 bg-lime-950/10 p-3" data-testid="clippers-account-setup-session">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">Account Setup Session: {status.accountSetupSession.markdownPath}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.accountSetupSession.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", accountCreationPackBadge(status.accountSetupSession.status))}>{status.accountSetupSession.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                      <p>Accounts: {status.accountSetupSession.totals.accounts}</p>
+                      <p>Create: {status.accountSetupSession.totals.readyToCreate}</p>
+                      <p>Progress: {status.accountSetupSession.totals.inProgress}</p>
+                      <p>Ready: {status.accountSetupSession.totals.ready}</p>
+                      <p>Blocked: {status.accountSetupSession.totals.blocked}</p>
+                      <p>Portals: {status.accountSetupSession.totals.portalUrls}</p>
+                      <p>Rows: {status.accountSetupSession.totals.evidenceRows}</p>
+                      <p>Vault: {status.accountSetupSession.totals.vaultSlots}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-yellow-300/20 bg-transparent px-2 text-xs text-yellow-100 hover:bg-yellow-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.accountSetupSession.items.map((item) => item.submittedEvidenceBatchRow))}
+                        data-testid="append-clippers-account-setup-submitted-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Submitted all
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.accountSetupSession.items.map((item) => item.verifiedEvidenceBatchRow))}
+                        data-testid="append-clippers-account-setup-verified-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        Verified all
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-lime-300/20 bg-transparent px-2 text-xs text-lime-100 hover:bg-lime-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.accountSetupSession.items.flatMap((item) => item.evidenceRows))}
+                        data-testid="append-clippers-account-setup-all-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        All account rows
+                      </Button>
+                    </div>
+                    <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.accountSetupSession.csvPath}</p>
+                    <div className="mt-3 rounded-md border border-lime-300/15 bg-black/25 p-2 text-[11px] leading-4 text-zinc-500">
+                      <p className="break-all">Account pack: {status.accountSetupSession.sourceArtifacts.accountCreationPackPath}</p>
+                      <p className="mt-1 break-all">Claim sheet: {status.accountSetupSession.sourceArtifacts.accountClaimSheetPath}</p>
+                      <p className="mt-1 break-all">Evidence kit: {status.accountSetupSession.sourceArtifacts.accountEvidenceConnectionKitPath}</p>
+                      <p className="mt-1 break-all">Account evidence template: {status.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath}</p>
+                      <p className="mt-1 break-all">Owner pack: {status.accountSetupSession.sourceArtifacts.ownerConnectPackPath}</p>
+                    </div>
+                    {status.accountSetupSession.items.length > 0 && (
+                      <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
+                        {status.accountSetupSession.items.map((item) => {
+                          const ownerConnectAccountItem = findOwnerAccountConnectItem(item);
+                          return (
+                          <div key={item.id} className={cn(tunnelBoxClass, "bg-black/30 p-3")}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-white">#{item.rank} {item.accountName}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", accountCreationPackBadge(item.status))}>{item.status}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge className="border border-lime-300/20 bg-lime-950/40 text-[10px] text-lime-100">{item.platform}</Badge>
+                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.priority}</Badge>
+                              <Badge className={cn("border text-[10px]", accountEvidenceBadge(item.evidenceStatus))}>{item.evidenceStatus}</Badge>
+                            </div>
+                            <p className="mt-2 break-all text-xs text-zinc-500">{item.handle} · {item.profileLink}</p>
+                            <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-400">{item.nextStep}</p>
+                            {(item.handleCheckUrls || []).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {item.handleCheckUrls.slice(0, 2).map((url, index) => (
+                                  <a key={url} href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-lime-300/20 px-2 py-1 text-xs text-lime-100 hover:bg-lime-300/10">
+                                    {index === 0 ? "Check handle" : "Search"}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                            <div className="mt-3 rounded-md border border-lime-300/10 bg-lime-950/10 p-2">
+                              <p className="break-all text-[11px] leading-4 text-lime-100/80">Vault: {item.vaultItemName}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">Login: {item.loginIdentifierLabel}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-zinc-600">2FA: {item.twoFactorSlot}</p>
+                            </div>
+                            {item.copyPackage.length > 0 && (
+                              <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-500">
+                                Copy: {item.copyPackage.slice(0, 3).map((field) => `${field.label}=${field.value}`).join(" · ")}
+                              </p>
+                            )}
+                            {item.portalFormFields.length > 0 && (
+                              <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-emerald-100/75">
+                                Portal: {item.portalFormFields.slice(0, 2).map((field) => `${field.field}=${field.value}`).join(" · ")}
+                              </p>
+                            )}
+                            {ownerConnectAccountItem && (
+                              <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-2" data-testid={`clippers-account-setup-owner-progress-${item.id}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-[10px] font-medium uppercase text-sky-200">Owner progress</p>
+                                  <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(ownerConnectAccountItem.progressStatus || ownerConnectAccountItem.status))}>
+                                    {ownerConnectAccountItem.progressStatus || ownerConnectAccountItem.status}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-sky-100/70">{ownerConnectAccountItem.nextStep}</p>
+                                {ownerConnectAccountItem.progressNotes && (
+                                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-emerald-100/75">{ownerConnectAccountItem.progressNotes}</p>
+                                )}
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-amber-300/30 bg-amber-950/20 px-2 text-[11px] text-amber-100 hover:bg-amber-900/30"
+                                    disabled={ownerConnectProgressMutation.isPending}
+                                    onClick={() => ownerConnectProgressMutation.mutate({
+                                      itemId: ownerConnectAccountItem.id,
+                                      status: "waiting",
+                                      notes: "Cuenta en creacion desde Account Setup Session; evidencia real pendiente.",
+                                      evidenceRows: [item.submittedEvidenceBatchRow],
+                                    })}
+                                    data-testid={`mark-clippers-owner-account-working-${item.id}`}
+                                  >
+                                    {ownerConnectProgressMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                                    Working
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-emerald-300/30 bg-emerald-950/20 px-2 text-[11px] text-emerald-100 hover:bg-emerald-900/30"
+                                    disabled={ownerConnectProgressMutation.isPending}
+                                    onClick={() => ownerConnectProgressMutation.mutate({
+                                      itemId: ownerConnectAccountItem.id,
+                                      status: "done",
+                                      notes: "Cuenta marcada completa localmente desde Account Setup Session; importar evidencia real para desbloquear go-live.",
+                                      evidenceRows: [item.verifiedEvidenceBatchRow],
+                                    })}
+                                    data-testid={`mark-clippers-owner-account-done-${item.id}`}
+                                  >
+                                    {ownerConnectProgressMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                                    Done local
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                            {item.claimSteps.length > 0 && (
+                              <ul className="mt-3 space-y-1 text-xs leading-4 text-lime-100/75">
+                                {item.claimSteps.slice(0, 3).map((step) => (
+                                  <li key={step}>{step}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {item.blockers.length > 0 && (
+                              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-2">
+                                <p className="text-[10px] font-medium uppercase text-amber-200">Blockers</p>
+                                <ul className="mt-1 space-y-1 text-xs leading-4 text-amber-100/80">
+                                  {item.blockers.slice(0, 3).map((blocker) => (
+                                    <li key={blocker}>{blocker}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <a href={item.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-lime-300/20 px-2 py-1 text-xs text-lime-100 hover:bg-lime-300/10">
+                                Signup
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <a href={item.profileLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                                Profile
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button size="sm" variant="outline" className="h-7 border-yellow-300/20 bg-transparent px-2 text-xs text-yellow-100 hover:bg-yellow-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.submittedEvidenceBatchRow)}>
+                                Submitted
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10" onClick={() => appendLaunchEvidenceBatchRow(item.verifiedEvidenceBatchRow)}>
+                                Verified
+                              </Button>
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -8455,6 +14503,190 @@ export default function ClippersPage() {
                   )}
                 </div>
 
+                {(status.accountEvidence.quickBatchRows || []).length > 0 && (
+                  <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-account-connection-kit">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-white">External Account Connection Kit</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">Carga las filas de todas las cuentas al batch; reemplaza los placeholders con evidencia real antes de importar.</p>
+                        <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.accountEvidence.connectionKitCsvPath}</p>
+                        <p className="mt-1 break-all text-xs text-zinc-600">Runbook: {status.accountEvidence.connectionKitMarkdownPath}</p>
+                        {status.accountEvidence.connectionKitGeneratedAt && (
+                          <p className="mt-1 text-xs text-zinc-600">actualizado: {formatDate(status.accountEvidence.connectionKitGeneratedAt)}</p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setLaunchEvidenceBatchPreview(null);
+                          setLaunchEvidenceBatchText(status.accountEvidence.quickBatchTemplate || launchEvidenceBatchHeader);
+                          toast({
+                            title: "Quick batch cargado",
+                            description: `${status.accountEvidence.quickBatchRows.length} filas listas para completar con evidencia real.`,
+                          });
+                        }}
+                        className="border-cyan-300/30 text-cyan-100 hover:bg-cyan-300/10"
+                        data-testid="load-account-evidence-quick-batch-button"
+                      >
+                        <UploadCloud className="mr-2 h-4 w-4" />
+                        Cargar pack
+                      </Button>
+                    </div>
+                    {(status.accountEvidence.quickBatchChecklist || []).length > 0 && (
+                      <div className="mt-3 grid gap-2 text-xs text-cyan-100/80 md:grid-cols-2">
+                        {status.accountEvidence.quickBatchChecklist.slice(0, 4).map((step) => (
+                          <p key={step} className="flex gap-2 leading-5">
+                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-200" />
+                            {step}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {(status.accountEvidence.connectionKitPlatformBatches || []).length > 0 && (
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        {status.accountEvidence.connectionKitPlatformBatches.map((batch) => (
+                          <div key={batch.id} className="rounded-md border border-cyan-300/15 bg-black/25 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", accountEvidenceBadge(batch.status))}>{batch.status}</Badge>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                              <p>Accounts: {batch.accounts}</p>
+                              <p>Verified: {batch.verified}</p>
+                              <p>Submitted: {batch.submitted}</p>
+                              <p>Missing: {batch.missing}</p>
+                            </div>
+                            <p className="mt-2 break-all text-[11px] leading-4 text-blue-100/70">Submitted template: {batch.submittedTemplateFilePath}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-teal-100/70">Verified template: {batch.verifiedTemplateFilePath}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">Submitted drop: {batch.submittedDropFilePath}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">Verified drop: {batch.verifiedDropFilePath}</p>
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">{batch.nextStep}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <a href={batch.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                Signup
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button size="sm" variant="outline" className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10" onClick={() => setLaunchEvidenceBatchText(batch.submittedDropTemplate || launchEvidenceBatchHeader)}>
+                                Submitted CSV
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => setLaunchEvidenceBatchText(batch.verifiedDropTemplate || launchEvidenceBatchHeader)}>
+                                Verified CSV
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {status.accountEvidence.quickBatchRows.slice(0, 9).map((row) => (
+                        <div key={row.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">{row.displayName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{row.handle} · {row.platform}</p>
+                            </div>
+                            <Badge className={cn("shrink-0 border", accountEvidenceBadge(row.status))}>{row.status}</Badge>
+                          </div>
+                          <p className="mt-2 break-all text-xs text-zinc-600">{row.profileLink}</p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/70">Drop JSON: {row.evidenceJsonPath}</p>
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">{row.nextStep}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <a href={row.signupUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                              Signup
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <a href={row.profileLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/5">
+                              Perfil
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => appendLaunchEvidenceBatchRow(row.verifiedBatchRow)}
+                              className="h-7 border-cyan-300/30 px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                            >
+                              Add row
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {status.goLiveEvidenceBundle && (
+                  <div className="rounded-md border border-purple-300/20 bg-purple-950/10 p-3" data-testid="clippers-go-live-evidence-bundle">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-white">Go-Live Evidence Bundle</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.goLiveEvidenceBundle.nextStep}</p>
+                        <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.goLiveEvidenceBundle.csvPath}</p>
+                        <p className="mt-1 break-all text-xs text-zinc-600">Runbook: {status.goLiveEvidenceBundle.markdownPath}</p>
+                        {status.goLiveEvidenceBundle.generatedAt && (
+                          <p className="mt-1 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveEvidenceBundle.generatedAt)}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setLaunchEvidenceBatchPreview(null);
+                            setLaunchEvidenceBatchText(status.goLiveEvidenceBundle.importTemplate || launchEvidenceBatchHeader);
+                            toast({
+                              title: "Starter bundle cargado",
+                              description: `${status.goLiveEvidenceBundle.totals.starterRows} filas listas para completar con prueba real.`,
+                            });
+                          }}
+                          className="border-purple-300/30 text-purple-100 hover:bg-purple-300/10"
+                          data-testid="load-go-live-evidence-starter-bundle-button"
+                        >
+                          <UploadCloud className="mr-2 h-4 w-4" />
+                          Starter rows
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => appendLaunchEvidenceBatchRows(status.goLiveEvidenceBundle.approvalRows)}
+                          className="border-emerald-300/30 text-emerald-100 hover:bg-emerald-300/10"
+                          data-testid="append-go-live-evidence-approval-rows-button"
+                        >
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                          Approval rows
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                      <p>Starter: {status.goLiveEvidenceBundle.totals.starterRows}</p>
+                      <p>Approval: {status.goLiveEvidenceBundle.totals.approvalRows}</p>
+                      <p>Accounts: {status.goLiveEvidenceBundle.totals.accountRows}</p>
+                      <p>Apps: {status.goLiveEvidenceBundle.totals.developerAppRows}</p>
+                      <p>Permisos: {status.goLiveEvidenceBundle.totals.permissionRows}</p>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {(status.goLiveEvidenceBundle.sections || []).map((section) => (
+                        <div key={section.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{section.label}</p>
+                            <Badge className="shrink-0 border border-purple-300/20 bg-purple-300/10 text-[10px] text-purple-100">{section.count}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-4 text-zinc-500">{section.nextStep}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-purple-100/80 md:grid-cols-2">
+                      {status.goLiveEvidenceBundle.checklist.slice(0, 4).map((step) => (
+                        <p key={step} className="flex gap-2 leading-5">
+                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-200" />
+                          {step}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div id="launch-evidence-batch" className="scroll-mt-6 rounded-md border border-purple-300/20 bg-purple-950/10 p-3">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
@@ -8462,6 +14694,19 @@ export default function ClippersPage() {
                       <p className="mt-1 text-xs leading-5 text-zinc-500">Importa cuentas verificadas, apps developer, permisos y derechos de fuentes desde CSV o JSON sin guardar secretos.</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setLaunchEvidenceStrictImport((current) => !current)}
+                        className={cn(
+                          "border-white/10 text-zinc-200 hover:bg-white/5",
+                          launchEvidenceStrictImport && "border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/15",
+                        )}
+                        data-testid="toggle-clippers-launch-evidence-strict-import-button"
+                      >
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        {launchEvidenceStrictImport ? "Strict on" : "Strict off"}
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
@@ -8496,13 +14741,23 @@ export default function ClippersPage() {
                       </Button>
                     </div>
                   </div>
+                  <div className={cn(
+                    "mt-3 rounded-md border p-2 text-xs leading-5",
+                    launchEvidenceStrictImport
+                      ? "border-emerald-300/20 bg-emerald-950/10 text-emerald-100"
+                      : "border-amber-300/20 bg-amber-950/10 text-amber-100",
+                  )}>
+                    {launchEvidenceStrictImport
+                      ? "Strict import activo: si una fila falla, no se escribe ninguna evidencia parcial."
+                      : "Strict import apagado: las filas validas pueden escribirse aunque otras queden rejected."}
+                  </div>
                   <Textarea
                     value={launchEvidenceBatchText}
                     onChange={(event) => {
                       setLaunchEvidenceBatchText(event.target.value);
                       setLaunchEvidenceBatchPreview(null);
                     }}
-                    placeholder={`${launchEvidenceBatchHeader}\naccount,sports-daily,tiktok,verified,,,,Cuenta creada y verificada\ndeveloper_app,,youtube,submitted,,youtube-app-id,https://tu-dominio.com,App enviada a review\npermission,,tiktok,requested,video.publish,,,Scope solicitado\nsource_rights,clip.mp4,memes,owned_or_permissioned,clip.mp4,,,Permiso confirmado por creator; evidencia en Drive`}
+                    placeholder={`${launchEvidenceBatchHeader}\naccount,sports-daily,tiktok,verified,,,,Cuenta creada y verificada con profile URL y screenshot en Drive\ndeveloper_app,,youtube,submitted,,youtube-app-id,https://tu-dominio.com,App enviada a review con screenshot/ticket del portal\npermission,,tiktok,requested,video.publish,,,Scope solicitado con ticket o screenshot del portal\nsource_rights,clip.mp4,memes,owned_or_permissioned,clip.mp4,,,Creator permission signed; proof URL https://drive.google.com/file/proof`}
                     className="mt-3 min-h-32 border-zinc-800 bg-black font-mono text-xs"
                     autoComplete="off"
                     data-testid="clipper-launch-evidence-batch-input"
@@ -8515,7 +14770,7 @@ export default function ClippersPage() {
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs font-medium text-white">Preview de importacion</p>
                         <Badge className={cn("w-fit border", launchEvidenceBatchPreview.rejected.length ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200")}>
-                          {launchEvidenceBatchPreview.rejected.length ? "needs_fix" : "importable"}
+                          {launchEvidenceBatchPreview.strictBlocked ? "strict_blocked" : launchEvidenceBatchPreview.rejected.length ? "needs_fix" : "importable"}
                         </Badge>
                       </div>
                       <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
@@ -8533,6 +14788,18 @@ export default function ClippersPage() {
                         </div>
                       )}
                       <p className="mt-2 text-xs leading-5 text-zinc-500">{launchEvidenceBatchPreview.nextStep}</p>
+                      {launchEvidenceBatchPreview.strictImport && (
+                        <p className={cn(
+                          "mt-2 rounded-md border p-2 text-xs leading-5",
+                          launchEvidenceBatchPreview.strictBlocked
+                            ? "border-red-300/20 bg-red-950/10 text-red-100"
+                            : "border-emerald-300/20 bg-emerald-950/10 text-emerald-100",
+                        )}>
+                          {launchEvidenceBatchPreview.strictBlocked
+                            ? "Strict import bloqueo la escritura: corrige rejected y vuelve a importar."
+                            : "Strict import limpio: no hay rejected bloqueando la escritura."}
+                        </p>
+                      )}
                       {(launchEvidenceBatchPreview.fileErrors || []).length > 0 && (
                         <div className="mt-3 space-y-2">
                           {launchEvidenceBatchPreview.fileErrors?.slice(0, 5).map((item) => (
@@ -8897,6 +15164,76 @@ export default function ClippersPage() {
                   </div>
                 </div>
 
+                {status.analyticsReportingPack && (
+                  <div className="rounded-md border border-emerald-400/20 bg-emerald-400/5 p-3" data-testid="clippers-analytics-reporting-pack">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-white">Analytics Reporting Pack</p>
+                          <Badge className={cn("border", analyticsReportingPackBadge(status.analyticsReportingPack.status))}>{status.analyticsReportingPack.status}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.analyticsReportingPack.nextStep}</p>
+                        <p className="mt-2 break-all text-xs text-zinc-600">{status.analyticsReportingPack.markdownPath}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-fit border-emerald-300/30 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20"
+                        disabled={analyticsReportingPackMutation.isPending}
+                        onClick={() => analyticsReportingPackMutation.mutate()}
+                        data-testid="prepare-clippers-analytics-reporting-pack-button"
+                      >
+                        {analyticsReportingPackMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="mr-2 h-3.5 w-3.5" />}
+                        Reporting pack
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                      <p>Exports: {formatNumber(status.analyticsReportingPack.totals.exports)}</p>
+                      <p>Accounts: {formatNumber(status.analyticsReportingPack.totals.accounts)}</p>
+                      <p>Platforms: {formatNumber(status.analyticsReportingPack.totals.platforms)}</p>
+                      <p>Files: {formatNumber(status.analyticsReportingPack.totals.metricsFiles)}</p>
+                      <p>Records: {formatNumber(status.analyticsReportingPack.totals.metricRecords)}</p>
+                      <p>Goal: {formatNumber(status.analyticsReportingPack.totals.weeklyViewsGoal)}</p>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_1fr]">
+                      <div className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">Runbook</p>
+                        <div className="mt-2 space-y-2">
+                          {status.analyticsReportingPack.runbook.slice(0, 4).map((step) => (
+                            <p key={step} className="flex gap-2 text-xs leading-5 text-zinc-400">
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-200" />
+                              {step}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">CSV template</p>
+                        <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-2 text-[11px] leading-5 text-zinc-400">
+                          {status.analyticsReportingPack.importTemplate.split("\n").slice(0, 4).join("\n")}
+                        </pre>
+                        <p className="mt-2 break-all text-xs text-zinc-600">{status.analyticsReportingPack.csvPath}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {status.analyticsReportingPack.items.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="truncate text-sm font-medium text-white">{item.accountName}</p>
+                            <Badge className="border border-white/10 bg-zinc-900 text-zinc-300">{item.platform}</Badge>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-zinc-500">{item.handle}</p>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.exportSource}</p>
+                          <p className="mt-2 break-all text-xs text-zinc-600">{item.targetFileName}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid gap-3 xl:grid-cols-2">
                   <div className="rounded-md border border-white/10 bg-black/35 p-3">
                     <p className="text-sm font-medium text-white">Top clips</p>
@@ -9024,10 +15361,22 @@ export default function ClippersPage() {
                           </div>
                           <p className="mt-1 text-xs text-zinc-500">{item.platform} · score {formatNumber(item.viralScore)} · {item.source}</p>
                           <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{item.outreachSubject}</p>
+                          {item.remixBrief && (
+                            <div className="mt-2 rounded border border-emerald-300/15 bg-emerald-950/10 p-2">
+                              <p className="text-[10px] uppercase tracking-wide text-emerald-200">Owned remix brief</p>
+                              <p className="mt-1 text-xs leading-4 text-emerald-100/80">{item.remixBrief}</p>
+                              {item.scriptBeats.length > 0 && (
+                                <p className="mt-2 text-xs leading-4 text-emerald-100/70">{item.scriptBeats[0]}</p>
+                              )}
+                            </div>
+                          )}
                           <div className="mt-2 rounded border border-white/10 bg-black/40 p-2">
                             <p className="text-[10px] uppercase tracking-wide text-zinc-500">Allowlist template</p>
                             <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-4 text-zinc-300">{item.permissionRecordTemplate}</pre>
                           </div>
+                          {item.publishSafetyChecklist.length > 0 && (
+                            <p className="mt-2 line-clamp-2 text-xs leading-5 text-red-100/80">Safety: {item.publishSafetyChecklist[0]}</p>
+                          )}
                           <p className="mt-2 line-clamp-2 text-xs leading-5 text-amber-200">{item.nextStep}</p>
                           {item.url && (
                             <a href={item.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-cyan-200 hover:text-cyan-100">
@@ -9414,6 +15763,50 @@ export default function ClippersPage() {
                 </div>
               </div>
             )}
+            {status?.publisherExecutionQueue && (
+              <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{status.publisherExecutionQueue.markdownPath}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{status.publisherExecutionQueue.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", publisherExecutionBadge(status.publisherExecutionQueue.status))}>{status.publisherExecutionQueue.status}</Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                  <p>Items: {status.publisherExecutionQueue.totals.items}</p>
+                  <p>Blocked: {status.publisherExecutionQueue.totals.blocked}</p>
+                  <p>Approval: {status.publisherExecutionQueue.totals.queuedForApproval}</p>
+                  <p>Ready send: {status.publisherExecutionQueue.totals.readyToSend}</p>
+                  <p>Real publish: {status.publisherExecutionQueue.realPublishEnabled ? "on" : "off"}</p>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {status.publisherExecutionQueue.items.slice(0, 6).map((item) => (
+                    <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-medium text-white">{item.accountName} / {item.platform}</p>
+                        <Badge className={cn("border text-[10px]", publisherExecutionBadge(item.status))}>{item.status}</Badge>
+                      </div>
+                      <p className="mt-2 truncate text-xs text-zinc-500">{item.endpoint}</p>
+                      <p className="mt-1 text-xs text-zinc-500">Token: {item.requestSpec.tokenSource} · Approval: {item.approvalRequired ? "yes" : "no"}</p>
+                      <p className="mt-1 truncate text-xs text-zinc-500">Source: {item.sourcePath || "missing"}</p>
+                      {item.gates.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {item.gates.slice(0, 3).map((gate) => (
+                            <div key={`${item.id}-${gate.id}`} className="flex items-center justify-between gap-2 rounded border border-white/10 px-2 py-1">
+                              <p className="truncate text-xs text-zinc-400">{gate.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", gate.done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                {gate.done ? "ok" : "missing"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs leading-5 text-amber-200">{item.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {status?.automation ? (
               <>
                 <div className="rounded-md border border-white/10 bg-black/35 p-3">
@@ -9433,7 +15826,11 @@ export default function ClippersPage() {
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div className="rounded-md border border-white/10 bg-black/35 p-3">
                           <p className="text-xs text-zinc-500">Posts</p>
-                          <p className="font-semibold">{status.automation.lastRun.totals.posts}</p>
+                          <p className="font-semibold">{status.automation.lastRun.totals.posts}/{status.automation.lastRun.totals.dailyTargetPosts || status.automation.lastRun.totals.posts}</p>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                          <p className="text-xs text-zinc-500">Weekly target</p>
+                          <p className="font-semibold">{status.automation.lastRun.totals.weeklyTargetClips || status.automationSchedule.weeklyTargetClips}</p>
                         </div>
                         <div className="rounded-md border border-white/10 bg-black/35 p-3">
                           <p className="text-xs text-zinc-500">Bloqueados</p>
@@ -9446,6 +15843,14 @@ export default function ClippersPage() {
                         <div className="rounded-md border border-white/10 bg-black/35 p-3">
                           <p className="text-xs text-zinc-500">Scheduled</p>
                           <p className="font-semibold">{status.automation.lastRun.totals.scheduled}</p>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                          <p className="text-xs text-zinc-500">Backlog</p>
+                          <p className="font-semibold">{status.automation.lastRun.totals.backlogPosts || 0}</p>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                          <p className="text-xs text-zinc-500">Gap</p>
+                          <p className="font-semibold">{status.automation.lastRun.totals.gapToDailyTarget || 0}</p>
                         </div>
                       </div>
                       <div className="rounded-md border border-white/10 bg-black/35 p-3">
@@ -9526,10 +15931,32 @@ export default function ClippersPage() {
                   {(status.sourceHunt?.items || []).slice(0, 3).map((item) => (
                     <div key={item.id} className="mt-2 rounded-md border border-white/10 bg-black/25 p-2">
                       <p className="truncate text-xs text-cyan-200">{item.accountName} slot {item.slotNumber}: {item.suggestedSearch}</p>
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-sky-100/80">{(item.viralSearchQueries || [])[0] || item.suggestedSearch}</p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{item.minimumViralSignal || item.recencyWindow}</p>
+                      <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">File: {item.targetFileName || "pending"} · {item.sourceDropManifestPath || item.sourceFolder}</p>
                       <div className="mt-2 space-y-1">
                         {(item.requiredInputs || []).slice(0, 3).map((input) => (
                           <p key={input} className="text-xs leading-5 text-zinc-500">- {input}</p>
                         ))}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(item.viralSearchUrls || [])[0] && (
+                          <a href={(item.viralSearchUrls || [])[0]} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                            Buscar ahora
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        {item.sourceDropManifestRow && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                            onClick={() => appendSourceIntakeBatchRows([item.sourceDropManifestRow])}
+                          >
+                            <UploadCloud className="mr-1 h-3 w-3" />
+                            Intake row
+                          </Button>
+                        )}
                       </div>
                       <p className="mt-2 text-xs leading-5 text-amber-200">{item.completionHint || item.nextStep}</p>
                     </div>
@@ -9580,9 +16007,22 @@ export default function ClippersPage() {
                       <p className="truncate font-medium text-white">{status.sourceAcquisition?.markdownPath || "source plan no generado"}</p>
                       <p className="mt-1 text-xs text-zinc-500">{status.sourceAcquisition?.nextStep || "Prepara un plan para cubrir sources diarios."}</p>
                     </div>
-                    <Badge className={cn("w-fit border", sourceAcquisitionBadge(status.sourceAcquisition?.status || "not_prepared"))}>
-                      {status.sourceAcquisition?.status || "not_prepared"}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn("w-fit border", sourceAcquisitionBadge(status.sourceAcquisition?.status || "not_prepared"))}>
+                        {status.sourceAcquisition?.status || "not_prepared"}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-cyan-300/30 px-3 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                        disabled={sourceSupplyDropKitMutation.isPending}
+                        onClick={() => sourceSupplyDropKitMutation.mutate()}
+                        data-testid="prepare-clippers-source-supply-drop-kit-button"
+                      >
+                        {sourceSupplyDropKitMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-2 h-3.5 w-3.5" />}
+                        Drop kit
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-6">
                     <p>Slots: {status.sourceAcquisition?.totals.dailySlots || 0}</p>
@@ -9606,6 +16046,162 @@ export default function ClippersPage() {
                       </div>
                     ))}
                   </div>
+                  {status.sourceSupplyDropKit && (
+                    <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-source-supply-drop-kit">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-white">{status.sourceSupplyDropKit.markdownPath}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{status.sourceSupplyDropKit.nextStep}</p>
+                        </div>
+                        <Badge className={cn("w-fit border", sourceAcquisitionBadge(status.sourceSupplyDropKit.status))}>{status.sourceSupplyDropKit.status}</Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                        <p>Rows: {status.sourceSupplyDropKit.totals.items}</p>
+                        <p>Critical: {status.sourceSupplyDropKit.totals.critical}</p>
+                        <p>High: {status.sourceSupplyDropKit.totals.high}</p>
+                        <p>Missing/wk: {status.sourceSupplyDropKit.totals.weeklyMissingSourceSlots}</p>
+                        <p>Rights OK: {status.sourceSupplyDropKit.totals.rightsReadyAssets}</p>
+                      </div>
+                      <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.sourceSupplyDropKit.csvPath}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-orange-300/30 px-3 text-xs text-orange-100 hover:bg-orange-300/10"
+                          onClick={() => appendTrendCandidateBatchRows(status.sourceSupplyDropKit.items.map((item) => item.trendCandidateBatchRow))}
+                          disabled={!status.sourceSupplyDropKit.items.length}
+                          data-testid="add-source-supply-trend-candidate-rows-button"
+                        >
+                          <Search className="mr-2 h-3.5 w-3.5" />
+                          Trend rows
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-cyan-300/30 px-3 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                          onClick={() => appendSourceIntakeBatchRows(status.sourceSupplyDropKit.items.map((item) => item.intakeBatchRow))}
+                          disabled={!status.sourceSupplyDropKit.items.length}
+                          data-testid="add-source-supply-drop-kit-rows-button"
+                        >
+                          <UploadCloud className="mr-2 h-3.5 w-3.5" />
+                          Add all rows
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-sky-300/30 px-3 text-xs text-sky-100 hover:bg-sky-300/10"
+                          onClick={() => void copySourceDropManifestRows(status.sourceSupplyDropKit.items.map((item) => item.intakeBatchRow))}
+                          disabled={!status.sourceSupplyDropKit.items.length}
+                          data-testid="copy-source-drop-manifest-rows-button"
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Manifest CSV
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-white/10 px-3 text-xs text-zinc-200 hover:bg-white/5"
+                          onClick={() => appendSourceIntakeBatchRows(status.sourceSupplyDropKit.items.slice(0, 5).map((item) => item.intakeBatchRow))}
+                          disabled={!status.sourceSupplyDropKit.items.length}
+                        >
+                          <Plus className="mr-2 h-3.5 w-3.5" />
+                          Add 5
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-300/30 px-3 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                          onClick={() => appendLaunchEvidenceBatchRows(status.sourceSupplyDropKit.items.map((item) => item.rightsEvidenceBatchRow))}
+                          disabled={!status.sourceSupplyDropKit.items.length}
+                          data-testid="add-source-supply-rights-evidence-rows-button"
+                        >
+                          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                          Rights rows
+                        </Button>
+                      </div>
+                      {(status.sourceSupplyDropKit.categoryBatches || []).length > 0 && (
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          {status.sourceSupplyDropKit.categoryBatches.map((batch) => (
+                            <div key={batch.id} className="rounded-md border border-cyan-300/15 bg-black/25 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-white">{batch.label}</p>
+                                <Badge className={cn("shrink-0 border text-[10px]", sourceAcquisitionBadge(batch.priority))}>{batch.priority}</Badge>
+                              </div>
+                              <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                                <p>Items: {batch.items}</p>
+                                <p>Queries: {batch.viralSearchQueries.length}</p>
+                              </div>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/70">Drop dir: {batch.sourceDropDir}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-sky-100/70">Manifest: {batch.sourceDropManifestPath}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">README: {batch.sourceDropReadmePath}</p>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{batch.nextStep}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button size="sm" variant="outline" className="h-7 border-orange-300/20 bg-transparent px-2 text-xs text-orange-100 hover:bg-orange-300/10" onClick={() => setTrendCandidatesBatchText(batch.trendCandidateBatchTemplate || trendCandidatesBatchHeader)}>
+                                  Trend CSV
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10" onClick={() => setSourceIntakeBatchText(batch.intakeBatchTemplate || sourceIntakeBatchHeader)}>
+                                  Intake CSV
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-sky-300/20 bg-transparent px-2 text-xs text-sky-100 hover:bg-sky-300/10" onClick={() => void copySourceDropManifestRows(batch.intakeBatchRows)}>
+                                  Manifest
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10" onClick={() => setLaunchEvidenceBatchText(batch.rightsEvidenceBatchTemplate || launchEvidenceBatchHeader)}>
+                                  Rights CSV
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-3 grid gap-2 md:grid-cols-3">
+                        {status.sourceSupplyDropKit.items.slice(0, 6).map((item) => (
+                          <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{item.targetFileName}</p>
+                              <Badge className={cn("border text-[10px]", sourceAcquisitionBadge(item.priority))}>{item.priority}</Badge>
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">{item.suggestedTitle}</p>
+                            <p className="mt-2 text-xs leading-5 text-cyan-200">{item.viralSearchQueries?.[0]}</p>
+                            <div className="mt-2 space-y-1">
+                              {(item.viralScoreChecklist || []).slice(0, 2).map((criteria) => (
+                                <p key={criteria} className="text-xs leading-5 text-zinc-500">- {criteria}</p>
+                              ))}
+                            </div>
+                            <p className="mt-2 truncate text-xs text-amber-200">{item.nextStep}</p>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-orange-100 hover:bg-orange-300/10"
+                                onClick={() => appendTrendCandidateBatchRow(item.trendCandidateBatchRow)}
+                              >
+                                <Search className="mr-1 h-3 w-3" />
+                                Trend
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                                onClick={() => appendSourceIntakeBatchRows([item.intakeBatchRow])}
+                              >
+                                <Plus className="mr-1 h-3 w-3" />
+                                Intake
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                                onClick={() => appendLaunchEvidenceBatchRow(item.rightsEvidenceBatchRow)}
+                              >
+                                <ShieldCheck className="mr-1 h-3 w-3" />
+                                Rights
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-md border border-white/10 bg-black/35 p-3">
@@ -9662,6 +16258,84 @@ export default function ClippersPage() {
 
                 <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
                   <div className={cn(tunnelStackClass, "space-y-3")}>
+                    {status.sourceDropDiagnostic && (
+                      <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-source-drop-diagnostic">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white">Source drop diagnostic</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">{status.sourceDropDiagnostic.nextStep}</p>
+                            <p className="mt-2 break-all text-xs text-zinc-600">Reporte: {status.sourceDropDiagnostic.markdownPath}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">Repair CSV: {status.sourceDropDiagnostic.repairWorksheetCsvPath}</p>
+                          </div>
+                          <Badge className={cn("w-fit border", status.sourceDropDiagnostic.status === "ready" || status.sourceDropDiagnostic.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.sourceDropDiagnostic.status === "needs_rights" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                            {status.sourceDropDiagnostic.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-6">
+                          <p>Files: {status.sourceDropDiagnostic.totals.files}</p>
+                          <p>Import ready: {status.sourceDropDiagnostic.totals.importEligible}</p>
+                          <p>Manifest ready: {status.sourceDropDiagnostic.totals.manifestReady || 0}</p>
+                          <p>Manifest rows: {status.sourceDropDiagnostic.totals.manifestRows || 0}</p>
+                          <p>Placeholders: {status.sourceDropDiagnostic.totals.manifestPlaceholderRows || 0}</p>
+                          <p>Missing files: {status.sourceDropDiagnostic.totals.manifestMissingFiles || 0}</p>
+                          <p>Rights-ready: {status.sourceDropDiagnostic.totals.rightsReadyAssets}</p>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-3">
+                          {status.sourceDropDiagnostic.categories.map((category) => (
+                            <div key={category.category} className="rounded-md border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-xs font-medium text-white">{category.label}</p>
+                                <Badge className={cn("border text-[10px]", category.missingSourceAssets === 0 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-200")}>
+                                  {category.rightsReadyAssets}/{category.minimumWeeklySourceAssets}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 text-xs text-zinc-500">Drop: {category.dropFiles} · Import: {category.importEligible}</p>
+                              <p className="mt-1 text-xs text-zinc-500">Manifest: {category.manifestRows || 0} rows · {category.manifestPlaceholderRows || 0} pending</p>
+                              <p className="mt-1 text-xs text-zinc-500">Missing files: {category.manifestMissingFiles || 0} · Ready: {category.rightsReadyAssets}</p>
+                              <p className="mt-1 text-xs text-zinc-500">Assets: {category.sourceAssets} · Missing: {category.missingSourceAssets}</p>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{category.dropPath}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {status.sourceDropDiagnostic.manifests.length > 0 && (
+                          <div className="mt-3 grid gap-2 md:grid-cols-3">
+                            {status.sourceDropDiagnostic.manifests.slice(0, 6).map((manifest) => (
+                              <div key={manifest.relativePath} className="rounded-md border border-sky-300/15 bg-sky-950/10 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-medium text-white">{manifest.relativePath}</p>
+                                  <Badge className={cn("border text-[10px]", manifest.placeholderRows === 0 && manifest.missingFiles.length === 0 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-200")}>
+                                    {manifest.readyRows}/{manifest.rows}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                                  <p>Pending: {manifest.placeholderRows}</p>
+                                  <p>Missing: {manifest.missingFiles.length}</p>
+                                  <p>Proof: {manifest.evidenceReadyRows}</p>
+                                  <p>Expected: {manifest.expectedFiles.length}</p>
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-zinc-500">{manifest.issue || manifest.nextStep}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {status.sourceDropDiagnostic.files.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {status.sourceDropDiagnostic.files.slice(0, 4).map((file) => (
+                              <div key={file.relativePath} className="rounded-md border border-white/10 bg-black/30 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-medium text-white">{file.relativePath}</p>
+                                  <Badge className={cn("border text-[10px]", file.importEligible ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                    {file.manifestEvidenceReady ? "manifest ready" : file.importEligible ? "importable" : file.location}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-xs leading-4 text-zinc-500">{file.issue || file.nextStep}</p>
+                                {file.manifestPath && <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">{file.manifestPath}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium text-white">Assets detectados</p>
@@ -9684,13 +16358,19 @@ export default function ClippersPage() {
                         <div className="grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
                           <p>Scanned: {sourceDropImport.filesScanned}</p>
                           <p>Imported: {sourceDropImport.imported}</p>
-                          <p>Skipped: {sourceDropImport.skipped}</p>
+                          <p>Manifest rows: {sourceDropImport.manifestRows || 0}</p>
+                          <p>Rights written: {sourceDropImport.rightsEvidenceWritten || 0}</p>
+                        </div>
+                        <div className="mt-2 grid gap-2 text-xs text-zinc-500 md:grid-cols-3">
+                          <p>Manifests: {sourceDropImport.manifestFilesScanned || 0}</p>
+                          <p>Matched: {sourceDropImport.manifestMatched || 0}</p>
                           <p>Assets: {sourceDropImport.queue.sourceAssets.length}</p>
                         </div>
                         <p className="mt-2 text-xs leading-5 text-zinc-500">{sourceDropImport.nextStep}</p>
                         {sourceDropImport.items.slice(0, 4).map((item) => (
                           <p key={`${item.sourcePath}-${item.targetPath}`} className={cn("mt-2 break-all text-xs", item.status === "imported" ? "text-cyan-100" : "text-amber-200")}>
                             {item.status}: {item.fileName} {"->"} {item.targetPath || item.reason}
+                            {item.rightsEvidencePath ? ` · ${item.rightsEvidencePath}` : ""}
                           </p>
                         ))}
                       </div>

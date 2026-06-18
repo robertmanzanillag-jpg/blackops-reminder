@@ -7,13 +7,18 @@ import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { sendPushNotification } from "./push-notifications";
 import { sendTelegramPlainMessage } from "./telegram";
 import { DRIVE_APP_ROOT_FOLDER, DRIVE_BLACK_ROOM_VIDEOS_FOLDER, ensureAppDriveFolderPath, uploadLocalFileToDriveFolder } from "./google-drive";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "radio_video_edits", "03_listos_para_subir");
 const DEFAULT_FALLBACK_INPUT_DIR = path.join(process.cwd(), "radio_video_edits", "01_originales");
 const IG_RADIO_FOLDER_NAME = "Instagram";
 const TIKTOK_RADIO_FOLDER_NAME = "TikTok";
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 type RadioEditStatus = "queued" | "analyzing" | "needs_dj_name" | "rendering" | "completed" | "failed";
 
@@ -494,8 +499,9 @@ async function notifyMissingDjName(userId: string, pendingActionId: string, vide
   ].join("\n");
 
   const telegramConfig = await storage.getTelegramConfig(userId).catch(() => undefined);
-  if (TELEGRAM_BOT_TOKEN && telegramConfig?.enabled && telegramConfig.chatId) {
-    await sendTelegramPlainMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message).catch((error) => {
+  const botToken = getTelegramBotToken();
+  if (botToken && telegramConfig?.enabled && telegramConfig.chatId) {
+    await sendTelegramPlainMessage(botToken, telegramConfig.chatId, message).catch((error) => {
       console.warn("[radio-video-edit] Telegram notification failed:", error instanceof Error ? error.message : error);
     });
   }

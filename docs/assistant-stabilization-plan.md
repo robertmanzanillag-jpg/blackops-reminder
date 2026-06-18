@@ -9,10 +9,11 @@ Estado: completado localmente el 2026-06-17.
 - `npm run check` debe pasar sin errores TypeScript.
 - `npm run build` debe producir cliente y servidor.
 - `npm run test:ceo-assistant` debe pasar completo.
+- `npm run test:env-loader` debe cubrir el parser local de `.env`/`CEO_ASSISTANT_ENV` sin leer secretos reales.
 - Tests focalizados de dominios grandes deben pasar cuando se toquen:
   - `node --import tsx --test tests/revenue-engine.test.ts`
   - `node --import tsx --test tests/clippers-agent.test.ts`
-- `npm run ceo:smoke -- --user-id=<real-user-id> --chat-id=<telegram-chat-id>` debe ser el preflight operativo antes de declarar un deploy listo; cubre doctor, schema, backup/restore y readiness.
+- `npm run ceo:smoke -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID"` debe ser el preflight operativo antes de declarar un deploy listo; cubre doctor, schema, backup/restore preflight y readiness. Backup y restore reales se ejecutan con `ceo:backup` y `ceo:restore`.
 
 Cambios realizados:
 
@@ -26,21 +27,26 @@ Cambios realizados:
 Objetivo: que el asistente opere para Robert sin fallback silencioso de desarrollo.
 
 - Configurar `DATABASE_URL`, `SESSION_SECRET`, `LOCAL_AUTH_ENABLED=true`, `ALLOW_DEV_USER_FALLBACK=false`.
-- Crear usuario real con `npm run auth:create-user`.
-- Migrar datos desde `mock-user-123` con `npm run user:migrate -- --from=mock-user-123 --to=<real-user-id> --execute`.
-- Configurar `DEFAULT_USER_ID=<real-user-id>` para jobs single-user.
+- Crear usuario real con `export LOCAL_AUTH_USERNAME=ceo-admin`, `read -r -s LOCAL_AUTH_PASSWORD`, `export LOCAL_AUTH_PASSWORD`, `npm run auth:create-user -- --username="$LOCAL_AUTH_USERNAME" --password-env=LOCAL_AUTH_PASSWORD --print-user-id` y `unset LOCAL_AUTH_PASSWORD` para no dejar la contrasena en el historial del comando.
+- Migrar datos desde `mock-user-123` con `npm run user:migrate -- --from=mock-user-123 --to="$REAL_USER_ID" --execute`.
+- Configurar `DEFAULT_USER_ID=$REAL_USER_ID` para jobs single-user.
 - Confirmar que requests web/API autentican por sesion/provider, no por `DEFAULT_USER_ID`.
 - Configurar Telegram real: token, chat, webhook URL y `TELEGRAM_WEBHOOK_SECRET`.
 - Bloquear deploy si `ceo:doctor` detecta placeholders, secretos debiles, URL no HTTPS, fallback dev o `DEFAULT_USER_ID` desalineado.
 - Confirmar schema operativo con `npm run ceo:db-check -- --json` despues de `npm run db:push`.
 - Confirmar backup/restore con `npm run ceo:backup-check -- --json` antes de operar con datos reales.
+- Ejecutar backup real con `npm run ceo:backup -- --label="$BACKUP_LABEL" --execute` y probar restore contra staging con `RESTORE_DATABASE_URL="$RESTORE_DATABASE_URL" npm run ceo:restore -- --dump="$BACKUP_DIR/postgres.dump" --artifacts="$BACKUP_DIR/local-artifacts.tgz" --manifest="$BACKUP_DIR/backup-manifest.json" --artifacts-output-dir="restored-artifacts/$BACKUP_LABEL" --confirm-restore --execute`.
+- Cerrar salida con `npm run ceo:go-live -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID"`; `smoke_ready` se prueba ejecutando `ceo:smoke`, mientras backup real, restore staging, brief, comandos Telegram e historial se confirman como evidencia externa persistida desde el dashboard CEO, `POST /api/ceo/go-live/evidence` o `npm run ceo:go-live -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID" --confirm-check=backup_executed --note="backup manifest verified" --execute`.
 - Verificar:
-  - `npm run ceo:doctor -- --user-id=<real-user-id> --chat-id=<telegram-chat-id> --json`
+  - `npm run ceo:doctor -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID" --json`
   - `npm run ceo:db-check -- --json`
   - `npm run ceo:backup-check -- --json`
-  - `npm run ceo:readiness -- --user-id=<real-user-id>`
-  - `npm run ceo:smoke -- --user-id=<real-user-id> --chat-id=<telegram-chat-id>`
-  - `npm run ceo:send-brief -- --user-id=<real-user-id> --execute`
+  - `npm run ceo:backup -- --label="$BACKUP_LABEL" --execute`
+  - `RESTORE_DATABASE_URL="$RESTORE_DATABASE_URL" npm run ceo:restore -- --dump="$BACKUP_DIR/postgres.dump" --artifacts="$BACKUP_DIR/local-artifacts.tgz" --manifest="$BACKUP_DIR/backup-manifest.json" --artifacts-output-dir="restored-artifacts/$BACKUP_LABEL" --confirm-restore --execute`
+  - `npm run ceo:readiness -- --user-id="$REAL_USER_ID"`
+  - `npm run ceo:smoke -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID"`
+  - `npm run ceo:send-brief -- --user-id="$REAL_USER_ID" --execute`
+  - `npm run ceo:go-live -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID" --smoke-ready --backup-executed --restore-verified --brief-verified --telegram-commands-verified --conversation-history-verified`
 
 ## Fase 2 - Observabilidad y operacion
 
@@ -55,7 +61,9 @@ Objetivo: saber que paso, que fallo y que requiere accion sin abrir logs crudos.
   - Rate limits de auth local y Telegram webhook ya usan `app_rate_limit_buckets` con fallback en memoria si el schema aun no fue aplicado.
 - Mostrar en `/ceo` un bloque de "Sistema" con blockers accionables.
 - Mantener `npm run ceo:smoke` como smoke command unico para doctor/schema/backup/readiness y brief real opcional bajo `--send-brief --execute`.
+- El gate `ceo:go-live` no acepta evidencia manual persistida para `smoke_ready`; ese check debe venir de ejecutar el smoke. La evidencia persistida queda reservada para checks externos/manuales: backup real, restore staging, brief real, comandos Telegram e historial compartido. Esos checks se pueden confirmar/revocar desde dashboard/API o desde terminal con `--confirm-check=<check-id> --note=<nota-no-sensible> --execute` y `--revoke-check=<check-id> --execute`.
 - `npm run ceo:backup-check -- --json` valida herramientas de backup/restore y politica de artefactos locales sensibles antes de produccion real.
+- El backup local de artefactos (`local-artifacts.tgz`) cubre `revenue_engine_data`, `revenue_mockups`, `radio_video_edits`, `promo_video_edits` y `clippers_workspace`; excluye `CEO_ASSISTANT_ENV`, `.env`, `.env.local`, `credentials/` y `secrets/`, que requieren evidencia separada de backup cifrado externo con `CEO_BACKUP_SECRETS_ENCRYPTED=true`. Cada backup real escribe `backup-manifest.json` con checksums SHA-256 para validar restore.
 
 ## Fase 3 - Arquitectura modular
 
@@ -123,9 +131,17 @@ Estado: parcial. `DEFAULT_USER_ID` ya no autentica requests ni auto-vincula chat
   - Weekly summary update ya verifica el owner antes de mutar por id y tiene prueba de regresion.
   - Clippers daily plan, bootstrap, account setup/manual posting/production queue, credenciales/plataforma/OAuth, imports/records/render/automation y permisos/fuentes/trends/external execution request-bound ya reciben el usuario autenticado y tienen prueba de regresion.
   - Reportes guardados de Clippers ya persisten `userId`; `/api/clippers/reports/:id` exige el usuario autenticado antes de devolver un reporte y tiene pruebas de regresion.
+  - Promo Video ya usa workspaces locales por usuario bajo `promo_video_edits/users/<user-id>`; status/source/import/delete/generate reciben el usuario autenticado y el script respeta `PROMO_OUTPUT_DIR` para no escribir salidas compartidas.
+  - Revenue Engine ya no comparte los JSON globales por API: las rutas autentificadas usan `revenue_engine_data/users/<user-id>/*.json` con user id sanitizado y acceso serializado mientras el modulo mantenga arrays en memoria. Sigue pendiente migrarlo a tablas/storage transaccional por usuario para multiusuario real con concurrencia fuerte.
+  - Code Agent y GitHub tools quedan bloqueados por API a usuarios distintos de `DEFAULT_USER_ID` hasta implementar permisos por usuario para filesystem, schema DB y repositorios remotos.
+  - Clippers API queda bloqueada a usuarios distintos de `DEFAULT_USER_ID` mientras `clippers_workspace`, token vault y artefactos de launch sigan siendo locales y compartidos; aun asi, OAuth connections y token vault records ya guardan `ownerUserId` para dejar auditoria explicita del owner single-user.
+  - OAuth callbacks publicos de Google Drive, Canva, Zoho y Clippers quedan exceptuados de auth request-bound solo para completar redirects externos; los endpoints de inicio/gestion siguen protegidos. En Clippers, el callback publico se vincula al `DEFAULT_USER_ID` configurado y no queda anonimo.
+  - Paginas HTML de OAuth callback ya escapan texto dinamico antes de renderizarlo y Zoho ya no imprime refresh tokens en pantalla.
 - Mover rate limit y Telegram dedupe de memoria a Postgres o Redis.
   - Telegram dedupe movido a Postgres con fallback en memoria.
   - Rate limit de auth local y Telegram webhook movido a Postgres con fallback en memoria.
 - Agregar backup/restore probado para Postgres y artefactos locales importantes.
-  - Preflight local implementado con `ceo:backup-check`.
+  - Preflight local implementado con `ceo:backup-check`; cubre artefactos locales no sensibles incluyendo `clippers_workspace` y separa el respaldo cifrado externo requerido para `CEO_ASSISTANT_ENV`, `.env`, `.env.local`, `credentials/` y `secrets/`.
+  - Comandos ejecutables agregados: `ceo:backup` hace dry-run por defecto, requiere `--execute` y escribe `backup-manifest.json`; `ceo:restore` apunta por defecto a `RESTORE_DATABASE_URL`, requiere `--confirm-restore --execute`, puede validar `--manifest` antes de restaurar y puede extraer `local-artifacts.tgz` en un directorio separado para validar recuperacion de artefactos sin pisar el workspace.
+  - `.gitignore` protege salidas locales generadas (`radio_video_edits`, `promo_video_edits`, `clippers_workspace`, `revenue_engine_data`, `revenue_mockups`, `backups`, `.backups`) para reducir riesgo de subir datos operativos por accidente.
   - Falta ejecutar backup real y prueba de restore contra entorno de produccion/staging.

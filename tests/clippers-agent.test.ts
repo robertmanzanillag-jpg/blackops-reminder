@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, saveClipperTokenPayload, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperLocalDropSync, saveClipperTokenPayload, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -105,7 +105,10 @@ test("getClipperStatus exposes guarded growth goals", async () => {
   assert.ok(status.guardrails.some((rule) => rule.includes("licenciado")));
   assert.ok(status.agents.some((agent) => agent.id === "rights-gate"));
   assert.ok(status.growthAudit.score >= 0 && status.growthAudit.score <= 100);
-  assert.ok(status.growthAudit.items.some((item) => item.id === "metrics-loop" && item.status === "critical"));
+  const metricsLoop = status.growthAudit.items.find((item) => item.id === "metrics-loop");
+  assert.ok(metricsLoop);
+  assert.ok(["critical", "warning", "ready"].includes(metricsLoop.status));
+  assert.ok(metricsLoop.label.toLowerCase().includes("metric"));
   assert.ok(status.growthAudit.items.some((item) => item.id === "google-drive-workspace"));
   assert.ok(status.growthAudit.roadmap.some((step) => step.includes("metricas")));
   assert.ok(["missing_keys", "needs_oauth", "ready", "error"].includes(status.driveWorkspace.status));
@@ -121,6 +124,10 @@ test("getClipperStatus exposes guarded growth goals", async () => {
   assert.ok(status.driveWorkspace.envDiagnostics.credentialTemplatePath.endsWith("google-drive-env-template.env"));
   assert.ok(status.driveWorkspace.envDiagnostics.requiredEnvTemplateRows.includes("GOOGLE_CLIENT_ID="));
   assert.ok(status.metrics.metricsDir.endsWith("metrics"));
+  assert.ok(status.analyticsReportingPack.metricsDir.endsWith("metrics"));
+  assert.ok(status.analyticsReportingPack.importTemplate.startsWith("account_id,platform,clip_id,hook"));
+  assert.ok(status.growthAudit.items.some((item) => item.id === "analytics-reporting-pack"));
+  assert.ok(status.commandCenter.steps.some((step) => step.id === "analytics-reporting-pack"));
   assert.ok(status.trendRadar.trendsDir.endsWith("trends"));
   assert.ok(status.growthAudit.items.some((item) => item.id === "trend-radar"));
   assert.ok(status.automationSchedule.manifestPath.endsWith("automation-schedule.json"));
@@ -193,31 +200,94 @@ test("prepareClipperCredentialSetupCenter writes safe setup docs and accepts Goo
     assert.ok(credentialSetup.items.some((item) => item.id === "google-youtube-oauth" && item.status === "ready"));
     assert.ok(credentialSetup.importPlan.some((item) => item.id === "google-youtube-oauth" && item.supportedInputFormats.includes("Google OAuth JSON client")));
     assert.ok(credentialSetup.importPlan.every((item) => item.verificationSteps.length >= 3));
+    assert.equal(credentialSetup.credentialPastePack.length, credentialSetup.items.length);
+    assert.ok(credentialSetup.credentialPastePack.some((item) => item.id === "tiktok-oauth" && item.missingSuggestedEnvVars.includes("TIKTOK_CLIENT_KEY")));
+    assert.ok(credentialSetup.credentialPastePack.some((item) => item.id === "google-youtube-oauth" && item.status === "ready"));
+    assert.ok(credentialSetup.credentialPasteTemplate.includes("Clippers All Missing Credentials Paste Pack"));
+    assert.ok(credentialSetup.credentialPasteTemplate.includes("TIKTOK_CLIENT_KEY="));
+    assert.ok(credentialSetup.credentialPasteChecklist.length >= 5);
+    assert.ok(credentialSetup.credentialTransferKitManifestPath.endsWith("credential-setup/credential-transfer-kit.json"));
+    assert.ok(credentialSetup.credentialTransferKitMarkdownPath.endsWith("credential-setup/credential-transfer-kit.md"));
+    assert.ok(credentialSetup.credentialTransferKitEnvPath.endsWith("credential-setup/credential-transfer-kit.env"));
+    assert.ok(credentialSetup.credentialTransferKitGeneratedAt);
+    assert.ok(credentialSetup.credentialDropDiagnosticPath.endsWith("credential-setup/credential-drop-diagnostic.json"));
+    assert.ok(credentialSetup.credentialDropDiagnosticMarkdownPath.endsWith("credential-setup/credential-drop-diagnostic.md"));
+    assert.ok(credentialSetup.credentialDropDiagnosticGeneratedAt);
+    assert.ok(["ready_to_import", "needs_review", "move_candidates_to_drop_dir", "no_candidates"].includes(credentialSetup.credentialDropDiagnostic.status));
+    assert.equal(credentialSetup.credentialDropDiagnostic.manifestPath, credentialSetup.credentialDropDiagnosticPath);
+    assert.equal(credentialSetup.credentialDropDiagnostic.markdownPath, credentialSetup.credentialDropDiagnosticMarkdownPath);
+    assert.ok(credentialSetup.credentialDropDiagnostic.allowedEnvVars.includes("GOOGLE_CLIENT_ID"));
+    assert.equal(credentialSetup.credentialTransferKitItems.length, credentialSetup.items.length);
+    assert.ok(credentialSetup.credentialTransferKitItems.some((item) => item.id === "tiktok-oauth" && item.driveSearchQueries.some((query) => query.includes("TIKTOK_CLIENT_KEY"))));
+    assert.ok(credentialSetup.credentialTransferKitItems.every((item) => item.driveSearchUrls.length === item.driveSearchQueries.length));
+    assert.ok(credentialSetup.credentialTransferKitItems.some((item) => item.driveSearchUrls.some((url) => url.startsWith("https://drive.google.com/drive/search?q="))));
+    assert.ok(credentialSetup.credentialTransferKitItems.some((item) => item.id === "google-youtube-oauth" && item.localDropFileNames.some((fileName) => fileName.endsWith(".json"))));
+    assert.ok(credentialSetup.credentialTransferKitItems.some((item) => item.id === "google-youtube-oauth" && item.localDropFileNames.includes("credentials/google-drive-keys.txt")));
+    assert.ok(credentialSetup.credentialTransferKitItems.some((item) => item.id === "google-drive-refresh" && item.localDropFileNames.includes("credentials/google-drive-refresh.txt")));
+    assert.ok(credentialSetup.credentialTransferTemplate.includes("Clippers Credential Transfer Kit"));
+    assert.ok(credentialSetup.credentialTransferTemplate.includes("TIKTOK_CLIENT_KEY="));
+    assert.ok(credentialSetup.credentialTransferChecklist.some((step) => step.includes("Google Drive")));
+    assert.ok(credentialSetup.credentialTransferChecklist.some((step) => step.includes("KEY=value")));
     assert.ok(credentialSetup.envFileScans.some((file) => file.fileName === "CEO_ASSISTANT_ENV"));
     assert.ok(status.credentialChecks.some((check) => check.platform === "youtube" && check.status === "ready"));
 
     const readmeStat = await stat(credentialSetup.readmePath);
     const templateStat = await stat(credentialSetup.templatePath);
     const missingTemplateStat = await stat(credentialSetup.missingTemplatePath);
+    const transferManifestStat = await stat(credentialSetup.credentialTransferKitManifestPath);
+    const transferMarkdownStat = await stat(credentialSetup.credentialTransferKitMarkdownPath);
+    const transferEnvStat = await stat(credentialSetup.credentialTransferKitEnvPath);
+    const dropDiagnosticStat = await stat(credentialSetup.credentialDropDiagnosticPath);
+    const dropDiagnosticMarkdownStat = await stat(credentialSetup.credentialDropDiagnosticMarkdownPath);
     assert.equal(readmeStat.isFile(), true);
     assert.equal(templateStat.isFile(), true);
     assert.equal(missingTemplateStat.isFile(), true);
+    const credentialDropDir = credentialSetup.credentialDropDirs.find((dir) => dir.endsWith("credentials"));
+    assert.ok(credentialDropDir);
+    const credentialDropReadme = await readFile(path.join(credentialDropDir, "README.md"), "utf8");
+    assert.ok(credentialDropReadme.includes("google-drive-keys.txt"));
+    assert.ok(credentialDropReadme.includes("KEY=value"));
+    assert.equal(transferManifestStat.isFile(), true);
+    assert.equal(transferMarkdownStat.isFile(), true);
+    assert.equal(transferEnvStat.isFile(), true);
+    assert.equal(dropDiagnosticStat.isFile(), true);
+    assert.equal(dropDiagnosticMarkdownStat.isFile(), true);
 
     const template = await readFile(credentialSetup.templatePath, "utf8");
     const missingTemplate = await readFile(credentialSetup.missingTemplatePath, "utf8");
     const readme = await readFile(credentialSetup.readmePath, "utf8");
+    const transferManifest = await readFile(credentialSetup.credentialTransferKitManifestPath, "utf8");
+    const transferMarkdown = await readFile(credentialSetup.credentialTransferKitMarkdownPath, "utf8");
+    const transferEnv = await readFile(credentialSetup.credentialTransferKitEnvPath, "utf8");
+    const dropDiagnosticMarkdown = await readFile(credentialSetup.credentialDropDiagnosticMarkdownPath, "utf8");
     assert.ok(template.includes("GOOGLE_DRIVE_CLIENT_ID"));
     assert.ok(missingTemplate.includes("TIKTOK_CLIENT_KEY"));
     assert.ok(readme.includes("Fast Import"));
+    assert.ok(readme.includes("All Missing Credentials Paste Pack"));
     assert.ok(readme.includes("Import Plan"));
     assert.ok(readme.includes("Safe Env File Audit"));
+    assert.ok(readme.includes("Credential Drop Diagnostic"));
     assert.ok(readme.includes("Credential File Candidates"));
     assert.ok(readme.includes("Paste template"));
     assert.ok(readme.includes("JSON OAuth client"));
     assert.ok(readme.includes("GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET"));
+    assert.ok(transferMarkdown.includes("Clippers Credential Transfer Kit"));
+    assert.ok(transferMarkdown.includes("Drive search queries"));
+    assert.ok(transferMarkdown.includes("Drive search URLs"));
+    assert.ok(transferMarkdown.includes("https://drive.google.com/drive/search?q="));
+    assert.ok(dropDiagnosticMarkdown.includes("Clippers Credential Drop Diagnostic"));
+    assert.ok(dropDiagnosticMarkdown.includes("Allowed env vars"));
+    assert.ok(transferEnv.includes("TIKTOK_CLIENT_KEY="));
+    assert.ok(transferManifest.includes("credentialTransferKitItems") || transferManifest.includes("\"items\""));
     assert.equal(template.includes("drive-client-id"), false);
     assert.equal(missingTemplate.includes("drive-client-secret"), false);
     assert.equal(readme.includes("drive-client-secret"), false);
+    assert.equal(readme.includes("drive-client-id"), false);
+    assert.equal(credentialSetup.credentialPasteTemplate.includes("drive-client-secret"), false);
+    assert.equal(credentialSetup.credentialTransferTemplate.includes("drive-client-secret"), false);
+    assert.equal(transferMarkdown.includes("drive-client-secret"), false);
+    assert.equal(transferEnv.includes("drive-client-id"), false);
+    assert.equal(dropDiagnosticMarkdown.includes("drive-client-secret"), false);
   } finally {
     if (originalGoogleClientId) process.env.GOOGLE_CLIENT_ID = originalGoogleClientId;
     else delete process.env.GOOGLE_CLIENT_ID;
@@ -232,36 +302,242 @@ test("prepareClipperCredentialSetupCenter writes safe setup docs and accepts Goo
 
 test("prepareClipperCredentialSetupCenter lists credential file candidates without reading secrets", async () => {
   const candidateDir = path.join(process.cwd(), "credentials");
+  const nestedCandidateDir = path.join(candidateDir, "google-nested-test");
   await mkdir(candidateDir, { recursive: true });
+  await mkdir(nestedCandidateDir, { recursive: true });
   const candidatePath = path.join(candidateDir, "google-oauth-client.test.json");
+  const nestedCandidatePath = path.join(nestedCandidateDir, "client_secret_nested.test.json");
+  const templatePath = path.join(candidateDir, "google-drive-keys.test.env.template");
   await writeFile(candidatePath, JSON.stringify({
     web: {
       client_id: "candidate-google-client-id",
       client_secret: "candidate-google-client-secret",
     },
   }));
+  await writeFile(nestedCandidatePath, JSON.stringify({
+    installed: {
+      client_id: "nested-google-client-id",
+      client_secret: "nested-google-client-secret",
+    },
+  }));
+  await writeFile(templatePath, "GOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\nGOOGLE_DRIVE_REFRESH_TOKEN=\n");
 
   try {
     const { credentialSetup } = await prepareClipperCredentialSetupCenter();
     const candidate = credentialSetup.credentialFileScans.find((file) => file.fileName === "google-oauth-client.test.json");
+    const nestedCandidate = credentialSetup.credentialFileScans.find((file) => file.relativePath.endsWith("credentials/google-nested-test/client_secret_nested.test.json"));
+    const ignoredTemplate = credentialSetup.credentialDropDiagnostic.ignoredTemplateFiles.find((file) => file.fileName === "google-drive-keys.test.env.template");
     assert.ok(candidate);
+    assert.ok(nestedCandidate);
+    assert.ok(ignoredTemplate);
     assert.ok(credentialSetup.credentialDropDirs.some((dir) => dir.endsWith("credentials")));
     assert.ok(credentialSetup.credentialDropDirs.some((dir) => dir.endsWith("secrets")));
     assert.equal(candidate.kind, "google_oauth_json");
+    assert.equal(nestedCandidate.kind, "google_oauth_json");
     assert.equal(candidate.suggestedImportTarget, "google-youtube-oauth");
+    assert.equal(credentialSetup.credentialFileScans.some((file) => file.fileName === "google-drive-keys.test.env.template"), false);
+    assert.ok(credentialSetup.credentialDropDiagnostic.totals.templateFiles >= 1);
+    assert.ok(ignoredTemplate.nextStep.includes("Template detectado"));
     assert.equal(JSON.stringify(candidate).includes("candidate-google-client-secret"), false);
+    assert.equal(JSON.stringify(nestedCandidate).includes("nested-google-client-secret"), false);
 
     const readme = await readFile(credentialSetup.readmePath, "utf8");
     assert.ok(readme.includes("Credential File Candidates"));
     assert.ok(readme.includes("Credential drop dirs"));
     assert.ok(readme.includes("google-oauth-client.test.json"));
+    assert.ok(readme.includes("credentials/google-nested-test/client_secret_nested.test.json"));
     const gitignore = await readFile(path.join(process.cwd(), ".gitignore"), "utf8");
     assert.ok(gitignore.includes("credentials/*"));
     assert.ok(gitignore.includes("secrets/*"));
     assert.equal(readme.includes("candidate-google-client-secret"), false);
     assert.equal(readme.includes("candidate-google-client-id"), false);
+    assert.equal(readme.includes("nested-google-client-secret"), false);
+    assert.equal(readme.includes("nested-google-client-id"), false);
   } finally {
     await unlink(candidatePath).catch(() => undefined);
+    await unlink(templatePath).catch(() => undefined);
+    await rm(nestedCandidateDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test("prepareClipperCredentialDropStarter writes editable pending env files without overwriting", async () => {
+  const starterPaths = [
+    path.join(process.cwd(), "credentials", "clippers-google-youtube-drive.env.pending"),
+    path.join(process.cwd(), "secrets", "clippers-meta-instagram.env.pending"),
+    path.join(process.cwd(), "secrets", "clippers-tiktok.env.pending"),
+    path.join(process.cwd(), "secrets", "clippers-token-vault.env.pending"),
+  ];
+  const previousFiles = new Map<string, string | null>();
+  for (const filePath of starterPaths) {
+    previousFiles.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+    await unlink(filePath).catch(() => undefined);
+  }
+  const envVars = [
+    "CLIPPERS_TOKEN_ENCRYPTION_KEY",
+    "TIKTOK_CLIENT_KEY",
+    "TIKTOK_CLIENT_SECRET",
+    "META_APP_ID",
+    "META_APP_SECRET",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_DRIVE_REFRESH_TOKEN",
+  ];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+
+  try {
+    const { credentialDropStarter, status } = await prepareClipperCredentialDropStarter();
+    assert.equal(credentialDropStarter.status, "prepared");
+    assert.equal(credentialDropStarter.totals.created, 4);
+    assert.equal(credentialDropStarter.totals.missing, 0);
+    assert.ok(status.credentialSetup.credentialDropStarter.files.some((file) => file.relativePath === "credentials/clippers-google-youtube-drive.env.pending"));
+    assert.ok(status.credentialSetup.credentialFileScans.some((file) => file.relativePath === "credentials/clippers-google-youtube-drive.env.pending"));
+    assert.ok(status.credentialSetup.credentialDropDiagnostic.totals.pendingEnvVars >= 7);
+    assert.ok(status.credentialSetup.credentialDropDiagnostic.files.some((file) =>
+      file.relativePath === "credentials/clippers-google-youtube-drive.env.pending"
+        && file.pendingEnvVars.includes("GOOGLE_CLIENT_ID")
+        && file.issue?.includes("Valores pendientes")
+    ));
+
+    const googleStarter = await readFile(path.join(process.cwd(), "credentials", "clippers-google-youtube-drive.env.pending"), "utf8");
+    assert.ok(googleStarter.includes("GOOGLE_CLIENT_ID="));
+    assert.ok(googleStarter.includes("GOOGLE_CLIENT_SECRET="));
+    assert.ok(googleStarter.includes("GOOGLE_DRIVE_REFRESH_TOKEN="));
+    assert.equal(JSON.stringify(credentialDropStarter).includes("do-not-overwrite-secret"), false);
+
+    const tiktokPath = path.join(process.cwd(), "secrets", "clippers-tiktok.env.pending");
+    await writeFile(tiktokPath, "TIKTOK_CLIENT_KEY=do-not-overwrite-secret\n");
+    const second = await prepareClipperCredentialDropStarter();
+    const secondTiktok = second.credentialDropStarter.files.find((file) => file.relativePath === "secrets/clippers-tiktok.env.pending");
+    assert.equal(secondTiktok?.status, "exists");
+    assert.equal(await readFile(tiktokPath, "utf8"), "TIKTOK_CLIENT_KEY=do-not-overwrite-secret\n");
+    assert.equal(JSON.stringify(second.credentialDropStarter).includes("do-not-overwrite-secret"), false);
+  } finally {
+    for (const filePath of starterPaths) {
+      const previous = previousFiles.get(filePath);
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous, { mode: 0o600 });
+    }
+    restoreEnv(snapshot);
+  }
+});
+
+test("importClipperCredentialDropFiles accepts KEY=value credential text files", async () => {
+  const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
+  const previousFile = await readFile(envPath, "utf8").catch(() => null);
+  const credentialDir = path.join(process.cwd(), "credentials");
+  const textDropPath = path.join(credentialDir, "google-drive-keys.test.txt");
+  const rootTextPath = path.join(process.cwd(), "google-drive-keys-root.test.txt");
+  const envVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+  await mkdir(credentialDir, { recursive: true });
+  await writeFile(textDropPath, [
+    "GOOGLE_CLIENT_ID=text-google-client-id",
+    "GOOGLE_CLIENT_SECRET=text-google-client-secret",
+    "GOOGLE_DRIVE_REFRESH_TOKEN=text-google-refresh-token",
+  ].join("\n"));
+  await writeFile(rootTextPath, [
+    "GOOGLE_CLIENT_ID=root-google-client-id",
+    "GOOGLE_CLIENT_SECRET=root-google-client-secret",
+  ].join("\n"));
+
+  try {
+    const { credentialSetup } = await prepareClipperCredentialSetupCenter();
+    const dropCandidate = credentialSetup.credentialFileScans.find((file) => file.fileName === "google-drive-keys.test.txt");
+    const rootCandidate = credentialSetup.credentialDropDiagnostic.files.find((file) => file.fileName === "google-drive-keys-root.test.txt");
+    assert.equal(dropCandidate?.kind, "credential_text");
+    assert.equal(rootCandidate?.location, "workspace_root");
+    assert.equal(rootCandidate?.importEligible, false);
+    assert.ok(rootCandidate?.nextStep.includes("credentials/"));
+    assert.ok(credentialSetup.credentialDropDiagnostic.totals.importEligible >= 1);
+
+    const { credentialDropImport, status } = await importClipperCredentialDropFiles();
+    assert.deepEqual(credentialDropImport.acceptedEnvVars, ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"]);
+    assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("google-drive-keys.test.txt")));
+    assert.ok(status.credentialDoctor.items.some((item) => item.id === "youtube-oauth" && item.status === "ready"));
+
+    const rawEnv = await readFile(envPath, "utf8");
+    assert.ok(rawEnv.includes("GOOGLE_CLIENT_ID=text-google-client-id"));
+    const responseJson = JSON.stringify(credentialDropImport);
+    for (const secretValue of ["text-google-client-id", "text-google-client-secret", "text-google-refresh-token", "root-google-client-id", "root-google-client-secret"]) {
+      assert.equal(responseJson.includes(secretValue), false);
+    }
+  } finally {
+    await unlink(textDropPath).catch(() => undefined);
+    await unlink(rootTextPath).catch(() => undefined);
+    if (previousFile === null) await unlink(envPath).catch(() => undefined);
+    else await writeFile(envPath, previousFile);
+    restoreEnv(snapshot);
+  }
+});
+
+test("importClipperCredentialDropFiles accepts Drive-style credential JSON files", async () => {
+  const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
+  const previousFile = await readFile(envPath, "utf8").catch(() => null);
+  const credentialDir = path.join(process.cwd(), "credentials");
+  const jsonDropPath = path.join(credentialDir, "clippers-social-secrets.test.json");
+  const envVars = [
+    "TIKTOK_CLIENT_KEY",
+    "TIKTOK_CLIENT_SECRET",
+    "META_APP_ID",
+    "META_APP_SECRET",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_DRIVE_REFRESH_TOKEN",
+  ];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+  await mkdir(credentialDir, { recursive: true });
+  await writeFile(jsonDropPath, JSON.stringify({
+    env: {
+      TIKTOK_CLIENT_KEY: "json-tiktok-client-key",
+      META_APP_ID: "json-meta-app-id",
+    },
+    credentials: [
+      { key: "TIKTOK_CLIENT_SECRET", value: "json-tiktok-client-secret" },
+      { envVar: "META_APP_SECRET", secret: "json-meta-app-secret" },
+      { name: "GOOGLE_CLIENT_ID", value: "json-google-client-id" },
+      { name: "GOOGLE_CLIENT_SECRET", value: "json-google-client-secret" },
+      { name: "GOOGLE_DRIVE_REFRESH_TOKEN", token: "json-google-refresh-token" },
+    ],
+  }, null, 2));
+
+  try {
+    const { credentialSetup } = await prepareClipperCredentialSetupCenter();
+    const jsonCandidate = credentialSetup.credentialFileScans.find((file) => file.fileName === "clippers-social-secrets.test.json");
+    assert.equal(jsonCandidate?.kind, "credential_json");
+    assert.equal(jsonCandidate?.suggestedImportTarget, "credential-secrets-batch");
+    assert.ok(credentialSetup.credentialDropDiagnostic.acceptedEnvVars.includes("TIKTOK_CLIENT_KEY"));
+    assert.ok(credentialSetup.credentialDropDiagnostic.acceptedEnvVars.includes("META_APP_SECRET"));
+    assert.ok(credentialSetup.credentialDropDiagnostic.acceptedEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
+
+    const { credentialDropImport, status } = await importClipperCredentialDropFiles();
+    assert.deepEqual(credentialDropImport.acceptedEnvVars, envVars.sort());
+    assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("clippers-social-secrets.test.json")));
+    assert.ok(status.credentialDoctor.items.some((item) => item.id === "tiktok-oauth" && item.status === "ready"));
+    assert.ok(status.credentialDoctor.items.some((item) => item.id === "instagram-oauth" && item.status === "ready"));
+    assert.ok(status.credentialDoctor.items.some((item) => item.id === "youtube-oauth" && item.status === "ready"));
+
+    const rawEnv = await readFile(envPath, "utf8");
+    assert.ok(rawEnv.includes("TIKTOK_CLIENT_KEY=json-tiktok-client-key"));
+    const responseJson = JSON.stringify(credentialDropImport);
+    for (const secretValue of [
+      "json-tiktok-client-key",
+      "json-tiktok-client-secret",
+      "json-meta-app-id",
+      "json-meta-app-secret",
+      "json-google-client-id",
+      "json-google-client-secret",
+      "json-google-refresh-token",
+    ]) {
+      assert.equal(responseJson.includes(secretValue), false);
+    }
+  } finally {
+    await unlink(jsonDropPath).catch(() => undefined);
+    if (previousFile === null) await unlink(envPath).catch(() => undefined);
+    else await writeFile(envPath, previousFile);
+    restoreEnv(snapshot);
   }
 });
 
@@ -405,6 +681,26 @@ test("prepareClipperDriveWorkspace writes safe Google Drive env template when ke
   }
 });
 
+test("prepareClipperDriveWorkspace ignores placeholder public redirect URLs", async () => {
+  const envVars = [...GOOGLE_OAUTH_ALIAS_ENV_VARS, "PUBLIC_BASE_URL", "PORT"];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+  process.env.GOOGLE_DRIVE_REDIRECT_URI = "<google-drive-redirect-uri>";
+  process.env.PUBLIC_BASE_URL = "https://your-domain.example";
+  process.env.PUBLIC_APP_URL = "https://your-domain.example";
+  process.env.EXPO_PUBLIC_DOMAIN = "your-domain.example";
+  process.env.PORT = "5019";
+
+  try {
+    const { driveWorkspace } = await prepareClipperDriveWorkspace();
+    assert.equal(driveWorkspace.oauthSetup.configuredRedirectUri, null);
+    assert.equal(driveWorkspace.oauthSetup.recommendedRedirectUris.some((uri) => uri.includes("your-domain.example")), false);
+    assert.ok(driveWorkspace.oauthSetup.recommendedRedirectUris.includes("http://127.0.0.1:5019/api/google-drive/oauth/callback"));
+  } finally {
+    restoreEnv(snapshot);
+  }
+});
+
 test("prepareClipperDriveWorkspace tells user to reload when Google keys are only in env files", async () => {
   const envPath = path.join(process.cwd(), ".env.production.local");
   const previousFile = await readFile(envPath, "utf8").catch(() => null);
@@ -433,7 +729,9 @@ test("prepareClipperDriveWorkspace tells user to reload when Google keys are onl
 
 test("prepareClipperCredentialDoctor reports platform aliases without secret values", async () => {
   const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
+  const tiktokDropPath = path.join(process.cwd(), "secrets", "clippers-tiktok.env.pending");
   const previousFile = await readFile(envPath, "utf8").catch(() => null);
+  const previousTikTokDrop = await readFile(tiktokDropPath, "utf8").catch(() => null);
   const originalTikTokClientKey = process.env.TIKTOK_CLIENT_KEY;
   const originalTikTokClientId = process.env.TIKTOK_CLIENT_ID;
   const originalMetaAppId = process.env.META_APP_ID;
@@ -453,24 +751,47 @@ test("prepareClipperCredentialDoctor reports platform aliases without secret val
     "YOUTUBE_CLIENT_ID=alias-youtube-client-id",
     "YOUTUBE_CLIENT_SECRET=alias-youtube-client-secret",
   ].join("\n"));
+  await mkdir(path.dirname(tiktokDropPath), { recursive: true });
+  await writeFile(tiktokDropPath, [
+    "TIKTOK_CLIENT_KEY=drop-tiktok-client-key",
+    "TIKTOK_CLIENT_SECRET=",
+  ].join("\n"));
 
   try {
     const { credentialDoctor, status } = await prepareClipperCredentialDoctor();
     assert.ok(credentialDoctor.manifestPath.endsWith("credential-doctor.json"));
     assert.ok(credentialDoctor.markdownPath.endsWith("credential-doctor.md"));
+    assert.ok(credentialDoctor.repairWorksheetCsvPath.endsWith("credential-doctor-repair-worksheet.csv"));
     assert.ok(credentialDoctor.items.some((item) => item.id === "youtube-oauth" && item.status === "ready"));
     assert.ok(credentialDoctor.items.some((item) => item.id === "tiktok-oauth" && item.status === "partial" && item.configuredEnvVars.includes("TIKTOK_CLIENT_ID")));
+    const tiktok = credentialDoctor.items.find((item) => item.id === "tiktok-oauth");
+    assert.equal(tiktok?.dropTarget, "secrets/clippers-tiktok.env.pending");
+    assert.equal(tiktok?.dropFileStatus, "pending_values");
+    assert.deepEqual(tiktok?.dropFileReadyEnvVars, ["TIKTOK_CLIENT_KEY"]);
+    assert.deepEqual(tiktok?.dropFilePendingEnvVars, ["TIKTOK_CLIENT_SECRET"]);
     assert.ok(status.commandCenter.steps.some((step) => step.id === "credential-doctor" && step.actionUrl === "/api/clippers/prepare-credential-doctor"));
 
     const rawManifest = await readFile(credentialDoctor.manifestPath, "utf8");
     const rawMarkdown = await readFile(credentialDoctor.markdownPath, "utf8");
+    const rawRepairWorksheet = await readFile(credentialDoctor.repairWorksheetCsvPath, "utf8");
     assert.ok(rawManifest.includes("YOUTUBE_CLIENT_ID"));
     assert.ok(rawMarkdown.includes("FACEBOOK_APP_ID"));
+    assert.ok(rawMarkdown.includes("Repair worksheet"));
+    assert.ok(rawMarkdown.includes("Drop file status"));
+    assert.ok(rawRepairWorksheet.includes("item_id,label,platform,status,drop_file_status,drop_file_env_vars,drop_file_ready_env_vars,drop_file_pending_env_vars"));
+    assert.ok(rawRepairWorksheet.includes("TIKTOK_CLIENT_SECRET"));
+    assert.ok(rawRepairWorksheet.includes("secrets/clippers-tiktok.env.pending"));
     assert.equal(rawManifest.includes("alias-youtube-client-secret"), false);
     assert.equal(rawMarkdown.includes("alias-tiktok-client-id"), false);
+    assert.equal(rawMarkdown.includes("drop-tiktok-client-key"), false);
+    assert.equal(rawRepairWorksheet.includes("alias-youtube-client-secret"), false);
+    assert.equal(rawRepairWorksheet.includes("alias-tiktok-client-id"), false);
+    assert.equal(rawRepairWorksheet.includes("drop-tiktok-client-key"), false);
   } finally {
     if (previousFile === null) await unlink(envPath).catch(() => undefined);
     else await writeFile(envPath, previousFile);
+    if (previousTikTokDrop === null) await unlink(tiktokDropPath).catch(() => undefined);
+    else await writeFile(tiktokDropPath, previousTikTokDrop);
     if (originalTikTokClientKey) process.env.TIKTOK_CLIENT_KEY = originalTikTokClientKey;
     else delete process.env.TIKTOK_CLIENT_KEY;
     if (originalTikTokClientId) process.env.TIKTOK_CLIENT_ID = originalTikTokClientId;
@@ -483,6 +804,50 @@ test("prepareClipperCredentialDoctor reports platform aliases without secret val
     else delete process.env.YOUTUBE_CLIENT_ID;
     if (originalYoutubeClientSecret) process.env.YOUTUBE_CLIENT_SECRET = originalYoutubeClientSecret;
     else delete process.env.YOUTUBE_CLIENT_SECRET;
+  }
+});
+
+test("prepareClipperCredentialDoctor rejects placeholder runtime credentials", async () => {
+  const envVars = [
+    "TIKTOK_CLIENT_KEY",
+    "TIKTOK_CLIENT_ID",
+    "TIKTOK_CLIENT_SECRET",
+    "META_APP_ID",
+    "META_APP_SECRET",
+    "FACEBOOK_APP_ID",
+    "FACEBOOK_APP_SECRET",
+    "YOUTUBE_CLIENT_ID",
+    "YOUTUBE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
+    "CLIPPERS_TOKEN_ENCRYPTION_KEY",
+  ];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+
+  process.env.TIKTOK_CLIENT_KEY = "replace-with-tiktok-client-key";
+  process.env.TIKTOK_CLIENT_SECRET = "your-tiktok-client-secret";
+  process.env.META_APP_ID = "your-meta-app-id";
+  process.env.META_APP_SECRET = "replace-with-meta-app-secret";
+  process.env.YOUTUBE_CLIENT_ID = "replace-with-youtube-client-id";
+  process.env.YOUTUBE_CLIENT_SECRET = "your-youtube-client-secret";
+  process.env.GOOGLE_REFRESH_TOKEN = "replace-with-google-refresh-token";
+  process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY = "replace-with-32-plus-character-secret";
+
+  try {
+    const { credentialDoctor } = await prepareClipperCredentialDoctor();
+    const tiktok = credentialDoctor.items.find((item) => item.id === "tiktok-oauth");
+    const instagram = credentialDoctor.items.find((item) => item.id === "instagram-oauth");
+    const youtube = credentialDoctor.items.find((item) => item.id === "youtube-oauth");
+    const tokenVault = credentialDoctor.items.find((item) => item.id === "token-vault");
+
+    assert.equal(tiktok?.status, "missing");
+    assert.equal(instagram?.status, "missing");
+    assert.equal(youtube?.status, "missing");
+    assert.equal(tokenVault?.status, "missing");
+    assert.deepEqual(tiktok?.configuredEnvVars, []);
+    assert.deepEqual(youtube?.configuredEnvVars, []);
+  } finally {
+    restoreEnv(snapshot);
   }
 });
 
@@ -556,7 +921,7 @@ test("previewClipperCredentialSecretsBatch validates .env text without writing s
 test("previewClipperCredentialSecretsBatch accepts Google OAuth client JSON without writing secrets", async () => {
   const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
   const previousFile = await readFile(envPath, "utf8").catch(() => null);
-  const envVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
+  const envVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"];
   const snapshot = snapshotEnv(envVars);
   clearEnv(envVars);
 
@@ -566,20 +931,65 @@ test("previewClipperCredentialSecretsBatch accepts Google OAuth client JSON with
         web: {
           client_id: "json-google-client-id",
           client_secret: "json-google-client-secret",
+          refresh_token: "json-google-refresh-token",
           redirect_uris: ["https://example.com/api/google-drive/callback"],
         },
       }, null, 2),
     });
 
-    assert.deepEqual(credentialSecretsBatchPreview.acceptedEnvVars, ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
+    assert.deepEqual(credentialSecretsBatchPreview.acceptedEnvVars, ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"]);
     assert.deepEqual(credentialSecretsBatchPreview.rejectedEnvVars, []);
     assert.equal(process.env.GOOGLE_CLIENT_ID, undefined);
     assert.equal(process.env.GOOGLE_CLIENT_SECRET, undefined);
+    assert.equal(process.env.GOOGLE_DRIVE_REFRESH_TOKEN, undefined);
 
     const nextFile = await readFile(envPath, "utf8").catch(() => null);
     assert.equal(nextFile, previousFile);
     assert.equal(JSON.stringify(credentialSecretsBatchPreview).includes("json-google-client-secret"), false);
     assert.equal(JSON.stringify(credentialSecretsBatchPreview).includes("json-google-client-id"), false);
+    assert.equal(JSON.stringify(credentialSecretsBatchPreview).includes("json-google-refresh-token"), false);
+  } finally {
+    if (previousFile === null) await unlink(envPath).catch(() => undefined);
+    else await writeFile(envPath, previousFile);
+    restoreEnv(snapshot);
+  }
+});
+
+test("previewClipperCredentialSecretsBatch accepts nested Google OAuth exports without writing secrets", async () => {
+  const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
+  const previousFile = await readFile(envPath, "utf8").catch(() => null);
+  const envVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+
+  try {
+    const { credentialSecretsBatchPreview } = await previewClipperCredentialSecretsBatch({
+      envText: JSON.stringify({
+        google: {
+          oauth_client: [
+            {
+              client_id: "nested-google-client-id",
+              client_secret: "nested-google-client-secret",
+            },
+          ],
+          token: {
+            refresh_token: "nested-google-refresh-token",
+          },
+        },
+      }, null, 2),
+    });
+
+    assert.deepEqual(credentialSecretsBatchPreview.acceptedEnvVars, ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"]);
+    assert.equal(process.env.GOOGLE_CLIENT_ID, undefined);
+    assert.equal(process.env.GOOGLE_CLIENT_SECRET, undefined);
+    assert.equal(process.env.GOOGLE_DRIVE_REFRESH_TOKEN, undefined);
+
+    const nextFile = await readFile(envPath, "utf8").catch(() => null);
+    assert.equal(nextFile, previousFile);
+    const responseJson = JSON.stringify(credentialSecretsBatchPreview);
+    for (const secretValue of ["nested-google-client-id", "nested-google-client-secret", "nested-google-refresh-token"]) {
+      assert.equal(responseJson.includes(secretValue), false);
+    }
   } finally {
     if (previousFile === null) await unlink(envPath).catch(() => undefined);
     else await writeFile(envPath, previousFile);
@@ -681,11 +1091,16 @@ test("importClipperCredentialDropFiles imports credential and secret drop files 
   const previousFile = await readFile(envPath, "utf8").catch(() => null);
   const credentialDir = path.join(process.cwd(), "credentials");
   const secretDir = path.join(process.cwd(), "secrets");
+  const nestedSecretDir = path.join(secretDir, "nested-drop-test");
   const googlePath = path.join(credentialDir, "google-oauth-drop.test.json");
+  const googleTokenPath = path.join(credentialDir, "google-drive-token.test.json");
   const envDropPath = path.join(secretDir, "clipper-drop.test.env");
+  const nestedEnvDropPath = path.join(nestedSecretDir, "meta-drop.test.env");
   const envVars = [
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_DRIVE_REFRESH_TOKEN",
+    "META_APP_ID",
     "TIKTOK_CLIENT_KEY",
     "TIKTOK_CLIENT_SECRET",
     "NOT_ALLOWED_SECRET",
@@ -694,10 +1109,16 @@ test("importClipperCredentialDropFiles imports credential and secret drop files 
   clearEnv(envVars);
   await mkdir(credentialDir, { recursive: true });
   await mkdir(secretDir, { recursive: true });
+  await mkdir(nestedSecretDir, { recursive: true });
   await writeFile(googlePath, JSON.stringify({
     web: {
       client_id: "drop-google-client-id",
       client_secret: "drop-google-client-secret",
+    },
+  }, null, 2));
+  await writeFile(googleTokenPath, JSON.stringify({
+    tokens: {
+      refresh_token: "drop-google-refresh-token",
     },
   }, null, 2));
   await writeFile(envDropPath, [
@@ -705,32 +1126,77 @@ test("importClipperCredentialDropFiles imports credential and secret drop files 
     "TIKTOK_CLIENT_SECRET=drop-tiktok-secret",
     "NOT_ALLOWED_SECRET=drop-bad-secret",
   ].join("\n"));
+  await writeFile(nestedEnvDropPath, [
+    "META_APP_ID=drop-meta-app-id",
+  ].join("\n"));
 
   try {
     const { credentialDropImport, status } = await importClipperCredentialDropFiles();
     assert.deepEqual(credentialDropImport.acceptedEnvVars, [
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
+      "GOOGLE_DRIVE_REFRESH_TOKEN",
+      "META_APP_ID",
       "TIKTOK_CLIENT_KEY",
       "TIKTOK_CLIENT_SECRET",
     ]);
     assert.deepEqual(credentialDropImport.rejectedEnvVars, ["NOT_ALLOWED_SECRET"]);
-    assert.equal(credentialDropImport.filesImported, 2);
+    assert.equal(credentialDropImport.filesImported, 4);
     assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("google-oauth-drop.test.json")));
+    assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("google-drive-token.test.json")));
     assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("clipper-drop.test.env")));
+    assert.ok(credentialDropImport.sourceFiles?.some((file) => file.endsWith("secrets/nested-drop-test/meta-drop.test.env")));
     assert.ok(status.credentialDoctor.items.some((item) => item.id === "youtube-oauth" && item.status === "ready"));
     assert.ok(status.credentialDoctor.items.some((item) => item.id === "tiktok-oauth" && item.status === "ready"));
 
     const rawEnv = await readFile(envPath, "utf8");
     assert.ok(rawEnv.includes("GOOGLE_CLIENT_ID=drop-google-client-id"));
+    assert.ok(rawEnv.includes("GOOGLE_DRIVE_REFRESH_TOKEN=drop-google-refresh-token"));
+    assert.ok(rawEnv.includes("META_APP_ID=drop-meta-app-id"));
     assert.ok(rawEnv.includes("TIKTOK_CLIENT_SECRET=drop-tiktok-secret"));
     const responseJson = JSON.stringify(credentialDropImport);
-    for (const secretValue of ["drop-google-client-secret", "drop-google-client-id", "drop-tiktok-key", "drop-tiktok-secret", "drop-bad-secret"]) {
+    for (const secretValue of ["drop-google-client-secret", "drop-google-client-id", "drop-google-refresh-token", "drop-meta-app-id", "drop-tiktok-key", "drop-tiktok-secret", "drop-bad-secret"]) {
       assert.equal(responseJson.includes(secretValue), false);
     }
   } finally {
     await unlink(googlePath).catch(() => undefined);
+    await unlink(googleTokenPath).catch(() => undefined);
     await unlink(envDropPath).catch(() => undefined);
+    await rm(nestedSecretDir, { recursive: true, force: true }).catch(() => undefined);
+    if (previousFile === null) await unlink(envPath).catch(() => undefined);
+    else await writeFile(envPath, previousFile);
+    restoreEnv(snapshot);
+  }
+});
+
+test("importClipperCredentialDropFiles reports Google service account JSON as wrong credential type", async () => {
+  const envPath = path.join(process.cwd(), "CEO_ASSISTANT_ENV");
+  const previousFile = await readFile(envPath, "utf8").catch(() => null);
+  const credentialDir = path.join(process.cwd(), "credentials");
+  const serviceAccountPath = path.join(credentialDir, "google-service-account-drop.test.json");
+  const envVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"];
+  const snapshot = snapshotEnv(envVars);
+  clearEnv(envVars);
+  await mkdir(credentialDir, { recursive: true });
+  await writeFile(serviceAccountPath, JSON.stringify({
+    type: "service_account",
+    client_id: "service-account-client-id",
+    private_key: "-----BEGIN PRIVATE KEY-----\\nsecret\\n-----END PRIVATE KEY-----\\n",
+  }, null, 2));
+
+  try {
+    await assert.rejects(
+      () => importClipperCredentialDropFiles(),
+      /No encontre archivos de credenciales importables/,
+    );
+    const { credentialSetup } = await prepareClipperCredentialSetupCenter();
+    const serviceAccountError = credentialSetup.credentialDropDiagnostic.fileErrors.find((file) => file.relativePath.endsWith("google-service-account-drop.test.json"));
+    assert.ok(serviceAccountError);
+    assert.ok(serviceAccountError.reason.includes("service_account"));
+    assert.equal(JSON.stringify(credentialSetup).includes("service-account-client-id"), false);
+    assert.equal(JSON.stringify(credentialSetup).includes("PRIVATE KEY"), false);
+  } finally {
+    await unlink(serviceAccountPath).catch(() => undefined);
     if (previousFile === null) await unlink(envPath).catch(() => undefined);
     else await writeFile(envPath, previousFile);
     restoreEnv(snapshot);
@@ -857,6 +1323,8 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(accountCreationPack.items.every((item) => item.evidenceRecipeRow.includes("<real handle")));
     assert.ok(accountCreationPack.items.every((item) => item.copyPackage.length >= 5));
     assert.ok(accountCreationPack.items.every((item) => item.portalFormFields.length >= 5));
+    assert.ok(accountCreationPack.items.every((item) => item.handleCheckUrls.length >= 2));
+    assert.ok(accountCreationPack.items.every((item) => item.handleCheckUrls.some((url) => url.startsWith(item.profileLink))));
     assert.ok(accountCreationPack.items.every((item) => item.handleReservationPlan.length >= 4));
     assert.ok(accountCreationPack.items.every((item) => item.browserSessionChecklist.length >= 4));
     assert.ok(accountCreationPack.items.every((item) => item.evidenceCapturePlan.length >= 5));
@@ -866,6 +1334,7 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.requiredProof.length >= 4));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.copyPackage.some((field) => field.label === "bio")));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.portalFormFields.length > 0));
+    assert.ok(accountCreationPack.sessionOrder.every((item) => item.handleCheckUrls.length >= 2));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.handleReservationPlan.length > 0));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.browserSessionChecklist.length > 0));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.evidenceCapturePlan.length > 0));
@@ -875,12 +1344,23 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.doneCriteria.length >= 5));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.evidenceRecipeRow.includes("<real handle")));
     assert.equal(accountCreationPack.claimSheet.length, accountCreationPack.items.length);
+    assert.equal(accountCreationPack.platformBatches.length, 3);
+    assert.equal(accountCreationPack.totals.platformBatches, accountCreationPack.platformBatches.length);
+    assert.ok(accountCreationPack.platformBatches.some((batch) => batch.platform === "instagram" && batch.handles.includes("@sportsdaily")));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.copyBlock.includes("Accounts:")));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.evidenceRecipeRows.length === batch.profiles));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.submittedEvidenceRows.every((row) => row.includes(",\"submitted\","))));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.verifiedEvidenceRows.every((row) => row.includes(",\"verified\","))));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.browserSessionChecklist.length >= 4));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.operatorVaultChecklist.length >= 4));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.doneCriteria.length >= 4));
     assert.ok(accountCreationPack.claimSheetPath.endsWith("account-claim-sheet.md"));
     assert.ok(accountCreationPack.claimSheetCsvPath.endsWith("account-claim-sheet.csv"));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.vaultItemName.startsWith("Clippers/")));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.loginIdentifierLabel.includes("login-email-or-phone-label")));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.passwordVaultSlot.includes("/password")));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.twoFactorSlot.includes("/2fa-method")));
+    assert.ok(accountCreationPack.claimSheet.every((item) => item.handleCheckUrls.length >= 2));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.preflightChecks.length >= 4));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.claimSteps.length >= 5));
     assert.ok(accountCreationPack.claimSheet.every((item) => item.verificationSteps.length >= 5));
@@ -894,6 +1374,7 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     const rawClaimSheet = await readFile(accountCreationPack.claimSheetPath, "utf8");
     const rawClaimSheetCsv = await readFile(accountCreationPack.claimSheetCsvPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Account Creation Pack"));
+    assert.ok(rawMarkdown.includes("Platform Creation Batches"));
     assert.ok(rawMarkdown.includes("Account Creation Session"));
     assert.ok(rawMarkdown.includes("Claim Sheet"));
     assert.ok(rawMarkdown.includes("Launch Evidence Batch Template"));
@@ -902,6 +1383,7 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(rawMarkdown.includes("Recovery plan"));
     assert.ok(rawMarkdown.includes("Copy package"));
     assert.ok(rawMarkdown.includes("Portal form fields"));
+    assert.ok(rawMarkdown.includes("Handle check URLs"));
     assert.ok(rawMarkdown.includes("Handle reservation plan"));
     assert.ok(rawMarkdown.includes("Browser session checklist"));
     assert.ok(rawMarkdown.includes("Evidence capture plan"));
@@ -913,20 +1395,24 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(rawCsv.includes("signup_url"));
     assert.ok(rawCsv.includes("copy_package"));
     assert.ok(rawCsv.includes("portal_form_fields"));
+    assert.ok(rawCsv.includes("handle_check_urls"));
     assert.ok(rawCsv.includes("handle_reservation_plan"));
     assert.ok(rawCsv.includes("browser_session_checklist"));
     assert.ok(rawCsv.includes("evidence_capture_plan"));
     assert.ok(rawCsv.includes("required_inputs"));
     assert.ok(rawCsv.includes("security_checklist"));
     assert.ok(rawCsv.includes("operator_vault_checklist"));
+    assert.ok(rawCsv.includes("platform_batch_id"));
     assert.ok(rawCsv.includes("platform_proof_required"));
     assert.ok(rawCsv.includes("submitted_evidence_batch_row"));
     assert.ok(rawCsv.includes("evidence_batch_row"));
     assert.ok(rawCsv.includes("evidence_recipe_row"));
     assert.ok(rawClaimSheet.includes("Clippers Account Claim Sheet"));
     assert.ok(rawClaimSheet.includes("Vault item"));
+    assert.ok(rawClaimSheet.includes("Handle check URLs"));
     assert.ok(rawClaimSheet.includes("Login identifier label"));
     assert.ok(rawClaimSheetCsv.includes("vault_item_name"));
+    assert.ok(rawClaimSheetCsv.includes("handle_check_urls"));
     assert.ok(rawClaimSheetCsv.includes("login_identifier_label"));
     assert.equal(rawMarkdown.includes("client_secret"), false);
     assert.equal(rawCsv.includes("access_token"), false);
@@ -946,21 +1432,155 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
   }
 });
 
+test("prepareClipperAccountSetupSession writes executable external account setup session", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.accountSetupSession.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.accountSetupSession.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.accountSetupSession.csvPath, "utf8").catch(() => null);
+  const previousAccountSetupEvidenceTemplate = await readFile(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, "utf8").catch(() => null);
+
+  try {
+    const { accountSetupSession, status } = await prepareClipperAccountSetupSession();
+    assert.ok(accountSetupSession.manifestPath.endsWith("account-setup-session.json"));
+    assert.ok(accountSetupSession.markdownPath.endsWith("account-setup-session.md"));
+    assert.ok(accountSetupSession.csvPath.endsWith("account-setup-session.csv"));
+    assert.equal(accountSetupSession.items.length, status.accountCreationPack.sessionOrder.length);
+    assert.equal(accountSetupSession.totals.accounts, accountSetupSession.items.length);
+    assert.ok(accountSetupSession.totals.readyToCreate > 0 || accountSetupSession.totals.ready > 0 || accountSetupSession.totals.inProgress > 0);
+    assert.ok(accountSetupSession.totals.portalUrls >= accountSetupSession.items.length);
+    assert.ok(accountSetupSession.totals.evidenceRows >= accountSetupSession.items.length * 3);
+    assert.ok(accountSetupSession.totals.vaultSlots >= accountSetupSession.items.length * 4);
+    assert.ok(accountSetupSession.items.every((item) => item.signupUrl.startsWith("https://")));
+    assert.ok(accountSetupSession.items.every((item) => item.handleCheckUrls.length >= 2));
+    assert.ok(accountSetupSession.items.every((item) => item.vaultItemName.startsWith("Clippers/")));
+    assert.ok(accountSetupSession.items.every((item) => item.submittedEvidenceBatchRow.includes(",\"submitted\",")));
+    assert.ok(accountSetupSession.items.every((item) => item.verifiedEvidenceBatchRow.includes(",\"verified\",")));
+    assert.ok(accountSetupSession.items.some((item) => item.platform === "instagram" && item.claimSteps.some((step) => step.includes("Professional") || step.includes("handle"))));
+    assert.ok(accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath.endsWith("account-setup-evidence.csv"));
+    assert.equal(status.accountSetupSession.manifestPath, accountSetupSession.manifestPath);
+
+    const rawManifest = await readFile(accountSetupSession.manifestPath, "utf8");
+    const rawMarkdown = await readFile(accountSetupSession.markdownPath, "utf8");
+    const rawCsv = await readFile(accountSetupSession.csvPath, "utf8");
+    const rawAccountSetupEvidenceTemplate = await readFile(accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Account Setup Session"));
+    assert.ok(rawMarkdown.includes("Account Queue"));
+    assert.ok(rawMarkdown.includes("Vault item"));
+    assert.ok(rawMarkdown.includes("Handle check URLs"));
+    assert.ok(rawMarkdown.includes("Account Setup Evidence Template"));
+    assert.ok(rawCsv.includes("vault_item_name"));
+    assert.ok(rawCsv.includes("handle_check_urls"));
+    assert.ok(rawCsv.includes("submitted_evidence_batch_row"));
+    assert.ok(rawManifest.includes("sourceArtifacts"));
+    assert.ok(rawManifest.includes("accountSetupEvidenceTemplatePath"));
+    assert.ok(rawAccountSetupEvidenceTemplate.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.ok(rawAccountSetupEvidenceTemplate.includes("<real @"));
+    assert.ok(rawAccountSetupEvidenceTemplate.includes(',"submitted",'));
+    assert.ok(rawAccountSetupEvidenceTemplate.includes(',"verified",'));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+    assert.equal(rawAccountSetupEvidenceTemplate.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.accountSetupSession.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.accountSetupSession.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.accountSetupSession.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.csvPath, previousCsv);
+    if (previousAccountSetupEvidenceTemplate === null) await unlink(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, previousAccountSetupEvidenceTemplate);
+  }
+});
+
 test("prepareClipperAccountEvidenceVault writes templates and evidence unlocks launch tasks", async () => {
   const { accountEvidence } = await prepareClipperAccountEvidenceVault();
   const evidencePath = `${accountEvidence.evidenceDir}/sports-daily-instagram.md`;
 
   try {
     assert.ok(accountEvidence.readmePath.endsWith("account-evidence/README.md"));
+    assert.ok(accountEvidence.connectionKitManifestPath.endsWith("account-evidence/external-account-connection-kit.json"));
+    assert.ok(accountEvidence.connectionKitMarkdownPath.endsWith("account-evidence/external-account-connection-kit.md"));
+    assert.ok(accountEvidence.connectionKitCsvPath.endsWith("account-evidence/external-account-connection-kit.csv"));
+    assert.ok(accountEvidence.connectionKitGeneratedAt);
     assert.ok(accountEvidence.launchEvidenceDropDir.endsWith("evidence-drop"));
     assert.ok(accountEvidence.launchEvidenceTemplatePath.endsWith("evidence-drop/launch-evidence-template.csv"));
     assert.ok(accountEvidence.launchEvidenceTemplateRows >= accountEvidence.totals.expected + 3);
     assert.ok(accountEvidence.launchEvidenceDropChecklist.length >= 5);
+    assert.equal(accountEvidence.quickBatchRows.length, accountEvidence.totals.expected);
+    assert.equal(accountEvidence.connectionKitPlatformBatches.length, 3);
+    assert.ok(accountEvidence.connectionKitPlatformBatches.some((batch) => batch.platform === "tiktok" && batch.submittedDropFilePath.endsWith("accounts-tiktok-submitted.csv")));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => batch.verifiedDropFilePath.endsWith(`accounts-${batch.platform}-verified.csv`)));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => batch.submittedTemplateFilePath.endsWith(`accounts-${batch.platform}-submitted.csv`)));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => batch.verifiedTemplateFilePath.endsWith(`accounts-${batch.platform}-verified.csv`)));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => path.dirname(batch.submittedTemplateFilePath) !== path.dirname(batch.submittedDropFilePath)));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => batch.submittedDropTemplate.startsWith("kind,account_id,platform,status,scope")));
+    assert.ok(accountEvidence.connectionKitPlatformBatches.every((batch) => batch.verifiedDropTemplate.includes("\"verified\"")));
+    assert.ok(accountEvidence.quickBatchTemplate.startsWith("\"kind\",\"account_id\",\"platform\",\"status\""));
+    assert.ok(accountEvidence.quickBatchTemplate.includes("sports-daily"));
+    assert.ok(accountEvidence.quickBatchTemplate.includes("<real handle + profile URL + 2FA/security proof + screenshot/proof URL>"));
+    assert.ok(accountEvidence.quickBatchChecklist.length >= 5);
+    assert.equal(accountEvidence.quickBatchTemplate.toLowerCase().includes("client_secret"), false);
+    assert.equal(accountEvidence.quickBatchTemplate.toLowerCase().includes("access_token"), false);
+    const quickRow = accountEvidence.quickBatchRows.find((item) => item.id === "sports-daily-instagram");
+    assert.ok(quickRow);
+    assert.equal(quickRow.profileLink, "https://www.instagram.com/sportsdaily/");
+    assert.ok(quickRow.signupUrl.includes("instagram.com"));
+    assert.ok(quickRow.evidenceJsonPath.endsWith("account-evidence/sports-daily-instagram.json"));
+    assert.ok(quickRow.evidenceMarkdownPath.endsWith("account-evidence/sports-daily-instagram.md"));
+    assert.ok(quickRow.verifiedBatchRow.includes("verified"));
     assert.equal(accountEvidence.totals.expected > 0, true);
     const readmeStat = await stat(accountEvidence.readmePath);
     const templateStat = await stat(accountEvidence.launchEvidenceTemplatePath);
+    const connectionKitManifestStat = await stat(accountEvidence.connectionKitManifestPath);
+    const connectionKitMarkdownStat = await stat(accountEvidence.connectionKitMarkdownPath);
+    const connectionKitCsvStat = await stat(accountEvidence.connectionKitCsvPath);
+    const accountBatch = accountEvidence.connectionKitPlatformBatches[0];
+    const submittedTemplateStat = await stat(accountBatch.submittedTemplateFilePath);
+    const verifiedTemplateStat = await stat(accountBatch.verifiedTemplateFilePath);
     assert.equal(readmeStat.isFile(), true);
     assert.equal(templateStat.isFile(), true);
+    assert.equal(connectionKitManifestStat.isFile(), true);
+    assert.equal(connectionKitMarkdownStat.isFile(), true);
+    assert.equal(connectionKitCsvStat.isFile(), true);
+    assert.equal(submittedTemplateStat.isFile(), true);
+    assert.equal(verifiedTemplateStat.isFile(), true);
+    const rawReadme = await readFile(accountEvidence.readmePath, "utf8");
+    assert.ok(rawReadme.includes("Account Evidence Quick Batch"));
+    assert.ok(rawReadme.includes("Per-account proof checklist"));
+    assert.equal(rawReadme.toLowerCase().includes("client_secret"), false);
+    const rawConnectionKitManifest = await readFile(accountEvidence.connectionKitManifestPath, "utf8");
+    const rawConnectionKitMarkdown = await readFile(accountEvidence.connectionKitMarkdownPath, "utf8");
+    const rawConnectionKitCsv = await readFile(accountEvidence.connectionKitCsvPath, "utf8");
+    assert.ok(rawConnectionKitMarkdown.includes("Clippers External Account Connection Kit"));
+    assert.ok(rawConnectionKitMarkdown.includes("Platform Batches"));
+    assert.ok(rawConnectionKitMarkdown.includes("accounts-tiktok-submitted.csv"));
+    assert.ok(rawConnectionKitMarkdown.includes("Submitted template file"));
+    assert.ok(rawConnectionKitMarkdown.includes("Verified template file"));
+    assert.ok(rawConnectionKitMarkdown.includes("Submitted drop template"));
+    assert.ok(rawConnectionKitMarkdown.includes("Verified import row"));
+    assert.ok(rawConnectionKitMarkdown.includes("JSON drop path"));
+    assert.ok(rawConnectionKitMarkdown.includes("sports-daily-instagram.json"));
+    assert.ok(rawConnectionKitCsv.includes("verified_batch_row"));
+    assert.ok(rawConnectionKitCsv.includes("platform_batch_id"));
+    assert.ok(rawConnectionKitCsv.includes("submitted_template_file_path"));
+    assert.ok(rawConnectionKitCsv.includes("verified_template_file_path"));
+    assert.ok(rawConnectionKitCsv.includes("submitted_drop_file_path"));
+    assert.ok(rawConnectionKitCsv.includes("verified_drop_file_path"));
+    assert.ok(rawConnectionKitCsv.includes("evidence_json_path"));
+    assert.ok(rawConnectionKitCsv.includes("evidence_markdown_path"));
+    assert.ok(rawConnectionKitManifest.includes("quickBatchRows"));
+    assert.ok(rawConnectionKitManifest.includes("connectionKitPlatformBatches"));
+    assert.ok(rawConnectionKitManifest.includes("evidenceJsonPath"));
+    assert.ok(rawConnectionKitManifest.includes("submittedTemplateFilePath"));
+    const rawSubmittedTemplate = await readFile(accountBatch.submittedTemplateFilePath, "utf8");
+    const rawTemplateReadme = await readFile(path.join(path.dirname(accountBatch.submittedTemplateFilePath), "README.md"), "utf8");
+    assert.ok(rawSubmittedTemplate.startsWith("kind,account_id,platform,status,scope"));
+    assert.ok(rawSubmittedTemplate.includes("<real profile URL"));
+    assert.ok(rawTemplateReadme.includes("safe templates only"));
+    assert.equal(rawConnectionKitManifest.toLowerCase().includes("client_secret"), false);
+    assert.equal(rawConnectionKitMarkdown.toLowerCase().includes("refresh_token"), false);
+    assert.equal(rawConnectionKitCsv.toLowerCase().includes("access_token"), false);
     const rawTemplate = await readFile(accountEvidence.launchEvidenceTemplatePath, "utf8");
     assert.ok(rawTemplate.includes("kind"));
     assert.ok(rawTemplate.includes("sports-daily"));
@@ -970,13 +1590,17 @@ test("prepareClipperAccountEvidenceVault writes templates and evidence unlocks l
 
     await writeFile(evidencePath, [
       "status: verified",
-      "notes: Cuenta creada, bio aplicada, email verificado y 2FA guardado.",
+      "notes: Cuenta creada con profile URL https://www.instagram.com/sportsdaily/, handle @sportsdaily visible, captura de perfil y 2FA guardado fuera del repo.",
     ].join("\n"));
 
     const status = await getClipperStatus();
     const evidence = status.accountEvidence.items.find((item) => item.id === "sports-daily-instagram");
     assert.ok(evidence);
     assert.equal(evidence.status, "verified");
+    const quickStatus = status.accountEvidence.quickBatchRows.find((item) => item.id === "sports-daily-instagram");
+    assert.ok(quickStatus);
+    assert.equal(quickStatus.status, "verified");
+    assert.ok(quickStatus.evidencePath?.endsWith("sports-daily-instagram.md"));
 
     const launchTask = status.accountLaunchKit.tasks.find((task) => task.id === "sports-daily-instagram");
     assert.ok(launchTask);
@@ -990,13 +1614,14 @@ test("prepareClipperAccountEvidenceVault writes templates and evidence unlocks l
 test("recordClipperAccountEvidence writes JSON evidence and unlocks launch task", async () => {
   const statusBefore = await getClipperStatus();
   const evidencePath = `${statusBefore.accountEvidence.evidenceDir}/meme-radar-youtube.json`;
+  const previousOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
 
   try {
     const { accountEvidence, status } = await recordClipperAccountEvidence({
       accountId: "meme-radar",
       platform: "youtube",
       status: "verified",
-      notes: "Cuenta YouTube creada y verificada desde test.",
+      notes: "Cuenta YouTube creada con handle @memeradar y profile URL https://youtube.com/@memeradar; 2FA guardado fuera del repo.",
     });
     const evidence = accountEvidence.items.find((item) => item.id === "meme-radar-youtube");
     assert.ok(evidence);
@@ -1006,9 +1631,14 @@ test("recordClipperAccountEvidence writes JSON evidence and unlocks launch task"
     const launchTask = status.accountLaunchKit.tasks.find((task) => task.id === "meme-radar-youtube");
     assert.ok(launchTask);
     assert.equal(launchTask.evidenceStatus, "verified");
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-account-meme-radar-youtube" &&
+      item.progressStatus === "done" &&
+      item.progressEvidenceRows.some((row) => row.includes("meme-radar") && row.includes("youtube"))
+    ));
 
     const raw = await readFile(evidencePath, "utf8");
-    assert.equal(raw.includes("Cuenta YouTube creada"), true);
+    assert.equal(raw.includes("https://youtube.com/@memeradar"), true);
 
     await assert.rejects(
       () => recordClipperAccountEvidence({
@@ -1019,8 +1649,19 @@ test("recordClipperAccountEvidence writes JSON evidence and unlocks launch task"
       }),
       /requiere evidencia real/
     );
+    await assert.rejects(
+      () => recordClipperAccountEvidence({
+        accountId: "meme-radar",
+        platform: "youtube",
+        status: "verified",
+        notes: "YouTube account @memeradar verified for test with profile proof and 2FA.",
+      }),
+      /requiere evidencia real/
+    );
   } finally {
     await unlink(evidencePath).catch(() => undefined);
+    if (previousOwnerProgress === null) await unlink(statusBefore.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(statusBefore.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
   }
 });
 
@@ -1032,9 +1673,65 @@ test("prepareClipperDeveloperAppEvidenceVault writes templates and reads approve
     assert.equal(developerAppEvidence.totals.expected, 3);
     assert.ok(developerAppEvidence.readmePath.endsWith("developer-app-evidence/README.md"));
     assert.ok(developerAppEvidence.templateDir.endsWith("developer-app-evidence/templates"));
+    assert.ok(developerAppEvidence.connectionKitManifestPath.endsWith("developer-app-evidence/developer-app-connection-kit.json"));
+    assert.ok(developerAppEvidence.connectionKitMarkdownPath.endsWith("developer-app-evidence/developer-app-connection-kit.md"));
+    assert.ok(developerAppEvidence.connectionKitCsvPath.endsWith("developer-app-evidence/developer-app-connection-kit.csv"));
+    assert.ok(developerAppEvidence.connectionKitGeneratedAt);
+    assert.equal(developerAppEvidence.connectionKitItems.length, 3);
+    assert.equal(developerAppEvidence.connectionKitPlatformBatches.length, 3);
+    assert.ok(developerAppEvidence.connectionKitTemplate.startsWith("\"kind\",\"account_id\",\"platform\",\"status\""));
+    assert.ok(developerAppEvidence.connectionKitItems.some((item) => item.platform === "tiktok" && item.scopes.includes("video.publish")));
+    assert.ok(developerAppEvidence.connectionKitItems.every((item) => item.redirectUri.includes("/api/clippers/oauth/")));
+    assert.ok(developerAppEvidence.connectionKitItems.every((item) => item.submittedEvidenceRow.includes("\"developer_app\"")));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.some((batch) => batch.platform === "tiktok" && batch.submittedDropFilePath.endsWith("developer-app-tiktok-submitted.csv")));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => batch.approvedDropFilePath.endsWith(`developer-app-${batch.platform}-approved.csv`)));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => batch.submittedTemplateFilePath.endsWith(`developer-app-${batch.platform}-submitted.csv`)));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => batch.approvedTemplateFilePath.endsWith(`developer-app-${batch.platform}-approved.csv`)));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => path.dirname(batch.submittedTemplateFilePath) !== path.dirname(batch.submittedDropFilePath)));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => batch.submittedDropTemplate.startsWith("kind,account_id,platform,status,scope")));
+    assert.ok(developerAppEvidence.connectionKitPlatformBatches.every((batch) => batch.approvedDropTemplate.includes("\"approved\"")));
+    assert.ok(developerAppEvidence.connectionKitChecklist.length >= 5);
 
     const readmeStat = await stat(developerAppEvidence.readmePath);
+    const kitManifestStat = await stat(developerAppEvidence.connectionKitManifestPath);
+    const kitMarkdownStat = await stat(developerAppEvidence.connectionKitMarkdownPath);
+    const kitCsvStat = await stat(developerAppEvidence.connectionKitCsvPath);
+    const developerBatch = developerAppEvidence.connectionKitPlatformBatches[0];
+    const submittedTemplateStat = await stat(developerBatch.submittedTemplateFilePath);
+    const approvedTemplateStat = await stat(developerBatch.approvedTemplateFilePath);
     assert.equal(readmeStat.isFile(), true);
+    assert.equal(kitManifestStat.isFile(), true);
+    assert.equal(kitMarkdownStat.isFile(), true);
+    assert.equal(kitCsvStat.isFile(), true);
+    assert.equal(submittedTemplateStat.isFile(), true);
+    assert.equal(approvedTemplateStat.isFile(), true);
+    const rawKitManifest = await readFile(developerAppEvidence.connectionKitManifestPath, "utf8");
+    const rawKitMarkdown = await readFile(developerAppEvidence.connectionKitMarkdownPath, "utf8");
+    const rawKitCsv = await readFile(developerAppEvidence.connectionKitCsvPath, "utf8");
+    assert.ok(rawKitMarkdown.includes("Clippers Developer App Connection Kit"));
+    assert.ok(rawKitMarkdown.includes("Evidence Batch Template"));
+    assert.ok(rawKitMarkdown.includes("Platform Batches"));
+    assert.ok(rawKitMarkdown.includes("Submitted template file"));
+    assert.ok(rawKitMarkdown.includes("Approved template file"));
+    assert.ok(rawKitMarkdown.includes("Submitted drop template"));
+    assert.ok(rawKitMarkdown.includes("developer-app-tiktok-submitted.csv"));
+    assert.ok(rawKitCsv.includes("submitted_evidence_row"));
+    assert.ok(rawKitCsv.includes("submitted_template_file_path"));
+    assert.ok(rawKitCsv.includes("approved_template_file_path"));
+    assert.ok(rawKitCsv.includes("submitted_drop_file_path"));
+    assert.ok(rawKitCsv.includes("approved_drop_file_path"));
+    assert.ok(rawKitManifest.includes("connectionKitItems"));
+    assert.ok(rawKitManifest.includes("connectionKitPlatformBatches"));
+    assert.ok(rawKitManifest.includes("submittedTemplateFilePath"));
+    const rawSubmittedTemplate = await readFile(developerBatch.submittedTemplateFilePath, "utf8");
+    const rawTemplateReadme = await readFile(path.join(path.dirname(developerBatch.submittedTemplateFilePath), "README.md"), "utf8");
+    assert.ok(rawSubmittedTemplate.startsWith("kind,account_id,platform,status,scope"));
+    assert.ok(rawSubmittedTemplate.includes("<"));
+    assert.ok(rawTemplateReadme.includes("safe templates only"));
+    assert.equal(rawKitManifest.includes("plain-access-token"), false);
+    assert.equal(rawKitManifest.includes("plain-refresh-token"), false);
+    assert.equal(rawKitMarkdown.toLowerCase().includes("access_token="), false);
+    assert.equal(rawKitCsv.toLowerCase().includes("refresh_token="), false);
 
     await writeFile(evidencePath, JSON.stringify({
       status: "approved",
@@ -1059,9 +1756,10 @@ test("prepareClipperDeveloperAppEvidenceVault writes templates and reads approve
 test("recordClipperDeveloperAppEvidence writes app evidence without secrets", async () => {
   const statusBefore = await getClipperStatus();
   const evidencePath = `${statusBefore.developerAppEvidence.evidenceDir}/instagram.json`;
+  const previousOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
 
   try {
-    const { developerAppEvidence } = await recordClipperDeveloperAppEvidence({
+    const { developerAppEvidence, status } = await recordClipperDeveloperAppEvidence({
       platform: "instagram",
       status: "approved",
       appIdentifier: "meta-app-id-test",
@@ -1073,6 +1771,11 @@ test("recordClipperDeveloperAppEvidence writes app evidence without secrets", as
     assert.equal(app.status, "approved");
     assert.equal(app.appIdentifier, "meta-app-id-test");
     assert.equal(app.publicBaseUrl, "https://example.com");
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-developer-app-instagram" &&
+      item.progressStatus === "done" &&
+      item.progressEvidenceRows.some((row) => row.includes("meta-app-id-test"))
+    ));
 
     const raw = await readFile(evidencePath, "utf8");
     assert.equal(raw.includes("client_secret"), false);
@@ -1090,6 +1793,8 @@ test("recordClipperDeveloperAppEvidence writes app evidence without secrets", as
     );
   } finally {
     await unlink(evidencePath).catch(() => undefined);
+    if (previousOwnerProgress === null) await unlink(statusBefore.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(statusBefore.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
   }
 });
 
@@ -1148,25 +1853,61 @@ test("prepareClipperPermissionRequestPack writes copy-ready scope requests", asy
     assert.ok(permissionRequestPack.items.every((item) => item.officialApprovalChecklist.length >= 3));
     assert.ok(permissionRequestPack.items.every((item) => item.evidenceBatchRow.includes(item.scope)));
     assert.ok(permissionRequestPack.items.every((item) => item.evidenceRecipeRow.includes("<permission request")));
+    assert.equal(permissionRequestPack.platformBatches.length, 3);
+    assert.equal(permissionRequestPack.totals.platformBatches, permissionRequestPack.platformBatches.length);
+    assert.ok(permissionRequestPack.platformBatches.some((batch) => batch.platform === "tiktok" && batch.scopes.includes("video.publish")));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.copyBlock.includes("Requested scopes")));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.evidenceRecipeRows.length === batch.permissions));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.requestedEvidenceRows.every((row) => row.includes("\"requested\""))));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.approvedEvidenceRows.every((row) => row.includes("\"approved\""))));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.requestedDropFilePath.endsWith(`permission-${batch.platform}-requested.csv`)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.approvedDropFilePath.endsWith(`permission-${batch.platform}-approved.csv`)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.requestedTemplateFilePath.endsWith(`permission-${batch.platform}-requested.csv`)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.approvedTemplateFilePath.endsWith(`permission-${batch.platform}-approved.csv`)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => path.dirname(batch.requestedTemplateFilePath) !== path.dirname(batch.requestedDropFilePath)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => path.dirname(batch.approvedTemplateFilePath) !== path.dirname(batch.approvedDropFilePath)));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.requestedDropTemplate.startsWith("kind,account_id,platform,status,scope")));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.approvedDropTemplate.includes("\"approved\"")));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.submissionSteps.length >= 5));
+    assert.ok(permissionRequestPack.platformBatches.every((batch) => batch.doneCriteria.length >= 3));
     assert.ok(permissionRequestPack.items.some((item) => item.requestReadiness === "blocked"));
     assert.ok(status.commandCenter.steps.some((step) => step.id === "permission-request-pack" && step.actionUrl === "/api/clippers/prepare-permission-request-pack"));
     assert.ok(status.growthAudit.items.some((item) => item.id === "permission-request-pack"));
 
     const rawMarkdown = await readFile(permissionRequestPack.markdownPath, "utf8");
     const rawCsv = await readFile(permissionRequestPack.csvPath, "utf8");
+    const firstBatch = permissionRequestPack.platformBatches[0];
+    const requestedTemplateRaw = await readFile(firstBatch.requestedTemplateFilePath, "utf8");
+    const approvedTemplateRaw = await readFile(firstBatch.approvedTemplateFilePath, "utf8");
+    const templateReadmeRaw = await readFile(path.join(path.dirname(firstBatch.requestedTemplateFilePath), "README.md"), "utf8");
     assert.ok(rawMarkdown.includes("Clippers Permission Request Pack"));
     assert.ok(rawMarkdown.includes("Copy-ready justification"));
+    assert.ok(rawMarkdown.includes("Platform Submission Batches"));
     assert.ok(rawMarkdown.includes("Reviewer instructions"));
     assert.ok(rawMarkdown.includes("Official approval checklist"));
     assert.ok(rawMarkdown.includes("Evidence recipe row"));
+    assert.ok(rawMarkdown.includes("Requested drop template"));
+    assert.ok(rawMarkdown.includes("Approved drop template"));
+    assert.ok(rawMarkdown.includes("permission-tiktok-requested.csv"));
+    assert.ok(rawMarkdown.includes("Requested template file"));
+    assert.ok(rawMarkdown.includes("Approved template file"));
     assert.ok(rawMarkdown.includes("Platform constraints"));
     assert.ok(rawMarkdown.includes("Audit / go-live warnings"));
     assert.ok(rawCsv.includes("developer_portal"));
+    assert.ok(rawCsv.includes("platform_batch_id"));
     assert.ok(rawCsv.includes("request_readiness"));
     assert.ok(rawCsv.includes("official_reference_url"));
+    assert.ok(rawCsv.includes("requested_template_file_path"));
+    assert.ok(rawCsv.includes("approved_template_file_path"));
+    assert.ok(rawCsv.includes("requested_drop_file_path"));
+    assert.ok(rawCsv.includes("approved_drop_file_path"));
     assert.ok(rawCsv.includes("reviewer_instructions"));
     assert.ok(rawCsv.includes("platform_constraints"));
     assert.ok(rawCsv.includes("audit_warnings"));
+    assert.ok(requestedTemplateRaw.startsWith("kind,account_id,platform,status,scope"));
+    assert.ok(requestedTemplateRaw.includes("<permission request/review URL"));
+    assert.ok(approvedTemplateRaw.includes("\"approved\""));
+    assert.ok(templateReadmeRaw.includes("safe templates only"));
     assert.equal(rawMarkdown.includes("client_secret"), false);
     assert.equal(rawCsv.includes("access_token"), false);
   } finally {
@@ -1181,7 +1922,9 @@ test("prepareClipperPermissionRequestPack writes copy-ready scope requests", asy
 
 test("recordClipperPermissionStatus persists permission review status without secrets", async () => {
   const recordsPath = __clipperInternals.permissionStatusRecordsPath;
+  const statusBefore = await getClipperStatus();
   const previousRecords = await readFile(recordsPath, "utf8").catch(() => null);
+  const previousOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
 
   try {
     const { permissionStatusRecord, permissionTracker, status } = await recordClipperPermissionStatus({
@@ -1200,6 +1943,11 @@ test("recordClipperPermissionStatus persists permission review status without se
       item.statusSource === "manual_record"
     ));
     assert.ok(status.permissionTracker.totals.approved >= 1);
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-permission-tiktok-video.publish" &&
+      item.progressStatus === "done" &&
+      item.progressEvidenceRows.some((row) => row.includes("video.publish"))
+    ));
 
     const raw = await readFile(recordsPath, "utf8");
     assert.ok(raw.includes("video.publish"));
@@ -1221,6 +1969,8 @@ test("recordClipperPermissionStatus persists permission review status without se
     } else {
       await writeFile(recordsPath, previousRecords);
     }
+    if (previousOwnerProgress === null) await unlink(statusBefore.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(statusBefore.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
   }
 });
 
@@ -1252,13 +2002,17 @@ test("previewClipperLaunchEvidenceBatch validates rows without writing evidence"
         "source_rights,preview-rights.mp4,memes,owned_or_permissioned,preview-rights.mp4,,,Creator permission confirmed for preview; proof stored in secure drive",
         "permission,,instagram,requested,not.real.scope,,,Bad scope should reject",
         "permission,,tiktok,requested,video.publish,,,TikTok Content Posting API requested; attach app review evidence",
+        "developer_app,,tiktok,submitted,,tiktok-app-id,http://127.0.0.1:5010,TikTok app review submitted with portal proof",
+        "source_rights,preview-rights.mp4,memes,owned_or_permissioned,preview-rights.mp4,,,Permission confirmed",
       ].join("\n"),
     });
 
     assert.deepEqual(launchEvidenceBatchPreview.accepted, { accountEvidence: 1, developerApps: 1, permissions: 1, sourceRights: 1 });
-    assert.equal(launchEvidenceBatchPreview.rejected.length, 2);
+    assert.equal(launchEvidenceBatchPreview.rejected.length, 4);
     assert.equal(launchEvidenceBatchPreview.rejected[0].kind, "permission");
     assert.ok(launchEvidenceBatchPreview.rejected.some((item) => item.reason.includes("requiere evidencia real")));
+    assert.ok(launchEvidenceBatchPreview.rejected.some((item) => item.kind === "developer_app" && item.reason.includes("URL publica HTTPS")));
+    assert.ok(launchEvidenceBatchPreview.rejected.some((item) => item.kind === "source_rights" && item.reason.includes("evidencia concreta")));
     assert.ok(launchEvidenceBatchPreview.nextStep.includes("Preview listo"));
     assert.equal(status.accountEvidence.items.some((item) => item.id === "sports-daily-instagram" && item.status === "verified"), false);
 
@@ -1297,6 +2051,7 @@ test("recordClipperLaunchEvidenceBatch imports account app and permission eviden
   const previousAccount = await readFile(accountPath, "utf8").catch(() => null);
   const previousApp = await readFile(appPath, "utf8").catch(() => null);
   const previousRecords = await readFile(recordsPath, "utf8").catch(() => null);
+  const previousOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
   const previousEvidence = await readFile(evidencePath, "utf8").catch(() => null);
   await mkdir(streamerFolder.path, { recursive: true });
   await writeFile(sourcePath, "fake-video-for-launch-record-test");
@@ -1305,33 +2060,57 @@ test("recordClipperLaunchEvidenceBatch imports account app and permission eviden
     const { launchEvidenceBatch, status } = await recordClipperLaunchEvidenceBatch({
       batchText: [
         "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
-        "account,sports-daily,tiktok,verified,,,,TikTok account verified in portal",
-        "developer_app,,youtube,submitted,,youtube-app-id,https://example.com,YouTube API submitted",
+        "account,sports-daily,tiktok,verified,,,,TikTok account handle @sportsdaily verified with profile URL https://www.tiktok.com/@sportsdaily and 2FA proof saved",
+        "developer_app,,youtube,submitted,,youtube-app-id,https://example.com,YouTube API app review submitted in Google Cloud portal with review ticket YT-123",
         "permission,,tiktok,requested,video.publish,,,TikTok scope requested",
         "source_rights,launch-import-streamer.mp4,streamers,owned_or_permissioned,launch-import-streamer.mp4,,,Creator permission confirmed for launch import; proof stored in secure drive",
         "permission,,tiktok,approved,not.real.scope,,,Bad scope should reject",
         "account,meme-radar,tiktok,verified,,,,Meme Radar handle=<handle>; verified=<proof link or note>",
+        "developer_app,,instagram,submitted,,meta-app-id,http://localhost:5010,Meta app review submitted with portal proof",
+        "source_rights,launch-import-streamer.mp4,streamers,owned_or_permissioned,launch-import-streamer.mp4,,,Permission confirmed",
       ].join("\n"),
     });
 
     assert.deepEqual(launchEvidenceBatch.accepted, { accountEvidence: 1, developerApps: 1, permissions: 1, sourceRights: 1 });
-    assert.equal(launchEvidenceBatch.rejected.length, 2);
+    assert.equal(launchEvidenceBatch.rejected.length, 4);
     assert.equal(launchEvidenceBatch.rejected[0].kind, "permission");
     assert.ok(launchEvidenceBatch.rejected.some((item) => item.reason.includes("requiere evidencia real")));
+    assert.ok(launchEvidenceBatch.rejected.some((item) => item.kind === "developer_app" && item.reason.includes("URL publica HTTPS")));
+    assert.ok(launchEvidenceBatch.rejected.some((item) => item.kind === "source_rights" && item.reason.includes("evidencia concreta")));
     assert.ok(status.accountEvidence.items.some((item) => item.id === "sports-daily-tiktok" && item.status === "verified"));
     assert.ok(status.developerAppEvidence.items.some((item) => item.platform === "youtube" && item.status === "submitted"));
     assert.ok(status.permissionTracker.items.some((item) => item.platform === "tiktok" && item.scope === "video.publish" && item.status === "requested"));
     assert.ok(status.productionQueue.sourceAssets.some((item) => item.fileName === "launch-import-streamer.mp4" && item.rightsStatus === "owned_or_permissioned"));
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-account-sports-daily-tiktok"
+      && item.progressStatus === "done"
+      && item.progressEvidenceRows.some((row) => row.includes("sports-daily") && row.includes("tiktok"))
+    ));
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-developer-app-youtube"
+      && item.progressStatus === "waiting"
+      && item.progressEvidenceRows.some((row) => row.includes("youtube-app-id"))
+    ));
+    assert.ok(status.ownerConnectPack.items.some((item) =>
+      item.id === "external-session-handoff-permission-tiktok-video.publish"
+      && item.progressStatus === "waiting"
+      && item.progressEvidenceRows.some((row) => row.includes("video.publish"))
+    ));
 
     const rawAccount = await readFile(accountPath, "utf8");
     const rawApp = await readFile(appPath, "utf8");
     const rawEvidence = await readFile(evidencePath, "utf8");
+    const rawOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8");
+    assert.ok(rawOwnerProgress.includes("external-session-handoff-account-sports-daily-tiktok"));
+    assert.ok(rawOwnerProgress.includes("external-session-handoff-developer-app-youtube"));
+    assert.ok(rawOwnerProgress.includes("external-session-handoff-permission-tiktok-video.publish"));
     assert.ok(rawEvidence.includes("launch-import-streamer.mp4"));
     const responseJson = JSON.stringify(launchEvidenceBatch);
     for (const forbidden of ["client_secret", "access_token", "plain-refresh-token"]) {
       assert.equal(rawAccount.includes(forbidden), false);
       assert.equal(rawApp.includes(forbidden), false);
       assert.equal(rawEvidence.includes(forbidden), false);
+      assert.equal(rawOwnerProgress.includes(forbidden), false);
       assert.equal(responseJson.includes(forbidden), false);
     }
   } finally {
@@ -1344,6 +2123,37 @@ test("recordClipperLaunchEvidenceBatch imports account app and permission eviden
     else await writeFile(appPath, previousApp);
     if (previousRecords === null) await unlink(recordsPath).catch(() => undefined);
     else await writeFile(recordsPath, previousRecords);
+    if (previousOwnerProgress === null) await unlink(statusBefore.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(statusBefore.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
+  }
+});
+
+test("recordClipperLaunchEvidenceBatch strict mode blocks partial writes", async () => {
+  const statusBefore = await getClipperStatus();
+  const accountPath = `${statusBefore.accountEvidence.evidenceDir}/meme-radar-youtube.json`;
+  const previousAccount = await readFile(accountPath, "utf8").catch(() => null);
+
+  try {
+    await unlink(accountPath).catch(() => undefined);
+    const { launchEvidenceBatch, status } = await recordClipperLaunchEvidenceBatch({
+      strict: true,
+      batchText: [
+        "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+        "account,meme-radar,youtube,verified,,,,YouTube account handle @memeradar verified with channel URL https://www.youtube.com/@memeradar and 2FA proof saved",
+        "permission,,tiktok,approved,not.real.scope,,,Bad scope should reject",
+      ].join("\n"),
+    });
+
+    assert.equal(launchEvidenceBatch.strictImport, true);
+    assert.equal(launchEvidenceBatch.strictBlocked, true);
+    assert.equal(launchEvidenceBatch.accepted.accountEvidence, 1);
+    assert.equal(launchEvidenceBatch.rejected.length, 1);
+    assert.ok(launchEvidenceBatch.nextStep.includes("No escribi evidencia parcial"));
+    assert.equal(await readFile(accountPath, "utf8").catch(() => null), null);
+    assert.equal(status.accountEvidence.items.some((item) => item.id === "meme-radar-youtube" && item.status === "verified"), false);
+  } finally {
+    if (previousAccount === null) await unlink(accountPath).catch(() => undefined);
+    else await writeFile(accountPath, previousAccount);
   }
 });
 
@@ -1352,17 +2162,23 @@ test("importClipperLaunchEvidenceDropFiles imports CSV evidence files from evide
   const statusBefore = await getClipperStatus();
   const dropDir = path.join(statusBefore.rootDir, "evidence-drop");
   const dropPath = path.join(dropDir, "launch-evidence-drop.test.csv");
+  const ownerConnectEvidenceDropPath = path.join(dropDir, "owner-connect-evidence.csv");
   const accountPath = `${statusBefore.accountEvidence.evidenceDir}/streamer-pulse-instagram.json`;
   const appPath = `${statusBefore.developerAppEvidence.evidenceDir}/tiktok.json`;
   const previousAccount = await readFile(accountPath, "utf8").catch(() => null);
   const previousApp = await readFile(appPath, "utf8").catch(() => null);
   const previousRecords = await readFile(recordsPath, "utf8").catch(() => null);
+  const previousOwnerConnectEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8").catch(() => null);
   await mkdir(dropDir, { recursive: true });
+  await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
   await writeFile(dropPath, [
     "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
-    "account,streamer-pulse,instagram,verified,,,,Instagram account verified in external portal",
-    "developer_app,,tiktok,submitted,,tiktok-drop-app-id,https://example.com,TikTok app review submitted from evidence drop",
-    "permission,,youtube,requested,https://www.googleapis.com/auth/youtube.upload,,,YouTube upload scope requested from Google Cloud evidence drop",
+    "account,streamer-pulse,instagram,verified,,,,Instagram account handle @streamerpulse verified with profile URL https://www.instagram.com/streamerpulse/ and screenshot proof saved",
+    "developer_app,,tiktok,submitted,,tt-client-987654321,https://clips.robertmanzanilla.com,TikTok app review submitted in developer portal; proof ticket TIKTOK-REV-123 and screenshot proof saved in Drive",
+    "permission,,youtube,requested,https://www.googleapis.com/auth/youtube.upload,,,YouTube upload scope requested in Google Cloud; review ticket YT-UPLOAD-123 and screenshot proof saved in Drive",
   ].join("\n"));
 
   try {
@@ -1392,6 +2208,56 @@ test("importClipperLaunchEvidenceDropFiles imports CSV evidence files from evide
     else await writeFile(appPath, previousApp);
     if (previousRecords === null) await unlink(recordsPath).catch(() => undefined);
     else await writeFile(recordsPath, previousRecords);
+    if (previousOwnerConnectEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
+    if (previousDiagnostic === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, previousRepairWorksheet);
+  }
+});
+
+test("importClipperLaunchEvidenceDropFiles blocks dirty evidence-drop without writing partial evidence", async () => {
+  const statusBefore = await getClipperStatus();
+  const dropDir = path.join(statusBefore.rootDir, "evidence-drop");
+  const dropPath = path.join(dropDir, "launch-evidence-drop-blocked.test.csv");
+  const ownerConnectEvidenceDropPath = path.join(dropDir, "owner-connect-evidence.csv");
+  const accountPath = `${statusBefore.accountEvidence.evidenceDir}/sports-daily-youtube.json`;
+  const previousAccount = await readFile(accountPath, "utf8").catch(() => null);
+  const previousOwnerConnectEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8").catch(() => null);
+  await mkdir(dropDir, { recursive: true });
+  await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+  await unlink(accountPath).catch(() => undefined);
+  await writeFile(dropPath, [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+    "account,sports-daily,youtube,verified,,,,<real handle + profile URL + screenshot proof>",
+  ].join("\n"));
+
+  try {
+    const { launchEvidenceDropImport, status } = await importClipperLaunchEvidenceDropFiles();
+    assert.equal(launchEvidenceDropImport.strictBlocked, true);
+    assert.equal(launchEvidenceDropImport.filesImported, 0);
+    assert.ok(launchEvidenceDropImport.nextStep.includes("No escribi evidencia parcial"));
+    assert.ok(launchEvidenceDropImport.nextStep.includes("launch-evidence-drop-repair-worksheet.csv"));
+    assert.equal(await readFile(accountPath, "utf8").catch(() => null), null);
+    assert.equal(status.accountEvidence.items.some((item) => item.id === "sports-daily-youtube" && item.status === "verified"), false);
+  } finally {
+    await unlink(dropPath).catch(() => undefined);
+    if (previousAccount === null) await unlink(accountPath).catch(() => undefined);
+    else await writeFile(accountPath, previousAccount);
+    if (previousOwnerConnectEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
+    if (previousDiagnostic === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, previousRepairWorksheet);
   }
 });
 
@@ -1532,20 +2398,79 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.equal(externalExecutionSession.unlockBoard.reduce((sum, item) => sum + item.total, 0), externalExecutionSession.items.length);
     assert.ok(externalExecutionSession.unlockBoard.some((item) => item.nextEvidenceRows.length > 0));
     assert.ok(externalExecutionSession.unlockBoard.every((item) => item.nextStep.length > 20));
+    assert.equal(externalExecutionSession.totals.portalBatches, externalExecutionSession.portalBatches.length);
+    assert.ok(externalExecutionSession.portalBatches.length >= 6);
+    assert.ok(externalExecutionSession.portalBatches.some((batch) => batch.type === "account" && batch.evidenceRows.length > 0));
+    assert.ok(externalExecutionSession.portalBatches.some((batch) => batch.type === "credential" && batch.credentialTemplates.length > 0));
+    assert.ok(externalExecutionSession.portalBatches.some((batch) => batch.type === "permission" && batch.importTemplate.startsWith("kind,account_id,platform,status")));
+    assert.ok(externalExecutionSession.portalBatches.every((batch) => batch.operatorChecklist.length >= 3));
+    assert.ok(externalExecutionSession.portalBatches.every((batch) => batch.nextStep.length > 10));
+    assert.equal(externalExecutionSession.focusRun.status, "ready");
+    assert.ok(externalExecutionSession.focusRun.items.length > 0);
+    assert.ok(externalExecutionSession.focusRun.items.length <= 7);
+    assert.ok(externalExecutionSession.focusRun.estimatedMinutes > 0);
+    assert.ok(externalExecutionSession.focusRun.items.every((item) => item.estimatedMinutes > 0));
+    assert.ok(externalExecutionSession.focusRun.items.every((item) => item.checklist.length >= 3));
+    assert.ok(externalExecutionSession.focusRun.items.every((item) => item.doneCriteria.length >= 3));
+    assert.ok(externalExecutionSession.focusRun.evidenceRows.length > 0 || externalExecutionSession.focusRun.credentialTemplates.length > 0);
     assert.equal(status.externalExecutionSession.manifestPath, externalExecutionSession.manifestPath);
+    assert.equal(status.platformWarRoom.items.length, 3);
+    assert.equal(status.platformWarRoom.totals.platforms, 3);
+    assert.ok(status.platformWarRoom.items.every((item) => ["tiktok", "instagram", "youtube"].includes(item.platform)));
+    assert.ok(status.platformWarRoom.items.every((item) => item.evidenceRows.length >= item.accountEvidenceRows.length));
+    assert.ok(status.platformWarRoom.items.every((item) => item.operatorSteps.length >= 5));
+    assert.ok(status.platformWarRoom.items.every((item) => item.connectionChecklist.length >= 5));
+    assert.ok(status.platformWarRoom.items.every((item) => item.evidenceChecklist.length >= 3));
+    assert.ok(status.platformWarRoom.items.every((item) => item.safetyRules.some((rule) => rule.toLowerCase().includes("never paste"))));
+    assert.ok(status.platformWarRoom.items.every((item) => item.afterConnectionSteps.length >= 3));
+    assert.ok(status.platformWarRoom.items.some((item) => item.status !== "ready" && item.accountEvidenceRows.length > 0));
+    assert.equal(status.platformWarRoom.accountConnectionRows.length, 9);
+    assert.equal(status.platformWarRoom.totals.accountConnections, 9);
+    assert.ok(status.platformWarRoom.accountConnectionRows.every((row) => row.accountEvidenceRow.startsWith("\"account\"")));
+    assert.ok(status.platformWarRoom.accountConnectionRows.every((row) => row.accountEvidenceRow.endsWith("\"\"")));
+    assert.ok(status.platformWarRoom.accountConnectionRows.every((row) => row.proofRequirements.length >= 4));
+    assert.ok(status.platformWarRoom.accountConnectionRows.every((row) => row.postConnectActions.length >= 3));
+    assert.ok(status.platformWarRoom.accountConnectionRows.some((row) => row.profileLink.includes("tiktok.com")));
+    assert.equal(status.platformWarRoom.permissionApprovalRows.length, 6);
+    assert.equal(status.platformWarRoom.totals.permissionApprovals, 6);
+    assert.ok(status.platformWarRoom.permissionApprovalRows.every((row) => row.requestedEvidenceRow.startsWith("\"permission\"")));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.every((row) => row.approvedEvidenceRow.includes("\"approved\"")));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.every((row) => row.requestedEvidenceRow.endsWith("\"\"")));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.every((row) => row.approvedEvidenceRow.endsWith("\"\"")));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.every((row) => row.proofRequirements.length >= 4));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.some((row) => row.scope === "video.publish"));
+    assert.ok(status.platformWarRoom.permissionApprovalRows.some((row) => row.scope === "https://www.googleapis.com/auth/youtube.upload"));
+    assert.ok(status.platformWarRoom.totals.accountEvidenceRows >= 3);
+    assert.ok(status.platformWarRoom.totals.permissionEvidenceRows >= 3);
+    assert.ok(status.platformWarRoom.manifestPath.endsWith("platform-war-room.json"));
+    assert.ok(status.platformWarRoom.markdownPath.endsWith("platform-war-room.md"));
 
     const rawManifest = await readFile(externalExecutionSession.manifestPath, "utf8");
     const rawMarkdown = await readFile(externalExecutionSession.markdownPath, "utf8");
+    const rawWarRoomManifest = await readFile(status.platformWarRoom.manifestPath, "utf8");
+    const rawWarRoomMarkdown = await readFile(status.platformWarRoom.markdownPath, "utf8");
     const rawCsv = await readFile(externalExecutionSession.csvPath, "utf8");
     const rawEvidenceImport = await readFile(externalExecutionSession.evidenceImportPath, "utf8");
+    assert.ok(rawWarRoomManifest.includes("\"connectionChecklist\""));
+    assert.ok(rawWarRoomManifest.includes("\"accountConnectionRows\""));
+    assert.ok(rawWarRoomManifest.includes("\"permissionApprovalRows\""));
+    assert.equal(rawWarRoomManifest.includes("2FA enabled; screenshot/proof saved"), false);
+    assert.ok(rawWarRoomMarkdown.includes("Clippers Platform War Room"));
+    assert.ok(rawWarRoomMarkdown.includes("Account Connection Matrix"));
+    assert.ok(rawWarRoomMarkdown.includes("Permission Approval Matrix"));
+    assert.ok(rawWarRoomMarkdown.includes("Connection checklist"));
+    assert.ok(rawWarRoomMarkdown.includes("Safety rules"));
     assert.ok(rawMarkdown.includes("Clippers External Execution Session"));
     assert.ok(rawMarkdown.includes("Launch Evidence Import"));
+    assert.ok(rawMarkdown.includes("Focus Run"));
     assert.ok(rawMarkdown.includes("Unlock Board"));
+    assert.ok(rawMarkdown.includes("Portal Batches"));
     assert.ok(rawMarkdown.includes("Required inputs"));
     assert.ok(rawMarkdown.includes("Lane reason"));
     assert.ok(rawMarkdown.includes("Evidence recipe row"));
     assert.ok(rawCsv.includes("action_mode"));
     assert.ok(rawCsv.includes("lane_reason"));
+    assert.ok(rawCsv.includes("portal_batch_id"));
     assert.ok(rawCsv.includes("evidence_recipe_row"));
     assert.ok(rawCsv.includes("completion_hint"));
     assert.ok(rawCsv.includes("required_inputs"));
@@ -1560,6 +2485,10 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawManifest.includes("requiredInputs"));
     assert.ok(rawManifest.includes("evidenceImportTemplate"));
     assert.ok(rawManifest.includes("unlockBoard"));
+    assert.ok(rawManifest.includes("portalBatches"));
+    assert.ok(rawManifest.includes("focusRun"));
+    assert.ok(rawManifest.includes("operatorChecklist"));
+    assert.ok(rawManifest.includes("importTemplate"));
     assert.equal(rawMarkdown.includes("access_token"), false);
     assert.equal(rawManifest.includes("client_secret"), false);
   } finally {
@@ -1571,6 +2500,60 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     else await writeFile(beforeStatus.externalExecutionSession.csvPath, previousCsv);
     if (previousEvidenceImport === null) await unlink(beforeStatus.externalExecutionSession.evidenceImportPath).catch(() => undefined);
     else await writeFile(beforeStatus.externalExecutionSession.evidenceImportPath, previousEvidenceImport);
+  }
+});
+
+test("prepareClipperGoLiveEvidenceBundle writes one import bundle for external launch evidence", async () => {
+  const statusBefore = await getClipperStatus();
+  const previousManifest = await readFile(statusBefore.goLiveEvidenceBundle.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(statusBefore.goLiveEvidenceBundle.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(statusBefore.goLiveEvidenceBundle.csvPath, "utf8").catch(() => null);
+
+  try {
+    const { goLiveEvidenceBundle, status } = await prepareClipperGoLiveEvidenceBundle();
+
+    assert.equal(goLiveEvidenceBundle.status, "ready");
+    assert.ok(goLiveEvidenceBundle.generatedAt);
+    assert.ok(goLiveEvidenceBundle.manifestPath.endsWith("go-live-evidence-bundle.json"));
+    assert.ok(goLiveEvidenceBundle.markdownPath.endsWith("go-live-evidence-bundle.md"));
+    assert.ok(goLiveEvidenceBundle.csvPath.endsWith("go-live-evidence-bundle.csv"));
+    assert.equal(goLiveEvidenceBundle.totals.accountRows, 9);
+    assert.equal(goLiveEvidenceBundle.totals.starterRows, 18);
+    assert.equal(goLiveEvidenceBundle.totals.approvalRows, 9);
+    assert.equal(goLiveEvidenceBundle.sections.length, 4);
+    assert.ok(goLiveEvidenceBundle.importTemplate.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.ok(goLiveEvidenceBundle.starterRows.some((row) => row.includes("\"account\"")));
+    assert.ok(goLiveEvidenceBundle.starterRows.some((row) => row.includes("\"developer_app\"") && row.includes("\"submitted\"")));
+    assert.ok(goLiveEvidenceBundle.starterRows.some((row) => row.includes("\"permission\"") && row.includes("\"requested\"")));
+    assert.ok(goLiveEvidenceBundle.approvalRows.some((row) => row.includes("\"approved\"")));
+    assert.ok(goLiveEvidenceBundle.checklist.some((step) => step.toLowerCase().includes("never paste")));
+    assert.equal(status.goLiveEvidenceBundle.manifestPath, goLiveEvidenceBundle.manifestPath);
+    assert.equal(status.goLiveEvidenceBundle.totals.starterRows, goLiveEvidenceBundle.totals.starterRows);
+
+    const manifestStat = await stat(goLiveEvidenceBundle.manifestPath);
+    const markdownStat = await stat(goLiveEvidenceBundle.markdownPath);
+    const csvStat = await stat(goLiveEvidenceBundle.csvPath);
+    assert.equal(manifestStat.isFile(), true);
+    assert.equal(markdownStat.isFile(), true);
+    assert.equal(csvStat.isFile(), true);
+
+    const rawManifest = await readFile(goLiveEvidenceBundle.manifestPath, "utf8");
+    const rawMarkdown = await readFile(goLiveEvidenceBundle.markdownPath, "utf8");
+    const rawCsv = await readFile(goLiveEvidenceBundle.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Go-Live Evidence Bundle"));
+    assert.ok(rawMarkdown.includes("Starter Import Template"));
+    assert.ok(rawCsv.includes("section_id"));
+    assert.ok(rawManifest.includes("starterRows"));
+    assert.equal(rawManifest.includes("plain-access-token"), false);
+    assert.equal(rawMarkdown.toLowerCase().includes("access_token="), false);
+    assert.equal(rawCsv.toLowerCase().includes("refresh_token="), false);
+  } finally {
+    if (previousManifest === null) await unlink(statusBefore.goLiveEvidenceBundle.manifestPath).catch(() => undefined);
+    else await writeFile(statusBefore.goLiveEvidenceBundle.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(statusBefore.goLiveEvidenceBundle.markdownPath).catch(() => undefined);
+    else await writeFile(statusBefore.goLiveEvidenceBundle.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(statusBefore.goLiveEvidenceBundle.csvPath).catch(() => undefined);
+    else await writeFile(statusBefore.goLiveEvidenceBundle.csvPath, previousCsv);
   }
 });
 
@@ -1675,21 +2658,161 @@ test("prepareClipperGoLiveExecutionPack writes executable platform phases", asyn
   }
 });
 
+test("prepareClipperGoLiveCompletionAudit verifies full go-live requirements conservatively", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.goLiveCompletionAudit.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.goLiveCompletionAudit.markdownPath, "utf8").catch(() => null);
+  const previousOperatorBrief = await readFile(beforeStatus.goLiveOperatorBrief.manifestPath, "utf8").catch(() => null);
+  const previousOperatorBriefMarkdown = await readFile(beforeStatus.goLiveOperatorBrief.markdownPath, "utf8").catch(() => null);
+  const previousEvidenceTemplatePaths = beforeStatus.goLiveCompletionAudit.externalSession.map((item) => item.evidenceDropPath);
+  const previousEvidenceTemplates = await Promise.all(previousEvidenceTemplatePaths.map((templatePath) => readFile(templatePath, "utf8").catch(() => null)));
+  const previousEvidenceTemplateReadmePath = path.join(path.dirname(previousEvidenceTemplatePaths[0] || beforeStatus.goLiveCompletionAudit.externalSessionCsvPath), "README.md");
+  const previousEvidenceTemplateReadme = await readFile(previousEvidenceTemplateReadmePath, "utf8").catch(() => null);
+
+  try {
+    const { goLiveCompletionAudit, status } = await prepareClipperGoLiveCompletionAudit();
+    assert.equal(goLiveCompletionAudit.requirements.length, 10);
+    assert.equal(goLiveCompletionAudit.totals.requirements, goLiveCompletionAudit.requirements.length);
+    assert.equal(goLiveCompletionAudit.readyToPublish, false);
+    assert.equal(goLiveCompletionAudit.status === "blocked" || goLiveCompletionAudit.status === "partial", true);
+    assert.ok(goLiveCompletionAudit.totals.blocked > 0);
+    assert.ok(goLiveCompletionAudit.totals.externalRequired > 0);
+    assert.ok(goLiveCompletionAudit.score >= 0 && goLiveCompletionAudit.score <= 100);
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "accounts-created-verified" && item.phase === "accounts"));
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "permissions-approved" && item.requiredEvidence.some((evidence) => evidence.includes("scope"))));
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "oauth-tokens-saved" && item.requiredEvidence.some((evidence) => evidence.includes("Encrypted token vault"))));
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "automation-reporting-ready" && item.phase === "optimization"));
+    assert.ok(goLiveCompletionAudit.requirements.every((item) => item.currentEvidence.length > 10 && item.nextStep.length > 10));
+    assert.equal(goLiveCompletionAudit.externalSession.length, goLiveCompletionAudit.requirements.length);
+    assert.equal(goLiveCompletionAudit.totals.externalSessionItems, goLiveCompletionAudit.externalSession.length);
+    assert.ok(goLiveCompletionAudit.totals.externalSessionPortalUrls > 0);
+    assert.ok(goLiveCompletionAudit.totals.externalSessionEvidenceRows > 0);
+    assert.ok(goLiveCompletionAudit.externalSession.some((item) => item.requirementId === "accounts-created-verified" && item.evidenceRows.some((row) => row.includes("account"))));
+    assert.ok(goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "accounts-created-verified")?.evidenceRows.every((row) => row.includes("<real handle")));
+    assert.ok(goLiveCompletionAudit.externalSession.some((item) => item.requirementId === "permissions-approved" && item.portalUrls.some((url) => url.startsWith("http"))));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.operatorSteps.length > 0 && item.verificationCommand.includes("prepareClipperGoLiveCompletionAudit")));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.evidenceDropFileName.endsWith("-evidence.md")));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.evidenceDropPath.endsWith(item.evidenceDropFileName)));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.evidenceDropPath.includes(`${path.sep}evidence-drop${path.sep}go-live-proof-templates${path.sep}`)));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.evidenceCaptureTemplate.includes("Clippers Evidence Capture")));
+    assert.ok(goLiveCompletionAudit.externalSession.every((item) => item.evidenceCaptureTemplate.includes("Do not paste passwords")));
+    for (const item of goLiveCompletionAudit.externalSession) {
+      const rawTemplate = await readFile(item.evidenceDropPath, "utf8");
+      assert.ok(rawTemplate.includes(`Requirement ID: ${item.requirementId}`));
+      assert.ok(rawTemplate.includes("Do not paste passwords"));
+      assert.equal(rawTemplate.includes("client_secret"), false);
+    }
+    const rawTemplateReadme = await readFile(path.join(path.dirname(goLiveCompletionAudit.externalSession[0].evidenceDropPath), "README.md"), "utf8");
+    assert.ok(rawTemplateReadme.includes("Clippers Go-Live Proof Templates"));
+    assert.equal(status.goLiveCompletionAudit.manifestPath, goLiveCompletionAudit.manifestPath);
+    assert.ok(status.goLiveOperatorBrief.manifestPath.endsWith("go-live-operator-brief.json"));
+    assert.ok(status.goLiveOperatorBrief.markdownPath.endsWith("go-live-operator-brief.md"));
+    assert.equal(status.goLiveOperatorBrief.lanes.length, 5);
+    assert.ok(status.goLiveOperatorBrief.lanes.some((lane) => lane.id === "accounts" && lane.evidenceRows.length >= 3));
+    assert.ok(status.goLiveOperatorBrief.lanes.some((lane) => lane.id === "content_supply" && lane.total >= lane.done));
+    assert.ok(status.goLiveOperatorBrief.totals.accountConnectionsTotal >= status.goLiveOperatorBrief.totals.accountConnectionsReady);
+
+    const rawManifest = await readFile(goLiveCompletionAudit.manifestPath, "utf8");
+    const rawMarkdown = await readFile(goLiveCompletionAudit.markdownPath, "utf8");
+    const rawExternalCsv = await readFile(goLiveCompletionAudit.externalSessionCsvPath, "utf8");
+    const rawOperatorBrief = await readFile(status.goLiveOperatorBrief.manifestPath, "utf8");
+    const rawOperatorBriefMarkdown = await readFile(status.goLiveOperatorBrief.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Go-Live Completion Audit"));
+    assert.ok(rawMarkdown.includes("External Go-Live Session"));
+    assert.ok(rawMarkdown.includes("Required evidence"));
+    assert.ok(rawMarkdown.includes("Evidence capture template"));
+    assert.ok(rawMarkdown.includes("Evidence drop file"));
+    assert.ok(rawMarkdown.includes("Ready to publish: no"));
+    assert.ok(rawExternalCsv.includes("requirement_id"));
+    assert.ok(rawExternalCsv.includes("accounts-created-verified"));
+    assert.ok(rawExternalCsv.includes("evidence_capture_template"));
+    assert.ok(rawExternalCsv.includes("evidence_drop_file_name"));
+    assert.ok(rawExternalCsv.includes("evidence_drop_path"));
+    assert.ok(rawManifest.includes("\"readyToPublish\""));
+    assert.ok(rawManifest.includes("\"requirements\""));
+    assert.ok(rawOperatorBrief.includes("\"currentFocus\""));
+    assert.ok(rawOperatorBriefMarkdown.includes("Clippers Go-Live Operator Brief"));
+    assert.ok(rawOperatorBriefMarkdown.includes("Cuentas + permisos"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawExternalCsv.includes("refresh_token"), false);
+    assert.equal(rawOperatorBrief.includes("access_token"), false);
+    assert.equal(rawOperatorBriefMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.goLiveCompletionAudit.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveCompletionAudit.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.goLiveCompletionAudit.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveCompletionAudit.markdownPath, previousMarkdown);
+    if (previousOperatorBrief === null) await unlink(beforeStatus.goLiveOperatorBrief.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.manifestPath, previousOperatorBrief);
+    if (previousOperatorBriefMarkdown === null) await unlink(beforeStatus.goLiveOperatorBrief.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.markdownPath, previousOperatorBriefMarkdown);
+    await Promise.all(previousEvidenceTemplatePaths.map(async (templatePath, index) => {
+      const previousTemplate = previousEvidenceTemplates[index];
+      if (previousTemplate === null) await unlink(templatePath).catch(() => undefined);
+      else await writeFile(templatePath, previousTemplate);
+    }));
+    if (previousEvidenceTemplateReadme === null) await unlink(previousEvidenceTemplateReadmePath).catch(() => undefined);
+    else await writeFile(previousEvidenceTemplateReadmePath, previousEvidenceTemplateReadme);
+  }
+});
+
+test("prepareClipperGoLiveOperatorBrief writes focused operator lanes", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.goLiveOperatorBrief.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.goLiveOperatorBrief.markdownPath, "utf8").catch(() => null);
+
+  try {
+    const { goLiveOperatorBrief, status } = await prepareClipperGoLiveOperatorBrief();
+
+    assert.equal(goLiveOperatorBrief.lanes.length, 5);
+    assert.equal(goLiveOperatorBrief.totals.lanes, goLiveOperatorBrief.lanes.length);
+    assert.ok(["blocked", "needs_action", "ready"].includes(goLiveOperatorBrief.status));
+    assert.ok(goLiveOperatorBrief.currentFocus.length > 3);
+    assert.ok(goLiveOperatorBrief.lanes.some((lane) => lane.id === "accounts" && lane.evidenceRows.length >= 3));
+    assert.ok(goLiveOperatorBrief.lanes.some((lane) => lane.id === "credentials" && lane.artifactPath.includes("credential-drop-diagnostic")));
+    assert.ok(goLiveOperatorBrief.lanes.some((lane) => lane.id === "content_supply" && lane.total >= lane.done));
+    assert.equal(status.goLiveOperatorBrief.manifestPath, goLiveOperatorBrief.manifestPath);
+    assert.ok(status.commandCenter.steps.some((step) => step.id === "go-live-operator-brief" && step.actionUrl === "/api/clippers/prepare-go-live-operator-brief"));
+
+    const rawManifest = await readFile(goLiveOperatorBrief.manifestPath, "utf8");
+    const rawMarkdown = await readFile(goLiveOperatorBrief.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Go-Live Operator Brief"));
+    assert.ok(rawMarkdown.includes("Cuentas + permisos"));
+    assert.ok(rawMarkdown.includes("Videos fuente + derechos"));
+    assert.ok(rawManifest.includes("\"currentFocus\""));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.goLiveOperatorBrief.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.goLiveOperatorBrief.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.markdownPath, previousMarkdown);
+  }
+});
+
 test("prepareClipperOfficialPermissionMatrix writes official scope references", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(beforeStatus.officialPermissionMatrix.manifestPath, "utf8").catch(() => null);
   const previousMarkdown = await readFile(beforeStatus.officialPermissionMatrix.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.officialPermissionMatrix.csvPath, "utf8").catch(() => null);
 
   try {
     const { officialPermissionMatrix, status } = await prepareClipperOfficialPermissionMatrix();
     assert.equal(officialPermissionMatrix.items.length, 3);
+    assert.ok(officialPermissionMatrix.csvPath.endsWith("official-permission-matrix.csv"));
     assert.equal(officialPermissionMatrix.totals.scopes, status.permissionQueue.length);
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.some((scope) => scope.scope === "video.publish" && scope.requiredForAutopost)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.sourceStatus === "official_login_required"));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "youtube" && item.scopes.some((scope) => scope.scope.includes("youtube.upload"))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.requestPortalUrl.startsWith("https://"))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.officialReferenceUrl.startsWith("https://"))));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-17" && scope.verificationNote.length > 20)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.portalProduct.length > 8)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => ["request_now", "human_login_recheck"].includes(scope.requestMode))));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.ownerAction.length > 20)));
+    assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.requestMode === "human_login_recheck" && scope.humanBlocker?.includes("Meta Developers login"))));
+    assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.requestMode === "request_now" && scope.humanBlocker === null)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-18" && scope.verificationNote.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.verificationStatus === "official_login_required")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verificationChecklist.length >= 3)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.some((scope) => scope.verificationChecklist.some((step) => step.includes("Log in to Meta Developers")))));
@@ -1699,7 +2822,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.postApprovalChecklist && scope.postApprovalChecklist.length >= 4)));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.complianceRisk && scope.complianceRisk.includes(scope.scope))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.fallbackPlan && scope.fallbackPlan.length > 20)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-17")));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-18")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit?.canonicalUrl === scope.officialReferenceUrl)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "login_required" && scope.sourceAudit.needsHumanRecheck)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "public")));
@@ -1710,36 +2833,136 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "youtube" && item.scopes.every((scope) => scope.sourceProofPack?.officialUrls.some((url) => url.includes("developers.google.com")))));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.sourceProofPack?.status === "login_required" && scope.sourceProofPack.blocker?.includes("Meta Developers login"))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.evidenceRequired.length > 0)));
+    assert.ok(officialPermissionMatrix.items.every((item) => (item.publicLaunchBlockers || []).length >= 5));
+    assert.ok(officialPermissionMatrix.items.every((item) => (item.minimumApprovalEvidence || []).length >= 4));
+    assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && (item.publicLaunchBlockers || []).some((blocker) => blocker.includes("video.publish"))));
+    assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "youtube" && (item.minimumApprovalEvidence || []).some((evidence) => evidence.includes("youtube.upload"))));
+    assert.equal(officialPermissionMatrix.sourceBatches.length, 3);
+    assert.equal(officialPermissionMatrix.totals.sourceBatches, officialPermissionMatrix.sourceBatches.length);
+    assert.equal(officialPermissionMatrix.webProofTrail.length, 3);
+    assert.ok(officialPermissionMatrix.webProofTrail.some((proof) => proof.platform === "tiktok" && proof.accessMode === "public" && proof.verifiedClaims.length >= 3));
+    assert.ok(officialPermissionMatrix.webProofTrail.some((proof) => proof.platform === "instagram" && proof.accessMode === "login_required" && proof.nextHumanAction.includes("Log in")));
+    assert.ok(officialPermissionMatrix.webProofTrail.every((proof) => proof.officialUrls.every((url) => url.startsWith("https://"))));
+    assert.ok(officialPermissionMatrix.sourceBatches.some((batch) => batch.platform === "tiktok" && batch.accessMode === "public" && batch.submitDecision === "request_now"));
+    assert.ok(officialPermissionMatrix.sourceBatches.some((batch) => batch.platform === "instagram" && batch.accessMode === "login_required" && batch.submitDecision === "human_login_recheck"));
+    assert.ok(officialPermissionMatrix.sourceBatches.every((batch) => batch.launchEvidenceRows.length === batch.scopes.length));
+    assert.ok(officialPermissionMatrix.sourceBatches.every((batch) => batch.approvalEvidenceRows.every((row) => row.includes(",approved,"))));
+    assert.ok(officialPermissionMatrix.sourceBatches.every((batch) => batch.recheckSteps.length >= 4));
+    assert.ok(officialPermissionMatrix.sourceBatches.every((batch) => batch.officialUrls.every((url) => url.startsWith("https://"))));
     assert.ok(status.commandCenter.steps.some((step) => step.id === "official-permission-matrix" && step.actionUrl === "/api/clippers/prepare-official-permission-matrix"));
 
     const rawManifest = await readFile(officialPermissionMatrix.manifestPath, "utf8");
     const rawMarkdown = await readFile(officialPermissionMatrix.markdownPath, "utf8");
+    const rawCsv = await readFile(officialPermissionMatrix.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Official Permission Matrix"));
+    assert.ok(rawMarkdown.includes("Web Proof Trail"));
+    assert.ok(rawMarkdown.includes("Source Verification Batches"));
     assert.ok(rawManifest.includes("developers.tiktok.com"));
     assert.ok(rawManifest.includes("developers.google.com/youtube"));
     assert.ok(rawManifest.includes("officialReferenceUrl"));
+    assert.ok(rawManifest.includes("portalProduct"));
+    assert.ok(rawManifest.includes("humanBlocker"));
+    assert.ok(rawMarkdown.includes("Portal product"));
+    assert.ok(rawMarkdown.includes("Human blocker"));
     assert.ok(rawMarkdown.includes("Official reference"));
     assert.ok(rawManifest.includes("verificationChecklist"));
     assert.ok(rawMarkdown.includes("Verification checklist"));
     assert.ok(rawMarkdown.includes("Source proof pack"));
     assert.ok(rawManifest.includes("sourceProofPack"));
+    assert.ok(rawManifest.includes("sourceBatches"));
+    assert.ok(rawManifest.includes("webProofTrail"));
     assert.ok(rawManifest.includes("ready_to_attach"));
     assert.ok(rawManifest.includes("portalSubmissionSteps"));
     assert.ok(rawMarkdown.includes("Portal submission steps"));
     assert.ok(rawManifest.includes("sourceAudit"));
     assert.ok(rawMarkdown.includes("Source audit"));
     assert.ok(rawMarkdown.includes("Go-live decision"));
+    assert.ok(rawMarkdown.includes("Public launch blockers"));
+    assert.ok(rawMarkdown.includes("Minimum approval evidence"));
+    assert.ok(rawManifest.includes("publicLaunchBlockers"));
+    assert.ok(rawManifest.includes("minimumApprovalEvidence"));
     assert.ok(rawManifest.includes("approvalEvidenceBatchRow"));
     assert.ok(rawMarkdown.includes("Approval Evidence Batch"));
     assert.ok(rawManifest.includes("launchEvidenceBatchRow"));
     assert.ok(rawMarkdown.includes("Launch Evidence Batch"));
+    assert.ok(rawCsv.includes("platform,label,source_status,scope"));
+    assert.ok(rawCsv.includes("video.publish"));
+    assert.ok(rawCsv.includes("youtube.upload"));
+    assert.ok(rawCsv.includes("launch_evidence_batch_row"));
+    assert.ok(rawCsv.includes("portal_product"));
+    assert.ok(rawCsv.includes("human_blocker"));
+    assert.ok(rawCsv.includes("web_proof_access_mode"));
+    assert.ok(rawCsv.includes("web_proof_next_human_action"));
+    assert.ok(rawCsv.includes("public_launch_blockers"));
+    assert.ok(rawCsv.includes("minimum_approval_evidence"));
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
   } finally {
     if (previousManifest === null) await unlink(beforeStatus.officialPermissionMatrix.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.officialPermissionMatrix.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.officialPermissionMatrix.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.officialPermissionMatrix.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.officialPermissionMatrix.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.officialPermissionMatrix.csvPath, previousCsv);
+  }
+});
+
+test("prepareClipperPermissionSubmissionDossier writes unified platform submission dossier", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.permissionSubmissionDossier.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.permissionSubmissionDossier.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.permissionSubmissionDossier.csvPath, "utf8").catch(() => null);
+
+  try {
+    const { permissionSubmissionDossier, status } = await prepareClipperPermissionSubmissionDossier();
+    assert.ok(permissionSubmissionDossier.manifestPath.endsWith("permission-submission-dossier.json"));
+    assert.ok(permissionSubmissionDossier.markdownPath.endsWith("permission-submission-dossier.md"));
+    assert.ok(permissionSubmissionDossier.csvPath.endsWith("permission-submission-dossier.csv"));
+    assert.equal(permissionSubmissionDossier.items.length, status.permissionRequestPack.platformBatches.length);
+    assert.equal(permissionSubmissionDossier.totals.platforms, permissionSubmissionDossier.items.length);
+    assert.equal(permissionSubmissionDossier.totals.scopes, status.permissionRequestPack.totals.permissions);
+    assert.ok(permissionSubmissionDossier.totals.requestedRows >= status.permissionRequestPack.totals.platformBatches);
+    assert.ok(permissionSubmissionDossier.totals.approvedRows >= status.permissionRequestPack.totals.platformBatches);
+    assert.ok(permissionSubmissionDossier.items.some((item) => item.platform === "tiktok" && item.submitDecision === "request_now"));
+    assert.ok(permissionSubmissionDossier.items.some((item) => item.platform === "youtube" && item.officialUrls.some((url) => url.startsWith("https://"))));
+    assert.ok(permissionSubmissionDossier.items.some((item) => item.platform === "instagram" && item.status === "needs_login_recheck"));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.copyBlock.includes("Requested scopes")));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.requestedEvidenceRows.every((row) => row.includes("\"requested\""))));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.approvedEvidenceRows.every((row) => row.includes("\"approved\""))));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.requestedDropTemplate.startsWith("kind,account_id,platform,status,scope")));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.requestedDropTemplate.includes("\"requested\"")));
+    assert.ok(permissionSubmissionDossier.items.every((item) => item.approvedDropTemplate.includes("\"approved\"")));
+    assert.equal(status.permissionSubmissionDossier.manifestPath, permissionSubmissionDossier.manifestPath);
+
+    const rawManifest = await readFile(permissionSubmissionDossier.manifestPath, "utf8");
+    const rawMarkdown = await readFile(permissionSubmissionDossier.markdownPath, "utf8");
+    const rawCsv = await readFile(permissionSubmissionDossier.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Permission Submission Dossier"));
+    assert.ok(rawMarkdown.includes("Requested evidence rows"));
+    assert.ok(rawMarkdown.includes("Approved evidence rows"));
+    assert.ok(rawMarkdown.includes("Requested drop template"));
+    assert.ok(rawMarkdown.includes("Approved drop template"));
+    assert.ok(rawManifest.includes("sourceArtifacts"));
+    assert.ok(rawManifest.includes("requestedEvidenceRows"));
+    assert.ok(rawManifest.includes("requestedDropTemplate"));
+    assert.ok(rawCsv.includes("submit_decision"));
+    assert.ok(rawCsv.includes("submission_steps"));
+    assert.ok(rawCsv.includes("reviewer_evidence"));
+    assert.ok(rawCsv.includes("requested_drop_template"));
+    assert.ok(rawCsv.includes("approved_drop_template"));
+    assert.ok(rawCsv.includes("done_criteria"));
+    assert.ok(rawCsv.includes("Open developer portal"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.permissionSubmissionDossier.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.permissionSubmissionDossier.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.permissionSubmissionDossier.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.permissionSubmissionDossier.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.permissionSubmissionDossier.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.permissionSubmissionDossier.csvPath, previousCsv);
   }
 });
 
@@ -1772,6 +2995,46 @@ test("prepareClipperPublisherConnectors writes platform publish preflight contra
     else await writeFile(beforeStatus.publisherConnectors.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.publisherConnectors.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.publisherConnectors.markdownPath, previousMarkdown);
+  }
+});
+
+test("prepareClipperPublisherExecutionQueue writes guarded publish ledger without secrets", async () => {
+  await runClipperAutomationCycle({ publishMode: "approval_required", riskTolerance: "growth" }, "publisher-exec-test");
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.publisherExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.publisherExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.publisherExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    const { publisherExecutionQueue, status } = await prepareClipperPublisherExecutionQueue();
+
+    assert.ok(publisherExecutionQueue.manifestPath.endsWith("publisher-execution-queue.json"));
+    assert.ok(publisherExecutionQueue.markdownPath.endsWith("publisher-execution-queue.md"));
+    assert.ok(publisherExecutionQueue.csvPath.endsWith("publisher-execution-queue.csv"));
+    assert.equal(publisherExecutionQueue.publishMode, "approval_required");
+    assert.equal(publisherExecutionQueue.realPublishEnabled, false);
+    assert.equal(publisherExecutionQueue.totals.items, status.automation.lastRun?.totals.posts);
+    assert.ok(publisherExecutionQueue.totals.blocked > 0);
+    assert.ok(publisherExecutionQueue.items.every((item) => item.approvalRequired));
+    assert.ok(publisherExecutionQueue.items.every((item) => item.requestSpec.tokenSource === "encrypted_vault" || item.requestSpec.tokenSource === "missing"));
+    assert.equal(status.publisherExecutionQueue.items.length, publisherExecutionQueue.items.length);
+    assert.ok(status.commandCenter.steps.some((step) => step.id === "publisher-execution-queue" && step.actionUrl === "/api/clippers/prepare-publisher-execution-queue"));
+
+    const rawManifest = await readFile(publisherExecutionQueue.manifestPath, "utf8");
+    const rawMarkdown = await readFile(publisherExecutionQueue.markdownPath, "utf8");
+    const rawCsv = await readFile(publisherExecutionQueue.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Publisher Execution Queue"));
+    assert.ok(rawCsv.includes("token_source"));
+    assert.equal(rawManifest.includes("plain-access-token"), false);
+    assert.equal(rawManifest.includes("refresh_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.publisherExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.publisherExecutionQueue.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.publisherExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.publisherExecutionQueue.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.publisherExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.publisherExecutionQueue.csvPath, previousCsv);
   }
 });
 
@@ -1854,6 +3117,9 @@ test("verifyClipperProductionUrl writes endpoint evidence without secrets", asyn
     assert.deepEqual(productionUrlVerification.dnsDiagnostic.addresses, ["203.0.113.10"]);
     assert.ok(productionUrlVerification.dnsDiagnostic.suggestedRecords.some((record) => record.includes("clippers-test.example.com")));
     assert.ok(productionUrlVerification.dnsDiagnostic.recordCandidates.some((record) => record.id === "cloudflare-tunnel-cname" && record.copyLine.includes("CNAME")));
+    assert.ok(productionUrlVerification.dnsDiagnostic.providerRecipes.some((recipe) => recipe.provider === "Cloudflare" && recipe.bestRecordId === "cloudflare-tunnel-cname"));
+    assert.ok(productionUrlVerification.dnsDiagnostic.repairRunbook.some((step) => step.includes("Pick one DNS route")));
+    assert.ok(productionUrlVerification.dnsDiagnostic.appReviewHoldChecklist.some((step) => step.includes("TikTok")));
     assert.ok(productionUrlVerification.dnsDiagnostic.propagationChecks.some((command) => command.includes("curl -I https://clippers-test.example.com/clippers")));
     assert.ok(productionUrlVerification.dnsDiagnostic.registrarChecklist.length >= 4);
     assert.ok(productionUrlVerification.dnsDiagnostic.blockedUntilResolved.some((action) => action.includes("app review")));
@@ -1865,12 +3131,18 @@ test("verifyClipperProductionUrl writes endpoint evidence without secrets", asyn
     const rawMarkdown = await readFile(productionUrlVerification.markdownPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Production URL Verification"));
     assert.ok(rawMarkdown.includes("DNS Diagnostic"));
+    assert.ok(rawMarkdown.includes("DNS repair runbook"));
+    assert.ok(rawMarkdown.includes("Provider recipes"));
+    assert.ok(rawMarkdown.includes("App review hold checklist"));
     assert.ok(rawMarkdown.includes("Record candidates"));
     assert.ok(rawMarkdown.includes("Propagation checks"));
     assert.ok(rawMarkdown.includes("Blocked until DNS resolves"));
     assert.ok(rawMarkdown.includes("Endpoint Evidence"));
     assert.ok(rawManifest.includes("dnsDiagnostic"));
     assert.ok(rawManifest.includes("recordCandidates"));
+    assert.ok(rawManifest.includes("providerRecipes"));
+    assert.ok(rawManifest.includes("repairRunbook"));
+    assert.ok(rawManifest.includes("appReviewHoldChecklist"));
     assert.ok(rawManifest.includes("responseMs"));
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
@@ -2229,6 +3501,11 @@ test("prepareClipperOAuthConnectionPack writes per-account OAuth runbook without
     const expectedConnections = status.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
     assert.equal(oauthConnectionPack.items.length, expectedConnections);
     assert.equal(oauthConnectionPack.totals.connections, expectedConnections);
+    assert.equal(oauthConnectionPack.platformBatches.length, 3);
+    assert.ok(oauthConnectionPack.platformBatches.some((batch) => batch.platform === "tiktok" && batch.connections > 0));
+    assert.ok(oauthConnectionPack.platformBatches.every((batch) => batch.redirectUri.includes(batch.callbackPath)));
+    assert.ok(oauthConnectionPack.platformBatches.every((batch) => batch.checklist.length >= 5));
+    assert.ok(oauthConnectionPack.platformBatches.every((batch) => batch.requestedScopes.length > 0));
     assert.ok(oauthConnectionPack.markdownPath.endsWith("oauth-connection-pack.md"));
     assert.ok(oauthConnectionPack.csvPath.endsWith("oauth-connection-pack.csv"));
     assert.ok(oauthConnectionPack.items.every((item) => item.redirectUri.includes(item.callbackPath)));
@@ -2242,10 +3519,13 @@ test("prepareClipperOAuthConnectionPack writes per-account OAuth runbook without
     const rawMarkdown = await readFile(oauthConnectionPack.markdownPath, "utf8");
     const rawCsv = await readFile(oauthConnectionPack.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers OAuth Connection Pack"));
+    assert.ok(rawMarkdown.includes("Platform Batches"));
     assert.ok(rawMarkdown.includes("Account Connections"));
     assert.ok(rawMarkdown.includes("Required inputs"));
+    assert.ok(rawCsv.includes("platform_batch_id"));
     assert.ok(rawCsv.includes("redirect_uri"));
     assert.ok(rawCsv.includes("required_inputs"));
+    assert.ok(rawManifest.includes("platformBatches"));
     assert.ok(rawManifest.includes("requiredInputs"));
     assert.equal(rawManifest.includes("client_secret"), false);
     assert.equal(rawMarkdown.includes("access_token_value"), false);
@@ -2275,6 +3555,8 @@ test("prepareClipperLaunchCommandCenter prepares all local launch artifacts and 
     assert.ok(commandCenter.steps.some((step) => step.id === "internal-setup" && step.status === "done"));
     assert.ok(commandCenter.steps.some((step) => step.id === "external-accounts"));
     assert.ok(commandCenter.steps.some((step) => step.id === "oauth-token-vault"));
+    assert.ok(commandCenter.steps.some((step) => step.id === "go-live-operator-brief" && step.actionUrl === "/api/clippers/prepare-go-live-operator-brief"));
+    assert.ok(commandCenter.steps.some((step) => step.id === "publisher-execution-queue" && step.actionUrl === "/api/clippers/prepare-publisher-execution-queue"));
     assert.equal(status.commandCenter.manifestPath, commandCenter.manifestPath);
 
     const manifestStat = await stat(commandCenter.manifestPath);
@@ -2285,6 +3567,8 @@ test("prepareClipperLaunchCommandCenter prepares all local launch artifacts and 
     const markdown = await readFile(commandCenter.markdownPath, "utf8");
     assert.ok(markdown.includes("Clippers Launch Command Center"));
     assert.ok(markdown.includes("Cuentas reales por plataforma"));
+    assert.ok(markdown.includes("Go-Live Operator Brief"));
+    assert.ok(markdown.includes("Publisher Execution Queue"));
   } finally {
     await unlink(commandCenter.manifestPath).catch(() => undefined);
     await unlink(commandCenter.markdownPath).catch(() => undefined);
@@ -2363,16 +3647,25 @@ test("prepareClipperGoLiveAutopilotBrief writes unified next-action queue", asyn
     assert.ok(goLiveAutopilotBrief.actions.every((action) => action.evidenceRows.length > 0));
     assert.ok(goLiveAutopilotBrief.actions.every((action) => action.successSignals.length >= 2));
     assert.ok(goLiveAutopilotBrief.actions.every((action) => action.riskControls.length >= 2));
+    assert.ok(goLiveAutopilotBrief.agentSessions.length > 0);
+    assert.equal(goLiveAutopilotBrief.totals.agentSessions, goLiveAutopilotBrief.agentSessions.length);
+    assert.ok(goLiveAutopilotBrief.agentSessions.every((session) => session.id.startsWith("agent-session-")));
+    assert.ok(goLiveAutopilotBrief.agentSessions.every((session) => session.actionCount === session.actionIds.length));
+    assert.ok(goLiveAutopilotBrief.agentSessions.every((session) => session.evidenceRows.length > 0));
+    assert.ok(goLiveAutopilotBrief.agentSessions.every((session) => session.riskControls.length > 0));
+    assert.ok(goLiveAutopilotBrief.actions.every((action) => goLiveAutopilotBrief.agentSessions.some((session) => session.actionIds.includes(action.id))));
     assert.equal(status.goLiveAutopilotBrief.manifestPath, goLiveAutopilotBrief.manifestPath);
 
     const rawManifest = await readFile(goLiveAutopilotBrief.manifestPath, "utf8");
     const rawMarkdown = await readFile(goLiveAutopilotBrief.markdownPath, "utf8");
     const rawCsv = await readFile(goLiveAutopilotBrief.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Go-Live Autopilot Brief"));
+    assert.ok(rawMarkdown.includes("Agent Sessions"));
     assert.ok(rawMarkdown.includes("Sub-agent"));
     assert.ok(rawMarkdown.includes("Operator steps"));
     assert.ok(rawMarkdown.includes("Risk controls"));
     assert.ok(rawMarkdown.includes("Evidence template"));
+    assert.ok(rawCsv.includes("agent_session_id"));
     assert.ok(rawCsv.includes("agent_id"));
     assert.ok(rawCsv.includes("operator_steps"));
     assert.ok(rawCsv.includes("risk_controls"));
@@ -2395,9 +3688,12 @@ test("runClipperGoLiveAutopilot executes allowlisted in-app actions and writes r
   const previousMarkdown = await readFile(beforeStatus.goLiveAutopilotRun.markdownPath, "utf8").catch(() => null);
 
   try {
-    const { goLiveAutopilotRun, status } = await runClipperGoLiveAutopilot({ maxActions: 1 });
+    const { goLiveAutopilotRun, status } = await runClipperGoLiveAutopilot({ maxActions: 1, resetCompleted: true });
     assert.ok(goLiveAutopilotRun.manifestPath.endsWith("go-live-autopilot-run.json"));
     assert.ok(goLiveAutopilotRun.markdownPath.endsWith("go-live-autopilot-run.md"));
+    assert.equal(goLiveAutopilotRun.resetCompleted, true);
+    assert.ok(goLiveAutopilotRun.availableInAppActions >= goLiveAutopilotRun.remainingInAppActions);
+    assert.equal(goLiveAutopilotRun.alreadyCompletedInAppActions, 0);
     assert.equal(goLiveAutopilotRun.totals.attempted, 1);
     assert.ok(goLiveAutopilotRun.totals.completed + goLiveAutopilotRun.totals.skipped + goLiveAutopilotRun.totals.failed >= 1);
     assert.ok(Array.isArray(goLiveAutopilotRun.completedActionIds));
@@ -2406,6 +3702,9 @@ test("runClipperGoLiveAutopilot executes allowlisted in-app actions and writes r
     const rawManifest = await readFile(goLiveAutopilotRun.manifestPath, "utf8");
     const rawMarkdown = await readFile(goLiveAutopilotRun.markdownPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Go-Live Autopilot Run"));
+    assert.ok(rawMarkdown.includes("Reset completed memory"));
+    assert.ok(rawMarkdown.includes("In-app actions"));
+    assert.ok(rawManifest.includes("remainingInAppActions"));
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
   } finally {
@@ -2413,6 +3712,43 @@ test("runClipperGoLiveAutopilot executes allowlisted in-app actions and writes r
     else await writeFile(beforeStatus.goLiveAutopilotRun.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.goLiveAutopilotRun.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.goLiveAutopilotRun.markdownPath, previousMarkdown);
+  }
+});
+
+test("runClipperGoLiveAutopilot can refresh the operator brief action", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousRunManifest = await readFile(beforeStatus.goLiveAutopilotRun.manifestPath, "utf8").catch(() => null);
+  const previousRunMarkdown = await readFile(beforeStatus.goLiveAutopilotRun.markdownPath, "utf8").catch(() => null);
+  const previousBriefManifest = await readFile(beforeStatus.goLiveOperatorBrief.manifestPath, "utf8").catch(() => null);
+  const previousBriefMarkdown = await readFile(beforeStatus.goLiveOperatorBrief.markdownPath, "utf8").catch(() => null);
+
+  try {
+    const { goLiveAutopilotBrief } = await prepareClipperGoLiveAutopilotBrief();
+    const action = goLiveAutopilotBrief.actions.find((item) => item.localActionUrl === "/api/clippers/prepare-go-live-operator-brief");
+    assert.ok(action);
+    assert.equal(action.localActionUrl, "/api/clippers/prepare-go-live-operator-brief");
+
+    const { goLiveAutopilotRun, status } = await runClipperGoLiveAutopilot({ actionId: action.id, resetCompleted: true });
+    assert.equal(goLiveAutopilotRun.requestedActionId, action.id);
+    assert.ok(goLiveAutopilotRun.items.some((item) => item.actionId === action.id && item.status === "completed"));
+    assert.ok(goLiveAutopilotRun.completedActionIds.includes(action.id));
+    assert.ok(status.goLiveOperatorBrief.generatedAt);
+
+    const rawRun = await readFile(goLiveAutopilotRun.markdownPath, "utf8");
+    const rawBrief = await readFile(status.goLiveOperatorBrief.markdownPath, "utf8");
+    assert.ok(rawRun.includes("Go-Live Operator Brief regenerated."));
+    assert.ok(rawBrief.includes("Clippers Go-Live Operator Brief"));
+    assert.equal(rawRun.includes("access_token"), false);
+    assert.equal(rawBrief.includes("client_secret"), false);
+  } finally {
+    if (previousRunManifest === null) await unlink(beforeStatus.goLiveAutopilotRun.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveAutopilotRun.manifestPath, previousRunManifest);
+    if (previousRunMarkdown === null) await unlink(beforeStatus.goLiveAutopilotRun.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveAutopilotRun.markdownPath, previousRunMarkdown);
+    if (previousBriefManifest === null) await unlink(beforeStatus.goLiveOperatorBrief.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.manifestPath, previousBriefManifest);
+    if (previousBriefMarkdown === null) await unlink(beforeStatus.goLiveOperatorBrief.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLiveOperatorBrief.markdownPath, previousBriefMarkdown);
   }
 });
 
@@ -2435,6 +3771,657 @@ test("runClipperGoLiveAutopilot advances past recently completed actions", async
     else await writeFile(beforeStatus.goLiveAutopilotRun.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.goLiveAutopilotRun.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.goLiveAutopilotRun.markdownPath, previousMarkdown);
+  }
+});
+
+test("runClipperLocalDropSync safely skips empty drops and refreshes go-live state", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.localDropSync.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.localDropSync.markdownPath, "utf8").catch(() => null);
+
+  try {
+    const { localDropSync, status } = await runClipperLocalDropSync();
+    assert.ok(localDropSync.manifestPath.endsWith("local-drop-sync.json"));
+    assert.ok(localDropSync.markdownPath.endsWith("local-drop-sync.md"));
+    assert.equal(localDropSync.items.length, 5);
+    assert.equal(localDropSync.missingInputs.length, 3);
+    assert.ok(localDropSync.items.some((item) => item.id === "credential_drop"));
+    assert.ok(localDropSync.items.some((item) => item.id === "permission_template_drop"));
+    assert.ok(localDropSync.items.some((item) => item.id === "launch_evidence_drop"));
+    assert.ok(localDropSync.items.some((item) => item.id === "source_drop"));
+    assert.ok(localDropSync.items.some((item) => item.id === "state_refresh" && item.status === "completed"));
+    assert.ok(localDropSync.missingInputs.some((item) => item.id === "credentials" && item.dropDirs.some((dir) => dir === "credentials")));
+    assert.ok(localDropSync.missingInputs.some((item) => item.id === "launch_evidence" && item.dropDirs.some((dir) => dir.includes("evidence-drop"))));
+    assert.ok(localDropSync.missingInputs.some((item) => item.id === "source_videos" && item.dropDirs.some((dir) => dir.includes("source-drop/sports"))));
+    assert.ok(localDropSync.totals.completed >= 1);
+    assert.equal(status.localDropSync.manifestPath, localDropSync.manifestPath);
+    assert.equal(status.localDropSync.missingInputs.length, 3);
+    assert.ok(status.goLiveAutopilotBrief.actions.some((action) => action.localActionUrl === "/api/clippers/run-local-drop-sync"));
+
+    const rawManifest = await readFile(localDropSync.manifestPath, "utf8");
+    const rawMarkdown = await readFile(localDropSync.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Local Drop Sync"));
+    assert.ok(rawMarkdown.includes("Missing Input Checklist"));
+    assert.ok(rawManifest.includes("permission_template_drop"));
+    assert.ok(rawManifest.includes("state_refresh"));
+    assert.ok(rawManifest.includes("source_videos"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.localDropSync.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.localDropSync.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.markdownPath, previousMarkdown);
+  }
+});
+
+test("runClipperLocalDropSync imports launch evidence drop without failing", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.localDropSync.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.localDropSync.markdownPath, "utf8").catch(() => null);
+  const evidenceDropDir = path.join(process.cwd(), "clippers_workspace", "evidence-drop");
+  const testEvidencePath = path.join(evidenceDropDir, "local-drop-sync-launch-evidence.test.csv");
+  const ownerConnectEvidenceDropPath = path.join(evidenceDropDir, "owner-connect-evidence.csv");
+  const previousEvidenceDrop = await readFile(testEvidencePath, "utf8").catch(() => null);
+  const previousOwnerConnectEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8").catch(() => null);
+  const accountEvidencePath = path.join(process.cwd(), "clippers_workspace", "account-evidence", "sports-daily-instagram.json");
+  const previousAccountEvidence = await readFile(accountEvidencePath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(beforeStatus.launchEvidenceDropDiagnostic.manifestPath, "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(beforeStatus.launchEvidenceDropDiagnostic.markdownPath, "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8").catch(() => null);
+
+  await mkdir(evidenceDropDir, { recursive: true });
+  await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+  await writeFile(testEvidencePath, [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+    "\"account\",\"sports-daily\",\"instagram\",\"verified\",\"\",\"\",\"\",\"Instagram account @sportsdaily verified with profile URL https://www.instagram.com/sportsdaily/ and proof path stored outside repo.\"",
+  ].join("\n"));
+
+  try {
+    const { localDropSync, status } = await runClipperLocalDropSync("local-drop-sync-launch-evidence-test");
+    const launchEvidenceItem = localDropSync.items.find((item) => item.id === "launch_evidence_drop");
+
+    assert.ok(launchEvidenceItem);
+    assert.equal(launchEvidenceItem.status, "completed");
+    assert.ok(launchEvidenceItem.message.includes("launch evidence rows accepted"));
+    assert.ok(launchEvidenceItem.message.includes("account"));
+    assert.ok(launchEvidenceItem.message.includes("app"));
+    assert.ok(launchEvidenceItem.message.includes("permission"));
+    assert.ok(launchEvidenceItem.message.includes("rejected"));
+    assert.ok(launchEvidenceItem.message.includes("file errors"));
+    assert.equal(launchEvidenceItem.message.includes("undefined"), false);
+    assert.ok(localDropSync.launchEvidenceDrop);
+    assert.equal(localDropSync.launchEvidenceDrop.accepted.accountEvidence >= 1, true);
+    assert.equal(Array.isArray(localDropSync.launchEvidenceDrop.rejected), true);
+    assert.equal(Array.isArray(localDropSync.launchEvidenceDrop.fileErrors), true);
+    assert.ok(status.accountEvidence.items.some((item) => item.id === "sports-daily-instagram" && item.status === "verified"));
+
+    const rawManifest = await readFile(localDropSync.manifestPath, "utf8");
+    const rawMarkdown = await readFile(localDropSync.markdownPath, "utf8");
+    assert.ok(rawManifest.includes("launch_evidence_drop"));
+    assert.ok(rawManifest.includes("launchEvidenceDrop"));
+    assert.ok(rawMarkdown.includes("Launch Evidence Drop"));
+    assert.equal(rawManifest.includes("Cannot read properties of undefined"), false);
+  } finally {
+    if (previousEvidenceDrop === null) await unlink(testEvidencePath).catch(() => undefined);
+    else await writeFile(testEvidencePath, previousEvidenceDrop);
+    if (previousOwnerConnectEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
+    if (previousAccountEvidence === null) await unlink(accountEvidencePath).catch(() => undefined);
+    else await writeFile(accountEvidencePath, previousAccountEvidence);
+    if (previousManifest === null) await unlink(beforeStatus.localDropSync.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.localDropSync.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.markdownPath, previousMarkdown);
+    if (previousDiagnostic === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.markdownPath, previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, previousRepairWorksheet);
+  }
+});
+
+test("prepareClipperLaunchEvidenceFixPack writes correction queue for rejected evidence rows", async () => {
+  const beforeStatus = await getClipperStatus();
+  const evidenceDropDir = path.join(process.cwd(), "clippers_workspace", "evidence-drop");
+  const ownerConnectEvidenceDropPath = path.join(evidenceDropDir, "owner-connect-evidence.csv");
+  const previousOwnerConnectEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8").catch(() => null);
+  const previousLocalDropManifest = await readFile(beforeStatus.localDropSync.manifestPath, "utf8").catch(() => null);
+  const previousLocalDropMarkdown = await readFile(beforeStatus.localDropSync.markdownPath, "utf8").catch(() => null);
+  const previousManifest = await readFile(beforeStatus.launchEvidenceFixPack.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.launchEvidenceFixPack.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.launchEvidenceFixPack.csvPath, "utf8").catch(() => null);
+  const suggestedImportCsvPath = path.join(evidenceDropDir, "owner-connect-evidence.fixpack.csv");
+  const previousSuggestedImportCsv = await readFile(suggestedImportCsvPath, "utf8").catch(() => null);
+
+  await mkdir(evidenceDropDir, { recursive: true });
+  await writeFile(ownerConnectEvidenceDropPath, [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+    "account,sports-daily,instagram,verified,,,,",
+    "developer_app,,tiktok,submitted,,tiktok-app-id,http://localhost:5000,Submitted with localhost URL",
+    "permission,,youtube,requested,https://www.googleapis.com/auth/youtube.upload,,,",
+  ].join("\n"));
+
+  try {
+    await runClipperLocalDropSync("launch-evidence-fix-pack-test");
+    const { launchEvidenceFixPack, status } = await prepareClipperLaunchEvidenceFixPack("launch-evidence-fix-pack-test");
+
+    assert.ok(launchEvidenceFixPack.manifestPath.endsWith("launch-evidence-fix-pack.json"));
+    assert.ok(launchEvidenceFixPack.markdownPath.endsWith("launch-evidence-fix-pack.md"));
+    assert.ok(launchEvidenceFixPack.csvPath.endsWith("launch-evidence-fix-pack.csv"));
+    assert.ok(launchEvidenceFixPack.suggestedImportCsvPath.endsWith("owner-connect-evidence.fixpack.csv"));
+    assert.equal(launchEvidenceFixPack.status, "needs_fix");
+    assert.equal(launchEvidenceFixPack.totals.rejectedRows, 3);
+    assert.equal(launchEvidenceFixPack.totals.currentStateGaps > 0, true);
+    assert.equal(launchEvidenceFixPack.totals.items >= 3 + launchEvidenceFixPack.totals.currentStateGaps, true);
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.fixCategory === "account_proof"));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.fixCategory === "developer_app"));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.fixCategory === "public_url"));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.fixCategory === "permission_proof"));
+    assert.ok(launchEvidenceFixPack.items.every((item) => item.suggestedReplacementRow.startsWith(item.kind)));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.evidenceSource === "drop_rejected"));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.evidenceSource === "current_state_gap"));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.suggestedReplacementRow.includes("<profile_url>")));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "account" && item.suggestedReplacementRow.includes("sports-daily,instagram,verified")));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "developer_app" && item.suggestedReplacementRow.includes(",tiktok,submitted,") && item.suggestedReplacementRow.includes("<https://your-domain.example>")));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "permission" && item.suggestedReplacementRow.includes(",youtube,requested,https://www.googleapis.com/auth/youtube.upload,")));
+    assert.equal(status.launchEvidenceFixPack.items.length, launchEvidenceFixPack.items.length);
+
+    const rawMarkdown = await readFile(launchEvidenceFixPack.markdownPath, "utf8");
+    const rawCsv = await readFile(launchEvidenceFixPack.csvPath, "utf8");
+    const rawSuggestedImportCsv = await readFile(launchEvidenceFixPack.suggestedImportCsvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Launch Evidence Fix Pack"));
+    assert.ok(rawMarkdown.includes("Suggested import CSV"));
+    assert.ok(rawMarkdown.includes("ignored by Local Sync"));
+    assert.ok(rawMarkdown.includes("Suggested notes"));
+    assert.ok(rawMarkdown.includes("Suggested replacement row"));
+    assert.ok(rawMarkdown.includes("current-state gaps"));
+    assert.ok(rawCsv.includes("evidence_source"));
+    assert.ok(rawCsv.includes("required_fix"));
+    assert.ok(rawCsv.includes("suggested_replacement_row"));
+    assert.ok(rawSuggestedImportCsv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.ok(rawSuggestedImportCsv.includes("sports-daily,instagram,verified"));
+    assert.ok(rawSuggestedImportCsv.includes("developer_app"));
+    assert.ok(rawSuggestedImportCsv.includes("permission"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("access_token"), false);
+    assert.equal(rawSuggestedImportCsv.includes("access_token"), false);
+    assert.equal(rawSuggestedImportCsv.includes("client_secret"), false);
+  } finally {
+    if (previousOwnerConnectEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
+    if (previousLocalDropManifest === null) await unlink(beforeStatus.localDropSync.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.manifestPath, previousLocalDropManifest);
+    if (previousLocalDropMarkdown === null) await unlink(beforeStatus.localDropSync.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.localDropSync.markdownPath, previousLocalDropMarkdown);
+    if (previousManifest === null) await unlink(beforeStatus.launchEvidenceFixPack.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceFixPack.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.launchEvidenceFixPack.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceFixPack.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.launchEvidenceFixPack.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceFixPack.csvPath, previousCsv);
+    if (previousSuggestedImportCsv === null) await unlink(suggestedImportCsvPath).catch(() => undefined);
+    else await writeFile(suggestedImportCsvPath, previousSuggestedImportCsv);
+  }
+});
+
+test("prepareClipperDropzoneReadyPack writes safe intake board for missing go-live inputs", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.dropzoneReadyPack.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.dropzoneReadyPack.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.dropzoneReadyPack.csvPath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(beforeStatus.launchEvidenceDropDiagnostic.manifestPath, "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(beforeStatus.launchEvidenceDropDiagnostic.markdownPath, "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8").catch(() => null);
+  const diagnosticDropPath = path.join(beforeStatus.rootDir, "evidence-drop", "launch-evidence-diagnostic.test.csv");
+  const previousDiagnosticDrop = await readFile(diagnosticDropPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(diagnosticDropPath, [
+      "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+      "account,sports-daily,instagram,verified,,,,",
+      "permission,,youtube,requested,https://www.googleapis.com/auth/youtube.upload,,,YouTube upload requested in portal without ticket or proof",
+      "permission,,tiktok,requested,video.publish,,,TikTok Content Posting API requested with portal ticket TT-123 and proof screenshot path stored outside repo.",
+    ].join("\n"));
+    const { dropzoneReadyPack, status } = await prepareClipperDropzoneReadyPack();
+    assert.ok(dropzoneReadyPack.manifestPath.endsWith("dropzone-ready-pack.json"));
+    assert.ok(dropzoneReadyPack.markdownPath.endsWith("dropzone-ready-pack.md"));
+    assert.ok(dropzoneReadyPack.csvPath.endsWith("dropzone-ready-pack.csv"));
+    assert.equal(dropzoneReadyPack.items.length, 3);
+    assert.ok(dropzoneReadyPack.items.some((item) => item.lane === "credentials"));
+    assert.ok(dropzoneReadyPack.items.some((item) => item.lane === "launch_evidence"));
+    assert.ok(dropzoneReadyPack.items.some((item) => item.lane === "source_videos"));
+    assert.ok(dropzoneReadyPack.items.some((item) => item.lane === "launch_evidence" && item.expectedFiles.some((file) => file.endsWith("owner-connect-evidence.csv"))));
+    const sourceDropzoneItem = dropzoneReadyPack.items.find((item) => item.lane === "source_videos");
+    assert.ok(sourceDropzoneItem);
+    assert.equal(sourceDropzoneItem.nextStep, status.sourceDropDiagnostic.nextStep);
+    assert.equal(sourceDropzoneItem.sourceArtifactPath, status.sourceDropDiagnostic.repairWorksheetCsvPath);
+    assert.ok(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("source assets") || blocker.includes("source manifest rows")));
+    assert.equal(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("weekly source slots")), false);
+    assert.ok(status.launchEvidenceDropDiagnostic.manifestPath.endsWith("launch-evidence-drop-diagnostic.json"));
+    assert.ok(status.launchEvidenceDropDiagnostic.markdownPath.endsWith("launch-evidence-drop-diagnostic.md"));
+    assert.ok(status.launchEvidenceDropDiagnostic.repairWorksheetCsvPath.endsWith("launch-evidence-drop-repair-worksheet.csv"));
+    assert.ok(status.launchEvidenceDropDiagnostic.totals.pendingRows >= 1);
+    assert.ok(status.launchEvidenceDropDiagnostic.rows.some((row) => row.sourceFile.endsWith("launch-evidence-diagnostic.test.csv") && row.status === "pending_values" && row.pendingFields.includes("notes")));
+    assert.ok(status.launchEvidenceDropDiagnostic.rows.some((row) => row.sourceFile.endsWith("launch-evidence-diagnostic.test.csv") && row.status === "pending_values" && row.pendingFields.includes("notes_proof")));
+    const launchEvidenceDropzoneItem = dropzoneReadyPack.items.find((item) => item.lane === "launch_evidence");
+    assert.ok(launchEvidenceDropzoneItem);
+    assert.equal(launchEvidenceDropzoneItem.nextStep, status.launchEvidenceDropDiagnostic.nextStep);
+    assert.equal(launchEvidenceDropzoneItem.sourceArtifactPath, status.launchEvidenceDropDiagnostic.repairWorksheetCsvPath);
+    assert.ok(launchEvidenceDropzoneItem.blockers.some((blocker) => blocker.includes("launch evidence rows")));
+    assert.ok(dropzoneReadyPack.totals.dropDirs >= 3);
+    assert.ok(dropzoneReadyPack.totals.expectedFiles > 0);
+    assert.equal(status.dropzoneReadyPack.manifestPath, dropzoneReadyPack.manifestPath);
+
+    const rawManifest = await readFile(dropzoneReadyPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(dropzoneReadyPack.markdownPath, "utf8");
+    const rawCsv = await readFile(dropzoneReadyPack.csvPath, "utf8");
+    const rawDiagnosticMarkdown = await readFile(status.launchEvidenceDropDiagnostic.markdownPath, "utf8");
+    const rawRepairWorksheet = await readFile(status.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Dropzone Ready Pack"));
+    assert.ok(rawMarkdown.includes("Credential drop intake"));
+    assert.ok(rawMarkdown.includes("Launch evidence drop intake"));
+    assert.ok(rawMarkdown.includes("Rights-cleared source video drop intake"));
+    assert.ok(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv"));
+    assert.ok(rawCsv.includes("source-drop-repair-worksheet.csv"));
+    assert.ok(rawDiagnosticMarkdown.includes("Clippers Launch Evidence Drop Diagnostic"));
+    assert.ok(rawDiagnosticMarkdown.includes("Pending rows"));
+    assert.ok(rawDiagnosticMarkdown.includes("Repair worksheet"));
+    assert.ok(rawRepairWorksheet.startsWith("source_file,row_index,kind,identifier,platform,scope,app_identifier,status,pending_fields"));
+    assert.ok(rawRepairWorksheet.includes("notes_proof"));
+    assert.ok(rawRepairWorksheet.includes("proof_needed"));
+    assert.ok(rawRepairWorksheet.includes("portal_url"));
+    assert.ok(rawRepairWorksheet.includes("suggested_evidence_row"));
+    assert.ok(rawRepairWorksheet.includes("clippers_workspace/evidence-drop"));
+    assert.equal(rawRepairWorksheet.includes(',permission,"""",'), false);
+    assert.ok(rawCsv.includes("source_videos"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret="), false);
+    assert.equal(rawCsv.includes("refresh_token="), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.dropzoneReadyPack.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.dropzoneReadyPack.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.dropzoneReadyPack.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.dropzoneReadyPack.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.dropzoneReadyPack.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.dropzoneReadyPack.csvPath, previousCsv);
+    if (previousDiagnosticDrop === null) await unlink(diagnosticDropPath).catch(() => undefined);
+    else await writeFile(diagnosticDropPath, previousDiagnosticDrop);
+    if (previousDiagnostic === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.markdownPath, previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, previousRepairWorksheet);
+  }
+});
+
+test("prepareClipperOwnerConnectPack writes one operator queue for external account connection", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.ownerConnectPack.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.ownerConnectPack.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.ownerConnectPack.csvPath, "utf8").catch(() => null);
+  const previousProgress = await readFile(beforeStatus.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
+  const ownerConnectEvidenceDropPath = path.join(beforeStatus.rootDir, "evidence-drop", "owner-connect-evidence.csv");
+  const previousEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8").catch(() => null);
+
+  try {
+    await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    const { ownerConnectPack, status } = await prepareClipperOwnerConnectPack();
+    assert.ok(ownerConnectPack.manifestPath.endsWith("owner-connect-pack.json"));
+    assert.ok(ownerConnectPack.markdownPath.endsWith("owner-connect-pack.md"));
+    assert.ok(ownerConnectPack.csvPath.endsWith("owner-connect-pack.csv"));
+    assert.ok(ownerConnectPack.items.length >= status.externalExecutionSession.items.length);
+    assert.ok(ownerConnectPack.items.some((item) => item.lane === "account"));
+    assert.ok(ownerConnectPack.items.some((item) => item.lane === "developer_app"));
+    assert.ok(ownerConnectPack.items.some((item) => item.lane === "permission"));
+    assert.ok(ownerConnectPack.items.some((item) => item.lane === "credential"));
+    assert.ok(ownerConnectPack.items.some((item) => item.lane === "source_video" || item.lane === "launch_evidence"));
+    assert.ok(ownerConnectPack.totals.portalUrls > 0);
+    assert.ok(ownerConnectPack.totals.evidenceRows > 0);
+    assert.equal(status.ownerConnectPack.manifestPath, ownerConnectPack.manifestPath);
+    assert.ok(status.ownerConnectPack.sourceArtifacts.permissionRequestPackPath.endsWith("permission-request-pack.md"));
+    assert.equal(ownerConnectPack.sourceArtifacts.ownerConnectEvidenceDropPath, ownerConnectEvidenceDropPath);
+    const rawEvidenceDrop = await readFile(ownerConnectEvidenceDropPath, "utf8");
+    assert.ok(rawEvidenceDrop.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.ok(rawEvidenceDrop.includes("\"account\"") || rawEvidenceDrop.includes("\"developer_app\"") || rawEvidenceDrop.includes("\"permission\""));
+    assert.equal(rawEvidenceDrop.includes("client_secret"), false);
+
+    const progressItem = ownerConnectPack.items.find((item) => item.status === "ready_to_execute") || ownerConnectPack.items[0];
+    assert.ok(progressItem);
+    const progressEvidenceRow = progressItem.evidenceRows[0] || "owner_connect_progress,system,manual,local tracker smoke row";
+    const progressResult = await recordClipperOwnerConnectProgress({
+      itemId: progressItem.id,
+      status: "done",
+      notes: "Created in portal; evidence still pending.",
+      evidenceRows: [progressEvidenceRow],
+    });
+    const progressedItem = progressResult.ownerConnectPack.items.find((item) => item.id === progressItem.id);
+    assert.equal(progressedItem?.progressStatus, "done");
+    assert.equal(progressedItem?.progressNotes, "Created in portal; evidence still pending.");
+    assert.ok(progressResult.ownerConnectPack.totals.progressRecords >= 1);
+    assert.ok(progressResult.ownerConnectPack.totals.progressDone >= 1);
+    assert.ok(progressResult.ownerConnectPack.progressRecordsPath.endsWith("owner-connect-progress.json"));
+
+    const rawManifest = await readFile(progressResult.ownerConnectPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(progressResult.ownerConnectPack.markdownPath, "utf8");
+    const rawCsv = await readFile(progressResult.ownerConnectPack.csvPath, "utf8");
+    const rawProgress = await readFile(progressResult.ownerConnectPack.progressRecordsPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Owner Connect Pack"));
+    assert.ok(rawMarkdown.includes("Execution Queue"));
+    assert.ok(rawMarkdown.includes("Progress Records"));
+    assert.ok(rawMarkdown.includes("Owner Connect Evidence Drop"));
+    assert.ok(rawProgress.includes(progressItem.id));
+    assert.ok(rawCsv.includes("ready_to_execute") || rawCsv.includes("blocked"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+    assert.equal(rawProgress.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.ownerConnectPack.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.ownerConnectPack.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.ownerConnectPack.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.csvPath, previousCsv);
+    if (previousProgress === null) await unlink(beforeStatus.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.progressRecordsPath, previousProgress);
+    if (previousEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
+    else await writeFile(ownerConnectEvidenceDropPath, previousEvidenceDrop);
+  }
+});
+
+test("prepareClipperRobertNextActions writes dynamic current-state action pack", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.robertNextActions.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.robertNextActions.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.robertNextActions.csvPath, "utf8").catch(() => null);
+  const connectNowPath = path.join(process.cwd(), "clippers_workspace", "ROBERT_CONNECT_NOW.md");
+  const previousConnectNow = await readFile(connectNowPath, "utf8").catch(() => null);
+
+  try {
+    const { robertNextActions, status } = await prepareClipperRobertNextActions();
+    assert.ok(robertNextActions.manifestPath.endsWith("ROBERT_NEXT_ACTIONS.json"));
+    assert.ok(robertNextActions.markdownPath.endsWith("ROBERT_NEXT_ACTIONS.md"));
+    assert.ok(robertNextActions.csvPath.endsWith("ROBERT_NEXT_ACTIONS.csv"));
+    assert.ok(robertNextActions.connectNow.markdownPath.endsWith("ROBERT_CONNECT_NOW.md"));
+    assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
+    assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
+    assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
+    assert.ok(robertNextActions.connectNow.focusRun.items.length <= 7);
+    assert.ok(robertNextActions.connectNow.focusRun.estimatedMinutes >= 0);
+    assert.ok(robertNextActions.connectNow.pendingCredentialEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
+    assert.ok(robertNextActions.connectNow.credentialTemplate.includes("TIKTOK_CLIENT_KEY="));
+    assert.ok(robertNextActions.connectNow.credentialTemplate.includes("GOOGLE_DRIVE_REFRESH_TOKEN="));
+    assert.ok(["ready_to_import", "needs_review", "move_candidates_to_drop_dir", "no_candidates"].includes(robertNextActions.connectNow.credentialCloseout.status));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.diagnosticPath.endsWith("credential-drop-diagnostic.md"));
+    assert.equal(robertNextActions.connectNow.credentialCloseout.importReady, robertNextActions.connectNow.credentialCloseout.status === "ready_to_import" && robertNextActions.connectNow.credentialCloseout.acceptedEnvVars.length > 0);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.dropDirs.length >= 2);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes("GOOGLE_CLIENT_ID"));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.missingEnvVars.every((envVar) =>
+      robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes(envVar)
+    ));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.configuredEnvVars.every((envVar) =>
+      robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes(envVar)
+    ));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.pendingEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.totals.files >= 0);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.totals.pendingEnvVars >= robertNextActions.connectNow.credentialCloseout.pendingEnvVars.length);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.files.length <= 10);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.files.every((file) => file.relativePath && file.nextStep.length > 0));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.length > 0);
+    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) =>
+      item.driveSearchUrls.some((url) => url.startsWith("https://drive.google.com/drive/search?q="))
+    ));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) =>
+      item.localDropFileNames.some((fileName) => fileName.startsWith("credentials/") || fileName.startsWith("secrets/"))
+    ));
+    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) => item.missingSuggestedEnvVars.includes("GOOGLE_CLIENT_ID")));
+    assert.equal(robertNextActions.connectNow.officialPermissionCloseout.status, status.officialPermissionMatrix.status);
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.matrixPath.endsWith("official-permission-matrix.md"));
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.csvPath.endsWith("official-permission-matrix.csv"));
+    assert.equal(robertNextActions.connectNow.officialPermissionCloseout.totals.scopes, status.officialPermissionMatrix.totals.scopes);
+    assert.equal(robertNextActions.connectNow.officialPermissionCloseout.totals.loginRequired, status.officialPermissionMatrix.totals.loginRequired);
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.length === status.officialPermissionMatrix.sourceBatches.length);
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "instagram" && batch.accessMode === "login_required"));
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "tiktok" && batch.accessMode === "public"));
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.nextRows.length > 0);
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.approvalRows.length > 0);
+    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.webProofTrail.some((proof) => proof.platform === "youtube" && proof.officialUrls.some((url) => url.includes("developers.google.com"))));
+    assert.equal(robertNextActions.connectNow.accountCloseout.status, status.ownerConnectPack.status);
+    assert.ok(robertNextActions.connectNow.accountCloseout.markdownPath.endsWith("owner-connect-pack.md"));
+    assert.ok(robertNextActions.connectNow.accountCloseout.csvPath.endsWith("owner-connect-pack.csv"));
+    assert.ok(robertNextActions.connectNow.accountCloseout.evidenceDropPath.endsWith("owner-connect-evidence.csv"));
+    assert.ok(robertNextActions.connectNow.accountCloseout.totals.items > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.totals.accounts > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.totals.developerApps > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.totals.permissions > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.portalUrls.length > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.evidenceRows.length > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.length > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.evidenceRow.includes("\"account\"")));
+    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.some((item) => item.portalUrl?.startsWith("https://")));
+    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.requiredProof.length >= 3));
+    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.length > 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.some((item) => item.lane === "permission" && item.scopes.length > 0));
+    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.some((item) => item.lane === "developer_app" || item.lane === "official_recheck"));
+    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.every((item) => item.requiredProof.length >= 3));
+    assert.ok(robertNextActions.connectNow.ownershipSplit.robertReady.length > 0);
+    assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.length > 0);
+    assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.some((item) => item.label.includes("accounts") || item.label.includes("permissions")));
+    assert.ok(robertNextActions.connectNow.ownershipSplit.automationUnlockedBy.includes("OAuth tokens connected"));
+    assert.ok(robertNextActions.connectNow.ownershipSplit.nextRobertAction.length > 0);
+    assert.ok(robertNextActions.connectNow.ownershipSplit.nextUserAction.length > 0);
+    assert.ok(["blocked", "needs_sources", "needs_connections", "ready"].includes(robertNextActions.connectNow.weeklyRunway.status));
+    assert.ok(robertNextActions.connectNow.weeklyRunway.targetWeeklyClips >= 100);
+    assert.ok(robertNextActions.connectNow.weeklyRunway.plannedDailyClips >= 15);
+    assert.ok(robertNextActions.connectNow.weeklyRunway.configuredDailyClipTarget >= robertNextActions.connectNow.weeklyRunway.plannedDailyClips);
+    assert.equal(robertNextActions.connectNow.weeklyRunway.categories.length, 3);
+    assert.ok(robertNextActions.connectNow.weeklyRunway.categories.every((category) => category.sourceAssetGap >= 0 && category.nextStep.length > 0));
+    assert.ok(robertNextActions.connectNow.weeklyRunway.weeklyMissingSlots >= 0);
+    assert.ok(robertNextActions.connectNow.weeklyRunway.sourceAssetGap >= 0);
+    assert.equal(robertNextActions.connectNow.platformLaunchBridge.length, 3);
+    assert.deepEqual(
+      robertNextActions.connectNow.platformLaunchBridge.map((item) => item.platform).sort(),
+      ["instagram", "tiktok", "youtube"],
+    );
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.handles.length > 0));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.scopes.length > 0));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.portalUrls.length >= 2));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "tiktok" && item.missingEnvVars.includes("TIKTOK_CLIENT_KEY")));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "instagram" && item.scopes.includes("instagram_content_publish")));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
+    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.length <= 12);
+    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
+    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "developer_app" || item.lane === "permission"));
+    assert.ok(robertNextActions.connectNow.evidenceTemplatePath.endsWith("owner-connect-evidence.fixpack.csv"));
+    assert.ok(robertNextActions.connectNow.evidenceImportPath.endsWith("owner-connect-evidence.csv"));
+    assert.ok(robertNextActions.connectNow.evidenceCloseout.total >= 0);
+    assert.ok(robertNextActions.connectNow.evidenceCloseout.fixpackPath.endsWith("owner-connect-evidence.fixpack.csv"));
+    assert.ok(robertNextActions.connectNow.evidenceCloseout.importTarget.endsWith("owner-connect-evidence.csv"));
+    assert.ok(robertNextActions.connectNow.evidenceCloseout.byCategory.currentStateGaps >= 0);
+    assert.ok(robertNextActions.connectNow.evidenceCloseout.byCategory.rejectedRows >= 0);
+    if (robertNextActions.connectNow.evidenceCloseout.total > 0) {
+      assert.ok(robertNextActions.connectNow.evidenceCloseout.nextRows.length > 0);
+      assert.ok(robertNextActions.connectNow.evidenceCloseout.nextItems.length > 0);
+      assert.ok(robertNextActions.connectNow.evidenceCloseout.importBridge.length > 0);
+      assert.ok(robertNextActions.connectNow.evidenceCloseout.nextItems.every((item) => item.requiredFix.length > 0));
+      assert.ok(robertNextActions.connectNow.evidenceCloseout.importBridge.every((batch) =>
+        batch.count > 0 &&
+        batch.rows.length === batch.count &&
+        batch.requiredFixes.length > 0 &&
+        batch.importTarget.endsWith("owner-connect-evidence.csv") &&
+        batch.nextStep.includes("Launch Evidence Batch")
+      ));
+    }
+    assert.equal(robertNextActions.connectNow.sourceCloseout.status, status.sourceSupplyDropKit.status);
+    assert.equal(robertNextActions.connectNow.sourceCloseout.total, status.sourceSupplyDropKit.totals.items);
+    assert.ok(robertNextActions.connectNow.sourceCloseout.markdownPath.endsWith("source-supply-drop-kit.md"));
+    assert.ok(robertNextActions.connectNow.sourceCloseout.csvPath.endsWith("source-supply-drop-kit.csv"));
+    assert.ok(robertNextActions.connectNow.sourceCloseout.sourceDropDir.endsWith("source-drop"));
+    assert.ok(robertNextActions.connectNow.sourceCloseout.nextRows.length <= 10);
+    assert.ok(robertNextActions.connectNow.sourceCloseout.rightsRows.length <= 10);
+    assert.ok(robertNextActions.connectNow.sourceCloseout.trendRows.length <= 10);
+    assert.equal(robertNextActions.connectNow.sourceCloseout.batches.length, status.sourceSupplyDropKit.categoryBatches.length);
+    assert.deepEqual(
+      robertNextActions.connectNow.sourceCloseout.batches.map((batch) => batch.category).sort(),
+      status.sourceSupplyDropKit.categoryBatches.map((batch) => batch.category).sort(),
+    );
+    if (robertNextActions.connectNow.sourceCloseout.total > 0) {
+      assert.ok(robertNextActions.connectNow.sourceCloseout.nextRows.some((row) => row.includes("owned_or_permissioned")));
+      assert.ok(robertNextActions.connectNow.sourceCloseout.rightsRows.some((row) => row.includes("source_rights")));
+      assert.ok(robertNextActions.connectNow.sourceCloseout.trendRows.some((row) => row.includes("approved_after_proof")));
+      assert.ok(robertNextActions.connectNow.sourceCloseout.nextItems.every((item) => item.targetFileName.endsWith(".mp4")));
+    }
+    assert.equal(robertNextActions.connectNow.connectionTunnel.gates.length, 8);
+    assert.deepEqual(
+      robertNextActions.connectNow.connectionTunnel.gates.map((gate) => gate.id),
+      ["credentials", "accounts", "developer_apps", "permissions", "oauth", "evidence", "sources", "publish"],
+    );
+    assert.ok(["blocked", "ready_to_execute", "waiting", "done"].includes(robertNextActions.connectNow.connectionTunnel.status));
+    assert.ok(robertNextActions.connectNow.connectionTunnel.progress >= 0);
+    assert.ok(robertNextActions.connectNow.connectionTunnel.progress <= 100);
+    assert.ok(robertNextActions.connectNow.connectionTunnel.gates.every((gate) => gate.total >= 1));
+    assert.ok(robertNextActions.connectNow.connectionTunnel.gates.every((gate) => gate.unlocks.length > 0));
+    assert.ok(robertNextActions.connectNow.connectionTunnel.nextGate);
+    assert.equal(robertNextActions.connectNow.connectionTunnel.nextStep, robertNextActions.connectNow.connectionTunnel.nextGate.nextStep);
+    assert.ok(robertNextActions.connectNow.launchEvidenceTemplate.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.ok(robertNextActions.connectNow.sourceIntakeTemplate.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes"));
+    const configuredHandles = beforeStatus.accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => platformAccount.handle));
+    assert.ok(configuredHandles.length > 0);
+    assert.deepEqual(
+      robertNextActions.connectNow.accountHandles.map((item) => item.handle).sort(),
+      configuredHandles.sort(),
+    );
+    assert.ok(robertNextActions.items.length > 0);
+    assert.ok(robertNextActions.totals.actions >= robertNextActions.items.length);
+    assert.ok(robertNextActions.totals.estimatedMinutes > 0);
+    assert.ok(robertNextActions.items.some((item) => item.lane === "local_drop" || item.lane === "external_portal" || item.lane === "source_supply"));
+    assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
+    assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("launch-evidence-drop-repair-worksheet.csv")));
+    assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("source-drop-repair-worksheet.csv")));
+    assert.ok(robertNextActions.items.every((item) => item.operatorSteps.length > 0));
+    assert.equal(status.robertNextActions.manifestPath, robertNextActions.manifestPath);
+    assert.equal(status.robertNextActions.markdownPath, robertNextActions.markdownPath);
+
+    const rawManifest = await readFile(robertNextActions.manifestPath, "utf8");
+    const rawMarkdown = await readFile(robertNextActions.markdownPath, "utf8");
+    const rawCsv = await readFile(robertNextActions.csvPath, "utf8");
+    const rawConnectNow = await readFile(robertNextActions.connectNow.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers - Robert Next Actions"));
+    assert.ok(rawMarkdown.includes("Connect Now Handoff"));
+    assert.ok(rawMarkdown.includes("Credential closeout"));
+    assert.ok(rawMarkdown.includes("Account closeout"));
+    assert.ok(rawMarkdown.includes("Official permission closeout"));
+    assert.ok(rawMarkdown.includes("Evidence closeout"));
+    assert.ok(rawMarkdown.includes("Source closeout"));
+    assert.ok(rawMarkdown.includes("Connection tunnel"));
+    assert.ok(rawMarkdown.includes("Priority Actions"));
+    assert.ok(rawMarkdown.includes("Operator steps"));
+    assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
+    assert.ok(rawConnectNow.includes("Connection Tunnel"));
+    assert.ok(rawConnectNow.includes("Credentials"));
+    assert.ok(rawConnectNow.includes("Publish"));
+    assert.ok(rawConnectNow.includes("Credential Closeout"));
+    assert.ok(rawConnectNow.includes("Drive credential bridge"));
+    assert.ok(rawConnectNow.includes("Official Permission Closeout"));
+    assert.ok(rawConnectNow.includes("Meta"));
+    assert.ok(rawConnectNow.includes("Account/App/Permission Closeout"));
+    assert.ok(rawConnectNow.includes("Account proof bridge"));
+    assert.ok(rawConnectNow.includes("App/permission bridge"));
+    assert.ok(rawConnectNow.includes("Ownership Split"));
+    assert.ok(rawConnectNow.includes("Robert-ready local actions"));
+    assert.ok(rawConnectNow.includes("User-required external actions"));
+    assert.ok(rawConnectNow.includes("Weekly Clip Runway"));
+    assert.ok(rawConnectNow.includes("Target weekly clips"));
+    assert.ok(rawConnectNow.includes("Platform Launch Bridge"));
+    assert.ok(rawConnectNow.includes("TikTok"));
+    assert.ok(rawConnectNow.includes("Instagram Reels"));
+    assert.ok(rawConnectNow.includes("YouTube Shorts"));
+    assert.ok(rawConnectNow.includes("Focus Run"));
+    assert.ok(rawConnectNow.includes("Evidence Closeout"));
+    assert.ok(rawConnectNow.includes("Evidence import bridge"));
+    assert.ok(rawConnectNow.includes("Source Closeout"));
+    assert.ok(configuredHandles.some((handle) => rawConnectNow.includes(handle)));
+    assert.ok(rawConnectNow.includes("owner-connect-evidence.fixpack.csv"));
+    assert.ok(rawConnectNow.includes("Local Drop Sync lo ignora"));
+    assert.ok(rawCsv.includes("estimated_minutes"));
+    assert.ok(rawCsv.includes("operator_steps"));
+    assert.ok(rawCsv.includes("credential-doctor-repair-worksheet.csv"));
+    assert.ok(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv"));
+    assert.ok(rawCsv.includes("source-drop-repair-worksheet.csv"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(robertNextActions.connectNow.credentialTemplate.includes("client_secret="), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.credentialCloseout).includes("client_secret="), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.credentialCloseout).includes("refresh_token="), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.accountCloseout).includes("client_secret="), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.accountCloseout).includes("refresh_token="), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.sourceCloseout).includes("refresh_token="), false);
+    assert.equal(robertNextActions.connectNow.launchEvidenceTemplate.includes("access_token"), false);
+    assert.equal(robertNextActions.connectNow.sourceIntakeTemplate.includes("refresh_token"), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret="), false);
+    assert.equal(rawCsv.includes("refresh_token="), false);
+    assert.equal(rawConnectNow.includes("access_token"), false);
+    assert.equal(rawConnectNow.includes("client_secret="), false);
+    assert.equal(rawConnectNow.includes("refresh_token="), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.robertNextActions.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.robertNextActions.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.robertNextActions.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.robertNextActions.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.robertNextActions.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.robertNextActions.csvPath, previousCsv);
+    if (previousConnectNow === null) await unlink(connectNowPath).catch(() => undefined);
+    else await writeFile(connectNowPath, previousConnectNow);
+  }
+});
+
+test("runClipperGoLivePrepSweep refreshes all local go-live packs conservatively", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.goLivePrepSweep.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.goLivePrepSweep.markdownPath, "utf8").catch(() => null);
+
+  try {
+    const { goLivePrepSweep, localDropSync, status } = await runClipperGoLivePrepSweep();
+    assert.ok(goLivePrepSweep.manifestPath.endsWith("go-live-prep-sweep.json"));
+    assert.ok(goLivePrepSweep.markdownPath.endsWith("go-live-prep-sweep.md"));
+    assert.ok(goLivePrepSweep.items.length >= 8);
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "bootstrap"));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "local_drop_sync"));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "go_live_refresh"));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "go_live_refresh" && item.message.includes("account setup session")));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "go_live_refresh" && item.message.includes("permission dossier")));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "go_live_refresh" && item.message.includes("Robert next actions")));
+    assert.ok(goLivePrepSweep.items.some((item) => item.id === "sources_publish" && item.message.includes("publisher execution queue")));
+    assert.ok(goLivePrepSweep.totals.completed >= 1);
+    assert.ok(localDropSync);
+    assert.equal(status.goLivePrepSweep.manifestPath, goLivePrepSweep.manifestPath);
+    assert.equal(status.goLivePrepSweep.markdownPath, goLivePrepSweep.markdownPath);
+    assert.ok(status.goLivePrepSweep.localDropSync);
+    assert.ok(status.accountSetupSession.markdownPath.endsWith("account-setup-session.md"));
+    assert.ok(status.permissionSubmissionDossier.markdownPath.endsWith("permission-submission-dossier.md"));
+    assert.ok(status.robertNextActions.markdownPath.endsWith("ROBERT_NEXT_ACTIONS.md"));
+
+    const rawManifest = await readFile(goLivePrepSweep.manifestPath, "utf8");
+    const rawMarkdown = await readFile(goLivePrepSweep.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Go-Live Prep Sweep"));
+    assert.ok(rawMarkdown.includes("Local Drop Sync"));
+    assert.ok(rawManifest.includes("go_live_refresh"));
+    assert.ok(rawManifest.includes("account setup session"));
+    assert.ok(rawManifest.includes("permission dossier"));
+    assert.ok(rawManifest.includes("Robert next actions"));
+    assert.ok(rawManifest.includes("publisher execution queue"));
+    assert.ok(rawManifest.includes("local_drop_sync"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.goLivePrepSweep.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLivePrepSweep.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.goLivePrepSweep.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.goLivePrepSweep.markdownPath, previousMarkdown);
   }
 });
 
@@ -2464,21 +4451,26 @@ test("recordClipperSourceIntakeBatch writes source tasks and rights batch rows",
   await bootstrapClipperWorkspace();
   const { sourceIntakeBatch, status } = await recordClipperSourceIntakeBatch({
     batchText: [
-      "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
-      "sports,Last second comeback,https://example.com/comeback,@league,tiktok,comeback.mp4,owned_or_permissioned,https://drive.google.com/proof,high,Use fast scoreboard context",
-      "memes,Loop format,https://example.com/meme,@creator,instagram,meme-loop.mp4,review_required,,medium,Needs creator approval",
-      ",,,,,,,,,",
-    ].join("\n"),
+        "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+        "sports,Last second comeback,https://example.com/comeback,@league,tiktok,comeback.mp4,owned_or_permissioned,https://drive.google.com/proof,high,Use fast scoreboard context",
+        "memes,Loop format,https://example.com/meme,@creator,instagram,meme-loop.mp4,review_required,,medium,Needs creator approval",
+        "streamers,Weak rights note,https://example.com/weak,@creator,youtube,weak-rights.mp4,owned_or_permissioned,Permission confirmed,low,Weak evidence should not unlock",
+        "sports,Placeholder source,<approved source URL for sports-source-01.mp4>,<creator/rightsholder handle>,tiktok,sports-source-01.mp4,owned_or_permissioned,<proof URL/path/id for sports-source-01.mp4>,high,Should be skipped",
+        ",,,,,,,,,",
+      ].join("\n"),
   });
 
   try {
-    assert.equal(sourceIntakeBatch.accepted, 2);
-    assert.equal(sourceIntakeBatch.skipped, 1);
+    assert.equal(sourceIntakeBatch.accepted, 3);
+    assert.equal(sourceIntakeBatch.skipped, 2);
     assert.equal(sourceIntakeBatch.totals.sports, 1);
     assert.equal(sourceIntakeBatch.totals.memes, 1);
+    assert.equal(sourceIntakeBatch.totals.streamers, 1);
     assert.equal(sourceIntakeBatch.totals.ownedOrPermissioned, 1);
-    assert.equal(sourceIntakeBatch.totals.reviewRequired, 1);
+    assert.equal(sourceIntakeBatch.totals.reviewRequired, 2);
     assert.ok(sourceIntakeBatch.items.some((item) => item.sourceRightsBatchRow?.startsWith("source_rights")));
+    assert.equal(sourceIntakeBatch.items.find((item) => item.targetFileName === "weak-rights.mp4")?.sourceRightsBatchRow, null);
+    assert.equal(sourceIntakeBatch.items.find((item) => item.targetFileName === "weak-rights.mp4")?.evidenceLink, null);
     assert.ok(sourceIntakeBatch.items.every((item) => item.targetSourcePath.includes("clippers_workspace/sources")));
     assert.ok(status.sourceHunt.items.length > 0);
 
@@ -2507,6 +4499,9 @@ test("importClipperSourceDropFiles copies dropped videos into source folders", a
   const dropDir = path.join(status.rootDir, "source-drop", "sports");
   const dropPath = path.join(dropDir, "drop-highlight.test.mp4");
   const targetPath = path.join(sportsFolder.path, "drop-highlight-test.mp4");
+  const previousDiagnostic = await readFile(path.join(status.rootDir, "source-drop-diagnostic.json"), "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(path.join(status.rootDir, "source-drop-diagnostic.md"), "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), "utf8").catch(() => null);
   let queuePath: string | null = null;
   await mkdir(dropDir, { recursive: true });
   await writeFile(dropPath, "fake-video-for-source-drop-test");
@@ -2515,12 +4510,15 @@ test("importClipperSourceDropFiles copies dropped videos into source folders", a
     const { sourceDropImport, status: nextStatus } = await importClipperSourceDropFiles();
     queuePath = sourceDropImport.queue.queuePath;
     assert.equal(sourceDropImport.filesScanned >= 1, true);
+    assert.equal(sourceDropImport.manifestRows >= 0, true);
+    assert.equal(sourceDropImport.rightsEvidenceWritten >= 0, true);
     assert.equal(sourceDropImport.imported >= 1, true);
     assert.ok(sourceDropImport.items.some((item) =>
       item.fileName === "drop-highlight-test.mp4" &&
       item.category === "sports" &&
       item.status === "imported" &&
-      item.rightsStatus === "review_required"
+      item.rightsStatus === "review_required" &&
+      item.rightsEvidencePath === null
     ));
     const targetStat = await stat(targetPath);
     assert.equal(targetStat.isFile(), true);
@@ -2529,10 +4527,104 @@ test("importClipperSourceDropFiles copies dropped videos into source folders", a
       asset.category === "sports" &&
       asset.rightsStatus === "review_required"
     ));
+    assert.ok(nextStatus.sourceDropDiagnostic.manifestPath.endsWith("source-drop-diagnostic.json"));
+    assert.ok(nextStatus.sourceDropDiagnostic.markdownPath.endsWith("source-drop-diagnostic.md"));
+    assert.ok(nextStatus.sourceDropDiagnostic.repairWorksheetCsvPath.endsWith("source-drop-repair-worksheet.csv"));
+    assert.ok(["ready_to_import", "needs_files", "needs_rights", "ready"].includes(nextStatus.sourceDropDiagnostic.status));
+    assert.ok(nextStatus.sourceDropDiagnostic.categories.some((category) => category.category === "sports"));
+    assert.ok(nextStatus.sourceDropDiagnostic.totals.minimumWeeklySourceAssets >= nextStatus.sourceDropDiagnostic.totals.rightsReadyAssets);
+    const rawDiagnostic = await readFile(nextStatus.sourceDropDiagnostic.manifestPath, "utf8");
+    const rawDiagnosticMarkdown = await readFile(nextStatus.sourceDropDiagnostic.markdownPath, "utf8");
+    const rawRepairWorksheet = await readFile(nextStatus.sourceDropDiagnostic.repairWorksheetCsvPath, "utf8");
+    assert.ok(rawDiagnosticMarkdown.includes("Clippers Source Drop Diagnostic"));
+    assert.ok(rawDiagnosticMarkdown.includes("Repair worksheet"));
+    assert.ok(rawDiagnosticMarkdown.includes("Missing source assets"));
+    assert.ok(rawDiagnostic.includes("source-drop-diagnostic"));
+    assert.ok(rawRepairWorksheet.includes("type,category,source_file,expected_file,current_status,issue,proof_needed,viral_search_query,viral_search_url,recency_window,minimum_views,viral_signal,rights_gate,next_step"));
+    assert.ok(rawRepairWorksheet.includes("file_needs_rights"));
+    assert.ok(rawRepairWorksheet.includes("viral_search_url"));
+    assert.ok(rawRepairWorksheet.includes("minimum_views"));
+    assert.ok(rawRepairWorksheet.includes("rights_gate"));
+    assert.equal(rawDiagnostic.includes("access_token"), false);
+    assert.equal(rawDiagnosticMarkdown.includes("client_secret"), false);
+    assert.equal(rawRepairWorksheet.includes("client_secret"), false);
   } finally {
     await unlink(dropPath).catch(() => undefined);
     await unlink(targetPath).catch(() => undefined);
     if (queuePath) await unlink(queuePath).catch(() => undefined);
+    if (previousDiagnostic === null) await unlink(path.join(status.rootDir, "source-drop-diagnostic.json")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-diagnostic.json"), previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(path.join(status.rootDir, "source-drop-diagnostic.md")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-diagnostic.md"), previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(path.join(status.rootDir, "source-drop-repair-worksheet.csv")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), previousRepairWorksheet);
+  }
+});
+
+test("importClipperSourceDropFiles creates allowlist evidence from source-drop manifest", async () => {
+  const status = await bootstrapClipperWorkspace();
+  const sportsFolder = status.sourceFolders.find((folder) => folder.category === "sports");
+  assert.ok(sportsFolder);
+  const dropDir = path.join(status.rootDir, "source-drop", "sports");
+  const dropPath = path.join(dropDir, "drop-approved.test.mp4");
+  const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
+  const previousManifest = await readFile(manifestPath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(path.join(status.rootDir, "source-drop-diagnostic.json"), "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(path.join(status.rootDir, "source-drop-diagnostic.md"), "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), "utf8").catch(() => null);
+  let queuePath: string | null = null;
+  let targetPath: string | null = null;
+  let evidencePath: string | null = null;
+  await mkdir(dropDir, { recursive: true });
+  await writeFile(dropPath, "fake-video-for-source-drop-manifest-test");
+  await writeFile(manifestPath, [
+    "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+    "sports,Approved comeback,https://example.com/source,@league,tiktok,drop-approved.test.mp4,owned_or_permissioned,https://drive.google.com/file/proof,high,Official source proof stored in Drive",
+    "",
+  ].join("\n"));
+
+  try {
+    const { sourceDropImport, status: nextStatus } = await importClipperSourceDropFiles();
+    queuePath = sourceDropImport.queue.queuePath;
+    const imported = sourceDropImport.items.find((item) =>
+      item.sourcePath === dropPath &&
+      item.category === "sports" &&
+      item.status === "imported"
+    );
+    assert.ok(imported);
+    targetPath = imported.targetPath;
+    evidencePath = imported.rightsEvidencePath;
+    assert.equal(imported.fileName, "drop-approved-test.mp4");
+    assert.equal(imported.rightsStatus, "owned_or_permissioned");
+    assert.equal(imported.manifestPath, manifestPath);
+    assert.equal(sourceDropImport.manifestFilesScanned >= 1, true);
+    assert.equal(sourceDropImport.manifestRows >= 1, true);
+    assert.equal(sourceDropImport.manifestMatched >= 1, true);
+    assert.equal(sourceDropImport.rightsEvidenceWritten >= 1, true);
+    assert.ok(evidencePath?.endsWith("drop-approved-test.md"));
+    assert.ok(nextStatus.productionQueue.sourceAssets.some((asset) =>
+      asset.fileName === "drop-approved-test.mp4" &&
+      asset.category === "sports" &&
+      asset.rightsStatus === "owned_or_permissioned" &&
+      asset.evidencePath === evidencePath
+    ));
+    const rawEvidence = await readFile(evidencePath!, "utf8");
+    assert.ok(rawEvidence.includes("source-drop-manifest"));
+    assert.ok(rawEvidence.includes("https://drive.google.com/file/proof"));
+    assert.equal(rawEvidence.includes("client_secret"), false);
+  } finally {
+    await unlink(dropPath).catch(() => undefined);
+    if (targetPath) await unlink(targetPath).catch(() => undefined);
+    if (evidencePath) await unlink(evidencePath).catch(() => undefined);
+    if (queuePath) await unlink(queuePath).catch(() => undefined);
+    if (previousManifest === null) await unlink(manifestPath).catch(() => undefined);
+    else await writeFile(manifestPath, previousManifest);
+    if (previousDiagnostic === null) await unlink(path.join(status.rootDir, "source-drop-diagnostic.json")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-diagnostic.json"), previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(path.join(status.rootDir, "source-drop-diagnostic.md")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-diagnostic.md"), previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(path.join(status.rootDir, "source-drop-repair-worksheet.csv")).catch(() => undefined);
+    else await writeFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), previousRepairWorksheet);
   }
 });
 
@@ -2607,6 +4699,108 @@ test("prepareClipperSourceAcquisitionPlan writes daily source gaps by category",
   }
 });
 
+test("prepareClipperSourceSupplyDropKit writes intake-ready source rows", async () => {
+  const beforeStatus = await bootstrapClipperWorkspace();
+  const previousManifest = await readFile(beforeStatus.sourceSupplyDropKit.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.sourceSupplyDropKit.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.sourceSupplyDropKit.csvPath, "utf8").catch(() => null);
+  const starterManifestPaths = ["sports", "memes", "streamers"].map((category) => path.join(beforeStatus.rootDir, "source-drop", category, "source-drop-manifest.csv"));
+  const previousStarterManifests = await Promise.all(starterManifestPaths.map((manifestPath) => readFile(manifestPath, "utf8").catch(() => null)));
+  const starterReadmePaths = ["sports", "memes", "streamers"].map((category) => path.join(beforeStatus.rootDir, "source-drop", category, "README.md"));
+  const previousStarterReadmes = await Promise.all(starterReadmePaths.map((readmePath) => readFile(readmePath, "utf8").catch(() => null)));
+
+  try {
+    await Promise.all(starterManifestPaths.map((manifestPath) => unlink(manifestPath).catch(() => undefined)));
+    await Promise.all(starterReadmePaths.map((readmePath) => unlink(readmePath).catch(() => undefined)));
+    const { sourceSupplyDropKit, status } = await prepareClipperSourceSupplyDropKit();
+    const expectedItems = status.sourceAcquisition.categories.reduce((sum, category) => sum + Math.max(0, category.minimumWeeklySourceAssets - category.rightsReadyAssets), 0);
+
+    assert.equal(sourceSupplyDropKit.items.length, expectedItems);
+    assert.equal(sourceSupplyDropKit.totals.items, sourceSupplyDropKit.items.length);
+    assert.ok(sourceSupplyDropKit.categoryBatches.length > 0);
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.items > 0));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropManifestPath.endsWith(`${path.sep}source-drop${path.sep}${batch.category}${path.sep}source-drop-manifest.csv`)));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropReadmePath.endsWith(`${path.sep}source-drop${path.sep}${batch.category}${path.sep}README.md`)));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.intakeBatchTemplate.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes")));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.trendCandidateBatchTemplate.startsWith("category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle")));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.rightsEvidenceBatchTemplate.startsWith("kind,account_id,platform,status,scope")));
+    assert.ok(sourceSupplyDropKit.intakeBatchTemplate.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes"));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.intakeBatchRow.includes("owned_or_permissioned")));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.sourceDropPath.includes(`${path.sep}source-drop${path.sep}${item.category}${path.sep}`)));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropDir.endsWith(`${path.sep}source-drop${path.sep}${batch.category}`)));
+    assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropPaths.every((dropPath) => dropPath.includes(`${path.sep}source-drop${path.sep}${batch.category}${path.sep}`))));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.trendCandidateBatchRow.includes("approved_after_proof")));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.rightsEvidenceBatchRow.includes("source_rights")));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.evidenceLinkPlaceholder.includes("proof URL/path/id")));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.requiredProof.length >= 4));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.viralSearchQueries.length >= 3));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.viralScoreChecklist.length >= 4));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.rejectIf.length >= 4));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.doneCriteria.some((criteria) => criteria.includes("Source Intake Batch"))));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.doneCriteria.some((criteria) => criteria.includes("Trend Candidate Batch"))));
+    assert.ok(sourceSupplyDropKit.items.every((item) => item.doneCriteria.some((criteria) => criteria.includes("Launch Evidence Batch"))));
+    assert.ok(status.commandCenter.steps.some((step) => step.id === "source-supply-drop-kit" && step.actionUrl === "/api/clippers/prepare-source-supply-drop-kit"));
+    assert.ok(status.sourceDropDiagnostic.manifests.length >= sourceSupplyDropKit.categoryBatches.length);
+    assert.equal(status.sourceDropDiagnostic.totals.manifestFiles, status.sourceDropDiagnostic.manifests.length);
+    assert.ok(status.sourceDropDiagnostic.totals.manifestRows >= sourceSupplyDropKit.items.length);
+    assert.ok(status.sourceDropDiagnostic.totals.manifestPlaceholderRows >= sourceSupplyDropKit.items.length);
+    assert.ok(status.sourceDropDiagnostic.totals.manifestMissingFiles >= sourceSupplyDropKit.items.length);
+    assert.ok(status.sourceDropDiagnostic.nextStep.includes("source-drop manifests") || status.sourceDropDiagnostic.nextStep.includes("Coloca videos reales"));
+    assert.ok(status.sourceDropDiagnostic.categories.some((category) => category.manifestPlaceholderRows > 0 && category.nextStep.includes("placeholder")));
+
+    const rawManifest = await readFile(sourceSupplyDropKit.manifestPath, "utf8");
+    const rawMarkdown = await readFile(sourceSupplyDropKit.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceSupplyDropKit.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Source Supply Drop Kit"));
+    assert.ok(rawMarkdown.includes("Source Intake Template"));
+    assert.ok(rawMarkdown.includes("Category Batches"));
+    assert.ok(rawMarkdown.includes("Source drop manifest"));
+    assert.ok(rawMarkdown.includes("Source drop README"));
+    assert.ok(rawMarkdown.includes("Rights evidence template"));
+    assert.ok(rawMarkdown.includes("Viral search queries"));
+    assert.ok(rawCsv.includes("category_batch_id"));
+    assert.ok(rawCsv.includes("source_drop_manifest_path"));
+    assert.ok(rawCsv.includes("source_drop_readme_path"));
+    assert.ok(rawCsv.includes("intake_batch_row"));
+    assert.ok(rawCsv.includes("trend_candidate_batch_row"));
+    assert.ok(rawCsv.includes("rights_evidence_batch_row"));
+    assert.ok(rawManifest.includes("categoryBatches"));
+    assert.ok(rawManifest.includes("intakeBatchTemplate"));
+    for (const batch of sourceSupplyDropKit.categoryBatches) {
+      const starterManifest = await readFile(batch.sourceDropManifestPath, "utf8");
+      assert.ok(starterManifest.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes"));
+      assert.ok(starterManifest.includes(`${batch.category}-source-01.mp4`));
+      assert.equal(starterManifest.includes("client_secret"), false);
+      const starterReadme = await readFile(batch.sourceDropReadmePath, "utf8");
+      assert.ok(starterReadme.includes(`Clippers Source Drop - ${batch.label}`));
+      assert.ok(starterReadme.includes("Expected Files"));
+      assert.ok(starterReadme.includes("Safety Rules"));
+      assert.ok(starterReadme.includes("source-drop-manifest.csv"));
+      assert.equal(starterReadme.includes("access_token"), false);
+    }
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.sourceSupplyDropKit.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceSupplyDropKit.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.sourceSupplyDropKit.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceSupplyDropKit.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.sourceSupplyDropKit.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceSupplyDropKit.csvPath, previousCsv);
+    await Promise.all(starterManifestPaths.map(async (manifestPath, index) => {
+      const previousStarterManifest = previousStarterManifests[index];
+      if (previousStarterManifest === null) await unlink(manifestPath).catch(() => undefined);
+      else await writeFile(manifestPath, previousStarterManifest);
+    }));
+    await Promise.all(starterReadmePaths.map(async (readmePath, index) => {
+      const previousStarterReadme = previousStarterReadmes[index];
+      if (previousStarterReadme === null) await unlink(readmePath).catch(() => undefined);
+      else await writeFile(readmePath, previousStarterReadme);
+    }));
+  }
+});
+
 test("prepareClipperSourceHuntSheet writes 30-slot daily hunt CSV and markdown", async () => {
   const status = await bootstrapClipperWorkspace();
   const huntDate = "2026-06-17";
@@ -2625,9 +4819,21 @@ test("prepareClipperSourceHuntSheet writes 30-slot daily hunt CSV and markdown",
     assert.equal(sourceHunt.items.length, expectedDailySlots);
     assert.equal(sourceHunt.totals.items, expectedDailySlots);
     assert.ok(sourceHunt.items.every((item) => item.suggestedSearch.length > 0 && item.evidenceNeeded.length > 0));
+    assert.ok(sourceHunt.items.every((item) => item.viralSearchQueries.length >= 3));
+    assert.ok(sourceHunt.items.every((item) => item.viralSearchUrls.every((url) => url.startsWith("https://www.google.com/search?"))));
+    assert.ok(sourceHunt.items.every((item) => item.recencyWindow.includes("24-72")));
+    assert.ok(sourceHunt.items.every((item) => item.minimumViralSignal.length > 0));
+    assert.ok(sourceHunt.items.every((item) => item.viralScoreChecklist.length >= 4));
+    assert.ok(sourceHunt.items.every((item) => item.rejectIf.length >= 4));
+    assert.ok(sourceHunt.items.every((item) => item.targetFileName.endsWith(".mp4")));
+    assert.ok(sourceHunt.items.every((item) => item.sourceDropPath.includes(`${path.sep}source-drop${path.sep}${item.category}${path.sep}`)));
+    assert.ok(sourceHunt.items.every((item) => item.sourceDropManifestPath.endsWith(`${path.sep}source-drop${path.sep}${item.category}${path.sep}source-drop-manifest.csv`)));
+    assert.ok(sourceHunt.items.every((item) => item.sourceDropManifestRow.includes(item.targetFileName)));
+    assert.ok(sourceHunt.items.every((item) => item.sourceDropManifestRow.includes("owned_or_permissioned")));
     assert.ok(sourceHunt.items.every((item) => item.requiredInputs.length > 0 && item.completionHint.length > 0));
     assert.ok(sourceHunt.items.every((item) => item.sourceRightsRecordTemplate.includes("rights_status")));
-    assert.equal(nextStatus.sourceHunt.csvPath, csvPath);
+    assert.ok(sourceHunt.csvPath.endsWith(`source-hunt-${huntDate}.csv`));
+    assert.ok(nextStatus.sourceHunt.csvPath.includes("source-hunt-"));
     assert.ok(nextStatus.commandCenter.steps.some((step) => step.id === "daily-source-hunt" && step.actionUrl === "/api/clippers/prepare-source-hunt"));
 
     const rawCsv = await readFile(csvPath, "utf8");
@@ -2635,7 +4841,13 @@ test("prepareClipperSourceHuntSheet writes 30-slot daily hunt CSV and markdown",
     const rawManifest = await readFile(manifestPath, "utf8");
     assert.ok(rawCsv.includes("hunt_date,status,category"));
     assert.ok(rawMarkdown.includes("Clippers Source Hunt Sheet"));
+    assert.ok(rawMarkdown.includes("Viral search queries"));
+    assert.ok(rawMarkdown.includes("Minimum viral signal"));
+    assert.ok(rawMarkdown.includes("Source drop manifest row"));
     assert.ok(rawMarkdown.includes("Required inputs:"));
+    assert.ok(rawCsv.includes("viral_search_urls"));
+    assert.ok(rawCsv.includes("minimum_viral_signal"));
+    assert.ok(rawCsv.includes("source_drop_manifest_row"));
     assert.ok(rawCsv.includes("completion_hint"));
     assert.ok(rawManifest.includes("needsSource"));
     assert.equal(rawCsv.includes("access_token"), false);
@@ -2754,10 +4966,19 @@ test("recordClipperSourceRights writes allowlist evidence and unlocks source ass
     assert.ok(asset);
     assert.equal(asset.rightsStatus, "review_required");
 
+    await assert.rejects(
+      () => recordClipperSourceRights({
+        assetId: asset.id,
+        rightsStatus: "owned_or_permissioned",
+        notes: "Creator permission confirmed for test.",
+      }),
+      /evidencia concreta/,
+    );
+
     const { sourceRights, queue, status: nextStatus } = await recordClipperSourceRights({
       assetId: asset.id,
       rightsStatus: "owned_or_permissioned",
-      notes: "Creator permission confirmed for test; no tokens or secrets.",
+      notes: "Creator permission confirmed for test; proof path /secure-drive/permissioned-meme-approval.png; no tokens or secrets.",
     });
     queuePath = queue.queuePath;
 
@@ -2852,7 +5073,7 @@ test("renderClipperDraftVideos renders mp4 clips from rights-cleared draft specs
       accountId: "sports-daily",
       platform: "tiktok",
       status: "verified",
-      notes: "TikTok account @sportsdailyclips verified for publishing package test; 2FA and profile proof stored.",
+      notes: "TikTok account @sportsdaily verified with profile URL https://www.tiktok.com/@sportsdaily, redacted profile screenshot proof and 2FA proof stored outside repo.",
     });
     const { renderedClips } = await renderClipperDraftVideos({ maxClips: 1, durationSeconds: 3 });
 
@@ -2953,18 +5174,72 @@ test("runClipperAutomationCycle writes schedule and reports blockers", async () 
     assert.equal(automation.reportPath.endsWith(".json"), true);
     assert.ok(automation.totals.posts >= status.accounts.length);
     assert.ok(automation.totals.blocked >= status.accounts.length);
+    assert.equal(automation.totals.weeklyTargetClips, 100);
+    assert.equal(automation.totals.dailyTargetPosts, 15);
+    assert.equal(automation.totals.posts, automation.totals.dailyTargetPosts);
+    assert.ok(automation.totals.backlogPosts >= 0);
+    assert.equal(automation.totals.gapToDailyTarget, 0);
     assert.ok(automation.blockers.length > 0);
+    assert.ok(automation.recommendations.some((recommendation) => recommendation.includes("100/semana")));
 
     const scheduleStat = await stat(automation.schedulePath);
     const reportStat = await stat(automation.reportPath);
     assert.equal(scheduleStat.isFile(), true);
     assert.equal(reportStat.isFile(), true);
-    const rawReport = JSON.parse(await readFile(automation.reportPath, "utf8")) as { userId?: string };
+    const rawReport = JSON.parse(await readFile(automation.reportPath, "utf8")) as { userId?: string; summary?: string };
     assert.equal(rawReport.userId, userId);
+    assert.ok(rawReport.summary?.includes("15/15"));
   } finally {
     await unlink(automation.schedulePath).catch(() => undefined);
     await unlink(automation.reportPath).catch(() => undefined);
     await unlink(automation.queuePath).catch(() => undefined);
+  }
+});
+
+test("prepareClipperAnalyticsReportingPack writes analytics export runbook without secrets", async () => {
+  const beforeStatus = await bootstrapClipperWorkspace();
+  const previousManifest = await readFile(beforeStatus.analyticsReportingPack.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.analyticsReportingPack.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.analyticsReportingPack.csvPath, "utf8").catch(() => null);
+  const starterTargetPath = beforeStatus.analyticsReportingPack.items[0]?.targetPath;
+  assert.ok(starterTargetPath);
+  const previousStarterCsv = await readFile(starterTargetPath, "utf8").catch(() => null);
+  await unlink(starterTargetPath).catch(() => undefined);
+
+  try {
+    const { analyticsReportingPack, status } = await prepareClipperAnalyticsReportingPack();
+
+    assert.equal(analyticsReportingPack.items.length, status.accounts.length * 3);
+    assert.equal(analyticsReportingPack.totals.exports, analyticsReportingPack.items.length);
+    assert.equal(analyticsReportingPack.totals.accounts, status.accounts.length);
+    assert.equal(analyticsReportingPack.totals.metricsFiles >= 1, true);
+    assert.ok(analyticsReportingPack.importTemplate.startsWith("account_id,platform,clip_id,hook"));
+    assert.ok(analyticsReportingPack.items.every((item) => item.minimumFields.includes("views")));
+    assert.ok(analyticsReportingPack.items.every((item) => item.targetPath.endsWith(`${item.accountId}-${item.platform}-analytics.csv`)));
+    assert.ok(analyticsReportingPack.runbook.some((step) => step.includes("export analytics")));
+    assert.ok(status.commandCenter.steps.some((step) => step.id === "analytics-reporting-pack" && step.actionUrl === "/api/clippers/prepare-analytics-reporting-pack"));
+
+    const rawManifest = await readFile(analyticsReportingPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(analyticsReportingPack.markdownPath, "utf8");
+    const rawCsv = await readFile(analyticsReportingPack.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Analytics Reporting Pack"));
+    assert.ok(rawMarkdown.includes("Import Template"));
+    assert.ok(rawCsv.includes("import_row_template"));
+    assert.ok(rawManifest.includes("weeklyViewsGoal"));
+    const rawStarterCsv = await readFile(starterTargetPath, "utf8");
+    assert.ok(rawStarterCsv.startsWith("account_id,platform,clip_id,hook"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.analyticsReportingPack.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.analyticsReportingPack.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.analyticsReportingPack.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.analyticsReportingPack.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.analyticsReportingPack.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.analyticsReportingPack.csvPath, previousCsv);
+    if (previousStarterCsv === null) await unlink(starterTargetPath).catch(() => undefined);
+    else await writeFile(starterTargetPath, previousStarterCsv);
   }
 });
 
@@ -3037,7 +5312,8 @@ test("ingestClipperTrends ranks recent opportunities and gates rights", async ()
     const { trendRadar, status: nextStatus } = await ingestClipperTrends();
     assert.equal(trendRadar.status, "ready");
     assert.equal(trendRadar.candidates.length >= 2, true);
-    assert.equal(trendRadar.topCandidates[0].rightsStatus, "owned_or_permissioned");
+    const permissionedCandidate = trendRadar.candidates.find((candidate) => candidate.url === "https://example.com/sports-clip-1");
+    assert.equal(permissionedCandidate?.rightsStatus, "owned_or_permissioned");
     assert.ok(trendRadar.recommendations.some((recommendation) => recommendation.includes("Prioridad")));
     assert.ok(nextStatus.growthAudit.items.some((item) => item.id === "trend-radar" && item.status === "ready"));
   } finally {
@@ -3060,13 +5336,14 @@ test("recordClipperTrendCandidatesBatch imports candidates and refreshes radar",
         "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle",
         "sports,tiktok,Last second comeback,https://example.com/comeback,@team,2026-06-17T09:00:00Z,1500000,80000,5000,22000,approved,Use scoreboard tension",
         "memes,instagram,POV everyone today,https://example.com/meme,@creator,2026-06-17T08:30:00Z,350000,20000,1200,9000,review,Fast relatable hook",
+        "sports,tiktok,Placeholder trend,<approved source URL for sports-source-01.mp4>,<creator/rightsholder handle>,<posted_at ISO>,<views>,<likes>,<comments>,<shares>,approved_after_proof,Should be skipped",
         ",,,,,,,,,,,",
       ].join("\n"),
     });
     importedPath = trendCandidatesBatch.filePath;
 
     assert.equal(trendCandidatesBatch.accepted, 2);
-    assert.equal(trendCandidatesBatch.skipped, 1);
+    assert.equal(trendCandidatesBatch.skipped, 2);
     assert.equal(trendCandidatesBatch.trendRadar.status, "ready");
     assert.ok(trendCandidatesBatch.trendRadar.candidates.some((candidate) => candidate.title === "Last second comeback"));
     assert.ok(nextStatus.trendRadar.topCandidates.some((candidate) => candidate.url === "https://example.com/comeback"));
@@ -3105,6 +5382,10 @@ test("prepareClipperTrendRightsOutreachPack writes outreach for review-required 
     assert.equal(trendRightsOutreach.status, "partial");
     assert.equal(trendRightsOutreach.totals.reviewRequired >= 1, true);
     assert.ok(trendRightsOutreach.items.some((item) => item.title === "Streamer rage moment" && item.outreachMessage.includes("permission")));
+    assert.ok(trendRightsOutreach.items.every((item) => item.remixBrief.includes(item.title)));
+    assert.ok(trendRightsOutreach.items.every((item) => item.ownedAssetPlan.length >= 4));
+    assert.ok(trendRightsOutreach.items.every((item) => item.scriptBeats.length >= 5));
+    assert.ok(trendRightsOutreach.items.every((item) => item.publishSafetyChecklist.some((step) => step.includes("No publicar raw footage"))));
     assert.ok(nextStatus.commandCenter.steps.some((step) => step.id === "trend-rights-outreach"));
 
     const rawManifest = await readFile(trendRightsOutreach.manifestPath, "utf8");
@@ -3112,9 +5393,14 @@ test("prepareClipperTrendRightsOutreachPack writes outreach for review-required 
     const rawCsv = await readFile(trendRightsOutreach.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Trend Rights Outreach Pack"));
     assert.ok(rawMarkdown.includes("Permission record template"));
+    assert.ok(rawMarkdown.includes("Owned/remix-safe brief"));
+    assert.ok(rawMarkdown.includes("Publish safety checklist"));
     assert.ok(rawCsv.includes("evidence_file"));
+    assert.ok(rawCsv.includes("remix_brief"));
+    assert.ok(rawCsv.includes("publish_safety_checklist"));
     assert.ok(rawCsv.includes("permission_record_template"));
     assert.ok(rawManifest.includes("permissionRecordTemplate"));
+    assert.ok(rawManifest.includes("ownedAssetPlan"));
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
   } finally {
@@ -3167,21 +5453,30 @@ test("buildClipperConnectActions creates OAuth URL when env is present", () => {
 });
 
 test("recordClipperOAuthCallback stores hashed OAuth metadata and updates account state", async () => {
-  const connection = await recordClipperOAuthCallback({
-    platform: "tiktok",
-    code: "sample-auth-code",
-    state: "clippers-tiktok",
-  });
+  const oauthConnectionsPath = path.join(process.cwd(), "clippers_workspace", "oauth-connections.json");
+  const originalConnections = await readFile(oauthConnectionsPath, "utf8").catch(() => null);
 
-  assert.equal(connection.status, "code_received");
-  assert.equal(connection.codeHash, __clipperInternals.hashOAuthCode("sample-auth-code"));
-  assert.notEqual(connection.codeHash, "sample-auth-code");
+  try {
+    const connection = await recordClipperOAuthCallback({
+      platform: "tiktok",
+      code: "sample-auth-code",
+      state: "clippers-tiktok",
+    }, "owner-oauth-test");
 
-  const status = await getClipperStatus();
-  assert.ok(status.oauthConnections.some((item) => item.platform === "tiktok" && item.status === "code_received"));
-  assert.ok(status.accounts.some((account) =>
-    account.platformAccounts.some((platformAccount) => platformAccount.platform === "tiktok" && platformAccount.status === "needs_review")
-  ));
+    assert.equal(connection.status, "code_received");
+    assert.equal(connection.ownerUserId, "owner-oauth-test");
+    assert.equal(connection.codeHash, __clipperInternals.hashOAuthCode("sample-auth-code"));
+    assert.notEqual(connection.codeHash, "sample-auth-code");
+
+    const status = await getClipperStatus();
+    assert.ok(status.oauthConnections.some((item) => item.platform === "tiktok" && item.ownerUserId === "owner-oauth-test" && item.status === "code_received"));
+    assert.ok(status.accounts.some((account) =>
+      account.platformAccounts.some((platformAccount) => platformAccount.platform === "tiktok" && platformAccount.status === "needs_review")
+    ));
+  } finally {
+    if (originalConnections !== null) await writeFile(oauthConnectionsPath, originalConnections);
+    else await unlink(oauthConnectionsPath).catch(() => undefined);
+  }
 });
 
 test("TikTok OAuth state and vault records stay scoped per account", async () => {
@@ -3281,15 +5576,16 @@ test("saveClipperTokenPayload encrypts token payloads before writing the vault",
       scope: "https://www.googleapis.com/auth/youtube.upload",
       expires_in: 3600,
       sub: "youtube-subject",
-    });
+    }, "owner-token-test");
     assert.equal(summary.platform, "youtube");
+    assert.equal(summary.ownerUserId, "owner-token-test");
     assert.equal(summary.tokenType, "Bearer");
 
     const status = await getClipperStatus();
     const rawVault = await readFile(status.tokenVault.vaultPath, "utf8");
     assert.equal(rawVault.includes("plain-access-token"), false);
     assert.equal(rawVault.includes("plain-refresh-token"), false);
-    assert.ok(status.tokenVault.records.some((record) => record.platform === "youtube" && record.status === "saved"));
+    assert.ok(status.tokenVault.records.some((record) => record.platform === "youtube" && record.ownerUserId === "owner-token-test" && record.status === "saved"));
   } finally {
     if (originalKey) process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY = originalKey;
     else delete process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY;

@@ -1,3 +1,5 @@
+import { validateRequiredRealCliValue } from "./cli-validation";
+
 export type TelegramConfigureCliOptions = {
   userId: string;
   chatId: string;
@@ -24,8 +26,12 @@ export function parseTelegramConfigureArgs(argv: string[]): TelegramConfigureCli
 
 export function validateTelegramConfigureOptions(options: TelegramConfigureCliOptions): string[] {
   const errors: string[] = [];
-  if (!options.userId) errors.push("--user-id is required.");
-  if (!options.chatId && !options.latest) errors.push("--chat-id or --latest is required.");
+  const userIdError = validateRequiredRealCliValue(options.userId, "--user-id");
+  if (userIdError) errors.push(userIdError);
+  if (!options.latest) {
+    const chatIdError = validateRequiredRealCliValue(options.chatId, "--chat-id");
+    if (chatIdError) errors.push(chatIdError);
+  }
   if (!options.execute) errors.push("--execute is required to write Telegram configuration.");
   return errors;
 }

@@ -4,7 +4,7 @@
 NODE_ENV=production
 PORT=5000
 HOST=0.0.0.0
-DATABASE_URL=postgres://user:password@host:5432/blackops
+DATABASE_URL=replace-with-production-postgres-url
 
 # Auth/user context
 SESSION_SECRET=replace-with-long-random-secret
@@ -22,6 +22,8 @@ TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 PUBLIC_APP_URL=https://your-domain.example
 # TELEGRAM_WEBHOOK_URL=https://your-domain.example/api/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=replace-with-telegram-webhook-secret
+# Keep false unless you intentionally want startup to call Telegram setWebhook.
+TELEGRAM_AUTO_SETUP_WEBHOOK=false
 
 # Scheduler
 SCHEDULER_TIMEZONE=America/New_York
@@ -46,7 +48,8 @@ DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE=true
 
 # Backup/restore preflight
 CEO_BACKUP_DIR=backups/ceo-assistant
-# Set true only after credentials/ and secrets/ are covered by encrypted off-machine backup.
+# Set true only after CEO_ASSISTANT_ENV, .env, .env.local, credentials/ and secrets/
+# are covered by encrypted off-machine backup.
 CEO_BACKUP_SECRETS_ENCRYPTED=false
 
 # Optional integrations

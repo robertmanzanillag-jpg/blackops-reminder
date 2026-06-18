@@ -30,5 +30,8 @@ test("validates user migration requests", () => {
   assert.deepEqual(validateUserMigrationRequest({ fromUserId: "", toUserId: "real-user" }), ["fromUserId is required"]);
   assert.deepEqual(validateUserMigrationRequest({ fromUserId: "mock-user-123", toUserId: "" }), ["toUserId is required"]);
   assert.deepEqual(validateUserMigrationRequest({ fromUserId: "same", toUserId: "same" }), ["fromUserId and toUserId must be different"]);
+  assert.deepEqual(validateUserMigrationRequest({ fromUserId: "real-user", toUserId: " mock-user-123 " }), ["mock-user-123 cannot be the migration target"]);
+  assert.deepEqual(validateUserMigrationRequest({ fromUserId: "<from-user-id>", toUserId: "real-user" }), ["fromUserId must be a real value, not a placeholder"]);
+  assert.deepEqual(validateUserMigrationRequest({ fromUserId: "mock-user-123", toUserId: "<real-user-id>" }), ["toUserId must be a real value, not a placeholder"]);
   assert.deepEqual(validateUserMigrationRequest({ fromUserId: "mock-user-123", toUserId: "real-user" }), []);
 });

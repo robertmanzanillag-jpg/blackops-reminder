@@ -27,9 +27,20 @@ test("validates Telegram configure CLI options", () => {
     execute: false,
     sendConfirmation: true,
   }), [
-    "--user-id is required.",
-    "--chat-id or --latest is required.",
+    "--user-id must be a real value, not a placeholder.",
+    "--chat-id must be a real value, not a placeholder.",
     "--execute is required to write Telegram configuration.",
+  ]);
+
+  assert.deepEqual(validateTelegramConfigureOptions({
+    userId: "<real-user-id>",
+    chatId: "<telegram-chat-id>",
+    latest: false,
+    execute: true,
+    sendConfirmation: true,
+  }), [
+    "--user-id must be a real value, not a placeholder.",
+    "--chat-id must be a real value, not a placeholder.",
   ]);
 
   assert.deepEqual(validateTelegramConfigureOptions({

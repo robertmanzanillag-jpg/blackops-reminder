@@ -1,3 +1,6 @@
+import { DEFAULT_DEV_USER_ID } from "./user-context";
+import { hasRealValue } from "./ceo-doctor-cli";
+
 export type UserMigrationColumn = "user_id" | "owner_user_id";
 
 export interface UserMigrationTarget {
@@ -43,15 +46,24 @@ export const USER_MIGRATION_TARGETS: UserMigrationTarget[] = [
 
 export function validateUserMigrationRequest(request: UserMigrationRequest): string[] {
   const errors: string[] = [];
+  const fromUserId = request.fromUserId.trim();
+  const toUserId = request.toUserId.trim();
 
-  if (!request.fromUserId.trim()) {
+  if (!fromUserId) {
     errors.push("fromUserId is required");
+  } else if (!hasRealValue(fromUserId)) {
+    errors.push("fromUserId must be a real value, not a placeholder");
   }
-  if (!request.toUserId.trim()) {
+  if (!toUserId) {
     errors.push("toUserId is required");
+  } else if (!hasRealValue(toUserId)) {
+    errors.push("toUserId must be a real value, not a placeholder");
   }
-  if (request.fromUserId.trim() && request.fromUserId === request.toUserId) {
+  if (fromUserId && toUserId && fromUserId === toUserId) {
     errors.push("fromUserId and toUserId must be different");
+  }
+  if (toUserId === DEFAULT_DEV_USER_ID) {
+    errors.push(`${DEFAULT_DEV_USER_ID} cannot be the migration target`);
   }
 
   return errors;

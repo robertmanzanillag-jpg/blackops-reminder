@@ -1,4 +1,5 @@
 // Finance Service - Stock and Crypto price fetching
+import { hasRealValue } from "./ceo-doctor-cli";
 
 export interface PriceData {
   symbol: string;
@@ -506,7 +507,7 @@ export interface NewsItem {
 export async function getCompanyNews(symbol: string, daysBack: number = 7): Promise<NewsItem[]> {
   try {
     const apiKey = process.env.FINNHUB_API_KEY;
-    if (!apiKey) {
+    if (!hasRealValue(apiKey)) {
       console.error("FINNHUB_API_KEY not configured");
       return [];
     }
@@ -548,7 +549,7 @@ export async function getCompanyNews(symbol: string, daysBack: number = 7): Prom
 export async function getMarketNews(): Promise<NewsItem[]> {
   try {
     const apiKey = process.env.FINNHUB_API_KEY;
-    if (!apiKey) {
+    if (!hasRealValue(apiKey)) {
       console.error("FINNHUB_API_KEY not configured");
       return [];
     }

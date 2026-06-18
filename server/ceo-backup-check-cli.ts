@@ -1,3 +1,5 @@
+import { hasRealValue } from "./ceo-doctor-cli";
+
 export type CeoBackupCheckOptions = {
   json: boolean;
 };
@@ -25,6 +27,7 @@ export type CeoBackupCheckReport = {
   tools: CeoBackupToolCheck[];
   artifacts: CeoBackupArtifactCheck[];
   commands: string[];
+  sensitiveArtifactNote: string;
 };
 
 export const DEFAULT_CEO_BACKUP_DIR = "backups/ceo-assistant";
@@ -34,6 +37,10 @@ export const CEO_BACKUP_ARTIFACT_PATHS = [
   { path: "revenue_mockups", sensitive: false, policy: "include_if_exists" },
   { path: "radio_video_edits", sensitive: false, policy: "include_if_exists" },
   { path: "promo_video_edits", sensitive: false, policy: "include_if_exists" },
+  { path: "clippers_workspace", sensitive: false, policy: "include_if_exists" },
+  { path: "CEO_ASSISTANT_ENV", sensitive: true, policy: "encrypted_only" },
+  { path: ".env", sensitive: true, policy: "encrypted_only" },
+  { path: ".env.local", sensitive: true, policy: "encrypted_only" },
   { path: "credentials", sensitive: true, policy: "encrypted_only" },
   { path: "secrets", sensitive: true, policy: "encrypted_only" },
 ] as const;
@@ -42,6 +49,10 @@ export function parseCeoBackupCheckArgs(argv: string[]): CeoBackupCheckOptions {
   return {
     json: argv.includes("--json"),
   };
+}
+
+export function resolveCeoBackupDir(value: string | undefined): string {
+  return hasRealValue(value) ? value : DEFAULT_CEO_BACKUP_DIR;
 }
 
 export function buildCeoBackupCheckReport(input: {
@@ -74,6 +85,7 @@ export function buildCeoBackupCheckReport(input: {
     };
   });
   const sensitiveArtifactsReady = artifacts.every((artifact) => !artifact.exists || !artifact.sensitive || input.encryptedSecretBackupConfigured);
+  const existingSensitiveArtifacts = artifacts.filter((artifact) => artifact.exists && artifact.sensitive);
   const ready = input.databaseUrlConfigured
     && input.backupDirWritable
     && tools.every((tool) => tool.ok)
@@ -88,6 +100,10 @@ export function buildCeoBackupCheckReport(input: {
     tools,
     artifacts,
     commands: buildCeoBackupCommands(input.backupDir),
+    sensitiveArtifactNote: buildSensitiveArtifactNote({
+      existingSensitiveArtifacts: existingSensitiveArtifacts.map((artifact) => artifact.path),
+      encryptedSecretBackupConfigured: input.encryptedSecretBackupConfigured,
+    }),
   };
 }
 
@@ -96,10 +112,24 @@ export function buildCeoBackupCommands(backupDir: string): string[] {
   return [
     `mkdir -p ${dir}`,
     `pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl --file="${dir}/postgres.dump"`,
-    `tar -czf "${dir}/local-artifacts.tgz" revenue_engine_data revenue_mockups radio_video_edits promo_video_edits 2>/dev/null || true`,
+    `tar -czf "${dir}/local-artifacts.tgz" revenue_engine_data revenue_mockups radio_video_edits promo_video_edits clippers_workspace 2>/dev/null || true`,
     `psql "$DATABASE_URL" -c "select 1"`,
-    `pg_restore --clean --if-exists --no-owner --no-acl --dbname="$DATABASE_URL" "${dir}/postgres.dump"`,
+    `RESTORE_DATABASE_URL=<staging-db-url> pg_restore --clean --if-exists --no-owner --no-acl --dbname="$RESTORE_DATABASE_URL" "${dir}/postgres.dump"`,
   ];
+}
+
+export function buildSensitiveArtifactNote(input: {
+  existingSensitiveArtifacts: string[];
+  encryptedSecretBackupConfigured: boolean;
+}): string {
+  if (input.existingSensitiveArtifacts.length === 0) {
+    return "No sensitive local artifact directories were found.";
+  }
+  const paths = input.existingSensitiveArtifacts.join(", ");
+  if (input.encryptedSecretBackupConfigured) {
+    return `Sensitive artifact directories found (${paths}). They are intentionally excluded from local-artifacts.tgz; keep the separate encrypted off-machine backup evidence current.`;
+  }
+  return `Sensitive artifact directories found (${paths}). Do not run production with real data until they are covered by separate encrypted off-machine backup evidence.`;
 }
 
 export function formatCeoBackupCheckText(report: CeoBackupCheckReport): string {
@@ -115,6 +145,8 @@ export function formatCeoBackupCheckText(report: CeoBackupCheckReport): string {
     "",
     "Artifacts:",
     ...report.artifacts.map((check) => `- [${check.exists ? "found" : "absent"}] ${check.path}: ${check.detail}`),
+    "",
+    `Sensitive artifact note: ${report.sensitiveArtifactNote}`,
     "",
     "Backup/restore commands:",
     ...report.commands.map((command) => `- ${command}`),

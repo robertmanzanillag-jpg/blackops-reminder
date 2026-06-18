@@ -1,8 +1,5 @@
 import { storage } from "./storage";
-
-const ZOHO_CLIENT_ID = process.env.ZOHO_CLIENT_ID;
-const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET;
-const ZOHO_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN;
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const ZOHO_ACCOUNTS_URL = "https://accounts.zoho.com";
 const ZOHO_CALENDAR_URL = "https://calendar.zoho.com/api/v1";
@@ -35,8 +32,16 @@ interface ZohoCalendar {
 let cachedAccessToken: string | null = null;
 let tokenExpiry: number = 0;
 
+function getZohoCredentials() {
+  const clientId = hasRealValue(process.env.ZOHO_CLIENT_ID) ? process.env.ZOHO_CLIENT_ID : "";
+  const clientSecret = hasRealValue(process.env.ZOHO_CLIENT_SECRET) ? process.env.ZOHO_CLIENT_SECRET : "";
+  const refreshToken = hasRealValue(process.env.ZOHO_REFRESH_TOKEN) ? process.env.ZOHO_REFRESH_TOKEN : "";
+  return { clientId, clientSecret, refreshToken };
+}
+
 async function getAccessToken(): Promise<string | null> {
-  if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET || !ZOHO_REFRESH_TOKEN) {
+  const { clientId, clientSecret, refreshToken } = getZohoCredentials();
+  if (!clientId || !clientSecret || !refreshToken) {
     console.log("Zoho Calendar credentials not configured");
     return null;
   }
@@ -47,9 +52,9 @@ async function getAccessToken(): Promise<string | null> {
 
   try {
     const params = new URLSearchParams({
-      refresh_token: ZOHO_REFRESH_TOKEN,
-      client_id: ZOHO_CLIENT_ID,
-      client_secret: ZOHO_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: "refresh_token",
     });
 
@@ -259,11 +264,12 @@ export async function checkZohoConnection(): Promise<{ connected: boolean; email
 }
 
 export function getZohoAuthUrl(redirectUri: string): string | null {
-  if (!ZOHO_CLIENT_ID) return null;
+  const { clientId } = getZohoCredentials();
+  if (!clientId) return null;
   
   const params = new URLSearchParams({
     scope: "ZohoCalendar.calendar.READ,ZohoCalendar.event.READ",
-    client_id: ZOHO_CLIENT_ID,
+    client_id: clientId,
     response_type: "code",
     access_type: "offline",
     redirect_uri: redirectUri,
@@ -274,15 +280,16 @@ export function getZohoAuthUrl(redirectUri: string): string | null {
 }
 
 export async function exchangeZohoCode(code: string, redirectUri: string): Promise<{ refresh_token?: string; error?: string }> {
-  if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET) {
+  const { clientId, clientSecret } = getZohoCredentials();
+  if (!clientId || !clientSecret) {
     return { error: "Zoho credentials not configured" };
   }
 
   try {
     const params = new URLSearchParams({
       code,
-      client_id: ZOHO_CLIENT_ID,
-      client_secret: ZOHO_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     });

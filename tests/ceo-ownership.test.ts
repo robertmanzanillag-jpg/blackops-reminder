@@ -41,7 +41,9 @@ test("Telegram webhook does not auto-bind unknown chats to the system user", () 
 test("Telegram config route binds chats to the authenticated owner only", () => {
   const routesSource = readFileSync("server/telegram-routes.ts", "utf8");
 
+  assert.match(routesSource, /const chatId = String\(req\.body\?\.chatId \|\| ""\)\.trim\(\)/, "Telegram config API should require an explicit chat ID");
   assert.match(routesSource, /storage\.saveTelegramConfig\(getCurrentUserId\(req\), chatId\)/, "manual Telegram config should save mapping for authenticated owner");
+  assert.doesNotMatch(routesSource, /getTelegramUpdates/, "Telegram config API should not auto-bind the latest bot update to the authenticated owner");
   assert.doesNotMatch(routesSource, /saveTelegramConfig\(getSystemUserId\(\)/, "Telegram config routes should not bind chat IDs to the system user");
 });
 
@@ -63,6 +65,76 @@ test("promo video daily scheduler uploads under discovered owners", () => {
   assert.match(promoSource, /storage\.getEnabledTelegramConfigs\(\)/, "promo scheduler should discover enabled Telegram owners");
   assert.match(promoSource, /runPromoVideoAutoDaily\(\{[^}]*userId/s, "promo scheduler should pass an explicit user id to auto daily runs");
   assert.doesNotMatch(promoSource, /runPromoVideoAutoDaily\(\{ maxVideos: 5, targetSeconds: 15, cuts: 3, style: "full" \}\)/, "promo scheduler should not run auto daily without an owner");
+});
+
+test("promo video local workspace routes are scoped to the authenticated owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const promoSource = readFileSync("server/promo-video-agent.ts", "utf8");
+  const scriptSource = readFileSync("scripts/edit-promo-videos.sh", "utf8");
+
+  assert.match(routesSource, /getPromoVideoStatus\(getCurrentUserId\(req\)\)/, "promo status route should inspect only the authenticated owner's workspace");
+  assert.match(routesSource, /setPromoVideoSourceDir\(req\.body\?\.sourceDir, getCurrentUserId\(req\)\)/, "promo source route should write source config for the authenticated owner");
+  assert.match(routesSource, /importPromoVideosFromSource\(req\.body \|\| \{\}, getCurrentUserId\(req\)\)/, "promo import route should copy files into the authenticated owner's workspace");
+  assert.match(routesSource, /deletePromoOutputVideo\(req\.params\.filename, getCurrentUserId\(req\)\)/, "promo delete route should delete only from the authenticated owner's output workspace");
+
+  assert.match(promoSource, /const USERS_DIR = path\.join\(ROOT_DIR, "users"\)/, "promo workspaces should live under per-user local folders");
+  assert.match(promoSource, /function getPromoVideoWorkspacePaths\(userId = getSystemUserId\(\)\)/, "promo agent should resolve local workspace paths by user id");
+  assert.match(promoSource, /const rootDir = path\.join\(USERS_DIR, safeUserId\)/, "promo workspace root should include the sanitized user id");
+  assert.match(promoSource, /PROMO_OUTPUT_DIR: paths\.outputDir/, "promo edit subprocess should write outputs to the owner workspace");
+  assert.match(scriptSource, /OUTPUT_DIR="\$\{PROMO_OUTPUT_DIR:-\$ROOT_DIR\/promo_video_edits\/03_listos_para_subir\}"/, "promo edit script should accept an owner-scoped output directory override");
+});
+
+test("Revenue Engine routes scope local JSON storage to the authenticated user", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const revenueSource = readFileSync("server/revenue-engine.ts", "utf8");
+
+  assert.match(routesSource, /app\.use\("\/api\/revenue-engine"/, "Revenue Engine should have a route-level owner scope");
+  assert.match(routesSource, /setRevenueUserDataScope\(getCurrentUserId\(req\)\)/, "Revenue Engine routes should scope data to the authenticated user");
+  assert.match(routesSource, /let revenueEngineRouteQueue = Promise\.resolve\(\)/, "Revenue Engine routes should serialize access while module state is in-memory");
+  assert.match(routesSource, /res\.once\("finish", release\)/, "Revenue Engine route queue should release after the response finishes");
+  assert.doesNotMatch(routesSource, /Revenue Engine is limited to the configured single-user owner/, "Revenue Engine should not reject non-owner users now that local JSON is scoped");
+  assert.match(revenueSource, /revenue_engine_data", "users", safeRevenueUserId\(userId\)/, "Revenue Engine JSON paths should include a sanitized user id");
+});
+
+test("developer code and GitHub tools are gated to the configured single-user owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /app\.use\(\["\/api\/code", "\/api\/github"\]/, "developer tools should have a shared route guard");
+  assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const toolOwnerUserId = getSystemUserId\(\);/s, "developer tool guard should compare authenticated user to configured owner");
+  assert.match(routesSource, /if \(userId !== toolOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "developer tools should reject non-owner users");
+  assert.match(routesSource, /per-user repo and filesystem permissions/, "developer tool rejection should explain the missing permission model");
+});
+
+test("Clippers API is gated to the configured single-user owner while local artifacts are shared", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /app\.use\("\/api\/clippers"/, "Clippers API should have a shared route guard");
+  assert.match(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Clippers OAuth callbacks should bypass the owner guard after public callback classification");
+  assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const clipperOwnerUserId = getSystemUserId\(\);/s, "Clippers guard should compare authenticated user to configured owner");
+  assert.match(routesSource, /if \(userId !== clipperOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Clippers API should reject non-owner users while artifacts are shared");
+  assert.match(routesSource, /local workspace, token vault, and launch artifacts are shared/, "Clippers rejection should explain the shared local artifact limitation");
+});
+
+test("Clippers OAuth callbacks and token vault records keep explicit owner metadata", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
+
+  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getSystemUserId\(\)\)/s, "public Clippers OAuth callback should bind to the configured single-user owner");
+  assert.match(clippersSource, /export interface ClipperOAuthConnection \{[\s\S]*ownerUserId: string;/s, "OAuth connection records should include owner metadata");
+  assert.match(clippersSource, /export interface ClipperTokenSummary \{[\s\S]*ownerUserId: string;/s, "token vault summaries should include owner metadata");
+  assert.match(clippersSource, /saveClipperTokenPayload\(platform: ClipperPlatform, payload: Record<string, unknown>, ownerUserId = getSystemUserId\(\)\)/, "token vault writes should accept an explicit owner");
+  assert.match(clippersSource, /tryExchangeAndStoreClipperToken\(platform: ClipperPlatform, code: string, ownerUserId: string\)/, "OAuth token exchange should carry owner metadata through storage");
+});
+
+test("public OAuth callback pages escape dynamic text and do not print tokens", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /function escapeHtml\(value: unknown\): string/, "routes should define an HTML escaping helper for callback pages");
+  assert.match(routesSource, /<p>\$\{escapeHtml\(errorDescription \|\| error\)\}<\/p>/, "OAuth provider error descriptions should be escaped before rendering");
+  assert.match(routesSource, /Scopes: \$\{escapeHtml\(result\.scope \|\| "guardados"\)\}/, "OAuth scopes should be escaped before rendering");
+  assert.match(routesSource, /escapeHtml\(connection\.note\)/, "Clippers OAuth callback notes should be escaped before rendering");
+  assert.doesNotMatch(routesSource, /\$\{result\.refresh_token\}/, "Zoho callback page should not render the refresh token secret");
+  assert.match(routesSource, /No se muestra en pantalla por seguridad/, "Zoho callback should explain that the refresh token is hidden");
 });
 
 test("manual notification test endpoints target the authenticated user only", () => {

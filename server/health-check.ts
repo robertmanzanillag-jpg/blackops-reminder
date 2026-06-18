@@ -2,9 +2,14 @@ import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
 import { sendPushNotification } from "./push-notifications";
 import type { MonitoredProject } from "@shared/schema";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 interface HealthCheckResult {
   status: "online" | "offline" | "degraded";
@@ -79,14 +84,15 @@ async function handleStatusChange(
       
       // Send Telegram notification
       const telegramConfig = await storage.getTelegramConfig(project.userId);
-      if (telegramConfig?.enabled) {
+      const botToken = getTelegramBotToken();
+      if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
         const message = `🔴 *ALERTA: Proyecto Caído*\n\n` +
           `📦 *${project.name}*\n` +
           `🔗 ${project.url}\n` +
           `❌ Error: ${result.errorMessage || "Sin respuesta"}\n` +
           `⏰ ${new Date().toLocaleString("es-ES")}`;
         
-        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+        await sendTelegramMessage(botToken, telegramConfig.chatId, message);
       }
 
       await sendPushNotification(project.userId, {
@@ -107,7 +113,8 @@ async function handleStatusChange(
       
       // Send recovery notification
       const telegramConfig = await storage.getTelegramConfig(project.userId);
-      if (telegramConfig?.enabled) {
+      const botToken = getTelegramBotToken();
+      if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
         const durationMinutes = Math.floor((resolved.duration || 0) / 60);
         const durationSeconds = (resolved.duration || 0) % 60;
         const durationStr = durationMinutes > 0 
@@ -121,7 +128,7 @@ async function handleStatusChange(
           `📊 Tiempo de respuesta: ${result.responseTime}ms\n` +
           `⏰ ${new Date().toLocaleString("es-ES")}`;
         
-        await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+        await sendTelegramMessage(botToken, telegramConfig.chatId, message);
       }
 
       await sendPushNotification(project.userId, {

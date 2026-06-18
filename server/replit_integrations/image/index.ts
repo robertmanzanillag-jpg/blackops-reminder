@@ -1,2 +1,2 @@
 export { registerImageRoutes } from "./routes";
-export { ai, generateImage } from "./client";
+export { getGeminiClient, generateImage } from "./client";

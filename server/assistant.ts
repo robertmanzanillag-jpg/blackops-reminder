@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from "express";
-import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
@@ -11,14 +10,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import type { PendingAction } from "@shared/schema";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+import { getGeminiClient } from "./gemini-client";
 
 function normalizeApprovalText(message: string): string {
   return message
@@ -30,28 +22,14 @@ function normalizeApprovalText(message: string): string {
     .trim();
 }
 
-function userAlreadyApprovedExecution(message?: string): boolean {
+export function userAlreadyApprovedExecution(message?: string): boolean {
   if (!message) return false;
   const text = normalizeApprovalText(message);
   return [
-    "hazlo",
-    "hazlo ya",
-    "dale",
-    "aprobado",
-    "lo apruebo",
-    "si cambialo",
-    "cambialo",
-    "cambiame",
-    "quiero que",
-    "agregame",
-    "agrega",
-    "creame",
-    "crea",
-    "modifica",
-    "actualiza",
-    "desactiva",
-    "quita",
-  ].some((phrase) => text.includes(phrase));
+    /\b(hazlo|hazlo ya|dale|aprobado|apruebo|lo apruebo|confirmo|confirmado|autorizo|autorizado|ejecuta|ejecutalo|procede|empieza|comienza)\b/,
+    /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|empieza|comienza|ejecuta|ejecutalo|hazlo|procede)\b/,
+    /\b(quiero que|puedes)\b.*\b(empiece|empieces|comience|comiences|lo hagas|lo haga|ejecutes|ejecutarlo)\b/,
+  ].some((pattern) => pattern.test(text));
 }
 
 function requireStringField(data: any, field: string, label: string): string {
@@ -310,11 +288,19 @@ async function executeIfAlreadyApproved(
 ): Promise<{ executed: boolean; error?: string }> {
   if (!userAlreadyApprovedExecution(message)) return { executed: false };
 
+  return approveAndExecutePendingAction(pendingAction, userId, "Aprobado en el mismo mensaje del chat.");
+}
+
+async function approveAndExecutePendingAction(
+  pendingAction: PendingAction,
+  userId: string,
+  approvalReason: string,
+): Promise<{ executed: boolean; error?: string }> {
   const approved = await storage.updatePendingAction(pendingAction.id, {
     status: "approved",
     approvedBy: userId,
     approvedAt: new Date(),
-    approvalReason: "Aprobado en el mismo mensaje del chat.",
+    approvalReason,
   });
 
   await storage.createPendingActionEvent({
@@ -325,12 +311,46 @@ async function executeIfAlreadyApproved(
     eventType: "approved",
     previousStatus: pendingAction.status,
     nextStatus: "approved",
-    note: "Aprobado en el mismo mensaje del chat.",
+    note: approvalReason,
     metadata: { origin: "web" },
   });
 
   const result = await executeApprovedPendingAction(approved, userId);
   return result.success ? { executed: true } : { executed: false, error: result.error };
+}
+
+async function executeSinglePendingApprovalFromChat(
+  userId: string,
+  message?: string,
+): Promise<{ handled: boolean; content?: string; executed?: boolean; title?: string; error?: string }> {
+  if (!userAlreadyApprovedExecution(message)) return { handled: false };
+
+  const activeActions = (await storage.getPendingActions(userId))
+    .filter((action) => ["pending", "edited", "snoozed"].includes(action.status));
+
+  if (activeActions.length === 0) return { handled: false };
+
+  if (activeActions.length > 1) {
+    return {
+      handled: true,
+      content: [
+        "Tengo varias aprobaciones pendientes. Dime cual quieres ejecutar por numero o abre Decisiones y aprobaciones para evitar ejecutar la equivocada.",
+        ...activeActions.slice(0, 5).map((action, index) => `${index + 1}. ${action.title}`),
+      ].join("\n"),
+    };
+  }
+
+  const action = activeActions[0];
+  const execution = await approveAndExecutePendingAction(action, userId, "Aprobado desde el chat.");
+  return {
+    handled: true,
+    executed: execution.executed,
+    title: action.title,
+    error: execution.error,
+    content: execution.executed
+      ? `Aprobado y ejecutado desde el chat: ${action.title}.`
+      : `Lo aprobe desde el chat, pero no pude ejecutarlo: ${execution.error || "error desconocido"}.`,
+  };
 }
 
 async function getUserProfileContext(userId: string): Promise<string> {
@@ -649,6 +669,32 @@ export function registerAssistantRoutes(app: Express): void {
         return res.status(400).json({ error: "Message or images are required" });
       }
 
+      const directPendingExecution = await executeSinglePendingApprovalFromChat(userId, message);
+      if (directPendingExecution.handled) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct approval user message:", historyError);
+          });
+        }
+
+        const content = directPendingExecution.content || "Listo.";
+        res.write(`data: ${JSON.stringify({
+          content,
+          ...(directPendingExecution.executed ? { actionExecuted: true, title: directPendingExecution.title } : {}),
+          ...(directPendingExecution.error ? { blackRoomLinkError: directPendingExecution.error } : {}),
+        })}\n\n`);
+        await saveCeoConversationMessage(userId, "assistant", content).catch((historyError) => {
+          console.error("Error saving direct approval assistant response:", historyError);
+        });
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
       const directPromoVideoCommand = buildDirectPromoVideoCommand(message);
       if (directPromoVideoCommand) {
         res.setHeader("Content-Type", "text/event-stream");
@@ -795,7 +841,7 @@ export function registerAssistantRoutes(app: Express): void {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
       } else {
-        const stream = await ai.models.generateContentStream({
+        const stream = await getGeminiClient().models.generateContentStream({
           model: "gemini-2.5-flash",
           contents,
         });
@@ -1246,7 +1292,16 @@ export function registerAssistantRoutes(app: Express): void {
       while ((blackRoomUpdateMatch = blackRoomUpdateRegex.exec(fullResponse)) !== null) {
         try {
           const linkData = JSON.parse(blackRoomUpdateMatch[1]);
-          const title = requireStringField(linkData, "title", "title nuevo para el link");
+          const title = (
+            typeof linkData.title === "string" && linkData.title.trim()
+              ? linkData.title.trim()
+              : typeof linkData.matchTitle === "string" && linkData.matchTitle.trim()
+                ? linkData.matchTitle.trim()
+                : ""
+          );
+          if (!title) {
+            throw new Error("Falta title o matchTitle para el link");
+          }
           const url = requireStringField(linkData, "url", "url nueva para el link");
           if (!linkData.matchTitle && !linkData.matchUrl && !linkData.matchId) {
             throw new Error("Falta matchTitle, matchUrl o matchId para saber cuál link editar.");

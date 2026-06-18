@@ -51,12 +51,23 @@ test("parses CEO smoke CLI options", () => {
 });
 
 test("requires execute and user id before sending a real smoke brief", () => {
-  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs([])), []);
+  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs([])), [
+    "--user-id=<real-user-id> must be a real value, not a placeholder.",
+    "--chat-id=<telegram-chat-id> must be a real value, not a placeholder.",
+  ]);
+  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs(["--user-id=user-1"])), [
+    "--chat-id=<telegram-chat-id> must be a real value, not a placeholder.",
+  ]);
   assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs(["--send-brief"])), [
-    "--user-id is required when --send-brief is used.",
+    "--user-id=<real-user-id> must be a real value, not a placeholder.",
+    "--chat-id=<telegram-chat-id> must be a real value, not a placeholder.",
     "--execute is required with --send-brief to send a real Telegram CEO brief.",
   ]);
-  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs(["--send-brief", "--user-id=user-1", "--execute"])), []);
+  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs(["--user-id=<real-user-id>", "--chat-id=<telegram-chat-id>"])), [
+    "--user-id=<real-user-id> must be a real value, not a placeholder.",
+    "--chat-id=<telegram-chat-id> must be a real value, not a placeholder.",
+  ]);
+  assert.deepEqual(validateCeoSmokeOptions(parseCeoSmokeArgs(["--send-brief", "--user-id=user-1", "--chat-id=123", "--execute"])), []);
 });
 
 test("builds CEO smoke readiness from doctor readiness and optional brief", () => {
@@ -76,7 +87,7 @@ test("builds CEO smoke readiness from doctor readiness and optional brief", () =
   assert.equal(report.readinessReady, true);
   assert.match(formatCeoSmokeText(report), /CEO Assistant Smoke/);
   assert.match(formatCeoSmokeText(report), /Database schema: ready/);
-  assert.match(formatCeoSmokeText(report), /Backup\/restore: ready/);
+  assert.match(formatCeoSmokeText(report), /Backup\/restore preflight: ready/);
   assert.match(formatCeoSmokeText(report), /Brief: skipped/);
   assert.equal(JSON.parse(formatCeoSmokeJson(report)).ready, true);
 });

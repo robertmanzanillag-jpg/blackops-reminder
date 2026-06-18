@@ -1,3 +1,5 @@
+import { hasRealValue } from "./ceo-doctor-cli";
+
 type JsonRecord = Record<string, any>;
 
 export interface BlackRoomLinkInput {
@@ -83,7 +85,12 @@ const MONTH_ALIASES: Record<string, number> = {
 };
 
 function getBlackRoomBaseUrl(): string {
-  return (process.env.BLACKROOM_ADMIN_BASE_URL || DEFAULT_BLACKROOM_BASE_URL).replace(/\/$/, "");
+  const configuredBaseUrl = process.env.BLACKROOM_ADMIN_BASE_URL;
+  if (configuredBaseUrl !== undefined && !hasRealValue(configuredBaseUrl)) {
+    throw new Error("BLACKROOM_ADMIN_BASE_URL must be a real admin URL, not a placeholder.");
+  }
+
+  return (configuredBaseUrl || DEFAULT_BLACKROOM_BASE_URL).replace(/\/$/, "");
 }
 
 function getBlackRoomHeaders(hasBody: boolean): Record<string, string> {
@@ -92,11 +99,11 @@ function getBlackRoomHeaders(hasBody: boolean): Record<string, string> {
   };
 
   if (hasBody) headers["Content-Type"] = "application/json";
-  if (process.env.BLACKROOM_ADMIN_COOKIE) headers.Cookie = process.env.BLACKROOM_ADMIN_COOKIE;
-  if (process.env.BLACKROOM_ADMIN_BEARER_TOKEN) {
+  if (hasRealValue(process.env.BLACKROOM_ADMIN_COOKIE)) headers.Cookie = process.env.BLACKROOM_ADMIN_COOKIE;
+  if (hasRealValue(process.env.BLACKROOM_ADMIN_BEARER_TOKEN)) {
     headers.Authorization = `Bearer ${process.env.BLACKROOM_ADMIN_BEARER_TOKEN}`;
   }
-  if (process.env.BLACKROOM_ADMIN_API_KEY) {
+  if (hasRealValue(process.env.BLACKROOM_ADMIN_API_KEY)) {
     headers["X-API-Key"] = process.env.BLACKROOM_ADMIN_API_KEY;
   }
 

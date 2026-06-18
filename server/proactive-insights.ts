@@ -3,7 +3,12 @@ import { sendTelegramPlainMessage } from "./telegram";
 import { format, startOfWeek, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { getSystemUserId } from "./user-context";
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+import { hasRealValue } from "./ceo-doctor-cli";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 interface Insight {
   type: "goal_reminder" | "task_reminder" | "radio_alert" | "portfolio_check";
@@ -152,7 +157,8 @@ export async function sendProactiveInsights(userId = getSystemUserId()): Promise
   }
   
   const telegramConfig = await storage.getTelegramConfig(userId);
-  if (!telegramConfig || !telegramConfig.enabled || !telegramConfig.chatId) {
+  const botToken = getTelegramBotToken();
+  if (!telegramConfig || !telegramConfig.enabled || !telegramConfig.chatId || !botToken) {
     console.log("Telegram not configured or disabled, skipping proactive insights");
     return { sent: false, insights: insights.length };
   }
@@ -168,7 +174,7 @@ export async function sendProactiveInsights(userId = getSystemUserId()): Promise
   message += "— Tu asistente BlackOps";
   
   try {
-    await sendTelegramPlainMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+    await sendTelegramPlainMessage(botToken, telegramConfig.chatId, message);
     return { sent: true, insights: insights.length };
   } catch (error) {
     console.error("Error sending proactive insights:", error);

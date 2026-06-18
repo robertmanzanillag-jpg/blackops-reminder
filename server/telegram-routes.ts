@@ -1,15 +1,42 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { getCurrentUserId, DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
-import { sendTelegramMessage, getTelegramUpdates, isTelegramWebhookSecretValid } from "./telegram";
+import { sendTelegramMessage, isTelegramWebhookSecretValid } from "./telegram";
 import { handleTelegramMessage, setupTelegramWebhook, getTelegramWebhookStatus, resolveTelegramWebhookUrl } from "./telegram-chat";
 import { testCeoMorningBrief, getReminderSchedulerConfig } from "./reminder-scheduler";
-import { buildCeoReadinessReport } from "./ceo-readiness";
 import { getCeoConversationMessages } from "./ceo-conversation-history";
 import { resolveSessionRuntimeSettings } from "./session-config-core";
 import { createRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper, shouldProcessTelegramUpdate } from "./telegram-webhook-dedupe";
 import { registerShopifyRoutes } from "./shopify-routes";
+import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
+import { buildTelegramCeoReadinessPayload, buildTelegramHealthPayload } from "./telegram-readiness";
+import {
+  CEO_GO_LIVE_EVIDENCE_CATEGORY,
+  buildCeoGoLiveEvidenceMutation,
+  buildCeoGoLiveEvidenceMeta,
+  buildCeoGoLiveEvidenceFlags,
+  buildCeoGoLiveReport,
+  parseCeoGoLiveEvidenceConfirmation,
+} from "./ceo-go-live-cli";
+
+function readOptionalBooleanFlag(req: { query: any; body?: any }, name: string): boolean | null {
+  const queryValue = req.query?.[name];
+  const bodyValue = req.body?.[name];
+  return parseCeoGoLiveEvidenceConfirmation(bodyValue ?? queryValue);
+}
+
+async function readGoLiveEvidenceFlags(userId: string) {
+  const evidence = await storage.getUserProfileDataByCategory(userId, CEO_GO_LIVE_EVIDENCE_CATEGORY);
+  return {
+    flags: buildCeoGoLiveEvidenceFlags(evidence.map((item) => item.key)),
+    meta: buildCeoGoLiveEvidenceMeta(evidence.map((item) => ({
+      key: item.key,
+      value: item.value,
+      source: item.source,
+    }))),
+  };
+}
 
 export function registerTelegramRoutes(app: Express): void {
   registerShopifyRoutes(app);
@@ -30,7 +57,7 @@ export function registerTelegramRoutes(app: Express): void {
       const config = await storage.getTelegramConfig(getCurrentUserId(req));
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-      if (!botToken) {
+      if (!hasRealValue(botToken)) {
         return res.json({ configured: false, enabled: false, reason: "no_token" });
       }
 
@@ -52,28 +79,19 @@ export function registerTelegramRoutes(app: Express): void {
     try {
       const userId = getCurrentUserId(req);
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const aiConfigured = Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
       const config = await storage.getTelegramConfig(userId);
       const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
       const expectedWebhookUrl = resolveTelegramWebhookUrl();
 
-      res.json({
-        tokenConfigured: Boolean(botToken),
-        aiConfigured,
-        webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
-        webhookUrlConfigured: Boolean(expectedWebhookUrl),
-        chatConfigured: Boolean(config?.chatId),
-        enabled: Boolean(config?.enabled),
-        chatId: config?.chatId || null,
-        webhookUrl: webhook?.url || null,
+      res.json(buildTelegramHealthPayload({
+        aiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        botToken,
+        webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+        config,
+        webhook,
         expectedWebhookUrl,
-        webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-        pendingUpdates: webhook?.pending_update_count || 0,
-        lastWebhookError: webhook?.last_error_message || null,
-        readyForBriefs: Boolean(botToken && config?.chatId && config?.enabled),
-        readyForChat: Boolean(aiConfigured && botToken && config?.chatId && config?.enabled && webhook?.url),
         scheduler: getReminderSchedulerConfig(),
-      });
+      }));
     } catch (error) {
       res.status(500).json({ error: "Failed to get Telegram health" });
     }
@@ -89,28 +107,19 @@ export function registerTelegramRoutes(app: Express): void {
       const scheduler = getReminderSchedulerConfig();
       const sessionSettings = resolveSessionRuntimeSettings();
 
-      res.json(buildCeoReadinessReport({
-        auth: {
-          userId,
-          devFallbackAllowed: allowsDevUserFallback(),
-          usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
-          defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
-          sessionSecretConfigured: Boolean(process.env.SESSION_SECRET),
-          sessionStoreKind: sessionSettings.storeKind,
-        },
-        assistant: {
-          aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
-        },
-        telegram: {
-          tokenConfigured: Boolean(botToken),
-          chatConfigured: Boolean(config?.chatId),
-          enabled: Boolean(config?.enabled),
-          webhookUrlConfigured: Boolean(expectedWebhookUrl),
-          webhookRegistered: Boolean(webhook?.url),
-          webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-          webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
-          lastWebhookError: webhook?.last_error_message || null,
-        },
+      res.json(buildTelegramCeoReadinessPayload({
+        userId,
+        devFallbackAllowed: allowsDevUserFallback(),
+        usingDevFallback: userId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
+        defaultUserId: process.env.DEFAULT_USER_ID,
+        sessionSecret: process.env.SESSION_SECRET,
+        sessionStoreKind: sessionSettings.storeKind,
+        aiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+        botToken,
+        webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+        config,
+        webhook,
+        expectedWebhookUrl,
         scheduler: {
           timezone: scheduler.timezone,
           ceoBriefHour: scheduler.ceoBriefHour,
@@ -119,6 +128,71 @@ export function registerTelegramRoutes(app: Express): void {
       }));
     } catch (error) {
       res.status(500).json({ error: "Failed to get CEO readiness" });
+    }
+  });
+
+  app.get("/api/ceo/go-live", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const config = await storage.getTelegramConfig(userId);
+      const chatId = config?.chatId || "";
+      const evidence = await readGoLiveEvidenceFlags(userId);
+
+      res.json(buildCeoGoLiveReport({
+        userId,
+        chatId,
+        json: true,
+        execute: false,
+        confirmCheckId: "",
+        revokeCheckId: "",
+        evidenceNote: "",
+        ...evidence.flags,
+        evidence: evidence.meta,
+      }));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get CEO go-live gate" });
+    }
+  });
+
+  app.post("/api/ceo/go-live/evidence", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const checkId = String(req.body?.checkId || "").trim();
+      const confirmed = readOptionalBooleanFlag(req, "confirmed");
+      const { mutation, error } = buildCeoGoLiveEvidenceMutation({ checkId, confirmed, note: req.body?.note });
+
+      if (error || !mutation) return res.status(400).json({ error });
+
+      if (mutation.action === "save") {
+        await storage.saveUserProfileData(userId, {
+          userId,
+          category: CEO_GO_LIVE_EVIDENCE_CATEGORY,
+          key: mutation.key,
+          value: mutation.value,
+          confidence: "confirmed",
+          source: mutation.source,
+        });
+      } else {
+        const existing = await storage.getUserProfileDataByKey(userId, mutation.key);
+        if (existing) await storage.deleteUserProfileData(existing.id);
+      }
+
+      const config = await storage.getTelegramConfig(userId);
+      const evidence = await readGoLiveEvidenceFlags(userId);
+
+      res.json(buildCeoGoLiveReport({
+        userId,
+        chatId: config?.chatId || "",
+        json: true,
+        execute: false,
+        confirmCheckId: "",
+        revokeCheckId: "",
+        evidenceNote: "",
+        ...evidence.flags,
+        evidence: evidence.meta,
+      }));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save CEO go-live evidence" });
     }
   });
 
@@ -152,29 +226,17 @@ export function registerTelegramRoutes(app: Express): void {
   app.post("/api/telegram/configure", async (req, res) => {
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) {
+      if (!hasRealValue(botToken)) {
         return res.status(400).json({ error: "TELEGRAM_BOT_TOKEN not configured" });
       }
 
-      let chatId = req.body.chatId;
+      const chatId = String(req.body?.chatId || "").trim();
 
       if (!chatId) {
-        const updates = await getTelegramUpdates(botToken);
-
-        if (updates.length === 0) {
-          return res.status(400).json({
-            error: "No messages found. Please send /start to your bot first.",
-            instruction: "Send /start to your Telegram bot, then try again.",
-            manualOption: "Or provide chatId in request body",
-          });
-        }
-
-        const lastMessage = updates[updates.length - 1];
-        chatId = lastMessage.message?.chat?.id?.toString();
-      }
-
-      if (!chatId) {
-        return res.status(400).json({ error: "Could not find chat ID" });
+        return res.status(400).json({
+          error: "chatId is required",
+          instruction: "Use npm run telegram:configure -- --user-id=<real-user-id> --latest --execute after sending /start, or provide chatId explicitly.",
+        });
       }
 
       const config = await storage.saveTelegramConfig(getCurrentUserId(req), chatId);
@@ -204,7 +266,7 @@ export function registerTelegramRoutes(app: Express): void {
   app.post("/api/telegram/test", async (req, res) => {
     try {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) {
+      if (!hasRealValue(botToken)) {
         return res.status(400).json({ error: "TELEGRAM_BOT_TOKEN not configured" });
       }
 
@@ -241,6 +303,10 @@ export function registerTelegramRoutes(app: Express): void {
   app.post("/api/telegram/webhook", telegramWebhookRateLimit, async (req, res) => {
     try {
       const providedSecret = req.header("x-telegram-bot-api-secret-token");
+      if (process.env.TELEGRAM_WEBHOOK_SECRET && !hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16)) {
+        console.warn("[Telegram Webhook] Rejected update because TELEGRAM_WEBHOOK_SECRET is not a strong configured value");
+        return res.status(503).json({ ok: false, error: "telegram_webhook_secret_invalid" });
+      }
       if (!isTelegramWebhookSecretValid(process.env.TELEGRAM_WEBHOOK_SECRET, providedSecret)) {
         console.warn("[Telegram Webhook] Rejected update with invalid secret token");
         return res.status(401).json({ ok: false });

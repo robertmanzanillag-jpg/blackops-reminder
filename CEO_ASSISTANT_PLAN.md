@@ -22,7 +22,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Proactive insights diarios ya se generan por owner con Telegram activo.
 - Agent actions de radio, portfolio y video-edit task ya aceptan `userId` y el scheduler los ejecuta por owner.
 - Webhook de Telegram soporta `TELEGRAM_WEBHOOK_SECRET` y valida el header oficial de Telegram.
-- Webhook de Telegram deduplica `update_id` en memoria para evitar procesar reintentos dos veces en despliegues single-instance.
+- Webhook de Telegram deduplica `update_id` con storage persistente cuando la tabla existe y cae a memoria como fallback temporal.
 - Setup de webhook soporta `TELEGRAM_WEBHOOK_URL` o `PUBLIC_APP_URL` para produccion fuera de Replit.
 - CLI `npm run telegram:webhook` permite consultar status y registrar webhook real con `setup --execute`.
 - Scheduler usa `SCHEDULER_TIMEZONE` y horas configurables para el brief CEO e insights.
@@ -34,7 +34,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - CLI `npm run auth:create-user` permite crear el primer usuario local sin abrir registro publico.
 - APIs protegidas rechazan requests sin contexto de usuario cuando el fallback dev esta deshabilitado.
 - Auth middleware permite callbacks externos necesarios como Telegram webhook y Zoho OAuth callback.
-- Rate limiting in-memory protege login/registro local y webhook Telegram en despliegues single-instance.
+- Rate limiting de login/registro local y webhook Telegram usa storage persistente cuando la tabla existe y cae a memoria como fallback temporal.
 - Endpoint `/api/ceo/readiness` agrega estado de auth, IA, Telegram, webhook, secret y scheduler para saber si el CEO Assistant esta listo.
 - CLI `npm run ceo:readiness` ejecuta el mismo readiness desde terminal para validar deploys y smoke tests.
 - CLI `npm run ceo:doctor` imprime checks de entorno y la secuencia exacta de comandos para activar el CEO Assistant.
@@ -100,12 +100,12 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Auth real: el boundary ya soporta provider/session y bloquea mock en produccion; ya existe utilidad de migracion dry-run para datos dev, pero falta conectar proveedor real de login y ejecutar migracion en entorno real.
 - Auth local: ya existe login/session propio como puente single-user con session store persistente en Postgres, pantalla de acceso y CLI para crear el primer usuario; falta decidir si se queda como proveedor oficial o se reemplaza por Clerk/Auth.js/Replit Auth.
 - Telegram ownership real parcial: el webhook ya resuelve `chatId -> userId` y no auto-vincula chats desconocidos; brief, evening, weekly, news digest, proactive insights, recordatorios de usuario y agent actions principales usan owner real; falta auth real y terminar hardening multiusuario.
-- Tests automatizados: ya hay pruebas focalizadas y una suite agregada `test:ceo-assistant` para auth boundary, comandos Telegram, particion de mensajes, formato del brief CEO, readiness CEO y decision diaria del scheduler; faltan pruebas de integracion para scheduler, data loading de `generateCeoMorningBrief`, pending actions, handler completo de Telegram y endpoints `/api/ceo`.
+- Tests automatizados: `test:ceo-assistant` agrega auth boundary, auth local, session/db/env config, rate limit, ownership, code/GitHub security, Google Drive/Canva/Black Room guards, readiness, scheduler, brief, doctor, backup/restore, go-live, Telegram, chat web y migracion. Aun faltan pruebas runtime con cuentas reales.
 - Inbox real: existen borradores y aprobacion, pero no envio externo real por email/Slack/WhatsApp/CRM.
 - Meeting post-processing: falta extraer action items despues de reuniones y generar follow-ups automaticamente.
 - Delegation OS dedicado: hoy se modela con follow-ups/commitments; falta un modelo formal de owner, status, escalation y SLA.
-- Observabilidad: faltan dashboards/logs de jobs, webhooks, errores de IA, latencia y reintentos.
-- Hardening: rate limiting y dedupe inicial ya existen para auth/webhook en single-instance; varios ownership checks por ID/accion ya cubren usuario autenticado, incluidas acciones Clippers de cuenta/credenciales/plataforma/imports/records/render/automation/permisos/fuentes/trends; faltan checks restantes, backups reales y observabilidad.
+- Observabilidad: hay readiness, health, automation runs y go-live gate; faltan dashboards profundos de latencia/reintentos y monitoreo externo.
+- Hardening: placeholders, secretos debiles, URLs no HTTPS, backup/restore, restore destructivo, Telegram webhook, rutas sensibles y artefactos locales ya tienen guardrails locales. Falta ejecutar backup/restore/smoke/go-live contra cuentas reales.
 
 ## Roadmap Recomendado
 
@@ -115,8 +115,7 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 - Verificar estado agregado desde `/api/ceo/readiness`.
 - Verificar estado operativo desde Telegram con `health`, `status` o `estado sistema`.
 - Confirmar hora real del brief matutino en `reminder-scheduler` y mantener prueba anti-duplicados por dia.
-- Ampliar prueba del formatter del brief hacia `generateCeoMorningBrief` con storage mockeado.
-- Ampliar pruebas de Telegram desde clasificacion de comandos hacia `handleTelegramMessage` con `brief`, `pendientes`, `aprobar` y conversacion normal.
+- Mantener pruebas de formatter, scheduler y handlers Telegram con dependencias mockeadas; el pendiente real es probar con bot/chat/webhook productivos.
 - Configurar `TELEGRAM_WEBHOOK_URL` o `PUBLIC_APP_URL`, configurar `TELEGRAM_WEBHOOK_SECRET`, y re-ejecutar setup webhook.
 - Configurar `SCHEDULER_TIMEZONE`, `CEO_BRIEF_HOUR` y `CEO_BRIEF_MINUTE` segun la rutina real del usuario.
 
@@ -148,10 +147,17 @@ Convertir BlackOps Reminder en un CEO Assistant personal: un sistema que entiend
 ### Fase 5 - Production Hardening
 
 - Test suite estable para API, assistant, Telegram, scheduler y trust layer.
-- Observabilidad de webhooks/jobs con errores accionables.
-- Rate limiting por usuario y por canal.
-- Backups y migraciones.
+- Observabilidad de webhooks/jobs con errores accionables y monitoreo externo.
+- Rate limiting por usuario y por canal con storage persistente confirmado despues de `db:push`.
+- Backups, migraciones, restore staging y go-live gate ejecutados con evidencia real.
 - Documentacion de deploy, secretos y runbooks.
+
+### Fase 6 - Handoff de Cuentas Reales
+
+- Configurar secretos reales desde `CEO_ASSISTANT_ENV.example`, sin placeholders.
+- Crear o migrar el usuario real, definir `DEFAULT_USER_ID` y apagar fallback dev.
+- Imprimir `npm run ceo:handoff`, completar variables operativas como `REAL_USER_ID`, `TELEGRAM_CHAT_ID`, `BACKUP_LABEL`, `BACKUP_DIR` y `RESTORE_DATABASE_URL`, y ejecutar `npm run db:push`, `ceo:db-check`, `telegram:configure`, `telegram:webhook -- setup --execute`, `ceo:backup-check`, `ceo:backup`, `ceo:restore`, `ceo:doctor`, `ceo:readiness`, `ceo:smoke`, `ceo:send-brief` y `ceo:go-live`.
+- Confirmar evidencia persistida de go-live desde dashboard CEO, `POST /api/ceo/go-live/evidence` o `npm run ceo:go-live -- --user-id="$REAL_USER_ID" --chat-id="$TELEGRAM_CHAT_ID" --confirm-check=backup_executed --note="backup manifest verified" --execute` para backup real, restore staging, brief real, comandos Telegram e historial compartido.
 
 ## Bloque 1 - Telegram Como CEO Channel
 
@@ -243,13 +249,13 @@ Estado: parcialmente implementado.
 
 ## Bloque 8 - Production Hardening
 
-Estado: pendiente/parcial.
+Estado: implementado local, pendiente runtime real.
 
-- Auth real sin fallback de desarrollo para produccion.
-- Ownership checks en rutas por ID.
-- Tests para assistant, Telegram, scheduler, pending actions y brief.
-- Observabilidad de jobs.
-- Backups, limites de rate y manejo de secretos.
+- Auth local/sesion y boundary real implementados; pendiente decidir proveedor definitivo si se quiere multiusuario completo.
+- Ownership checks y guardas single-owner cubren rutas CEO/Telegram/Clippers/Code/GitHub y rutas criticas auditadas.
+- Tests focalizados y agregados pasan localmente.
+- Backup/restore/go-live estan implementados con comandos seguros; pendiente ejecutarlos con Postgres/staging reales.
+- Manejo de secretos evita leer o incluir `credentials/`, `secrets/`, `.env`, `.env.local` y `CEO_ASSISTANT_ENV` en tar local.
 
 ## Criterio de Exito
 
@@ -261,3 +267,4 @@ BlackOps se considera un CEO Assistant real cuando:
 - El sistema identifica prioridades, riesgos, decisiones y follow-ups.
 - La memoria del usuario mejora las respuestas sin perder control.
 - El dashboard muestra el estado operativo completo en una pantalla.
+- `ceo:doctor`, `ceo:readiness`, `ceo:db-check`, `ceo:backup-check`, `ceo:backup`, `ceo:restore`, `ceo:smoke`, `ceo:send-brief` y `ceo:go-live` pasan con cuentas reales.

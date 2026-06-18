@@ -143,8 +143,8 @@ export function DashboardAssistantChat() {
                 return next;
               });
             }
-            if (data.googleEventError || data.radioError) {
-              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError}`;
+            if (data.googleEventError || data.radioError || data.blackRoomLinkError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError}`;
               setMessages((prev) => {
                 const next = [...prev];
                 next[next.length - 1] = {
@@ -155,7 +155,7 @@ export function DashboardAssistantChat() {
               });
             }
             if (data.approvalRequired && data.pendingAction) {
-              assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Revisalo en approvals antes de ejecutar.`;
+              assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
               queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
               setMessages((prev) => {
                 const next = [...prev];

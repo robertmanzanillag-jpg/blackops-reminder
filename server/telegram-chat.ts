@@ -1,4 +1,4 @@
-import { GoogleGenAI, Content, Part } from "@google/genai";
+import { Content, Part } from "@google/genai";
 import { storage } from "./storage";
 import { sendTelegramMessage, sendTelegramPlainMessage, sendTelegramPlainMessageChunks, TelegramUpdate, setTelegramWebhook, getWebhookInfo } from "./telegram";
 import { getCalendarEvents, isGoogleCalendarConnected } from "./google-calendar";
@@ -14,6 +14,8 @@ import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
+import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
+import { getGeminiClient } from "./gemini-client";
 import type { PendingActionStatus } from "@shared/schema";
 
 const TELEGRAM_WEBHOOK_PATH = "/api/telegram/webhook";
@@ -22,12 +24,20 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function resolveTelegramWebhookUrl(): string | null {
   const explicitUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim();
-  if (explicitUrl) return explicitUrl;
+  if (hasRealValue(explicitUrl)) return explicitUrl;
 
   const publicAppUrl = process.env.PUBLIC_APP_URL?.trim();
-  if (publicAppUrl) return `${trimTrailingSlash(publicAppUrl)}${TELEGRAM_WEBHOOK_PATH}`;
+  if (hasRealValue(publicAppUrl)) return `${trimTrailingSlash(publicAppUrl)}${TELEGRAM_WEBHOOK_PATH}`;
 
   const replitDomains = process.env.REPLIT_DOMAINS?.trim();
   if (replitDomains) {
@@ -74,13 +84,29 @@ async function downloadTelegramPhoto(botToken: string, fileId: string): Promise<
   }
 }
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+export interface TelegramMessageHandlerDeps {
+  getBotToken(): string | undefined;
+  getAiKey(): string | undefined;
+  getTelegramConfigByChatId(chatId: string): Promise<{ userId: string; enabled: boolean } | undefined>;
+  saveTelegramConfig(userId: string, chatId: string): Promise<{ userId: string; enabled: boolean }>;
+  sendPlainMessage(botToken: string, chatId: string, text: string): Promise<boolean>;
+  sendPlainMessageChunks(botToken: string, chatId: string, text: string): Promise<boolean>;
+  saveConversationMessage(userId: string, role: "user" | "assistant", content: string): Promise<void>;
+  handleControlCommand(userId: string, message: string): Promise<string | null>;
+  handleWorkRequest(userId: string, message: string): Promise<string | null>;
+}
+
+const defaultTelegramMessageHandlerDeps: TelegramMessageHandlerDeps = {
+  getBotToken: () => process.env.TELEGRAM_BOT_TOKEN,
+  getAiKey: () => process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  getTelegramConfigByChatId: (chatId) => storage.getTelegramConfigByChatId(chatId),
+  saveTelegramConfig: (userId, chatId) => storage.saveTelegramConfig(userId, chatId),
+  sendPlainMessage: sendTelegramPlainMessage,
+  sendPlainMessageChunks: sendTelegramPlainMessageChunks,
+  saveConversationMessage: saveCeoConversationMessage,
+  handleControlCommand: handleTelegramControlCommand,
+  handleWorkRequest: handleTelegramWorkRequest,
+};
 
 async function getCalendarContext(): Promise<string> {
   try {
@@ -561,8 +587,8 @@ async function buildTelegramHealthStatus(userId: string): Promise<string> {
   const pendingActions = (await storage.getPendingActions(userId))
     .filter((action) => action.status === "pending" || action.status === "draft" || action.status === "edited");
 
-  const tokenReady = Boolean(botToken);
-  const aiReady = Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
+  const tokenReady = hasRealValue(botToken);
+  const aiReady = hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY);
   const chatReady = Boolean(config?.chatId);
   const notificationsReady = Boolean(config?.enabled);
   const webhookReady = Boolean(webhook?.url);
@@ -585,7 +611,7 @@ async function buildTelegramHealthStatus(userId: string): Promise<string> {
     `Webhook URL: ${webhook?.url || "sin configurar"}`,
     `URL esperada: ${expectedWebhookUrl || "sin PUBLIC_APP_URL/TELEGRAM_WEBHOOK_URL"}`,
     `Webhook coincide: ${flag(webhookMatchesExpected)}`,
-    `Secret webhook: ${flag(Boolean(process.env.TELEGRAM_WEBHOOK_SECRET))}`,
+    `Secret webhook: ${flag(hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16))}`,
     `Updates pendientes: ${webhook?.pending_update_count || 0}`,
     `Ultimo error webhook: ${webhook?.last_error_message || "ninguno"}`,
     `Scheduler: ${scheduler.timezone}, brief ${String(scheduler.ceoBriefHour).padStart(2, "0")}:${String(scheduler.ceoBriefMinute).padStart(2, "0")}`,
@@ -603,20 +629,20 @@ async function buildTelegramCeoReadiness(userId: string): Promise<string> {
     auth: {
       userId,
       devFallbackAllowed: allowsDevUserFallback(),
-      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
-      defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
+      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
+      defaultUserConfigured: hasRealValue(process.env.DEFAULT_USER_ID),
     },
     assistant: {
-      aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
+      aiConfigured: hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
     },
     telegram: {
-      tokenConfigured: Boolean(botToken),
+      tokenConfigured: hasRealValue(botToken),
       chatConfigured: Boolean(config?.chatId),
       enabled: Boolean(config?.enabled),
       webhookUrlConfigured: Boolean(expectedWebhookUrl),
       webhookRegistered: Boolean(webhook?.url),
       webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-      webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+      webhookSecretConfigured: hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16),
       lastWebhookError: webhook?.last_error_message || null,
     },
     scheduler: {
@@ -1049,7 +1075,10 @@ function cleanResponseForTelegram(response: string): string {
   return clean;
 }
 
-export async function handleTelegramMessage(update: TelegramUpdate): Promise<void> {
+export async function handleTelegramMessageWithDeps(
+  update: TelegramUpdate,
+  deps: TelegramMessageHandlerDeps,
+): Promise<void> {
   const hasText = !!update.message?.text;
   const hasPhoto = !!update.message?.photo && update.message.photo.length > 0;
   const hasCaption = !!update.message?.caption;
@@ -1058,16 +1087,16 @@ export async function handleTelegramMessage(update: TelegramUpdate): Promise<voi
   
   const chatId = update.message!.chat.id.toString();
   const userMessage = update.message?.text || update.message?.caption || "";
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = deps.getBotToken();
   
-  if (!botToken) {
+  if (!hasRealValue(botToken)) {
     console.error("[Telegram Chat] No bot token configured");
     return;
   }
 
-  let config = await storage.getTelegramConfigByChatId(chatId);
+  let config = await deps.getTelegramConfigByChatId(chatId);
   if (!config) {
-    await sendTelegramPlainMessage(
+    await deps.sendPlainMessage(
       botToken,
       chatId,
       [
@@ -1080,39 +1109,39 @@ export async function handleTelegramMessage(update: TelegramUpdate): Promise<voi
     return;
   }
   if (!config.enabled) {
-    config = await storage.saveTelegramConfig(config.userId, chatId);
+    config = await deps.saveTelegramConfig(config.userId, chatId);
   }
   const userId = config.userId;
 
   try {
     if (userMessage) {
-      await saveCeoConversationMessage(userId, "user", userMessage);
+      await deps.saveConversationMessage(userId, "user", userMessage);
     } else if (hasPhoto) {
-      await saveCeoConversationMessage(userId, "user", "[Imagen enviada por Telegram]");
+      await deps.saveConversationMessage(userId, "user", "[Imagen enviada por Telegram]");
     }
 
-    const controlResponse = userMessage ? await handleTelegramControlCommand(userId, userMessage) : null;
+    const controlResponse = userMessage ? await deps.handleControlCommand(userId, userMessage) : null;
     if (controlResponse) {
-      await sendTelegramPlainMessageChunks(botToken, chatId, controlResponse);
-      await saveCeoConversationMessage(userId, "assistant", controlResponse);
+      await deps.sendPlainMessageChunks(botToken, chatId, controlResponse);
+      await deps.saveConversationMessage(userId, "assistant", controlResponse);
       return;
     }
 
-    const workResponse = userMessage ? await handleTelegramWorkRequest(userId, userMessage) : null;
+    const workResponse = userMessage ? await deps.handleWorkRequest(userId, userMessage) : null;
     if (workResponse) {
-      await sendTelegramPlainMessageChunks(botToken, chatId, workResponse);
-      await saveCeoConversationMessage(userId, "assistant", workResponse);
+      await deps.sendPlainMessageChunks(botToken, chatId, workResponse);
+      await deps.saveConversationMessage(userId, "assistant", workResponse);
       return;
     }
 
-    if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+    if (!hasRealValue(deps.getAiKey())) {
       const missingAiMessage = "❌ Error: API de IA no configurada.";
-      await sendTelegramPlainMessage(botToken, chatId, missingAiMessage);
-      await saveCeoConversationMessage(userId, "assistant", missingAiMessage);
+      await deps.sendPlainMessage(botToken, chatId, missingAiMessage);
+      await deps.saveConversationMessage(userId, "assistant", missingAiMessage);
       return;
     }
 
-    await sendTelegramPlainMessage(botToken, chatId, hasPhoto ? "📷 Analizando imagen..." : "💭 Pensando...");
+    await deps.sendPlainMessage(botToken, chatId, hasPhoto ? "📷 Analizando imagen..." : "💭 Pensando...");
 
     // Download photo if present
     let imageData: { base64: string; mimeType: string } | null = null;
@@ -1174,7 +1203,7 @@ ${conversationHistory}
       parts.push({ text: `${contextPrompt}\n\nUsuario dice: ${userMessage}` });
     }
 
-    const result = await ai.models.generateContent({
+    const result = await getGeminiClient().models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts }],
     });
@@ -1192,19 +1221,23 @@ ${conversationHistory}
       responseToSend = "No pude generar una respuesta útil esta vez. Intenta reformularlo en una frase más concreta.";
     }
 
-    await sendTelegramPlainMessageChunks(botToken, chatId, responseToSend);
-    await saveCeoConversationMessage(userId, "assistant", responseToSend);
+    await deps.sendPlainMessageChunks(botToken, chatId, responseToSend);
+    await deps.saveConversationMessage(userId, "assistant", responseToSend);
   } catch (error) {
     console.error("[Telegram Chat] Error processing message:", error);
     const errorMessage = "❌ Error al procesar el mensaje. Intenta de nuevo.";
-    await sendTelegramPlainMessage(botToken, chatId, errorMessage);
-    await saveCeoConversationMessage(userId, "assistant", errorMessage);
+    await deps.sendPlainMessage(botToken, chatId, errorMessage);
+    await deps.saveConversationMessage(userId, "assistant", errorMessage);
   }
+}
+
+export async function handleTelegramMessage(update: TelegramUpdate): Promise<void> {
+  return handleTelegramMessageWithDeps(update, defaultTelegramMessageHandlerDeps);
 }
 
 export async function setupTelegramWebhook(): Promise<{ success: boolean; message: string }> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) {
+  if (!hasRealValue(botToken)) {
     return { success: false, message: "No bot token configured" };
   }
 
@@ -1214,17 +1247,26 @@ export async function setupTelegramWebhook(): Promise<{ success: boolean; messag
     return { success: false, message: "Could not determine webhook URL" };
   }
 
-  const success = await setTelegramWebhook(botToken, webhookUrl, process.env.TELEGRAM_WEBHOOK_SECRET);
+  if (!isHttpsUrl(webhookUrl)) {
+    return { success: false, message: "Webhook URL must be a real HTTPS URL" };
+  }
+
+  if (!hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16)) {
+    return { success: false, message: "TELEGRAM_WEBHOOK_SECRET must be a real random secret with at least 16 characters" };
+  }
+
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const success = await setTelegramWebhook(botToken, webhookUrl, webhookSecret);
   return {
     success,
     message: success
-      ? `Webhook configured: ${webhookUrl}${process.env.TELEGRAM_WEBHOOK_SECRET ? " with secret token" : ""}`
+      ? `Webhook configured: ${webhookUrl}${webhookSecret ? " with secret token" : ""}`
       : "Failed to set webhook"
   };
 }
 
 export async function getTelegramWebhookStatus(): Promise<any> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) return null;
+  if (!hasRealValue(botToken)) return null;
   return await getWebhookInfo(botToken);
 }

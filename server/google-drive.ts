@@ -5,6 +5,7 @@ import { google } from "googleapis";
 import { getGoogleAccessToken, getGoogleOAuthClient } from "./google-calendar";
 import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 export const DRIVE_APP_ROOT_FOLDER = "Robert A";
@@ -35,6 +36,13 @@ function isDrivePermissionError(error: any): boolean {
   const status = error?.code || error?.response?.status;
   const message = String(error?.message || error?.response?.data?.error_description || "");
   return status === 401 || status === 403 || /insufficient|permission|scope|unauthorized/i.test(message);
+}
+
+function readOptionalRealDriveFolderId(envName: string): string | null {
+  const value = process.env[envName];
+  if (!value) return null;
+  if (hasRealValue(value)) return value;
+  throw new Error(`${envName} must be a real Google Drive folder id, not a placeholder.`);
 }
 
 async function getDriveClient(userId: string) {
@@ -135,7 +143,7 @@ export async function ensureAppDriveStructure(userId = getSystemUserId()): Promi
 export async function ensureRadioDriveFolder(dateFolderName: string, userId = getSystemUserId()): Promise<string> {
   try {
     const drive = await getDriveClient(userId);
-    const configuredRootId = process.env.GOOGLE_DRIVE_RADIO_FOLDER_ID;
+    const configuredRootId = readOptionalRealDriveFolderId("GOOGLE_DRIVE_RADIO_FOLDER_ID");
     const appRootId = configuredRootId || (await findOrCreateFolder(drive, DRIVE_APP_ROOT_FOLDER, "root"));
     const flyersRootId = await findOrCreateFolder(drive, DRIVE_RADIO_FLYERS_FOLDER, appRootId);
     return findOrCreateFolder(drive, dateFolderName, flyersRootId);

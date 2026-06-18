@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { testCeoMorningBrief } from "../server/reminder-scheduler";
 import { parseSendCeoBriefArgs, validateSendCeoBriefOptions } from "../server/ceo-brief-cli";
 

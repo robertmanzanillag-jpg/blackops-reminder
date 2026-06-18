@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -5,15 +6,19 @@ import { Pool } from "pg";
 import { parseCeoSmokeArgs, validateCeoSmokeOptions, buildCeoSmokeReport, formatCeoSmokeJson, formatCeoSmokeText } from "../server/ceo-smoke-cli";
 import {
   CEO_BACKUP_ARTIFACT_PATHS,
-  DEFAULT_CEO_BACKUP_DIR,
   buildCeoBackupCheckReport,
+  resolveCeoBackupDir,
 } from "../server/ceo-backup-check-cli";
 import {
   REQUIRED_CEO_DB_TABLES,
   buildCeoDbCheckReport,
 } from "../server/ceo-db-check-cli";
-import { buildCeoDoctorChecks, buildCeoDoctorNextCommands } from "../server/ceo-doctor-cli";
+import { buildCeoDoctorChecks, buildCeoDoctorNextCommands, hasRealValue, hasStrongSecret } from "../server/ceo-doctor-cli";
 import { buildCeoReadinessReport } from "../server/ceo-readiness";
+import {
+  CEO_GO_LIVE_EVIDENCE_CATEGORY,
+  buildCeoGoLiveSmokeEvidenceMutation,
+} from "../server/ceo-go-live-cli";
 import { getReminderSchedulerConfig, testCeoMorningBrief } from "../server/reminder-scheduler";
 import { getTelegramWebhookStatus, resolveTelegramWebhookUrl } from "../server/telegram-chat";
 import { storage } from "../server/storage";
@@ -53,14 +58,14 @@ async function getExistingTables(databaseUrl: string): Promise<string[]> {
 }
 
 function resolveSmokeBackupReport() {
-  const backupDir = process.env.CEO_BACKUP_DIR || DEFAULT_CEO_BACKUP_DIR;
+  const backupDir = resolveCeoBackupDir(process.env.CEO_BACKUP_DIR);
   const absoluteBackupDir = path.resolve(process.cwd(), backupDir);
   const existingArtifactPaths = CEO_BACKUP_ARTIFACT_PATHS
     .filter((artifact) => fs.existsSync(path.resolve(process.cwd(), artifact.path)))
     .map((artifact) => artifact.path);
 
   return buildCeoBackupCheckReport({
-    databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
+    databaseUrlConfigured: hasRealValue(process.env.DATABASE_URL),
     backupDir,
     backupDirWritable: ensureWritableDir(absoluteBackupDir),
     encryptedSecretBackupConfigured: process.env.CEO_BACKUP_SECRETS_ENCRYPTED === "true",
@@ -77,7 +82,7 @@ function resolveSmokeBackupReport() {
 async function resolveSmokeReadiness(userId: string | null) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const config = userId ? await storage.getTelegramConfig(userId).catch(() => undefined) : undefined;
-  const webhook = botToken ? await getTelegramWebhookStatus().catch(() => null) : null;
+  const webhook = hasRealValue(botToken) ? await getTelegramWebhookStatus().catch(() => null) : null;
   const expectedWebhookUrl = resolveTelegramWebhookUrl();
   const scheduler = getReminderSchedulerConfig();
   const sessionSettings = resolveSessionRuntimeSettings();
@@ -86,22 +91,22 @@ async function resolveSmokeReadiness(userId: string | null) {
     auth: {
       userId,
       devFallbackAllowed: allowsDevUserFallback(),
-      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !process.env.DEFAULT_USER_ID,
-      defaultUserConfigured: Boolean(process.env.DEFAULT_USER_ID),
-      sessionSecretConfigured: Boolean(process.env.SESSION_SECRET),
+      usingDevFallback: userId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
+      defaultUserConfigured: hasRealValue(process.env.DEFAULT_USER_ID),
+      sessionSecretConfigured: hasStrongSecret(process.env.SESSION_SECRET),
       sessionStoreKind: sessionSettings.storeKind,
     },
     assistant: {
-      aiConfigured: Boolean(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
+      aiConfigured: hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY),
     },
     telegram: {
-      tokenConfigured: Boolean(botToken),
+      tokenConfigured: hasRealValue(botToken),
       chatConfigured: Boolean(config?.chatId),
       enabled: Boolean(config?.enabled),
       webhookUrlConfigured: Boolean(expectedWebhookUrl),
       webhookRegistered: Boolean(webhook?.url),
       webhookMatchesExpected: Boolean(expectedWebhookUrl && webhook?.url === expectedWebhookUrl),
-      webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+      webhookSecretConfigured: hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16),
       lastWebhookError: webhook?.last_error_message || null,
     },
     scheduler: {
@@ -133,9 +138,11 @@ async function main() {
   const doctorOptions = { userId: options.userId || userId || "", chatId: options.chatId, json: options.json };
   const checks = buildCeoDoctorChecks(process.env, doctorOptions);
   const commands = buildCeoDoctorNextCommands(doctorOptions);
-  const existingTables = process.env.DATABASE_URL ? await getExistingTables(process.env.DATABASE_URL).catch(() => []) : [];
+  const existingTables = hasRealValue(process.env.DATABASE_URL)
+    ? await getExistingTables(process.env.DATABASE_URL).catch(() => [])
+    : [];
   const db = buildCeoDbCheckReport({
-    databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
+    databaseUrlConfigured: hasRealValue(process.env.DATABASE_URL),
     existingTables,
   });
   const backup = resolveSmokeBackupReport();
@@ -144,6 +151,20 @@ async function main() {
     ? { attempted: true, ...(await testCeoMorningBrief(options.userId)) }
     : { attempted: false, success: true, message: "skipped" };
   const report = buildCeoSmokeReport({ checks, db, backup, readiness, commands, brief });
+
+  if (report.ready && userId) {
+    const mutation = buildCeoGoLiveSmokeEvidenceMutation({
+      note: options.sendBrief ? "ceo:smoke passed with real brief" : "ceo:smoke passed",
+    });
+    await storage.saveUserProfileData(userId, {
+      userId,
+      category: CEO_GO_LIVE_EVIDENCE_CATEGORY,
+      key: mutation.key,
+      value: mutation.value,
+      confidence: "confirmed",
+      source: mutation.source,
+    });
+  }
 
   console.log(options.json ? formatCeoSmokeJson(report) : formatCeoSmokeText(report));
   process.exit(report.ready ? 0 : 1);

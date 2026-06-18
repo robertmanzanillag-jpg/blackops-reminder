@@ -1,3 +1,5 @@
+import { hasRealValue } from "../server/ceo-doctor-cli";
+
 const DEFAULT_BASE_URL = "https://robplanner.replit.app";
 const TIKTOK_VERIFICATION_FILE = "tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt";
 
@@ -36,7 +38,12 @@ const checks: Check[] = [
 ];
 
 function normalizeBaseUrl(raw: string | undefined) {
-  const baseUrl = (raw || process.env.PUBLIC_BASE_URL || DEFAULT_BASE_URL).trim().replace(/\/$/, "");
+  const configuredBaseUrl = raw ?? process.env.PUBLIC_BASE_URL;
+  if (configuredBaseUrl !== undefined && !hasRealValue(configuredBaseUrl)) {
+    throw new Error("Base URL must be a real public HTTPS URL, not a placeholder.");
+  }
+
+  const baseUrl = (configuredBaseUrl || DEFAULT_BASE_URL).trim().replace(/\/$/, "");
   if (!/^https:\/\/[^/]+/i.test(baseUrl)) {
     throw new Error(`Base URL must be public HTTPS. Received: ${baseUrl}`);
   }

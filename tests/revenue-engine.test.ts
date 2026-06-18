@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   answerRevenueAutomationIntake,
   buildAutomationQuote,
+  buildRevenueUserDataPaths,
   buildImprovementReview,
   buildRevenueEnginePlan,
   buildRevenueLaunchReadiness,
@@ -53,6 +54,7 @@ import {
   setRevenueScoutingMissionsPathForTests,
   setRevenueOutreachSenderForTests,
   sendRevenueOutreachDraft,
+  setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
 } from "../server/revenue-engine";
 
@@ -94,6 +96,19 @@ test.beforeEach(() => {
   resetRevenueImprovementReviewsForTests();
   resetRevenueScoutingMissionsForTests();
   resetRevenueDeliveryWorkspacesForTests();
+});
+
+test("scopes Revenue Engine JSON paths by authenticated user", () => {
+  const paths = buildRevenueUserDataPaths("user@example.com/with spaces");
+
+  assert.match(paths.baseDir, /revenue_engine_data\/users\/user_example_com_with_spaces$/);
+  assert.match(paths.ledgerPath, /revenue_engine_data\/users\/user_example_com_with_spaces\/ledger\.json$/);
+
+  setRevenueUserDataScope("owner-a");
+  const scopedSnapshot = getRevenueEngineSnapshot();
+  assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a\/ledger\.json$/);
+  assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a\/leads\.json$/);
+  assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a\/outreach\.json$/);
 });
 
 test.afterEach(() => {
@@ -746,6 +761,70 @@ test("blocks outreach send when email provider is missing", async () => {
   assert.equal(sendResult.provider.configured, false);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
   assert.equal(sendResult.gates.some((gate) => gate.gate === "provider_configured" && gate.passed === false), true);
+});
+
+test("blocks outreach send when email provider values are placeholders", async () => {
+  process.env.RESEND_API_KEY = "replace-with-resend-api-key";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "your-email@example.com";
+  const result = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Placeholder Provider Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Placeholder Provider Outreach has public data and a clear need for website conversion.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.provider.configured, false);
+  assert.equal(sendResult.provider.missing.includes("RESEND_API_KEY"), true);
+  assert.equal(sendResult.provider.missing.includes("REVENUE_ENGINE_FROM_EMAIL"), true);
+  assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
+});
+
+test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "your-email@example.com";
+  process.env.RESEND_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Fallback Sender Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Fallback Sender Outreach has public data and a clear need for website conversion.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  setRevenueOutreachSenderForTests(async (payload) => {
+    assert.equal(payload.from, "Revenue Engine <sales@example.com>");
+    return { id: "email_fallback_sender" };
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "sent");
+  assert.equal(sendResult.provider.configured, true);
+  assert.equal(sendResult.provider.fromEmail, "Revenue Engine <sales@example.com>");
 });
 
 test("sends approved outreach with configured provider and updates matching lead", async () => {

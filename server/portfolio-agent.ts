@@ -4,7 +4,12 @@ import { getPrice, getBatchCryptoPrices, getStockHistoricalData, getCryptoHistor
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getSystemUserId } from "./user-context";
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+import { hasRealValue } from "./ceo-doctor-cli";
+
+function getTelegramBotToken(): string | null {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return hasRealValue(token) ? token : null;
+}
 
 interface PortfolioSummary {
   totalValue: number;
@@ -404,12 +409,13 @@ export async function generateWeeklyReport(userId = getSystemUserId()): Promise<
 export async function sendWeeklyPortfolioReport(userId = getSystemUserId()): Promise<{ sent: boolean; message: string }> {
   try {
     const telegramConfig = await storage.getTelegramConfig(userId);
-    if (!telegramConfig || !telegramConfig.chatId || !TELEGRAM_BOT_TOKEN) {
+    const botToken = getTelegramBotToken();
+    if (!telegramConfig || !telegramConfig.chatId || !botToken) {
       return { sent: false, message: "Telegram no configurado" };
     }
 
     const report = await generateWeeklyReport(userId);
-    const sent = await sendTelegramMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, report);
+    const sent = await sendTelegramMessage(botToken, telegramConfig.chatId, report);
     return { sent, message: sent ? "Reporte semanal enviado" : "No se pudo enviar el reporte" };
   } catch (error) {
     console.error("Error sending weekly report:", error);

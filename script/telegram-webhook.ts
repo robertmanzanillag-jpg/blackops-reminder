@@ -1,4 +1,6 @@
+import "../server/env-loader";
 import { getTelegramWebhookStatus, resolveTelegramWebhookUrl, setupTelegramWebhook } from "../server/telegram-chat";
+import { hasStrongSecret } from "../server/ceo-doctor-cli";
 import { parseTelegramWebhookArgs, validateTelegramWebhookOptions } from "../server/telegram-webhook-cli";
 
 async function main() {
@@ -26,7 +28,7 @@ async function main() {
     webhookMatchesExpected: Boolean(expectedWebhookUrl && status?.url === expectedWebhookUrl),
     pendingUpdates: status?.pending_update_count || 0,
     lastError: status?.last_error_message || null,
-    secretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET),
+    secretConfigured: hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16),
   }, null, 2));
 }
 

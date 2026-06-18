@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildDirectBlackRoomCommand, buildDirectPromoVideoCommand } from "../server/assistant";
+import { buildDirectBlackRoomCommand, buildDirectPromoVideoCommand, userAlreadyApprovedExecution } from "../server/assistant";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -89,4 +89,42 @@ test("web assistant does not add vague Black Room event link without URL", () =>
   );
 
   assert.equal(direct, null);
+});
+
+test("web assistant accepts Black Room link updates that only change the URL", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(source, /typeof linkData\.matchTitle === "string" && linkData\.matchTitle\.trim\(\)/);
+  assert.match(source, /Falta title o matchTitle para el link/);
+});
+
+test("dashboard assistant chat shows Black Room approval creation errors", () => {
+  const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+
+  assert.match(source, /data\.blackRoomLinkError/);
+  assert.match(source, /No pude completar la accion/);
+});
+
+test("web assistant only auto-executes after explicit chat approval", () => {
+  assert.equal(userAlreadyApprovedExecution("si, hazlo"), true);
+  assert.equal(userAlreadyApprovedExecution("lo apruebo, ejecutalo"), true);
+  assert.equal(userAlreadyApprovedExecution("si quiero que empiece la tarea"), true);
+  assert.equal(userAlreadyApprovedExecution("quiero que cambies el link de Black Room"), false);
+  assert.equal(userAlreadyApprovedExecution("prepara la tarea para aprobar"), false);
+});
+
+test("web assistant can execute one pending approval directly from chat", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(source, /executeSinglePendingApprovalFromChat/);
+  assert.match(source, /Tengo varias aprobaciones pendientes/);
+  assert.match(source, /Aprobado y ejecutado desde el chat/);
+});
+
+test("assistant approval prompt explains chat approval shortcut", () => {
+  const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+  const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
+
+  assert.match(dashboardChat, /Puedes decir "si, hazlo"/);
+  assert.match(assistantPage, /Puedes decir "si, hazlo"/);
 });

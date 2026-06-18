@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { Pool } from "pg";
 import {
   REQUIRED_CEO_DB_TABLES,
@@ -6,6 +7,7 @@ import {
   formatCeoDbCheckText,
   parseCeoDbCheckArgs,
 } from "../server/ceo-db-check-cli";
+import { hasRealValue } from "../server/ceo-doctor-cli";
 
 async function getExistingTables(databaseUrl: string): Promise<string[]> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -28,9 +30,9 @@ async function getExistingTables(databaseUrl: string): Promise<string[]> {
 async function main() {
   const options = parseCeoDbCheckArgs(process.argv.slice(2));
   const databaseUrl = process.env.DATABASE_URL;
-  const existingTables = databaseUrl ? await getExistingTables(databaseUrl) : [];
+  const existingTables = hasRealValue(databaseUrl) ? await getExistingTables(databaseUrl) : [];
   const report = buildCeoDbCheckReport({
-    databaseUrlConfigured: Boolean(databaseUrl),
+    databaseUrlConfigured: hasRealValue(databaseUrl),
     existingTables,
   });
 

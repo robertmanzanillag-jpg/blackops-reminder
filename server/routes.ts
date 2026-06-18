@@ -20,7 +20,7 @@ import { listAllActions, executeAction, executeMultipleActions, getActionsByCate
 import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTableSchema, executeQuery, getProjectStructure, addColumnToTable, createTable, getTableInfo } from "./code-agent";
 import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
 import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview } from "./github-client";
-import { getCurrentUserId } from "./user-context";
+import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-context";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
@@ -30,14 +30,26 @@ import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
+import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getShopifyOAuthStatus } from "./shopify-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, verifyClipperProductionUrl } from "./clippers-agent";
-import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperLocalDropSync, verifyClipperProductionUrl } from "./clippers-agent";
+import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
-import { runCybersecurityScan } from "./cybersecurity-agent";
+import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+let revenueEngineRouteQueue = Promise.resolve();
 
 export async function registerRoutes(
   httpServer: Server,
@@ -190,6 +202,114 @@ export async function registerRoutes(
     }
   });
 
+  // GET Shopify OAuth status
+  app.get("/api/shopify/oauth/status", (_req, res) => {
+    try {
+      res.json(getShopifyOAuthStatus());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to fetch Shopify OAuth status" });
+    }
+  });
+
+  // GET Shopify install entrypoint - used as the App URL in Shopify Dev Dashboard
+  app.get("/api/shopify/install", (req, res) => {
+    const { shop } = req.query;
+    if (!shop || typeof shop !== "string") {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Shopify install incompleto</h1>
+          <p>Falta el parametro shop de Shopify.</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+
+    try {
+      res.redirect(createShopifyAuthorizationUrl({ shop, req, verifyInstallHmac: Boolean(req.query.hmac) }));
+    } catch (error: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Shopify no está configurado</h1>
+          <p>${escapeHtml(error.message || "Agrega SHOPIFY_APP_CLIENT_ID y SHOPIFY_APP_CLIENT_SECRET.")}</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+  });
+
+  // GET Shopify OAuth authorization URL - manual connect helper
+  app.get("/api/shopify/oauth/start", (req, res) => {
+    const shop = typeof req.query.shop === "string" ? req.query.shop : process.env.SHOPIFY_SHOP_DOMAIN;
+    if (!shop) {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Shopify store requerido</h1>
+          <p>Abre esta ruta con ?shop=tu-tienda.myshopify.com o configura SHOPIFY_SHOP_DOMAIN.</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+
+    try {
+      res.redirect(createShopifyAuthorizationUrl({ shop, req }));
+    } catch (error: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Shopify OAuth no está configurado</h1>
+          <p>${escapeHtml(error.message || "Agrega SHOPIFY_APP_CLIENT_ID y SHOPIFY_APP_CLIENT_SECRET.")}</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+  });
+
+  // GET Shopify OAuth callback - stores Admin API token without displaying it
+  app.get("/api/shopify/oauth/callback", async (req, res) => {
+    const { code, state, shop, error, error_description: errorDescription } = req.query;
+
+    if (error) {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Shopify</h1>
+          <p>${escapeHtml(errorDescription || error)}</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+
+    if (!code || typeof code !== "string" || !state || typeof state !== "string" || !shop || typeof shop !== "string") {
+      return res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Shopify</h1>
+          <p>No se recibió el authorization code/state/shop de Shopify.</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+
+    try {
+      const result = await exchangeShopifyAuthorizationCode({ code, state, shop, query: req.query });
+      res.send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1 style="color:#22c55e;">Shopify conectado</h1>
+          <p>El Admin API token quedó guardado para Dropshipping CEO sin mostrarlo en pantalla.</p>
+          <p style="color:#94a3b8;">Store: ${escapeHtml(result.shop)}</p>
+          <p style="color:#94a3b8;">Scopes: ${escapeHtml(result.scope || "guardados")}</p>
+          <p style="color:#94a3b8;">Env local: ${escapeHtml(result.envFilePath)}</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Ir a Dropshipping CEO</a>
+        </body></html>
+      `);
+    } catch (callbackError: any) {
+      res.status(400).send(`
+        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+          <h1>Error conectando Shopify</h1>
+          <p>${escapeHtml(callbackError.message || "No se pudo guardar la conexión de Shopify.")}</p>
+          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+        </body></html>
+      `);
+    }
+  });
+
   app.post("/api/google-drive/organize", async (req, res) => {
     try {
       const result = await ensureAppDriveStructure(getCurrentUserId(req));
@@ -207,7 +327,7 @@ export async function registerRoutes(
       res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Google Drive no está configurado</h1>
-          <p>${error.message || "Agrega GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en los secrets."}</p>
+          <p>${escapeHtml(error.message || "Agrega GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en los secrets.")}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -222,7 +342,7 @@ export async function registerRoutes(
       return res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error conectando Google Drive</h1>
-          <p>${String(errorDescription || error)}</p>
+          <p>${escapeHtml(errorDescription || error)}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -244,7 +364,7 @@ export async function registerRoutes(
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1 style="color:#22c55e;">Google Drive conectado</h1>
           <p>La conexión de Drive quedó guardada para preparar carpetas y fuentes de Clippers.</p>
-          <p style="color:#94a3b8;">Scopes: ${result.scope || "guardados"}</p>
+          <p style="color:#94a3b8;">Scopes: ${escapeHtml(result.scope || "guardados")}</p>
           <a href="/clippers" style="color:#3b82f6;">Ir a Clippers</a>
         </body></html>
       `);
@@ -252,7 +372,7 @@ export async function registerRoutes(
       res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error conectando Google Drive</h1>
-          <p>${callbackError.message || "No se pudo guardar la conexión de Google Drive."}</p>
+          <p>${escapeHtml(callbackError.message || "No se pudo guardar la conexión de Google Drive.")}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -267,7 +387,7 @@ export async function registerRoutes(
       res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Canva no está configurado</h1>
-          <p>${error.message || "Agrega CANVA_CLIENT_ID y CANVA_CLIENT_SECRET en los secrets."}</p>
+          <p>${escapeHtml(error.message || "Agrega CANVA_CLIENT_ID y CANVA_CLIENT_SECRET en los secrets.")}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -282,7 +402,7 @@ export async function registerRoutes(
       return res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error conectando Canva</h1>
-          <p>${String(errorDescription || error)}</p>
+          <p>${escapeHtml(errorDescription || error)}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -304,7 +424,7 @@ export async function registerRoutes(
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1 style="color:#22c55e;">Canva conectado</h1>
           <p>La conexión de Canva quedó guardada para este usuario.</p>
-          <p style="color:#94a3b8;">Scopes: ${result.scope || "guardados"}</p>
+          <p style="color:#94a3b8;">Scopes: ${escapeHtml(result.scope || "guardados")}</p>
           <a href="/radio" style="color:#3b82f6;">Ir a Radio</a>
         </body></html>
       `);
@@ -312,7 +432,7 @@ export async function registerRoutes(
       res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error conectando Canva</h1>
-          <p>${callbackError.message || "No se pudo guardar la conexión de Canva."}</p>
+          <p>${escapeHtml(callbackError.message || "No se pudo guardar la conexión de Canva.")}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -375,7 +495,7 @@ export async function registerRoutes(
       return res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error</h1>
-          <p>${result.error}</p>
+          <p>${escapeHtml(result.error)}</p>
           <a href="/" style="color:#3b82f6;">Volver al inicio</a>
         </body></html>
       `);
@@ -384,11 +504,8 @@ export async function registerRoutes(
     res.send(`
       <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
         <h1 style="color:#22c55e;">Zoho Calendar Conectado</h1>
-        <p>Tu Refresh Token es:</p>
-        <code style="background:#1f2937;padding:10px;display:block;border-radius:8px;word-break:break-all;margin:20px 0;">
-          ${result.refresh_token}
-        </code>
-        <p style="color:#fbbf24;">Copia este token y agrégalo como secret ZOHO_REFRESH_TOKEN en Replit.</p>
+        <p>Zoho devolvió un refresh token válido. No se muestra en pantalla por seguridad.</p>
+        <p style="color:#fbbf24;">Guarda el token en tu gestor de secretos como ZOHO_REFRESH_TOKEN desde un flujo seguro.</p>
         <a href="/" style="color:#3b82f6;">Volver al inicio</a>
       </body></html>
     `);
@@ -1223,9 +1340,9 @@ export async function registerRoutes(
 
   // ==================== PROMO VIDEO AGENT ====================
 
-  app.get("/api/promo-video/status", async (_req, res) => {
+  app.get("/api/promo-video/status", async (req, res) => {
     try {
-      const status = await getPromoVideoStatus();
+      const status = await getPromoVideoStatus(getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect promo video folders" });
@@ -1242,7 +1359,7 @@ export async function registerRoutes(
 
   app.post("/api/promo-video/source", async (req, res) => {
     try {
-      const status = await setPromoVideoSourceDir(req.body?.sourceDir);
+      const status = await setPromoVideoSourceDir(req.body?.sourceDir, getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to set promo video source folder" });
@@ -1251,7 +1368,7 @@ export async function registerRoutes(
 
   app.post("/api/promo-video/import-source", async (req, res) => {
     try {
-      const result = await importPromoVideosFromSource(req.body || {});
+      const result = await importPromoVideosFromSource(req.body || {}, getCurrentUserId(req));
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import promo videos" });
@@ -1269,7 +1386,7 @@ export async function registerRoutes(
 
   app.delete("/api/promo-video/output/:filename", async (req, res) => {
     try {
-      const status = await deletePromoOutputVideo(req.params.filename);
+      const status = await deletePromoOutputVideo(req.params.filename, getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to delete promo output video" });
@@ -1287,8 +1404,21 @@ export async function registerRoutes(
 
   // ==================== CLIPPERS COMMAND CENTER ====================
 
+  app.use("/api/clippers", (req, res, next) => {
+    if (isPublicApiRequest(req)) return next();
+    const userId = getCurrentUserId(req);
+    const clipperOwnerUserId = getSystemUserId();
+    if (userId !== clipperOwnerUserId) {
+      return res.status(403).json({
+        error: "Clippers tools are limited to the configured single-user owner while local workspace, token vault, and launch artifacts are shared.",
+      });
+    }
+    return next();
+  });
+
   app.get("/api/clippers/status", async (req, res) => {
     try {
+      res.set("Cache-Control", "no-store");
       const status = await getClipperStatus(getCurrentUserId(req));
       res.json(status);
     } catch (error: any) {
@@ -1347,6 +1477,15 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account creation pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-setup-session", async (req, res) => {
+    try {
+      const result = await prepareClipperAccountSetupSession(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account setup session" });
     }
   });
 
@@ -1415,10 +1554,19 @@ export async function registerRoutes(
 
   app.post("/api/clippers/import-launch-evidence-drop-files", async (req, res) => {
     try {
-      const result = await importClipperLaunchEvidenceDropFiles(getCurrentUserId(req));
+      const result = await importClipperLaunchEvidenceDropFiles(getCurrentUserId(req), req.body || {});
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import clippers launch evidence drop files" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-go-live-evidence-bundle", async (req, res) => {
+    try {
+      const result = await prepareClipperGoLiveEvidenceBundle(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers go-live evidence bundle" });
     }
   });
 
@@ -1428,6 +1576,15 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers credential setup center" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-credential-drop-starter", async (req, res) => {
+    try {
+      const result = await prepareClipperCredentialDropStarter(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers credential drop starter" });
     }
   });
 
@@ -1584,12 +1741,39 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/prepare-go-live-completion-audit", async (req, res) => {
+    try {
+      const result = await prepareClipperGoLiveCompletionAudit(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers go-live completion audit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-go-live-operator-brief", async (req, res) => {
+    try {
+      const result = await prepareClipperGoLiveOperatorBrief(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers go-live operator brief" });
+    }
+  });
+
   app.post("/api/clippers/prepare-publisher-connectors", async (req, res) => {
     try {
       const result = await prepareClipperPublisherConnectors(getCurrentUserId(req));
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers publisher connectors" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-publisher-execution-queue", async (req, res) => {
+    try {
+      const result = await prepareClipperPublisherExecutionQueue(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers publisher execution queue" });
     }
   });
 
@@ -1692,6 +1876,69 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/run-go-live-prep-sweep", async (req, res) => {
+    try {
+      const result = await runClipperGoLivePrepSweep(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run clippers go-live prep sweep" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-owner-connect-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperOwnerConnectPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers owner connect pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-dropzone-ready-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperDropzoneReadyPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers dropzone ready pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-robert-next-actions", async (req, res) => {
+    try {
+      const result = await prepareClipperRobertNextActions(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Robert next actions" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-launch-evidence-fix-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperLaunchEvidenceFixPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers launch evidence fix pack" });
+    }
+  });
+
+  app.post("/api/clippers/record-owner-connect-progress", async (req, res) => {
+    try {
+      const result = await recordClipperOwnerConnectProgress(req.body || {}, getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record clippers owner connect progress" });
+    }
+  });
+
+  app.post("/api/clippers/run-local-drop-sync", async (req, res) => {
+    try {
+      const result = await runClipperLocalDropSync(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run clippers local drop sync" });
+    }
+  });
+
   app.post("/api/clippers/prepare-permissions", async (req, res) => {
     try {
       const result = await prepareClipperPermissionPack(getCurrentUserId(req));
@@ -1716,6 +1963,15 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers permission request pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-permission-submission-dossier", async (req, res) => {
+    try {
+      const result = await prepareClipperPermissionSubmissionDossier(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers permission submission dossier" });
     }
   });
 
@@ -1761,6 +2017,15 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers source acquisition plan" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-source-supply-drop-kit", async (req, res) => {
+    try {
+      const result = await prepareClipperSourceSupplyDropKit(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers source supply drop kit" });
     }
   });
 
@@ -1854,6 +2119,15 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/prepare-analytics-reporting-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperAnalyticsReportingPack(getCurrentUserId(req));
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers analytics reporting pack" });
+    }
+  });
+
   app.post("/api/clippers/ingest-trends", async (req, res) => {
     try {
       const result = await ingestClipperTrends(getCurrentUserId(req));
@@ -1922,17 +2196,17 @@ export async function registerRoutes(
         code: req.query.code,
         state: req.query.state,
         error: req.query.error,
-      });
+      }, getSystemUserId());
       const isError = connection.status === "error";
       res.status(isError ? 400 : 200).send(`
         <html>
           <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
             <h1>${isError ? "OAuth no conectado" : "OAuth registrado"}</h1>
-            <p>${connection.note}</p>
-            ${connection.tokenNote ? `<p style="color:#fbbf24;">${connection.tokenNote}</p>` : ""}
-            <p style="color:#94a3b8;">Plataforma: ${connection.platform}</p>
-            <p style="color:#94a3b8;">Estado: ${connection.status}</p>
-            ${connection.tokenStatus ? `<p style="color:#94a3b8;">Token: ${connection.tokenStatus}</p>` : ""}
+            <p>${escapeHtml(connection.note)}</p>
+            ${connection.tokenNote ? `<p style="color:#fbbf24;">${escapeHtml(connection.tokenNote)}</p>` : ""}
+            <p style="color:#94a3b8;">Plataforma: ${escapeHtml(connection.platform)}</p>
+            <p style="color:#94a3b8;">Estado: ${escapeHtml(connection.status)}</p>
+            ${connection.tokenStatus ? `<p style="color:#94a3b8;">Token: ${escapeHtml(connection.tokenStatus)}</p>` : ""}
             <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
           </body>
         </html>
@@ -1942,7 +2216,7 @@ export async function registerRoutes(
         <html>
           <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
             <h1>OAuth no conectado</h1>
-            <p>${error.message || "No se pudo registrar OAuth."}</p>
+            <p>${escapeHtml(error.message || "No se pudo registrar OAuth.")}</p>
             <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
           </body>
         </html>
@@ -3184,6 +3458,26 @@ export async function registerRoutes(
 
   // ==================== REVENUE ENGINE ====================
 
+  app.use("/api/revenue-engine", (req, res, next) => {
+    let releaseRoute: () => void = () => {};
+    const previousRoute = revenueEngineRouteQueue;
+    revenueEngineRouteQueue = new Promise<void>((resolve) => {
+      releaseRoute = resolve;
+    });
+    previousRoute.then(() => {
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        releaseRoute();
+      };
+      setRevenueUserDataScope(getCurrentUserId(req));
+      res.once("finish", release);
+      res.once("close", release);
+      return next();
+    }).catch(next);
+  });
+
   app.get("/api/revenue-engine", async (_req, res) => {
     try {
       res.json(getRevenueEngineSnapshot());
@@ -4347,6 +4641,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/cybersecurity-agent/import-missing-apps", async (req, res) => {
+    try {
+      if (!(await isGitHubConnected())) {
+        return res.status(400).json({ error: "GitHub is not connected" });
+      }
+      const result = await importMissingGithubApps(getCurrentUserId(req));
+      res.status(201).json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to import GitHub apps" });
+    }
+  });
+
   app.get("/api/legal-compliance/reports", async (req, res) => {
     try {
       const result = await runLegalComplianceReports(getCurrentUserId(req));
@@ -4707,6 +5013,17 @@ export async function registerRoutes(
   registerAssistantRoutes(app);
 
   // ==================== CODE AGENT ROUTES ====================
+
+  app.use(["/api/code", "/api/github"], (req, res, next) => {
+    const userId = getCurrentUserId(req);
+    const toolOwnerUserId = getSystemUserId();
+    if (userId !== toolOwnerUserId) {
+      return res.status(403).json({
+        error: "Developer tools are limited to the configured single-user owner until per-user repo and filesystem permissions are implemented.",
+      });
+    }
+    return next();
+  });
   
   // Read file content
   app.get("/api/code/read", async (req, res) => {
@@ -4929,7 +5246,7 @@ export async function registerRoutes(
       const contents = await getRepoContents(owner, repo, path);
       res.json(contents);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Error al obtener contenido" });
+      res.status(error.statusCode || error.status || 500).json({ error: error.message || "Error al obtener contenido" });
     }
   });
 
@@ -4944,7 +5261,7 @@ export async function registerRoutes(
       const file = await getFileContent(owner, repo, path);
       res.json(file);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Error al leer archivo" });
+      res.status(error.statusCode || error.status || 500).json({ error: error.message || "Error al leer archivo" });
     }
   });
 
@@ -4959,7 +5276,7 @@ export async function registerRoutes(
       const result = await updateFile(owner, repo, path, content, message, sha);
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Error al guardar archivo" });
+      res.status(error.statusCode || error.status || 500).json({ error: error.message || "Error al guardar archivo" });
     }
   });
 
@@ -4974,7 +5291,7 @@ export async function registerRoutes(
       const result = await deleteFile(owner, repo, path, message, sha);
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Error al eliminar archivo" });
+      res.status(error.statusCode || error.status || 500).json({ error: error.message || "Error al eliminar archivo" });
     }
   });
 

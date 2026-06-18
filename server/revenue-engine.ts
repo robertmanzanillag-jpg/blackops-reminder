@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -808,24 +809,111 @@ let revenueApprovalDecisionsPathOverride: string | null = null;
 let revenueAutomationIntakesLoaded = false;
 let revenueAutomationIntakesPersistenceError: string | null = null;
 let revenueAutomationIntakesPathOverride: string | null = null;
+let revenueUserDataScope: string | null = null;
+
+const REVENUE_ENGINE_DATA_FILES = {
+  ledger: "ledger.json",
+  leads: "leads.json",
+  outreach: "outreach.json",
+  agentRuns: "agent_runs.json",
+  automationOpportunities: "automation_opportunities.json",
+  improvementReviews: "improvement_reviews.json",
+  scoutingMissions: "scouting_missions.json",
+  deliveryWorkspaces: "delivery_workspaces.json",
+  approvalDecisions: "approval_decisions.json",
+  automationIntakes: "automation_intakes.json",
+} as const;
+
+function safeRevenueUserId(userId: string) {
+  const safe = userId.trim().replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 96);
+  return safe || "unknown-user";
+}
+
+export function buildRevenueUserDataPaths(userId: string) {
+  const baseDir = path.join(process.cwd(), "revenue_engine_data", "users", safeRevenueUserId(userId));
+  return {
+    baseDir,
+    ledgerPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.ledger),
+    leadsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.leads),
+    outreachPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.outreach),
+    agentRunsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.agentRuns),
+    automationOpportunitiesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationOpportunities),
+    improvementReviewsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.improvementReviews),
+    scoutingMissionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.scoutingMissions),
+    deliveryWorkspacesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.deliveryWorkspaces),
+    approvalDecisionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.approvalDecisions),
+    automationIntakesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationIntakes),
+  };
+}
+
+function clearRevenueEngineMemory() {
+  revenueLedger.splice(0, revenueLedger.length);
+  revenueLeads.splice(0, revenueLeads.length);
+  revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length);
+  revenueAgentRuns.splice(0, revenueAgentRuns.length);
+  revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
+  revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
+  revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
+  revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length);
+  revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length);
+  revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length);
+}
+
+function markRevenueEngineDataUnloaded() {
+  revenueLedgerLoaded = false;
+  revenueLeadsLoaded = false;
+  revenueOutreachLoaded = false;
+  revenueAgentRunsLoaded = false;
+  revenueAutomationOpportunitiesLoaded = false;
+  revenueImprovementReviewsLoaded = false;
+  revenueScoutingMissionsLoaded = false;
+  revenueDeliveryWorkspacesLoaded = false;
+  revenueApprovalDecisionsLoaded = false;
+  revenueAutomationIntakesLoaded = false;
+}
+
+export function setRevenueUserDataScope(userId: string) {
+  const paths = buildRevenueUserDataPaths(userId);
+  if (revenueUserDataScope === paths.baseDir) return paths;
+  revenueUserDataScope = paths.baseDir;
+  revenueLedgerPathOverride = paths.ledgerPath;
+  revenueLeadsPathOverride = paths.leadsPath;
+  revenueOutreachPathOverride = paths.outreachPath;
+  revenueAgentRunsPathOverride = paths.agentRunsPath;
+  revenueAutomationOpportunitiesPathOverride = paths.automationOpportunitiesPath;
+  revenueImprovementReviewsPathOverride = paths.improvementReviewsPath;
+  revenueScoutingMissionsPathOverride = paths.scoutingMissionsPath;
+  revenueDeliveryWorkspacesPathOverride = paths.deliveryWorkspacesPath;
+  revenueApprovalDecisionsPathOverride = paths.approvalDecisionsPath;
+  revenueAutomationIntakesPathOverride = paths.automationIntakesPath;
+  clearRevenueEngineMemory();
+  markRevenueEngineDataUnloaded();
+  return paths;
+}
 
 function getRevenueLedgerPath() {
-  return revenueLedgerPathOverride || process.env.REVENUE_ENGINE_LEDGER_PATH || path.join(process.cwd(), "revenue_engine_data", "ledger.json");
+  return revenueLedgerPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_LEDGER_PATH", "ledger.json");
 }
 
 function getRevenueLeadsPath() {
-  return revenueLeadsPathOverride || process.env.REVENUE_ENGINE_LEADS_PATH || path.join(process.cwd(), "revenue_engine_data", "leads.json");
+  return revenueLeadsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_LEADS_PATH", "leads.json");
 }
 
 function getRevenueOutreachPath() {
-  return revenueOutreachPathOverride || process.env.REVENUE_ENGINE_OUTREACH_PATH || path.join(process.cwd(), "revenue_engine_data", "outreach.json");
+  return revenueOutreachPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_OUTREACH_PATH", "outreach.json");
+}
+
+function getRevenueEnginePathEnv(envName: string, defaultFileName: string): string {
+  const configuredPath = process.env[envName];
+  if (configuredPath !== undefined && hasRealValue(configuredPath)) return configuredPath;
+  return path.join(process.cwd(), "revenue_engine_data", defaultFileName);
 }
 
 function getRevenueEmailProviderStatus(): RevenueEmailProviderStatus {
-  const fromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || "";
+  const fromEmail = [process.env.REVENUE_ENGINE_FROM_EMAIL, process.env.RESEND_FROM_EMAIL].find(hasRealValue) || "";
   const missing = [
-    !process.env.RESEND_API_KEY && "RESEND_API_KEY",
-    !fromEmail && "REVENUE_ENGINE_FROM_EMAIL",
+    !hasRealValue(process.env.RESEND_API_KEY) && "RESEND_API_KEY",
+    !hasRealValue(fromEmail) && "REVENUE_ENGINE_FROM_EMAIL",
   ].filter((item): item is string => Boolean(item));
 
   return {
@@ -884,31 +972,31 @@ async function sendRevenueOutreachPayload(payload: RevenueOutreachSendPayload) {
 }
 
 function getRevenueAgentRunsPath() {
-  return revenueAgentRunsPathOverride || process.env.REVENUE_ENGINE_AGENT_RUNS_PATH || path.join(process.cwd(), "revenue_engine_data", "agent_runs.json");
+  return revenueAgentRunsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_AGENT_RUNS_PATH", "agent_runs.json");
 }
 
 function getRevenueAutomationOpportunitiesPath() {
-  return revenueAutomationOpportunitiesPathOverride || process.env.REVENUE_ENGINE_AUTOMATION_OPPORTUNITIES_PATH || path.join(process.cwd(), "revenue_engine_data", "automation_opportunities.json");
+  return revenueAutomationOpportunitiesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_AUTOMATION_OPPORTUNITIES_PATH", "automation_opportunities.json");
 }
 
 function getRevenueImprovementReviewsPath() {
-  return revenueImprovementReviewsPathOverride || process.env.REVENUE_ENGINE_IMPROVEMENT_REVIEWS_PATH || path.join(process.cwd(), "revenue_engine_data", "improvement_reviews.json");
+  return revenueImprovementReviewsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_IMPROVEMENT_REVIEWS_PATH", "improvement_reviews.json");
 }
 
 function getRevenueScoutingMissionsPath() {
-  return revenueScoutingMissionsPathOverride || process.env.REVENUE_ENGINE_SCOUTING_MISSIONS_PATH || path.join(process.cwd(), "revenue_engine_data", "scouting_missions.json");
+  return revenueScoutingMissionsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_SCOUTING_MISSIONS_PATH", "scouting_missions.json");
 }
 
 function getRevenueDeliveryWorkspacesPath() {
-  return revenueDeliveryWorkspacesPathOverride || process.env.REVENUE_ENGINE_DELIVERY_WORKSPACES_PATH || path.join(process.cwd(), "revenue_engine_data", "delivery_workspaces.json");
+  return revenueDeliveryWorkspacesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_DELIVERY_WORKSPACES_PATH", "delivery_workspaces.json");
 }
 
 function getRevenueApprovalDecisionsPath() {
-  return revenueApprovalDecisionsPathOverride || process.env.REVENUE_ENGINE_APPROVAL_DECISIONS_PATH || path.join(process.cwd(), "revenue_engine_data", "approval_decisions.json");
+  return revenueApprovalDecisionsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_APPROVAL_DECISIONS_PATH", "approval_decisions.json");
 }
 
 function getRevenueAutomationIntakesPath() {
-  return revenueAutomationIntakesPathOverride || process.env.REVENUE_ENGINE_AUTOMATION_INTAKES_PATH || path.join(process.cwd(), "revenue_engine_data", "automation_intakes.json");
+  return revenueAutomationIntakesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_AUTOMATION_INTAKES_PATH", "automation_intakes.json");
 }
 
 function loadRevenueLedger() {
@@ -3828,6 +3916,7 @@ export function preflightRevenueExpense(input: RevenueExpensePreflightInput) {
 }
 
 export function setRevenueLedgerPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueLedgerPathOverride = filePath;
   revenueLedgerLoaded = false;
   revenueLedgerPersistenceError = null;
@@ -3835,6 +3924,7 @@ export function setRevenueLedgerPathForTests(filePath: string) {
 }
 
 export function setRevenueLeadsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueLeadsPathOverride = filePath;
   revenueLeadsLoaded = false;
   revenueLeadsPersistenceError = null;
@@ -3842,6 +3932,7 @@ export function setRevenueLeadsPathForTests(filePath: string) {
 }
 
 export function setRevenueOutreachPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueOutreachPathOverride = filePath;
   revenueOutreachLoaded = false;
   revenueOutreachPersistenceError = null;
@@ -3853,6 +3944,7 @@ export function setRevenueOutreachSenderForTests(sender: ((payload: RevenueOutre
 }
 
 export function setRevenueAgentRunsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueAgentRunsPathOverride = filePath;
   revenueAgentRunsLoaded = false;
   revenueAgentRunsPersistenceError = null;
@@ -3860,6 +3952,7 @@ export function setRevenueAgentRunsPathForTests(filePath: string) {
 }
 
 export function setRevenueAutomationOpportunitiesPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueAutomationOpportunitiesPathOverride = filePath;
   revenueAutomationOpportunitiesLoaded = false;
   revenueAutomationOpportunitiesPersistenceError = null;
@@ -3867,6 +3960,7 @@ export function setRevenueAutomationOpportunitiesPathForTests(filePath: string) 
 }
 
 export function setRevenueImprovementReviewsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueImprovementReviewsPathOverride = filePath;
   revenueImprovementReviewsLoaded = false;
   revenueImprovementReviewsPersistenceError = null;
@@ -3874,6 +3968,7 @@ export function setRevenueImprovementReviewsPathForTests(filePath: string) {
 }
 
 export function setRevenueScoutingMissionsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueScoutingMissionsPathOverride = filePath;
   revenueScoutingMissionsLoaded = false;
   revenueScoutingMissionsPersistenceError = null;
@@ -3881,6 +3976,7 @@ export function setRevenueScoutingMissionsPathForTests(filePath: string) {
 }
 
 export function setRevenueDeliveryWorkspacesPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueDeliveryWorkspacesPathOverride = filePath;
   revenueDeliveryWorkspacesLoaded = false;
   revenueDeliveryWorkspacesPersistenceError = null;
@@ -3888,6 +3984,7 @@ export function setRevenueDeliveryWorkspacesPathForTests(filePath: string) {
 }
 
 export function setRevenueApprovalDecisionsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueApprovalDecisionsPathOverride = filePath;
   revenueApprovalDecisionsLoaded = false;
   revenueApprovalDecisionsPersistenceError = null;
@@ -3895,6 +3992,7 @@ export function setRevenueApprovalDecisionsPathForTests(filePath: string) {
 }
 
 export function setRevenueAutomationIntakesPathForTests(filePath: string) {
+  revenueUserDataScope = null;
   revenueAutomationIntakesPathOverride = filePath;
   revenueAutomationIntakesLoaded = false;
   revenueAutomationIntakesPersistenceError = null;

@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmod, readFile, writeFile } from "fs/promises";
 import path from "path";
 import type { Request } from "express";
+import { hasRealValue } from "./ceo-doctor-cli";
 
 const SHOPIFY_TOKEN_PATH = "/admin/oauth/access_token";
 const DEFAULT_SHOPIFY_SCOPES = "read_products,write_products";
@@ -18,10 +19,6 @@ interface ShopifyTokenResponse {
 }
 
 const pendingAuth = new Map<string, PendingShopifyAuth>();
-
-function hasRealValue(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0 && !/replace-with|your-domain|example/i.test(value);
-}
 
 function getFirstEnvValue(names: string[]): string {
   for (const name of names) {

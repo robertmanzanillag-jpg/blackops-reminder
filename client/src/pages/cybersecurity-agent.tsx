@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BellRing,
   CheckCircle2,
+  DownloadCloud,
   Loader2,
   Radar,
   ShieldAlert,
@@ -72,6 +73,24 @@ type CybersecurityScan = {
   skills: CyberSkill[];
 };
 
+type CyberInventoryImportResult = {
+  imported: number;
+  skipped: number;
+  totalGithubRepos: number;
+  githubConnected: boolean;
+  apps: Array<{
+    id: string;
+    name: string;
+    githubRepo?: string | null;
+    publicUrl?: string | null;
+    healthUrl?: string | null;
+  }>;
+  skippedRepos: Array<{
+    fullName: string;
+    reason: string;
+  }>;
+};
+
 const severityStyle: Record<CyberThreatSeverity, string> = {
   critical: "border-red-400/40 bg-red-500/12 text-red-100",
   high: "border-orange-300/40 bg-orange-500/12 text-orange-100",
@@ -94,8 +113,21 @@ export default function CybersecurityAgentPage() {
     },
   });
 
+  const importMissingAppsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/cybersecurity-agent/import-missing-apps", {});
+      return response.json() as Promise<CyberInventoryImportResult>;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/developer-health/apps"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/cybersecurity-agent/status"] });
+      scanMutation.mutate(false);
+    },
+  });
+
   const scan = scanMutation.data || data;
   const hasThreats = Boolean(scan?.threatCount);
+  const disconnectedGithubApps = scan?.githubRepos?.filter((repo) => !repo.connectedToMonitor && repo.risk !== "low").length ?? 0;
 
   return (
     <div className="min-h-screen bg-[#03070c] text-white">
@@ -116,7 +148,17 @@ export default function CybersecurityAgentPage() {
               <h1 className="text-2xl font-semibold">Proteccion de apps y amenazas</h1>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={importMissingAppsMutation.isPending || !scan?.githubConnected}
+              onClick={() => importMissingAppsMutation.mutate()}
+              className="border-white/15 bg-black/40 text-white hover:bg-white/10"
+            >
+              {importMissingAppsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
+              Importar apps
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -169,9 +211,19 @@ export default function CybersecurityAgentPage() {
                   Ultimo scan: {scan?.scannedAt ? new Date(scan.scannedAt).toLocaleString() : "pendiente"}.
                   {scan?.telegramSent ? " Telegram enviado." : " Telegram se manda si lo pides o si hay riesgo alto."}
                 </p>
+                {importMissingAppsMutation.data && (
+                  <p className="mt-2 text-sm text-cyan-100">
+                    Inventario actualizado: {importMissingAppsMutation.data.imported} apps importadas, {importMissingAppsMutation.data.skipped} repos omitidos.
+                  </p>
+                )}
               </div>
             </div>
-            <Badge className="border-cyan-200/25 bg-cyan-300/10 text-cyan-100">Monitor cada 15 min</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="border-cyan-200/25 bg-cyan-300/10 text-cyan-100">Monitor cada 15 min</Badge>
+              {disconnectedGithubApps > 0 && (
+                <Badge className="border-amber-300/25 bg-amber-400/10 text-amber-100">{disconnectedGithubApps} repos por importar</Badge>
+              )}
+            </div>
           </CardContent>
         </Card>
 

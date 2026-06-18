@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import type { Request } from "express";
 import { google } from "googleapis";
+import { hasRealValue } from "./ceo-doctor-cli";
 import { hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { storage } from "./storage";
 
@@ -54,7 +55,7 @@ const pendingAuth = new Map<string, PendingGoogleDriveAuth>();
 function getFirstEnvValue(names: string[]): string {
   for (const name of names) {
     const value = process.env[name];
-    if (value) return value;
+    if (hasRealValue(value)) return value;
   }
   return "";
 }
@@ -82,9 +83,9 @@ export function getGoogleDriveRefreshTokenFromEnv(): string {
 }
 
 export function resolveGoogleDriveRedirectUri(req: Request): string {
-  if (process.env.GOOGLE_DRIVE_REDIRECT_URI) return process.env.GOOGLE_DRIVE_REDIRECT_URI;
+  if (hasRealValue(process.env.GOOGLE_DRIVE_REDIRECT_URI)) return process.env.GOOGLE_DRIVE_REDIRECT_URI;
 
-  const publicAppUrl = process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN;
+  const publicAppUrl = [process.env.PUBLIC_APP_URL, process.env.EXPO_PUBLIC_DOMAIN].find(hasRealValue);
   if (publicAppUrl) {
     const origin = publicAppUrl.startsWith("http") ? publicAppUrl : `https://${publicAppUrl}`;
     return `${origin.replace(/\/$/, "")}/api/google-drive/oauth/callback`;
@@ -99,7 +100,7 @@ export function createGoogleDriveAuthorizationUrl(userId: string, req: Request):
   const { clientId } = getGoogleDriveClientConfig();
   const state = randomBytes(48).toString("base64url");
   const redirectUri = resolveGoogleDriveRedirectUri(req);
-  const scope = process.env.GOOGLE_DRIVE_SCOPES || DEFAULT_GOOGLE_DRIVE_SCOPES;
+  const scope = hasRealValue(process.env.GOOGLE_DRIVE_SCOPES) ? process.env.GOOGLE_DRIVE_SCOPES : DEFAULT_GOOGLE_DRIVE_SCOPES;
 
   pendingAuth.set(state, {
     userId,
@@ -237,8 +238,8 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
     connected: Boolean(envConnected || token || replitConnectorAvailable),
     provider: envConnected ? "env_refresh_token" : token ? "local_oauth" : replitConnectorAvailable ? "replit_connector" : null,
     expiresAt: token?.expiresAt || null,
-    scope: token?.scope || process.env.GOOGLE_DRIVE_SCOPES || DEFAULT_GOOGLE_DRIVE_SCOPES,
-    redirectUri: process.env.GOOGLE_DRIVE_REDIRECT_URI || null,
+    scope: token?.scope || (hasRealValue(process.env.GOOGLE_DRIVE_SCOPES) ? process.env.GOOGLE_DRIVE_SCOPES : DEFAULT_GOOGLE_DRIVE_SCOPES),
+    redirectUri: hasRealValue(process.env.GOOGLE_DRIVE_REDIRECT_URI) ? process.env.GOOGLE_DRIVE_REDIRECT_URI : null,
     storageError,
   };
 }
