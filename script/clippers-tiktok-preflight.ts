@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = "https://sportclipsr.com";
+const DEFAULT_BASE_URL = "https://robplanner.replit.app";
 const TIKTOK_VERIFICATION_FILE = "tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt";
 
 type Check = {

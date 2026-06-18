@@ -17,7 +17,13 @@ const PUBLIC_API_PATHS = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/telegram/webhook",
+  "/api/google-drive/oauth/callback",
+  "/api/canva/oauth/callback",
   "/api/zoho/callback",
+];
+
+const PUBLIC_API_PATTERNS = [
+  /^\/api\/clippers\/oauth\/[^/]+\/callback$/,
 ];
 
 function cleanUserId(value: unknown): string | null {
@@ -50,7 +56,17 @@ export function resolveCurrentUserId(req: Request): string | null {
 }
 
 export function isPublicApiPath(path: string): boolean {
-  return PUBLIC_API_PATHS.includes(path);
+  return PUBLIC_API_PATHS.includes(path) || PUBLIC_API_PATTERNS.some((pattern) => pattern.test(path));
+}
+
+export function resolveRequestApiPath(req: Request): string {
+  const request = req as Request & { originalUrl?: string; baseUrl?: string };
+  const rawPath = request.originalUrl || `${request.baseUrl || ""}${req.path || ""}`;
+  return rawPath.split("?")[0] || "/";
+}
+
+export function isPublicApiRequest(req: Request): boolean {
+  return isPublicApiPath(resolveRequestApiPath(req));
 }
 
 /**
@@ -74,7 +90,7 @@ export function getCurrentUserId(req: Request): string {
 
 export function requireAppUser(req: Request, res: Response, next: NextFunction): void {
   if (!req.path.startsWith("/api")) return next();
-  if (isPublicApiPath(req.path)) return next();
+  if (isPublicApiRequest(req)) return next();
 
   const userId = resolveCurrentUserId(req);
   if (!userId) {

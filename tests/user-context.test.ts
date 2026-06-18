@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId, isPublicApiPath, requireAppUser, resolveCurrentUserId } from "../server/user-context";
+import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId, isPublicApiPath, isPublicApiRequest, requireAppUser, resolveCurrentUserId } from "../server/user-context";
 
 function requestWithHeader(headerValue?: string, extras: Record<string, unknown> = {}) {
   return {
@@ -93,7 +93,12 @@ test("classifies public callback and webhook paths", () => {
   assert.equal(isPublicApiPath("/api/auth/register"), true);
   assert.equal(isPublicApiPath("/api/auth/logout"), true);
   assert.equal(isPublicApiPath("/api/telegram/webhook"), true);
+  assert.equal(isPublicApiPath("/api/google-drive/oauth/callback"), true);
+  assert.equal(isPublicApiPath("/api/canva/oauth/callback"), true);
   assert.equal(isPublicApiPath("/api/zoho/callback"), true);
+  assert.equal(isPublicApiPath("/api/clippers/oauth/tiktok/callback"), true);
+  assert.equal(isPublicApiPath("/api/clippers/oauth/youtube/callback"), true);
+  assert.equal(isPublicApiPath("/api/clippers/oauth/tiktok/start"), false);
   assert.equal(isPublicApiPath("/api/tasks"), false);
 });
 
@@ -101,13 +106,36 @@ test("auth middleware allows public API callbacks without user context", () => {
   withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => {
     let nextCalled = false;
     requireAppUser(
-      requestWithHeader(undefined, { path: "/api/zoho/callback" }),
+      requestWithHeader(undefined, { path: "/api/google-drive/oauth/callback" }),
       {} as any,
       () => { nextCalled = true; },
     );
 
     assert.equal(nextCalled, true);
   });
+});
+
+test("auth middleware allows dynamic Clippers OAuth callbacks without user context", () => {
+  withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => {
+    let nextCalled = false;
+    requireAppUser(
+      requestWithHeader(undefined, { path: "/api/clippers/oauth/tiktok/callback" }),
+      {} as any,
+      () => { nextCalled = true; },
+    );
+
+    assert.equal(nextCalled, true);
+  });
+});
+
+test("public API request classification uses original URL for mounted middleware", () => {
+  const mountedClipperCallback = requestWithHeader(undefined, {
+    baseUrl: "/api/clippers",
+    path: "/oauth/tiktok/callback",
+    originalUrl: "/api/clippers/oauth/tiktok/callback?code=oauth-code&state=csrf",
+  });
+
+  assert.equal(isPublicApiRequest(mountedClipperCallback), true);
 });
 
 test("auth middleware rejects protected APIs without user context", () => {
