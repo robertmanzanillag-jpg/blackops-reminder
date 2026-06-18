@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const DEFAULT_DEV_USER_ID = "mock-user-123";
+export const LOCAL_AUTH_USER_COOKIE_NAME = "blackops.uid";
 const DEV_FALLBACK_ENVS = new Set(["development", "test"]);
 
 type RequestWithAuth = Request & {
@@ -32,6 +34,66 @@ function cleanUserId(value: unknown): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
+function getLocalAuthCookieSecret(): string | null {
+  const secret = process.env.SESSION_SECRET?.trim();
+  return secret ? secret : null;
+}
+
+function signLocalAuthCookiePayload(payload: string, secret: string): string {
+  return createHmac("sha256", secret).update(payload).digest("base64url");
+}
+
+export function createSignedLocalAuthCookieValue(userId: string): string | null {
+  const cleanedUserId = cleanUserId(userId);
+  const secret = getLocalAuthCookieSecret();
+  if (!cleanedUserId || !secret) return null;
+
+  const payload = Buffer.from(cleanedUserId, "utf8").toString("base64url");
+  return `v1.${payload}.${signLocalAuthCookiePayload(payload, secret)}`;
+}
+
+function verifySignedLocalAuthCookieValue(value: string): string | null {
+  const secret = getLocalAuthCookieSecret();
+  if (!secret) return null;
+
+  const [version, payload, signature] = value.split(".");
+  if (version !== "v1" || !payload || !signature) return null;
+
+  const expected = signLocalAuthCookiePayload(payload, secret);
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+    return null;
+  }
+
+  try {
+    return cleanUserId(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readCookieHeader(req: Request): string {
+  const directHeader = req.headers?.cookie;
+  if (typeof directHeader === "string") return directHeader;
+  const header = req.header("cookie");
+  return typeof header === "string" ? header : "";
+}
+
+function readSignedLocalAuthCookie(req: Request): string | null {
+  const cookieHeader = readCookieHeader(req);
+  const cookies = cookieHeader.split(";").map((part) => part.trim()).filter(Boolean);
+  const prefix = `${LOCAL_AUTH_USER_COOKIE_NAME}=`;
+  const rawValue = cookies.find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length);
+  if (!rawValue) return null;
+
+  try {
+    return verifySignedLocalAuthCookieValue(decodeURIComponent(rawValue));
+  } catch {
+    return null;
+  }
+}
+
 export function allowsDevUserFallback(): boolean {
   if (process.env.ALLOW_DEV_USER_FALLBACK === "true") return true;
   if (process.env.ALLOW_DEV_USER_FALLBACK === "false") return false;
@@ -50,6 +112,7 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
+    readSignedLocalAuthCookie(req) ||
     (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
     (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
   );

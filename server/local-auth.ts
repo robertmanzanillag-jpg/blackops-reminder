@@ -1,7 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage";
-import { DEFAULT_DEV_USER_ID, resolveCurrentUserId } from "./user-context";
+import {
+  createSignedLocalAuthCookieValue,
+  DEFAULT_DEV_USER_ID,
+  LOCAL_AUTH_USER_COOKIE_NAME,
+  resolveCurrentUserId,
+} from "./user-context";
 import { createRateLimiter } from "./rate-limit";
 import {
   hashPassword,
@@ -32,6 +37,7 @@ const authBodySchema = z.object({
   username: z.string().trim().min(2).max(80),
   password: z.string().min(8).max(200),
 });
+const LOCAL_AUTH_COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
 const localAuthRateLimit = createRateLimiter({
   scope: "local-auth",
   limit: 20,
@@ -46,6 +52,29 @@ function ensureSessionAvailable(req: RequestWithSession, res: Response): boolean
   if (req.session) return true;
   res.status(500).json({ error: "Session middleware is not configured" });
   return false;
+}
+
+function localAuthCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+}
+
+function setLocalAuthUserCookie(res: Response, userId: string): void {
+  const value = createSignedLocalAuthCookieValue(userId);
+  if (!value) return;
+
+  res.cookie(LOCAL_AUTH_USER_COOKIE_NAME, value, {
+    ...localAuthCookieOptions(),
+    maxAge: LOCAL_AUTH_COOKIE_MAX_AGE_MS,
+  });
+}
+
+function clearLocalAuthUserCookie(res: Response): void {
+  res.clearCookie(LOCAL_AUTH_USER_COOKIE_NAME, localAuthCookieOptions());
 }
 
 export function registerLocalAuthRoutes(app: Express): void {
@@ -97,6 +126,7 @@ export function registerLocalAuthRoutes(app: Express): void {
         password: await hashPassword(body.password),
       });
       if (req.session) req.session.userId = user.id;
+      setLocalAuthUserCookie(res, user.id);
       res.status(201).json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -120,6 +150,7 @@ export function registerLocalAuthRoutes(app: Express): void {
       }
 
       if (req.session) req.session.userId = user.id;
+      setLocalAuthUserCookie(res, user.id);
       res.json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -130,6 +161,7 @@ export function registerLocalAuthRoutes(app: Express): void {
   });
 
   app.post("/api/auth/logout", (req: RequestWithSession, res: Response) => {
+    clearLocalAuthUserCookie(res);
     if (!req.session?.destroy) {
       return res.json({ authenticated: false });
     }

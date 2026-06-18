@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getSystemUserId, isPublicApiPath, isPublicApiRequest, requireAppUser, resolveCurrentUserId } from "../server/user-context";
+import {
+  DEFAULT_DEV_USER_ID,
+  LOCAL_AUTH_USER_COOKIE_NAME,
+  allowsDevUserFallback,
+  createSignedLocalAuthCookieValue,
+  getSystemUserId,
+  isPublicApiPath,
+  isPublicApiRequest,
+  requireAppUser,
+  resolveCurrentUserId,
+} from "../server/user-context";
 
 function requestWithHeader(headerValue?: string, extras: Record<string, unknown> = {}) {
   return {
@@ -50,6 +60,33 @@ test("resolves user id from session before dev fallback", () => {
   );
 
   assert.equal(userId, "user-from-session");
+});
+
+test("resolves user id from signed local auth cookie", () => {
+  const userId = withEnv({ NODE_ENV: "production", SESSION_SECRET: "production-session-secret", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => {
+    const cookieValue = createSignedLocalAuthCookieValue("user-from-cookie");
+    assert.ok(cookieValue);
+    return resolveCurrentUserId(requestWithHeader(undefined, {
+      headers: { cookie: `${LOCAL_AUTH_USER_COOKIE_NAME}=${encodeURIComponent(cookieValue)}` },
+    }));
+  });
+
+  assert.equal(userId, "user-from-cookie");
+});
+
+test("rejects tampered signed local auth cookies", () => {
+  const userId = withEnv({ NODE_ENV: "production", SESSION_SECRET: "production-session-secret", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => {
+    const cookieValue = createSignedLocalAuthCookieValue("user-from-cookie");
+    assert.ok(cookieValue);
+    const parts = cookieValue.split(".");
+    parts[1] = Buffer.from("evil-from-cookie", "utf8").toString("base64url");
+    const tamperedCookie = parts.join(".");
+    return resolveCurrentUserId(requestWithHeader(undefined, {
+      headers: { cookie: `${LOCAL_AUTH_USER_COOKIE_NAME}=${encodeURIComponent(tamperedCookie)}` },
+    }));
+  });
+
+  assert.equal(userId, null);
 });
 
 test("allows x-user-id as a development bridge only when request fallbacks are enabled", () => {
