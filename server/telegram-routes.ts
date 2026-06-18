@@ -9,8 +9,11 @@ import { getCeoConversationMessages } from "./ceo-conversation-history";
 import { resolveSessionRuntimeSettings } from "./session-config-core";
 import { createRateLimiter } from "./rate-limit";
 import { createTelegramUpdateDeduper, shouldProcessTelegramUpdate } from "./telegram-webhook-dedupe";
+import { registerShopifyRoutes } from "./shopify-routes";
 
 export function registerTelegramRoutes(app: Express): void {
+  registerShopifyRoutes(app);
+
   const telegramWebhookRateLimit = createRateLimiter({
     scope: "telegram-webhook",
     limit: 180,

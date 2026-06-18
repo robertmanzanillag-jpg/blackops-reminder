@@ -60,7 +60,14 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 # Dropshipping CEO / Shopify
 # V1 can operate in research/draft mode without these.
 # Set these when Shopify is ready for product/order/report integrations.
-# Shopify token needs write_products for draft product creation.
+# Shopify OAuth app credentials come from Shopify Dev Dashboard.
+# App URL: https://your-domain.example/api/shopify/install
+# Allowed redirection URL: https://your-domain.example/api/shopify/oauth/callback
+# Scopes for draft product creation: read_products,write_products
+# SHOPIFY_APP_CLIENT_ID=replace-with-shopify-client-id
+# SHOPIFY_APP_CLIENT_SECRET=replace-with-shopify-client-secret
+# SHOPIFY_OAUTH_REDIRECT_URI=https://your-domain.example/api/shopify/oauth/callback
+# SHOPIFY_OAUTH_SCOPES=read_products,write_products
 # SHOPIFY_SHOP_DOMAIN=your-store.myshopify.com
 # SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_replace-with-token
 # SHOPIFY_API_VERSION=2026-04
