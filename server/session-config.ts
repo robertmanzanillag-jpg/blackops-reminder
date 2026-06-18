@@ -17,7 +17,7 @@ export function createSessionMiddleware(settings = resolveSessionRuntimeSettings
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: settings.secureCookie,
+      secure: settings.secureCookie ? "auto" : false,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     },
   };
