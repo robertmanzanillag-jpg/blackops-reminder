@@ -59,6 +59,7 @@ Reglas:
 
 - $0 ads hasta que tienda/listing, politicas y tracking esten listos.
 - $0 inventario.
+- Cap diario inicial: $10.
 - Sample opcional de 1 unidad despues de conectar cuenta/proveedor, maximo $8-$15, solo para validar calidad y crear contenido real.
 - Micro ads max $10 por test solo si hay approval, cash disponible y senal organica.
 - Nunca gastar mas de lo cobrado sin decision nueva.
@@ -78,6 +79,7 @@ Completado en app:
 - Social posts draft.
 - Capital plan con budget protegido.
 - Growth Board.
+- Launch readiness gate con Postgres, checkout, producto/supplier y automatizacion.
 - Daily report preview.
 - Approval outbox local cuando Postgres/Trust Center no esta encendido.
 - Politicas publicas draft:
@@ -86,6 +88,7 @@ Completado en app:
   - `/dropshipping/legal/shipping-policy`
   - `/dropshipping/legal/terms`
   - `/dropshipping/legal/checkout-readiness`
+  - `/api/dropshipping-ceo/launch-readiness`
   - `/api/dropshipping-ceo/approval-outbox-migration`
 
 Bloqueado hasta cuentas:
@@ -129,7 +132,7 @@ Marketing CMO:
 Ads Strategist:
 
 - Solo prepara micro tests.
-- No gasta sin Profit Guard y approval.
+- No gasta sin Profit Guard, cap diario y approval.
 
 Learning Analyst:
 
@@ -139,6 +142,7 @@ Learning Analyst:
 Legal + Security:
 
 - Bloquea marcas ajenas, claims exagerados, promesas de envio no verificadas y assets sin permiso.
+- Mantiene policy routes y checkout readiness antes de publicar.
 
 Order Ops:
 

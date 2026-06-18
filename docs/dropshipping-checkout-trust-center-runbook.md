@@ -9,6 +9,8 @@ Estado: pre-cuentas. Este documento deja listo lo que se puede preparar antes de
 - Reglas de shipping y delay handling.
 - Approval outbox local.
 - Migrador de outbox local a Trust Center.
+- Launch readiness panel en Dropshipping CEO > Execution.
+- Budget guardrails por defecto: `$100` mensual, `$10` diario, approvals obligatorios y sample antes de escalar.
 - Tests y build.
 
 ## Que requiere cuentas
@@ -76,6 +78,7 @@ Antes de activar ventas:
 Estado local actual:
 
 - El sistema puede guardar approvals en `dropshipping_engine_data/approval_outbox.json` cuando Postgres no responde.
+- El panel Dropshipping CEO > Execution > Launch readiness marca Postgres como `needs_database` hasta configurar `DATABASE_URL`.
 - El nuevo endpoint `/api/dropshipping-ceo/approval-outbox-migration` permite:
   - `dryRun: true`: revisar que se migraria.
   - `dryRun: false`: crear pending approvals en Trust Center y marcar items como `queued_in_trust_center`.
@@ -94,6 +97,18 @@ El endpoint no ejecuta acciones externas. Solo crea approvals.
 6. Luego usar `Migrar`.
 
 Si Postgres sigue apagado, la migracion falla sin borrar el outbox local.
+
+## Budget y automatizacion
+
+Defaults versionados en `CEO_ASSISTANT_ENV.example`:
+
+- `DROPSHIPPING_STARTING_MONTHLY_BUDGET_USD=100`
+- `DROPSHIPPING_TARGET_MONTHLY_REVENUE_USD=1000`
+- `DROPSHIPPING_DAILY_SPEND_CAP_USD=10`
+- `DROPSHIPPING_REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS=true`
+- `DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE=true`
+
+Con estos defaults, el CEO puede crear research, drafts, posts y reports. No puede gastar, publicar, comprar sample, fulfill ni contactar externamente sin approval y cuenta conectada.
 
 ## Comandos de validacion
 

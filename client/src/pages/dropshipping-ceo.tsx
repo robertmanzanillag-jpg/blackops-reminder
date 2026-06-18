@@ -101,10 +101,13 @@ type DropshippingSnapshot = {
     activeMonthlyBudgetUsd: number;
     startingMonthlyBudgetUsd: number;
     targetMonthlyRevenueUsd: number;
+    dailySpendCapUsd: number;
     nextStage: string;
     nextBudgetUsd: number;
     maxSingleTestUsd: number;
     orderSignal: number;
+    requiresApprovalForExternalActions: boolean;
+    requiresSampleBeforeScale: boolean;
     reasons: string[];
     scalingRule: string;
   };
@@ -211,6 +214,7 @@ type DropshippingSnapshot = {
     }>;
   };
   executionSetup: DropshippingExecutionSetup;
+  launchReadiness: DropshippingLaunchReadiness;
   operatingContract: {
     ceoAgent: string;
     canRunAutonomously: string[];
@@ -305,6 +309,58 @@ type DropshippingExecutionSetup = {
     title: string;
     description: string;
   };
+};
+
+type DropshippingLaunchReadiness = {
+  generatedAt: string;
+  status: "pre_account_ready" | "ready_for_test_order" | "blocked_needs_accounts" | "blocked_safety";
+  summary: string;
+  budgetLimits: {
+    startingMonthlyBudgetUsd: number;
+    activeMonthlyBudgetUsd: number;
+    dailySpendCapUsd: number;
+    maxSingleTestUsd: number;
+    targetMonthlyRevenueUsd: number;
+    canSpendUsd: number;
+    requiresApprovalForExternalActions: boolean;
+    requiresSampleBeforeScale: boolean;
+  };
+  postgresTrustCenter: {
+    databaseUrlConfigured: boolean;
+    dbPushCommand: string;
+    migrationPath: string;
+    localApprovalOutbox: number;
+    status: "ready" | "needs_database" | "needs_migration";
+    nextAction: string;
+  };
+  checkout: {
+    paymentProcessorConfigured: boolean;
+    policyRoutesReady: boolean;
+    testOrderReady: boolean;
+    status: "ready_for_test_order" | "needs_accounts" | "draft_ready";
+    requiredAccounts: string[];
+    policyRoutes: string[];
+    nextAction: string;
+  };
+  productSupplier: {
+    productSelected: boolean;
+    productName: string;
+    supplierReviewed: boolean;
+    sampleRecommended: boolean;
+    status: "ready_for_sample" | "needs_product" | "needs_supplier_validation" | "validation_ready";
+    nextAction: string;
+  };
+  automation: {
+    schedulerConfigured: boolean;
+    telegramConfigured: boolean;
+    reportsMode: "telegram" | "preview_only";
+    status: "ready" | "preview_only";
+    nextAction: string;
+  };
+  canDoNow: string[];
+  requiresConnectedAccounts: string[];
+  hardBlocks: string[];
+  tomorrowChecklist: string[];
 };
 
 type DropshippingProduct = {
@@ -788,13 +844,13 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 function statusTone(status: string) {
-  if (["ready", "ready_for_dry_run", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "queued_in_trust_center", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go"].includes(status)) {
+  if (["ready", "ready_for_dry_run", "ready_for_test_order", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "queued_in_trust_center", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go", "validation_ready", "telegram"].includes(status)) {
     return "border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
   }
-  if (["needs_approval", "review_queue", "sample_recommended", "needs_setup", "needs_backup_supplier", "fix", "approval_required", "draft", "iterate_hooks", "needs_data", "locked_until_signal", "locked", "research", "validation", "traction", "pending_payment", "ready_for_fulfillment", "preflight", "needs_product", "scale_locked", "organic_only", "scale_plan_only", "shortlisted", "needs_supplier", "research_board", "validation_board", "approval_locked", "cash_locked", "watch", "hold"].includes(status)) {
+  if (["needs_approval", "review_queue", "sample_recommended", "needs_setup", "needs_backup_supplier", "needs_database", "needs_migration", "needs_accounts", "needs_supplier_validation", "ready_for_sample", "pre_account_ready", "preview_only", "fix", "approval_required", "draft", "iterate_hooks", "needs_data", "locked_until_signal", "locked", "research", "validation", "traction", "pending_payment", "ready_for_fulfillment", "preflight", "needs_product", "scale_locked", "organic_only", "scale_plan_only", "shortlisted", "needs_supplier", "research_board", "validation_board", "approval_locked", "cash_locked", "watch", "hold"].includes(status)) {
     return "border-amber-400/40 bg-amber-400/10 text-amber-100";
   }
-  if (["blocked", "pause_spend", "block", "rejected", "pause_and_fix", "critical"].includes(status)) {
+  if (["blocked", "blocked_needs_accounts", "blocked_safety", "pause_spend", "block", "rejected", "pause_and_fix", "critical"].includes(status)) {
     return "border-red-400/40 bg-red-400/10 text-red-100";
   }
   return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -2557,6 +2613,48 @@ export default function DropshippingCeoPage() {
                 <Card className="border-zinc-800 bg-zinc-900/80">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between gap-3 text-base">
+                      <span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Launch readiness</span>
+                      <Badge variant="outline" className={cn("shrink-0", statusTone(snapshot.launchReadiness.status))}>{snapshot.launchReadiness.status}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="rounded-lg border border-zinc-800 bg-black p-3 text-sm leading-5 text-zinc-300">{snapshot.launchReadiness.summary}</p>
+                    <div className="mt-4 grid gap-2 md:grid-cols-4">
+                      <Metric label="Budget inicial" value={money.format(snapshot.launchReadiness.budgetLimits.startingMonthlyBudgetUsd)} />
+                      <Metric label="Cap diario" value={money.format(snapshot.launchReadiness.budgetLimits.dailySpendCapUsd)} />
+                      <Metric label="Max test" value={money.format(snapshot.launchReadiness.budgetLimits.maxSingleTestUsd)} />
+                      <Metric label="Puede gastar" value={money.format(snapshot.launchReadiness.budgetLimits.canSpendUsd)} />
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {[
+                        { label: "Postgres / Trust Center", status: snapshot.launchReadiness.postgresTrustCenter.status, detail: snapshot.launchReadiness.postgresTrustCenter.nextAction },
+                        { label: "Checkout real", status: snapshot.launchReadiness.checkout.status, detail: snapshot.launchReadiness.checkout.nextAction },
+                        { label: "Producto / supplier", status: snapshot.launchReadiness.productSupplier.status, detail: snapshot.launchReadiness.productSupplier.nextAction },
+                        { label: "Automatizacion", status: snapshot.launchReadiness.automation.status, detail: snapshot.launchReadiness.automation.nextAction },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-white">{item.label}</p>
+                            <Badge variant="outline" className={cn("shrink-0", statusTone(item.status))}>{item.status}</Badge>
+                          </div>
+                          <p className="text-xs leading-5 text-zinc-500">{item.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {snapshot.launchReadiness.hardBlocks.length > 0 && (
+                      <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/10 p-3">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-amber-100">Bloqueos antes de vender real</p>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {snapshot.launchReadiness.hardBlocks.map((item) => <p key={item} className="text-xs leading-5 text-amber-50">{item}</p>)}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-zinc-800 bg-zinc-900/80">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-3 text-base">
                       <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Execution setup</span>
                       <Badge variant="outline" className={cn("shrink-0", statusTone(snapshot.executionSetup.status))}>{snapshot.executionSetup.status}</Badge>
                     </CardTitle>
@@ -2604,6 +2702,40 @@ export default function DropshippingCeoPage() {
               </div>
 
               <div className="space-y-4">
+                <Card className="border-zinc-800 bg-zinc-900/80">
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CheckCircle2 className="h-4 w-4" /> Cuenta pendiente</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Se puede hacer sin cuentas</p>
+                      <div className="space-y-2">
+                        {snapshot.launchReadiness.canDoNow.slice(0, 4).map((item) => (
+                          <p key={item} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-400">{item}</p>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Conectar para go-live</p>
+                      <div className="space-y-2">
+                        {snapshot.launchReadiness.requiresConnectedAccounts.slice(0, 5).map((item) => (
+                          <p key={item} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-400">{item}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-zinc-800 bg-zinc-900/80">
+                  <CardHeader><CardTitle className="text-base">Checklist de activacion</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {snapshot.launchReadiness.tomorrowChecklist.map((item, index) => (
+                      <div key={item} className="flex gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-zinc-800 text-xs text-zinc-300">{index + 1}</span>
+                        <p className="text-xs leading-5 text-zinc-400">{item}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
                 <Card className="border-zinc-800 bg-zinc-900/80">
                   <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Truck className="h-4 w-4" /> Supplier ops</CardTitle></CardHeader>
                   <CardContent>

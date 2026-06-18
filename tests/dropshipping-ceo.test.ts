@@ -15,6 +15,7 @@ import {
   createDropshippingShopifyDraft,
   getDropshippingCeoSnapshot,
   getDropshippingExecutionSetup,
+  getDropshippingLaunchReadiness,
   markDropshippingApprovalOutboxQueued,
   prepareDropshippingFulfillment,
   prepareDropshippingApprovalOutboxMigration,
@@ -67,6 +68,7 @@ const originalSupplierPortalUrl = process.env.DROPSHIPPING_SUPPLIER_PORTAL_URL;
 const originalStorePaymentProcessor = process.env.STORE_PAYMENT_PROCESSOR;
 const originalReturnPolicyUrl = process.env.DROPSHIPPING_RETURN_POLICY_URL;
 const originalPrivacyPolicyUrl = process.env.DROPSHIPPING_PRIVACY_POLICY_URL;
+const originalDatabaseUrl = process.env.DATABASE_URL;
 
 test.beforeEach(() => {
   setDropshippingProductsPathForTests(path.join(testDir, "products.json"));
@@ -99,6 +101,7 @@ test.beforeEach(() => {
   delete process.env.STORE_PAYMENT_PROCESSOR;
   delete process.env.DROPSHIPPING_RETURN_POLICY_URL;
   delete process.env.DROPSHIPPING_PRIVACY_POLICY_URL;
+  delete process.env.DATABASE_URL;
   resetDropshippingEngineForTests();
 });
 
@@ -125,6 +128,8 @@ test.after(() => {
   else process.env.DROPSHIPPING_RETURN_POLICY_URL = originalReturnPolicyUrl;
   if (originalPrivacyPolicyUrl === undefined) delete process.env.DROPSHIPPING_PRIVACY_POLICY_URL;
   else process.env.DROPSHIPPING_PRIVACY_POLICY_URL = originalPrivacyPolicyUrl;
+  if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+  else process.env.DATABASE_URL = originalDatabaseUrl;
 });
 
 function createProductAndCampaign() {
@@ -382,12 +387,14 @@ test("execution setup stays safe and manual without external credentials", () =>
   const shopify = result.executionSetup.connectors.find((connector) => connector.id === "shopify");
   const social = result.executionSetup.connectors.find((connector) => connector.id === "social_publisher");
   const supplier = result.executionSetup.connectors.find((connector) => connector.id === "supplier_ops");
+  const approvals = result.executionSetup.connectors.find((connector) => connector.id === "approvals");
 
   assert.equal(result.executionSetup.status, "needs_setup");
   assert.equal(shopify?.mode, "dry_run");
   assert.equal(shopify?.missingEnv.includes("SHOPIFY_SHOP_DOMAIN"), true);
   assert.equal(social?.mode, "manual");
   assert.equal(supplier?.status, "ready");
+  assert.equal(approvals?.missingEnv.includes("DATABASE_URL"), true);
   assert.match(result.executionSetup.supplierOps.fulfillmentPolicy, /No comprar stock/);
 });
 
@@ -401,18 +408,84 @@ test("execution setup becomes ready for dry run when external readiness markers 
   process.env.STORE_PAYMENT_PROCESSOR = "shopify_payments";
   process.env.DROPSHIPPING_RETURN_POLICY_URL = "https://store.example/returns";
   process.env.DROPSHIPPING_PRIVACY_POLICY_URL = "https://store.example/privacy";
+  process.env.DATABASE_URL = "postgres://user:pass@localhost:5432/blackops_test";
 
   const result = getDropshippingExecutionSetup();
   const shopify = result.executionSetup.connectors.find((connector) => connector.id === "shopify");
   const social = result.executionSetup.connectors.find((connector) => connector.id === "social_publisher");
   const supplier = result.executionSetup.connectors.find((connector) => connector.id === "supplier_ops");
+  const approvals = result.executionSetup.connectors.find((connector) => connector.id === "approvals");
 
   assert.equal(result.executionSetup.status, "ready_for_dry_run");
   assert.equal(shopify?.status, "ready");
   assert.equal(shopify?.mode, "api");
   assert.equal(social?.mode, "webhook");
   assert.equal(supplier?.status, "ready");
+  assert.equal(approvals?.status, "ready");
   assert.equal(result.executionSetup.launchSequence.every((step) => step.blockedUntil.length === 0), true);
+});
+
+test("launch readiness separates pre-account work from real checkout blockers", () => {
+  const readiness = getDropshippingLaunchReadiness().launchReadiness;
+
+  assert.equal(readiness.status, "blocked_needs_accounts");
+  assert.equal(readiness.postgresTrustCenter.status, "needs_database");
+  assert.equal(readiness.checkout.status, "draft_ready");
+  assert.equal(readiness.budgetLimits.startingMonthlyBudgetUsd, 100);
+  assert.equal(readiness.budgetLimits.dailySpendCapUsd, 10);
+  assert.equal(readiness.canDoNow.some((item) => item.includes("investigando productos")), true);
+  assert.equal(readiness.requiresConnectedAccounts.some((item) => item.includes("Shopify")), true);
+});
+
+test("launch readiness becomes ready for test order after accounts and validation markers exist", () => {
+  process.env.SHOPIFY_SHOP_DOMAIN = "example.myshopify.com";
+  process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = "shpat_test";
+  process.env.TELEGRAM_BOT_TOKEN = "telegram_test";
+  process.env.DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL = "https://publisher.example/webhook";
+  process.env.STORE_PAYMENT_PROCESSOR = "shopify_payments";
+  process.env.DATABASE_URL = "postgres://user:pass@localhost:5432/blackops_test";
+
+  const product = researchDropshippingProduct({
+    productName: "Pet water bottle for walks",
+    niche: "pet supplies",
+    trendSource: "tiktok",
+    supplierPlatform: "aliexpress",
+    productCostUsd: 5,
+    shippingCostUsd: 2,
+    targetSellPriceUsd: 24.99,
+    estimatedMonthlyDemand: 800,
+    competitorPriceUsd: 29.99,
+    supplierRating: 4.8,
+    reviewCount: 1800,
+    shippingDaysMin: 7,
+    shippingDaysMax: 14,
+    returnPolicy: "Supplier supports damaged-item returns.",
+    evidence: "Walking/pet problem is visible and easy to explain in short video.",
+    legalRisk: "low",
+    qualityRisk: "low",
+  }).product;
+
+  reviewDropshippingSupplier({
+    supplierName: "AliExpress Pet Supplier",
+    platform: "aliexpress",
+    productName: product.productName,
+    rating: 4.8,
+    reviewCount: 1800,
+    ordersCount: 5000,
+    shipsFrom: "China",
+    estimatedShippingDays: 12,
+    hasTracking: true,
+    hasReturns: true,
+    hasMultipleSuppliers: true,
+  });
+
+  const readiness = getDropshippingLaunchReadiness().launchReadiness;
+
+  assert.equal(readiness.status, "ready_for_test_order");
+  assert.equal(readiness.postgresTrustCenter.status, "ready");
+  assert.equal(readiness.checkout.status, "ready_for_test_order");
+  assert.equal(readiness.productSupplier.supplierReviewed, true);
+  assert.equal(readiness.automation.status, "ready");
 });
 
 test("researches a viral product and keeps launch actions behind approval", () => {

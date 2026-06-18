@@ -4,8 +4,23 @@ import { z } from "zod";
 import { storage } from "./storage";
 import { sendTelegramPlainMessage } from "./telegram";
 
-const STARTING_MONTHLY_BUDGET_USD = 100;
-const TARGET_MONTHLY_REVENUE_USD = 1000;
+function envMoney(name: string, fallback: number, min: number, max: number) {
+  const raw = Number(process.env[name] || fallback);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(max, Math.max(min, raw));
+}
+
+function envFlag(name: string, fallback = true) {
+  const raw = (process.env[name] || "").trim().toLowerCase();
+  if (!raw) return fallback;
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
+const STARTING_MONTHLY_BUDGET_USD = envMoney("DROPSHIPPING_STARTING_MONTHLY_BUDGET_USD", 100, 0, 10000);
+const TARGET_MONTHLY_REVENUE_USD = envMoney("DROPSHIPPING_TARGET_MONTHLY_REVENUE_USD", 1000, 1, 1000000);
+const DAILY_SPEND_CAP_USD = envMoney("DROPSHIPPING_DAILY_SPEND_CAP_USD", 10, 0, 5000);
+const REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS = envFlag("DROPSHIPPING_REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS", true);
+const REQUIRE_SAMPLE_BEFORE_SCALE = envFlag("DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE", true);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
 const money = new Intl.NumberFormat("en-US", {
@@ -740,6 +755,58 @@ type DropshippingExecutionSetup = {
     title: string;
     description: string;
   };
+};
+
+type DropshippingLaunchReadiness = {
+  generatedAt: string;
+  status: "pre_account_ready" | "ready_for_test_order" | "blocked_needs_accounts" | "blocked_safety";
+  summary: string;
+  budgetLimits: {
+    startingMonthlyBudgetUsd: number;
+    activeMonthlyBudgetUsd: number;
+    dailySpendCapUsd: number;
+    maxSingleTestUsd: number;
+    targetMonthlyRevenueUsd: number;
+    canSpendUsd: number;
+    requiresApprovalForExternalActions: boolean;
+    requiresSampleBeforeScale: boolean;
+  };
+  postgresTrustCenter: {
+    databaseUrlConfigured: boolean;
+    dbPushCommand: string;
+    migrationPath: string;
+    localApprovalOutbox: number;
+    status: "ready" | "needs_database" | "needs_migration";
+    nextAction: string;
+  };
+  checkout: {
+    paymentProcessorConfigured: boolean;
+    policyRoutesReady: boolean;
+    testOrderReady: boolean;
+    status: "ready_for_test_order" | "needs_accounts" | "draft_ready";
+    requiredAccounts: string[];
+    policyRoutes: string[];
+    nextAction: string;
+  };
+  productSupplier: {
+    productSelected: boolean;
+    productName: string;
+    supplierReviewed: boolean;
+    sampleRecommended: boolean;
+    status: "ready_for_sample" | "needs_product" | "needs_supplier_validation" | "validation_ready";
+    nextAction: string;
+  };
+  automation: {
+    schedulerConfigured: boolean;
+    telegramConfigured: boolean;
+    reportsMode: "telegram" | "preview_only";
+    status: "ready" | "preview_only";
+    nextAction: string;
+  };
+  canDoNow: string[];
+  requiresConnectedAccounts: string[];
+  hardBlocks: string[];
+  tomorrowChecklist: string[];
 };
 
 type DropshippingCeoOperatingPlan = {
@@ -3455,6 +3522,11 @@ function missingEnv(names: string[]) {
   return names.filter((name) => !(process.env[name] || "").trim());
 }
 
+function isDatabaseUrlConfigured() {
+  const value = (process.env.DATABASE_URL || "").trim();
+  return Boolean(value && !value.includes("user:password") && !value.includes("replace-with"));
+}
+
 function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
   const shopifyMissing = missingEnv(["SHOPIFY_SHOP_DOMAIN", "SHOPIFY_ADMIN_ACCESS_TOKEN"]);
   const socialMissing = missingEnv(["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL"]);
@@ -3464,7 +3536,8 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
     ? ["DROPSHIPPING_SUPPLIER_EXECUTION_MODE"]
     : ["DROPSHIPPING_SUPPLIER_EXECUTION_MODE", "DROPSHIPPING_SUPPLIER_PORTAL_URL"];
   const supplierMissing = supplierConfig.preferredMode === "manual" ? [] : missingEnv(supplierRequiredEnv);
-  const approvalsReady = true;
+  const approvalsMissing = isDatabaseUrlConfigured() ? [] : ["DATABASE_URL"];
+  const approvalsReady = approvalsMissing.length === 0;
   const paymentsTaxMissing = ["STORE_PAYMENT_PROCESSOR", "DROPSHIPPING_RETURN_POLICY_URL", "DROPSHIPPING_PRIVACY_POLICY_URL"].filter((name) => !(process.env[name] || "").trim());
   const connectors: DropshippingExecutionSetup["connectors"] = [
     {
@@ -3528,15 +3601,17 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
     {
       id: "approvals",
       label: "Approval gate",
-      status: approvalsReady ? "ready" : "blocked",
-      mode: "api",
+      status: approvalsReady ? "ready" : "needs_setup",
+      mode: approvalsReady ? "api" : "dry_run",
       ownerAgent: "Profit Guard",
-      capabilities: ["bloquear gasto", "bloquear publish", "bloquear fulfillment", "convertir approvals en estados operativos"],
-      requiredEnv: [],
-      missingEnv: [],
+      capabilities: approvalsReady
+        ? ["bloquear gasto", "bloquear publish", "bloquear fulfillment", "migrar approvals locales al Trust Center"]
+        : ["mantener outbox local", "previsualizar migracion", "bloquear gasto con reglas locales"],
+      requiredEnv: ["DATABASE_URL"],
+      missingEnv: approvalsMissing,
       approvalGate: "Siempre requerido para dinero, publicacion, Shopify y fulfillment.",
-      nextAction: "Usar pending approvals antes de acciones externas.",
-      evidence: ["Trust policy y approval state internos disponibles."],
+      nextAction: approvalsReady ? "Ejecutar db:push y migrar outbox local si hay pendientes." : "Configurar DATABASE_URL antes de migrar approvals al Trust Center.",
+      evidence: approvalsReady ? ["DATABASE_URL detectado."] : ["Sin DATABASE_URL; approvals siguen en outbox local."],
     },
     {
       id: "payments_tax",
@@ -3576,7 +3651,7 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
       { step: 1, owner: "Product Scout", action: "Elegir producto foco con margen, proveedor y riesgo aceptable.", mode: "autonomous", blockedUntil: [] },
       { step: 2, owner: "Store Builder", action: "Crear Shopify draft o payload dry-run.", mode: "approval_required", blockedUntil: shopifyMissing },
       { step: 3, owner: "Social Media Manager", action: "Crear posts y ponerlos en cola/publisher.", mode: "approval_required", blockedUntil: socialMissing },
-      { step: 4, owner: "Profit Guard", action: "Liberar primer tramo de capital si hay cash y approvals.", mode: "approval_required", blockedUntil: [] },
+      { step: 4, owner: "Profit Guard", action: "Liberar primer tramo de capital si hay cash y approvals.", mode: "approval_required", blockedUntil: approvalsMissing },
       { step: 5, owner: "Order Ops", action: "Fulfill solo orden pagada con supplier por pedido.", mode: "approval_required", blockedUntil: supplierMissing },
       { step: 6, owner: "Dropshipping CEO", action: "Enviar reporte AM/PM con ventas, capital, posts y fulfillment.", mode: telegramMissing.length ? "manual" : "autonomous", blockedUntil: telegramMissing },
     ],
@@ -3620,6 +3695,175 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
             title: "Aprobar primer tramo de marketing",
             description: "Usar capital plan y Profit Guard para liberar solo el primer test controlado.",
           },
+  };
+}
+
+function buildDropshippingLaunchReadinessCenter(input: {
+  profitGuard: ReturnType<typeof buildProfitGuard>;
+  executionSetup: DropshippingExecutionSetup;
+  localApprovalOutbox: number;
+  unfulfilledOrders: number;
+}): DropshippingLaunchReadiness {
+  const bestProduct = pickBestDropshippingProduct();
+  const supplierReviewed = bestProduct
+    ? suppliers.some((supplier) =>
+        supplier.productName.toLowerCase() === bestProduct.productName.toLowerCase() &&
+        supplier.status !== "blocked"
+      )
+    : false;
+  const shopifyReady = missingEnv(["SHOPIFY_SHOP_DOMAIN", "SHOPIFY_ADMIN_ACCESS_TOKEN"]).length === 0;
+  const paymentProcessorConfigured = Boolean((process.env.STORE_PAYMENT_PROCESSOR || "").trim());
+  const socialReady = missingEnv(["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL"]).length === 0;
+  const telegramConfigured = missingEnv(["TELEGRAM_BOT_TOKEN"]).length === 0;
+  const databaseUrlConfigured = isDatabaseUrlConfigured();
+  const policyRoutes = [
+    "/dropshipping/legal/privacy",
+    "/dropshipping/legal/refund-policy",
+    "/dropshipping/legal/shipping-policy",
+    "/dropshipping/legal/terms",
+    "/dropshipping/legal/checkout-readiness",
+  ];
+  const requiredAccounts = [
+    !shopifyReady && "Shopify Admin/API",
+    !paymentProcessorConfigured && "Payment processor",
+  ].filter(Boolean) as string[];
+  const testOrderReady = shopifyReady && paymentProcessorConfigured;
+  const postgresStatus: DropshippingLaunchReadiness["postgresTrustCenter"]["status"] =
+    !databaseUrlConfigured
+      ? "needs_database"
+      : input.localApprovalOutbox > 0
+        ? "needs_migration"
+        : "ready";
+  const checkoutStatus: DropshippingLaunchReadiness["checkout"]["status"] =
+    testOrderReady
+      ? "ready_for_test_order"
+      : shopifyReady || paymentProcessorConfigured
+        ? "needs_accounts"
+        : "draft_ready";
+  const sampleRecommended = Boolean(bestProduct && (bestProduct.requiresSample || bestProduct.status === "sample_recommended" || REQUIRE_SAMPLE_BEFORE_SCALE));
+  const productSupplierStatus: DropshippingLaunchReadiness["productSupplier"]["status"] =
+    !bestProduct
+      ? "needs_product"
+      : !supplierReviewed
+        ? "needs_supplier_validation"
+        : sampleRecommended
+          ? "ready_for_sample"
+          : "validation_ready";
+  const automationStatus: DropshippingLaunchReadiness["automation"]["status"] = telegramConfigured ? "ready" : "preview_only";
+  const hardBlocks = [
+    input.profitGuard.status === "pause_spend" && "Profit Guard pauso gasto: budget activo alcanzado.",
+    !bestProduct && "Falta elegir producto foco antes de vender.",
+    bestProduct && !supplierReviewed && "Falta validar supplier primario/backup antes de primera orden real.",
+    !databaseUrlConfigured && "Falta DATABASE_URL para Postgres/Trust Center.",
+    !testOrderReady && "Falta Shopify/payment para checkout y orden de prueba real.",
+    input.unfulfilledOrders > 0 && `${input.unfulfilledOrders} orden(es) requieren fulfillment/approval.`,
+  ].filter(Boolean) as string[];
+  const hasAccountBlock = !testOrderReady || !databaseUrlConfigured || !telegramConfigured || !socialReady;
+  const hasProductOrSupplierBlock = !bestProduct || !supplierReviewed;
+  const status: DropshippingLaunchReadiness["status"] =
+    input.profitGuard.status === "pause_spend"
+      ? "blocked_safety"
+      : hasAccountBlock
+        ? "blocked_needs_accounts"
+        : hasProductOrSupplierBlock
+          ? "blocked_safety"
+          : testOrderReady && databaseUrlConfigured && bestProduct && supplierReviewed
+            ? "ready_for_test_order"
+            : "pre_account_ready";
+
+  return {
+    generatedAt: new Date().toISOString(),
+    status,
+    summary:
+      status === "ready_for_test_order"
+        ? "Listo para hacer orden de prueba controlada antes de vender real."
+        : status === "blocked_safety"
+          ? "Bloqueado por seguridad financiera u operativa."
+          : status === "blocked_needs_accounts"
+            ? "La preparacion local esta lista, pero faltan cuentas/credenciales para ejecutar real."
+            : "Modo pre-cuentas listo: investigar, crear drafts, revisar politicas y preparar approvals sin gastar.",
+    budgetLimits: {
+      startingMonthlyBudgetUsd: STARTING_MONTHLY_BUDGET_USD,
+      activeMonthlyBudgetUsd: input.profitGuard.monthlyBudgetUsd,
+      dailySpendCapUsd: DAILY_SPEND_CAP_USD,
+      maxSingleTestUsd: input.profitGuard.budgetPolicy.maxSingleTestUsd,
+      targetMonthlyRevenueUsd: TARGET_MONTHLY_REVENUE_USD,
+      canSpendUsd: input.profitGuard.canSpendUsd,
+      requiresApprovalForExternalActions: REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS,
+      requiresSampleBeforeScale: REQUIRE_SAMPLE_BEFORE_SCALE,
+    },
+    postgresTrustCenter: {
+      databaseUrlConfigured,
+      dbPushCommand: "npm run db:push",
+      migrationPath: "Approvals > Migrar outbox local",
+      localApprovalOutbox: input.localApprovalOutbox,
+      status: postgresStatus,
+      nextAction:
+        postgresStatus === "ready"
+          ? "Trust Center listo; mantener approvals externos alli."
+          : postgresStatus === "needs_migration"
+            ? "Correr dry-run y luego migrar outbox local al Trust Center."
+            : "Configurar DATABASE_URL, correr npm run db:push y repetir migracion.",
+    },
+    checkout: {
+      paymentProcessorConfigured,
+      policyRoutesReady: true,
+      testOrderReady,
+      status: checkoutStatus,
+      requiredAccounts,
+      policyRoutes,
+      nextAction: testOrderReady
+        ? "Hacer una orden de prueba y verificar pago, taxes, email, shipping y refund path."
+        : "Conectar Shopify/payment; las politicas y checklist ya pueden revisarse antes.",
+    },
+    productSupplier: {
+      productSelected: Boolean(bestProduct),
+      productName: bestProduct?.productName || "",
+      supplierReviewed,
+      sampleRecommended,
+      status: productSupplierStatus,
+      nextAction:
+        productSupplierStatus === "needs_product"
+          ? "Elegir producto foco con margen, shipping y bajo riesgo."
+          : productSupplierStatus === "needs_supplier_validation"
+            ? "Validar supplier primario y backup antes de publicar fuerte."
+            : productSupplierStatus === "ready_for_sample"
+              ? "Pedir approval de sample de 1 unidad antes de escalar."
+              : "Producto/supplier listos para checkout de prueba.",
+    },
+    automation: {
+      schedulerConfigured: Boolean((process.env.SCHEDULER_TIMEZONE || "America/New_York").trim()),
+      telegramConfigured,
+      reportsMode: telegramConfigured ? "telegram" : "preview_only",
+      status: automationStatus,
+      nextAction: telegramConfigured
+        ? "Enviar reporte de prueba y dejar AM/PM activos."
+        : "Conectar Telegram; mientras tanto usar preview de reporte en la app.",
+    },
+    canDoNow: [
+      "Seguir investigando productos y suppliers sin comprar inventario.",
+      "Crear drafts de Shopify en dry-run/payload local.",
+      "Crear posts, captions, hooks y calendario sin publicar.",
+      "Revisar politicas publicas y checklist de checkout.",
+      "Preparar approvals locales y migrarlos cuando Postgres este listo.",
+      "Correr report preview AM/PM sin Telegram real.",
+    ],
+    requiresConnectedAccounts: [
+      "Postgres DATABASE_URL para Trust Center persistente.",
+      "Shopify + payment processor para checkout real y orden de prueba.",
+      "Telegram Bot + chat para reportes diarios reales.",
+      "Redes/social publisher para publicar automaticamente.",
+      "Supplier portal/API para fulfillment real por orden pagada.",
+    ],
+    hardBlocks,
+    tomorrowChecklist: [
+      "Pegar DATABASE_URL y correr npm run db:push.",
+      "Abrir Approvals > Revisar y luego Migrar outbox local.",
+      "Conectar Shopify/payment y hacer una orden de prueba.",
+      "Conectar Telegram y enviar reporte de prueba.",
+      "Conectar redes o webhook social y publicar solo posts aprobados.",
+      "Validar supplier primario/backup y pedir sample solo con approval.",
+    ],
   };
 }
 
@@ -4007,9 +4251,11 @@ function buildBudgetPolicy(entries: DropshippingLedgerEntry[], metricList: Drops
     orderSignal >= stage.minOrders
   ) || stages[0];
   const nextStage = stages[stages.findIndex((stage) => stage.stage === activeStage.stage) + 1] || null;
-  const maxSingleTestUsd = Number(Math.min(activeStage.activeMonthlyBudgetUsd * 0.25, Math.max(10, Math.max(totals.profitUsd, 0) * 0.15 || 10)).toFixed(2));
+  const profitBasedTestUsd = Math.max(10, Math.max(totals.profitUsd, 0) * 0.15 || 10);
+  const maxSingleTestUsd = Number(Math.min(activeStage.activeMonthlyBudgetUsd * 0.25, profitBasedTestUsd, DAILY_SPEND_CAP_USD).toFixed(2));
   const reasons = [
     `Nivel activo ${activeStage.stage}: budget mensual ${money.format(activeStage.activeMonthlyBudgetUsd)}.`,
+    `Cap diario ${money.format(DAILY_SPEND_CAP_USD)} y max test ${money.format(maxSingleTestUsd)}.`,
     `Ventas ledger ${money.format(totals.totalRevenueUsd)}, profit ${money.format(totals.profitUsd)}, ordenes senal ${orderSignal}.`,
     nextStage
       ? `Para subir a ${nextStage.stage}: ventas ${money.format(nextStage.minRevenueUsd)}, profit ${money.format(nextStage.minProfitUsd)} y ${nextStage.minOrders} ordenes.`
@@ -4021,10 +4267,13 @@ function buildBudgetPolicy(entries: DropshippingLedgerEntry[], metricList: Drops
     activeMonthlyBudgetUsd: activeStage.activeMonthlyBudgetUsd,
     startingMonthlyBudgetUsd: STARTING_MONTHLY_BUDGET_USD,
     targetMonthlyRevenueUsd: TARGET_MONTHLY_REVENUE_USD,
+    dailySpendCapUsd: DAILY_SPEND_CAP_USD,
     nextStage: nextStage?.stage || "",
     nextBudgetUsd: nextStage?.activeMonthlyBudgetUsd || activeStage.activeMonthlyBudgetUsd,
     maxSingleTestUsd,
     orderSignal,
+    requiresApprovalForExternalActions: REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS,
+    requiresSampleBeforeScale: REQUIRE_SAMPLE_BEFORE_SCALE,
     reasons,
     scalingRule: "Escalar budget solo con ventas cobradas, profit positivo, ordenes reales y approval humano.",
   };
@@ -5263,6 +5512,13 @@ export function getDropshippingCeoSnapshot() {
   const orderRevenueUsd = Number(orderRecords.reduce((sum, order) => sum + order.grossRevenueUsd, 0).toFixed(2));
   const orderProfitUsd = Number(orderRecords.reduce((sum, order) => sum + order.estimatedProfitUsd, 0).toFixed(2));
   const unfulfilledOrders = orderRecords.filter((order) => order.status === "approval_required" || order.status === "ready_for_fulfillment").length;
+  const localApprovalOutbox = approvalOutbox.filter((item) => item.status === "pending_local").length;
+  const launchReadiness = buildDropshippingLaunchReadinessCenter({
+    profitGuard,
+    executionSetup,
+    localApprovalOutbox,
+    unfulfilledOrders,
+  });
   const status =
     profitGuard.status === "pause_spend"
       ? "blocked" as const
@@ -5344,7 +5600,7 @@ export function getDropshippingCeoSnapshot() {
       capitalPlans: capitalPlans.length,
       growthSprints: growthSprints.length,
       launchPacks: launchPacks.length,
-      localApprovalOutbox: approvalOutbox.filter((item) => item.status === "pending_local").length,
+      localApprovalOutbox,
       orderRevenueUsd,
       orderProfitUsd,
       totalRevenueUsd: profitGuard.totalRevenueUsd,
@@ -5372,6 +5628,7 @@ export function getDropshippingCeoSnapshot() {
     growthBoard,
     marketingDepartment,
     executionSetup,
+    launchReadiness,
     operatingContract: {
       ceoAgent: "Dropshipping CEO",
       canRunAutonomously: [
@@ -5503,6 +5760,15 @@ export function getDropshippingExecutionSetup() {
   };
 }
 
+export function getDropshippingLaunchReadiness() {
+  loadAll();
+  const snapshot = getDropshippingCeoSnapshot();
+  return {
+    launchReadiness: snapshot.launchReadiness,
+    snapshot,
+  };
+}
+
 export function buildDropshippingDailyReport(cadence: "morning" | "evening" = "morning") {
   const snapshot = getDropshippingCeoSnapshot();
   const topProducts = snapshot.recentProducts.slice(0, 3);
@@ -5559,6 +5825,7 @@ export function buildDropshippingDailyReport(cadence: "morning" | "evening" = "m
     `Ordenes: ${snapshot.metrics.orders} registradas, ${snapshot.metrics.paidOrders} pagadas, ${snapshot.metrics.unfulfilledOrders} por fulfillment.`,
     `Marketing: ${snapshot.metrics.socialPosts} posts, ${snapshot.metrics.publishedSocialPosts} publicados, revenue social ${money.format(snapshot.metrics.socialRevenueUsd)}.`,
     `Approval outbox local: ${snapshot.metrics.localApprovalOutbox} pendiente(s) si Trust Center/DB esta apagado.`,
+    `Launch readiness: ${snapshot.launchReadiness.status}. ${snapshot.launchReadiness.summary}`,
     `Budget ladder: ${snapshot.budgetPolicy.stage}, budget activo ${money.format(snapshot.budgetPolicy.activeMonthlyBudgetUsd)}, max test ${money.format(snapshot.budgetPolicy.maxSingleTestUsd)}.`,
     `Plan CEO: ${snapshot.ceoOperatingPlan.stage}, faltan ${money.format(snapshot.ceoOperatingPlan.revenueGapUsd)} y ~${snapshot.ceoOperatingPlan.estimatedOrdersNeeded} ordenes. Decision: ${snapshot.ceoOperatingPlan.nextExecutiveDecision}`,
     `Growth Board: ${snapshot.growthBoard.status}. ${snapshot.growthBoard.decision}`,

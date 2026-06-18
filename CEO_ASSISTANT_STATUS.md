@@ -17,7 +17,7 @@ Estado operativo del trabajo para convertir BlackOps Reminder en un CEO Assistan
 | Smoke test operativo combinado | Implementado | `npm run ceo:smoke -- --user-id=<real-user-id> --chat-id=<telegram-chat-id>` cubre doctor, schema, backup/restore, readiness y opcion segura `--send-brief --execute` |
 | Backup/restore preflight | Implementado local | `npm run ceo:backup-check -- --json` valida `pg_dump`, `pg_restore`, `psql`, `tar`, directorio escribible y backup cifrado para `credentials/`/`secrets/` |
 | Suite focalizada | Implementado | `npm run test:ceo-assistant` |
-| Dropshipping CEO | Implementado pre-cuentas | Area Dropshipping CEO, Product Scout, launch pack, Marketing Command Center, Profit Guard, Growth Board, approval outbox local, reportes y politicas draft; runbook en `docs/dropshipping-ceo-launch-runbook.md` |
+| Dropshipping CEO | Implementado pre-cuentas | Area Dropshipping CEO, Product Scout, launch pack, Marketing Command Center, Profit Guard, Growth Board, launch readiness, approval outbox local, reportes y politicas draft; runbook en `docs/dropshipping-ceo-launch-runbook.md` |
 
 ## Dropshipping CEO pre-cuentas
 
@@ -28,9 +28,10 @@ Completado:
 - Producto foco: `Pet water bottle for walks`.
 - Modelo: dropshipping sin inventario propio; fulfillment por orden pagada.
 - Budget inicial: `$100`, con gasto real bloqueado en `$0` hasta tener cuentas, approvals y senales.
+- Cap diario inicial: `$10`; micro-tests y cualquier accion externa requieren approval.
 - Marketing: campaign draft, posts organicos draft y reglas de aprendizaje.
 - Legal/seguridad: politicas publicas draft, checkout readiness y guardrails contra claims, marcas ajenas y promesas de envio no verificadas.
-- Trust Center: migrador local outbox -> pending approvals disponible en `/api/dropshipping-ceo/approval-outbox-migration` y UI en Dropshipping CEO > Approvals.
+- Trust Center: migrador local outbox -> pending approvals disponible en `/api/dropshipping-ceo/approval-outbox-migration`, UI en Dropshipping CEO > Approvals y gate visible en Dropshipping CEO > Execution.
 - Build completo: `npm run build` pasa despues de limpiar el bloqueo de OneDrive en `dist`.
 - Datos runtime locales: `dropshipping_engine_data/*` queda ignorado por Git; el plan versionado vive en `docs/dropshipping-ceo-launch-runbook.md`.
 
