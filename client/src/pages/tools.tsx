@@ -14,6 +14,8 @@ import {
   Settings,
   ShieldCheck,
   ShieldAlert,
+  Store,
+  Megaphone,
   TrendingUp,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -54,6 +56,20 @@ const tools = [
     description: "Vender websites, automatizaciones y mockups con control de gasto.",
     href: "/revenue-engine",
     icon: BadgeDollarSign,
+    primary: true,
+  },
+  {
+    title: "Dropshipping CEO",
+    description: "Shopify, productos virales, suppliers, budget y marketing con approvals.",
+    href: "/dropshipping-ceo",
+    icon: Store,
+    primary: true,
+  },
+  {
+    title: "Marketing HQ",
+    description: "CMO global, clientes internos, skills, posts, calendario, analytics y self-improvement.",
+    href: "/marketing-command-center",
+    icon: Megaphone,
     primary: true,
   },
   {

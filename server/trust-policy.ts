@@ -11,7 +11,7 @@ import type {
   TrustOrigin,
 } from "@shared/schema";
 
-export type TrustScope = "calendar" | "finance" | "code" | "github" | "communications" | "projects" | "tasks" | "memory" | "system";
+export type TrustScope = "calendar" | "finance" | "code" | "github" | "communications" | "projects" | "tasks" | "memory" | "ecommerce" | "system";
 
 export interface TrustActionRequest {
   userId: string;
@@ -39,6 +39,7 @@ const DEFAULT_SCOPE_PERMISSIONS: Record<TrustScope, PermissionLevel> = {
   projects: "execute_after_approval",
   tasks: "autonomous",
   memory: "autonomous",
+  ecommerce: "execute_after_approval",
   system: "execute_after_approval",
 };
 
@@ -56,6 +57,13 @@ const ACTION_RISK: Record<string, RiskLevel> = {
   "github.update_file": "critical",
   "github.delete_file": "critical",
   "communications.send": "critical",
+  "dropshipping.spend": "critical",
+  "dropshipping.publish_product": "critical",
+  "dropshipping.create_shopify_draft": "critical",
+  "dropshipping.publish_social": "critical",
+  "dropshipping.contact_supplier": "critical",
+  "dropshipping.fulfill_order": "critical",
+  "dropshipping.order_sample": "high",
   "marketing.publish": "critical",
   "marketing.blackroom_link_add": "high",
   "marketing.blackroom_link_update": "high",
@@ -70,6 +78,7 @@ export function getActionScope(actionType: string): TrustScope {
   if (actionType.startsWith("code.")) return "code";
   if (actionType.startsWith("github.")) return "github";
   if (actionType.startsWith("communications.") || actionType.startsWith("marketing.")) return "communications";
+  if (actionType.startsWith("dropshipping.")) return "ecommerce";
   if (actionType.startsWith("project.")) return "projects";
   if (actionType.startsWith("task.") || actionType.startsWith("reminder.")) return "tasks";
   if (actionType.startsWith("memory.")) return "memory";

@@ -8,6 +8,7 @@ import { getSystemUserId } from "./user-context";
 import { generateCeoMorningBrief } from "./ceo-briefing";
 import { ensureDefaultAutomations, recordScheduledAutomationRun, type ScheduledAutomationRunOutcome } from "./automation-registry";
 import { generateRadioTemplatesForDate } from "./radio-template-agent";
+import { runDropshippingDailyOperatingCycle, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import {
   getDateKeyFromClock,
   getZonedClock as getClockInTimezone,
@@ -21,6 +22,12 @@ const CEO_BRIEF_MINUTE = Number(process.env.CEO_BRIEF_MINUTE || 0);
 const INSIGHTS_HOUR = Number(process.env.INSIGHTS_HOUR || 8);
 const NEWS_DIGEST_HOUR = Number(process.env.NEWS_DIGEST_HOUR || 9);
 const EVENING_REVIEW_HOUR = Number(process.env.EVENING_REVIEW_HOUR || 21);
+const DROPSHIPPING_CEO_CYCLE_HOUR = Number(process.env.DROPSHIPPING_CEO_CYCLE_HOUR || 7);
+const DROPSHIPPING_CEO_CYCLE_MINUTE = Number(process.env.DROPSHIPPING_CEO_CYCLE_MINUTE || 20);
+const DROPSHIPPING_CEO_MORNING_HOUR = Number(process.env.DROPSHIPPING_CEO_MORNING_HOUR || 7);
+const DROPSHIPPING_CEO_MORNING_MINUTE = Number(process.env.DROPSHIPPING_CEO_MORNING_MINUTE || 30);
+const DROPSHIPPING_CEO_EVENING_HOUR = Number(process.env.DROPSHIPPING_CEO_EVENING_HOUR || 21);
+const DROPSHIPPING_CEO_EVENING_MINUTE = Number(process.env.DROPSHIPPING_CEO_EVENING_MINUTE || 0);
 
 export function getReminderSchedulerConfig() {
   return {
@@ -30,6 +37,12 @@ export function getReminderSchedulerConfig() {
     insightsHour: INSIGHTS_HOUR,
     newsDigestHour: NEWS_DIGEST_HOUR,
     eveningReviewHour: EVENING_REVIEW_HOUR,
+    dropshippingCeoCycleHour: DROPSHIPPING_CEO_CYCLE_HOUR,
+    dropshippingCeoCycleMinute: DROPSHIPPING_CEO_CYCLE_MINUTE,
+    dropshippingCeoMorningHour: DROPSHIPPING_CEO_MORNING_HOUR,
+    dropshippingCeoMorningMinute: DROPSHIPPING_CEO_MORNING_MINUTE,
+    dropshippingCeoEveningHour: DROPSHIPPING_CEO_EVENING_HOUR,
+    dropshippingCeoEveningMinute: DROPSHIPPING_CEO_EVENING_MINUTE,
   };
 }
 
@@ -91,6 +104,9 @@ let lastRadioTemplateGeneration: string | null = null;
 let lastPortfolioReport: string | null = null;
 let lastVideoEditCheck: string | null = null;
 let lastNewsNotification: string | null = null;
+let lastDropshippingDailyCycle: string | null = null;
+let lastDropshippingMorningReport: string | null = null;
+let lastDropshippingEveningReport: string | null = null;
 const userRemindersSent: Map<string, string> = new Map();
 
 export function getZonedClock(date: Date): SchedulerClock {
@@ -393,6 +409,52 @@ async function runRadioTemplateGenerationForUser(userId: string): Promise<string
   }
 }
 
+async function sendDropshippingCeoReports(cadence: "morning" | "evening"): Promise<void> {
+  const userIds = await getScheduledNotificationUserIds();
+  const automationKey = cadence === "morning" ? "dropshipping-ceo-morning-report" : "dropshipping-ceo-evening-report";
+  const results = await Promise.all(userIds.map((userId) => runTrackedScheduledAutomation(
+    userId,
+    automationKey,
+    () => sendDropshippingDailyReport(userId, cadence),
+    (result) => ({
+      status: result.sent ? "success" : "skipped",
+      resultSummary: result.reason,
+      metadata: {
+        sent: result.sent,
+        cadence,
+        metrics: result.snapshot.metrics,
+        profitGuard: result.snapshot.profitGuard.status,
+      },
+    }),
+  )));
+  const sentCount = results.filter((result) => result.sent).length;
+  console.log(`[Dropshipping] ${cadence} CEO reports processed for ${userIds.length} user(s) - ${sentCount} sent`);
+}
+
+async function runDropshippingCeoDailyCycle(): Promise<void> {
+  const userIds = await getScheduledNotificationUserIds();
+  const userId = userIds[0] || getSystemUserId();
+  const result = await runTrackedScheduledAutomation(
+    userId,
+    "dropshipping-ceo-daily-operating-cycle",
+    async () => runDropshippingDailyOperatingCycle(),
+    (cycleResult) => ({
+      status: "success",
+      resultSummary: cycleResult.summary,
+      metadata: {
+        mode: cycleResult.mode,
+        forcePaidTest: cycleResult.forcePaidTest,
+        generatedCampaignIds: cycleResult.cycle.generatedCampaignIds,
+        generatedPostIds: cycleResult.cycle.generatedPostIds,
+        safety: cycleResult.safety,
+        metrics: cycleResult.snapshot.metrics,
+        profitGuard: cycleResult.snapshot.profitGuard.status,
+      },
+    }),
+  );
+  console.log(`[Dropshipping] Daily operating cycle processed for ${userId}: ${result.summary}`);
+}
+
 async function checkScheduledReminders(): Promise<void> {
   const now = new Date();
   const clock = getZonedClock(now);
@@ -404,6 +466,16 @@ async function checkScheduledReminders(): Promise<void> {
     if (shouldRunDailyScheduledJob(clock, CEO_BRIEF_HOUR, CEO_BRIEF_MINUTE, lastMorningNotification)) {
       lastMorningNotification = dateKey;
       await sendMorningReminder();
+    }
+
+    if (shouldRunDailyScheduledJob(clock, DROPSHIPPING_CEO_CYCLE_HOUR, DROPSHIPPING_CEO_CYCLE_MINUTE, lastDropshippingDailyCycle)) {
+      lastDropshippingDailyCycle = dateKey;
+      await runDropshippingCeoDailyCycle();
+    }
+
+    if (shouldRunDailyScheduledJob(clock, DROPSHIPPING_CEO_MORNING_HOUR, DROPSHIPPING_CEO_MORNING_MINUTE, lastDropshippingMorningReport)) {
+      lastDropshippingMorningReport = dateKey;
+      await sendDropshippingCeoReports("morning");
     }
     
     if (shouldRunDailyScheduledJob(clock, INSIGHTS_HOUR, 0, lastInsightsNotification)) {
@@ -445,6 +517,11 @@ async function checkScheduledReminders(): Promise<void> {
     if (shouldRunDailyScheduledJob(clock, EVENING_REVIEW_HOUR, 0, lastEveningNotification)) {
       lastEveningNotification = dateKey;
       await sendEveningReminder();
+    }
+
+    if (shouldRunDailyScheduledJob(clock, DROPSHIPPING_CEO_EVENING_HOUR, DROPSHIPPING_CEO_EVENING_MINUTE, lastDropshippingEveningReport)) {
+      lastDropshippingEveningReport = dateKey;
+      await sendDropshippingCeoReports("evening");
     }
     
     if (dayOfWeek === 0 && hour === 18 && minute === 0 && lastWeeklyNotification !== weekKey) {
@@ -557,6 +634,7 @@ export function startReminderScheduler(): void {
   console.log("[Reminder] Starting reminder scheduler...");
   console.log(`[Reminder] Schedule timezone: ${SCHEDULER_TIMEZONE}`);
   console.log(`[Reminder] Schedule: CEO Brief ${CEO_BRIEF_HOUR}:${String(CEO_BRIEF_MINUTE).padStart(2, "0")}, Insights ${INSIGHTS_HOUR}:00, News ${NEWS_DIGEST_HOUR}:00, Evening ${EVENING_REVIEW_HOUR}:00, Weekly Sunday 18:00`);
+  console.log(`[Dropshipping] Schedule: Cycle ${DROPSHIPPING_CEO_CYCLE_HOUR}:${String(DROPSHIPPING_CEO_CYCLE_MINUTE).padStart(2, "0")}, AM ${DROPSHIPPING_CEO_MORNING_HOUR}:${String(DROPSHIPPING_CEO_MORNING_MINUTE).padStart(2, "0")}, PM ${DROPSHIPPING_CEO_EVENING_HOUR}:${String(DROPSHIPPING_CEO_EVENING_MINUTE).padStart(2, "0")}`);
   console.log("[Agent] Schedule: Radio Monday 8:00 AM, Radio Templates daily 8:15 AM, Portfolio Sunday 10:00 AM, Video Tasks Friday 10:00 AM");
   
   setInterval(checkScheduledReminders, 60 * 1000);

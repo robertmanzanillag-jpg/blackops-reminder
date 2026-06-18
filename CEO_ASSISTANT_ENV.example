@@ -30,6 +30,12 @@ CEO_BRIEF_MINUTE=0
 INSIGHTS_HOUR=8
 NEWS_DIGEST_HOUR=9
 EVENING_REVIEW_HOUR=21
+DROPSHIPPING_CEO_CYCLE_HOUR=7
+DROPSHIPPING_CEO_CYCLE_MINUTE=20
+DROPSHIPPING_CEO_MORNING_HOUR=7
+DROPSHIPPING_CEO_MORNING_MINUTE=30
+DROPSHIPPING_CEO_EVENING_HOUR=21
+DROPSHIPPING_CEO_EVENING_MINUTE=0
 
 # Backup/restore preflight
 CEO_BACKUP_DIR=backups/ceo-assistant
@@ -43,6 +49,37 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 # Without these values the app stays in manual Gmail/mailto mode.
 # RESEND_API_KEY=re_replace-with-resend-api-key
 # REVENUE_ENGINE_FROM_EMAIL="Revenue Engine <sales@your-domain.example>"
+
+# Dropshipping CEO / Shopify
+# V1 can operate in research/draft mode without these.
+# Set these when Shopify is ready for product/order/report integrations.
+# Shopify token needs write_products for draft product creation.
+# SHOPIFY_SHOP_DOMAIN=your-store.myshopify.com
+# SHOPIFY_ADMIN_ACCESS_TOKEN=shpat_replace-with-token
+# SHOPIFY_API_VERSION=2026-04
+
+# Dropshipping CEO / Social publisher
+# Optional generic webhook for approved posts. Without it, posts stay in draft/queue/manual mode.
+# DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL=https://your-social-publisher.example/webhook
+# DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN=replace-with-webhook-token
+
+# Dropshipping CEO / Supplier fulfillment
+# Start with manual or DSers. No supplier order is executed without approval.
+# DROPSHIPPING_SUPPLIER_EXECUTION_MODE=manual
+# DROPSHIPPING_SUPPLIER_PORTAL_URL=https://www.dsers.com/
+# DROPSHIPPING_SUPPLIER_ORDER_WEBHOOK_URL=https://your-fulfillment-handoff.example/webhook
+# DROPSHIPPING_SUPPLIER_ORDER_WEBHOOK_TOKEN=replace-with-supplier-webhook-token
+
+# Dropshipping CEO / Store policy readiness markers
+# STORE_PAYMENT_PROCESSOR=shopify_payments
+# DROPSHIPPING_RETURN_POLICY_URL=https://your-store.example/policies/refund-policy
+# DROPSHIPPING_PRIVACY_POLICY_URL=https://your-store.example/policies/privacy-policy
+
+# Dropshipping CEO / Optional local data overrides
+# DROPSHIPPING_PRODUCT_SCOUT_CANDIDATES_PATH=dropshipping_engine_data/product_scout_candidates.json
+# DROPSHIPPING_GROWTH_SPRINTS_PATH=dropshipping_engine_data/growth_sprints.json
+# DROPSHIPPING_LAUNCH_PACKS_PATH=dropshipping_engine_data/launch_packs.json
+# DROPSHIPPING_APPROVAL_OUTBOX_PATH=dropshipping_engine_data/approval_outbox.json
 
 # Clippers command center
 # PUBLIC_BASE_URL=https://your-domain.example
