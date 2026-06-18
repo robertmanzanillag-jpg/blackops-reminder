@@ -6409,16 +6409,10 @@ export default function ClippersPage() {
       if (!response.ok) throw new Error(data.error || "No pude correr Intake Refresh Sweep");
       return data as {
         intakeRefreshSweep: ClipperIntakeRefreshSweepSummary;
-        postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
-        goLivePrepSweep: ClipperGoLivePrepSweepSummary;
-        localDropSync: ClipperLocalDropSyncSummary | null;
-        robertNextActions: ClipperRobertNextActionsSummary;
-        status: ClipperStatus;
       };
     },
     onSuccess: (data) => {
       setIntakeRefreshSweep(data.intakeRefreshSweep);
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
         title: "Intake refresh listo",
         description: `${data.intakeRefreshSweep.intakeConsole.totals.ready} ready, ${data.intakeRefreshSweep.intakeConsole.totals.partial} partial, ${data.intakeRefreshSweep.intakeConsole.totals.missing} missing; ${data.intakeRefreshSweep.blockers.length} blockers.`,
@@ -7727,6 +7721,15 @@ export default function ClippersPage() {
               Activation sweep
             </Button>
             <Button
+              onClick={() => intakeRefreshSweepMutation.mutate()}
+              disabled={intakeRefreshSweepMutation.isPending || postConnectActivationSweepMutation.isPending || goLivePrepSweepMutation.isPending}
+              className="bg-violet-200 text-zinc-950 hover:bg-violet-100"
+              data-testid="run-clippers-intake-refresh-sweep-button"
+            >
+              {intakeRefreshSweepMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Intake refresh
+            </Button>
+            <Button
               onClick={() => ownerConnectPackMutation.mutate()}
               disabled={ownerConnectPackMutation.isPending || isLoading}
               className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
@@ -8125,6 +8128,27 @@ export default function ClippersPage() {
             </Button>
           </div>
         </header>
+
+        {intakeRefreshSweep && (
+          <div className="rounded-md border border-violet-300/20 bg-violet-950/20 p-3" data-testid="clippers-intake-refresh-sweep-global-result">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">Intake refresh</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{intakeRefreshSweep.nextStep}</p>
+              </div>
+              <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(intakeRefreshSweep.status))}>{intakeRefreshSweep.status}</Badge>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
+              <p>Lanes: {intakeRefreshSweep.intakeConsole.totals.lanes}</p>
+              <p>Ready: {intakeRefreshSweep.intakeConsole.totals.ready}</p>
+              <p>Partial: {intakeRefreshSweep.intakeConsole.totals.partial}</p>
+              <p>Missing: {intakeRefreshSweep.intakeConsole.totals.missing}</p>
+              <p>Completed: {intakeRefreshSweep.completedSteps.length}</p>
+              <p>Blocked: {intakeRefreshSweep.blockers.length}</p>
+            </div>
+            <p className="mt-2 break-all text-[10px] leading-4 text-violet-100/70">{intakeRefreshSweep.markdownPath}</p>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard icon={Target} label="Meta semanal" value={`${formatNumber(status?.goals.totalWeeklyGoal || 0)} views`} detail={`${formatNumber(status?.goals.weeklyViewsPerAccount || 0)} por cuenta`} />
@@ -9228,7 +9252,7 @@ export default function ClippersPage() {
                                 className="ml-1 h-7 border-violet-300/20 bg-transparent px-2 text-[11px] text-violet-100 hover:bg-violet-300/10"
                                 onClick={() => intakeRefreshSweepMutation.mutate()}
                                 disabled={intakeRefreshSweepMutation.isPending || postConnectActivationSweepMutation.isPending || goLivePrepSweepMutation.isPending || isLoading}
-                                data-testid="run-clippers-intake-refresh-sweep-button"
+                                data-testid="run-clippers-intake-refresh-sweep-inline-button"
                               >
                                 {intakeRefreshSweepMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
                                 Run intake refresh

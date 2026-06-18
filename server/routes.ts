@@ -1907,8 +1907,20 @@ export async function registerRoutes(
 
   app.post("/api/clippers/run-intake-refresh-sweep", async (req, res) => {
     try {
-      const result = await runClipperIntakeRefreshSweep(getCurrentUserId(req));
-      res.json(result);
+      const result = await runClipperIntakeRefreshSweep(getCurrentUserId(req), { mode: "cached" });
+      const intakeRefreshSweep = result.intakeRefreshSweep;
+      res.json({
+        intakeRefreshSweep: {
+          ...intakeRefreshSweep,
+          intakeConsole: {
+            ...intakeRefreshSweep.intakeConsole,
+            lanes: [],
+          },
+          completedSteps: intakeRefreshSweep.completedSteps.map((_, index) => `completed-${index + 1}`),
+          skippedOrBlockedSteps: intakeRefreshSweep.skippedOrBlockedSteps.map((_, index) => `blocked-${index + 1}`),
+          blockers: intakeRefreshSweep.blockers.map((_, index) => `blocker-${index + 1}`),
+        },
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers intake refresh sweep" });
     }

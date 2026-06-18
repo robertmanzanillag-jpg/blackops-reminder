@@ -111,6 +111,8 @@ export type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperSourceIngestionSprintStatus = "not_prepared" | "needs_files" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
+export type ClipperSourceIngestionSprintItemStatus = "needs_file" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
 export type ClipperAnalyticsReportingPackStatus = "not_prepared" | "needs_data" | "ready";
 export type ClipperAccountCreationPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperAccountSetupSessionStatus = "not_prepared" | "blocked" | "ready_to_create" | "in_progress" | "ready";
@@ -643,6 +645,77 @@ export interface ClipperSourceSupplyDropKitSummary {
     minimumWeeklySourceAssets: number;
   };
   intakeBatchTemplate: string;
+  nextStep: string;
+}
+
+export interface ClipperSourceIngestionSprintItem {
+  id: string;
+  rank: number;
+  status: ClipperSourceIngestionSprintItemStatus;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  targetFileName: string;
+  sourceDropPath: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  suggestedTitle: string;
+  viralSearchQuery: string;
+  viralSearchUrl: string;
+  recencyWindow: string;
+  proofNeeded: string[];
+  intakeBatchRow: string;
+  rightsEvidenceBatchRow: string;
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceIngestionSprintCategory {
+  category: ClipperAccountCategory;
+  label: string;
+  status: ClipperSourceIngestionSprintStatus;
+  sourceDropDir: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  items: number;
+  filesNeeded: number;
+  metadataRowsNeeded: number;
+  rightsNeeded: number;
+  importReady: number;
+  rightsReadyAssets: number;
+  minimumWeeklySourceAssets: number;
+  nextStep: string;
+}
+
+export interface ClipperSourceIngestionSprintSummary {
+  status: ClipperSourceIngestionSprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  targetWeeklyClips: number;
+  items: ClipperSourceIngestionSprintItem[];
+  categories: ClipperSourceIngestionSprintCategory[];
+  totals: {
+    items: number;
+    filesNeeded: number;
+    metadataRowsNeeded: number;
+    rightsNeeded: number;
+    importReady: number;
+    ready: number;
+    missingSourceAssets: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+    categoriesReady: number;
+  };
+  artifactPaths: {
+    sourceSupplyDropKit: string;
+    sourceDropDiagnostic: string;
+    repairWorksheet: string;
+    intakeRefresh: string;
+  };
   nextStep: string;
 }
 
@@ -4763,6 +4836,9 @@ const SOURCE_ACQUISITION_PLAN_MARKDOWN_PATH = path.join(ROOT_DIR, "source-acquis
 const SOURCE_SUPPLY_DROP_KIT_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.json");
 const SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.md");
 const SOURCE_SUPPLY_DROP_KIT_CSV_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.csv");
+const SOURCE_INGESTION_SPRINT_PATH = path.join(ROOT_DIR, "source-ingestion-sprint.json");
+const SOURCE_INGESTION_SPRINT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-ingestion-sprint.md");
+const SOURCE_INGESTION_SPRINT_CSV_PATH = path.join(ROOT_DIR, "source-ingestion-sprint.csv");
 const RIGHTS_OUTREACH_PATH = path.join(ROOT_DIR, "rights-outreach-pack.json");
 const RIGHTS_OUTREACH_MARKDOWN_PATH = path.join(ROOT_DIR, "rights-outreach-pack.md");
 const RIGHTS_OUTREACH_TEMPLATES_PATH = path.join(ROOT_DIR, "rights-outreach-templates.md");
@@ -26231,6 +26307,24 @@ async function buildGoLivePrepSweepSummary(): Promise<ClipperGoLivePrepSweepSumm
   };
 }
 
+async function buildCachedRobertNextActionsSummary(): Promise<ClipperRobertNextActionsSummary | null> {
+  const raw = await readFile(ROBERT_NEXT_ACTIONS_PATH, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ClipperRobertNextActionsSummary;
+    if (!parsed?.connectNow?.intakeConsole) return null;
+    return {
+      ...parsed,
+      generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+      manifestPath: ROBERT_NEXT_ACTIONS_PATH,
+      markdownPath: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
+      csvPath: ROBERT_NEXT_ACTIONS_CSV_PATH,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderGoLivePrepSweepMarkdown(summary: ClipperGoLivePrepSweepSummary): string {
   return [
     "# Clippers Go-Live Prep Sweep",
@@ -26463,6 +26557,114 @@ function renderPostConnectActivationSweepMarkdown(summary: ClipperPostConnectAct
   ].join("\n");
 }
 
+async function buildPostConnectActivationSweepSummary(input: {
+  goLivePrepSweep?: ClipperGoLivePrepSweepSummary;
+  localDropSync?: ClipperLocalDropSyncSummary | null;
+  robertNextActions?: ClipperRobertNextActionsSummary | null;
+} = {}): Promise<ClipperPostConnectActivationSweepSummary> {
+  const raw = await readFile(POST_CONNECT_ACTIVATION_SWEEP_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperPostConnectActivationSweepSummary;
+      return {
+        ...parsed,
+        status: parsed.status || "not_run",
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: POST_CONNECT_ACTIVATION_SWEEP_PATH,
+        markdownPath: POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH,
+        prepSweepStatus: parsed.prepSweepStatus || "not_run",
+        localDropSyncStatus: parsed.localDropSyncStatus || "not_run",
+        readyToPublish: Boolean(parsed.readyToPublish),
+        totalLanes: parsed.totalLanes || 0,
+        readyLanes: parsed.readyLanes || 0,
+        activationReadyLanes: parsed.activationReadyLanes || 0,
+        waitingLanes: parsed.waitingLanes || 0,
+        blockedLanes: parsed.blockedLanes || 0,
+        nextLane: parsed.nextLane || null,
+        nextLocalActions: Array.isArray(parsed.nextLocalActions) ? parsed.nextLocalActions : [],
+        blockers: Array.isArray(parsed.blockers) ? parsed.blockers : [],
+        artifactPaths: parsed.artifactPaths || {
+          prepSweep: GO_LIVE_PREP_SWEEP_MARKDOWN_PATH,
+          robertNextActions: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
+          connectNow: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
+          launcher: EXTERNAL_PORTAL_LAUNCHER_HTML_PATH,
+          completionAudit: GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH,
+          localDropSync: null,
+        },
+        launcherUrl: parsed.launcherUrl || "/clippers/external-portal-launcher",
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Activation Sweep after connecting accounts, apps, permissions and OAuth tokens.",
+      };
+    } catch {
+      // Fall through to a lightweight summary from cached local manifests.
+    }
+  }
+
+  const goLivePrepSweep = input.goLivePrepSweep || await buildGoLivePrepSweepSummary();
+  const localDropSync = input.localDropSync === undefined
+    ? goLivePrepSweep.localDropSync || await buildLocalDropSyncSummary()
+    : input.localDropSync;
+  const robertNextActions = input.robertNextActions === undefined
+    ? await buildCachedRobertNextActionsSummary()
+    : input.robertNextActions;
+  const lanes = robertNextActions?.connectNow?.postConnectActivationBridge || [];
+  const nextLane = lanes.find((lane) => lane.status === "blocked")
+    || lanes.find((lane) => lane.status === "waiting")
+    || lanes.find((lane) => lane.status === "activation_ready")
+    || lanes.find((lane) => lane.status === "ready")
+    || null;
+  const localDropSyncStatus = localDropSync?.status || "not_run";
+  const blockedLanes = lanes.filter((lane) => lane.status === "blocked").length;
+  const waitingLanes = lanes.filter((lane) => lane.status === "waiting").length;
+  const activationReadyLanes = lanes.filter((lane) => lane.status === "activation_ready").length;
+  const readyLanes = lanes.filter((lane) => lane.status === "ready").length;
+  const blockers = uniqueStrings([
+    ...lanes.flatMap((lane) => lane.blockers),
+    goLivePrepSweep.status !== "completed" ? goLivePrepSweep.nextStep : null,
+    localDropSync && localDropSync.status !== "completed" ? localDropSync.nextStep : null,
+    robertNextActions ? null : "ROBERT_NEXT_ACTIONS.json is missing; run Robert Next Actions or Prep Sweep once before using cached intake refresh.",
+  ]).slice(0, 30);
+  const status: ClipperPostConnectActivationSweepStatus = goLivePrepSweep.status === "not_run"
+    ? "not_run"
+    : goLivePrepSweep.totals.failed > 0
+      ? "blocked"
+      : goLivePrepSweep.status !== "completed" || localDropSyncStatus !== "completed"
+        ? "needs_local_input"
+        : lanes.length && blockedLanes === 0 && waitingLanes === 0
+          ? "ready"
+          : "needs_external_action";
+
+  return {
+    status,
+    generatedAt: null,
+    manifestPath: POST_CONNECT_ACTIVATION_SWEEP_PATH,
+    markdownPath: POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH,
+    prepSweepStatus: goLivePrepSweep.status,
+    localDropSyncStatus,
+    readyToPublish: status === "ready",
+    totalLanes: lanes.length,
+    readyLanes,
+    activationReadyLanes,
+    waitingLanes,
+    blockedLanes,
+    nextLane,
+    nextLocalActions: uniqueStrings([
+      ...lanes.flatMap((lane) => lane.nextLocalActions),
+      localDropSync && localDropSync.status !== "completed" ? localDropSync.nextStep : null,
+    ]).slice(0, 20),
+    blockers,
+    artifactPaths: {
+      prepSweep: GO_LIVE_PREP_SWEEP_MARKDOWN_PATH,
+      robertNextActions: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
+      connectNow: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
+      launcher: EXTERNAL_PORTAL_LAUNCHER_HTML_PATH,
+      completionAudit: GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH,
+      localDropSync: localDropSync?.markdownPath || null,
+    },
+    launcherUrl: "/clippers/external-portal-launcher",
+    nextStep: nextLane?.nextStep || blockers[0] || "Run the full Activation Sweep after external accounts, permissions, OAuth and source drops are updated.",
+  };
+}
+
 export async function runClipperPostConnectActivationSweep(userId = getSystemUserId()): Promise<{
   postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
   goLivePrepSweep: ClipperGoLivePrepSweepSummary;
@@ -26618,15 +26820,38 @@ function renderIntakeRefreshSweepMarkdown(summary: ClipperIntakeRefreshSweepSumm
   ].join("\n");
 }
 
-export async function runClipperIntakeRefreshSweep(userId = getSystemUserId()): Promise<{
+export async function runClipperIntakeRefreshSweep(userId = getSystemUserId(), options: { mode?: "full" | "cached" } = {}): Promise<{
   intakeRefreshSweep: ClipperIntakeRefreshSweepSummary;
   postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
   goLivePrepSweep: ClipperGoLivePrepSweepSummary;
   localDropSync: ClipperLocalDropSyncSummary | null;
   robertNextActions: ClipperRobertNextActionsSummary;
-  status: ClipperStatus;
+  status: ClipperStatus | null;
 }> {
-  const activationResult = await runClipperPostConnectActivationSweep(userId);
+  const activationResult = options.mode === "cached"
+    ? await (async () => {
+      await writeDefaultConfigIfMissing();
+      await ensureClipperDirs();
+      const robertNextActions = await buildCachedRobertNextActionsSummary();
+      if (!robertNextActions) {
+        throw new Error("ROBERT_NEXT_ACTIONS.json is missing or incomplete. Run Robert Next Actions or Prep Sweep once, then rerun Intake refresh.");
+      }
+      const goLivePrepSweep = await buildGoLivePrepSweepSummary();
+      const localDropSync = goLivePrepSweep.localDropSync || await buildLocalDropSyncSummary();
+      const postConnectActivationSweep = await buildPostConnectActivationSweepSummary({
+        goLivePrepSweep,
+        localDropSync,
+        robertNextActions,
+      });
+      return {
+        postConnectActivationSweep,
+        goLivePrepSweep,
+        localDropSync,
+        robertNextActions,
+        status: null,
+      };
+    })()
+    : await runClipperPostConnectActivationSweep(userId);
   const intakeConsole = activationResult.robertNextActions.connectNow.intakeConsole;
   const completedSteps = [
     ...activationResult.goLivePrepSweep.items
@@ -26690,7 +26915,7 @@ export async function runClipperIntakeRefreshSweep(userId = getSystemUserId()): 
     goLivePrepSweep: activationResult.goLivePrepSweep,
     localDropSync: activationResult.localDropSync,
     robertNextActions: activationResult.robertNextActions,
-    status: await getClipperStatus(userId),
+    status: activationResult.status || (options.mode === "cached" ? null : await getClipperStatus(userId)),
   };
 }
 
