@@ -2737,6 +2737,30 @@ export interface ClipperRobertConnectNowHandoff {
     doneCriteria: string[];
     nextStep: string;
   }>;
+  postConnectActivationBridge: Array<{
+    id: string;
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    label: string;
+    handle: string;
+    status: "blocked" | "waiting" | "activation_ready" | "ready";
+    activationScore: number;
+    accountProofStatus: ClipperAccountEvidenceItemStatus | "missing";
+    developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing";
+    permissionsApproved: number;
+    permissionsTotal: number;
+    tokenSaved: boolean;
+    tokenSavedAt: string | null;
+    oauthStatus: ClipperOAuthConnectionStatus | "token_saved" | "missing";
+    publisherConnectorStatus: ClipperPublisherConnectorStatus;
+    publishGate: ClipperPublisherConnectorItem["publishGate"] | "blocked";
+    readyQueueItems: number;
+    blockedQueueItems: number;
+    blockers: string[];
+    nextLocalActions: string[];
+    nextStep: string;
+  }>;
   recommendedOrder: string[];
   pendingCredentialEnvVars: string[];
   credentialTemplate: string;
@@ -27957,6 +27981,111 @@ function buildRobertPlatformLaunchBridge(input: {
   });
 }
 
+function buildRobertPostConnectActivationBridge(input: {
+  accounts: ClipperAccount[];
+  accountEvidence: ClipperAccountEvidenceSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+  oauthConnections: ClipperOAuthConnection[];
+  tokenVault: ClipperTokenVaultSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+  productionQueue: ClipperProductionQueueSummary;
+}): ClipperRobertConnectNowHandoff["postConnectActivationBridge"] {
+  return input.accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => {
+    const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platformAccount.platform);
+    const label = `${account.name} / ${requirement?.label || platformAccount.platform}`;
+    const accountProof = input.accountEvidence.items.find((item) => item.accountId === account.id && item.platform === platformAccount.platform);
+    const developerApp = input.developerAppEvidence.items.find((item) => item.platform === platformAccount.platform);
+    const permissionItems = input.permissionTracker.items.filter((item) => item.platform === platformAccount.platform);
+    const permissionsApproved = permissionItems.filter((item) => item.status === "approved").length;
+    const permissionsTotal = permissionItems.length || requirement?.scopes.length || 0;
+    const tokenRecord = input.tokenVault.records.find((item) => item.platform === platformAccount.platform);
+    const oauthConnection = input.oauthConnections.find((item) => item.platform === platformAccount.platform && item.status !== "error");
+    const publisherConnector = input.publisherConnectors.items.find((item) => item.platform === platformAccount.platform);
+    const platformNames = uniqueStrings([
+      platformAccount.platform,
+      requirement?.label || "",
+      requirement?.label.replace(/\s+/g, "") || "",
+    ].filter(Boolean)).map((item) => item.toLowerCase());
+    const accountQueueItems = input.productionQueue.items.filter((item) =>
+      item.accountId === account.id &&
+      item.platforms.some((platform) => platformNames.includes(platform.toLowerCase()) || platform.toLowerCase().includes(platformAccount.platform))
+    );
+    const readyQueueItems = accountQueueItems.filter((item) => item.status === "draft_ready").length;
+    const blockedQueueItems = accountQueueItems.filter((item) => item.status !== "draft_ready").length;
+    const accountProofStatus: ClipperAccountEvidenceItemStatus | "missing" = accountProof?.status || "missing";
+    const developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing" = developerApp?.status || "missing";
+    const tokenSaved = Boolean(tokenRecord);
+    const publisherConnectorStatus = publisherConnector?.status || "blocked";
+    const publishGate = publisherConnector?.publishGate || "blocked";
+    const oauthStatus: ClipperOAuthConnectionStatus | "token_saved" | "missing" = tokenSaved ? "token_saved" : oauthConnection?.status || "missing";
+    const externalChecks = [
+      accountProofStatus === "verified",
+      developerAppStatus === "approved",
+      permissionsTotal > 0 && permissionsApproved >= permissionsTotal,
+      tokenSaved,
+      publisherConnectorStatus === "ready",
+    ];
+    const activationScore = Math.round((externalChecks.filter(Boolean).length / externalChecks.length) * 100);
+    const blockers = [
+      accountProofStatus !== "verified" ? `Account proof missing for ${platformAccount.handle}.` : null,
+      developerAppStatus !== "approved" ? `${requirement?.label || platformAccount.platform} developer app is not approved.` : null,
+      permissionsApproved < permissionsTotal ? `${permissionsTotal - permissionsApproved} permission scope(s) still not approved.` : null,
+      !tokenSaved ? `${requirement?.label || platformAccount.platform} OAuth token is not saved.` : null,
+      publisherConnectorStatus !== "ready" ? `${requirement?.label || platformAccount.platform} publisher connector is ${publisherConnectorStatus}.` : null,
+    ].filter((item): item is string => Boolean(item));
+    const nextLocalActions = blockers.length
+      ? [
+        "Import completed account/app/permission evidence rows through Launch Evidence Batch.",
+        "Run Local Drop Sync after proof files are placed.",
+        "Run Prep Sweep so audits and publisher connectors refresh from the new proof.",
+      ]
+      : [
+        "Run Local Drop Sync to absorb the final owner-connect evidence drop.",
+        "Run Go-Live Prep Sweep and Completion Audit.",
+        "Refresh Publisher Execution Queue in approval mode before enabling real autopost.",
+        readyQueueItems > 0 ? `Review ${readyQueueItems} draft-ready queue item(s) for this account/platform.` : "Load rights-cleared source supply and render draft specs until queue items become draft-ready.",
+      ];
+    const status: ClipperRobertConnectNowHandoff["postConnectActivationBridge"][number]["status"] = blockers.length
+      ? "blocked"
+      : readyQueueItems > 0 && publishGate !== "blocked"
+        ? "ready"
+        : "activation_ready";
+    const nextStep = blockers[0]
+      || (readyQueueItems > 0
+        ? "Run publisher execution in approval mode, verify output, then keep the daily report loop on."
+        : "External connection is clear; load sources/render drafts so the account has publishable clips.");
+
+    return {
+      id: `${account.id}-${platformAccount.platform}`,
+      accountId: account.id,
+      accountName: account.name,
+      platform: platformAccount.platform,
+      label,
+      handle: platformAccount.handle,
+      status,
+      activationScore,
+      accountProofStatus,
+      developerAppStatus,
+      permissionsApproved,
+      permissionsTotal,
+      tokenSaved,
+      tokenSavedAt: tokenRecord?.savedAt || null,
+      oauthStatus,
+      publisherConnectorStatus,
+      publishGate,
+      readyQueueItems,
+      blockedQueueItems,
+      blockers,
+      nextLocalActions,
+      nextStep,
+    };
+  })).sort((a, b) => {
+    const statusScore = { blocked: 0, waiting: 1, activation_ready: 2, ready: 3 };
+    return statusScore[a.status] - statusScore[b.status] || a.activationScore - b.activationScore || a.label.localeCompare(b.label);
+  });
+}
+
 async function buildRobertConnectNowHandoff(input: {
   ownerConnectPack: ClipperOwnerConnectPackSummary;
   dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
@@ -27966,6 +28095,13 @@ async function buildRobertConnectNowHandoff(input: {
   goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
   externalExecutionSession: ClipperExternalExecutionSessionSummary;
   sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+  accountEvidence: ClipperAccountEvidenceSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+  oauthConnections: ClipperOAuthConnection[];
+  tokenVault: ClipperTokenVaultSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+  productionQueue: ClipperProductionQueueSummary;
 }): Promise<ClipperRobertConnectNowHandoff> {
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
@@ -28015,6 +28151,16 @@ async function buildRobertConnectNowHandoff(input: {
     accountCloseout,
     officialPermissionCloseout,
   });
+  const postConnectActivationBridge = buildRobertPostConnectActivationBridge({
+    accounts,
+    accountEvidence: input.accountEvidence,
+    developerAppEvidence: input.developerAppEvidence,
+    permissionTracker: input.permissionTracker,
+    oauthConnections: input.oauthConnections,
+    tokenVault: input.tokenVault,
+    publisherConnectors: input.publisherConnectors,
+    productionQueue: input.productionQueue,
+  });
 
   return {
     markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
@@ -28028,6 +28174,7 @@ async function buildRobertConnectNowHandoff(input: {
     ownershipSplit,
     weeklyRunway,
     platformLaunchBridge,
+    postConnectActivationBridge,
     recommendedOrder: [
       "Fill real credential values in the credential starter files, then import credential drop files.",
       "Create or verify each external TikTok, Instagram and YouTube account with the configured handles.",
@@ -28086,6 +28233,13 @@ async function buildRobertNextActionsSummary(input: {
   goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
   externalExecutionSession: ClipperExternalExecutionSessionSummary;
   sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+  accountEvidence: ClipperAccountEvidenceSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+  oauthConnections: ClipperOAuthConnection[];
+  tokenVault: ClipperTokenVaultSummary;
+  publisherConnectors: ClipperPublisherConnectorSummary;
+  productionQueue: ClipperProductionQueueSummary;
 }): Promise<ClipperRobertNextActionsSummary> {
   const generatedAt = await stat(ROBERT_NEXT_ACTIONS_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const dropItems = input.dropzoneReadyPack.items
@@ -28302,6 +28456,7 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     `- Focus run: ${summary.connectNow.focusRun.label} (${summary.connectNow.focusRun.status}, ${summary.connectNow.focusRun.estimatedMinutes} min)`,
     `- Evidence closeout: ${summary.connectNow.evidenceCloseout.total} open items; next rows ${summary.connectNow.evidenceCloseout.nextRows.length}`,
     `- Connection tunnel: ${summary.connectNow.connectionTunnel.status}; ${summary.connectNow.connectionTunnel.progress}% progress; ${summary.connectNow.connectionTunnel.blockedGates} blocked gates`,
+    `- Post-connect activation bridge: ${summary.connectNow.postConnectActivationBridge.length} account/platform lane(s); ${summary.connectNow.postConnectActivationBridge.filter((item) => item.status === "ready" || item.status === "activation_ready").length} activation-ready`,
     `- Handoff file: ${summary.connectNow.markdownPath}`,
     "",
     "## Priority Actions",
@@ -28442,6 +28597,29 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       ...platform.blockers.map((blocker) => `- ${blocker}`),
       "Done criteria:",
       ...platform.doneCriteria.map((criteria) => `- ${criteria}`),
+      "",
+    ]),
+    "",
+    "## Post-Connect Activation Bridge",
+    "",
+    handoff.postConnectActivationBridge.length ? "Account/platform activation lanes:" : "Account/platform activation lanes: none",
+    ...handoff.postConnectActivationBridge.flatMap((lane) => [
+      `### ${lane.accountName} / ${lane.platform}`,
+      "",
+      `- Status: ${lane.status}`,
+      `- Handle: ${lane.handle}`,
+      `- Activation score: ${lane.activationScore}%`,
+      `- Account proof: ${lane.accountProofStatus}`,
+      `- Developer app: ${lane.developerAppStatus}`,
+      `- Permissions: ${lane.permissionsApproved}/${lane.permissionsTotal}`,
+      `- OAuth/token: ${lane.oauthStatus}${lane.tokenSavedAt ? ` (${lane.tokenSavedAt})` : ""}`,
+      `- Publisher connector: ${lane.publisherConnectorStatus}; gate ${lane.publishGate}`,
+      `- Queue: ${lane.readyQueueItems} ready; ${lane.blockedQueueItems} blocked`,
+      `- Next step: ${lane.nextStep}`,
+      lane.blockers.length ? "Blockers:" : "Blockers: none",
+      ...lane.blockers.map((blocker) => `- ${blocker}`),
+      lane.nextLocalActions.length ? "Next local actions:" : "Next local actions: none",
+      ...lane.nextLocalActions.map((action) => `- ${action}`),
       "",
     ]),
     "",
@@ -28709,6 +28887,13 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     goLiveCompletionAudit: statusBefore.goLiveCompletionAudit,
     externalExecutionSession: statusBefore.externalExecutionSession,
     sourceSupplyDropKit: statusBefore.sourceSupplyDropKit,
+    accountEvidence: statusBefore.accountEvidence,
+    developerAppEvidence: statusBefore.developerAppEvidence,
+    permissionTracker: statusBefore.permissionTracker,
+    oauthConnections: statusBefore.oauthConnections,
+    tokenVault: statusBefore.tokenVault,
+    publisherConnectors: statusBefore.publisherConnectors,
+    productionQueue: statusBefore.productionQueue,
   });
   const robertNextActions: ClipperRobertNextActionsSummary = {
     ...draftSummary,
@@ -30032,6 +30217,13 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     goLiveCompletionAudit,
     externalExecutionSession,
     sourceSupplyDropKit,
+    accountEvidence,
+    developerAppEvidence,
+    permissionTracker,
+    oauthConnections,
+    tokenVault,
+    publisherConnectors,
+    productionQueue,
   });
 
   return {
