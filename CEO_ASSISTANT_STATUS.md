@@ -29,7 +29,8 @@ Completado:
 - Modelo: dropshipping sin inventario propio; fulfillment por orden pagada.
 - Budget inicial: `$100`, con gasto real bloqueado en `$0` hasta tener cuentas, approvals y senales.
 - Marketing: campaign draft, posts organicos draft y reglas de aprendizaje.
-- Legal/seguridad: politicas publicas draft y guardrails contra claims, marcas ajenas y promesas de envio no verificadas.
+- Legal/seguridad: politicas publicas draft, checkout readiness y guardrails contra claims, marcas ajenas y promesas de envio no verificadas.
+- Trust Center: migrador local outbox -> pending approvals disponible en `/api/dropshipping-ceo/approval-outbox-migration` y UI en Dropshipping CEO > Approvals.
 - Build completo: `npm run build` pasa despues de limpiar el bloqueo de OneDrive en `dist`.
 - Datos runtime locales: `dropshipping_engine_data/*` queda ignorado por Git; el plan versionado vive en `docs/dropshipping-ceo-launch-runbook.md`.
 
@@ -39,7 +40,7 @@ Pendiente permitido para manana:
 2. Conectar Telegram.
 3. Conectar redes/social publisher.
 4. Conectar proveedor/DSers/AliExpress.
-5. Encender Postgres/Trust Center y migrar approvals locales.
+5. Encender Postgres/Trust Center y ejecutar migracion del outbox local desde Approvals.
 6. Confirmar politicas con URLs reales.
 
 ## Pendiente para declarar produccion real

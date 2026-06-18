@@ -220,6 +220,14 @@ export const dropshippingLaunchPackApprovalQueueSchema = z.object({
 
 export type DropshippingLaunchPackApprovalQueueInput = z.infer<typeof dropshippingLaunchPackApprovalQueueSchema>;
 
+export const dropshippingApprovalOutboxMigrationSchema = z.object({
+  dryRun: z.coerce.boolean().default(true),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  itemIds: z.array(z.string().trim().min(1).max(220)).optional().default([]),
+});
+
+export type DropshippingApprovalOutboxMigrationInput = z.infer<typeof dropshippingApprovalOutboxMigrationSchema>;
+
 export const dropshippingSocialPublishSchema = z.object({
   postId: z.string().trim().min(1).max(200),
   approvalToPublish: z.coerce.boolean().default(false),
@@ -923,6 +931,7 @@ type DropshippingApprovalOutboxItem = DropshippingPreparedApprovalRequest & {
   source: "launch_pack_approval_queue" | "manual";
   failureReason: string;
   queuedExternally: boolean;
+  trustCenterPendingActionId: string;
 };
 
 const products: DropshippingProduct[] = [];
@@ -1110,6 +1119,7 @@ const approvalOutboxPersistedSchema: z.ZodType<DropshippingApprovalOutboxItem, z
   source: z.enum(["launch_pack_approval_queue", "manual"]),
   failureReason: z.string(),
   queuedExternally: z.boolean(),
+  trustCenterPendingActionId: z.string().optional().default(""),
   actionType: z.enum([
     "dropshipping.spend",
     "dropshipping.publish_product",
@@ -3061,6 +3071,7 @@ export function recordDropshippingApprovalOutboxRequests(
       source: "launch_pack_approval_queue",
       failureReason,
       queuedExternally: false,
+      trustCenterPendingActionId: "",
     };
     approvalOutbox.unshift(item);
     queued.push(item);
@@ -3078,6 +3089,63 @@ export function recordDropshippingApprovalOutboxRequests(
       "Cuando Postgres/Trust Center este disponible, migrar o recrear estas approvals.",
       "Spend y sample siguen fuera salvo request explicito.",
     ],
+    snapshot: getDropshippingCeoSnapshot(),
+  };
+}
+
+export function prepareDropshippingApprovalOutboxMigration(input: Partial<DropshippingApprovalOutboxMigrationInput> = {}) {
+  loadAll();
+  const parsed = dropshippingApprovalOutboxMigrationSchema.parse(input);
+  const itemIdSet = new Set(parsed.itemIds);
+  const matchingPending = approvalOutbox.filter((item) =>
+    item.status === "pending_local" &&
+    (itemIdSet.size === 0 || itemIdSet.has(item.id))
+  );
+  const items = matchingPending.slice(0, parsed.limit);
+  return {
+    status: items.length ? "ready" as const : "empty" as const,
+    dryRun: parsed.dryRun,
+    limit: parsed.limit,
+    items,
+    selectedCount: items.length,
+    pendingLocalCount: approvalOutbox.filter((item) => item.status === "pending_local").length,
+    skippedCount: Math.max(0, matchingPending.length - items.length),
+    guardrails: [
+      "Dry run no toca Trust Center ni cambia estados.",
+      "Execute solo crea pending approvals; no publica, no gasta, no compra sample y no contacta supplier.",
+      "Los items migrados quedan marcados queued_in_trust_center y salen del contador local pending.",
+    ],
+    snapshot: getDropshippingCeoSnapshot(),
+  };
+}
+
+export function markDropshippingApprovalOutboxQueued(items: Array<{ id: string; pendingActionId?: string }>) {
+  loadAll();
+  const now = new Date().toISOString();
+  const marked: DropshippingApprovalOutboxItem[] = [];
+  const missing: string[] = [];
+
+  items.forEach((result) => {
+    const item = approvalOutbox.find((entry) => entry.id === result.id);
+    if (!item) {
+      missing.push(result.id);
+      return;
+    }
+    item.status = "queued_in_trust_center";
+    item.updatedAt = now;
+    item.queuedExternally = true;
+    item.trustCenterPendingActionId = result.pendingActionId || item.trustCenterPendingActionId || "";
+    item.failureReason = "Queued in Trust Center.";
+    marked.push(item);
+  });
+
+  if (marked.length) persistApprovalOutbox();
+
+  return {
+    status: marked.length ? "marked" as const : "empty" as const,
+    marked,
+    missing,
+    pendingLocalCount: approvalOutbox.filter((item) => item.status === "pending_local").length,
     snapshot: getDropshippingCeoSnapshot(),
   };
 }

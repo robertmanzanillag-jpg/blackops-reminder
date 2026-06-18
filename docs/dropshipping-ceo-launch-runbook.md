@@ -85,6 +85,8 @@ Completado en app:
   - `/dropshipping/legal/refund-policy`
   - `/dropshipping/legal/shipping-policy`
   - `/dropshipping/legal/terms`
+  - `/dropshipping/legal/checkout-readiness`
+  - `/api/dropshipping-ceo/approval-outbox-migration`
 
 Bloqueado hasta cuentas:
 
@@ -231,7 +233,7 @@ Cuando se conecten cuentas, hacer solo esto:
 2. Conectar Telegram y enviar reporte test.
 3. Conectar social publisher o definir modo manual.
 4. Conectar proveedor/DSers/AliExpress y revisar sample de 1 unidad.
-5. Encender Postgres/Trust Center y migrar approvals locales.
+5. Encender Postgres/Trust Center, usar Approvals > Migrar outbox local, primero en dry-run y luego ejecutar.
 6. Confirmar politicas con URLs reales.
 7. Publicar primer contenido organico si Robert aprueba.
 8. Mantener ads en $0 hasta tener tracking y primera senal.

@@ -15,7 +15,9 @@ import {
   createDropshippingShopifyDraft,
   getDropshippingCeoSnapshot,
   getDropshippingExecutionSetup,
+  markDropshippingApprovalOutboxQueued,
   prepareDropshippingFulfillment,
+  prepareDropshippingApprovalOutboxMigration,
   prepareDropshippingLaunchPackApprovalQueue,
   promoteDropshippingScoutCandidate,
   publishDropshippingSocialPost,
@@ -326,6 +328,41 @@ test("launch pack approval outbox saves local fallback without duplicating reque
   assert.equal(second.duplicates.length, preview.requests.length);
   assert.equal(second.snapshot.metrics.localApprovalOutbox, preview.requests.length);
   assert.equal(buildDropshippingDailyReport("morning").includes("Approval outbox local"), true);
+});
+
+test("approval outbox migration dry run and mark queued keep actions gated", () => {
+  const { product } = createProductAndCampaign();
+  const pack = buildDropshippingLaunchPack({
+    productId: product.id,
+    mode: "starter_validation",
+    dailyOrganicPosts: 3,
+    platforms: ["tiktok", "instagram"],
+    postsPerPlatform: 1,
+    requestedBudgetUsd: 100,
+    approvalToPrepareDraft: false,
+    approvalToPublish: false,
+    approvalToSpend: false,
+  }).launchPack;
+  const preview = prepareDropshippingLaunchPackApprovalQueue({ launchPackId: pack.id });
+  const outbox = recordDropshippingApprovalOutboxRequests(preview.requests, "Postgres unavailable in local dev.");
+
+  const dryRun = prepareDropshippingApprovalOutboxMigration({ dryRun: true });
+  assert.equal(dryRun.status, "ready");
+  assert.equal(dryRun.items.length, preview.requests.length);
+  assert.equal(dryRun.snapshot.metrics.localApprovalOutbox, preview.requests.length);
+
+  const marked = markDropshippingApprovalOutboxQueued(outbox.queued.map((item, index) => ({
+    id: item.id,
+    pendingActionId: `pending-${index + 1}`,
+  })));
+  const after = prepareDropshippingApprovalOutboxMigration({ dryRun: true });
+
+  assert.equal(marked.status, "marked");
+  assert.equal(marked.marked.every((item) => item.status === "queued_in_trust_center"), true);
+  assert.equal(marked.marked.every((item) => item.queuedExternally === true), true);
+  assert.equal(marked.pendingLocalCount, 0);
+  assert.equal(after.status, "empty");
+  assert.equal(after.snapshot.metrics.localApprovalOutbox, 0);
 });
 
 test("exposes dedicated marketing CMO department with subagents", () => {

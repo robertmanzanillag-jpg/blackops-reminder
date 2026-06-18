@@ -260,6 +260,7 @@ type DropshippingApprovalOutboxItem = {
   source: "launch_pack_approval_queue" | "manual";
   failureReason: string;
   queuedExternally: boolean;
+  trustCenterPendingActionId: string;
   actionType: "dropshipping.spend" | "dropshipping.publish_product" | "dropshipping.create_shopify_draft" | "dropshipping.publish_social" | "dropshipping.contact_supplier" | "dropshipping.fulfill_order" | "dropshipping.order_sample";
   resourceType: string;
   resourceId: string;
@@ -787,7 +788,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 function statusTone(status: string) {
-  if (["ready", "ready_for_dry_run", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go"].includes(status)) {
+  if (["ready", "ready_for_dry_run", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "queued_in_trust_center", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go"].includes(status)) {
     return "border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
   }
   if (["needs_approval", "review_queue", "sample_recommended", "needs_setup", "needs_backup_supplier", "fix", "approval_required", "draft", "iterate_hooks", "needs_data", "locked_until_signal", "locked", "research", "validation", "traction", "pending_payment", "ready_for_fulfillment", "preflight", "needs_product", "scale_locked", "organic_only", "scale_plan_only", "shortlisted", "needs_supplier", "research_board", "validation_board", "approval_locked", "cash_locked", "watch", "hold"].includes(status)) {
@@ -1011,6 +1012,7 @@ export default function DropshippingCeoPage() {
   const [reportCadence, setReportCadence] = useState<"morning" | "evening">("morning");
   const [lastReport, setLastReport] = useState<string>("");
   const [approvalQueueResult, setApprovalQueueResult] = useState<string>("");
+  const [outboxMigrationResult, setOutboxMigrationResult] = useState<string>("");
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["dropshipping-ceo"] });
 
@@ -1071,6 +1073,28 @@ export default function DropshippingCeoPage() {
   const approvalMutation = useMutation({
     mutationFn: () => postJson("/api/dropshipping-ceo/pending-approval", approvalForm),
     onSuccess: refresh,
+  });
+  const outboxMigrationMutation = useMutation({
+    mutationFn: (dryRun: boolean) => postJson<{
+      dryRun: boolean;
+      prepared: { selectedCount: number; pendingLocalCount: number; skippedCount: number };
+      migrated: Array<{ id: string; title: string; actionType: string }>;
+      failed: Array<{ id: string; title: string; actionType: string; error: string }>;
+      marked: { pendingLocalCount: number } | null;
+    }>("/api/dropshipping-ceo/approval-outbox-migration", { dryRun, limit: 25 }),
+    onSuccess: (data) => {
+      if (data.dryRun) {
+        setOutboxMigrationResult(`Dry run: ${data.prepared.selectedCount} approval(s) listos para Trust Center; ${data.prepared.pendingLocalCount} pending local total.`);
+      } else if (data.failed.length) {
+        setOutboxMigrationResult(`Trust Center/Postgres aun no esta listo: ${data.failed.length} fallo(s), ${data.migrated.length} migrado(s).`);
+      } else {
+        setOutboxMigrationResult(`Migrados ${data.migrated.length} approval(s) a Trust Center. Pending local: ${data.marked?.pendingLocalCount ?? 0}.`);
+      }
+      refresh();
+    },
+    onError: (error) => {
+      setOutboxMigrationResult(error instanceof Error ? error.message : "No se pudo migrar el outbox.");
+    },
   });
   const campaignMutation = useMutation({
     mutationFn: () => postJson("/api/dropshipping-ceo/marketing-campaign", { ...campaignForm, productId: campaignForm.productId || snapshot?.recentProducts[0]?.id || "" }),
@@ -2826,29 +2850,66 @@ export default function DropshippingCeoPage() {
 
           <TabsContent value="approvals" className="mt-0">
             <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-              <Card className="border-zinc-800 bg-zinc-900/80">
-                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileCheck2 className="h-4 w-4" /> Crear approval</CardTitle></CardHeader>
-                <CardContent>
-                  <form className="space-y-3" onSubmit={(event) => submit(event, () => approvalMutation.mutate())}>
-                    <select value={approvalForm.actionType} onChange={(event) => setApprovalForm({ ...approvalForm, actionType: event.target.value })} className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm">
-                      <option value="dropshipping.order_sample">ordenar sample</option>
-                      <option value="dropshipping.spend">gastar dinero</option>
-                      <option value="dropshipping.create_shopify_draft">crear draft Shopify</option>
-                      <option value="dropshipping.publish_product">publicar producto</option>
-                      <option value="dropshipping.publish_social">publicar social</option>
-                      <option value="dropshipping.contact_supplier">contactar supplier</option>
-                      <option value="dropshipping.fulfill_order">fulfill orden</option>
-                    </select>
-                    <Input value={approvalForm.resourceId} onChange={(event) => setApprovalForm({ ...approvalForm, resourceId: event.target.value })} className="border-zinc-800 bg-black" />
-                    <Input value={approvalForm.title} onChange={(event) => setApprovalForm({ ...approvalForm, title: event.target.value })} className="border-zinc-800 bg-black" />
-                    <Textarea value={approvalForm.description} onChange={(event) => setApprovalForm({ ...approvalForm, description: event.target.value })} className="min-h-24 border-zinc-800 bg-black" />
-                    <Button type="submit" disabled={approvalMutation.isPending} className="w-full bg-amber-600 text-white hover:bg-amber-500">
-                      {approvalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                      Enviar a approvals
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
+              <div className="space-y-4">
+                <Card className="border-zinc-800 bg-zinc-900/80">
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileCheck2 className="h-4 w-4" /> Crear approval</CardTitle></CardHeader>
+                  <CardContent>
+                    <form className="space-y-3" onSubmit={(event) => submit(event, () => approvalMutation.mutate())}>
+                      <select value={approvalForm.actionType} onChange={(event) => setApprovalForm({ ...approvalForm, actionType: event.target.value })} className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm">
+                        <option value="dropshipping.order_sample">ordenar sample</option>
+                        <option value="dropshipping.spend">gastar dinero</option>
+                        <option value="dropshipping.create_shopify_draft">crear draft Shopify</option>
+                        <option value="dropshipping.publish_product">publicar producto</option>
+                        <option value="dropshipping.publish_social">publicar social</option>
+                        <option value="dropshipping.contact_supplier">contactar supplier</option>
+                        <option value="dropshipping.fulfill_order">fulfill orden</option>
+                      </select>
+                      <Input value={approvalForm.resourceId} onChange={(event) => setApprovalForm({ ...approvalForm, resourceId: event.target.value })} className="border-zinc-800 bg-black" />
+                      <Input value={approvalForm.title} onChange={(event) => setApprovalForm({ ...approvalForm, title: event.target.value })} className="border-zinc-800 bg-black" />
+                      <Textarea value={approvalForm.description} onChange={(event) => setApprovalForm({ ...approvalForm, description: event.target.value })} className="min-h-24 border-zinc-800 bg-black" />
+                      <Button type="submit" disabled={approvalMutation.isPending} className="w-full bg-amber-600 text-white hover:bg-amber-500">
+                        {approvalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Enviar a approvals
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-zinc-800 bg-zinc-900/80">
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4" /> Migrar outbox local</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Metric label="Pending local" value={String(snapshot.metrics.localApprovalOutbox)} />
+                      <Metric label="Trust Center" value={snapshot.executionSetup.connectors.find((connector) => connector.id === "approvals")?.status || "ready"} />
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <Button type="button" onClick={() => outboxMigrationMutation.mutate(true)} disabled={outboxMigrationMutation.isPending || snapshot.metrics.localApprovalOutbox === 0} className="bg-zinc-800 text-white hover:bg-zinc-700">
+                        {outboxMigrationMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardList className="mr-2 h-4 w-4" />}
+                        Revisar
+                      </Button>
+                      <Button type="button" onClick={() => outboxMigrationMutation.mutate(false)} disabled={outboxMigrationMutation.isPending || snapshot.metrics.localApprovalOutbox === 0} className="bg-emerald-600 text-white hover:bg-emerald-500">
+                        {outboxMigrationMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                        Migrar
+                      </Button>
+                    </div>
+                    {outboxMigrationResult && (
+                      <p className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs leading-5 text-emerald-100">{outboxMigrationResult}</p>
+                    )}
+                    <div className="space-y-2">
+                      {snapshot.recentApprovalOutbox.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-white">{item.title}</p>
+                            <Badge variant="outline" className={cn("shrink-0", statusTone(item.status))}>{item.status}</Badge>
+                          </div>
+                          <p className="text-xs leading-5 text-zinc-500">{item.actionType}</p>
+                          {item.trustCenterPendingActionId && <p className="mt-1 text-xs text-emerald-100">Trust Center: {item.trustCenterPendingActionId}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
               <Card className="border-zinc-800 bg-zinc-900/80">
                 <CardContent className="space-y-3 p-4">
                   {snapshot.recentApprovals.map((approval) => (

@@ -183,11 +183,15 @@ app.get("/dropshipping/legal/privacy", (_req, res) => {
   res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Privacy Policy", [
     "<p>This store collects customer information only as needed to process orders, provide support, prevent fraud, improve the shopping experience, and comply with legal obligations.</p>",
     "<h2>Information We Process</h2>",
-    "<p>Order details may include name, shipping address, email, phone number, payment status, product selections, support messages, device/session data, and marketing attribution data.</p>",
+    "<p>Order details may include name, shipping address, email, phone number, billing details handled by the payment processor, payment status, product selections, support messages, device/session data, and marketing attribution data.</p>",
     "<h2>Service Providers</h2>",
     "<p>We may share order and fulfillment information with ecommerce, payment, shipping, analytics, email, advertising, and dropshipping supplier tools only when needed to operate the store.</p>",
+    "<h2>Supplier Fulfillment</h2>",
+    "<p>Because the store uses supplier fulfillment, limited order details may be shared with the supplier or fulfillment partner so the order can be shipped and tracked.</p>",
     "<h2>Marketing</h2>",
     "<p>Email, SMS, retargeting, and social advertising should run only after the customer has provided the required consent or where allowed by applicable law and platform policy.</p>",
+    "<h2>Retention And Security</h2>",
+    "<p>Order and support records should be retained only as long as needed for accounting, fraud prevention, legal compliance, customer support, and platform requirements. Tokens and secrets must not be exposed in public reports.</p>",
     "<h2>Customer Requests</h2>",
     "<p>Customers can request access, correction, deletion, or opt-out support through the store contact channel once configured.</p>",
   ]));
@@ -196,6 +200,8 @@ app.get("/dropshipping/legal/privacy", (_req, res) => {
 app.get("/dropshipping/legal/refund-policy", (_req, res) => {
   res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Refund Policy", [
     "<p>Refunds and replacements are handled case by case. The store should clearly disclose shipping times, item condition requirements, and evidence needed before launch.</p>",
+    "<h2>Cancellation Before Shipment</h2>",
+    "<p>If an order cannot be shipped within the stated shipping window or a lawful delay notice cannot be completed, the customer should be offered cancellation and a prompt refund before the item ships.</p>",
     "<h2>Damaged Or Incorrect Items</h2>",
     "<p>Customers should contact support with the order number, photos or video, packaging evidence, and a short description of the issue within the posted return window.</p>",
     "<h2>Change Of Mind</h2>",
@@ -203,7 +209,7 @@ app.get("/dropshipping/legal/refund-policy", (_req, res) => {
     "<h2>Non-Returnable Items</h2>",
     "<p>Hygiene, personalized, final-sale, used, or safety-sensitive items may be non-returnable when allowed by law and clearly disclosed.</p>",
     "<h2>Refund Timing</h2>",
-    "<p>Approved refunds should be returned to the original payment method after inspection or supplier confirmation, subject to payment processor timelines.</p>",
+    "<p>Approved refunds should be returned to the original payment method after inspection, supplier confirmation, cancellation, or delay handling, subject to payment processor timelines.</p>",
   ]));
 });
 
@@ -211,9 +217,11 @@ app.get("/dropshipping/legal/shipping-policy", (_req, res) => {
   res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Shipping Policy", [
     "<p>This store uses supplier fulfillment and does not hold bulk inventory. Shipping estimates must be displayed clearly on each product page before launch.</p>",
     "<h2>Processing Time</h2>",
-    "<p>Orders should be reviewed for payment, fraud, address quality, supplier availability, and fulfillment approval before shipment.</p>",
+    "<p>Orders should be reviewed for payment, fraud, address quality, supplier availability, and fulfillment approval before shipment. The shipment clock should be measured from a properly completed paid order.</p>",
     "<h2>Transit Time</h2>",
     "<p>Transit times vary by supplier, destination, carrier, customs, and seasonal demand. Product pages should show estimated ranges, not guaranteed delivery dates unless verified.</p>",
+    "<h2>Delay Handling</h2>",
+    "<p>If the store learns it cannot ship within the represented time, support should notify the customer quickly, provide a revised shipment date when available, and offer cancellation with a prompt refund where required.</p>",
     "<h2>Tracking</h2>",
     "<p>Tracking should be provided when available from the supplier or fulfillment partner. If tracking is delayed, customer support should communicate the current order state.</p>",
     "<h2>Customs And Duties</h2>",
@@ -232,6 +240,18 @@ app.get("/dropshipping/legal/terms", (_req, res) => {
     "<p>Marketing copy must not promise health, safety, legal, financial, or performance outcomes without reliable evidence and required approvals.</p>",
     "<h2>Limitation</h2>",
     "<p>The final public terms should be reviewed for the store jurisdiction, payment processor, supplier agreements, platform policies, and consumer protection rules.</p>",
+  ]));
+});
+
+app.get("/dropshipping/legal/checkout-readiness", (_req, res) => {
+  res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Checkout Readiness Checklist", [
+    "<p>This checklist is for pre-account setup. It becomes complete only after Shopify, payment processing, supplier operations, and tracking are connected and tested.</p>",
+    "<h2>Before Enabling Checkout</h2>",
+    "<ul><li>Product page shows price, estimated shipping range, return/refund link, privacy link, terms link, support contact, and no unsupported claims.</li><li>Shipping estimate has supplier evidence and a reasonable basis.</li><li>Payment processor is connected in test mode or live mode as appropriate.</li><li>Tax, shipping, discount, abandoned checkout, and order confirmation settings are reviewed.</li><li>Supplier primary and backup are documented before paid traffic.</li></ul>",
+    "<h2>Test Order</h2>",
+    "<ul><li>Create one test checkout with a low-risk product draft.</li><li>Verify payment authorization, receipt, order status, customer email, shipping address, tax/shipping display, refund path, and cancellation path.</li><li>Do not send supplier fulfillment until the order is paid and approval is recorded.</li></ul>",
+    "<h2>First Live Order Guardrail</h2>",
+    "<p>For the first real order, fulfillment must stay approval-required. The team should verify payment captured, product margin positive, supplier stock available, tracking available, and customer promise still accurate.</p>",
   ]));
 });
 
