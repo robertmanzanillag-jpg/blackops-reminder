@@ -4233,6 +4233,17 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "tiktok" && item.missingEnvVars.includes("TIKTOK_CLIENT_KEY")));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "instagram" && item.scopes.includes("instagram_content_publish")));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
+    assert.equal(robertNextActions.connectNow.postConnectActivationBridge.length, beforeStatus.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0));
+    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.every((lane) =>
+      ["blocked", "waiting", "activation_ready", "ready"].includes(lane.status) &&
+      lane.activationScore >= 0 &&
+      lane.activationScore <= 100 &&
+      lane.permissionsTotal > 0 &&
+      lane.nextLocalActions.length > 0 &&
+      lane.nextStep.length > 0
+    ));
+    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.platform === "tiktok" && lane.handle === "@sportsdaily"));
+    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.blockers.length > 0));
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.length <= 12);
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "developer_app" || item.lane === "permission"));
@@ -4340,6 +4351,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("TikTok"));
     assert.ok(rawConnectNow.includes("Instagram Reels"));
     assert.ok(rawConnectNow.includes("YouTube Shorts"));
+    assert.ok(rawConnectNow.includes("Post-Connect Activation Bridge"));
     assert.ok(rawConnectNow.includes("Focus Run"));
     assert.ok(rawConnectNow.includes("Evidence Closeout"));
     assert.ok(rawConnectNow.includes("Evidence import bridge"));
