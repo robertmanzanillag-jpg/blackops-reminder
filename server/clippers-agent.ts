@@ -268,6 +268,7 @@ export interface ClipperConnectAction {
 
 export interface ClipperOAuthConnection {
   platform: ClipperPlatform;
+  accountId?: string | null;
   status: ClipperOAuthConnectionStatus;
   receivedAt: string;
   scopes: string[];
@@ -290,6 +291,7 @@ export interface ClipperTokenVaultSummary {
 
 export interface ClipperTokenSummary {
   platform: ClipperPlatform;
+  accountId?: string | null;
   status: "saved";
   savedAt: string;
   scopes: string[];
@@ -3917,10 +3919,11 @@ function splitScopes(value: unknown): string[] {
   return value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
 }
 
-function extractTokenSummary(platform: ClipperPlatform, payload: Record<string, unknown>): Omit<ClipperTokenVaultRecord, "encryptedPayload"> {
+function extractTokenSummary(platform: ClipperPlatform, payload: Record<string, unknown>, accountId?: string | null): Omit<ClipperTokenVaultRecord, "encryptedPayload"> {
   const subject = payload.open_id || payload.user_id || payload.id || payload.sub || null;
   return {
     platform,
+    accountId: accountId || null,
     status: "saved",
     savedAt: new Date().toISOString(),
     scopes: splitScopes(payload.scope || payload.scopes || payload.granted_scopes).length
@@ -3933,14 +3936,17 @@ function extractTokenSummary(platform: ClipperPlatform, payload: Record<string, 
   };
 }
 
-export async function saveClipperTokenPayload(platform: ClipperPlatform, payload: Record<string, unknown>): Promise<ClipperTokenSummary> {
-  const summary = extractTokenSummary(platform, payload);
+export async function saveClipperTokenPayload(platform: ClipperPlatform, payload: Record<string, unknown>, accountId?: string | null): Promise<ClipperTokenSummary> {
+  const summary = extractTokenSummary(platform, payload, accountId);
   const record: ClipperTokenVaultRecord = {
     ...summary,
     encryptedPayload: encryptTokenPayload(payload),
   };
   const previous = await readTokenVaultRecords();
-  const next = [record, ...previous.filter((item) => item.platform !== platform)].slice(0, 24);
+  const next = [
+    record,
+    ...previous.filter((item) => !(item.platform === platform && (item.accountId || null) === (summary.accountId || null))),
+  ].slice(0, 24);
   await writeTokenVaultRecords(next);
   return summary;
 }
@@ -4337,7 +4343,7 @@ async function exchangeClipperOAuthCode(platform: ClipperPlatform, code: string)
   return body as Record<string, unknown>;
 }
 
-async function tryExchangeAndStoreClipperToken(platform: ClipperPlatform, code: string): Promise<{ status: ClipperTokenExchangeStatus; note: string }> {
+async function tryExchangeAndStoreClipperToken(platform: ClipperPlatform, code: string, accountId?: string | null): Promise<{ status: ClipperTokenExchangeStatus; note: string }> {
   const credentialCheck = getCredentialCheck(platform);
   const missingEnvVars = [...credentialCheck.missingEnvVars];
   if (!getTokenVaultSecret()) missingEnvVars.push(TOKEN_ENCRYPTION_ENV_VAR);
@@ -4350,7 +4356,7 @@ async function tryExchangeAndStoreClipperToken(platform: ClipperPlatform, code: 
 
   try {
     const payload = await exchangeClipperOAuthCode(platform, code);
-    await saveClipperTokenPayload(platform, payload);
+    await saveClipperTokenPayload(platform, payload, accountId);
     return {
       status: "saved",
       note: "Token intercambiado y guardado cifrado en el vault local.",
@@ -4370,15 +4376,22 @@ function applyOAuthStateToAccounts(
 ): ClipperAccount[] {
   const connectedPlatforms = new Set(
     connections
-      .filter((connection) => connection.status === "code_received")
+      .filter((connection) => connection.status === "code_received" && !connection.accountId)
       .map((connection) => connection.platform)
   );
-  const tokenPlatforms = new Set(tokenRecords.map((record) => record.platform));
+  const connectedAccountPlatforms = new Set(
+    connections
+      .filter((connection) => connection.status === "code_received" && connection.accountId)
+      .map((connection) => `${connection.platform}:${connection.accountId}`)
+  );
+  const tokenPlatforms = new Set(tokenRecords.filter((record) => !record.accountId).map((record) => record.platform));
+  const tokenAccountPlatforms = new Set(tokenRecords.filter((record) => record.accountId).map((record) => `${record.platform}:${record.accountId}`));
 
   return accounts.map((account) => ({
     ...account,
     platformAccounts: account.platformAccounts.map((platformAccount) => {
-      if (tokenPlatforms.has(platformAccount.platform)) {
+      const accountPlatformKey = `${platformAccount.platform}:${account.id}`;
+      if (tokenPlatforms.has(platformAccount.platform) || tokenAccountPlatforms.has(accountPlatformKey)) {
         return {
           ...platformAccount,
           status: "needs_review",
@@ -4386,7 +4399,7 @@ function applyOAuthStateToAccounts(
           notes: "Token OAuth guardado cifrado; falta validar app review, cuenta destino y permiso final antes de autopost.",
         };
       }
-      if (!connectedPlatforms.has(platformAccount.platform)) return platformAccount;
+      if (!connectedPlatforms.has(platformAccount.platform) && !connectedAccountPlatforms.has(accountPlatformKey)) return platformAccount;
       return {
         ...platformAccount,
         status: "needs_review",
@@ -4675,9 +4688,27 @@ function getCredentialCheck(platform: ClipperPlatform): ClipperCredentialCheck {
   return check;
 }
 
-function buildPlatformAuthUrl(platform: ClipperPlatform): string | null {
+function normalizeOAuthAccountId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^[a-z0-9][a-z0-9-]{1,63}$/.test(trimmed) ? trimmed : null;
+}
+
+function buildOAuthState(platform: ClipperPlatform, accountId?: string | null): string {
+  const normalizedAccountId = normalizeOAuthAccountId(accountId);
+  return normalizedAccountId ? `clippers-${platform}-${normalizedAccountId}` : `clippers-${platform}`;
+}
+
+function accountIdFromOAuthState(platform: ClipperPlatform, state: unknown): string | null {
+  if (typeof state !== "string") return null;
+  const prefix = `clippers-${platform}-`;
+  if (!state.startsWith(prefix)) return null;
+  return normalizeOAuthAccountId(state.slice(prefix.length));
+}
+
+function buildPlatformAuthUrl(platform: ClipperPlatform, accountId?: string | null): string | null {
   const redirectUri = buildRedirectUri(platform);
-  const state = `clippers-${platform}`;
+  const state = buildOAuthState(platform, accountId);
 
   if (platform === "tiktok") {
     const clientKey = getTikTokClientKey();
@@ -4805,11 +4836,17 @@ function buildClipperTokenExchanges(
   });
 }
 
-export function getClipperConnectAction(platform: unknown): ClipperConnectAction {
+export function getClipperConnectAction(platform: unknown, accountId?: unknown): ClipperConnectAction {
   if (platform !== "tiktok" && platform !== "instagram" && platform !== "youtube") {
     throw new Error("Plataforma no soportada.");
   }
-  return buildClipperConnectActions().find((action) => action.platform === platform)!;
+  const action = buildClipperConnectActions().find((item) => item.platform === platform)!;
+  const normalizedAccountId = normalizeOAuthAccountId(accountId);
+  if (!normalizedAccountId || !action.authUrl) return action;
+  return {
+    ...action,
+    authUrl: buildPlatformAuthUrl(platform, normalizedAccountId),
+  };
 }
 
 async function writeWorkspaceReadme() {
@@ -15229,7 +15266,9 @@ async function buildOAuthConnectionPackSummary(input: {
     const platform = platformAccount.platform;
     const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platform)!;
     const connectAction = input.connectActions.find((item) => item.platform === platform);
-    const tokenRecord = input.tokenRecords.find((item) => item.platform === platform);
+    const accountAuthUrl = connectAction?.authUrl ? buildPlatformAuthUrl(platform, account.id) : null;
+    const tokenRecord = input.tokenRecords.find((item) => item.platform === platform && (item.accountId || null) === account.id)
+      || input.tokenRecords.find((item) => item.platform === platform && !item.accountId);
     const accountEvidence = input.accountEvidence.items.find((item) => item.accountId === account.id && item.platform === platform);
     const developerApp = input.developerAppEvidence.items.find((item) => item.platform === platform);
     const permissionItems = input.permissionTracker.items.filter((item) => item.platform === platform);
@@ -15240,7 +15279,7 @@ async function buildOAuthConnectionPackSummary(input: {
     const blockers = [
       ...(productionUrlReady ? [] : ["PUBLIC_BASE_URL debe ser HTTPS publico antes de app review/OAuth final."]),
       ...(input.tokenVault.configured ? [] : [`Falta ${TOKEN_ENCRYPTION_ENV_VAR} para guardar tokens cifrados.`]),
-      ...(connectAction?.authUrl ? [] : [`OAuth URL no lista: ${missingEnvVars.length ? missingEnvVars.join(", ") : "credenciales faltantes"}.`]),
+      ...(accountAuthUrl ? [] : [`OAuth URL no lista: ${missingEnvVars.length ? missingEnvVars.join(", ") : "credenciales faltantes"}.`]),
       ...(accountEvidence?.status === "verified" ? [] : [`Evidencia de cuenta ${accountEvidence?.status || "missing"}.`]),
       ...(developerApp?.status === "approved" ? [] : [`Developer app ${developerApp?.status || "missing"}.`]),
       ...(permissionItems.length > 0 && approvedPermissions === permissionItems.length ? [] : [`Permisos ${permissionSummary}.`]),
@@ -15248,7 +15287,7 @@ async function buildOAuthConnectionPackSummary(input: {
     ];
     const hasProgress = Boolean(
       tokenRecord ||
-      connectAction?.authUrl ||
+      accountAuthUrl ||
       accountEvidence ||
       developerApp?.status === "draft" ||
       developerApp?.status === "submitted" ||
@@ -15264,7 +15303,7 @@ async function buildOAuthConnectionPackSummary(input: {
       `Confirmar que ${platformAccount.handle} existe, tiene login controlado y evidencia verificada.`,
       `Registrar redirect URI exacto: ${buildRedirectUri(platform)}`,
       `Solicitar/aprobar scopes: ${platformAccount.requiredScopes.join(", ")}`,
-      connectAction?.authUrl ? "Abrir OAuth URL desde Clippers y autorizar con la cuenta correcta." : "Completar credenciales OAuth para generar auth URL.",
+      accountAuthUrl ? "Abrir OAuth URL desde Clippers y autorizar con la cuenta correcta." : "Completar credenciales OAuth para generar auth URL.",
       "Confirmar que el callback guarda el token cifrado sin imprimir secretos.",
       "Hacer dry-run con approval_required antes de activar autopost.",
     ];
@@ -15286,7 +15325,7 @@ async function buildOAuthConnectionPackSummary(input: {
       displayName: platformAccount.displayName,
       status,
       connectionStatus: platformAccount.status,
-      authUrl: connectAction?.authUrl || null,
+      authUrl: accountAuthUrl,
       callbackPath: connectAction?.callbackPath || `/api/clippers/oauth/${platform}/callback`,
       redirectUri: buildRedirectUri(platform),
       requestedScopes: platformAccount.requiredScopes,
@@ -15308,7 +15347,7 @@ async function buildOAuthConnectionPackSummary(input: {
         callbackPath: connectAction?.callbackPath || `/api/clippers/oauth/${platform}/callback`,
         missingEnvVars,
       }),
-      completionHint: oauthConnectionCompletionHint({ platform, authUrl: connectAction?.authUrl || null }),
+      completionHint: oauthConnectionCompletionHint({ platform, authUrl: accountAuthUrl }),
       blockers,
       nextStep: status === "ready"
         ? "Cuenta lista para dry-run OAuth/publicacion en approval_required."
@@ -18137,9 +18176,11 @@ export async function recordClipperOAuthCallback(input: {
   const platform = input.platform;
   const code = typeof input.code === "string" ? input.code : "";
   const error = typeof input.error === "string" ? input.error : null;
-  const tokenResult = code && !error ? await tryExchangeAndStoreClipperToken(platform, code) : null;
+  const accountId = accountIdFromOAuthState(platform, input.state);
+  const tokenResult = code && !error ? await tryExchangeAndStoreClipperToken(platform, code, accountId) : null;
   const connection: ClipperOAuthConnection = {
     platform,
+    accountId,
     status: error ? "error" : code ? "code_received" : "pending",
     receivedAt: new Date().toISOString(),
     scopes: PLATFORM_SCOPES[platform],
@@ -18149,14 +18190,17 @@ export async function recordClipperOAuthCallback(input: {
     note: error
       ? "La plataforma devolvio error durante OAuth."
       : code
-        ? "Authorization code recibido y resumido con hash; no se guardo el code plaintext."
+        ? `Authorization code recibido${accountId ? ` para ${accountId}` : ""} y resumido con hash; no se guardo el code plaintext.`
         : "Callback recibido sin authorization code.",
     tokenStatus: tokenResult?.status,
     tokenNote: tokenResult?.note,
   };
 
   const previous = await readOAuthConnections();
-  const next = [connection, ...previous.filter((item) => item.platform !== platform)].slice(0, 12);
+  const next = [
+    connection,
+    ...previous.filter((item) => !(item.platform === platform && (item.accountId || null) === (accountId || null))),
+  ].slice(0, 12);
   await writeOAuthConnections(next);
   return connection;
 }

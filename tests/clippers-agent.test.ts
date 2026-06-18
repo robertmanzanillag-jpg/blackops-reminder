@@ -3184,6 +3184,55 @@ test("recordClipperOAuthCallback stores hashed OAuth metadata and updates accoun
   ));
 });
 
+test("TikTok OAuth state and vault records stay scoped per account", async () => {
+  const originalKey = process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY;
+  const originalTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+  const originalTikTokSecret = process.env.TIKTOK_CLIENT_SECRET;
+  const beforeStatus = await getClipperStatus();
+  const vaultPath = beforeStatus.tokenVault.vaultPath;
+  const originalVault = await readFile(vaultPath, "utf8").catch(() => null);
+  process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY = "test-encryption-key-with-more-than-32-chars";
+  process.env.TIKTOK_CLIENT_KEY = "test-client-key";
+  process.env.TIKTOK_CLIENT_SECRET = "test-client-secret";
+
+  try {
+    const authUrl = __clipperInternals.buildPlatformAuthUrl("tiktok", "meme-radar");
+    assert.ok(authUrl);
+    assert.equal(new URL(authUrl).searchParams.get("state"), "clippers-tiktok-meme-radar");
+
+    await saveClipperTokenPayload("tiktok", {
+      access_token: "sports-access-token",
+      refresh_token: "sports-refresh-token",
+      open_id: "sports-open-id",
+    }, "sports-daily");
+    await saveClipperTokenPayload("tiktok", {
+      access_token: "meme-access-token",
+      refresh_token: "meme-refresh-token",
+      open_id: "meme-open-id",
+    }, "meme-radar");
+
+    const status = await getClipperStatus();
+    assert.ok(status.tokenVault.records.some((record) => record.platform === "tiktok" && record.accountId === "sports-daily"));
+    assert.ok(status.tokenVault.records.some((record) => record.platform === "tiktok" && record.accountId === "meme-radar"));
+
+    const connection = await recordClipperOAuthCallback({
+      platform: "tiktok",
+      error: "test-no-exchange",
+      state: "clippers-tiktok-meme-radar",
+    });
+    assert.equal(connection.accountId, "meme-radar");
+  } finally {
+    if (originalKey) process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY = originalKey;
+    else delete process.env.CLIPPERS_TOKEN_ENCRYPTION_KEY;
+    if (originalTikTokKey) process.env.TIKTOK_CLIENT_KEY = originalTikTokKey;
+    else delete process.env.TIKTOK_CLIENT_KEY;
+    if (originalTikTokSecret) process.env.TIKTOK_CLIENT_SECRET = originalTikTokSecret;
+    else delete process.env.TIKTOK_CLIENT_SECRET;
+    if (originalVault !== null) await writeFile(vaultPath, originalVault);
+    else await unlink(vaultPath).catch(() => undefined);
+  }
+});
+
 test("buildTokenExchangeRequest targets official token endpoints", () => {
   const originalTikTokKey = process.env.TIKTOK_CLIENT_KEY;
   const originalTikTokSecret = process.env.TIKTOK_CLIENT_SECRET;

@@ -1901,7 +1901,7 @@ export async function registerRoutes(
 
   app.get("/api/clippers/oauth/:platform/start", async (req, res) => {
     try {
-      const action = getClipperConnectAction(req.params.platform);
+      const action = getClipperConnectAction(req.params.platform, req.query.accountId);
       if (!action.authUrl) {
         return res.status(400).json({
           error: "OAuth not ready",
