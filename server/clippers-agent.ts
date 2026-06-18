@@ -90,6 +90,8 @@ export type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" |
 export type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
 export type ClipperPostConnectActivationSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
 export type ClipperIntakeRefreshSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
+export type ClipperExternalConnectSprintStatus = "not_prepared" | "blocked" | "ready_to_execute" | "waiting" | "done";
+export type ClipperExternalConnectSprintLane = "credentials" | "accounts" | "developer_apps" | "permissions" | "oauth" | "activation";
 export type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
 export type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
@@ -2595,6 +2597,74 @@ export interface ClipperIntakeRefreshSweepSummary {
   nextStep: string;
 }
 
+export interface ClipperExternalConnectSprintItem {
+  id: string;
+  rank: number;
+  lane: ClipperExternalConnectSprintLane;
+  status: ClipperExternalConnectSprintStatus;
+  platform: ClipperPlatform | "mixed" | "system";
+  label: string;
+  actionLabel: string;
+  actionUrl: string | null;
+  portalUrls: Array<{ label: string; url: string }>;
+  artifactPath: string | null;
+  evidenceRows: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  unlocks: string[];
+  nextStep: string;
+}
+
+export interface ClipperExternalConnectSprintPlatform {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperExternalConnectSprintStatus;
+  handles: string[];
+  scopes: string[];
+  portalUrls: Array<{ label: string; url: string }>;
+  blockers: string[];
+  evidenceRows: string[];
+  nextStep: string;
+}
+
+export interface ClipperExternalConnectSprintSummary {
+  status: ClipperExternalConnectSprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  launcherUrl: string;
+  items: ClipperExternalConnectSprintItem[];
+  platforms: ClipperExternalConnectSprintPlatform[];
+  totals: {
+    items: number;
+    blocked: number;
+    readyToExecute: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    pendingCredentialEnvVars: number;
+    platformAccounts: number;
+    accountTasks: number;
+    developerAppTasks: number;
+    permissionTasks: number;
+    oauthTasks: number;
+    activationLanes: number;
+    activationBlocked: number;
+  };
+  artifactPaths: {
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    ownerConnectPack: string;
+    permissionMatrix: string;
+    oauthConnectionPack: string;
+    intakeRefresh: string;
+  };
+  nextStep: string;
+}
+
 export interface ClipperOwnerConnectPackItem {
   id: string;
   rank: number;
@@ -4940,6 +5010,9 @@ const POST_CONNECT_ACTIVATION_SWEEP_PATH = path.join(ROOT_DIR, "post-connect-act
 const POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "post-connect-activation-sweep.md");
 const INTAKE_REFRESH_SWEEP_PATH = path.join(ROOT_DIR, "intake-refresh-sweep.json");
 const INTAKE_REFRESH_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "intake-refresh-sweep.md");
+const EXTERNAL_CONNECT_SPRINT_PATH = path.join(ROOT_DIR, "external-connect-sprint.json");
+const EXTERNAL_CONNECT_SPRINT_MARKDOWN_PATH = path.join(ROOT_DIR, "external-connect-sprint.md");
+const EXTERNAL_CONNECT_SPRINT_CSV_PATH = path.join(ROOT_DIR, "external-connect-sprint.csv");
 const OWNER_CONNECT_PACK_PATH = path.join(ROOT_DIR, "owner-connect-pack.json");
 const OWNER_CONNECT_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "owner-connect-pack.md");
 const OWNER_CONNECT_PACK_CSV_PATH = path.join(ROOT_DIR, "owner-connect-pack.csv");
@@ -27318,6 +27391,256 @@ export async function runClipperIntakeRefreshSweep(userId = getSystemUserId(), o
     robertNextActions: activationResult.robertNextActions,
     status: activationResult.status || (options.mode === "cached" ? null : await getClipperStatus(userId)),
   };
+}
+
+function externalConnectStatusFromRobertStatus(status: "blocked" | "ready_to_execute" | "waiting" | "done"): ClipperExternalConnectSprintStatus {
+  return status;
+}
+
+function externalConnectStatusFromActivation(status: ClipperRobertConnectNowHandoff["postConnectActivationBridge"][number]["status"]): ClipperExternalConnectSprintStatus {
+  if (status === "ready" || status === "activation_ready") return "done";
+  if (status === "waiting") return "waiting";
+  return "blocked";
+}
+
+function externalConnectLaneFromGateId(id: string, label: string): ClipperExternalConnectSprintLane {
+  const normalized = `${id} ${label}`.toLowerCase();
+  if (normalized.includes("credential")) return "credentials";
+  if (normalized.includes("account")) return "accounts";
+  if (normalized.includes("developer") || normalized.includes("app")) return "developer_apps";
+  if (normalized.includes("permission") || normalized.includes("scope")) return "permissions";
+  if (normalized.includes("oauth") || normalized.includes("token")) return "oauth";
+  return "activation";
+}
+
+function renderExternalConnectSprintCsv(summary: ClipperExternalConnectSprintSummary): string {
+  const header = ["rank", "lane", "status", "platform", "label", "action_label", "action_url", "portal_urls", "artifact_path", "evidence_rows", "blockers", "done_criteria", "unlocks", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.rank,
+    item.lane,
+    item.status,
+    item.platform,
+    item.label,
+    item.actionLabel,
+    item.actionUrl || "",
+    item.portalUrls.map((portal) => `${portal.label}: ${portal.url}`).join(" | "),
+    item.artifactPath || "",
+    item.evidenceRows.join(" | "),
+    item.blockers.join(" | "),
+    item.doneCriteria.join(" | "),
+    item.unlocks.join(" | "),
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderExternalConnectSprintMarkdown(summary: ClipperExternalConnectSprintSummary): string {
+  return [
+    "# Clippers External Connect Sprint",
+    "",
+    "Fast operator sprint for external accounts, developer apps, permissions, OAuth and post-connect activation. It does not create external accounts, submit permission requests, store secrets or publish content by itself.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Launcher: ${summary.launcherUrl}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Ready to execute: ${summary.totals.readyToExecute}`,
+    `- Waiting: ${summary.totals.waiting}`,
+    `- Done: ${summary.totals.done}`,
+    `- Portal URLs: ${summary.totals.portalUrls}`,
+    `- Evidence rows: ${summary.totals.evidenceRows}`,
+    `- Pending credential env vars: ${summary.totals.pendingCredentialEnvVars}`,
+    `- Account tasks: ${summary.totals.accountTasks}`,
+    `- Developer app tasks: ${summary.totals.developerAppTasks}`,
+    `- Permission tasks: ${summary.totals.permissionTasks}`,
+    `- OAuth tasks: ${summary.totals.oauthTasks}`,
+    `- Activation blocked: ${summary.totals.activationBlocked}/${summary.totals.activationLanes}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Platforms",
+    "",
+    ...summary.platforms.flatMap((platform) => [
+      `### ${platform.label}`,
+      "",
+      `- Status: ${platform.status}`,
+      `- Handles: ${platform.handles.join(", ") || "none"}`,
+      `- Scopes: ${platform.scopes.join(", ") || "none"}`,
+      `- Next step: ${platform.nextStep}`,
+      "",
+      ...(platform.portalUrls.length ? ["Portal URLs:", ...platform.portalUrls.map((portal) => `- ${portal.label}: ${portal.url}`), ""] : []),
+      ...(platform.blockers.length ? ["Blockers:", ...platform.blockers.map((blocker) => `- ${blocker}`), ""] : []),
+    ]),
+    "## Sprint Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.label}`,
+      "",
+      `- Lane: ${item.lane}`,
+      `- Status: ${item.status}`,
+      `- Platform: ${item.platform}`,
+      `- Action: ${item.actionLabel}${item.actionUrl ? ` (${item.actionUrl})` : ""}`,
+      `- Artifact: ${item.artifactPath || "n/a"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      ...(item.portalUrls.length ? ["Portal URLs:", ...item.portalUrls.map((portal) => `- ${portal.label}: ${portal.url}`), ""] : []),
+      ...(item.evidenceRows.length ? ["Evidence rows:", ...item.evidenceRows.slice(0, 6).map((row) => `- ${row}`), ""] : []),
+      ...(item.blockers.length ? ["Blockers:", ...item.blockers.map((blocker) => `- ${blocker}`), ""] : []),
+      ...(item.doneCriteria.length ? ["Done criteria:", ...item.doneCriteria.map((criteria) => `- [ ] ${criteria}`), ""] : []),
+      ...(item.unlocks.length ? ["Unlocks:", ...item.unlocks.map((unlock) => `- ${unlock}`), ""] : []),
+    ]),
+    "## Artifacts",
+    "",
+    `- Robert Next Actions: ${summary.artifactPaths.robertNextActions}`,
+    `- Connect Now: ${summary.artifactPaths.connectNow}`,
+    `- Launcher: ${summary.artifactPaths.launcher}`,
+    `- Owner Connect Pack: ${summary.artifactPaths.ownerConnectPack}`,
+    `- Permission Matrix: ${summary.artifactPaths.permissionMatrix}`,
+    `- OAuth Connection Pack: ${summary.artifactPaths.oauthConnectionPack}`,
+    `- Intake Refresh: ${summary.artifactPaths.intakeRefresh}`,
+    "",
+  ].join("\n");
+}
+
+export async function prepareClipperExternalConnectSprint(userId = getSystemUserId()): Promise<{ externalConnectSprint: ClipperExternalConnectSprintSummary; status: ClipperStatus | null }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const robertNextActions = await buildCachedRobertNextActionsSummary();
+  if (!robertNextActions) {
+    throw new Error("ROBERT_NEXT_ACTIONS.json is missing or incomplete. Run Robert Next Actions or Prep Sweep once, then rerun External Connect Sprint.");
+  }
+  const connectNow = robertNextActions.connectNow;
+  const gateItems: ClipperExternalConnectSprintItem[] = connectNow.connectionTunnel.gates.map((gate, index) => ({
+    id: `gate-${gate.id}`,
+    rank: index + 1,
+    lane: externalConnectLaneFromGateId(gate.id, gate.label),
+    status: externalConnectStatusFromRobertStatus(gate.status),
+    platform: "system",
+    label: gate.label,
+    actionLabel: gate.actionLabel,
+    actionUrl: gate.actionUrl,
+    portalUrls: [],
+    artifactPath: gate.artifactPath,
+    evidenceRows: [],
+    blockers: gate.blockers > 0 ? [`${gate.blockers} blocker(s) remain for ${gate.label}.`] : [],
+    doneCriteria: [`${gate.done}/${gate.total} required item(s) complete.`],
+    unlocks: gate.unlocks,
+    nextStep: gate.nextStep,
+  }));
+  const platformItems: ClipperExternalConnectSprintItem[] = connectNow.platformLaunchBridge.map((platform, index) => ({
+    id: `platform-${platform.platform}`,
+    rank: gateItems.length + index + 1,
+    lane: platform.oauthCount > 0 ? "oauth" : platform.appPermissionCount > 0 ? "permissions" : platform.accountProofCount > 0 ? "accounts" : "developer_apps",
+    status: externalConnectStatusFromRobertStatus(platform.status),
+    platform: platform.platform,
+    label: platform.label,
+    actionLabel: "Open platform portal",
+    actionUrl: platform.portalUrls[0]?.url || platform.developerPortalUrl || platform.accountCreationUrl,
+    portalUrls: platform.portalUrls,
+    artifactPath: robertNextActions.markdownPath,
+    evidenceRows: platform.evidenceRows,
+    blockers: platform.blockers,
+    doneCriteria: platform.doneCriteria,
+    unlocks: [
+      "Account evidence",
+      "Developer app approval",
+      "Permission review",
+      "OAuth token save",
+      "Publisher connector readiness",
+    ],
+    nextStep: platform.nextStep,
+  }));
+  const activationItems: ClipperExternalConnectSprintItem[] = connectNow.postConnectActivationBridge.map((lane, index) => ({
+    id: `activation-${lane.id}`,
+    rank: gateItems.length + platformItems.length + index + 1,
+    lane: "activation",
+    status: externalConnectStatusFromActivation(lane.status),
+    platform: lane.platform,
+    label: lane.label,
+    actionLabel: "Resolve activation lane",
+    actionUrl: connectNow.externalPortalLauncher.url,
+    portalUrls: connectNow.portalUrls.filter((portal) => portal.label.toLowerCase().includes(lane.platform)),
+    artifactPath: connectNow.markdownPath,
+    evidenceRows: [],
+    blockers: lane.blockers,
+    doneCriteria: [
+      `${lane.permissionsApproved}/${lane.permissionsTotal} permission scope(s) approved.`,
+      lane.tokenSaved ? "OAuth token saved." : "OAuth token saved after account/app permission approval.",
+      `${lane.readyQueueItems} queue item(s) ready and ${lane.blockedQueueItems} blocked.`,
+    ],
+    unlocks: lane.nextLocalActions,
+    nextStep: lane.nextStep,
+  }));
+  const items = [...gateItems, ...platformItems, ...activationItems].sort((a, b) => {
+    const statusScore = { blocked: 0, ready_to_execute: 1, waiting: 2, done: 3, not_prepared: 4 };
+    return statusScore[a.status] - statusScore[b.status] || a.rank - b.rank;
+  }).map((item, index) => ({ ...item, rank: index + 1 }));
+  const platforms = connectNow.platformLaunchBridge.map<ClipperExternalConnectSprintPlatform>((platform) => ({
+    platform: platform.platform,
+    label: platform.label,
+    status: externalConnectStatusFromRobertStatus(platform.status),
+    handles: platform.handles,
+    scopes: platform.scopes,
+    portalUrls: platform.portalUrls,
+    blockers: platform.blockers,
+    evidenceRows: platform.evidenceRows,
+    nextStep: platform.nextStep,
+  }));
+  const status: ClipperExternalConnectSprintStatus = items.some((item) => item.status === "blocked")
+    ? "blocked"
+    : items.some((item) => item.status === "ready_to_execute")
+      ? "ready_to_execute"
+      : items.some((item) => item.status === "waiting")
+        ? "waiting"
+        : "done";
+  const totals = {
+    items: items.length,
+    blocked: items.filter((item) => item.status === "blocked").length,
+    readyToExecute: items.filter((item) => item.status === "ready_to_execute").length,
+    waiting: items.filter((item) => item.status === "waiting").length,
+    done: items.filter((item) => item.status === "done").length,
+    portalUrls: uniqueStrings(items.flatMap((item) => item.portalUrls.map((portal) => portal.url))).length,
+    evidenceRows: items.reduce((sum, item) => sum + item.evidenceRows.length, 0),
+    pendingCredentialEnvVars: connectNow.pendingCredentialEnvVars.length,
+    platformAccounts: connectNow.accountHandles.length,
+    accountTasks: connectNow.externalPortalLauncher.accountTasks,
+    developerAppTasks: connectNow.externalPortalLauncher.developerAppTasks,
+    permissionTasks: connectNow.externalPortalLauncher.permissionTasks,
+    oauthTasks: connectNow.externalPortalLauncher.oauthTasks,
+    activationLanes: connectNow.postConnectActivationBridge.length,
+    activationBlocked: connectNow.postConnectActivationBridge.filter((lane) => lane.status === "blocked").length,
+  };
+  const externalConnectSprint: ClipperExternalConnectSprintSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: EXTERNAL_CONNECT_SPRINT_PATH,
+    markdownPath: EXTERNAL_CONNECT_SPRINT_MARKDOWN_PATH,
+    csvPath: EXTERNAL_CONNECT_SPRINT_CSV_PATH,
+    launcherUrl: connectNow.externalPortalLauncher.url,
+    items,
+    platforms,
+    totals,
+    artifactPaths: {
+      robertNextActions: robertNextActions.markdownPath,
+      connectNow: connectNow.markdownPath,
+      launcher: connectNow.externalPortalLauncher.htmlPath,
+      ownerConnectPack: connectNow.accountCloseout.markdownPath,
+      permissionMatrix: connectNow.officialPermissionCloseout.matrixPath,
+      oauthConnectionPack: OAUTH_CONNECTION_PACK_MARKDOWN_PATH,
+      intakeRefresh: INTAKE_REFRESH_SWEEP_MARKDOWN_PATH,
+    },
+    nextStep: connectNow.connectionTunnel.nextGate?.nextStep || connectNow.externalPortalLauncher.nextStep || robertNextActions.nextStep,
+  };
+  await writeFile(EXTERNAL_CONNECT_SPRINT_PATH, JSON.stringify(externalConnectSprint, null, 2));
+  await writeFile(EXTERNAL_CONNECT_SPRINT_MARKDOWN_PATH, renderExternalConnectSprintMarkdown(externalConnectSprint));
+  await writeFile(EXTERNAL_CONNECT_SPRINT_CSV_PATH, renderExternalConnectSprintCsv(externalConnectSprint));
+  return { externalConnectSprint, status: null };
 }
 
 function ownerConnectStatusFromExternal(item: ClipperExternalExecutionSessionItem): ClipperOwnerConnectPackItemStatus {

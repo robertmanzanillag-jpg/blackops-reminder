@@ -10,9 +10,11 @@ import {
   ImagePlus,
   Loader2,
   MessageSquare,
+  Mic,
   Plus,
   Send,
   Sparkles,
+  Square,
   Trash2,
   Upload,
   Wallet,
@@ -63,10 +65,16 @@ export default function AssistantPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -74,6 +82,13 @@ export default function AssistantPage() {
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimeoutRef.current) window.clearTimeout(recordingTimeoutRef.current);
+      voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   useEffect(() => {
@@ -151,6 +166,116 @@ export default function AssistantPage() {
 
   const removeImage = (index: number) => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const blobToDataUrl = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("No pude leer el audio"));
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const cleanupRecording = () => {
+    if (recordingTimeoutRef.current) {
+      window.clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voiceStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  };
+
+  const sendVoiceForTranscription = async (blob: Blob) => {
+    if (!blob.size) return;
+    setIsTranscribing(true);
+    try {
+      const audio = await blobToDataUrl(blob);
+      const response = await fetch("/api/assistant/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio }),
+      });
+      if (!response.ok) throw new Error("Voice transcription failed");
+      const data = await response.json();
+      const transcript = typeof data.text === "string" ? data.text.trim() : "";
+      if (!transcript) throw new Error("Empty transcript");
+      await sendMessage(transcript);
+    } catch (error) {
+      console.error("Error transcribing voice:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "No pude entender esa nota de voz. Intenta grabarla otra vez un poco mas cerca del microfono.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (isLoading || isTranscribing || isRecording) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Tu navegador no permite grabar audio aqui.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      audioChunksRef.current = [];
+      voiceStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        audioChunksRef.current = [];
+        cleanupRecording();
+        void sendVoiceForTranscription(audioBlob);
+      };
+      recorder.onerror = () => cleanupRecording();
+
+      recorder.start();
+      setIsRecording(true);
+      recordingTimeoutRef.current = window.setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
+          mediaRecorderRef.current.stop();
+        }
+      }, 90_000);
+    } catch (error) {
+      console.error("Error starting voice recording:", error);
+      cleanupRecording();
+      alert("No pude acceder al microfono.");
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    } else {
+      cleanupRecording();
+    }
+  };
+
+  const toggleVoiceRecording = () => {
+    if (isRecording) {
+      stopVoiceRecording();
+    } else {
+      void startVoiceRecording();
+    }
   };
 
   const sendMessage = async (messageText?: string) => {
@@ -505,6 +630,17 @@ export default function AssistantPage() {
                       </div>
                     </motion.div>
                   )}
+                  {isTranscribing && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
+                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
+                        <Bot className="h-4 w-4 text-zinc-100" />
+                      </div>
+                      <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-400">
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
+                        Entendiendo tu nota de voz...
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
               )}
             </div>
@@ -552,37 +688,59 @@ export default function AssistantPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading}
+                  disabled={isLoading || isTranscribing || isRecording}
                   className="h-10 w-10 shrink-0 rounded-md text-zinc-400 hover:bg-zinc-900 hover:text-white"
-                  title="Subir imagen de broker/cartera"
+                  title="Subir imagen"
                   data-testid="button-upload-image"
                 >
                   <ImagePlus className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleVoiceRecording}
+                  disabled={isLoading || isTranscribing}
+                  className={cn(
+                    "h-10 w-10 shrink-0 rounded-md text-zinc-400 hover:bg-zinc-900 hover:text-white",
+                    isRecording && "bg-red-950/60 text-red-200 hover:bg-red-900/70 hover:text-white"
+                  )}
+                  title={isRecording ? "Detener nota de voz" : "Grabar nota de voz"}
+                  data-testid="button-record-voice"
+                >
+                  {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-5 w-5" />}
                 </Button>
                 <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={selectedImages.length > 0 ? "Describe que quieres analizar..." : "Escribele a tu asistente..."}
+                  placeholder={
+                    isRecording
+                      ? "Grabando..."
+                      : isTranscribing
+                        ? "Transcribiendo voz..."
+                        : selectedImages.length > 0
+                          ? "Describe que quieres analizar..."
+                          : "Escribele a tu asistente..."
+                  }
                   rows={1}
                   className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
-                  disabled={isLoading}
+                  disabled={isLoading || isTranscribing || isRecording}
                   data-testid="input-assistant-message"
                 />
                 <Button
                   onClick={() => sendMessage()}
-                  disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
+                  disabled={(!input.trim() && selectedImages.length === 0) || isLoading || isTranscribing || isRecording}
                   size="icon"
                   className="h-10 w-10 shrink-0 rounded-md bg-zinc-100 text-zinc-950 hover:bg-white disabled:opacity-50"
                   data-testid="button-send-message"
                 >
-                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                  {isLoading || isTranscribing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
               </div>
               <div className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
-                <Clock3 className="h-3.5 w-3.5" />
-                Enter envia, Shift + Enter crea una nueva linea.
+                {isRecording ? <Mic className="h-3.5 w-3.5 text-red-300" /> : <Clock3 className="h-3.5 w-3.5" />}
+                {isRecording ? "Grabando nota de voz. Toca detener para enviarla." : "Enter envia, Shift + Enter crea una nueva linea."}
               </div>
             </div>
           </div>

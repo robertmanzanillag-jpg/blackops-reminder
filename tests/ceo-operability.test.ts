@@ -519,7 +519,6 @@ test("Telegram delivery modules read and validate bot tokens at send time", () =
 test("Gemini clients read and validate API keys at request time", () => {
   const clientSource = readFileSync("server/gemini-client.ts", "utf8");
   const aiModules = [
-    "server/assistant.ts",
     "server/code-generator.ts",
     "server/telegram-chat.ts",
     "server/replit_integrations/chat/routes.ts",
@@ -540,6 +539,21 @@ test("Gemini clients read and validate API keys at request time", () => {
     );
     assert.match(source, /getGeminiClient/, `${modulePath} should use the shared Gemini client helper`);
   }
+});
+
+test("OpenAI assistant client reads and validates API keys at request time", () => {
+  const clientSource = readFileSync("server/openai-client.ts", "utf8");
+  const assistantSource = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(clientSource, /hasRealValue\(apiKey\)/, "OpenAI client should reject placeholder API keys");
+  assert.match(clientSource, /new OpenAI/, "OpenAI client should own OpenAI construction");
+  assert.doesNotMatch(
+    assistantSource,
+    /new OpenAI\(\{\s*apiKey: process\.env\.OPENAI_API_KEY/s,
+    "assistant should not construct OpenAI clients from env at import time",
+  );
+  assert.match(assistantSource, /getOpenAIClient/, "assistant should use the shared OpenAI client helper");
+  assert.match(assistantSource, /OPENAI_TRANSCRIPTION_MODEL/, "assistant voice transcription should use the shared OpenAI model config");
 });
 
 test("Push notification VAPID keys are validated before use", () => {

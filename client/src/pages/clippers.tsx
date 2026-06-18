@@ -131,6 +131,8 @@ type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "block
 type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
 type ClipperPostConnectActivationSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
 type ClipperIntakeRefreshSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
+type ClipperExternalConnectSprintStatus = "not_prepared" | "blocked" | "ready_to_execute" | "waiting" | "done";
+type ClipperExternalConnectSprintLane = "credentials" | "accounts" | "developer_apps" | "permissions" | "oauth" | "activation";
 type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
 type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
@@ -2517,6 +2519,74 @@ interface ClipperIntakeRefreshSweepSummary {
     robertNextActions: string;
     connectNow: string;
     launcher: string;
+    intakeRefresh: string;
+  };
+  nextStep: string;
+}
+
+interface ClipperExternalConnectSprintItem {
+  id: string;
+  rank: number;
+  lane: ClipperExternalConnectSprintLane;
+  status: ClipperExternalConnectSprintStatus;
+  platform: ClipperPlatform | "mixed" | "system";
+  label: string;
+  actionLabel: string;
+  actionUrl: string | null;
+  portalUrls: Array<{ label: string; url: string }>;
+  artifactPath: string | null;
+  evidenceRows: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  unlocks: string[];
+  nextStep: string;
+}
+
+interface ClipperExternalConnectSprintPlatform {
+  platform: ClipperPlatform;
+  label: string;
+  status: ClipperExternalConnectSprintStatus;
+  handles: string[];
+  scopes: string[];
+  portalUrls: Array<{ label: string; url: string }>;
+  blockers: string[];
+  evidenceRows: string[];
+  nextStep: string;
+}
+
+interface ClipperExternalConnectSprintSummary {
+  status: ClipperExternalConnectSprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  launcherUrl: string;
+  items: ClipperExternalConnectSprintItem[];
+  platforms: ClipperExternalConnectSprintPlatform[];
+  totals: {
+    items: number;
+    blocked: number;
+    readyToExecute: number;
+    waiting: number;
+    done: number;
+    portalUrls: number;
+    evidenceRows: number;
+    pendingCredentialEnvVars: number;
+    platformAccounts: number;
+    accountTasks: number;
+    developerAppTasks: number;
+    permissionTasks: number;
+    oauthTasks: number;
+    activationLanes: number;
+    activationBlocked: number;
+  };
+  artifactPaths: {
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    ownerConnectPack: string;
+    permissionMatrix: string;
+    oauthConnectionPack: string;
     intakeRefresh: string;
   };
   nextStep: string;
@@ -5088,7 +5158,7 @@ function permissionRequestPackBadge(status: ClipperPermissionRequestPackStatus) 
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperPostConnectActivationSweepStatus | ClipperIntakeRefreshSweepStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
+function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperPostConnectActivationSweepStatus | ClipperIntakeRefreshSweepStatus | ClipperExternalConnectSprintStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
   if (status === "ready" || status === "done" || status === "completed") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped" || status === "ready_to_execute" || status === "needs_action" || status === "needs_fix" || status === "needs_login_recheck" || status === "ready_to_submit") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared" || status === "not_run") return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -5224,6 +5294,7 @@ export default function ClippersPage() {
   const [sourceDropImport, setSourceDropImport] = useState<ClipperSourceDropImportSummary | null>(null);
   const [sourceIngestionSprint, setSourceIngestionSprint] = useState<ClipperSourceIngestionSprintSummary | null>(null);
   const [intakeRefreshSweep, setIntakeRefreshSweep] = useState<ClipperIntakeRefreshSweepSummary | null>(null);
+  const [externalConnectSprint, setExternalConnectSprint] = useState<ClipperExternalConnectSprintSummary | null>(null);
   const [renderedClips, setRenderedClips] = useState<ClipperRenderedClipSummary | null>(null);
   const [publishingPackage, setPublishingPackage] = useState<ClipperPublishingPackageSummary | null>(null);
   const [productionPublicUrl, setProductionPublicUrl] = useState("");
@@ -6494,6 +6565,25 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude correr Intake refresh", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const externalConnectSprintMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-external-connect-sprint", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar External Connect Sprint");
+      return data as { externalConnectSprint: ClipperExternalConnectSprintSummary };
+    },
+    onSuccess: (data) => {
+      setExternalConnectSprint(data.externalConnectSprint);
+      toast({
+        title: "Connect sprint listo",
+        description: `${data.externalConnectSprint.totals.blocked} bloqueados, ${data.externalConnectSprint.totals.readyToExecute} listos; ${data.externalConnectSprint.totals.portalUrls} portales.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Connect sprint", description: error.message, variant: "destructive" });
     },
   });
 
@@ -7823,6 +7913,15 @@ export default function ClippersPage() {
               Intake refresh
             </Button>
             <Button
+              onClick={() => externalConnectSprintMutation.mutate()}
+              disabled={externalConnectSprintMutation.isPending}
+              className="bg-blue-200 text-zinc-950 hover:bg-blue-100"
+              data-testid="prepare-clippers-external-connect-sprint-button"
+            >
+              {externalConnectSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+              Connect sprint
+            </Button>
+            <Button
               onClick={() => ownerConnectPackMutation.mutate()}
               disabled={ownerConnectPackMutation.isPending || isLoading}
               className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
@@ -8249,6 +8348,30 @@ export default function ClippersPage() {
               <p>Blocked: {intakeRefreshSweep.blockers.length}</p>
             </div>
             <p className="mt-2 break-all text-[10px] leading-4 text-violet-100/70">{intakeRefreshSweep.markdownPath}</p>
+          </div>
+        )}
+
+        {externalConnectSprint && (
+          <div className="rounded-md border border-cyan-300/20 bg-cyan-950/20 p-3" data-testid="clippers-external-connect-sprint-global-result">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Connect sprint</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{externalConnectSprint.nextStep}</p>
+              </div>
+              <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(externalConnectSprint.status))}>{externalConnectSprint.status}</Badge>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
+              <p>Items: {externalConnectSprint.totals.items}</p>
+              <p>Blocked: {externalConnectSprint.totals.blocked}</p>
+              <p>Ready: {externalConnectSprint.totals.readyToExecute}</p>
+              <p>Portals: {externalConnectSprint.totals.portalUrls}</p>
+              <p>Evidence: {externalConnectSprint.totals.evidenceRows}</p>
+              <p>OAuth: {externalConnectSprint.totals.oauthTasks}</p>
+            </div>
+            <div className="mt-2 grid gap-2 text-[10px] leading-4 text-cyan-100/70 sm:grid-cols-2">
+              <p className="break-all">{externalConnectSprint.markdownPath}</p>
+              <p className="break-all">{externalConnectSprint.csvPath}</p>
+            </div>
           </div>
         )}
 
