@@ -122,8 +122,8 @@ test("Clippers OAuth callbacks and token vault records keep explicit owner metad
   assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getSystemUserId\(\)\)/s, "public Clippers OAuth callback should bind to the configured single-user owner");
   assert.match(clippersSource, /export interface ClipperOAuthConnection \{[\s\S]*ownerUserId: string;/s, "OAuth connection records should include owner metadata");
   assert.match(clippersSource, /export interface ClipperTokenSummary \{[\s\S]*ownerUserId: string;/s, "token vault summaries should include owner metadata");
-  assert.match(clippersSource, /saveClipperTokenPayload\(platform: ClipperPlatform, payload: Record<string, unknown>, ownerUserId = getSystemUserId\(\)\)/, "token vault writes should accept an explicit owner");
-  assert.match(clippersSource, /tryExchangeAndStoreClipperToken\(platform: ClipperPlatform, code: string, ownerUserId: string\)/, "OAuth token exchange should carry owner metadata through storage");
+  assert.match(clippersSource, /saveClipperTokenPayload\([\s\S]*ownerUserIdOrAccountId = getSystemUserId\(\)[\s\S]*accountId\?: string \| null/s, "token vault writes should accept an explicit owner and optional account");
+  assert.match(clippersSource, /tryExchangeAndStoreClipperToken\([\s\S]*ownerUserId: string,[\s\S]*accountId\?: string \| null/s, "OAuth token exchange should carry owner metadata through storage");
 });
 
 test("public OAuth callback pages escape dynamic text and do not print tokens", () => {
