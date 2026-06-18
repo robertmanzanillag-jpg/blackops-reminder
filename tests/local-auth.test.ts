@@ -49,10 +49,12 @@ test("hashes and verifies local auth passwords", async () => {
   assert.equal(await verifyPassword("correct horse battery staple", "plain-text"), false);
 });
 
-test("local auth defaults to dev/test and requires opt-in for production", () => {
+test("local auth defaults to dev/test and session-backed production", () => {
   assert.equal(withEnv({ NODE_ENV: "development", LOCAL_AUTH_ENABLED: undefined }, () => isLocalAuthEnabled()), true);
   assert.equal(withEnv({ NODE_ENV: "production", LOCAL_AUTH_ENABLED: undefined }, () => isLocalAuthEnabled()), false);
+  assert.equal(withEnv({ NODE_ENV: "production", LOCAL_AUTH_ENABLED: undefined, SESSION_SECRET: "production-session-secret" }, () => isLocalAuthEnabled()), true);
   assert.equal(withEnv({ NODE_ENV: "production", LOCAL_AUTH_ENABLED: "true" }, () => isLocalAuthEnabled()), true);
+  assert.equal(withEnv({ NODE_ENV: "production", LOCAL_AUTH_ENABLED: "false", SESSION_SECRET: "production-session-secret" }, () => isLocalAuthEnabled()), false);
 });
 
 test("local registration defaults to dev/test and requires opt-in for production", () => {

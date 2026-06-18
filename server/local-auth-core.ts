@@ -20,6 +20,7 @@ export function normalizeUsername(username: string): string {
 export function isLocalAuthEnabled(): boolean {
   if (process.env.LOCAL_AUTH_ENABLED === "true") return true;
   if (process.env.LOCAL_AUTH_ENABLED === "false") return false;
+  if (process.env.NODE_ENV === "production" && process.env.SESSION_SECRET) return true;
   return ["development", "test"].includes(process.env.NODE_ENV || "development");
 }
 
