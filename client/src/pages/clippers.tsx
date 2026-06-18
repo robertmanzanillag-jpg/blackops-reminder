@@ -382,6 +382,8 @@ interface ClipperSourceDropImportSummary {
 }
 
 type ClipperSourceDropDiagnosticStatus = "ready_to_import" | "needs_files" | "needs_rights" | "ready";
+type ClipperSourceIngestionSprintStatus = "not_prepared" | "needs_files" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
+type ClipperSourceIngestionSprintItemStatus = "needs_file" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
 
 interface ClipperSourceDropDiagnosticFile {
   relativePath: string;
@@ -574,6 +576,77 @@ interface ClipperSourceSupplyDropKitSummary {
     minimumWeeklySourceAssets: number;
   };
   intakeBatchTemplate: string;
+  nextStep: string;
+}
+
+interface ClipperSourceIngestionSprintItem {
+  id: string;
+  rank: number;
+  status: ClipperSourceIngestionSprintItemStatus;
+  category: ClipperAccountCategory;
+  label: string;
+  priority: "critical" | "high" | "watch";
+  targetFileName: string;
+  sourceDropPath: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  suggestedTitle: string;
+  viralSearchQuery: string;
+  viralSearchUrl: string;
+  recencyWindow: string;
+  proofNeeded: string[];
+  intakeBatchRow: string;
+  rightsEvidenceBatchRow: string;
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceIngestionSprintCategory {
+  category: ClipperAccountCategory;
+  label: string;
+  status: ClipperSourceIngestionSprintStatus;
+  sourceDropDir: string;
+  sourceDropManifestPath: string;
+  sourceDropReadmePath: string;
+  items: number;
+  filesNeeded: number;
+  metadataRowsNeeded: number;
+  rightsNeeded: number;
+  importReady: number;
+  rightsReadyAssets: number;
+  minimumWeeklySourceAssets: number;
+  nextStep: string;
+}
+
+interface ClipperSourceIngestionSprintSummary {
+  status: ClipperSourceIngestionSprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDropDir: string;
+  targetWeeklyClips: number;
+  items: ClipperSourceIngestionSprintItem[];
+  categories: ClipperSourceIngestionSprintCategory[];
+  totals: {
+    items: number;
+    filesNeeded: number;
+    metadataRowsNeeded: number;
+    rightsNeeded: number;
+    importReady: number;
+    ready: number;
+    missingSourceAssets: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+    categoriesReady: number;
+  };
+  artifactPaths: {
+    sourceSupplyDropKit: string;
+    sourceDropDiagnostic: string;
+    repairWorksheet: string;
+    intakeRefresh: string;
+  };
   nextStep: string;
 }
 
@@ -5149,6 +5222,7 @@ export default function ClippersPage() {
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceIntakeBatch, setSourceIntakeBatch] = useState<ClipperSourceIntakeBatchSummary | null>(null);
   const [sourceDropImport, setSourceDropImport] = useState<ClipperSourceDropImportSummary | null>(null);
+  const [sourceIngestionSprint, setSourceIngestionSprint] = useState<ClipperSourceIngestionSprintSummary | null>(null);
   const [intakeRefreshSweep, setIntakeRefreshSweep] = useState<ClipperIntakeRefreshSweepSummary | null>(null);
   const [renderedClips, setRenderedClips] = useState<ClipperRenderedClipSummary | null>(null);
   const [publishingPackage, setPublishingPackage] = useState<ClipperPublishingPackageSummary | null>(null);
@@ -6717,6 +6791,25 @@ export default function ClippersPage() {
     },
   });
 
+  const sourceIngestionSprintMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-source-ingestion-sprint", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar source ingestion sprint");
+      return data as { sourceIngestionSprint: ClipperSourceIngestionSprintSummary };
+    },
+    onSuccess: (data) => {
+      setSourceIngestionSprint(data.sourceIngestionSprint);
+      toast({
+        title: "Source sprint listo",
+        description: `${data.sourceIngestionSprint.totals.filesNeeded} files, ${data.sourceIngestionSprint.totals.metadataRowsNeeded} metadata, ${data.sourceIngestionSprint.totals.rightsNeeded} rights.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar source sprint", description: error.message, variant: "destructive" });
+    },
+  });
+
   const sourceHuntMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-source-hunt", { method: "POST" });
@@ -7983,6 +8076,15 @@ export default function ClippersPage() {
               Source plan
             </Button>
             <Button
+              onClick={() => sourceIngestionSprintMutation.mutate()}
+              disabled={sourceIngestionSprintMutation.isPending}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-source-ingestion-sprint-button"
+            >
+              {sourceIngestionSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+              Source sprint
+            </Button>
+            <Button
               onClick={() => sourceHuntMutation.mutate()}
               disabled={sourceHuntMutation.isPending || isLoading}
               className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
@@ -8147,6 +8249,29 @@ export default function ClippersPage() {
               <p>Blocked: {intakeRefreshSweep.blockers.length}</p>
             </div>
             <p className="mt-2 break-all text-[10px] leading-4 text-violet-100/70">{intakeRefreshSweep.markdownPath}</p>
+          </div>
+        )}
+
+        {sourceIngestionSprint && (
+          <div className="rounded-md border border-sky-300/20 bg-sky-950/20 p-3" data-testid="clippers-source-ingestion-sprint-global-result">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-sky-200">Source sprint</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{sourceIngestionSprint.nextStep}</p>
+              </div>
+              <Badge className={cn("w-fit border text-[10px]", sourceIngestionSprint.status === "ready" || sourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : sourceIngestionSprint.status === "needs_rights" || sourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                {sourceIngestionSprint.status}
+              </Badge>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
+              <p>Items: {sourceIngestionSprint.totals.items}</p>
+              <p>Files: {sourceIngestionSprint.totals.filesNeeded}</p>
+              <p>Metadata: {sourceIngestionSprint.totals.metadataRowsNeeded}</p>
+              <p>Rights: {sourceIngestionSprint.totals.rightsNeeded}</p>
+              <p>Import: {sourceIngestionSprint.totals.importReady}</p>
+              <p>Ready: {sourceIngestionSprint.totals.rightsReadyAssets}/{sourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
+            </div>
+            <p className="mt-2 break-all text-[10px] leading-4 text-sky-100/70">{sourceIngestionSprint.markdownPath}</p>
           </div>
         )}
 
@@ -16620,6 +16745,54 @@ export default function ClippersPage() {
                                 Rights
                               </Button>
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {sourceIngestionSprint && (
+                    <div className="rounded-md border border-sky-300/20 bg-sky-950/10 p-3" data-testid="clippers-source-ingestion-sprint-result">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white">Source ingestion sprint</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{sourceIngestionSprint.nextStep}</p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-sky-100/70">Sprint: {sourceIngestionSprint.markdownPath}</p>
+                          <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">CSV: {sourceIngestionSprint.csvPath}</p>
+                        </div>
+                        <Badge className={cn("w-fit border", sourceIngestionSprint.status === "ready" || sourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : sourceIngestionSprint.status === "needs_rights" || sourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                          {sourceIngestionSprint.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-6">
+                        <p>Items: {sourceIngestionSprint.totals.items}</p>
+                        <p>Files: {sourceIngestionSprint.totals.filesNeeded}</p>
+                        <p>Metadata: {sourceIngestionSprint.totals.metadataRowsNeeded}</p>
+                        <p>Rights: {sourceIngestionSprint.totals.rightsNeeded}</p>
+                        <p>Import: {sourceIngestionSprint.totals.importReady}</p>
+                        <p>Ready: {sourceIngestionSprint.totals.rightsReadyAssets}/{sourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-3">
+                        {sourceIngestionSprint.categories.map((category) => (
+                          <div key={`source-sprint-${category.category}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{category.label}</p>
+                              <Badge className={cn("border text-[10px]", category.status === "ready" || category.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-200")}>{category.status}</Badge>
+                            </div>
+                            <p className="mt-2 text-xs text-zinc-500">Files: {category.filesNeeded} · Metadata: {category.metadataRowsNeeded} · Rights: {category.rightsNeeded}</p>
+                            <p className="mt-1 text-xs text-zinc-500">Import: {category.importReady} · Ready: {category.rightsReadyAssets}/{category.minimumWeeklySourceAssets}</p>
+                            <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{category.sourceDropManifestPath}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-3">
+                        {sourceIngestionSprint.items.slice(0, 6).map((item) => (
+                          <div key={`source-sprint-item-${item.id}`} className="rounded-md border border-white/10 bg-black/25 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{item.targetFileName}</p>
+                              <Badge className={cn("border text-[10px]", item.status === "ready_to_import" || item.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : item.status === "needs_rights" || item.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>{item.status}</Badge>
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                            <p className="mt-2 text-xs leading-5 text-sky-200">{item.viralSearchQuery}</p>
                           </div>
                         ))}
                       </div>

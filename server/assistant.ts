@@ -10,7 +10,9 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import type { PendingAction } from "@shared/schema";
-import { getGeminiClient } from "./gemini-client";
+import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
+import { toFile } from "openai";
+import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 function normalizeApprovalText(message: string): string {
   return message
@@ -38,6 +40,24 @@ function requireStringField(data: any, field: string, label: string): string {
     throw new Error(`Falta ${label}`);
   }
   return value.trim();
+}
+
+function parseDataUrl(value: string): { mimeType: string; base64Data: string } | null {
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return {
+    mimeType: match[1],
+    base64Data: match[2],
+  };
+}
+
+function extensionFromMimeType(mimeType: string): string {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 function extractBlackRoomLinkTarget(message: string): string | null {
@@ -655,7 +675,56 @@ REGLAS:
 - Usa la información personal que conoces para personalizar tus respuestas
 - Si el usuario te cuenta algo personal, agradece y recuerda guardarlo`;
 
+const APP_HELP_CONTEXT = `## CONOCIMIENTO DE ESTA APP
+La app es un centro de mando personal llamado BlackOps/CEO Assistant. El usuario puede preguntar como hacer algo dentro de la app y debes explicarlo claro, paso a paso, sin sonar técnico.
+
+Pantallas y capacidades principales:
+- Dashboard: resumen del dia, tareas, pendientes, aprobaciones y acceso rapido al asistente.
+- Assistant: chat principal. Permite texto, fotos/capturas y notas de voz. Puede crear tareas, revisar agenda, analizar portafolio, preparar acciones y pedir aprobacion antes de ejecutar cambios sensibles.
+- Projects, Tools y Agents Office: organizan proyectos, herramientas y agentes de trabajo.
+- Automation Manager: revisar automatizaciones, recordatorios y tareas programadas.
+- Portfolio/Investment Detail: revisar o actualizar inversiones.
+- Radio y Promo Video: flujos para eventos, radio, videos promocionales y assets.
+- Marketing Command Center, Revenue Engine, Dropshipping CEO, Clippers, Legal Compliance, Cybersecurity Agent, GitHub Agent y Code Agent: modulos especializados para negocio, marketing, compliance, seguridad y codigo.
+
+Cuando el usuario pregunte "como hago..." o "donde esta...", responde con instrucciones practicas usando los nombres visibles de la app. Si no tienes certeza de un boton exacto, dilo y ofrece el camino mas probable.`;
+
 export function registerAssistantRoutes(app: Express): void {
+  app.post("/api/assistant/transcribe", async (req: Request, res: Response) => {
+    try {
+      const audio = typeof req.body?.audio === "string" ? req.body.audio : "";
+      const parsed = parseDataUrl(audio);
+      if (!parsed) {
+        return res.status(400).json({ error: "Audio data URL is required" });
+      }
+
+      const audioBytes = Buffer.from(parsed.base64Data, "base64");
+      const maxAudioBytes = 12 * 1024 * 1024;
+      if (audioBytes.length > maxAudioBytes) {
+        return res.status(413).json({ error: "Audio is too large" });
+      }
+
+      const file = await toFile(
+        audioBytes,
+        `voice.${extensionFromMimeType(parsed.mimeType)}`,
+        { type: parsed.mimeType },
+      );
+      const transcription = await getOpenAIClient().audio.transcriptions.create({
+        file,
+        model: OPENAI_TRANSCRIPTION_MODEL,
+        response_format: "text",
+        language: "es",
+        prompt: "El audio es una nota para un asistente personal en español/Spanglish sobre la app, tareas, calendario, negocio o inversiones.",
+      });
+      const text = typeof transcription === "string" ? transcription : String((transcription as any).text || "");
+
+      return res.json({ text: text.trim() });
+    } catch (error) {
+      console.error("Error transcribing assistant audio:", error);
+      return res.status(500).json({ error: "No pude transcribir el audio" });
+    }
+  });
+
   app.post("/api/assistant/chat", async (req: Request, res: Response) => {
     let requestUserId: string | null = null;
     try {
@@ -763,8 +832,7 @@ export function registerAssistantRoutes(app: Express): void {
         await saveCeoConversationMessage(userId, "user", "[Imagen enviada desde el app]");
       }
 
-      // Build user message parts
-      const userMessageParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+      const userMessageParts: ChatCompletionContentPart[] = [];
       
       // Add all images if present (max 6MB total for safety with 8MB API limit)
       const MAX_TOTAL_SIZE = 6 * 1024 * 1024; // 6MB
@@ -772,11 +840,10 @@ export function registerAssistantRoutes(app: Express): void {
       
       if (images && Array.isArray(images)) {
         for (const image of images) {
-          // Extract base64 data and mime type from data URL
-          const matches = image.match(/^data:([^;]+);base64,(.+)$/);
-          if (matches) {
-            const mimeType = matches[1];
-            const base64Data = matches[2];
+          if (typeof image !== "string") continue;
+          const parsedImage = parseDataUrl(image);
+          if (parsedImage) {
+            const { base64Data } = parsedImage;
             
             // Calculate image size (base64 is ~33% larger than original)
             const imageSize = (base64Data.length * 3) / 4;
@@ -788,10 +855,11 @@ export function registerAssistantRoutes(app: Express): void {
             
             totalImageSize += imageSize;
             userMessageParts.push({
-              inlineData: {
-                mimeType,
-                data: base64Data
-              }
+              type: "image_url",
+              image_url: {
+                url: image,
+                detail: "low",
+              },
             });
           }
         }
@@ -801,32 +869,36 @@ export function registerAssistantRoutes(app: Express): void {
       
       // Add text message
       if (message) {
-        userMessageParts.push({ text: message });
+        userMessageParts.push({ type: "text", text: message });
       } else if (images && images.length > 0) {
         const imageCount = images.length;
         userMessageParts.push({ 
+          type: "text",
           text: imageCount > 1 
             ? `Analiza estas ${imageCount} imágenes de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio.`
             : "Analiza esta imagen de mi broker/cartera y extrae la información de mis inversiones. Si encuentras acciones, ETFs o criptomonedas, agrégalas a mi portafolio." 
         });
       }
 
-      const contents = [
+      const openAiMessages: ChatCompletionMessageParam[] = [
         {
-          role: "user" as const,
-          parts: [{ text: `${SYSTEM_PROMPT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}` }],
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
         },
         {
-          role: "model" as const,
-          parts: [{ text: "Entendido. Soy tu asistente personal BlackOps. Te conozco y recuerdo todo lo que me cuentas. Tengo acceso a tu calendario, puedo analizar imágenes de tu broker/cartera, y ayudarte con tareas, agenda y más. ¿En qué puedo ayudarte?" }],
+          role: "assistant",
+          content: "Entendido. Soy tu asistente personal BlackOps. Te conozco y recuerdo todo lo que me cuentas. Tengo acceso a tu calendario, puedo analizar imágenes, entender notas de voz, y ayudarte con tareas, agenda, inversiones y la app.",
         },
-        ...conversationHistory.map((msg: { role: string; content: string }) => ({
-          role: msg.role === "assistant" ? "model" as const : "user" as const,
-          parts: [{ text: msg.content }],
-        })),
+        ...conversationHistory
+          .filter((msg: { role: string; content: string }) => msg?.content && (msg.role === "assistant" || msg.role === "user"))
+          .slice(-12)
+          .map((msg: { role: string; content: string }) => ({
+            role: msg.role === "assistant" ? "assistant" as const : "user" as const,
+            content: msg.content,
+          })),
         {
-          role: "user" as const,
-          parts: userMessageParts,
+          role: "user",
+          content: userMessageParts,
         },
       ];
 
@@ -841,13 +913,15 @@ export function registerAssistantRoutes(app: Express): void {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
       } else {
-        const stream = await getGeminiClient().models.generateContentStream({
-          model: "gemini-2.5-flash",
-          contents,
+        const stream = await getOpenAIClient().chat.completions.create({
+          model: OPENAI_ASSISTANT_MODEL,
+          messages: openAiMessages,
+          stream: true,
+          max_completion_tokens: 1200,
         });
 
         for await (const chunk of stream) {
-          const content = chunk.text || "";
+          const content = chunk.choices[0]?.delta?.content || "";
           if (content) {
             fullResponse += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);

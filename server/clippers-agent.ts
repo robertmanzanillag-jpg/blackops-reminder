@@ -8058,6 +8058,407 @@ async function writeSourceSupplyDropManifestStarters(summary: ClipperSourceSuppl
   }));
 }
 
+async function readCachedSourceSupplyDropKitSummary(): Promise<ClipperSourceSupplyDropKitSummary> {
+  const raw = await readFile(SOURCE_SUPPLY_DROP_KIT_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperSourceSupplyDropKitSummary;
+      return {
+        ...parsed,
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: SOURCE_SUPPLY_DROP_KIT_PATH,
+        markdownPath: SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH,
+        csvPath: SOURCE_SUPPLY_DROP_KIT_CSV_PATH,
+        sourceDropDir: parsed.sourceDropDir || SOURCE_DROP_DIR,
+        items: Array.isArray(parsed.items) ? parsed.items : [],
+        categoryBatches: Array.isArray(parsed.categoryBatches) ? parsed.categoryBatches : [],
+        intakeBatchTemplate: typeof parsed.intakeBatchTemplate === "string" ? parsed.intakeBatchTemplate : "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes\n",
+        totals: parsed.totals || { items: 0, critical: 0, high: 0, watch: 0, categories: 0, weeklyMissingSourceSlots: 0, rightsReadyAssets: 0, minimumWeeklySourceAssets: 0 },
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Prepare Source Supply Drop Kit before running source ingestion sprint.",
+      };
+    } catch {
+      // Fall through to a clean not_prepared summary.
+    }
+  }
+  return {
+    status: "not_prepared",
+    generatedAt: null,
+    manifestPath: SOURCE_SUPPLY_DROP_KIT_PATH,
+    markdownPath: SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH,
+    csvPath: SOURCE_SUPPLY_DROP_KIT_CSV_PATH,
+    sourceDropDir: SOURCE_DROP_DIR,
+    items: [],
+    categoryBatches: [],
+    totals: { items: 0, critical: 0, high: 0, watch: 0, categories: 0, weeklyMissingSourceSlots: 0, rightsReadyAssets: 0, minimumWeeklySourceAssets: 0 },
+    intakeBatchTemplate: "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes\n",
+    nextStep: "Prepare Source Supply Drop Kit before running source ingestion sprint.",
+  };
+}
+
+async function readCachedSourceDropDiagnosticSummary(): Promise<ClipperSourceDropDiagnosticSummary> {
+  const raw = await readFile(SOURCE_DROP_DIAGNOSTIC_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperSourceDropDiagnosticSummary;
+      return {
+        ...parsed,
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: SOURCE_DROP_DIAGNOSTIC_PATH,
+        markdownPath: SOURCE_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+        repairWorksheetCsvPath: SOURCE_DROP_REPAIR_WORKSHEET_CSV_PATH,
+        dropDir: parsed.dropDir || SOURCE_DROP_DIR,
+        files: Array.isArray(parsed.files) ? parsed.files : [],
+        manifests: Array.isArray(parsed.manifests) ? parsed.manifests : [],
+        categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+        totals: parsed.totals || {
+          files: 0,
+          importEligible: 0,
+          manifestReady: 0,
+          manifestFiles: 0,
+          manifestRows: 0,
+          manifestReadyRows: 0,
+          manifestPlaceholderRows: 0,
+          manifestMissingFiles: 0,
+          unsupported: 0,
+          categoriesReady: 0,
+          minimumWeeklySourceAssets: 0,
+          currentSourceAssets: 0,
+          rightsReadyAssets: 0,
+          missingSourceAssets: 0,
+        },
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Prepare Source Drop Diagnostic before running source ingestion sprint.",
+      };
+    } catch {
+      // Fall through to a clean empty diagnostic.
+    }
+  }
+  return {
+    status: "needs_files",
+    generatedAt: null,
+    manifestPath: SOURCE_DROP_DIAGNOSTIC_PATH,
+    markdownPath: SOURCE_DROP_DIAGNOSTIC_MARKDOWN_PATH,
+    repairWorksheetCsvPath: SOURCE_DROP_REPAIR_WORKSHEET_CSV_PATH,
+    dropDir: SOURCE_DROP_DIR,
+    files: [],
+    manifests: [],
+    categories: [],
+    totals: {
+      files: 0,
+      importEligible: 0,
+      manifestReady: 0,
+      manifestFiles: 0,
+      manifestRows: 0,
+      manifestReadyRows: 0,
+      manifestPlaceholderRows: 0,
+      manifestMissingFiles: 0,
+      unsupported: 0,
+      categoriesReady: 0,
+      minimumWeeklySourceAssets: 0,
+      currentSourceAssets: 0,
+      rightsReadyAssets: 0,
+      missingSourceAssets: 0,
+    },
+    nextStep: "Prepare Source Drop Diagnostic before running source ingestion sprint.",
+  };
+}
+
+function sourceIngestionStatusForItem(
+  item: ClipperSourceSupplyDropKitItem,
+  diagnostic: ClipperSourceDropDiagnosticSummary
+): { status: ClipperSourceIngestionSprintItemStatus; blockers: string[] } {
+  const itemKeys = new Set(sourceDropFileMatchKeys(item.targetFileName));
+  const categoryFiles = diagnostic.files.filter((file) => file.category === item.category);
+  const matchingFile = categoryFiles.find((file) => sourceDropFileMatchKeys(file.fileName).some((key) => itemKeys.has(key))) || null;
+  const categoryManifests = diagnostic.manifests.filter((manifest) => manifest.category === item.category);
+  const matchingManifest = categoryManifests.find((manifest) => manifest.expectedFiles.some((fileName) => sourceDropFileMatchKeys(fileName).some((key) => itemKeys.has(key)))) || null;
+  const blockers = uniqueStrings([
+    !matchingFile ? `Upload ${item.targetFileName} into ${path.dirname(item.sourceDropPath)}.` : null,
+    matchingManifest && matchingManifest.placeholderRows > 0 ? "Replace source URL/source/proof placeholders in source-drop-manifest.csv." : null,
+    matchingManifest && matchingManifest.missingFiles.some((fileName) => sourceDropFileMatchKeys(fileName).some((key) => itemKeys.has(key))) ? "Manifest expects this file but it is missing from source-drop." : null,
+    matchingFile && !matchingFile.manifestEvidenceReady && !matchingFile.rightsEvidencePath ? "Add concrete rights evidence before scaling publishing." : null,
+    matchingFile?.issue || null,
+  ]);
+  if (!matchingFile) return { status: "needs_file", blockers };
+  if (matchingManifest && matchingManifest.placeholderRows > 0) return { status: "needs_metadata", blockers };
+  if (matchingFile.importEligible && (matchingFile.manifestEvidenceReady || matchingFile.rightsEvidencePath)) return { status: "ready_to_import", blockers: [] };
+  if (matchingFile.importEligible) return { status: "needs_rights", blockers };
+  return { status: "needs_file", blockers };
+}
+
+function statusForSourceIngestionCategory(items: ClipperSourceIngestionSprintItem[]): ClipperSourceIngestionSprintStatus {
+  if (!items.length) return "ready";
+  if (items.some((item) => item.status === "needs_file")) return "needs_files";
+  if (items.some((item) => item.status === "needs_metadata")) return "needs_metadata";
+  if (items.some((item) => item.status === "needs_rights")) return "needs_rights";
+  if (items.some((item) => item.status === "ready_to_import")) return "ready_to_import";
+  return "ready";
+}
+
+function renderSourceIngestionSprintCsv(summary: ClipperSourceIngestionSprintSummary): string {
+  const header = [
+    "rank",
+    "status",
+    "category",
+    "priority",
+    "target_file_name",
+    "source_drop_path",
+    "manifest_path",
+    "viral_search_query",
+    "viral_search_url",
+    "proof_needed",
+    "blockers",
+    "intake_batch_row",
+    "rights_evidence_batch_row",
+    "next_step",
+  ];
+  const rows = summary.items.map((item) => [
+    item.rank,
+    item.status,
+    item.category,
+    item.priority,
+    item.targetFileName,
+    item.sourceDropPath,
+    item.sourceDropManifestPath,
+    item.viralSearchQuery,
+    item.viralSearchUrl,
+    item.proofNeeded.join(" | "),
+    item.blockers.join(" | "),
+    item.intakeBatchRow,
+    item.rightsEvidenceBatchRow,
+    item.nextStep,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceIngestionSprintMarkdown(summary: ClipperSourceIngestionSprintSummary): string {
+  return [
+    "# Clippers Source Ingestion Sprint",
+    "",
+    "Fast operator sprint for filling the source-drop backlog. It does not download videos, bypass rights checks or mark content publishable without evidence.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Target weekly clips: ${summary.targetWeeklyClips}`,
+    `Source drop dir: ${summary.sourceDropDir}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Files needed: ${summary.totals.filesNeeded}`,
+    `- Metadata rows needed: ${summary.totals.metadataRowsNeeded}`,
+    `- Rights needed: ${summary.totals.rightsNeeded}`,
+    `- Import ready: ${summary.totals.importReady}`,
+    `- Ready: ${summary.totals.ready}`,
+    `- Missing source assets: ${summary.totals.missingSourceAssets}`,
+    `- Rights-ready assets: ${summary.totals.rightsReadyAssets}/${summary.totals.minimumWeeklySourceAssets}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Category Sprints",
+    "",
+    ...summary.categories.flatMap((category) => [
+      `### ${category.label}`,
+      "",
+      `- Status: ${category.status}`,
+      `- Items: ${category.items}`,
+      `- Files needed: ${category.filesNeeded}`,
+      `- Metadata rows needed: ${category.metadataRowsNeeded}`,
+      `- Rights needed: ${category.rightsNeeded}`,
+      `- Import ready: ${category.importReady}`,
+      `- Rights-ready assets: ${category.rightsReadyAssets}/${category.minimumWeeklySourceAssets}`,
+      `- Source drop dir: ${category.sourceDropDir}`,
+      `- Manifest: ${category.sourceDropManifestPath}`,
+      `- README: ${category.sourceDropReadmePath}`,
+      `- Next step: ${category.nextStep}`,
+      "",
+    ]),
+    "## Sprint Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.targetFileName}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Category: ${item.category}`,
+      `- Priority: ${item.priority}`,
+      `- Drop path: ${item.sourceDropPath}`,
+      `- Manifest: ${item.sourceDropManifestPath}`,
+      `- Search: ${item.viralSearchQuery}`,
+      `- Search URL: ${item.viralSearchUrl}`,
+      `- Recency: ${item.recencyWindow}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Proof needed:",
+      ...item.proofNeeded.map((proof) => `- ${proof}`),
+      "",
+      ...(item.blockers.length ? [
+        "Blockers:",
+        ...item.blockers.map((blocker) => `- ${blocker}`),
+        "",
+      ] : []),
+      "Intake row:",
+      "```csv",
+      item.intakeBatchRow,
+      "```",
+      "",
+      "Rights evidence row:",
+      "```csv",
+      item.rightsEvidenceBatchRow,
+      "```",
+      "",
+    ]),
+    "## Artifacts",
+    "",
+    `- Source supply drop kit: ${summary.artifactPaths.sourceSupplyDropKit}`,
+    `- Source drop diagnostic: ${summary.artifactPaths.sourceDropDiagnostic}`,
+    `- Repair worksheet: ${summary.artifactPaths.repairWorksheet}`,
+    `- Intake refresh: ${summary.artifactPaths.intakeRefresh}`,
+    "",
+  ].join("\n");
+}
+
+export async function prepareClipperSourceIngestionSprint(userId = getSystemUserId()): Promise<{ sourceIngestionSprint: ClipperSourceIngestionSprintSummary; status: ClipperStatus | null }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const sourceSupplyDropKit = await readCachedSourceSupplyDropKitSummary();
+  const sourceDropDiagnostic = await readCachedSourceDropDiagnosticSummary();
+  const items = sourceSupplyDropKit.items.map<ClipperSourceIngestionSprintItem>((item, index) => {
+    const sourceStatus = sourceIngestionStatusForItem(item, sourceDropDiagnostic);
+    const batch = sourceSupplyDropKit.categoryBatches.find((candidate) => candidate.category === item.category);
+    const viralSearchQuery = item.viralSearchQueries[0] || `${item.category} viral clip today rights cleared ${item.targetFileName}`;
+    const platform = item.category === "streamers" ? "youtube" : item.category === "memes" ? "instagram" : "tiktok";
+    return {
+      id: item.id,
+      rank: index + 1,
+      status: sourceStatus.status,
+      category: item.category,
+      label: item.label,
+      priority: item.priority,
+      targetFileName: item.targetFileName,
+      sourceDropPath: item.sourceDropPath,
+      sourceDropManifestPath: batch?.sourceDropManifestPath || path.join(SOURCE_DROP_DIR, item.category, "source-drop-manifest.csv"),
+      sourceDropReadmePath: batch?.sourceDropReadmePath || path.join(SOURCE_DROP_DIR, item.category, "README.md"),
+      suggestedTitle: item.suggestedTitle,
+      viralSearchQuery,
+      viralSearchUrl: viralDiscoverySearchUrl(platform, viralSearchQuery),
+      recencyWindow: "0-72h preferred; prove date/context before using.",
+      proofNeeded: item.requiredProof,
+      intakeBatchRow: item.intakeBatchRow,
+      rightsEvidenceBatchRow: item.rightsEvidenceBatchRow,
+      blockers: sourceStatus.blockers,
+      doneCriteria: item.doneCriteria,
+      nextStep: sourceStatus.status === "needs_file"
+        ? `Upload ${item.targetFileName} to ${path.dirname(item.sourceDropPath)} and fill its manifest row.`
+        : sourceStatus.status === "needs_metadata"
+          ? "Replace placeholders in source-drop-manifest.csv with real URL/source/proof values."
+          : sourceStatus.status === "needs_rights"
+            ? "Attach concrete creator/license/official-source proof before importing for production."
+            : sourceStatus.status === "ready_to_import"
+              ? "Run Import source-drop, then regenerate Production Queue and Draft Specs."
+              : "Source item is ready for the current publishing gate.",
+    };
+  });
+  const categories = (["sports", "memes", "streamers"] as ClipperAccountCategory[])
+    .map<ClipperSourceIngestionSprintCategory>((category) => {
+      const categoryItems = items.filter((item) => item.category === category);
+      const diagnosticCategory = sourceDropDiagnostic.categories.find((candidate) => candidate.category === category);
+      const batch = sourceSupplyDropKit.categoryBatches.find((candidate) => candidate.category === category);
+      const filesNeeded = categoryItems.filter((item) => item.status === "needs_file").length;
+      const metadataRowsNeeded = categoryItems.filter((item) => item.status === "needs_metadata").length;
+      const rightsNeeded = categoryItems.filter((item) => item.status === "needs_rights").length;
+      const importReady = categoryItems.filter((item) => item.status === "ready_to_import").length;
+      return {
+        category,
+        label: categoryLabelsForBackend(category),
+        status: statusForSourceIngestionCategory(categoryItems),
+        sourceDropDir: batch?.sourceDropDir || path.join(SOURCE_DROP_DIR, category),
+        sourceDropManifestPath: batch?.sourceDropManifestPath || path.join(SOURCE_DROP_DIR, category, "source-drop-manifest.csv"),
+        sourceDropReadmePath: batch?.sourceDropReadmePath || path.join(SOURCE_DROP_DIR, category, "README.md"),
+        items: categoryItems.length,
+        filesNeeded,
+        metadataRowsNeeded,
+        rightsNeeded,
+        importReady,
+        rightsReadyAssets: diagnosticCategory?.rightsReadyAssets || 0,
+        minimumWeeklySourceAssets: diagnosticCategory?.minimumWeeklySourceAssets || 0,
+        nextStep: filesNeeded > 0
+          ? `Upload ${filesNeeded} ${categoryLabelsForBackend(category)} file(s) into source-drop and fill manifest rows.`
+          : metadataRowsNeeded > 0
+            ? `Replace ${metadataRowsNeeded} placeholder row(s) in source-drop-manifest.csv.`
+            : rightsNeeded > 0
+              ? `Attach proof for ${rightsNeeded} ${categoryLabelsForBackend(category)} source file(s).`
+              : importReady > 0
+                ? `Import ${importReady} ready ${categoryLabelsForBackend(category)} source file(s).`
+                : "Category source sprint is clear.",
+      };
+    });
+  const totals = items.reduce<ClipperSourceIngestionSprintSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "needs_file") sum.filesNeeded += 1;
+    if (item.status === "needs_metadata") sum.metadataRowsNeeded += 1;
+    if (item.status === "needs_rights") sum.rightsNeeded += 1;
+    if (item.status === "ready_to_import") sum.importReady += 1;
+    if (item.status === "ready") sum.ready += 1;
+    return sum;
+  }, {
+    items: 0,
+    filesNeeded: 0,
+    metadataRowsNeeded: 0,
+    rightsNeeded: 0,
+    importReady: 0,
+    ready: 0,
+    missingSourceAssets: sourceDropDiagnostic.totals.missingSourceAssets || sourceSupplyDropKit.totals.weeklyMissingSourceSlots || 0,
+    rightsReadyAssets: sourceDropDiagnostic.totals.rightsReadyAssets || sourceSupplyDropKit.totals.rightsReadyAssets || 0,
+    minimumWeeklySourceAssets: sourceDropDiagnostic.totals.minimumWeeklySourceAssets || sourceSupplyDropKit.totals.minimumWeeklySourceAssets || 0,
+    categoriesReady: categories.filter((category) => category.status === "ready").length,
+  });
+  const status: ClipperSourceIngestionSprintStatus = !sourceSupplyDropKit.items.length
+    ? "not_prepared"
+    : totals.filesNeeded > 0
+      ? "needs_files"
+      : totals.metadataRowsNeeded > 0
+        ? "needs_metadata"
+        : totals.rightsNeeded > 0
+          ? "needs_rights"
+          : totals.importReady > 0
+            ? "ready_to_import"
+            : "ready";
+  const sourceIngestionSprint: ClipperSourceIngestionSprintSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: SOURCE_INGESTION_SPRINT_PATH,
+    markdownPath: SOURCE_INGESTION_SPRINT_MARKDOWN_PATH,
+    csvPath: SOURCE_INGESTION_SPRINT_CSV_PATH,
+    sourceDropDir: SOURCE_DROP_DIR,
+    targetWeeklyClips: sourceSupplyDropKit.totals.weeklyMissingSourceSlots + sourceDropDiagnostic.totals.rightsReadyAssets,
+    items,
+    categories,
+    totals,
+    artifactPaths: {
+      sourceSupplyDropKit: sourceSupplyDropKit.markdownPath,
+      sourceDropDiagnostic: sourceDropDiagnostic.markdownPath,
+      repairWorksheet: sourceDropDiagnostic.repairWorksheetCsvPath,
+      intakeRefresh: INTAKE_REFRESH_SWEEP_MARKDOWN_PATH,
+    },
+    nextStep: status === "needs_files"
+      ? `Upload ${totals.filesNeeded} source file(s) into source-drop, starting with sports/memes/streamers folders.`
+      : status === "needs_metadata"
+        ? `Replace ${totals.metadataRowsNeeded} manifest placeholder row(s) with real source URL, creator and proof.`
+        : status === "needs_rights"
+          ? `Attach rights proof for ${totals.rightsNeeded} importable source file(s).`
+          : status === "ready_to_import"
+            ? `Import ${totals.importReady} ready source file(s), then regenerate Production Queue and Draft Specs.`
+            : status === "ready"
+              ? "Source ingestion sprint is clear for the current weekly target."
+              : "Prepare Source Supply Drop Kit and Source Drop Diagnostic first.",
+  };
+  await writeFile(SOURCE_INGESTION_SPRINT_PATH, JSON.stringify(sourceIngestionSprint, null, 2));
+  await writeFile(SOURCE_INGESTION_SPRINT_MARKDOWN_PATH, renderSourceIngestionSprintMarkdown(sourceIngestionSprint));
+  await writeFile(SOURCE_INGESTION_SPRINT_CSV_PATH, renderSourceIngestionSprintCsv(sourceIngestionSprint));
+  return { sourceIngestionSprint, status: null };
+}
+
 function sourceHuntPaths(huntDate: string) {
   const safeDate = huntDate.replace(/[^0-9-]/g, "").slice(0, 10) || new Date().toISOString().slice(0, 10);
   return {
