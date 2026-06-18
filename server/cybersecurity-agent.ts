@@ -6,6 +6,26 @@ import { hasRealValue } from "./ceo-doctor-cli";
 
 const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const lastAutomaticAlertByUser = new Map<string, { signature: string; sentAt: number }>();
+const IMPORTANT_APP_REPO_KEYWORDS = ["blackops", "kong", "blackroom", "br-website", "dropkit"];
+const LIKELY_APP_REPO_KEYWORDS = [
+  "app",
+  "site",
+  "website",
+  "web",
+  "planner",
+  "kong",
+  "black",
+  "room",
+  "dropkit",
+  "dashboard",
+  "bot",
+  "server",
+  "client",
+  "typescript",
+  "javascript",
+  "react",
+  "node",
+];
 
 function getTelegramBotToken(): string | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -111,7 +131,7 @@ function friendlyRepoName(repoName: string): string {
 
 function inferPriorityFromRepo(repo: GithubRepo): AppProject["priority"] {
   const text = `${repo.full_name} ${repo.description || ""} ${repo.homepage || ""}`.toLowerCase();
-  if (text.includes("blackops") || text.includes("kong") || text.includes("blackroom") || text.includes("br-website")) {
+  if (IMPORTANT_APP_REPO_KEYWORDS.some((word) => text.includes(word))) {
     return "high";
   }
   if (text.includes("production") || text.includes("prod") || text.includes("website") || text.includes("app")) {
@@ -303,24 +323,7 @@ function appRepoSet(apps: AppProject[]): Set<string> {
 
 function isLikelyAppRepo(repo: GithubRepo): boolean {
   const text = `${repo.name} ${repo.description || ""} ${repo.language || ""}`.toLowerCase();
-  return [
-    "app",
-    "site",
-    "website",
-    "web",
-    "planner",
-    "kong",
-    "black",
-    "room",
-    "dashboard",
-    "bot",
-    "server",
-    "client",
-    "typescript",
-    "javascript",
-    "react",
-    "node",
-  ].some((word) => text.includes(word));
+  return LIKELY_APP_REPO_KEYWORDS.some((word) => text.includes(word));
 }
 
 function analyzeGithubRepo(repo: GithubRepo, connectedRepos: Set<string>): { check: CyberGithubRepoCheck; threats: CyberThreat[] } {
@@ -487,6 +490,12 @@ export async function importMissingGithubApps(userId: string): Promise<CyberInve
     skippedRepos,
   };
 }
+
+export const __cybersecurityAgentInternals = {
+  githubRepoToAppProjectInput,
+  inferPriorityFromRepo,
+  isLikelyAppRepo,
+};
 
 function recommendSkills(threats: CyberThreat[]): CyberSkill[] {
   const skills: CyberSkill[] = [

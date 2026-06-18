@@ -129,6 +129,8 @@ type ClipperLocalDropSyncStatus = "not_run" | "completed" | "partial" | "blocked
 type ClipperLocalDropSyncItemStatus = "completed" | "skipped" | "failed";
 type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "blocked";
 type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
+type ClipperPostConnectActivationSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
+type ClipperIntakeRefreshSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
 type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
 type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
@@ -2393,6 +2395,60 @@ interface ClipperGoLivePrepSweepSummary {
   nextStep: string;
 }
 
+interface ClipperPostConnectActivationSweepSummary {
+  status: ClipperPostConnectActivationSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  prepSweepStatus: ClipperGoLivePrepSweepStatus;
+  localDropSyncStatus: ClipperLocalDropSyncStatus | "not_run";
+  readyToPublish: boolean;
+  totalLanes: number;
+  readyLanes: number;
+  activationReadyLanes: number;
+  waitingLanes: number;
+  blockedLanes: number;
+  nextLane: NonNullable<ClipperRobertConnectNowHandoff["postConnectActivationBridge"]>[number] | null;
+  nextLocalActions: string[];
+  blockers: string[];
+  artifactPaths: {
+    prepSweep: string;
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    completionAudit: string;
+    localDropSync: string | null;
+  };
+  launcherUrl: string;
+  nextStep: string;
+}
+
+interface ClipperIntakeRefreshSweepSummary {
+  status: ClipperIntakeRefreshSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  prepSweepStatus: ClipperGoLivePrepSweepStatus;
+  localDropSyncStatus: ClipperLocalDropSyncStatus | "not_run";
+  postConnectStatus: ClipperPostConnectActivationSweepStatus;
+  readyToPublish: boolean;
+  intakeConsole: NonNullable<ClipperRobertConnectNowHandoff["intakeConsole"]>;
+  refreshSequence: string[];
+  completedSteps: string[];
+  skippedOrBlockedSteps: string[];
+  blockers: string[];
+  artifactPaths: {
+    localDropSync: string | null;
+    prepSweep: string;
+    postConnectActivation: string;
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    intakeRefresh: string;
+  };
+  nextStep: string;
+}
+
 interface ClipperOwnerConnectPackItem {
   id: string;
   rank: number;
@@ -3150,6 +3206,52 @@ interface ClipperRobertConnectNowHandoff {
     doneCriteria: string[];
     nextStep: string;
   }>;
+  externalPortalLauncher?: {
+    htmlPath: string;
+    url: string;
+    totalPortals: number;
+    doNow: number;
+    blocked: number;
+    accountTasks: number;
+    developerAppTasks: number;
+    permissionTasks: number;
+    oauthTasks: number;
+    credentialTasks: number;
+    nextStep: string;
+  };
+  intakeConsole?: {
+    status: ClipperDropzoneReadyPackStatus;
+    nextStep: string;
+    refreshSequence: string[];
+    totals: {
+      lanes: number;
+      ready: number;
+      partial: number;
+      missing: number;
+      critical: number;
+      blockers: number;
+      dropDirs: number;
+      expectedFiles: number;
+    };
+    lanes: Array<{
+      id: string;
+      rank: number;
+      lane: ClipperDropzoneReadyPackLane;
+      label: string;
+      status: ClipperDropzoneReadyPackItemStatus;
+      priority: "critical" | "high" | "medium";
+      actionLabel: string;
+      actionUrl: string;
+      artifactPath: string | null;
+      dropDirs: string[];
+      acceptedFormats: string[];
+      expectedFilesCount: number;
+      sampleExpectedFiles: string[];
+      blockers: string[];
+      unlocks: string[];
+      nextStep: string;
+    }>;
+  };
   postConnectActivationBridge?: Array<{
     id: string;
     accountId: string;
@@ -4913,7 +5015,7 @@ function permissionRequestPackBadge(status: ClipperPermissionRequestPackStatus) 
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
+function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperPostConnectActivationSweepStatus | ClipperIntakeRefreshSweepStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
   if (status === "ready" || status === "done" || status === "completed") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped" || status === "ready_to_execute" || status === "needs_action" || status === "needs_fix" || status === "needs_login_recheck" || status === "ready_to_submit") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared" || status === "not_run") return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -5047,6 +5149,7 @@ export default function ClippersPage() {
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceIntakeBatch, setSourceIntakeBatch] = useState<ClipperSourceIntakeBatchSummary | null>(null);
   const [sourceDropImport, setSourceDropImport] = useState<ClipperSourceDropImportSummary | null>(null);
+  const [intakeRefreshSweep, setIntakeRefreshSweep] = useState<ClipperIntakeRefreshSweepSummary | null>(null);
   const [renderedClips, setRenderedClips] = useState<ClipperRenderedClipSummary | null>(null);
   const [publishingPackage, setPublishingPackage] = useState<ClipperPublishingPackageSummary | null>(null);
   const [productionPublicUrl, setProductionPublicUrl] = useState("");
@@ -5069,6 +5172,93 @@ export default function ClippersPage() {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
   }, [status?.credentialDoctor]);
+
+  const refreshPostConnectActivationState = async (sourceLabel: string) => {
+    try {
+      const response = await fetch("/api/clippers/run-post-connect-activation-sweep", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude refrescar Activation sweep");
+      const result = data as {
+        postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
+        status: ClipperStatus;
+      };
+      queryClient.setQueryData(["/api/clippers/status"], result.status);
+      toast({
+        title: "Activation sweep actualizado",
+        description: `${sourceLabel}: ${result.postConnectActivationSweep.readyLanes + result.postConnectActivationSweep.activationReadyLanes}/${result.postConnectActivationSweep.totalLanes} lanes listas; ${result.postConnectActivationSweep.blockedLanes} bloqueadas.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Sweep pendiente",
+        description: error?.message || "Guarde la evidencia, pero no pude refrescar el estado post-connect.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const refreshSourceRunwayState = async (sourceLabel: string) => {
+    try {
+      const steps = [
+        "/api/clippers/prepare-production-queue",
+        "/api/clippers/prepare-source-acquisition",
+        "/api/clippers/prepare-source-supply-drop-kit",
+      ];
+      let latestStatus: ClipperStatus | null = null;
+      for (const endpoint of steps) {
+        const response = await fetch(endpoint, { method: "POST" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `No pude refrescar ${endpoint}`);
+        latestStatus = data.status;
+      }
+      if (!latestStatus) return;
+      queryClient.setQueryData(["/api/clippers/status"], latestStatus);
+      toast({
+        title: "Source runway actualizado",
+        description: `${sourceLabel}: ${latestStatus.sourceAcquisition.totals.weeklyReadySlots}/${latestStatus.sourceAcquisition.totals.targetWeeklyClips} clips/semana listos; ${latestStatus.sourceSupplyDropKit.totals.items} filas faltantes.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Source runway pendiente",
+        description: error?.message || "Guarde el input, pero no pude regenerar source plan/production queue.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const refreshCredentialOauthRunwayState = async (sourceLabel: string) => {
+    try {
+      const steps = [
+        "/api/clippers/reload-credentials",
+        "/api/clippers/prepare-credential-doctor",
+        "/api/clippers/prepare-oauth-go-live",
+        "/api/clippers/prepare-oauth-connection-pack",
+        "/api/clippers/prepare-platform-readiness",
+      ];
+      let latestStatus: ClipperStatus | null = null;
+      for (const endpoint of steps) {
+        const response = await fetch(endpoint, { method: "POST" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `No pude refrescar ${endpoint}`);
+        latestStatus = data.status;
+      }
+      const sweepResponse = await fetch("/api/clippers/run-post-connect-activation-sweep", { method: "POST" });
+      const sweepData = await sweepResponse.json();
+      if (!sweepResponse.ok) throw new Error(sweepData.error || "No pude refrescar Activation sweep");
+      latestStatus = sweepData.status || latestStatus;
+      if (!latestStatus) return;
+      queryClient.setQueryData(["/api/clippers/status"], latestStatus);
+      toast({
+        title: "Credential/OAuth runway actualizado",
+        description: `${sourceLabel}: ${latestStatus.credentialSetup.totals.ready}/${latestStatus.credentialSetup.totals.items} credenciales; ${latestStatus.oauthConnectionPack.totals.tokensSaved}/${latestStatus.oauthConnectionPack.totals.connections} OAuth tokens.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Credential/OAuth refresh pendiente",
+        description: error?.message || "Guarde credenciales, pero no pude refrescar OAuth/Activation.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const runMutation = useMutation({
     mutationFn: async () => {
@@ -5282,6 +5472,7 @@ export default function ClippersPage() {
         title: "Evidencia registrada",
         description: `${data.accountEvidence.totals.verified}/${data.accountEvidence.totals.expected} cuentas verificadas.`,
       });
+      void refreshPostConnectActivationState("cuenta");
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar evidencia", description: error.message, variant: "destructive" });
@@ -5305,6 +5496,7 @@ export default function ClippersPage() {
         title: "Developer app registrada",
         description: `${data.developerAppEvidence.totals.approved}/${data.developerAppEvidence.totals.expected} apps aprobadas.`,
       });
+      void refreshPostConnectActivationState("developer app");
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar developer app", description: error.message, variant: "destructive" });
@@ -5364,6 +5556,7 @@ export default function ClippersPage() {
         title: "Evidencia batch importada",
         description: `${accepted.accountEvidence} cuentas, ${accepted.developerApps} apps, ${accepted.permissions} permisos, ${accepted.sourceRights} derechos; ${data.launchEvidenceBatch.rejected.length} rechazados.`,
       });
+      void refreshPostConnectActivationState("batch evidence");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar evidencia", description: error.message, variant: "destructive" });
@@ -5393,6 +5586,7 @@ export default function ClippersPage() {
         title: "Evidence drop importado",
         description: `${accepted.accountEvidence} cuentas, ${accepted.developerApps} apps, ${accepted.permissions} permisos; ${data.launchEvidenceDropImport.filesImported || 0}/${data.launchEvidenceDropImport.filesScanned || 0} archivos.`,
       });
+      void refreshPostConnectActivationState("evidence-drop");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar evidence-drop", description: error.message, variant: "destructive" });
@@ -5521,6 +5715,7 @@ export default function ClippersPage() {
         title: "Credencial guardada",
         description: `${data.credentialSecret.envVar} actualizada en ${data.credentialSecret.envFileName}.`,
       });
+      void refreshCredentialOauthRunwayState("credencial guardada");
     },
     onError: (error: Error) => {
       toast({ title: "No pude guardar la credencial", description: error.message, variant: "destructive" });
@@ -5570,6 +5765,7 @@ export default function ClippersPage() {
         title: "Credenciales batch guardadas",
         description: `${data.credentialSecretsBatch.acceptedEnvVars.length} guardadas; ${data.credentialSecretsBatch.rejectedEnvVars.length} rechazadas.`,
       });
+      void refreshCredentialOauthRunwayState("batch de credenciales");
     },
     onError: (error: Error) => {
       toast({ title: "No pude guardar el batch", description: error.message, variant: "destructive" });
@@ -5590,6 +5786,7 @@ export default function ClippersPage() {
         title: "Drop credentials importadas",
         description: `${data.credentialDropImport.acceptedEnvVars.length} keys; ${data.credentialDropImport.filesImported || 0}/${data.credentialDropImport.filesScanned || 0} archivos.`,
       });
+      void refreshCredentialOauthRunwayState("credential drop");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar drop files", description: error.message, variant: "destructive" });
@@ -5610,6 +5807,7 @@ export default function ClippersPage() {
         title: "Credenciales recargadas",
         description: `${data.credentialReload.credentialSetup.totals.ready}/${data.credentialReload.credentialSetup.totals.items} grupos listos. Archivos: ${found}.`,
       });
+      void refreshCredentialOauthRunwayState("reload credentials");
     },
     onError: (error: Error) => {
       toast({ title: "No pude recargar credenciales", description: error.message, variant: "destructive" });
@@ -6179,6 +6377,58 @@ export default function ClippersPage() {
     },
   });
 
+  const postConnectActivationSweepMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/run-post-connect-activation-sweep", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude correr el Post-connect sweep");
+      return data as {
+        postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
+        goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+        localDropSync: ClipperLocalDropSyncSummary | null;
+        robertNextActions: ClipperRobertNextActionsSummary;
+        status: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Post-connect sweep listo",
+        description: `${data.postConnectActivationSweep.readyLanes + data.postConnectActivationSweep.activationReadyLanes}/${data.postConnectActivationSweep.totalLanes} lanes listas; ${data.postConnectActivationSweep.blockedLanes} bloqueadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr Post-connect sweep", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const intakeRefreshSweepMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/run-intake-refresh-sweep", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude correr Intake Refresh Sweep");
+      return data as {
+        intakeRefreshSweep: ClipperIntakeRefreshSweepSummary;
+        postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
+        goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+        localDropSync: ClipperLocalDropSyncSummary | null;
+        robertNextActions: ClipperRobertNextActionsSummary;
+        status: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      setIntakeRefreshSweep(data.intakeRefreshSweep);
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Intake refresh listo",
+        description: `${data.intakeRefreshSweep.intakeConsole.totals.ready} ready, ${data.intakeRefreshSweep.intakeConsole.totals.partial} partial, ${data.intakeRefreshSweep.intakeConsole.totals.missing} missing; ${data.intakeRefreshSweep.blockers.length} blockers.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr Intake refresh", description: error.message, variant: "destructive" });
+    },
+  });
+
   const ownerConnectPackMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-owner-connect-pack", { method: "POST" });
@@ -6390,6 +6640,7 @@ export default function ClippersPage() {
         title: "Permiso actualizado",
         description: `${data.permissionTracker.totals.approved}/${data.permissionTracker.totals.permissions} aprobados; ${data.permissionTracker.totals.requested} solicitados.`,
       });
+      void refreshPostConnectActivationState("permiso");
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar permiso", description: error.message, variant: "destructive" });
@@ -6509,6 +6760,7 @@ export default function ClippersPage() {
         title: "Source intake importado",
         description: `${data.sourceIntakeBatch.accepted} sources; ${data.sourceIntakeBatch.totals.ownedOrPermissioned} con fila de derechos lista.`,
       });
+      void refreshSourceRunwayState("source intake");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar source intake", description: error.message, variant: "destructive" });
@@ -6609,6 +6861,7 @@ export default function ClippersPage() {
         title: "Candidatos importados",
         description: `${data.trendCandidatesBatch.accepted} aceptados; ${data.trendCandidatesBatch.skipped} saltados.`,
       });
+      void refreshSourceRunwayState("candidatos virales");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar candidatos", description: error.message, variant: "destructive" });
@@ -6686,6 +6939,7 @@ export default function ClippersPage() {
         title: "Source drop importado",
         description: `${data.sourceDropImport.imported}/${data.sourceDropImport.filesScanned} videos importados; ${data.sourceDropImport.queue.sourceAssets.length} assets detectados.`,
       });
+      void refreshSourceRunwayState("source-drop");
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar source-drop", description: error.message, variant: "destructive" });
@@ -6710,6 +6964,7 @@ export default function ClippersPage() {
         title: "Derechos registrados",
         description: `${data.sourceRights.fileName} listo. ${readyAssets}/${data.queue.sourceAssets.length} assets con permiso.`,
       });
+      void refreshSourceRunwayState("derechos de source");
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar derechos", description: error.message, variant: "destructive" });
@@ -7461,6 +7716,15 @@ export default function ClippersPage() {
             >
               {goLivePrepSweepMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
               Prep sweep
+            </Button>
+            <Button
+              onClick={() => postConnectActivationSweepMutation.mutate()}
+              disabled={postConnectActivationSweepMutation.isPending || goLivePrepSweepMutation.isPending || isLoading}
+              className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+              data-testid="run-clippers-post-connect-activation-sweep-button"
+            >
+              {postConnectActivationSweepMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Activation sweep
             </Button>
             <Button
               onClick={() => ownerConnectPackMutation.mutate()}
@@ -8895,6 +9159,141 @@ export default function ClippersPage() {
                                     <UploadCloud className="mr-1 h-3 w-3" />
                                     Rows
                                   </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.externalPortalLauncher && (
+                        <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-2">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-amber-100">External portal launcher</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.externalPortalLauncher.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="w-fit border border-amber-300/20 bg-amber-950/30 text-[10px] text-amber-100">
+                                {status.robertNextActions.connectNow.externalPortalLauncher.doNow} do now
+                              </Badge>
+                              <Badge className="w-fit border border-rose-300/20 bg-rose-950/30 text-[10px] text-rose-100">
+                                {status.robertNextActions.connectNow.externalPortalLauncher.blocked} blocked
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <a
+                              href={status.robertNextActions.connectNow.externalPortalLauncher.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-300/20 px-2 text-[11px] text-amber-100 hover:bg-amber-300/10"
+                            >
+                              Open launcher
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                          <div className="mt-2 grid gap-2 text-[10px] leading-4 text-zinc-500 sm:grid-cols-2 lg:grid-cols-5">
+                            <p>Portals: {status.robertNextActions.connectNow.externalPortalLauncher.totalPortals}</p>
+                            <p>Accounts: {status.robertNextActions.connectNow.externalPortalLauncher.accountTasks}</p>
+                            <p>Apps: {status.robertNextActions.connectNow.externalPortalLauncher.developerAppTasks}</p>
+                            <p>Perms: {status.robertNextActions.connectNow.externalPortalLauncher.permissionTasks}</p>
+                            <p>OAuth/env: {status.robertNextActions.connectNow.externalPortalLauncher.oauthTasks + status.robertNextActions.connectNow.externalPortalLauncher.credentialTasks}</p>
+                          </div>
+                          <p className="mt-2 break-all rounded border border-white/10 bg-black/25 p-2 text-[10px] leading-4 text-amber-100/80">
+                            {status.robertNextActions.connectNow.externalPortalLauncher.htmlPath}
+                          </p>
+                        </div>
+                      )}
+                      {status.robertNextActions.connectNow.intakeConsole && (
+                        <div className="mt-3 rounded-md border border-violet-300/15 bg-violet-950/10 p-2" data-testid="clippers-go-live-intake-console">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium text-violet-100">Go-Live Intake Console</p>
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.intakeConsole.nextStep}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(status.robertNextActions.connectNow.intakeConsole.status))}>
+                                {status.robertNextActions.connectNow.intakeConsole.status}
+                              </Badge>
+                              <Badge className="w-fit border border-rose-300/20 bg-rose-950/30 text-[10px] text-rose-100">
+                                {status.robertNextActions.connectNow.intakeConsole.totals.blockers} blockers
+                              </Badge>
+                              <Badge className="w-fit border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                                {status.robertNextActions.connectNow.intakeConsole.totals.lanes} lanes
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="ml-1 h-7 border-violet-300/20 bg-transparent px-2 text-[11px] text-violet-100 hover:bg-violet-300/10"
+                                onClick={() => intakeRefreshSweepMutation.mutate()}
+                                disabled={intakeRefreshSweepMutation.isPending || postConnectActivationSweepMutation.isPending || goLivePrepSweepMutation.isPending || isLoading}
+                                data-testid="run-clippers-intake-refresh-sweep-button"
+                              >
+                                {intakeRefreshSweepMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                                Run intake refresh
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid gap-2 text-[10px] leading-4 text-zinc-500 sm:grid-cols-2 lg:grid-cols-6">
+                            <p>Ready: {status.robertNextActions.connectNow.intakeConsole.totals.ready}</p>
+                            <p>Partial: {status.robertNextActions.connectNow.intakeConsole.totals.partial}</p>
+                            <p>Missing: {status.robertNextActions.connectNow.intakeConsole.totals.missing}</p>
+                            <p>Critical: {status.robertNextActions.connectNow.intakeConsole.totals.critical}</p>
+                            <p>Dirs: {status.robertNextActions.connectNow.intakeConsole.totals.dropDirs}</p>
+                            <p>Files: {status.robertNextActions.connectNow.intakeConsole.totals.expectedFiles}</p>
+                          </div>
+                          <div className="mt-2 rounded border border-violet-300/10 bg-black/25 p-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">Refresh sequence</p>
+                            <p className="mt-1 text-[10px] leading-4 text-violet-100/80">{status.robertNextActions.connectNow.intakeConsole.refreshSequence.join(" -> ")}</p>
+                          </div>
+                          {intakeRefreshSweep && (
+                            <div className="mt-2 rounded border border-violet-300/10 bg-black/25 p-2" data-testid="clippers-intake-refresh-sweep-result">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">Last intake refresh</p>
+                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{intakeRefreshSweep.nextStep}</p>
+                                </div>
+                                <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(intakeRefreshSweep.status))}>{intakeRefreshSweep.status}</Badge>
+                              </div>
+                              <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500 sm:grid-cols-2 lg:grid-cols-5">
+                                <p>Prep: {intakeRefreshSweep.prepSweepStatus}</p>
+                                <p>Local: {intakeRefreshSweep.localDropSyncStatus}</p>
+                                <p>Post: {intakeRefreshSweep.postConnectStatus}</p>
+                                <p>Completed: {intakeRefreshSweep.completedSteps.length}</p>
+                                <p>Blocked/skipped: {intakeRefreshSweep.skippedOrBlockedSteps.length}</p>
+                              </div>
+                              <p className="mt-2 break-all text-[10px] leading-4 text-violet-100/75">{intakeRefreshSweep.markdownPath}</p>
+                            </div>
+                          )}
+                          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                            {status.robertNextActions.connectNow.intakeConsole.lanes.map((lane) => (
+                              <div key={`intake-console-${lane.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11px] font-medium text-white">{lane.rank}. {lane.label}</p>
+                                    <p className="mt-1 truncate text-[10px] text-violet-100/80">{lane.lane} / {lane.priority}</p>
+                                  </div>
+                                  <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(lane.status))}>{lane.status}</Badge>
+                                </div>
+                                <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-zinc-500">{lane.nextStep}</p>
+                                <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500">
+                                  <p>Action: {lane.actionLabel}</p>
+                                  <p>Expected: {lane.expectedFilesCount}</p>
+                                  <p className="break-all">API: {lane.actionUrl}</p>
+                                  {lane.artifactPath && <p className="break-all">Artifact: {lane.artifactPath}</p>}
+                                </div>
+                                {lane.dropDirs.length > 0 && (
+                                  <p className="mt-2 line-clamp-2 break-all text-[10px] leading-4 text-violet-100/75">Dirs: {lane.dropDirs.slice(0, 3).join(" | ")}</p>
+                                )}
+                                {lane.acceptedFormats.length > 0 && (
+                                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">Formats: {lane.acceptedFormats.slice(0, 4).join(" | ")}</p>
+                                )}
+                                {lane.blockers.length > 0 && (
+                                  <p className="mt-2 line-clamp-3 text-[10px] leading-4 text-rose-100/80">Blockers: {lane.blockers.slice(0, 3).join(" | ")}</p>
+                                )}
+                                {lane.unlocks.length > 0 && (
+                                  <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-emerald-100/75">Unlocks: {lane.unlocks.slice(0, 3).join(" | ")}</p>
                                 )}
                               </div>
                             ))}

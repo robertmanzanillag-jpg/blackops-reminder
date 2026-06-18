@@ -88,6 +88,8 @@ export type ClipperLocalDropSyncStatus = "not_run" | "completed" | "partial" | "
 export type ClipperLocalDropSyncItemStatus = "completed" | "skipped" | "failed";
 export type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "blocked";
 export type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
+export type ClipperPostConnectActivationSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
+export type ClipperIntakeRefreshSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
 export type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
 export type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
@@ -2466,6 +2468,60 @@ export interface ClipperGoLivePrepSweepSummary {
   nextStep: string;
 }
 
+export interface ClipperPostConnectActivationSweepSummary {
+  status: ClipperPostConnectActivationSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  prepSweepStatus: ClipperGoLivePrepSweepStatus;
+  localDropSyncStatus: ClipperLocalDropSyncStatus | "not_run";
+  readyToPublish: boolean;
+  totalLanes: number;
+  readyLanes: number;
+  activationReadyLanes: number;
+  waitingLanes: number;
+  blockedLanes: number;
+  nextLane: ClipperRobertConnectNowHandoff["postConnectActivationBridge"][number] | null;
+  nextLocalActions: string[];
+  blockers: string[];
+  artifactPaths: {
+    prepSweep: string;
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    completionAudit: string;
+    localDropSync: string | null;
+  };
+  launcherUrl: string;
+  nextStep: string;
+}
+
+export interface ClipperIntakeRefreshSweepSummary {
+  status: ClipperIntakeRefreshSweepStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  prepSweepStatus: ClipperGoLivePrepSweepStatus;
+  localDropSyncStatus: ClipperLocalDropSyncStatus | "not_run";
+  postConnectStatus: ClipperPostConnectActivationSweepStatus;
+  readyToPublish: boolean;
+  intakeConsole: ClipperRobertConnectNowHandoff["intakeConsole"];
+  refreshSequence: string[];
+  completedSteps: string[];
+  skippedOrBlockedSteps: string[];
+  blockers: string[];
+  artifactPaths: {
+    localDropSync: string | null;
+    prepSweep: string;
+    postConnectActivation: string;
+    robertNextActions: string;
+    connectNow: string;
+    launcher: string;
+    intakeRefresh: string;
+  };
+  nextStep: string;
+}
+
 export interface ClipperOwnerConnectPackItem {
   id: string;
   rank: number;
@@ -2737,6 +2793,52 @@ export interface ClipperRobertConnectNowHandoff {
     doneCriteria: string[];
     nextStep: string;
   }>;
+  externalPortalLauncher: {
+    htmlPath: string;
+    url: string;
+    totalPortals: number;
+    doNow: number;
+    blocked: number;
+    accountTasks: number;
+    developerAppTasks: number;
+    permissionTasks: number;
+    oauthTasks: number;
+    credentialTasks: number;
+    nextStep: string;
+  };
+  intakeConsole: {
+    status: ClipperDropzoneReadyPackSummary["status"];
+    nextStep: string;
+    refreshSequence: string[];
+    totals: {
+      lanes: number;
+      ready: number;
+      partial: number;
+      missing: number;
+      critical: number;
+      blockers: number;
+      dropDirs: number;
+      expectedFiles: number;
+    };
+    lanes: Array<{
+      id: string;
+      rank: number;
+      lane: ClipperDropzoneReadyPackItem["lane"];
+      label: string;
+      status: ClipperDropzoneReadyPackItem["status"];
+      priority: ClipperDropzoneReadyPackItem["priority"];
+      actionLabel: string;
+      actionUrl: string;
+      artifactPath: string | null;
+      dropDirs: string[];
+      acceptedFormats: string[];
+      expectedFilesCount: number;
+      sampleExpectedFiles: string[];
+      blockers: string[];
+      unlocks: string[];
+      nextStep: string;
+    }>;
+  };
   postConnectActivationBridge: Array<{
     id: string;
     accountId: string;
@@ -4758,6 +4860,10 @@ const LOCAL_DROP_SYNC_PATH = path.join(ROOT_DIR, "local-drop-sync.json");
 const LOCAL_DROP_SYNC_MARKDOWN_PATH = path.join(ROOT_DIR, "local-drop-sync.md");
 const GO_LIVE_PREP_SWEEP_PATH = path.join(ROOT_DIR, "go-live-prep-sweep.json");
 const GO_LIVE_PREP_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "go-live-prep-sweep.md");
+const POST_CONNECT_ACTIVATION_SWEEP_PATH = path.join(ROOT_DIR, "post-connect-activation-sweep.json");
+const POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "post-connect-activation-sweep.md");
+const INTAKE_REFRESH_SWEEP_PATH = path.join(ROOT_DIR, "intake-refresh-sweep.json");
+const INTAKE_REFRESH_SWEEP_MARKDOWN_PATH = path.join(ROOT_DIR, "intake-refresh-sweep.md");
 const OWNER_CONNECT_PACK_PATH = path.join(ROOT_DIR, "owner-connect-pack.json");
 const OWNER_CONNECT_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "owner-connect-pack.md");
 const OWNER_CONNECT_PACK_CSV_PATH = path.join(ROOT_DIR, "owner-connect-pack.csv");
@@ -4769,6 +4875,7 @@ const ROBERT_NEXT_ACTIONS_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.json")
 const ROBERT_NEXT_ACTIONS_MARKDOWN_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.md");
 const ROBERT_NEXT_ACTIONS_CSV_PATH = path.join(ROOT_DIR, "ROBERT_NEXT_ACTIONS.csv");
 const ROBERT_CONNECT_NOW_MARKDOWN_PATH = path.join(ROOT_DIR, "ROBERT_CONNECT_NOW.md");
+const EXTERNAL_PORTAL_LAUNCHER_HTML_PATH = path.join(ROOT_DIR, "external-portal-launcher.html");
 const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
 const LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.md");
 const LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.csv");
@@ -5198,10 +5305,10 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
         humanBlocker: null,
         requiredForAutopost: false,
         appReviewRequired: true,
-        officialReferenceUrl: "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+        officialReferenceUrl: "https://developers.tiktok.com/doc/tiktok-api-scopes/",
         verificationStatus: "official_verified",
         verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
-        verificationNote: "TikTok Content Posting API has Upload/Draft flow separate from Direct Post; keep as fallback until direct public posting is fully reviewed.",
+        verificationNote: "TikTok official scopes reference lists video.upload as sharing/uploading content as a draft; keep as fallback until direct public posting is fully reviewed.",
         requestPortalUrl: "https://developers.tiktok.com/",
         requestAction: "En TikTok for Developers, solicitar video.upload para Upload/Draft posting como fallback seguro.",
         verificationChecklist: [
@@ -6102,6 +6209,15 @@ function normalizeOrigin(value: string | undefined): string | null {
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function buildDriveOAuthSetupSummary(): ClipperDriveOAuthSetup {
@@ -26292,6 +26408,292 @@ export async function runClipperGoLivePrepSweep(userId = getSystemUserId()): Pro
   return { goLivePrepSweep, localDropSync: completedLocalDropSync, status: await getClipperStatus(userId) };
 }
 
+function renderPostConnectActivationSweepMarkdown(summary: ClipperPostConnectActivationSweepSummary): string {
+  return [
+    "# Clippers Post-Connect Activation Sweep",
+    "",
+    "Runs the local closeout pass after external account, app, permission and OAuth work. It does not publish or mark external work complete without imported evidence.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Prep sweep: ${summary.prepSweepStatus}`,
+    `Local drop sync: ${summary.localDropSyncStatus}`,
+    "",
+    "## Activation Lanes",
+    "",
+    `- Total lanes: ${summary.totalLanes}`,
+    `- Ready lanes: ${summary.readyLanes}`,
+    `- Activation-ready lanes: ${summary.activationReadyLanes}`,
+    `- Waiting lanes: ${summary.waitingLanes}`,
+    `- Blocked lanes: ${summary.blockedLanes}`,
+    "",
+    summary.nextLane ? "## Next Lane" : "## Next Lane\n\n- none",
+    ...(summary.nextLane ? [
+      "",
+      `- Account: ${summary.nextLane.accountName}`,
+      `- Platform: ${summary.nextLane.platform}`,
+      `- Handle: ${summary.nextLane.handle}`,
+      `- Status: ${summary.nextLane.status}`,
+      `- Score: ${summary.nextLane.activationScore}%`,
+      `- Next step: ${summary.nextLane.nextStep}`,
+    ] : []),
+    "",
+    "## Next Local Actions",
+    "",
+    ...(summary.nextLocalActions.length ? summary.nextLocalActions.map((action) => `- ${action}`) : ["- none"]),
+    "",
+    "## Blockers",
+    "",
+    ...(summary.blockers.length ? summary.blockers.map((blocker) => `- ${blocker}`) : ["- none"]),
+    "",
+    "## Artifacts",
+    "",
+    `- Prep sweep: ${summary.artifactPaths.prepSweep}`,
+    `- Robert next actions: ${summary.artifactPaths.robertNextActions}`,
+    `- Connect now: ${summary.artifactPaths.connectNow}`,
+    `- Launcher: ${summary.artifactPaths.launcher}`,
+    `- Launcher URL: ${summary.launcherUrl}`,
+    `- Completion audit: ${summary.artifactPaths.completionAudit}`,
+    `- Local drop sync: ${summary.artifactPaths.localDropSync || "n/a"}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+  ].join("\n");
+}
+
+export async function runClipperPostConnectActivationSweep(userId = getSystemUserId()): Promise<{
+  postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
+  goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+  localDropSync: ClipperLocalDropSyncSummary | null;
+  robertNextActions: ClipperRobertNextActionsSummary;
+  status: ClipperStatus;
+}> {
+  const prepResult = await runClipperGoLivePrepSweep(userId);
+  const robertResult = await prepareClipperRobertNextActions(userId);
+  const lanes = robertResult.robertNextActions.connectNow.postConnectActivationBridge;
+  const nextLane = lanes.find((lane) => lane.status === "blocked")
+    || lanes.find((lane) => lane.status === "waiting")
+    || lanes.find((lane) => lane.status === "activation_ready")
+    || lanes.find((lane) => lane.status === "ready")
+    || null;
+  const blockers = uniqueStrings([
+    ...lanes.flatMap((lane) => lane.blockers),
+    prepResult.goLivePrepSweep.status !== "completed" ? prepResult.goLivePrepSweep.nextStep : null,
+    !robertResult.status.goLiveCompletionAudit.readyToPublish ? robertResult.status.goLiveCompletionAudit.nextStep : null,
+  ]).slice(0, 30);
+  const nextLocalActions = uniqueStrings([
+    ...lanes.flatMap((lane) => lane.nextLocalActions),
+    prepResult.localDropSync && prepResult.localDropSync.status !== "completed" ? prepResult.localDropSync.nextStep : null,
+  ]).slice(0, 20);
+  const blockedLanes = lanes.filter((lane) => lane.status === "blocked").length;
+  const waitingLanes = lanes.filter((lane) => lane.status === "waiting").length;
+  const activationReadyLanes = lanes.filter((lane) => lane.status === "activation_ready").length;
+  const readyLanes = lanes.filter((lane) => lane.status === "ready").length;
+  const readyToPublish = robertResult.status.goLiveCompletionAudit.readyToPublish;
+  const localDropSyncStatus = prepResult.localDropSync?.status || "not_run";
+  const status: ClipperPostConnectActivationSweepStatus = readyToPublish && blockedLanes === 0 && waitingLanes === 0
+    ? "ready"
+    : prepResult.goLivePrepSweep.totals.failed > 0
+      ? "blocked"
+      : prepResult.goLivePrepSweep.status !== "completed" || localDropSyncStatus !== "completed"
+        ? "needs_local_input"
+        : "needs_external_action";
+  const postConnectActivationSweep: ClipperPostConnectActivationSweepSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: POST_CONNECT_ACTIVATION_SWEEP_PATH,
+    markdownPath: POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH,
+    prepSweepStatus: prepResult.goLivePrepSweep.status,
+    localDropSyncStatus,
+    readyToPublish,
+    totalLanes: lanes.length,
+    readyLanes,
+    activationReadyLanes,
+    waitingLanes,
+    blockedLanes,
+    nextLane,
+    nextLocalActions,
+    blockers,
+    artifactPaths: {
+      prepSweep: prepResult.goLivePrepSweep.markdownPath,
+      robertNextActions: robertResult.robertNextActions.markdownPath,
+      connectNow: robertResult.robertNextActions.connectNow.markdownPath,
+      launcher: robertResult.robertNextActions.connectNow.externalPortalLauncher.htmlPath,
+      completionAudit: robertResult.status.goLiveCompletionAudit.markdownPath,
+      localDropSync: prepResult.localDropSync?.markdownPath || null,
+    },
+    launcherUrl: robertResult.robertNextActions.connectNow.externalPortalLauncher.url,
+    nextStep: status === "ready"
+      ? "All post-connect lanes are clear; keep approval-required publishing until the operator confirms the first live posts."
+      : nextLane?.nextStep || blockers[0] || robertResult.status.goLiveCompletionAudit.nextStep,
+  };
+  await writeFile(POST_CONNECT_ACTIVATION_SWEEP_PATH, JSON.stringify(postConnectActivationSweep, null, 2));
+  await writeFile(POST_CONNECT_ACTIVATION_SWEEP_MARKDOWN_PATH, renderPostConnectActivationSweepMarkdown(postConnectActivationSweep));
+  return {
+    postConnectActivationSweep,
+    goLivePrepSweep: prepResult.goLivePrepSweep,
+    localDropSync: prepResult.localDropSync,
+    robertNextActions: robertResult.robertNextActions,
+    status: await getClipperStatus(userId),
+  };
+}
+
+function renderIntakeRefreshSweepMarkdown(summary: ClipperIntakeRefreshSweepSummary): string {
+  return [
+    "# Clippers Intake Refresh Sweep",
+    "",
+    "One-click local intake refresh for the Go-Live Intake Console. It runs the prep/local/post-connect refresh path and reports what still needs real credentials, evidence or source files. It does not create external accounts, approve permissions, save OAuth tokens or publish content by itself.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Prep sweep: ${summary.prepSweepStatus}`,
+    `Local drop sync: ${summary.localDropSyncStatus}`,
+    `Post-connect activation: ${summary.postConnectStatus}`,
+    "",
+    "## Intake Console",
+    "",
+    `- Status: ${summary.intakeConsole.status}`,
+    `- Lanes: ${summary.intakeConsole.totals.lanes}`,
+    `- Ready: ${summary.intakeConsole.totals.ready}`,
+    `- Partial: ${summary.intakeConsole.totals.partial}`,
+    `- Missing: ${summary.intakeConsole.totals.missing}`,
+    `- Critical: ${summary.intakeConsole.totals.critical}`,
+    `- Blockers: ${summary.intakeConsole.totals.blockers}`,
+    `- Drop dirs: ${summary.intakeConsole.totals.dropDirs}`,
+    `- Expected files: ${summary.intakeConsole.totals.expectedFiles}`,
+    `- Next step: ${summary.intakeConsole.nextStep}`,
+    "",
+    "## Refresh Sequence",
+    "",
+    ...summary.refreshSequence.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "## Completed Steps",
+    "",
+    ...(summary.completedSteps.length ? summary.completedSteps.map((step) => `- ${step}`) : ["- none"]),
+    "",
+    "## Skipped Or Blocked Steps",
+    "",
+    ...(summary.skippedOrBlockedSteps.length ? summary.skippedOrBlockedSteps.map((step) => `- ${step}`) : ["- none"]),
+    "",
+    "## Intake Lanes",
+    "",
+    ...summary.intakeConsole.lanes.flatMap((lane) => [
+      `### ${lane.rank}. ${lane.label}`,
+      "",
+      `- Status: ${lane.status}`,
+      `- Lane: ${lane.lane}`,
+      `- Priority: ${lane.priority}`,
+      `- Action: ${lane.actionLabel} (${lane.actionUrl})`,
+      `- Artifact: ${lane.artifactPath || "n/a"}`,
+      `- Expected files: ${lane.expectedFilesCount}`,
+      `- Next step: ${lane.nextStep}`,
+      lane.dropDirs.length ? "Drop dirs:" : "Drop dirs: none",
+      ...lane.dropDirs.map((dir) => `- ${dir}`),
+      lane.blockers.length ? "Blockers:" : "Blockers: none",
+      ...lane.blockers.map((blocker) => `- ${blocker}`),
+      lane.unlocks.length ? "Unlocks:" : "Unlocks: none",
+      ...lane.unlocks.map((unlock) => `- ${unlock}`),
+      "",
+    ]),
+    "## Blockers",
+    "",
+    ...(summary.blockers.length ? summary.blockers.map((blocker) => `- ${blocker}`) : ["- none"]),
+    "",
+    "## Artifacts",
+    "",
+    `- Intake refresh: ${summary.artifactPaths.intakeRefresh}`,
+    `- Local drop sync: ${summary.artifactPaths.localDropSync || "n/a"}`,
+    `- Prep sweep: ${summary.artifactPaths.prepSweep}`,
+    `- Post-connect activation: ${summary.artifactPaths.postConnectActivation}`,
+    `- Robert next actions: ${summary.artifactPaths.robertNextActions}`,
+    `- Connect now: ${summary.artifactPaths.connectNow}`,
+    `- Launcher: ${summary.artifactPaths.launcher}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+  ].join("\n");
+}
+
+export async function runClipperIntakeRefreshSweep(userId = getSystemUserId()): Promise<{
+  intakeRefreshSweep: ClipperIntakeRefreshSweepSummary;
+  postConnectActivationSweep: ClipperPostConnectActivationSweepSummary;
+  goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+  localDropSync: ClipperLocalDropSyncSummary | null;
+  robertNextActions: ClipperRobertNextActionsSummary;
+  status: ClipperStatus;
+}> {
+  const activationResult = await runClipperPostConnectActivationSweep(userId);
+  const intakeConsole = activationResult.robertNextActions.connectNow.intakeConsole;
+  const completedSteps = [
+    ...activationResult.goLivePrepSweep.items
+      .filter((item) => item.status === "completed")
+      .map((item) => item.label),
+    ...(activationResult.localDropSync?.items || [])
+      .filter((item) => item.status === "completed")
+      .map((item) => item.label),
+  ];
+  const skippedOrBlockedSteps = [
+    ...activationResult.goLivePrepSweep.items
+      .filter((item) => item.status !== "completed")
+      .map((item) => `${item.label}: ${item.message}`),
+    ...(activationResult.localDropSync?.items || [])
+      .filter((item) => item.status !== "completed")
+      .map((item) => `${item.label}: ${item.message}`),
+  ];
+  const blockers = uniqueStrings([
+    ...intakeConsole.lanes.flatMap((lane) => lane.blockers),
+    ...activationResult.postConnectActivationSweep.blockers,
+  ]).slice(0, 40);
+  const status: ClipperIntakeRefreshSweepStatus = activationResult.postConnectActivationSweep.status === "ready"
+    ? "ready"
+    : activationResult.goLivePrepSweep.totals.failed > 0
+      ? "blocked"
+      : intakeConsole.totals.missing > 0 || intakeConsole.totals.partial > 0 || activationResult.localDropSync?.status !== "completed"
+        ? "needs_local_input"
+        : "needs_external_action";
+  const intakeRefreshSweep: ClipperIntakeRefreshSweepSummary = {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: INTAKE_REFRESH_SWEEP_PATH,
+    markdownPath: INTAKE_REFRESH_SWEEP_MARKDOWN_PATH,
+    prepSweepStatus: activationResult.goLivePrepSweep.status,
+    localDropSyncStatus: activationResult.localDropSync?.status || "not_run",
+    postConnectStatus: activationResult.postConnectActivationSweep.status,
+    readyToPublish: activationResult.postConnectActivationSweep.readyToPublish,
+    intakeConsole,
+    refreshSequence: intakeConsole.refreshSequence,
+    completedSteps: uniqueStrings(completedSteps).slice(0, 40),
+    skippedOrBlockedSteps: uniqueStrings(skippedOrBlockedSteps).slice(0, 40),
+    blockers,
+    artifactPaths: {
+      localDropSync: activationResult.localDropSync?.markdownPath || null,
+      prepSweep: activationResult.goLivePrepSweep.markdownPath,
+      postConnectActivation: activationResult.postConnectActivationSweep.markdownPath,
+      robertNextActions: activationResult.robertNextActions.markdownPath,
+      connectNow: activationResult.robertNextActions.connectNow.markdownPath,
+      launcher: activationResult.robertNextActions.connectNow.externalPortalLauncher.htmlPath,
+      intakeRefresh: INTAKE_REFRESH_SWEEP_MARKDOWN_PATH,
+    },
+    nextStep: status === "ready"
+      ? "Intake refresh is clear and post-connect activation is ready; keep publishing approval-required until the operator confirms."
+      : intakeConsole.nextStep || activationResult.postConnectActivationSweep.nextStep,
+  };
+  await writeFile(INTAKE_REFRESH_SWEEP_PATH, JSON.stringify(intakeRefreshSweep, null, 2));
+  await writeFile(INTAKE_REFRESH_SWEEP_MARKDOWN_PATH, renderIntakeRefreshSweepMarkdown(intakeRefreshSweep));
+  return {
+    intakeRefreshSweep,
+    postConnectActivationSweep: activationResult.postConnectActivationSweep,
+    goLivePrepSweep: activationResult.goLivePrepSweep,
+    localDropSync: activationResult.localDropSync,
+    robertNextActions: activationResult.robertNextActions,
+    status: await getClipperStatus(userId),
+  };
+}
+
 function ownerConnectStatusFromExternal(item: ClipperExternalExecutionSessionItem): ClipperOwnerConnectPackItemStatus {
   if (item.status === "done") return "done";
   if (item.lane === "do_now") return "ready_to_execute";
@@ -28086,6 +28488,53 @@ function buildRobertPostConnectActivationBridge(input: {
   });
 }
 
+function buildRobertIntakeConsole(dropzoneReadyPack: ClipperDropzoneReadyPackSummary): ClipperRobertConnectNowHandoff["intakeConsole"] {
+  const lanes = dropzoneReadyPack.items.map((item) => ({
+    id: item.id,
+    rank: item.rank,
+    lane: item.lane,
+    label: item.label,
+    status: item.status,
+    priority: item.priority,
+    actionLabel: item.actionLabel,
+    actionUrl: item.localActionUrl,
+    artifactPath: item.sourceArtifactPath,
+    dropDirs: item.dropDirs,
+    acceptedFormats: item.acceptedFormats,
+    expectedFilesCount: item.expectedFiles.length,
+    sampleExpectedFiles: item.expectedFiles.slice(0, 8),
+    blockers: item.blockers,
+    unlocks: item.unlocks,
+    nextStep: item.nextStep,
+  })).sort((a, b) => a.rank - b.rank);
+  const blockers = lanes.reduce((total, item) => total + item.blockers.length, 0);
+
+  return {
+    status: dropzoneReadyPack.status,
+    nextStep: dropzoneReadyPack.nextStep,
+    refreshSequence: [
+      "Import credential drop files",
+      "Import launch evidence drop",
+      "Import source drop files",
+      "Run Local Drop Sync",
+      "Run Prep Sweep",
+      "Run Completion Audit",
+      "Run Activation Sweep",
+    ],
+    totals: {
+      lanes: lanes.length,
+      ready: dropzoneReadyPack.totals.ready,
+      partial: dropzoneReadyPack.totals.partial,
+      missing: dropzoneReadyPack.totals.missing,
+      critical: dropzoneReadyPack.totals.critical,
+      blockers,
+      dropDirs: dropzoneReadyPack.totals.dropDirs,
+      expectedFiles: dropzoneReadyPack.totals.expectedFiles,
+    },
+    lanes,
+  };
+}
+
 async function buildRobertConnectNowHandoff(input: {
   ownerConnectPack: ClipperOwnerConnectPackSummary;
   dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
@@ -28161,6 +28610,21 @@ async function buildRobertConnectNowHandoff(input: {
     publisherConnectors: input.publisherConnectors,
     productionQueue: input.productionQueue,
   });
+  const intakeConsole = buildRobertIntakeConsole(input.dropzoneReadyPack);
+  const launcherItems = input.externalExecutionSession.items;
+  const externalPortalLauncher: ClipperRobertConnectNowHandoff["externalPortalLauncher"] = {
+    htmlPath: EXTERNAL_PORTAL_LAUNCHER_HTML_PATH,
+    url: "/clippers/external-portal-launcher",
+    totalPortals: uniqueStrings(launcherItems.flatMap((item) => [item.portalUrl, item.executionUrl]).filter((url) => typeof url === "string" && /^https?:\/\//i.test(url))).length,
+    doNow: launcherItems.filter((item) => item.lane === "do_now").length,
+    blocked: launcherItems.filter((item) => item.lane === "blocked").length,
+    accountTasks: launcherItems.filter((item) => item.type === "account").length,
+    developerAppTasks: launcherItems.filter((item) => item.type === "developer_app").length,
+    permissionTasks: launcherItems.filter((item) => item.type === "permission").length,
+    oauthTasks: launcherItems.filter((item) => item.type === "oauth").length,
+    credentialTasks: launcherItems.filter((item) => item.type === "credential").length,
+    nextStep: input.externalExecutionSession.nextStep,
+  };
 
   return {
     markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
@@ -28174,6 +28638,8 @@ async function buildRobertConnectNowHandoff(input: {
     ownershipSplit,
     weeklyRunway,
     platformLaunchBridge,
+    externalPortalLauncher,
+    intakeConsole,
     postConnectActivationBridge,
     recommendedOrder: [
       "Fill real credential values in the credential starter files, then import credential drop files.",
@@ -28456,6 +28922,8 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     `- Focus run: ${summary.connectNow.focusRun.label} (${summary.connectNow.focusRun.status}, ${summary.connectNow.focusRun.estimatedMinutes} min)`,
     `- Evidence closeout: ${summary.connectNow.evidenceCloseout.total} open items; next rows ${summary.connectNow.evidenceCloseout.nextRows.length}`,
     `- Connection tunnel: ${summary.connectNow.connectionTunnel.status}; ${summary.connectNow.connectionTunnel.progress}% progress; ${summary.connectNow.connectionTunnel.blockedGates} blocked gates`,
+    `- External portal launcher: ${summary.connectNow.externalPortalLauncher.htmlPath}; ${summary.connectNow.externalPortalLauncher.doNow} do-now; ${summary.connectNow.externalPortalLauncher.blocked} blocked`,
+    `- Intake console: ${summary.connectNow.intakeConsole.status}; ${summary.connectNow.intakeConsole.totals.lanes} lanes; ${summary.connectNow.intakeConsole.totals.blockers} blockers`,
     `- Post-connect activation bridge: ${summary.connectNow.postConnectActivationBridge.length} account/platform lane(s); ${summary.connectNow.postConnectActivationBridge.filter((item) => item.status === "ready" || item.status === "activation_ready").length} activation-ready`,
     `- Handoff file: ${summary.connectNow.markdownPath}`,
     "",
@@ -28597,6 +29065,57 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       ...platform.blockers.map((blocker) => `- ${blocker}`),
       "Done criteria:",
       ...platform.doneCriteria.map((criteria) => `- ${criteria}`),
+      "",
+    ]),
+    "",
+    "## External Portal Launcher",
+    "",
+    `- HTML: ${handoff.externalPortalLauncher.htmlPath}`,
+    `- Portal URLs: ${handoff.externalPortalLauncher.totalPortals}`,
+    `- Do now: ${handoff.externalPortalLauncher.doNow}`,
+    `- Blocked: ${handoff.externalPortalLauncher.blocked}`,
+    `- Account tasks: ${handoff.externalPortalLauncher.accountTasks}`,
+    `- Developer app tasks: ${handoff.externalPortalLauncher.developerAppTasks}`,
+    `- Permission tasks: ${handoff.externalPortalLauncher.permissionTasks}`,
+    `- OAuth tasks: ${handoff.externalPortalLauncher.oauthTasks}`,
+    `- Credential tasks: ${handoff.externalPortalLauncher.credentialTasks}`,
+    `- Next step: ${handoff.externalPortalLauncher.nextStep}`,
+    "",
+    "## Go-Live Intake Console",
+    "",
+    `- Status: ${handoff.intakeConsole.status}`,
+    `- Lanes: ${handoff.intakeConsole.totals.lanes}`,
+    `- Ready: ${handoff.intakeConsole.totals.ready}`,
+    `- Partial: ${handoff.intakeConsole.totals.partial}`,
+    `- Missing: ${handoff.intakeConsole.totals.missing}`,
+    `- Critical: ${handoff.intakeConsole.totals.critical}`,
+    `- Blockers: ${handoff.intakeConsole.totals.blockers}`,
+    `- Drop dirs: ${handoff.intakeConsole.totals.dropDirs}`,
+    `- Expected files: ${handoff.intakeConsole.totals.expectedFiles}`,
+    `- Next step: ${handoff.intakeConsole.nextStep}`,
+    "",
+    "Refresh sequence:",
+    ...handoff.intakeConsole.refreshSequence.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    ...handoff.intakeConsole.lanes.flatMap((lane) => [
+      `### ${lane.rank}. ${lane.label}`,
+      "",
+      `- Status: ${lane.status}`,
+      `- Priority: ${lane.priority}`,
+      `- Action: ${lane.actionLabel} (${lane.actionUrl})`,
+      `- Artifact: ${lane.artifactPath || "n/a"}`,
+      `- Expected files: ${lane.expectedFilesCount}`,
+      `- Next step: ${lane.nextStep}`,
+      lane.dropDirs.length ? "Drop dirs:" : "Drop dirs: none",
+      ...lane.dropDirs.map((dir) => `- ${dir}`),
+      lane.acceptedFormats.length ? "Accepted formats:" : "Accepted formats: none",
+      ...lane.acceptedFormats.map((format) => `- ${format}`),
+      lane.sampleExpectedFiles.length ? "Sample expected files:" : "Sample expected files: none",
+      ...lane.sampleExpectedFiles.map((file) => `- ${file}`),
+      lane.blockers.length ? "Blockers:" : "Blockers: none",
+      ...lane.blockers.map((blocker) => `- ${blocker}`),
+      lane.unlocks.length ? "Unlocks:" : "Unlocks: none",
+      ...lane.unlocks.map((unlock) => `- ${unlock}`),
       "",
     ]),
     "",
@@ -28849,6 +29368,384 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
   ].join("\n");
 }
 
+function renderExternalPortalLauncherHtml(summary: ClipperRobertNextActionsSummary, externalExecutionSession: ClipperExternalExecutionSessionSummary): string {
+  const launcher = summary.connectNow.externalPortalLauncher;
+  const intakeCards = summary.connectNow.intakeConsole.lanes.map((lane) => `
+      <article class="intake-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(lane.label)}</h2>
+            <p>${escapeHtml(lane.lane)} / ${escapeHtml(lane.priority)}</p>
+          </div>
+          <span class="badge ${escapeHtml(lane.status === "ready" ? "do_now" : lane.status === "partial" ? "waiting" : "blocked")}">${escapeHtml(lane.status)}</span>
+        </div>
+        <dl>
+          <div><dt>Action</dt><dd>${escapeHtml(lane.actionLabel)}</dd></div>
+          <div><dt>Expected files</dt><dd>${escapeHtml(lane.expectedFilesCount)}</dd></div>
+          <div><dt>Artifact</dt><dd>${escapeHtml(lane.artifactPath || "n/a")}</dd></div>
+          <div><dt>Local API</dt><dd><code>${escapeHtml(lane.actionUrl)}</code></dd></div>
+        </dl>
+        <h3>Drop dirs</h3>
+        <ul>${lane.dropDirs.map((dir) => `<li>${escapeHtml(dir)}</li>`).join("") || "<li>none</li>"}</ul>
+        <h3>Accepted formats</h3>
+        <ul>${lane.acceptedFormats.map((format) => `<li>${escapeHtml(format)}</li>`).join("") || "<li>none</li>"}</ul>
+        <h3>Blockers</h3>
+        <ul>${lane.blockers.map((blocker) => `<li>${escapeHtml(blocker)}</li>`).join("") || "<li>none</li>"}</ul>
+        <p>${escapeHtml(lane.nextStep)}</p>
+      </article>`).join("\n");
+  const accountCards = summary.connectNow.accountCloseout.accountProofBridge.map((item) => {
+    const accountHandle = summary.connectNow.accountHandles.find((handle) => handle.accountId === item.accountId && handle.platform === item.platform);
+    const portalHref = item.portalUrl ? escapeHtml(item.portalUrl) : "";
+    return `
+      <article class="account-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(accountHandle?.accountName || item.accountId || item.label)}</h2>
+            <p>${escapeHtml(item.handle)} / ${escapeHtml(item.platform)}</p>
+          </div>
+          <span class="badge ${escapeHtml(item.status === "ready_to_execute" ? "do_now" : item.status === "waiting" ? "waiting" : "blocked")}">${escapeHtml(item.status)}</span>
+        </div>
+        <dl>
+          <div><dt>Account ID</dt><dd>${escapeHtml(item.accountId)}</dd></div>
+          <div><dt>Platform</dt><dd>${escapeHtml(item.platform)}</dd></div>
+          <div><dt>Handle</dt><dd>${escapeHtml(item.handle)}</dd></div>
+          <div><dt>Portal</dt><dd>${item.portalUrl ? `<a href="${portalHref}" target="_blank" rel="noreferrer">Open signup</a>` : "n/a"}</dd></div>
+        </dl>
+        <h3>Required proof</h3>
+        <ul>${item.requiredProof.map((proof) => `<li>${escapeHtml(proof)}</li>`).join("") || "<li>none</li>"}</ul>
+        <h3>Checklist</h3>
+        <ul>${item.checklist.slice(0, 5).map((step) => `<li>${escapeHtml(step)}</li>`).join("") || "<li>none</li>"}</ul>
+        <label>Account proof row</label>
+        <textarea readonly aria-label="Account proof row">${escapeHtml(item.evidenceRow)}</textarea>
+        <p>${escapeHtml(item.nextStep)}</p>
+      </article>`;
+  }).join("\n");
+  const credentialCards = summary.connectNow.credentialCloseout.driveCredentialBridge.map((item) => {
+    const portalHref = item.portalUrl ? escapeHtml(item.portalUrl) : "";
+    const docsHref = item.docsUrl ? escapeHtml(item.docsUrl) : "";
+    const dropFiles = item.localDropFileNames.map((fileName) => `<li>${escapeHtml(fileName)}</li>`).join("") || "<li>none</li>";
+    const envVars = item.missingSuggestedEnvVars.map((envVar) => `<code>${escapeHtml(envVar)}</code>`).join(", ") || "ready";
+    const driveSearchLinks = item.driveSearchUrls.map((url, index) =>
+      `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Drive search ${index + 1}</a>`
+    ).join("<br />") || "n/a";
+    return `
+      <article class="credential-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(item.label)}</h2>
+            <p>${escapeHtml(item.platform)}</p>
+          </div>
+          <span class="badge ${escapeHtml(item.status === "ready" ? "do_now" : "blocked")}">${escapeHtml(item.status)}</span>
+        </div>
+        <dl>
+          <div><dt>Missing env</dt><dd>${envVars}</dd></div>
+          <div><dt>Portal</dt><dd>${item.portalUrl ? `<a href="${portalHref}" target="_blank" rel="noreferrer">Open portal</a>` : "n/a"}</dd></div>
+          <div><dt>Docs</dt><dd>${item.docsUrl ? `<a href="${docsHref}" target="_blank" rel="noreferrer">Open docs</a>` : "n/a"}</dd></div>
+          <div><dt>Drive search</dt><dd class="links">${driveSearchLinks}</dd></div>
+        </dl>
+        <h3>Drop files to complete</h3>
+        <ul>${dropFiles}</ul>
+        <h3>Search queries</h3>
+        <ul>${item.driveSearchQueries.slice(0, 4).map((query) => `<li>${escapeHtml(query)}</li>`).join("") || "<li>none</li>"}</ul>
+        <p>${escapeHtml(item.nextStep)}</p>
+      </article>`;
+  }).join("\n");
+  const sourceCards = summary.connectNow.sourceCloseout.batches.map((batch) => {
+    const searchLinks = batch.viralSearchQueries.map((query) => {
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(query)}</a>`;
+    }).join("<br />") || "n/a";
+    return `
+      <article class="source-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(batch.label)}</h2>
+            <p>${escapeHtml(batch.category)} / ${escapeHtml(batch.priority)}</p>
+          </div>
+          <span class="badge ${escapeHtml(batch.priority === "critical" ? "blocked" : batch.priority === "high" ? "waiting" : "do_now")}">${escapeHtml(batch.items)}</span>
+        </div>
+        <dl>
+          <div><dt>Source drop</dt><dd>${escapeHtml(batch.sourceDropDir)}</dd></div>
+          <div><dt>Manifest</dt><dd>${escapeHtml(batch.sourceDropManifestPath)}</dd></div>
+          <div><dt>Rows needed</dt><dd>${escapeHtml(batch.items)}</dd></div>
+          <div><dt>Proof needed</dt><dd>${escapeHtml(batch.requiredProof.slice(0, 2).join(" | ") || "none")}</dd></div>
+        </dl>
+        <h3>Viral searches</h3>
+        <p class="links">${searchLinks}</p>
+        <label>Source intake rows</label>
+        <textarea readonly aria-label="Source intake rows">${escapeHtml(batch.intakeRows.join("\n"))}</textarea>
+        <label>Rights evidence rows</label>
+        <textarea readonly aria-label="Source rights rows">${escapeHtml(batch.rightsRows.join("\n"))}</textarea>
+        <p>${escapeHtml(batch.nextStep)}</p>
+      </article>`;
+  }).join("\n");
+  const sourceItemRows = summary.connectNow.sourceCloseout.nextItems.map((item) => {
+    const searches = item.viralSearchQueries.map((query) => {
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(query)}</a>`;
+    }).join("<br />") || "n/a";
+    return `
+      <tr>
+        <td class="rank">${escapeHtml(item.rank)}</td>
+        <td>${escapeHtml(item.category)}</td>
+        <td><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.nextStep)}</small></td>
+        <td>${escapeHtml(item.targetFileName)}</td>
+        <td>${escapeHtml(item.sourceDropPath)}</td>
+        <td class="links">${searches}</td>
+        <td><textarea readonly aria-label="Source intake row">${escapeHtml(item.intakeBatchRow)}</textarea></td>
+        <td><textarea readonly aria-label="Source rights row">${escapeHtml(item.rightsEvidenceBatchRow)}</textarea></td>
+      </tr>`;
+  }).join("\n");
+  const permissionRows = summary.connectNow.officialPermissionCloseout.sourceBatches.map((batch) => {
+    const officialLinks = batch.officialUrls.map((url) =>
+      `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>`
+    ).join("<br />") || "n/a";
+    return `
+      <article class="permission-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(batch.label)}</h2>
+            <p>${escapeHtml(batch.nextStep)}</p>
+          </div>
+          <span class="badge ${escapeHtml(batch.submitDecision === "request_now" ? "do_now" : "waiting")}">${escapeHtml(batch.submitDecision)}</span>
+        </div>
+        <dl>
+          <div><dt>Platform</dt><dd>${escapeHtml(batch.platform)}</dd></div>
+          <div><dt>Access</dt><dd>${escapeHtml(batch.accessMode)}</dd></div>
+          <div><dt>Scopes</dt><dd>${escapeHtml(batch.scopes.join(", ") || "none")}</dd></div>
+          <div><dt>Blocker</dt><dd>${escapeHtml(batch.blocker || "none")}</dd></div>
+        </dl>
+        <div class="permission-grid">
+          <div>
+            <h3>Official URLs</h3>
+            <p class="links">${officialLinks}</p>
+          </div>
+          <div>
+            <h3>Reviewer evidence</h3>
+            <ul>${batch.reviewerEvidence.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>none</li>"}</ul>
+          </div>
+          <div>
+            <h3>Verified claims</h3>
+            <ul>${batch.verifiedClaims.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>none</li>"}</ul>
+          </div>
+        </div>
+        <label>Request/import rows</label>
+        <textarea readonly aria-label="Permission request rows">${escapeHtml(batch.scopes.map((scope) =>
+          summary.connectNow.officialPermissionCloseout.nextRows.find((row) => row.includes(`,${batch.platform},`) && row.includes(scope)) || ""
+        ).filter(Boolean).join("\n"))}</textarea>
+        <label>Approval rows after portal approval</label>
+        <textarea readonly aria-label="Permission approval rows">${escapeHtml(batch.scopes.map((scope) =>
+          summary.connectNow.officialPermissionCloseout.approvalRows.find((row) => row.includes(`,${batch.platform},`) && row.includes(scope)) || ""
+        ).filter(Boolean).join("\n"))}</textarea>
+      </article>`;
+  }).join("\n");
+  const rows = externalExecutionSession.items.map((item) => {
+    const portalHref = item.portalUrl ? escapeHtml(item.portalUrl) : "";
+    const executionHref = item.executionUrl ? escapeHtml(item.executionUrl) : "";
+    return `
+      <tr>
+        <td class="rank">${escapeHtml(item.rank)}</td>
+        <td><span class="badge ${escapeHtml(item.lane)}">${escapeHtml(item.lane)}</span></td>
+        <td>${escapeHtml(item.platform)}</td>
+        <td>${escapeHtml(item.type)}</td>
+        <td>
+          <strong>${escapeHtml(item.label)}</strong>
+          <small>${escapeHtml(item.nextStep)}</small>
+        </td>
+        <td>${escapeHtml(item.actionMode)}</td>
+        <td>${item.portalUrl ? `<a href="${portalHref}" target="_blank" rel="noreferrer">Portal</a>` : "n/a"}</td>
+        <td>${item.executionUrl ? `<a href="${executionHref}" target="_blank" rel="noreferrer">Action</a>` : "n/a"}</td>
+        <td><ul>${item.requiredInputs.map((input) => `<li>${escapeHtml(input)}</li>`).join("") || "<li>none</li>"}</ul></td>
+        <td><ul>${item.blockers.map((blocker) => `<li>${escapeHtml(blocker)}</li>`).join("") || "<li>none</li>"}</ul></td>
+        <td>${item.evidenceBatchRow ? `<textarea readonly aria-label="Launch Evidence Batch row">${escapeHtml(item.evidenceBatchRow)}</textarea>` : "n/a"}</td>
+        <td>${item.credentialTemplate ? `<textarea readonly aria-label="Credential template">${escapeHtml(item.credentialTemplate)}</textarea>` : "n/a"}</td>
+      </tr>`;
+  }).join("\n");
+
+  const generated = summary.generatedAt || new Date().toISOString();
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clippers External Portal Launcher</title>
+  <style>
+    :root { color-scheme: dark; --bg: #080a0f; --panel: #111521; --line: #273044; --text: #f8fafc; --muted: #a1a1aa; --cyan: #67e8f9; --rose: #fda4af; --amber: #fcd34d; --green: #86efac; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(1480px, calc(100vw - 32px)); margin: 0 auto; padding: 28px 0 40px; }
+    header { display: flex; gap: 18px; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: 0; }
+    p { margin: 6px 0 0; color: var(--muted); line-height: 1.55; }
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+    .stat { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 12px; min-height: 82px; }
+    .stat span { display: block; color: var(--muted); font-size: 12px; }
+    .stat strong { display: block; margin-top: 6px; font-size: 22px; }
+    .notice { border: 1px solid rgba(252, 211, 77, 0.35); background: rgba(252, 211, 77, 0.08); border-radius: 8px; padding: 12px; color: #fde68a; }
+    .permission-section { margin: 18px 0; }
+    .permission-section > h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: 0; }
+    .intake-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .intake-card { border: 1px solid var(--line); background: #111827; border-radius: 8px; padding: 12px; }
+    .intake-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+    .intake-card h3 { margin: 12px 0 6px; font-size: 12px; color: #d4d4d8; letter-spacing: 0; }
+    .intake-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .intake-card dt { color: var(--muted); font-size: 11px; }
+    .intake-card dd { margin: 2px 0 0; font-size: 12px; line-height: 1.45; word-break: break-word; }
+    .permission-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .permission-card { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 12px; }
+    .account-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .account-card { border: 1px solid var(--line); background: #101623; border-radius: 8px; padding: 12px; }
+    .account-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+    .account-card h3 { margin: 12px 0 6px; font-size: 12px; color: #d4d4d8; letter-spacing: 0; }
+    .account-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .account-card dt { color: var(--muted); font-size: 11px; }
+    .account-card dd { margin: 2px 0 0; font-size: 12px; line-height: 1.45; }
+    .account-card label { display: block; margin: 10px 0 4px; color: #d4d4d8; font-size: 11px; font-weight: 700; }
+    .credential-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .credential-card { border: 1px solid var(--line); background: #111827; border-radius: 8px; padding: 12px; }
+    .credential-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+    .credential-card h3 { margin: 12px 0 6px; font-size: 12px; color: #d4d4d8; letter-spacing: 0; }
+    .credential-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .credential-card dt { color: var(--muted); font-size: 11px; }
+    .credential-card dd { margin: 2px 0 0; font-size: 12px; line-height: 1.45; word-break: break-word; }
+    .source-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .source-card { border: 1px solid var(--line); background: #0f172a; border-radius: 8px; padding: 12px; }
+    .source-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+    .source-card h3 { margin: 12px 0 6px; font-size: 12px; color: #d4d4d8; letter-spacing: 0; }
+    .source-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .source-card dt { color: var(--muted); font-size: 11px; }
+    .source-card dd { margin: 2px 0 0; font-size: 12px; line-height: 1.45; word-break: break-word; }
+    .source-card label { display: block; margin: 10px 0 4px; color: #d4d4d8; font-size: 11px; font-weight: 700; }
+    code { border: 1px solid var(--line); border-radius: 4px; background: #05070b; padding: 1px 4px; color: #e5e7eb; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .permission-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .permission-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+    .permission-card h3 { margin: 12px 0 6px; font-size: 12px; color: #d4d4d8; letter-spacing: 0; }
+    .permission-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .permission-card dt { color: var(--muted); font-size: 11px; }
+    .permission-card dd { margin: 2px 0 0; font-size: 12px; line-height: 1.45; }
+    .permission-grid { display: grid; gap: 8px; }
+    .permission-card label { display: block; margin: 10px 0 4px; color: #d4d4d8; font-size: 11px; font-weight: 700; }
+    .links { word-break: break-word; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #0b0e15; }
+    table { width: 100%; border-collapse: collapse; min-width: 1280px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; font-size: 12px; }
+    th { position: sticky; top: 0; background: #151a27; z-index: 1; color: #d4d4d8; }
+    tr:last-child td { border-bottom: 0; }
+    a { color: var(--cyan); text-decoration: none; font-weight: 700; }
+    a:hover { text-decoration: underline; }
+    small { display: block; margin-top: 5px; color: var(--muted); line-height: 1.45; }
+    ul { margin: 0; padding-left: 16px; }
+    li + li { margin-top: 4px; }
+    textarea { width: 280px; min-height: 84px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: #05070b; color: #e5e7eb; padding: 8px; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .badge { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge.do_now { border-color: rgba(134, 239, 172, 0.35); color: var(--green); background: rgba(134, 239, 172, 0.08); }
+    .badge.blocked { border-color: rgba(253, 164, 175, 0.35); color: var(--rose); background: rgba(253, 164, 175, 0.08); }
+    .badge.waiting { border-color: rgba(252, 211, 77, 0.35); color: var(--amber); background: rgba(252, 211, 77, 0.08); }
+    @media (max-width: 1100px) { .permission-cards, .account-cards, .credential-cards, .source-cards, .intake-cards { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { main { width: min(100vw - 20px, 1480px); padding-top: 18px; } header { display: block; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } h1 { font-size: 22px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Clippers External Portal Launcher</h1>
+        <p>Generated ${escapeHtml(generated)} from current Clippers state. This launcher opens official portals and prepares import rows; it does not mark accounts, permissions, OAuth or publishing as ready without real evidence.</p>
+      </div>
+      <p><strong>Status:</strong> ${escapeHtml(summary.status)}<br /><strong>Next:</strong> ${escapeHtml(launcher.nextStep)}</p>
+    </header>
+    <section class="grid" aria-label="Launcher totals">
+      <div class="stat"><span>Portal URLs</span><strong>${escapeHtml(launcher.totalPortals)}</strong></div>
+      <div class="stat"><span>Do now</span><strong>${escapeHtml(launcher.doNow)}</strong></div>
+      <div class="stat"><span>Blocked</span><strong>${escapeHtml(launcher.blocked)}</strong></div>
+      <div class="stat"><span>Account/app/permission</span><strong>${escapeHtml(launcher.accountTasks + launcher.developerAppTasks + launcher.permissionTasks)}</strong></div>
+      <div class="stat"><span>OAuth/credentials</span><strong>${escapeHtml(launcher.oauthTasks + launcher.credentialTasks)}</strong></div>
+    </section>
+    <p class="notice">Launch Evidence Batch rows are templates. Replace placeholders with real profile URLs, app IDs, approval tickets, public URLs, proof paths and notes before importing.</p>
+    <section class="permission-section" aria-label="Go-live intake console">
+      <h2>Go-Live Intake Console</h2>
+      <p>Complete these local intake lanes first. After new files or rows are added, run the refresh sequence: ${summary.connectNow.intakeConsole.refreshSequence.map((step) => escapeHtml(step)).join(" -> ")}.</p>
+      <div class="intake-cards">
+        ${intakeCards || "<p>No intake lanes are currently prepared.</p>"}
+      </div>
+    </section>
+    <section class="permission-section" aria-label="Account creation launcher">
+      <h2>Account Creation Launcher</h2>
+      <p>Create or verify each external account here, then replace blank evidence fields with real profile URLs, proof paths and ownership notes before importing.</p>
+      <div class="account-cards">
+        ${accountCards || "<p>No account creation tasks are currently prepared.</p>"}
+      </div>
+    </section>
+    <section class="permission-section" aria-label="Credential collection launcher">
+      <h2>Credential Collection Launcher</h2>
+      <p>Collect app keys and refresh tokens from official portals or Drive, then paste real values into these drop files before importing. Never paste token values into this launcher.</p>
+      <div class="credential-cards">
+        ${credentialCards || "<p>No credential collection tasks are currently prepared.</p>"}
+      </div>
+    </section>
+    <section class="permission-section" aria-label="Permission request launcher">
+      <h2>Permission Request Launcher</h2>
+      <p>Use these cards to submit or recheck official posting permissions, then import requested or approved evidence rows after the portal action is real.</p>
+      <div class="permission-cards">
+        ${permissionRows || "<p>No permission batches are currently prepared.</p>"}
+      </div>
+    </section>
+    <section class="permission-section" aria-label="Viral source hunt launcher">
+      <h2>Viral Source Hunt Launcher</h2>
+      <p>Use these searches to find recent, viral, rights-safe source candidates. Add real URLs, source handles, proof links and files before importing.</p>
+      <div class="source-cards">
+        ${sourceCards || "<p>No source hunt batches are currently prepared.</p>"}
+      </div>
+    </section>
+    <section class="table-wrap" aria-label="Source hunt rows">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Category</th>
+            <th>Source task</th>
+            <th>Target file</th>
+            <th>Drop path</th>
+            <th>Searches</th>
+            <th>Source Intake Batch</th>
+            <th>Rights Evidence Batch</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sourceItemRows}
+        </tbody>
+      </table>
+    </section>
+    <section class="table-wrap" aria-label="External execution items">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Lane</th>
+            <th>Platform</th>
+            <th>Type</th>
+            <th>Task</th>
+            <th>Mode</th>
+            <th>Portal</th>
+            <th>App action</th>
+            <th>Required inputs</th>
+            <th>Blockers</th>
+            <th>Launch Evidence Batch</th>
+            <th>Credential template</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
+`;
+}
+
 function renderRobertNextActionsCsv(summary: ClipperRobertNextActionsSummary): string {
   const header = ["rank", "id", "lane", "status", "priority", "platform", "estimated_minutes", "label", "action_url", "portal_url", "artifact_path", "drop_dirs", "evidence_rows", "operator_steps", "blockers", "done_criteria", "next_step"];
   const rows = summary.items.map((item) => [
@@ -28908,6 +29805,7 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
   await writeFile(ROBERT_NEXT_ACTIONS_MARKDOWN_PATH, renderRobertNextActionsMarkdown(robertNextActions));
   await writeFile(ROBERT_NEXT_ACTIONS_CSV_PATH, renderRobertNextActionsCsv(robertNextActions));
   await writeFile(ROBERT_CONNECT_NOW_MARKDOWN_PATH, renderRobertConnectNowMarkdown(robertNextActions));
+  await writeFile(EXTERNAL_PORTAL_LAUNCHER_HTML_PATH, renderExternalPortalLauncherHtml(robertNextActions, statusBefore.externalExecutionSession));
   return { robertNextActions, status: await getClipperStatus(userId) };
 }
 

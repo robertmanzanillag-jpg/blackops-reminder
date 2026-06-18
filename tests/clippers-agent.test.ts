@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperLocalDropSync, saveClipperTokenPayload, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -4139,6 +4139,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
   const previousCsv = await readFile(beforeStatus.robertNextActions.csvPath, "utf8").catch(() => null);
   const connectNowPath = path.join(process.cwd(), "clippers_workspace", "ROBERT_CONNECT_NOW.md");
   const previousConnectNow = await readFile(connectNowPath, "utf8").catch(() => null);
+  const externalPortalLauncherPath = path.join(process.cwd(), "clippers_workspace", "external-portal-launcher.html");
+  const previousExternalPortalLauncher = await readFile(externalPortalLauncherPath, "utf8").catch(() => null);
 
   try {
     const { robertNextActions, status } = await prepareClipperRobertNextActions();
@@ -4233,6 +4235,33 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "tiktok" && item.missingEnvVars.includes("TIKTOK_CLIENT_KEY")));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "instagram" && item.scopes.includes("instagram_content_publish")));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.htmlPath.endsWith("external-portal-launcher.html"));
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.url, "/clippers/external-portal-launcher");
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.totalPortals >= 3);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.doNow, status.externalExecutionSession.totals.doNow);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.blocked, status.externalExecutionSession.totals.blocked);
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.accountTasks > 0);
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.developerAppTasks > 0);
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.permissionTasks > 0);
+    assert.ok(robertNextActions.connectNow.externalPortalLauncher.credentialTasks > 0);
+    assert.equal(robertNextActions.connectNow.intakeConsole.status, status.dropzoneReadyPack.status);
+    assert.equal(robertNextActions.connectNow.intakeConsole.totals.lanes, status.dropzoneReadyPack.items.length);
+    assert.ok(robertNextActions.connectNow.intakeConsole.totals.blockers >= 0);
+    assert.ok(robertNextActions.connectNow.intakeConsole.refreshSequence.includes("Run Activation Sweep"));
+    assert.deepEqual(
+      robertNextActions.connectNow.intakeConsole.lanes.map((lane) => lane.id).sort(),
+      status.dropzoneReadyPack.items.map((item) => item.id).sort(),
+    );
+    assert.ok(robertNextActions.connectNow.intakeConsole.lanes.some((lane) =>
+      lane.id === "credentials" &&
+      lane.actionUrl === "/api/clippers/import-credential-drop-files" &&
+      lane.dropDirs.some((dir) => dir.includes("credentials"))
+    ));
+    assert.ok(robertNextActions.connectNow.intakeConsole.lanes.some((lane) =>
+      lane.id === "source_videos" &&
+      lane.expectedFilesCount >= 0 &&
+      lane.acceptedFormats.includes("mp4")
+    ));
     assert.equal(robertNextActions.connectNow.postConnectActivationBridge.length, beforeStatus.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0));
     assert.ok(robertNextActions.connectNow.postConnectActivationBridge.every((lane) =>
       ["blocked", "waiting", "activation_ready", "ready"].includes(lane.status) &&
@@ -4321,6 +4350,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     const rawMarkdown = await readFile(robertNextActions.markdownPath, "utf8");
     const rawCsv = await readFile(robertNextActions.csvPath, "utf8");
     const rawConnectNow = await readFile(robertNextActions.connectNow.markdownPath, "utf8");
+    const rawPortalLauncher = await readFile(robertNextActions.connectNow.externalPortalLauncher.htmlPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers - Robert Next Actions"));
     assert.ok(rawMarkdown.includes("Connect Now Handoff"));
     assert.ok(rawMarkdown.includes("Credential closeout"));
@@ -4329,6 +4359,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawMarkdown.includes("Evidence closeout"));
     assert.ok(rawMarkdown.includes("Source closeout"));
     assert.ok(rawMarkdown.includes("Connection tunnel"));
+    assert.ok(rawMarkdown.includes("Intake console"));
     assert.ok(rawMarkdown.includes("Priority Actions"));
     assert.ok(rawMarkdown.includes("Operator steps"));
     assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
@@ -4351,6 +4382,9 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("TikTok"));
     assert.ok(rawConnectNow.includes("Instagram Reels"));
     assert.ok(rawConnectNow.includes("YouTube Shorts"));
+    assert.ok(rawConnectNow.includes("External Portal Launcher"));
+    assert.ok(rawConnectNow.includes("Go-Live Intake Console"));
+    assert.ok(rawConnectNow.includes("Refresh sequence"));
     assert.ok(rawConnectNow.includes("Post-Connect Activation Bridge"));
     assert.ok(rawConnectNow.includes("Focus Run"));
     assert.ok(rawConnectNow.includes("Evidence Closeout"));
@@ -4374,6 +4408,32 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.launchEvidenceTemplate.includes("access_token"), false);
     assert.equal(robertNextActions.connectNow.sourceIntakeTemplate.includes("refresh_token"), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("access_token"), false);
+    assert.ok(rawPortalLauncher.includes("Clippers External Portal Launcher"));
+    assert.ok(rawPortalLauncher.includes("Account Creation Launcher"));
+    assert.ok(rawPortalLauncher.includes("Credential Collection Launcher"));
+    assert.ok(rawPortalLauncher.includes("Permission Request Launcher"));
+    assert.ok(rawPortalLauncher.includes("Viral Source Hunt Launcher"));
+    assert.ok(rawPortalLauncher.includes("Go-Live Intake Console"));
+    assert.ok(rawPortalLauncher.includes("Import credential drop files"));
+    assert.ok(rawPortalLauncher.includes("Run Activation Sweep"));
+    assert.ok(rawPortalLauncher.includes("Launch Evidence Batch"));
+    assert.ok(rawPortalLauncher.includes("Source Intake Batch"));
+    assert.ok(rawPortalLauncher.includes("Rights Evidence Batch"));
+    assert.ok(rawPortalLauncher.includes("source-drop"));
+    assert.ok(rawPortalLauncher.includes("GOOGLE_CLIENT_ID"));
+    assert.ok(rawPortalLauncher.includes("TIKTOK_CLIENT_KEY"));
+    assert.ok(rawPortalLauncher.includes("META_APP_ID"));
+    assert.ok(rawPortalLauncher.includes("@sportsdaily"));
+    assert.ok(rawPortalLauncher.includes("@memeradar"));
+    assert.ok(rawPortalLauncher.includes("@streamerpulse"));
+    assert.ok(rawPortalLauncher.includes("Account proof row"));
+    assert.ok(rawPortalLauncher.includes("developers.tiktok.com"));
+    assert.ok(rawPortalLauncher.includes("developers.facebook.com"));
+    assert.ok(rawPortalLauncher.includes("developers.google.com"));
+    assert.ok(rawPortalLauncher.includes("target=\"_blank\""));
+    assert.equal(rawPortalLauncher.includes("access_token"), false);
+    assert.equal(rawPortalLauncher.includes("client_secret="), false);
+    assert.equal(rawPortalLauncher.includes("refresh_token="), false);
     assert.equal(rawMarkdown.includes("client_secret="), false);
     assert.equal(rawCsv.includes("refresh_token="), false);
     assert.equal(rawConnectNow.includes("access_token"), false);
@@ -4388,6 +4448,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     else await writeFile(beforeStatus.robertNextActions.csvPath, previousCsv);
     if (previousConnectNow === null) await unlink(connectNowPath).catch(() => undefined);
     else await writeFile(connectNowPath, previousConnectNow);
+    if (previousExternalPortalLauncher === null) await unlink(externalPortalLauncherPath).catch(() => undefined);
+    else await writeFile(externalPortalLauncherPath, previousExternalPortalLauncher);
   }
 });
 
@@ -4434,6 +4496,92 @@ test("runClipperGoLivePrepSweep refreshes all local go-live packs conservatively
     else await writeFile(beforeStatus.goLivePrepSweep.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.goLivePrepSweep.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.goLivePrepSweep.markdownPath, previousMarkdown);
+  }
+});
+
+test("runClipperPostConnectActivationSweep refreshes post-connect readiness safely", async () => {
+  const postConnectManifestPath = path.join(process.cwd(), "clippers_workspace", "post-connect-activation-sweep.json");
+  const postConnectMarkdownPath = path.join(process.cwd(), "clippers_workspace", "post-connect-activation-sweep.md");
+  const previousManifest = await readFile(postConnectManifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(postConnectMarkdownPath, "utf8").catch(() => null);
+
+  try {
+    const { postConnectActivationSweep, goLivePrepSweep, localDropSync, robertNextActions, status } = await runClipperPostConnectActivationSweep();
+    assert.ok(postConnectActivationSweep.manifestPath.endsWith("post-connect-activation-sweep.json"));
+    assert.ok(postConnectActivationSweep.markdownPath.endsWith("post-connect-activation-sweep.md"));
+    assert.equal(postConnectActivationSweep.prepSweepStatus, goLivePrepSweep.status);
+    assert.equal(postConnectActivationSweep.localDropSyncStatus, localDropSync?.status || "not_run");
+    assert.equal(postConnectActivationSweep.totalLanes, robertNextActions.connectNow.postConnectActivationBridge.length);
+    assert.equal(postConnectActivationSweep.blockedLanes, robertNextActions.connectNow.postConnectActivationBridge.filter((lane) => lane.status === "blocked").length);
+    assert.equal(postConnectActivationSweep.readyToPublish, status.goLiveCompletionAudit.readyToPublish);
+    assert.ok(["ready", "needs_external_action", "needs_local_input", "blocked"].includes(postConnectActivationSweep.status));
+    assert.ok(postConnectActivationSweep.artifactPaths.launcher.endsWith("external-portal-launcher.html"));
+    assert.equal(postConnectActivationSweep.launcherUrl, "/clippers/external-portal-launcher");
+    assert.ok(postConnectActivationSweep.artifactPaths.connectNow.endsWith("ROBERT_CONNECT_NOW.md"));
+    assert.ok(postConnectActivationSweep.nextStep.length > 0);
+
+    const rawManifest = await readFile(postConnectActivationSweep.manifestPath, "utf8");
+    const rawMarkdown = await readFile(postConnectActivationSweep.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Post-Connect Activation Sweep"));
+    assert.ok(rawMarkdown.includes("Activation Lanes"));
+    assert.ok(rawMarkdown.includes("Launcher URL"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawManifest.includes("client_secret="), false);
+    assert.equal(rawManifest.includes("refresh_token="), false);
+    assert.equal(rawMarkdown.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret="), false);
+    assert.equal(rawMarkdown.includes("refresh_token="), false);
+  } finally {
+    if (previousManifest === null) await unlink(postConnectManifestPath).catch(() => undefined);
+    else await writeFile(postConnectManifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(postConnectMarkdownPath).catch(() => undefined);
+    else await writeFile(postConnectMarkdownPath, previousMarkdown);
+  }
+});
+
+test("runClipperIntakeRefreshSweep writes operator intake refresh report safely", async () => {
+  const intakeRefreshManifestPath = path.join(process.cwd(), "clippers_workspace", "intake-refresh-sweep.json");
+  const intakeRefreshMarkdownPath = path.join(process.cwd(), "clippers_workspace", "intake-refresh-sweep.md");
+  const previousManifest = await readFile(intakeRefreshManifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(intakeRefreshMarkdownPath, "utf8").catch(() => null);
+
+  try {
+    const { intakeRefreshSweep, postConnectActivationSweep, goLivePrepSweep, localDropSync, robertNextActions, status } = await runClipperIntakeRefreshSweep();
+    assert.ok(intakeRefreshSweep.manifestPath.endsWith("intake-refresh-sweep.json"));
+    assert.ok(intakeRefreshSweep.markdownPath.endsWith("intake-refresh-sweep.md"));
+    assert.equal(intakeRefreshSweep.prepSweepStatus, goLivePrepSweep.status);
+    assert.equal(intakeRefreshSweep.localDropSyncStatus, localDropSync?.status || "not_run");
+    assert.equal(intakeRefreshSweep.postConnectStatus, postConnectActivationSweep.status);
+    assert.equal(intakeRefreshSweep.readyToPublish, postConnectActivationSweep.readyToPublish);
+    assert.equal(intakeRefreshSweep.intakeConsole.status, robertNextActions.connectNow.intakeConsole.status);
+    assert.equal(intakeRefreshSweep.intakeConsole.totals.lanes, robertNextActions.connectNow.intakeConsole.totals.lanes);
+    assert.ok(intakeRefreshSweep.refreshSequence.includes("Run Activation Sweep"));
+    assert.ok(intakeRefreshSweep.completedSteps.length > 0);
+    assert.ok(["ready", "needs_external_action", "needs_local_input", "blocked"].includes(intakeRefreshSweep.status));
+    assert.ok(intakeRefreshSweep.artifactPaths.localDropSync === null || intakeRefreshSweep.artifactPaths.localDropSync.endsWith("local-drop-sync.md"));
+    assert.ok(intakeRefreshSweep.artifactPaths.postConnectActivation.endsWith("post-connect-activation-sweep.md"));
+    assert.ok(intakeRefreshSweep.artifactPaths.robertNextActions.endsWith("ROBERT_NEXT_ACTIONS.md"));
+    assert.ok(intakeRefreshSweep.artifactPaths.connectNow.endsWith("ROBERT_CONNECT_NOW.md"));
+    assert.ok(intakeRefreshSweep.artifactPaths.launcher.endsWith("external-portal-launcher.html"));
+    assert.equal(status.robertNextActions.connectNow.intakeConsole.totals.lanes, intakeRefreshSweep.intakeConsole.totals.lanes);
+
+    const rawManifest = await readFile(intakeRefreshSweep.manifestPath, "utf8");
+    const rawMarkdown = await readFile(intakeRefreshSweep.markdownPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Intake Refresh Sweep"));
+    assert.ok(rawMarkdown.includes("Go-Live Intake Console") || rawMarkdown.includes("Intake Console"));
+    assert.ok(rawMarkdown.includes("Refresh Sequence"));
+    assert.ok(rawMarkdown.includes("Intake Lanes"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawManifest.includes("client_secret="), false);
+    assert.equal(rawManifest.includes("refresh_token="), false);
+    assert.equal(rawMarkdown.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret="), false);
+    assert.equal(rawMarkdown.includes("refresh_token="), false);
+  } finally {
+    if (previousManifest === null) await unlink(intakeRefreshManifestPath).catch(() => undefined);
+    else await writeFile(intakeRefreshManifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(intakeRefreshMarkdownPath).catch(() => undefined);
+    else await writeFile(intakeRefreshMarkdownPath, previousMarkdown);
   }
 });
 

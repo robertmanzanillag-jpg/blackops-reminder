@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppProject } from "@shared/schema";
-import { analyzeAppProject } from "../server/cybersecurity-agent";
+import { __cybersecurityAgentInternals, analyzeAppProject } from "../server/cybersecurity-agent";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -52,4 +52,31 @@ test("keeps down critical apps at critical severity", () => {
   const uptimeThreat = threats.find((threat) => threat.signal === "uptime");
 
   assert.equal(uptimeThreat?.severity, "critical");
+});
+
+test("treats DROPKIT as an important app repo for inventory import", () => {
+  const repo = {
+    id: 42,
+    name: "DROPKIT",
+    full_name: "robertmanzanillag-jpg/DROPKIT",
+    private: false,
+    archived: false,
+    disabled: false,
+    fork: false,
+    language: "TypeScript",
+    description: "Dropshipping app kit",
+    homepage: "https://dropkit.example",
+    html_url: "https://github.com/robertmanzanillag-jpg/DROPKIT",
+    updated_at: "2026-06-18T12:00:00.000Z",
+    pushed_at: "2026-06-18T12:00:00.000Z",
+    open_issues_count: 0,
+  } as any;
+
+  assert.equal(__cybersecurityAgentInternals.isLikelyAppRepo(repo), true);
+  assert.equal(__cybersecurityAgentInternals.inferPriorityFromRepo(repo), "high");
+
+  const input = __cybersecurityAgentInternals.githubRepoToAppProjectInput(repo);
+  assert.equal(input.githubRepo, "robertmanzanillag-jpg/DROPKIT");
+  assert.equal(input.priority, "high");
+  assert.deepEqual(input.tags, ["github-import", "needs-health-url"]);
 });
