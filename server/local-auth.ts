@@ -29,6 +29,7 @@ export {
 type RequestWithSession = Request & {
   session?: {
     userId?: string;
+    save?: (callback: (error?: Error) => void) => void;
     destroy?: (callback: (error?: Error) => void) => void;
   };
 };
@@ -75,6 +76,20 @@ function setLocalAuthUserCookie(res: Response, userId: string): void {
 
 function clearLocalAuthUserCookie(res: Response): void {
   res.clearCookie(LOCAL_AUTH_USER_COOKIE_NAME, localAuthCookieOptions());
+}
+
+function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
+  if (!req.session?.save) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    req.session?.save?.((error?: Error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 export function registerLocalAuthRoutes(app: Express): void {
@@ -127,6 +142,11 @@ export function registerLocalAuthRoutes(app: Express): void {
       });
       if (req.session) req.session.userId = user.id;
       setLocalAuthUserCookie(res, user.id);
+      try {
+        await saveLocalAuthSession(req);
+      } catch {
+        return res.status(500).json({ error: "Session save failed" });
+      }
       res.status(201).json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -151,6 +171,11 @@ export function registerLocalAuthRoutes(app: Express): void {
 
       if (req.session) req.session.userId = user.id;
       setLocalAuthUserCookie(res, user.id);
+      try {
+        await saveLocalAuthSession(req);
+      } catch {
+        return res.status(500).json({ error: "Session save failed" });
+      }
       res.json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
