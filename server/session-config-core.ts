@@ -1,5 +1,3 @@
-import { hasRealValue } from "./ceo-doctor-cli";
-
 const DEV_SESSION_SECRET = "blackops-dev-session-secret";
 
 export type SessionStoreKind = "disabled" | "memory" | "postgres";
@@ -10,6 +8,24 @@ export interface SessionRuntimeSettings {
   storeKind: SessionStoreKind;
   production: boolean;
   secureCookie: boolean;
+}
+
+function hasRealDatabaseUrl(value: string | undefined): boolean {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (/^(replace-|<|your-|tu-|example|changeme|todo)/i.test(normalized)) {
+    return false;
+  }
+
+  if (/^postgres(?:ql)?:\/\/user:password@host(?::\d+)?(?:\/|$)/i.test(normalized)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function resolveSessionRuntimeSettings(env: NodeJS.ProcessEnv = process.env): SessionRuntimeSettings {
@@ -30,7 +46,7 @@ export function resolveSessionRuntimeSettings(env: NodeJS.ProcessEnv = process.e
   return {
     enabled: true,
     secret,
-    storeKind: requestedStore === "postgres" && hasRealValue(env.DATABASE_URL) ? "postgres" : "memory",
+    storeKind: requestedStore === "postgres" && hasRealDatabaseUrl(env.DATABASE_URL) ? "postgres" : "memory",
     production,
     secureCookie: production,
   };
