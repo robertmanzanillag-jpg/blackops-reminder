@@ -21,6 +21,9 @@ const PUBLIC_API_PATHS = [
   "/api/telegram/webhook",
   "/api/google-drive/oauth/callback",
   "/api/canva/oauth/callback",
+  "/api/shopify/oauth/callback",
+  "/api/shopify/oauth/start",
+  "/api/shopify/install",
   "/api/zoho/callback",
 ];
 
