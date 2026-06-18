@@ -12,6 +12,7 @@ import {
   X,
   Github,
   LineChart,
+  Megaphone,
   MessageSquare,
   Monitor,
   Radio,
@@ -20,6 +21,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Store,
   Zap,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -94,6 +96,42 @@ const agents = [
     skin: "bg-orange-100",
     position: "left-[59%] top-[42%]",
     bubblePosition: "left-[51%] top-[12%]",
+  },
+  {
+    id: "dropshipping",
+    name: "Dropshipping CEO",
+    role: "Shopify + social",
+    href: "/dropshipping-ceo",
+    icon: Store,
+    station: "Dropshipping Lab",
+    status: "Validando",
+    activity: "Buscando productos virales, margen, suppliers y contenido sin comprar inventario",
+    shortAction: "Dropship",
+    mode: "working",
+    color: "from-emerald-200 to-lime-400",
+    outfit: "bg-emerald-400",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[52%] top-[59%]",
+    bubblePosition: "left-[44%] top-[30%]",
+  },
+  {
+    id: "marketing-cmo",
+    name: "Marketing CMO",
+    role: "CMO global",
+    href: "/marketing-command-center",
+    icon: Megaphone,
+    station: "Marketing HQ",
+    status: "Produciendo",
+    activity: "Dirigiendo marketing para todos los clientes internos con skills, analytics, safety y aprendizaje separado",
+    shortAction: "Marketing",
+    mode: "working",
+    color: "from-lime-300 to-emerald-400",
+    outfit: "bg-lime-500",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[71%] top-[59%]",
+    bubblePosition: "right-[22%] top-[38%]",
   },
   {
     id: "code",
@@ -367,7 +405,9 @@ const defaultOfficeRooms: OfficeRoom[] = [
   { id: "deals", label: "Deals + Websites", x: 54, y: 27, w: 10, h: 29 },
   { id: "dev", label: "Dev + GitHub", x: 65, y: 19, w: 25, h: 43 },
   { id: "finance", label: "Finance", x: 10, y: 52, w: 18, h: 25 },
-  { id: "meeting", label: "Meeting Room", x: 31, y: 65, w: 32, h: 17 },
+  { id: "dropshipping-lab", label: "Dropshipping Lab", x: 46, y: 58, w: 18, h: 20 },
+  { id: "marketing-hq", label: "Marketing HQ", x: 65, y: 52, w: 15, h: 11 },
+  { id: "meeting", label: "Meeting Room", x: 31, y: 65, w: 14, h: 17 },
   { id: "ops", label: "Ops", x: 10, y: 82, w: 18, h: 13 },
   { id: "black-room", label: "Black Room", x: 30, y: 84, w: 13, h: 12 },
   { id: "clippers", label: "Clippers", x: 68, y: 65, w: 12, h: 17 },
@@ -380,7 +420,14 @@ const officeRoomConnections: OfficeRoomConnection[] = [
   { from: "reception", to: "finance" },
   { from: "kong", to: "deals" },
   { from: "kong", to: "meeting" },
+  { from: "deals", to: "dropshipping-lab" },
   { from: "deals", to: "dev" },
+  { from: "dropshipping-lab", to: "marketing-hq" },
+  { from: "marketing-hq", to: "clippers" },
+  { from: "marketing-hq", to: "security" },
+  { from: "marketing-hq", to: "legal" },
+  { from: "dropshipping-lab", to: "security" },
+  { from: "dropshipping-lab", to: "legal" },
   { from: "dev", to: "security" },
   { from: "finance", to: "ops" },
   { from: "meeting", to: "black-room" },
@@ -396,6 +443,8 @@ const defaultAgentLocations: AgentLocationMap = {
   assistant: "reception",
   ceo: "kong",
   revenue: "deals",
+  dropshipping: "dropshipping-lab",
+  "marketing-cmo": "marketing-hq",
   code: "dev",
   github: "dev",
   portfolio: "finance",
@@ -480,6 +529,30 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
   if (contact.name === "Revenue") {
     return `${opener}Lo convierto en pipeline: area, nicho, leads con evidencia, mockup, outreach en draft, propuesta y QA. Si falta un dato critico, pregunto antes de gastar o contactar.`;
   }
+  if (contact.id === "dropshipping") {
+    if (text.includes("stock") || text.includes("inventario") || text.includes("comprar")) {
+      return `${opener}No compramos inventario para empezar. Trabajo con modelo conectado a supplier: investigo producto, margen, shipping y riesgo; solo pido aprobacion si hay que gastar, publicar, ordenar sample o contactar proveedor.`;
+    }
+    if (text.includes("producto") || text.includes("viral") || text.includes("tiktok")) {
+      return `${opener}Mi siguiente batch es buscar productos virales con evidencia, margen mayor a 45%, shipping razonable y proveedor backup. Si pasa, lo dejo como launch draft, no publicado.`;
+    }
+    if (text.includes("budget") || text.includes("presupuesto") || text.includes("100")) {
+      return `${opener}Profit Guard manda: budget inicial $100, no gasto mas de lo cobrado, y cualquier gasto va a approval. La meta operativa es llegar a $1k/mes sin quemar caja.`;
+    }
+    return `${opener}Dirijo Shopify + social sin inventario propio: Product Scout, Supplier Analyst, Profit Guard, Social Manager, Legal/Security y Learning Analyst. Puedo investigar y preparar drafts; dinero/publicacion/contacto pasan por aprobacion.`;
+  }
+  if (contact.id === "marketing-cmo") {
+    if (text.includes("post") || text.includes("contenido") || text.includes("copy") || text.includes("reel")) {
+      return `${opener}Marketing HQ prepara posts por cliente: hook, copy, visual brief, calendario, CTA y safety check. Nada se publica fuera del app hasta que conectes redes y apruebes autoposting para ese cliente.`;
+    }
+    if (text.includes("ads") || text.includes("anuncio") || text.includes("budget") || text.includes("presupuesto")) {
+      return `${opener}Trabajo con presupuesto minimo por cliente. Primero organico, luego test pequeno solo si hay cash/senales y approval tuyo para gastar en ese proyecto.`;
+    }
+    if (text.includes("analitica") || text.includes("resultado") || text.includes("ventas") || text.includes("mejorar")) {
+      return `${opener}Mi Analytics subagent compara posts, hooks, plataformas, clicks, ordenes y ROAS por cliente. Lo que funcione se repite; lo que no, se pausa y se convierte en aprendizaje separado.`;
+    }
+    return `${opener}Soy el CMO global: manejo Dropshipping, Revenue, Radio, Clippers, Kong y futuros clientes como una agencia interna. Cada cliente tiene budget, cuentas, metricas, calendario y approvals separados.`;
+  }
   if (contact.name === "Code") {
     return `${opener}Lo reviso como problema tecnico.${text.includes("repo objetivo") ? " Voy a trabajar con el repo objetivo que seleccionaste, no con todos a la vez." : ""} Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
   }
@@ -522,6 +595,8 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
 
 function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.name === "CEO") return "Estoy aqui. Dime que decision o problema quieres ordenar y lo bajo a prioridades.";
+  if (contact.id === "dropshipping") return "Dropshipping CEO activo. Empiezo sin stock: producto viral, proveedor, margen, contenido draft y approvals para dinero/publicacion.";
+  if (contact.id === "marketing-cmo") return "Marketing HQ global activo. Manejo clientes internos separados, skills fuertes, learning loop, analytics y safety antes de publicar o gastar.";
   if (contact.name === "Code") return "Listo. Cuentame que quieres cambiar o que esta fallando y lo reviso como trabajo de codigo.";
   if (contact.name === "GitHub") return "Estoy mirando el lado de repos, PRs y branches. Dime que repo o cambio quieres revisar.";
   if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
@@ -545,7 +620,20 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
   ceo: [
     { from: "ceo", to: "portfolio", text: "Necesito lectura rapida: riesgo, oportunidad y algo que requiera accion." },
     { from: "portfolio", to: "ceo", text: "Estoy monitoreando mercado y cartera. Te paso solo senales utiles." },
+    { from: "dropshipping", to: "ceo", text: "Estoy validando productos virales sin inventario y sin gasto hasta que Profit Guard lo permita." },
+    { from: "marketing-cmo", to: "ceo", text: "Opero como agencia interna: clientes separados, skills fuertes, calendario, analytics y aprendizaje automatico." },
     { from: "control", to: "ceo", text: "Cualquier accion sensible pasa por permisos antes de ejecutarse." },
+  ],
+  dropshipping: [
+    { from: "dropshipping", to: "revenue", text: "Estoy montando pipeline de productos: tendencia, proveedor, margen, contenido y approval." },
+    { from: "marketing-cmo", to: "dropshipping", text: "Dropshipping es mi primer cliente interno: preparo brief, posts, calendario y test organico antes de gastar." },
+    { from: "legal", to: "dropshipping", text: "Bloqueo claims, marcas, politicas de envio dudosas y promesas sin evidencia." },
+    { from: "control", to: "dropshipping", text: "Dinero, publicacion, contacto y fulfillment pasan por aprobacion." },
+  ],
+  "marketing-cmo": [
+    { from: "marketing-cmo", to: "dropshipping", text: "Recibo cada cliente con su marca, budget, canales, metricas y approvals; no mezclo datos entre proyectos." },
+    { from: "legal", to: "marketing-cmo", text: "Reviso claims, copyright, marcas, politicas de plataforma y promesas antes de publicar." },
+    { from: "control", to: "marketing-cmo", text: "Autoposting, ads, contacto externo y uso de credenciales quedan bloqueados por cliente hasta aprobacion clara." },
   ],
   code: [
     { from: "code", to: "github", text: "Tengo cambios locales. Necesito contexto de ramas y PRs antes de publicar." },
@@ -605,6 +693,8 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "code", text: "Si una idea toca producto, la convierto en cambio pequeno y verificable." },
   { from: "github", text: "Yo reviso repos, PRs y checks antes de publicar para no romper produccion." },
   { from: "revenue", text: "Traigo deals validados: fuente, margen, oferta y website necesario." },
+  { from: "dropshipping", text: "Traigo productos virales validados por margen, supplier, shipping y contenido draft." },
+  { from: "marketing-cmo", text: "Yo manejo marketing global como agencia interna: cada cliente con su calendario, metricas, skills y learning loop." },
   { from: "cybersecurity", text: "Yo reviso superficie de ataque: apps, dominios, HTTPS, incidents y Telegram alerts." },
 ];
 
@@ -618,8 +708,10 @@ const meetingRoomPresence: RoomPresence[] = [
   { agent: "ceo", position: "left-[37%] top-[71%]" },
   { agent: "code", position: "left-[43%] top-[71%]" },
   { agent: "github", position: "left-[49%] top-[71%]" },
-  { agent: "revenue", position: "left-[55%] top-[71%]" },
-  { agent: "cybersecurity", position: "left-[61%] top-[71%]" },
+  { agent: "revenue", position: "left-[53%] top-[71%]" },
+  { agent: "dropshipping", position: "left-[57%] top-[71%]" },
+  { agent: "marketing-cmo", position: "left-[61%] top-[71%]" },
+  { agent: "cybersecurity", position: "left-[65%] top-[71%]" },
 ];
 
 const officeFeed: OfficeFeedItem[] = [
@@ -634,6 +726,18 @@ const officeFeed: OfficeFeedItem[] = [
     title: "Aprendizaje de deals",
     text: "Cuando un deal aparece, necesito guardar fuente, margen posible, landing requerida y siguiente contacto.",
     sharesWith: "CEO, Code",
+  },
+  {
+    agent: "dropshipping",
+    title: "Dropshipping lab",
+    text: "Valido productos virales sin stock: proveedor, margen, shipping, contenido y approvals.",
+    sharesWith: "Revenue, Legal, Control",
+  },
+  {
+    agent: "marketing-cmo",
+    title: "Marketing HQ",
+    text: "Coordino clientes internos separados: contenido, hooks, calendario, analytics, skills y tests organicos antes de pedir gasto o publicacion externa.",
+    sharesWith: "CEO, Dropshipping, Revenue, Legal, Control",
   },
   {
     agent: "clippers",
@@ -667,6 +771,18 @@ const learningSuggestions: LearningSuggestion[] = [
     agent: "revenue",
     lesson: "Antes de crear website para un deal, validar fuente, margen, publico y oferta.",
     reason: "Evita construir paginas para oportunidades flojas.",
+  },
+  {
+    id: "dropshipping-no-inventory-profit-guard",
+    agent: "dropshipping",
+    lesson: "Dropshipping debe operar sin inventario, con sample opcional aprobado y Profit Guard antes de gastar.",
+    reason: "Protege el budget inicial de $100 mientras el CEO busca productos virales rentables.",
+  },
+  {
+    id: "marketing-cmo-organic-first",
+    agent: "marketing-cmo",
+    lesson: "Marketing debe separar clientes, budgets, cuentas, metricas y aprendizajes antes de pedir ads o autoposting.",
+    reason: "Permite manejar hasta 20 clientes sin mezclar datos ni gastar antes de tener evidencia.",
   },
   {
     id: "clips-allowed-sources",
@@ -715,6 +831,20 @@ const skillSuggestions: SkillSuggestion[] = [
     skill: "Deal Research",
     helpsWith: "Buscar oportunidades, validar margen, detectar nichos y decidir si vale la pena crear website.",
     nextStep: "Crear checklist para cada deal antes de construir landing o contactar.",
+  },
+  {
+    id: "dropshipping-supplier-margin-scout",
+    agent: "dropshipping",
+    skill: "Supplier + Margin Scout",
+    helpsWith: "Comparar AliExpress/DSers/CJ/Zendrop, calcular margen, shipping, backup supplier y riesgos antes de lanzar.",
+    nextStep: "Usarlo antes de publicar producto, ordenar sample o gastar en marketing.",
+  },
+  {
+    id: "marketing-cmo-content-analytics",
+    agent: "marketing-cmo",
+    skill: "Global Growth OS",
+    helpsWith: "Audience research, oferta, hooks, brief creativo, calendario, UTMs, analytics, CRO, safety y learning loop por cliente.",
+    nextStep: "Agregar clientes uno por uno y conectar redes oficiales solo cuando Robert apruebe autoposting por cliente.",
   },
   {
     id: "clippers-source-analytics",
@@ -768,6 +898,20 @@ const legalBridgeReports: LegalBridgeReport[] = [
     title: "Permisos operativos",
     text: "Cuando Kong Legal aprueba una accion, Control valida permisos antes de que el agente la ejecute.",
   },
+  {
+    source: "Dropshipping CEO",
+    target: "Legal Main",
+    severity: "revisar",
+    title: "Ecommerce sin inventario",
+    text: "Dropshipping debe revisar shipping, refunds, claims, marcas, supplier quality y terminos de plataforma antes de publicar o vender.",
+  },
+  {
+    source: "Marketing CMO",
+    target: "Legal Main",
+    severity: "revisar",
+    title: "Marketing global",
+    text: "Marketing debe revisar claims, copyright, politicas de plataforma, assets externos, privacidad y approvals por cliente antes de publicar o gastar.",
+  },
 ];
 
 function buildLegalAppReport(project: MonitoredProject, overview?: GitHubOverview[string]): LegalAppReport {
@@ -796,6 +940,11 @@ function buildLegalAppReport(project: MonitoredProject, overview?: GitHubOvervie
     checks.push("Claims de landing pages", "Formularios, leads y consentimiento");
     summary = "Deals + Websites debe revisar claims, formularios, consentimiento y politicas antes de publicar.";
     nextAction = "Agregar checklist legal a cada landing: privacidad, terminos, contacto, claims y tracking.";
+    severity = "revisar";
+  } else if (text.includes("dropship") || text.includes("shopify")) {
+    checks.push("Shipping/refunds", "Claims de producto", "Supplier quality", "Terminos de plataforma");
+    summary = "Dropshipping requiere copy honesto, politica de devoluciones clara y aprobacion antes de publicar o gastar.";
+    nextAction = "Bloquear productos con claims de salud, marcas dudosas, shipping no verificable o proveedor sin backup.";
     severity = "revisar";
   }
 

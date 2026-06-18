@@ -158,6 +158,83 @@ app.get("/clippers/review-demo", (_req, res) => {
   ].join("\n"));
 });
 
+function renderDropshippingPublicLegalHtml(title: string, body: string[]): string {
+  const escapedTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `<title>${escapedTitle}</title>`,
+    '<style>body{font-family:Inter,Arial,sans-serif;max-width:860px;margin:0 auto;padding:40px 20px;line-height:1.6;color:#18181b}h1,h2{line-height:1.2}.meta{color:#71717a}.notice{border:1px solid #d4d4d8;background:#fafafa;padding:16px;border-radius:8px}</style>',
+    "</head>",
+    "<body>",
+    `<h1>${escapedTitle}</h1>`,
+    '<p class="meta">Draft operating policy for Dropshipping CEO. Last updated: June 18, 2026.</p>',
+    '<p class="notice">This policy is a starter template for a no-inventory dropshipping store. Final store name, legal entity, contact email, supplier terms, payment processor, and jurisdiction should be reviewed before public launch.</p>',
+    ...body,
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
+app.get("/dropshipping/legal/privacy", (_req, res) => {
+  res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Privacy Policy", [
+    "<p>This store collects customer information only as needed to process orders, provide support, prevent fraud, improve the shopping experience, and comply with legal obligations.</p>",
+    "<h2>Information We Process</h2>",
+    "<p>Order details may include name, shipping address, email, phone number, payment status, product selections, support messages, device/session data, and marketing attribution data.</p>",
+    "<h2>Service Providers</h2>",
+    "<p>We may share order and fulfillment information with ecommerce, payment, shipping, analytics, email, advertising, and dropshipping supplier tools only when needed to operate the store.</p>",
+    "<h2>Marketing</h2>",
+    "<p>Email, SMS, retargeting, and social advertising should run only after the customer has provided the required consent or where allowed by applicable law and platform policy.</p>",
+    "<h2>Customer Requests</h2>",
+    "<p>Customers can request access, correction, deletion, or opt-out support through the store contact channel once configured.</p>",
+  ]));
+});
+
+app.get("/dropshipping/legal/refund-policy", (_req, res) => {
+  res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Refund Policy", [
+    "<p>Refunds and replacements are handled case by case. The store should clearly disclose shipping times, item condition requirements, and evidence needed before launch.</p>",
+    "<h2>Damaged Or Incorrect Items</h2>",
+    "<p>Customers should contact support with the order number, photos or video, packaging evidence, and a short description of the issue within the posted return window.</p>",
+    "<h2>Change Of Mind</h2>",
+    "<p>Change-of-mind returns may be limited by supplier and product type. Any customer-paid return shipping should be clearly disclosed before checkout.</p>",
+    "<h2>Non-Returnable Items</h2>",
+    "<p>Hygiene, personalized, final-sale, used, or safety-sensitive items may be non-returnable when allowed by law and clearly disclosed.</p>",
+    "<h2>Refund Timing</h2>",
+    "<p>Approved refunds should be returned to the original payment method after inspection or supplier confirmation, subject to payment processor timelines.</p>",
+  ]));
+});
+
+app.get("/dropshipping/legal/shipping-policy", (_req, res) => {
+  res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Shipping Policy", [
+    "<p>This store uses supplier fulfillment and does not hold bulk inventory. Shipping estimates must be displayed clearly on each product page before launch.</p>",
+    "<h2>Processing Time</h2>",
+    "<p>Orders should be reviewed for payment, fraud, address quality, supplier availability, and fulfillment approval before shipment.</p>",
+    "<h2>Transit Time</h2>",
+    "<p>Transit times vary by supplier, destination, carrier, customs, and seasonal demand. Product pages should show estimated ranges, not guaranteed delivery dates unless verified.</p>",
+    "<h2>Tracking</h2>",
+    "<p>Tracking should be provided when available from the supplier or fulfillment partner. If tracking is delayed, customer support should communicate the current order state.</p>",
+    "<h2>Customs And Duties</h2>",
+    "<p>International customers may be responsible for customs, import taxes, duties, and local fees unless the checkout clearly states otherwise.</p>",
+  ]));
+});
+
+app.get("/dropshipping/legal/terms", (_req, res) => {
+  res.type("html").send(renderDropshippingPublicLegalHtml("Dropshipping Store Terms of Service", [
+    "<p>These terms describe the starter operating rules for a no-inventory ecommerce store using supplier fulfillment.</p>",
+    "<h2>Product Information</h2>",
+    "<p>Product descriptions, photos, prices, availability, shipping estimates, and promotions should be accurate, current, and free of unsupported claims.</p>",
+    "<h2>Orders</h2>",
+    "<p>The store may refuse, cancel, or hold an order for fraud review, unavailable supplier stock, pricing errors, shipping restrictions, or policy violations.</p>",
+    "<h2>No Medical Or Unsupported Claims</h2>",
+    "<p>Marketing copy must not promise health, safety, legal, financial, or performance outcomes without reliable evidence and required approvals.</p>",
+    "<h2>Limitation</h2>",
+    "<p>The final public terms should be reviewed for the store jurisdiction, payment processor, supplier agreements, platform policies, and consumer protection rules.</p>",
+  ]));
+});
+
 const sessionSettings = resolveSessionRuntimeSettings();
 const sessionMiddleware = createSessionMiddleware(sessionSettings);
 if (sessionMiddleware) {

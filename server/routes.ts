@@ -34,6 +34,8 @@ import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, verifyClipperProductionUrl } from "./clippers-agent";
 import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
+import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
 import { runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
 
@@ -2653,6 +2655,441 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch automation summary" });
+    }
+  });
+
+  // ==================== MARKETING COMMAND CENTER ====================
+
+  app.get("/api/marketing-command-center", async (_req, res) => {
+    try {
+      res.json(getMarketingCommandCenterSnapshot());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch marketing command center snapshot" });
+    }
+  });
+
+  app.post("/api/marketing-command-center/run-day", async (req, res) => {
+    try {
+      const input = marketingCommandCenterDaySchema.partial().parse(req.body || {});
+      res.json(runMarketingCommandCenterDay(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run marketing command center day" });
+    }
+  });
+
+  // ==================== DROPSHIPPING CEO ====================
+
+  app.get("/api/dropshipping-ceo", async (_req, res) => {
+    try {
+      res.json(getDropshippingCeoSnapshot());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch dropshipping CEO snapshot" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/product-research", async (req, res) => {
+    try {
+      const input = dropshippingProductResearchSchema.parse(req.body);
+      res.json(researchDropshippingProduct(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to research dropshipping product" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/product-scout-candidate", async (req, res) => {
+    try {
+      const input = dropshippingProductScoutCandidateSchema.parse(req.body);
+      res.json(createDropshippingProductScoutCandidate(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create dropshipping product scout candidate" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/product-scout-batch", async (req, res) => {
+    try {
+      const input = dropshippingProductScoutBatchSchema.parse(req.body || {});
+      res.json(runDropshippingProductScoutBatch(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run dropshipping product scout batch" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/product-scout-promote", async (req, res) => {
+    try {
+      const input = dropshippingProductScoutPromotionSchema.parse(req.body || {});
+      res.json(promoteDropshippingScoutCandidate(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to promote dropshipping product scout candidate" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/supplier-review", async (req, res) => {
+    try {
+      const input = dropshippingSupplierReviewSchema.parse(req.body);
+      res.json(reviewDropshippingSupplier(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to review dropshipping supplier" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/launch-plan", async (req, res) => {
+    try {
+      const input = dropshippingLaunchPlanSchema.parse(req.body);
+      res.json(buildDropshippingLaunchPlan(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build dropshipping launch plan" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/launch-pack", async (req, res) => {
+    try {
+      const input = dropshippingLaunchPackSchema.parse(req.body || {});
+      res.json(buildDropshippingLaunchPack(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build dropshipping launch pack" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/launch-pack-approval-preview", async (req, res) => {
+    try {
+      const input = dropshippingLaunchPackApprovalQueueSchema.parse(req.body || {});
+      res.json(prepareDropshippingLaunchPackApprovalQueue(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to preview dropshipping launch pack approvals" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/launch-pack-approvals", async (req, res) => {
+    try {
+      const input = dropshippingLaunchPackApprovalQueueSchema.parse(req.body || {});
+      const prepared = prepareDropshippingLaunchPackApprovalQueue(input);
+      try {
+        const pendingActions = await Promise.all(prepared.requests.map((request) => createPendingActionForApproval({
+          userId: getCurrentUserId(req),
+          actorType: "assistant",
+          actorId: "dropshipping-ceo",
+          origin: "web",
+          executionMode: "user_requested",
+          actionType: request.actionType,
+          resourceType: request.resourceType,
+          resourceId: request.resourceId,
+          title: request.title,
+          description: request.description,
+          input: request.input,
+          proposedChanges: request.proposedChanges,
+          metadata: { source: "dropshipping-ceo", launchPackId: request.resourceId },
+          scope: "ecommerce",
+        })));
+        res.status(201).json({ prepared, pendingActions, fallback: false, snapshot: getDropshippingCeoSnapshot() });
+      } catch (approvalError) {
+        const localOutbox = recordDropshippingApprovalOutboxRequests(
+          prepared.requests,
+          approvalError instanceof Error ? approvalError.message : "Trust Center approval queue unavailable.",
+        );
+        res.status(202).json({
+          prepared,
+          pendingActions: [],
+          fallback: true,
+          localOutbox,
+          snapshot: getDropshippingCeoSnapshot(),
+        });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue dropshipping launch pack approvals" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/ledger", async (req, res) => {
+    try {
+      const input = dropshippingLedgerEntrySchema.parse(req.body);
+      res.json(recordDropshippingLedgerEntry(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record dropshipping ledger entry" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/approval-decisions", async (req, res) => {
+    try {
+      const input = dropshippingApprovalDecisionSchema.parse(req.body);
+      res.json(recordDropshippingApprovalDecision(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record dropshipping approval decision" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/learning-review", async (req, res) => {
+    try {
+      const input = dropshippingLearningReviewSchema.parse(req.body);
+      res.json(recordDropshippingLearningReview(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record dropshipping learning review" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/marketing-campaign", async (req, res) => {
+    try {
+      const input = dropshippingMarketingCampaignSchema.parse(req.body);
+      res.json(buildDropshippingMarketingCampaign(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build dropshipping marketing campaign" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/social-post-batch", async (req, res) => {
+    try {
+      const input = dropshippingSocialPostBatchSchema.parse(req.body);
+      res.json(createDropshippingSocialPostBatch(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create dropshipping social posts" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/social-publish", async (req, res) => {
+    try {
+      const input = dropshippingSocialPublishSchema.parse(req.body);
+      res.json(await publishDropshippingSocialPost(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to publish dropshipping social post" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/social-metrics", async (req, res) => {
+    try {
+      const input = dropshippingSocialMetricsSchema.parse(req.body);
+      res.json(recordDropshippingSocialMetrics(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record dropshipping social metrics" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/social-analysis", async (req, res) => {
+    try {
+      const input = dropshippingSocialAnalysisSchema.parse(req.body || {});
+      res.json(analyzeDropshippingSocialPerformance(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to analyze dropshipping social performance" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/order", async (req, res) => {
+    try {
+      const input = dropshippingOrderSchema.parse(req.body);
+      res.json(recordDropshippingOrder(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record dropshipping order" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/fulfillment", async (req, res) => {
+    try {
+      const input = dropshippingFulfillmentSchema.parse(req.body);
+      res.json(prepareDropshippingFulfillment(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to prepare dropshipping fulfillment" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/capital-plan", async (req, res) => {
+    try {
+      const input = dropshippingCapitalPlanSchema.parse(req.body || {});
+      res.json(buildDropshippingCapitalPlan(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build dropshipping capital plan" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/growth-sprint", async (req, res) => {
+    try {
+      const input = dropshippingGrowthSprintSchema.parse(req.body || {});
+      res.json(buildDropshippingGrowthSprint(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build dropshipping growth sprint" });
+    }
+  });
+
+  app.get("/api/dropshipping-ceo/execution-setup", async (_req, res) => {
+    try {
+      res.json(getDropshippingExecutionSetup());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch dropshipping execution setup" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/run-cycle", async (req, res) => {
+    try {
+      const input = dropshippingCeoCycleSchema.parse(req.body || {});
+      res.json(runDropshippingCeoCycle(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run dropshipping CEO cycle" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/operating-cycle", async (req, res) => {
+    try {
+      const input = dropshippingCeoCycleSchema.partial().parse(req.body || {});
+      res.json(runDropshippingDailyOperatingCycle(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run dropshipping CEO operating cycle" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/shopify-preflight", async (req, res) => {
+    try {
+      const input = dropshippingShopifyDraftSchema.parse(req.body);
+      res.json(preflightDropshippingShopifyDraft(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to preflight Shopify draft" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/shopify-draft", async (req, res) => {
+    try {
+      const input = dropshippingShopifyDraftSchema.parse(req.body);
+      res.json(await createDropshippingShopifyDraft(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create Shopify draft" });
+    }
+  });
+
+  app.get("/api/dropshipping-ceo/report-preview", async (req, res) => {
+    try {
+      const cadence = req.query.cadence === "evening" ? "evening" : "morning";
+      res.json({ cadence, message: buildDropshippingDailyReport(cadence), snapshot: getDropshippingCeoSnapshot() });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to build dropshipping report preview" });
+    }
+  });
+
+  app.post("/api/dropshipping-ceo/send-report", async (req, res) => {
+    try {
+      const cadence = req.body?.cadence === "evening" ? "evening" : "morning";
+      res.json(await sendDropshippingDailyReport(getCurrentUserId(req), cadence));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send dropshipping report" });
+    }
+  });
+
+  const dropshippingPendingApprovalSchema = z.object({
+    actionType: z.enum([
+      "dropshipping.spend",
+      "dropshipping.publish_product",
+      "dropshipping.create_shopify_draft",
+      "dropshipping.publish_social",
+      "dropshipping.contact_supplier",
+      "dropshipping.fulfill_order",
+      "dropshipping.order_sample",
+    ]),
+    resourceType: z.string().trim().min(2).max(120).default("dropshipping"),
+    resourceId: z.string().trim().max(200).optional(),
+    title: z.string().trim().min(2).max(200),
+    description: z.string().trim().min(2).max(1200),
+    input: z.unknown().optional(),
+    proposedChanges: z.unknown().optional(),
+  });
+
+  app.post("/api/dropshipping-ceo/pending-approval", async (req, res) => {
+    try {
+      const input = dropshippingPendingApprovalSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "dropshipping-ceo",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: input.actionType,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        title: input.title,
+        description: input.description,
+        input: input.input,
+        proposedChanges: input.proposedChanges,
+        metadata: { source: "dropshipping-ceo" },
+        scope: "ecommerce",
+      });
+      res.status(201).json({ pendingAction, snapshot: getDropshippingCeoSnapshot() });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create dropshipping pending approval" });
     }
   });
 
