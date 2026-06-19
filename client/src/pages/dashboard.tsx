@@ -7,7 +7,6 @@ import {
   Calendar as CalendarIcon,
   LayoutGrid,
   Radio,
-  Settings,
   Wrench,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -15,14 +14,12 @@ import { ScheduleView } from "@/components/schedule-view";
 import { MonthView } from "@/components/month-view";
 import { TaskEditDialog } from "@/components/task-edit-dialog";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
-import { SettingsPanel } from "@/components/settings-panel";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { WeeklyReflectionForm } from "@/components/weekly-reflection-form";
 import { WeeklyReflectionHistory } from "@/components/weekly-reflection-history";
 import { MonthlyGoalsPanel } from "@/components/monthly-goals-panel";
 import { YearlyGoalsPanel } from "@/components/yearly-goals-panel";
 import { WeeklyTasksPanel } from "@/components/weekly-tasks-panel";
-import { NotificationSettings } from "@/components/notification-settings";
 import { DashboardAssistantChat } from "@/components/dashboard-assistant-chat";
 import { PendingActionsPanel } from "@/components/pending-actions-panel";
 import { Toaster } from "@/components/ui/toaster";
@@ -38,7 +35,6 @@ export default function Dashboard() {
   const [view, setView] = useState<"week" | "month" | "reflections">("week");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -416,18 +412,6 @@ export default function Dashboard() {
               Herramientas
             </Button>
           </Link>
-          <div className="hidden shrink-0 md:block">
-            <NotificationSettings />
-          </div>
-          <Button
-            variant="ghost"
-            onClick={() => setSettingsOpen(true)}
-            className="h-12 shrink-0 flex-col gap-1 rounded-full px-4 text-xs text-zinc-400 hover:bg-zinc-900 hover:text-white"
-            data-testid="button-settings"
-          >
-            <Settings className="h-4 w-4" />
-            Ajustes
-          </Button>
         </div>
       </nav>
 
@@ -453,9 +437,6 @@ export default function Dashboard() {
         }}
         onToggle={handleToggleTask}
       />
-
-      {/* Settings Panel */}
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmDialog
