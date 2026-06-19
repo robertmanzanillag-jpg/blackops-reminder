@@ -49,10 +49,11 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   // Fetch tasks
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: tasksResponse, isLoading } = useQuery({
     queryKey: ["tasks"],
     queryFn: getTasks,
   });
+  const tasks = Array.isArray(tasksResponse) ? tasksResponse : [];
 
   // Auto-reschedule overdue tasks - they chase you until completed!
   useEffect(() => {
