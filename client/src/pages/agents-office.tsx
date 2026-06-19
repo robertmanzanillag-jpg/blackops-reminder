@@ -171,6 +171,24 @@ const agents = [
     bubblePosition: "right-[18%] top-[32%]",
   },
   {
+    id: "claude-reviewer",
+    name: "Claude Reviewer",
+    role: "Segundo chequeo",
+    href: "/github-agent",
+    icon: Sparkles,
+    station: "Dev + GitHub",
+    status: "Auditando",
+    activity: "Revisando cambios de Codex con criterio independiente antes de QA",
+    shortAction: "Review",
+    mode: "working",
+    color: "from-orange-200 to-rose-300",
+    outfit: "bg-orange-400",
+    hair: "bg-stone-900",
+    skin: "bg-amber-100",
+    position: "left-[74%] top-[42%]",
+    bubblePosition: "right-[8%] top-[22%]",
+  },
+  {
     id: "portfolio",
     name: "Portfolio",
     role: "Inversiones",
@@ -466,6 +484,7 @@ const defaultAgentLocations: AgentLocationMap = {
   "marketing-cmo": "marketing-hq",
   code: "dev",
   github: "dev",
+  "claude-reviewer": "dev",
   portfolio: "finance",
   radio: "black-room",
   clippers: "clippers",
@@ -579,6 +598,9 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
   if (contact.name === "GitHub") {
     return `${opener}Lo veo desde repos/PRs/checks.${text.includes("repo objetivo") ? " Ya tengo el repo objetivo seleccionado." : " Si hablas de un proyecto, dime cual repo o rama."} Yo revisaria estado remoto, cambios pendientes, issues y si hay CI fallando.`;
   }
+  if (contact.id === "claude-reviewer") {
+    return `${opener}Yo hago el segundo chequeo independiente: leo el objetivo, comparo el diff, busco riesgos que Codex pudo pasar por alto y dejo una lista corta de bloquear, corregir o aprobar. No publico ni despliego; reviso antes de App QA.`;
+  }
   if (contact.name === "Portfolio") {
     return `${opener}Lo traduzco a lectura financiera: posicion, riesgo, noticia relevante y accion posible. Si me das ticker o captura, lo organizo como mantener, revisar o actuar.`;
   }
@@ -619,6 +641,7 @@ function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.id === "marketing-cmo") return "Marketing HQ global activo. Manejo clientes internos separados, skills fuertes, learning loop, analytics y safety antes de publicar o gastar.";
   if (contact.name === "Code") return "Listo. Cuentame que quieres cambiar o que esta fallando y lo reviso como trabajo de codigo.";
   if (contact.name === "GitHub") return "Estoy mirando el lado de repos, PRs y branches. Dime que repo o cambio quieres revisar.";
+  if (contact.id === "claude-reviewer") return "Estoy listo para doble chequeo. Pasame el PR, diff o repo objetivo y reviso riesgos, tests faltantes y puntos que Codex debe corregir.";
   if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
   if (contact.name === "Radio") return "Estoy en Black Room. Dime si hablamos de evento, flyer, calendario o media.";
   if (contact.name === "Clippers") return "Estoy en el war room social. Puedo preparar cuentas, drafts diarios, fuentes permitidas y reportes de views.";
@@ -658,12 +681,19 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
   code: [
     { from: "code", to: "github", text: "Tengo cambios locales. Necesito contexto de ramas y PRs antes de publicar." },
     { from: "github", to: "code", text: "Yo reviso estado remoto, checks y comentarios para que no subamos a ciegas." },
+    { from: "code", to: "claude-reviewer", text: "Cuando Codex termine el parche, quiero un segundo chequeo independiente antes de pedir QA." },
     { from: "ceo", to: "code", text: "Mantengan cambios pequenos y verificados. Nada de ruido innecesario." },
   ],
   github: [
     { from: "github", to: "code", text: "Hay que mirar checks, diff y comentarios antes de cerrar cualquier PR." },
     { from: "code", to: "github", text: "Pasame el contexto y preparo el parche con el menor alcance posible." },
+    { from: "claude-reviewer", to: "github", text: "Yo reviso el PR como segundo par de ojos: riesgos, tests faltantes, seguridad y claridad del rollback." },
     { from: "control", to: "github", text: "Push y PR siempre con confirmacion clara." },
+  ],
+  "claude-reviewer": [
+    { from: "claude-reviewer", to: "code", text: "No compito con Codex: reviso su plan y diff con otra mirada para detectar omisiones." },
+    { from: "claude-reviewer", to: "github", text: "Si hay PR, dejo el resumen de bloquear, corregir o aprobar antes de App QA." },
+    { from: "app-qa", to: "claude-reviewer", text: "Cuando tu revision pasa, yo corro rutas, links, APIs, errores y mejoras como gate final." },
   ],
   portfolio: [
     { from: "portfolio", to: "ceo", text: "Estoy mirando posiciones, noticias y movimientos para avisar cuando importe." },
@@ -688,6 +718,7 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
   "app-qa": [
     { from: "app-qa", to: "code", text: "Yo patrullo rutas, links, clicks esperados, health endpoints y errores antes de que algo llegue a produccion." },
     { from: "code", to: "app-qa", text: "Perfecto. Tus hallazgos me dicen donde tocar codigo y que verificar despues." },
+    { from: "claude-reviewer", to: "app-qa", text: "Te mando solo PRs que ya tuvieron segundo chequeo para que tu gate encuentre comportamiento, no descuidos obvios." },
     { from: "app-qa", to: "cybersecurity", text: "Si una pagina cae o un health endpoint falla, te paso la senal para separar bug de riesgo." },
   ],
   legal: [
@@ -717,6 +748,7 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "ceo", text: "Definamos prioridad: primero impacto, luego urgencia, luego quien ejecuta." },
   { from: "code", text: "Si una idea toca producto, la convierto en cambio pequeno y verificable." },
   { from: "github", text: "Yo reviso repos, PRs y checks antes de publicar para no romper produccion." },
+  { from: "claude-reviewer", text: "Yo hago doble chequeo independiente: diff, riesgo, pruebas, seguridad y rollback antes de App QA." },
   { from: "revenue", text: "Traigo deals validados: fuente, margen, oferta y website necesario." },
   { from: "dropshipping", text: "Traigo productos virales validados por margen, supplier, shipping y contenido draft." },
   { from: "marketing-cmo", text: "Yo manejo marketing global como agencia interna: cada cliente con su calendario, metricas, skills y learning loop." },
@@ -734,11 +766,12 @@ const meetingRoomPresence: RoomPresence[] = [
   { agent: "ceo", position: "left-[37%] top-[71%]" },
   { agent: "code", position: "left-[43%] top-[71%]" },
   { agent: "github", position: "left-[49%] top-[71%]" },
-  { agent: "revenue", position: "left-[53%] top-[71%]" },
-  { agent: "dropshipping", position: "left-[57%] top-[71%]" },
-  { agent: "marketing-cmo", position: "left-[61%] top-[71%]" },
-  { agent: "cybersecurity", position: "left-[65%] top-[71%]" },
-  { agent: "app-qa", position: "left-[69%] top-[71%]" },
+  { agent: "claude-reviewer", position: "left-[53%] top-[71%]" },
+  { agent: "revenue", position: "left-[57%] top-[71%]" },
+  { agent: "dropshipping", position: "left-[61%] top-[71%]" },
+  { agent: "marketing-cmo", position: "left-[65%] top-[71%]" },
+  { agent: "cybersecurity", position: "left-[69%] top-[71%]" },
+  { agent: "app-qa", position: "left-[73%] top-[71%]" },
 ];
 
 const officeFeed: OfficeFeedItem[] = [
@@ -783,6 +816,12 @@ const officeFeed: OfficeFeedItem[] = [
     title: "Patrulla de producto",
     text: "Subagentes revisan paginas, links, clicks esperados, health endpoints, errores abiertos y mejoras por area.",
     sharesWith: "Code, Cybersecurity, CEO",
+  },
+  {
+    agent: "claude-reviewer",
+    title: "Segundo chequeo",
+    text: "Reviso los cambios de Codex con otra mirada: objetivo, diff, pruebas, seguridad y rollback antes de App QA.",
+    sharesWith: "Code, GitHub, App QA",
   },
   {
     agent: "legal",
@@ -830,6 +869,12 @@ const learningSuggestions: LearningSuggestion[] = [
     reason: "Reduce errores y hace que los demas agentes entiendan que cambio.",
   },
   {
+    id: "claude-second-review",
+    agent: "claude-reviewer",
+    lesson: "Claude Reviewer debe revisar cada PR de Codex como segundo par de ojos antes del gate de App QA.",
+    reason: "Aumenta la probabilidad de detectar omisiones, tests faltantes o riesgos de rollback antes de produccion.",
+  },
+  {
     id: "security-threat-briefs",
     agent: "cybersecurity",
     lesson: "Cybersecurity debe separar amenaza real de ruido: app caida, HTTPS faltante, incidente abierto o repo sin trazabilidad.",
@@ -857,6 +902,13 @@ const skillSuggestions: SkillSuggestion[] = [
     skill: "PR + CI Reviewer",
     helpsWith: "Leer diffs, checks, errores de build y resumir que falta para subir cambios sin romper produccion.",
     nextStep: "Activarlo cuando Code termine un cambio o cuando un repo tenga errores.",
+  },
+  {
+    id: "claude-independent-review",
+    agent: "claude-reviewer",
+    skill: "Independent PR Review",
+    helpsWith: "Hacer doble chequeo de Codex: objetivo contra diff, regresiones posibles, pruebas faltantes, seguridad y rollback.",
+    nextStep: "Usarlo despues de abrir el PR y antes de correr App QA como gate final.",
   },
   {
     id: "revenue-deal-research",
@@ -1791,12 +1843,13 @@ export default function AgentsOfficePage() {
   const handleSendDirectMessage = () => {
     const text = directMessage.trim();
     if (!text) return;
+    const isDevReviewContact = contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer";
     const repoContext =
-      (contact.name === "Code" || contact.name === "GitHub") && selectedTarget
+      isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
     const reply = buildAgentReply(contact, `${text}${repoContext}`);
-    if ((contact.name === "Code" || contact.name === "GitHub") && targetRepo !== "workspace") {
+    if (isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
       window.localStorage.setItem(
         OFFICE_GITHUB_HANDOFF_KEY,
@@ -1838,7 +1891,7 @@ export default function AgentsOfficePage() {
     });
   };
   const openHref =
-    (contact.name === "Code" || contact.name === "GitHub") && targetRepo !== "workspace"
+    (contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer") && targetRepo !== "workspace"
       ? `/github-agent?repo=${encodeURIComponent(targetRepo)}${lastRemoteTask ? `&task=${encodeURIComponent(lastRemoteTask)}` : ""}`
       : contact.href;
   const handleSelectTeamAgent = (team: (typeof githubAppTeams)[number], agent: (typeof githubAppTeams)[number]["agents"][number]) => {
@@ -2286,7 +2339,7 @@ export default function AgentsOfficePage() {
                   </div>
                 </div>
               )}
-              {(contact.name === "Code" || contact.name === "GitHub") && (
+              {(contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer") && (
                 <div className="mt-2 rounded-md border border-cyan-200/15 bg-cyan-950/15 p-3">
                   <label className="text-[10px] uppercase tracking-wide text-cyan-200" htmlFor="office-target-repo">
                     App / repo objetivo
@@ -2306,8 +2359,8 @@ export default function AgentsOfficePage() {
                   </select>
                   <p className="mt-2 text-xs leading-4 text-zinc-400">
                     {targetRepo === "workspace"
-                      ? "Code aplica cambios en este app local con vista previa y aprobacion."
-                      : "Para apps de GitHub, abre GitHub Agent con ese repo y crea cambios/commit con aprobacion."}
+                      ? "Code aplica cambios locales; Claude Reviewer hace doble chequeo antes de App QA."
+                      : "Para apps de GitHub, abre GitHub Agent con ese repo; Codex trabaja PR-first y Claude revisa antes de App QA."}
                   </p>
                 </div>
               )}

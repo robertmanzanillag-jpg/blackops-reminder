@@ -63,6 +63,16 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 
 # Optional integrations
 
+# Metricool tracking / social publishing
+# Preferred path for social scheduling, analytics, best-time insights, and multi-brand reporting.
+# Add these only in local/deployment secrets, never in chat or committed docs.
+# Metricool MCP official server: https://ai.metricool.com/mcp
+# Local MCP package command: uvx --upgrade mcp-metricool
+# METRICOOL_USER_TOKEN=replace-with-metricool-user-token
+# METRICOOL_USER_ID=replace-with-metricool-user-id
+# METRICOOL_MCP_URL=https://ai.metricool.com/mcp
+# METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=true
+
 # Revenue Engine email provider
 # Required only when you want the outbox to send approved outreach by API.
 # Without these values the app stays in manual Gmail/mailto mode.

@@ -13,12 +13,14 @@ import {
 
 test("developer autopilot policy is PR-first and subscription-based", () => {
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.codexBillingMode, "chatgpt_subscription");
+  assert.equal(DEVELOPER_AUTOPILOT_POLICY.claudeBillingMode, "signed_in_claude_subscription_or_claude_code");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.repoScope, "all_registered_github_projects");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.changeStrategy, "pull_request_first");
+  assert.equal(DEVELOPER_AUTOPILOT_POLICY.secondReview, "claude_independent_review_before_app_qa");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.replitDeployment, "explicit_human_approval_required");
 });
 
-test("Codex brief blocks direct main commits, API spend, and Replit deploy", () => {
+test("Codex brief blocks direct main commits, API spend, and Replit deploy while requiring Claude review", () => {
   const brief = buildCodexPrFirstBrief({
     source: "telegram",
     repoFullName: "robert/asistente",
@@ -32,8 +34,10 @@ test("Codex brief blocks direct main commits, API spend, and Replit deploy", () 
   });
 
   assert.match(brief, /ChatGPT\/Codex subscription/);
+  assert.match(brief, /Claude as an independent signed-in reviewer/);
   assert.match(brief, /pull request first/);
   assert.match(brief, /do not commit directly to main/);
+  assert.match(brief, /Codex PR -> Claude independent review -> App QA release gate/);
   assert.match(brief, /Do not deploy to Replit/);
   assert.match(brief, /Keep exploit details private or sanitized/);
   assert.match(brief, /Do not edit \.env, secrets, credentials/);
@@ -57,6 +61,8 @@ test("release gate requires all App QA subagents to pass and still blocks Replit
   assert.equal(gate.canSendForApproval, true);
   assert.equal(gate.canDeployToReplit, false);
   assert.equal(gate.requiresHumanReplitApproval, true);
+  assert.equal(gate.secondReviewRequired, true);
+  assert.deepEqual(gate.requiredReviewers, ["codex", "claude", "app_qa"]);
   assert.equal(gate.prUrl, "https://github.com/robert/asistente/pull/12");
 });
 
@@ -100,6 +106,8 @@ test("ready message asks for explicit Replit approval", () => {
       canSendForApproval: true,
       canDeployToReplit: false,
       requiresHumanReplitApproval: true,
+      secondReviewRequired: true,
+      requiredReviewers: ["codex", "claude", "app_qa"],
       reasons: ["ready"],
       qaSummary: "All App QA subagents passed.",
     },
@@ -178,6 +186,7 @@ test("developer autopilot creates a GitHub handoff issue for the selected repo",
         assert.match(title, /\[Codex PR-first\]/);
         assert.match(body, /Do not deploy to Replit/);
         assert.match(body, /@codex review/);
+        assert.match(body, /Claude independent review/);
         return { number: 7, html_url: "https://github.com/robert/asistente/issues/7" };
       },
     },

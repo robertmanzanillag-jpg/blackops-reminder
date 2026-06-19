@@ -36,6 +36,8 @@ export type DeveloperReleaseGate = {
   canSendForApproval: boolean;
   canDeployToReplit: false;
   requiresHumanReplitApproval: true;
+  secondReviewRequired: true;
+  requiredReviewers: readonly ["codex", "claude", "app_qa"];
   prUrl?: string | null;
   reasons: string[];
   qaSummary: string;
@@ -43,8 +45,10 @@ export type DeveloperReleaseGate = {
 
 export const DEVELOPER_AUTOPILOT_POLICY = {
   codexBillingMode: "chatgpt_subscription",
+  claudeBillingMode: "signed_in_claude_subscription_or_claude_code",
   repoScope: "all_registered_github_projects",
   changeStrategy: "pull_request_first",
+  secondReview: "claude_independent_review_before_app_qa",
   qaGate: "app_qa_all_subagents_pass",
   replitDeployment: "explicit_human_approval_required",
   securityDisclosure: "private_or_sanitized",
@@ -198,7 +202,9 @@ export function parseDeveloperAutopilotRequest(message: string, source: Develope
 function safetyLines(kind: DeveloperFixKind): string[] {
   const lines = [
     "Use Codex via the signed-in ChatGPT/Codex subscription workflow, not OpenAI API spend.",
+    "Use Claude as an independent signed-in reviewer when available; do not use Anthropic API spend unless Robert explicitly asks.",
     "Open a separate branch and pull request first; do not commit directly to main.",
+    "After Codex opens the PR, run Claude's independent review before App QA and resolve any blocking findings.",
     "Run the repo checks and App QA multiagent gate before asking for deploy approval.",
     "Do not deploy to Replit. Deployment requires Robert's explicit approval after the PR/QA report.",
     "Do not edit .env, secrets, credentials, private keys, OAuth tokens, recovery codes, .git, credentials/, secrets/, or node_modules/.",
@@ -239,6 +245,7 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
     safetyLines(request.kind).map((line) => `- ${line}`).join("\n"),
     "",
     "Completion report must include PR URL, files changed, tests run, App QA status, residual risk, rollback plan, and whether Replit deploy is still waiting for approval.",
+    "Double-check order: Codex PR -> Claude independent review -> App QA release gate -> Robert approval.",
   ].join("\n");
 }
 
@@ -281,12 +288,14 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
     "- Create a separate branch.",
     "- Open a pull request before merging anything.",
     "- Add `@codex review` on the PR when ready for Codex review, or enable automatic Codex reviews for this repo.",
+    "- Run Claude as an independent second reviewer before App QA; fix or document any Claude blockers.",
     "- Run project checks and App QA before deploy approval.",
     "- Do not deploy to Replit from this issue or PR. Robert must approve Replit deployment explicitly after the PR/QA summary.",
     "",
     "## Release gate",
     "",
     "- PR exists: required.",
+    "- Claude independent review: required before App QA.",
     "- App QA Route Scout: pass required.",
     "- App QA Link + Click Scout: pass required.",
     "- App QA GitHub Scout: pass required.",
@@ -392,6 +401,8 @@ export function evaluateDeveloperReleaseGate(
     canSendForApproval: passed,
     canDeployToReplit: false,
     requiresHumanReplitApproval: true,
+    secondReviewRequired: true,
+    requiredReviewers: ["codex", "claude", "app_qa"],
     prUrl,
     reasons: passed ? [`PR can be sent to Robert for approval: ${prUrl}. Replit deployment is still blocked until explicit approval.`] : reasons,
     qaSummary: scan.summary,

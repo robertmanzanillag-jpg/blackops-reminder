@@ -31,3 +31,14 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
   assert.match(source, /const prUrl = typeof req\.body\?\.prUrl === "string"/);
   assert.match(source, /evaluateDeveloperReleaseGate\(scan, \{ prUrl \}\)/);
 });
+
+test("Agents Office shows Claude as an independent PR reviewer", () => {
+  const source = readFileSync("client/src/pages/agents-office.tsx", "utf8");
+
+  assert.match(source, /id: "claude-reviewer"/);
+  assert.match(source, /name: "Claude Reviewer"/);
+  assert.match(source, /Segundo chequeo/);
+  assert.match(source, /from: "claude-reviewer", to: "github"/);
+  assert.match(source, /from: "app-qa", to: "claude-reviewer"/);
+  assert.match(source, /Codex trabaja PR-first y Claude revisa antes de App QA/);
+});

@@ -2,6 +2,7 @@ node_modules
 dist
 .cache
 .DS_Store
+.codex-vite-*.log
 * 2.*
 .env
 .env.local
