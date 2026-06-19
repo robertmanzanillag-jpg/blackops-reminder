@@ -9,6 +9,8 @@ import { generateTelegramAssistantContext } from "./ceo-briefing";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
+import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
+import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
 import { toFile } from "openai";
@@ -782,7 +784,9 @@ COMANDOS DISPONIBLES:
 - [CREAR_RECORDATORIO: {"message": "Mensaje a enviar", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]}]
 - [ELIMINAR_RECORDATORIO: {"id": "reminder-id"}]
 - [LISTAR_RECORDATORIOS: {}]
+- [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3, "hookText": "...", "ctaText": "...", "fontStyle": "bold|clean|luxury|impact|neon", "sourceHint": "Pool parties"}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
@@ -822,6 +826,21 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 - El sistema escoge templates automáticamente según el contenido/carpeta: party, dinner, pool, yacht, guestlist, nightlife.
 - No uses screenshots, screen recordings o capturas; el editor solo debe tomar videos reales de promo.
 - No inventes que publicaste en redes; por ahora quedan listos para descargar/subir manualmente.
+
+## RADIO YOUTUBE CLIPS:
+Si el usuario manda un link de YouTube y pide clips/videos/edits de radio, usa RADIO_YOUTUBE_CLIPS con youtubeUrl y driveFolderPath.
+- Necesitas la carpeta destino de Google Drive. Si no la dice, pregunta por la carpeta antes de procesar.
+- Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, pon createFolderIfMissing:true. Si solo pide guardar en una carpeta y no sabes si existe, no lo pongas; el sistema pedirá confirmación si no la encuentra.
+- Si el usuario dice el nombre del DJ o lo ves en el contexto, ponlo en djName. Si no, el sistema intenta leerlo abajo a la izquierda del video; si no lo encuentra, pregunta el nombre antes de guardar los clips finales.
+- El resultado genera dos clips: horizontal Instagram y vertical TikTok.
+- Si el usuario pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente.
+- Si el usuario manda un segundo link de canción en musicUrl, usa ese audio externo. En ambos casos el sistema busca el drop por volumen y lo recorta al largo exacto del clip.
+
+## GOOGLE DRIVE:
+Puedes crear carpetas y subcarpetas en Google Drive con GOOGLE_DRIVE_CREATE_FOLDER.
+- driveFolderPath es una ruta ordenada. Ejemplo: ["Robert A", "Videos de Black Room", "Radio Junio"].
+- Si el usuario dice "en la carpeta Radio crea una carpeta Videos creados", usa ["Radio", "Videos creados"].
+- Si no dice el nombre exacto o la ruta, pregunta antes de crear.
 
 ## ANÁLISIS DE IMÁGENES DE BROKER/CARTERA:
 Cuando el usuario envíe una imagen de su broker, app de trading, o captura de cartera:
@@ -943,6 +962,108 @@ export function registerAssistantRoutes(app: Express): void {
         await saveCeoConversationMessage(userId, "assistant", content).catch((historyError) => {
           console.error("Error saving direct approval assistant response:", historyError);
         });
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
+      if (directRadioYoutubeCommand) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct radio YouTube user message:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ content: directRadioYoutubeCommand.content })}\n\n`);
+
+        if (!directRadioYoutubeCommand.driveFolderPath.length || directRadioYoutubeCommand.needsMusicUrl) {
+          await saveCeoConversationMessage(userId, "assistant", directRadioYoutubeCommand.content).catch((historyError) => {
+            console.error("Error saving direct radio YouTube folder question:", historyError);
+          });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
+        try {
+          const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
+          const summary = formatRadioYoutubeResult(result);
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${summary}`,
+            radioYoutubeProcessed: result.status === "completed",
+            radioYoutubeNeedsConfirmation: result.status === "queued",
+            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\n${directRadioYoutubeCommand.command}\n${summary}`).catch((historyError) => {
+            console.error("Error saving direct radio YouTube assistant response:", historyError);
+          });
+        } catch (e: any) {
+          const errorText = e.message || "No pude procesar el link de YouTube para radio";
+          res.write(`data: ${JSON.stringify({ radioYoutubeError: errorText })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\nError: ${errorText}`).catch((historyError) => {
+            console.error("Error saving direct radio YouTube assistant error:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const directGoogleDriveFolderCommand = buildDirectGoogleDriveFolderCommand(message);
+      if (directGoogleDriveFolderCommand) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct Google Drive folder user message:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ content: directGoogleDriveFolderCommand.content })}\n\n`);
+
+        if (!directGoogleDriveFolderCommand.driveFolderPath.length) {
+          await saveCeoConversationMessage(userId, "assistant", directGoogleDriveFolderCommand.content).catch((historyError) => {
+            console.error("Error saving direct Google Drive folder question:", historyError);
+          });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
+        try {
+          const result = await createGoogleDriveFolderPath({
+            userId,
+            driveFolderPath: directGoogleDriveFolderCommand.driveFolderPath,
+            origin: "web",
+          });
+          const summary = formatGoogleDriveFolderCreateResult(result);
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${summary}`,
+            googleDriveFolderCreated: true,
+            driveFolder: result,
+          })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directGoogleDriveFolderCommand.content}\n${directGoogleDriveFolderCommand.command}\n${summary}`).catch((historyError) => {
+            console.error("Error saving direct Google Drive folder assistant response:", historyError);
+          });
+        } catch (e: any) {
+          const errorText = e.message || "No pude crear la carpeta en Google Drive";
+          res.write(`data: ${JSON.stringify({ googleDriveFolderError: errorText })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directGoogleDriveFolderCommand.content}\nError: ${errorText}`).catch((historyError) => {
+            console.error("Error saving direct Google Drive folder assistant error:", historyError);
+          });
+        }
+
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
         return;
@@ -1190,6 +1311,58 @@ export function registerAssistantRoutes(app: Express): void {
           }
           res.write(`data: ${JSON.stringify({
             promoVideoError: e.message || "No pude generar los videos de promo",
+          })}\n\n`);
+        }
+      }
+
+      const radioYoutubeRegex = /\[RADIO_YOUTUBE_CLIPS:\s*(\{[^}]+\})\]/g;
+      let radioYoutubeMatch;
+      while ((radioYoutubeMatch = radioYoutubeRegex.exec(fullResponse)) !== null) {
+        try {
+          const radioYoutubeData = JSON.parse(radioYoutubeMatch[1]);
+          const result = await executeDirectRadioYoutubeCommand({
+            youtubeUrl: radioYoutubeData.youtubeUrl,
+            driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
+            createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
+            djName: radioYoutubeData.djName,
+            musicUrl: radioYoutubeData.musicUrl,
+            content: "Voy a procesar ese YouTube para radio.",
+            command: radioYoutubeMatch[0],
+          }, userId);
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${formatRadioYoutubeResult(result)}`,
+            radioYoutubeProcessed: result.status === "completed",
+            radioYoutubeNeedsConfirmation: result.status === "queued",
+            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
+        } catch (e: any) {
+          res.write(`data: ${JSON.stringify({
+            radioYoutubeError: e.message || "No pude procesar el link de YouTube para radio",
+          })}\n\n`);
+        }
+      }
+
+      const googleDriveCreateFolderRegex = /\[GOOGLE_DRIVE_CREATE_FOLDER:\s*(\{[^}]+\})\]/g;
+      let googleDriveCreateFolderMatch;
+      while ((googleDriveCreateFolderMatch = googleDriveCreateFolderRegex.exec(fullResponse)) !== null) {
+        try {
+          const driveData = JSON.parse(googleDriveCreateFolderMatch[1]);
+          const result = await createGoogleDriveFolderPath({
+            userId,
+            driveFolderPath: driveData.driveFolderPath,
+            origin: "web",
+          });
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${formatGoogleDriveFolderCreateResult(result)}`,
+            googleDriveFolderCreated: true,
+            driveFolder: result,
+          })}\n\n`);
+        } catch (e: any) {
+          res.write(`data: ${JSON.stringify({
+            googleDriveFolderError: e.message || "No pude crear la carpeta en Google Drive",
           })}\n\n`);
         }
       }

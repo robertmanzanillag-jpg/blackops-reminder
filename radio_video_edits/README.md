@@ -34,6 +34,45 @@
 - Copia los `.mp4` finales a una carpeta de Google Drive llamada `videos editado para ig` cuando Google Drive Desktop esta montado.
 - Deja archivos `.mp4` listos para montar.
 
+## YouTube por chat
+
+Tambien puedes pedirlo en el chat del asistente con un link de YouTube y una carpeta de Google Drive:
+
+`sacame los clips de radio de https://youtu.be/... y guardalos en carpeta Radio Junio del Drive`
+
+Por defecto el asistente busca el drop dentro del mismo video que esta editando y usa ese audio recortado al largo exacto de cada clip. Tambien puedes darle un segundo link si algun dia quieres usar una cancion/audio externo como drop:
+
+`sacame los clips de radio de https://youtu.be/VIDEO con el drop de esta cancion https://youtu.be/CANCION y guardalos en carpeta Radio Junio del Drive`
+
+El asistente descarga el YouTube, genera los clips horizontal Instagram y vertical TikTok, y los sube a esa carpeta. Para el audio, busca el drop por volumen. Si no das segundo link, usa el drop del mismo video fuente. Si das un link de cancion, descarga ese audio externo, busca su drop y lo recorta al largo exacto de cada clip.
+
+Si la carpeta no existe, no la crea automaticamente: deja una confirmacion pendiente para que apruebes crearla y guardar ahi. Si hay varias carpetas con el mismo nombre, te pide la ruta completa, por ejemplo:
+
+`Robert A/Videos de Black Room/Radio Junio`
+
+Tambien puede crear carpetas o subcarpetas por chat:
+
+`en la carpeta de radio crea una carpeta con los videos que creaste`
+
+Eso crea una ruta tipo `radio/Videos creados`. Si quieres un nombre exacto, dilo directo:
+
+`crea una subcarpeta Junio en la carpeta Robert A/Videos de Black Room del Drive`
+
+Para descargar YouTube usa `yt-dlp` o `python3 -m yt_dlp`.
+
+## Calidad y costo
+
+El render usa `ffmpeg` local con H.264, CRF 18 y preset `slow`. Eso busca buena calidad visual y archivos razonables sin usar servicios pagos. La calidad final nunca puede ser mayor que la del video original de YouTube o VLC, pero el export evita compresion agresiva.
+
+Costo estimado por video editado: `$0.00 USD`.
+
+Notas de costo:
+
+- `yt-dlp` es gratis.
+- `ffmpeg` corre localmente en la Mac/servidor, sin costo por render.
+- Google Drive API no cobra por subir archivos.
+- El unico costo posible es almacenamiento de Google Drive si la cuenta se queda sin espacio.
+
 ## Formato de archivos
 
 El script usa el nombre del archivo que descarga VLC. Por ejemplo:

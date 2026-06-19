@@ -14,6 +14,8 @@ import { DEFAULT_DEV_USER_ID, allowsDevUserFallback } from "./user-context";
 import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-conversation-history";
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
+import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
+import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { getGeminiClient } from "./gemini-client";
 import type { PendingActionStatus } from "@shared/schema";
@@ -276,7 +278,9 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [CREAR_BORRADOR_COMUNICACION: {"recipient": "...", "channel": "email|telegram|whatsapp|slack|sms", "subject": "...", "message": "...", "context": "..."}]
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [CREAR_RECORDATORIO: {"message": "...", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday"]}]
+- [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
 - [ELIMINAR_INVERSION: {"symbol": "AAPL"}]
@@ -287,6 +291,11 @@ INFORMACIÓN SOBRE RADIO:
 - 7, 8, 9 representan las horas (7pm, 8pm, 9pm Pacific)
 - Cada Radio tiene un eventId (externalId) único que necesitas para modificarlo
 - Si un slot está vacío, aparece como "7:" o "7: " (sin nombre)
+- Si el usuario manda un YouTube y pide sacar clips/videos de radio, usa RADIO_YOUTUBE_CLIPS. Necesitas driveFolderPath; si no dice carpeta de Drive, pregunta antes.
+- Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, incluye createFolderIfMissing:true. Si solo pide guardar en una carpeta, deja que el sistema confirme si no existe.
+- Si el usuario dice el DJ o aparece claro en el contexto, incluye djName. Si no, el sistema intenta leerlo abajo a la izquierda del video y pregunta si no lo encuentra.
+- Si pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente. Si manda un segundo link, usa ese audio externo.
+- Si el usuario pide crear carpetas o subcarpetas en Google Drive, usa GOOGLE_DRIVE_CREATE_FOLDER. Si no dice la ruta/nombre exacto, pregunta antes.
 
 TIPOS DE INVERSIÓN: stock, etf, crypto, bond, fund`;
 }
@@ -390,6 +399,38 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
       return `Guardé el nombre ${djNameResolution.djName}, pero falló el render: ${result.error}`;
     }
     return `✅ Listo. Guardé ${djNameResolution.djName} y generé los clips de radio.`;
+  }
+
+  const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
+  if (directRadioYoutubeCommand) {
+    if (!directRadioYoutubeCommand.driveFolderPath.length || directRadioYoutubeCommand.needsMusicUrl) {
+      return directRadioYoutubeCommand.content;
+    }
+
+    try {
+      const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
+      return formatRadioYoutubeResult(result);
+    } catch (error) {
+      return `No pude procesar ese YouTube para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
+    }
+  }
+
+  const directGoogleDriveFolderCommand = buildDirectGoogleDriveFolderCommand(message);
+  if (directGoogleDriveFolderCommand) {
+    if (!directGoogleDriveFolderCommand.driveFolderPath.length) {
+      return directGoogleDriveFolderCommand.content;
+    }
+
+    try {
+      const result = await createGoogleDriveFolderPath({
+        userId,
+        driveFolderPath: directGoogleDriveFolderCommand.driveFolderPath,
+        origin: "telegram",
+      });
+      return formatGoogleDriveFolderCreateResult(result);
+    } catch (error) {
+      return `No pude crear esa carpeta en Google Drive: ${error instanceof Error ? error.message : "error desconocido"}`;
+    }
   }
 
   const command = classifyTelegramControlCommand(message);
@@ -894,6 +935,42 @@ async function processAssistantResponse(userId: string, response: string): Promi
       actions.push(`💬 Borrador pendiente de aprobación: ${pendingAction.id}`);
     } catch (e) {
       console.error("Error creating communication draft from Telegram:", e);
+    }
+  }
+
+  const radioYoutubeRegex = /\[RADIO_YOUTUBE_CLIPS:\s*(\{[^}]+\})\]/g;
+  let radioYoutubeMatch;
+  while ((radioYoutubeMatch = radioYoutubeRegex.exec(response)) !== null) {
+    try {
+      const radioYoutubeData = JSON.parse(radioYoutubeMatch[1]);
+      const result = await executeDirectRadioYoutubeCommand({
+        youtubeUrl: radioYoutubeData.youtubeUrl,
+        driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
+        createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
+        djName: radioYoutubeData.djName,
+        musicUrl: radioYoutubeData.musicUrl,
+        content: "Voy a procesar ese YouTube para radio.",
+        command: radioYoutubeMatch[0],
+      }, userId);
+      actions.push(formatRadioYoutubeResult(result));
+    } catch (e) {
+      actions.push(`No pude procesar el YouTube de radio: ${e instanceof Error ? e.message : "error desconocido"}`);
+    }
+  }
+
+  const googleDriveCreateFolderRegex = /\[GOOGLE_DRIVE_CREATE_FOLDER:\s*(\{[^}]+\})\]/g;
+  let googleDriveCreateFolderMatch;
+  while ((googleDriveCreateFolderMatch = googleDriveCreateFolderRegex.exec(response)) !== null) {
+    try {
+      const driveData = JSON.parse(googleDriveCreateFolderMatch[1]);
+      const result = await createGoogleDriveFolderPath({
+        userId,
+        driveFolderPath: driveData.driveFolderPath,
+        origin: "telegram",
+      });
+      actions.push(formatGoogleDriveFolderCreateResult(result));
+    } catch (e) {
+      actions.push(`No pude crear la carpeta de Google Drive: ${e instanceof Error ? e.message : "error desconocido"}`);
     }
   }
 

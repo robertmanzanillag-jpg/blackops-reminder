@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "stream";
 import { google } from "googleapis";
-import { getGoogleAccessToken, getGoogleOAuthClient } from "./google-calendar";
+import { getGoogleAccessToken, getGoogleOAuthClient, hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
 import { hasRealValue } from "./ceo-doctor-cli";
@@ -53,6 +53,10 @@ async function getDriveClient(userId: string) {
     return google.drive({ version: "v3", auth: await getGoogleDriveOAuthClient(userId) });
   }
 
+  if (!hasReplitGoogleConnectorEnv()) {
+    throw new Error("Google Drive is not connected. Open /api/google-drive/auth to connect Drive before asking the agent to save videos there.");
+  }
+
   const accessToken = await getGoogleAccessToken();
   return google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) });
 }
@@ -73,6 +77,59 @@ async function findFolder(drive: any, name: string, parentId: string): Promise<s
   });
 
   return response.data.files?.[0]?.id || null;
+}
+
+export async function findDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string | null> {
+  try {
+    const drive = await getDriveClient(userId);
+    let parentId = "root";
+    for (const folderName of folderNames) {
+      const cleanName = folderName.trim();
+      if (!cleanName) continue;
+      const folderId = await findFolder(drive, cleanName, parentId);
+      if (!folderId) return null;
+      parentId = folderId;
+    }
+    return parentId;
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing.");
+    }
+    throw error;
+  }
+}
+
+export async function searchDriveFoldersByName(folderName: string, userId = getSystemUserId()): Promise<Array<{ id: string; name: string; webViewLink: string | null }>> {
+  try {
+    const cleanName = folderName.trim();
+    if (!cleanName) return [];
+    const drive = await getDriveClient(userId);
+    const query = [
+      `mimeType = '${DRIVE_FOLDER_MIME}'`,
+      `name = '${escapeDriveQueryValue(cleanName)}'`,
+      "trashed = false",
+    ].join(" and ");
+
+    const response = await drive.files.list({
+      q: query,
+      fields: "files(id, name, webViewLink)",
+      spaces: "drive",
+      pageSize: 10,
+    });
+
+    return (response.data.files || [])
+      .filter((file: any) => file.id && file.name)
+      .map((file: any) => ({
+        id: file.id,
+        name: file.name,
+        webViewLink: file.webViewLink || null,
+      }));
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing.");
+    }
+    throw error;
+  }
 }
 
 async function createFolder(drive: any, name: string, parentId: string): Promise<string> {

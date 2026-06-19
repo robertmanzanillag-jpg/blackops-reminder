@@ -3,7 +3,8 @@ import { storage } from "./storage";
 import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
 import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
-import { resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
+import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
+import { processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
 
 type JsonRecord = Record<string, any>;
 
@@ -157,6 +158,29 @@ export async function executeApprovedPendingAction(
 
       case "radio_edit.resolve_dj_name": {
         result = await resumeRadioVideoEditWithDjName({ ...input, userId: action.userId } as any);
+        break;
+      }
+
+      case "radio_edit.youtube_to_drive": {
+        result = await processYoutubeRadioVideoLink({
+          userId: action.userId,
+          youtubeUrl: input.youtubeUrl,
+          driveFolderPath: input.driveFolderPath,
+          createFolderIfMissing: Boolean(input.createFolderIfMissing),
+          force: Boolean(input.force),
+          djName: input.djName,
+          musicUrl: input.musicUrl,
+          musicPath: input.musicPath,
+        });
+        break;
+      }
+
+      case "google_drive.create_folder": {
+        result = await createGoogleDriveFolderPath({
+          userId: action.userId,
+          driveFolderPath: input.driveFolderPath,
+          origin: "web",
+        });
         break;
       }
 
