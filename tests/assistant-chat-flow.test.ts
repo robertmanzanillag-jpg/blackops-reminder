@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildDirectBlackRoomCommand, buildDirectPromoVideoCommand, userAlreadyApprovedExecution } from "../server/assistant";
+import {
+  buildDirectBlackRoomCommand,
+  buildDirectGoogleCalendarCommand,
+  buildDirectPromoVideoCommand,
+  userAlreadyApprovedExecution,
+} from "../server/assistant";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -40,6 +45,21 @@ test("web assistant routes natural promo video requests to the local video agent
   assert.match(direct.command, /PROMO_VIDEO_GENERATE/);
   assert.match(direct.command, /"count":5/);
   assert.match(direct.command, /"platform":"tiktok"/);
+});
+
+test("web assistant prepares clear Google Calendar requests without model routing", () => {
+  const direct = buildDirectGoogleCalendarCommand(
+    "quiero que agreguemos para este martes en el google calendar: BLACK ROOM RADIO BERLIN 3pm: 4pm: 5pm: 6pm: 7pm:",
+    new Date("2026-06-18T20:17:00-04:00"),
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /CREAR_EVENTO_GOOGLE/);
+  assert.equal(direct.eventData.title, "BLACK ROOM RADIO BERLIN");
+  assert.match(direct.eventData.date, /^2026-06-23T15:00:00-04:00$/);
+  assert.match(direct.eventData.endDate, /^2026-06-23T20:00:00-04:00$/);
+  assert.match(direct.eventData.description || "", /3:00 PM/);
+  assert.doesNotMatch(direct.command, /BLACKROOM_LINK_ADD|BLACKROOM_LINK_DEACTIVATE/);
 });
 
 test("web assistant extracts promo video text and typography from natural requests", () => {

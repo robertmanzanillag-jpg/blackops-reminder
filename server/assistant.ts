@@ -14,6 +14,8 @@ import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } f
 import { toFile } from "openai";
 import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
+const ASSISTANT_TIMEZONE = "America/New_York";
+
 function normalizeApprovalText(message: string): string {
   return message
     .toLowerCase()
@@ -32,6 +34,188 @@ export function userAlreadyApprovedExecution(message?: string): boolean {
     /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|empieza|comienza|ejecuta|ejecutalo|hazlo|procede)\b/,
     /\b(quiero que|puedes)\b.*\b(empiece|empieces|comience|comiences|lo hagas|lo haga|ejecutes|ejecutarlo)\b/,
   ].some((pattern) => pattern.test(text));
+}
+
+type DirectCalendarCommand = {
+  content: string;
+  command: string;
+  eventData: {
+    title: string;
+    date: string;
+    endDate: string;
+    description?: string;
+    isAllDay?: boolean;
+  };
+};
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  domingo: 0,
+  sunday: 0,
+  lunes: 1,
+  monday: 1,
+  martes: 2,
+  tuesday: 2,
+  miercoles: 3,
+  miércoles: 3,
+  wednesday: 3,
+  jueves: 4,
+  thursday: 4,
+  viernes: 5,
+  friday: 5,
+  sabado: 6,
+  sábado: 6,
+  saturday: 6,
+};
+
+const EN_WEEKDAY_TO_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function getZonedDateParts(date: Date, timeZone = ASSISTANT_TIMEZONE): { year: number; month: number; day: number; weekday: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    weekday: EN_WEEKDAY_TO_INDEX[values.weekday] ?? date.getDay(),
+  };
+}
+
+function dateKeyFromParts(parts: { year: number; month: number; day: number }): string {
+  return [
+    String(parts.year).padStart(4, "0"),
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0"),
+  ].join("-");
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return dateKeyFromParts({
+    year: utcDate.getUTCFullYear(),
+    month: utcDate.getUTCMonth() + 1,
+    day: utcDate.getUTCDate(),
+  });
+}
+
+function getTimeZoneOffsetSuffix(dateKey: string, hour: number, minute: number, timeZone = ASSISTANT_TIMEZONE): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const timeZoneName = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+  }).formatToParts(probe).find((part) => part.type === "timeZoneName")?.value || "GMT";
+  const match = timeZoneName.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return "";
+  return `${match[1]}${match[2].padStart(2, "0")}:${match[3] || "00"}`;
+}
+
+function zonedIsoString(dateKey: string, hour: number, minute = 0): string {
+  return `${dateKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00${getTimeZoneOffsetSuffix(dateKey, hour, minute)}`;
+}
+
+function parseDirectCalendarDateKey(message: string, now: Date): string | null {
+  const text = normalizeApprovalText(message);
+  const todayParts = getZonedDateParts(now);
+  const todayKey = dateKeyFromParts(todayParts);
+
+  if (/\b(hoy|today)\b/.test(text)) return todayKey;
+  if (/\b(manana|tomorrow)\b/.test(text)) return addDaysToDateKey(todayKey, 1);
+
+  const weekdayMatch = text.match(/\b(?:este|esta|proximo|proxima|next)?\s*(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+  const weekday = weekdayMatch?.[1];
+  if (!weekday) return null;
+
+  const targetWeekday = WEEKDAY_INDEX[weekday];
+  if (targetWeekday === undefined) return null;
+
+  let daysAhead = (targetWeekday - todayParts.weekday + 7) % 7;
+  if (daysAhead === 0 && /\b(proximo|proxima|next)\b/.test(text)) daysAhead = 7;
+  return addDaysToDateKey(todayKey, daysAhead);
+}
+
+function parseDirectCalendarTimes(message: string): Array<{ hour: number; minute: number; label: string }> {
+  const times: Array<{ hour: number; minute: number; label: string }> = [];
+  const seen = new Set<string>();
+  const timeRegex = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/gi;
+  let match;
+  while ((match = timeRegex.exec(message)) !== null) {
+    let hour = Number(match[1]);
+    const minute = Number(match[2] || 0);
+    const meridiem = match[3].toLowerCase();
+    if (meridiem === "pm" && hour !== 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    const key = `${hour}:${minute}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    times.push({
+      hour,
+      minute,
+      label: `${((hour + 11) % 12) + 1}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`,
+    });
+  }
+  return times.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
+}
+
+function extractDirectCalendarTitle(message: string): string | null {
+  const afterCalendar = message.match(/(?:google\s+calendar|calendario|calendar)\s*[:,-]?\s*(.+)$/i)?.[1] || message;
+  const title = afterCalendar
+    .replace(/\b(?:hoy|today|ma[ñn]ana|tomorrow)\b/gi, " ")
+    .replace(/\b(?:este|esta|pr[oó]ximo|pr[oó]xima|next)?\s*(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, " ")
+    .replace(/\b(?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*(?:am|pm)\b/gi, " ")
+    .replace(/\s*[:;,]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return title.length >= 2 ? title : null;
+}
+
+export function buildDirectGoogleCalendarCommand(message?: string, now = new Date()): DirectCalendarCommand | null {
+  if (!message) return null;
+  const text = normalizeApprovalText(message);
+  const wantsCalendar = /\b(google calendar|calendario|calendar)\b/.test(text);
+  const wantsCreate = /\b(agreg\w*|agenda\w*|crear\w*|pon\w*|program\w*|mete\w*)\b/.test(text);
+  if (!wantsCalendar || !wantsCreate) return null;
+  if (/\b(links?|linsks?|website|web|pagina|builder)\b/.test(text) && text.includes("black room")) return null;
+
+  const dateKey = parseDirectCalendarDateKey(message, now);
+  const times = parseDirectCalendarTimes(message);
+  const title = extractDirectCalendarTitle(message);
+  if (!dateKey || times.length === 0 || !title) return null;
+
+  const start = times[0];
+  const endProbe = times[times.length - 1];
+  const endHour = endProbe.hour + 1;
+  const endDateKey = endHour >= 24 ? addDaysToDateKey(dateKey, 1) : dateKey;
+  const description = times.length > 1
+    ? `Slots solicitados:\n${times.map((time) => `- ${time.label}`).join("\n")}`
+    : undefined;
+  const eventData = {
+    title,
+    date: zonedIsoString(dateKey, start.hour, start.minute),
+    endDate: zonedIsoString(endDateKey, endHour % 24, endProbe.minute),
+    description,
+    isAllDay: false,
+  };
+  return {
+    content: `Listo. Prepare la aprobacion para crear "${title}" en Google Calendar el ${dateKey} de ${times[0].label} a ${times[times.length - 1].label}${times.length > 1 ? " con esos slots en la descripcion" : ""}.`,
+    command: `[CREAR_EVENTO_GOOGLE: ${JSON.stringify(eventData)}]`,
+    eventData,
+  };
 }
 
 function requireStringField(data: any, field: string, label: string): string {
@@ -808,6 +992,58 @@ export function registerAssistantRoutes(app: Express): void {
           res.write(`data: ${JSON.stringify({ promoVideoError: errorText })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${fullResponse}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct promo video assistant error:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const directGoogleCalendarCommand = buildDirectGoogleCalendarCommand(message);
+      if (directGoogleCalendarCommand) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct Google Calendar user message:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ content: directGoogleCalendarCommand.content })}\n\n`);
+
+        try {
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "blackops-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "calendar.create_event",
+            resourceType: "calendar_event",
+            title: `Crear evento: ${directGoogleCalendarCommand.eventData.title}`,
+            description: "El asistente quiere crear un evento en Google Calendar.",
+            input: directGoogleCalendarCommand.eventData,
+            proposedChanges: directGoogleCalendarCommand.eventData,
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ googleEventError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction })}\n\n`);
+          }
+          await saveCeoConversationMessage(userId, "assistant", `${directGoogleCalendarCommand.content}\n${directGoogleCalendarCommand.command}`).catch((historyError) => {
+            console.error("Error saving direct Google Calendar assistant response:", historyError);
+          });
+        } catch (e: any) {
+          const errorText = e.message || "No se pudo preparar el evento en Google Calendar";
+          res.write(`data: ${JSON.stringify({ googleEventError: errorText })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directGoogleCalendarCommand.content}\nError: ${errorText}`).catch((historyError) => {
+            console.error("Error saving direct Google Calendar assistant error:", historyError);
           });
         }
 
