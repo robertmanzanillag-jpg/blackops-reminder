@@ -1,5 +1,7 @@
 // Telegram Bot Integration for Reminders and Chat
 import { timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 const TELEGRAM_API = "https://api.telegram.org/bot";
 
@@ -59,6 +61,40 @@ export async function sendTelegramMessage(
     return true;
   } catch (error) {
     console.error("Error sending Telegram message:", error);
+    return false;
+  }
+}
+
+export async function sendTelegramPhoto(
+  botToken: string,
+  chatId: string,
+  photoPath: string,
+  caption?: string
+): Promise<boolean> {
+  try {
+    const data = new FormData();
+    data.append("chat_id", chatId);
+    if (caption) {
+      data.append("caption", caption);
+      data.append("parse_mode", "HTML");
+    }
+
+    const photo = await readFile(photoPath);
+    data.append("photo", new Blob([photo]), path.basename(photoPath));
+
+    const response = await fetch(`${TELEGRAM_API}${botToken}/sendPhoto`, {
+      method: "POST",
+      body: data,
+    });
+
+    const result = await response.json();
+    if (!result.ok) {
+      console.error("Telegram photo error:", result.description);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error sending Telegram photo:", error);
     return false;
   }
 }

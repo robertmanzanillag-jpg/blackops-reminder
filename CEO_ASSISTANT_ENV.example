@@ -20,6 +20,15 @@ AI_INTEGRATIONS_GEMINI_API_KEY=replace-with-gemini-api-key
 # Telegram CEO channel
 TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 PUBLIC_APP_URL=https://your-domain.example
+# App QA Visual Click Scout. Use http://127.0.0.1:5000 for local QA, or production domain for hosted QA.
+APP_QA_BASE_URL=https://your-domain.example
+# Lowest-cost QA defaults: lightweight checks every 30 min; browser QA twice daily or when manually requested.
+# No AI API is used by App QA.
+APP_QA_INTERVAL_MINUTES=30
+# Options: off, manual, daily, every_scan. Keep daily/manual for lowest CPU cost.
+APP_QA_VISUAL_MODE=daily
+# Hours in America/New_York when APP_QA_VISUAL_MODE=daily. Default runs deep visual QA at 8 AM and 8 PM.
+APP_QA_VISUAL_HOURS=8,20
 # TELEGRAM_WEBHOOK_URL=https://your-domain.example/api/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=replace-with-telegram-webhook-secret
 # Keep false unless you intentionally want startup to call Telegram setWebhook.

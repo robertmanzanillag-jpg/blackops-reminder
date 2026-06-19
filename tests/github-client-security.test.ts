@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createIssue,
   deleteFile,
   updateFile,
   validateGitHubCommitMessage,
   validateGitHubFilePath,
+  validateGitHubIssueBody,
+  validateGitHubIssueTitle,
   validateGitHubFileWriteInput,
   validateGitHubRepoNamePart,
 } from "../server/github-client";
@@ -41,6 +44,17 @@ test("GitHub commit messages are bounded and single-line", () => {
   assert.match(validateGitHubCommitMessage("tiny") || "", /corto/);
   assert.match(validateGitHubCommitMessage("Update file\n\nCo-authored-by: bad") || "", /multilinea/);
   assert.match(validateGitHubCommitMessage("x".repeat(201)) || "", /largo/);
+});
+
+test("GitHub issue titles and bodies are bounded before connector access", () => {
+  assert.equal(validateGitHubIssueTitle("Create Codex PR-first handoff"), null);
+  assert.match(validateGitHubIssueTitle("tiny") || "", /corto/);
+  assert.match(validateGitHubIssueTitle("Bad\nTitle") || "", /multilinea/);
+  assert.match(validateGitHubIssueTitle("x".repeat(201)) || "", /largo/);
+
+  assert.equal(validateGitHubIssueBody("This issue body has enough detail for a safe handoff."), null);
+  assert.match(validateGitHubIssueBody("too short") || "", /corto/);
+  assert.match(validateGitHubIssueBody("x".repeat(64 * 1024 + 1)) || "", /grande/);
 });
 
 test("GitHub write input rejects oversized or unsafe writes before Octokit", () => {
@@ -84,6 +98,15 @@ test("GitHub mutations reject unsafe input with 400 before connector access", as
     (error: any) => {
       assert.equal(error.statusCode, 400);
       assert.match(error.message, /traversal/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => createIssue("robert", "repo/name", "Create Codex PR-first handoff", "This body has enough detail for validation."),
+    (error: any) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(error.message, /Repo invalido/);
       return true;
     },
   );

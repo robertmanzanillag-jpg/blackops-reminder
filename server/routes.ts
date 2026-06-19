@@ -40,6 +40,8 @@ import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, bui
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
+import { runAppQaScan } from "./app-qa-agent";
+import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -4748,6 +4750,70 @@ export async function registerRoutes(
       res.status(201).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to import GitHub apps" });
+    }
+  });
+
+  app.get("/api/app-qa-agent/status", async (req, res) => {
+    try {
+      const result = await runAppQaScan(getCurrentUserId(req));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run app QA scan" });
+    }
+  });
+
+  app.post("/api/app-qa-agent/scan", async (req, res) => {
+    try {
+      const notify = Boolean(req.body?.notify);
+      const result = await runAppQaScan(getCurrentUserId(req), notify, true, false);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run app QA scan" });
+    }
+  });
+
+  app.post("/api/developer-autopilot/handoff", async (req, res) => {
+    try {
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+      if (!message) {
+        return res.status(400).json({ error: "message is required" });
+      }
+      const result = await createDeveloperAutopilotHandoff(getCurrentUserId(req), message, "web_chat");
+      res.status(result.status === "created" ? 201 : result.status === "needs_repo" ? 422 : 400).json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to create Developer Autopilot handoff" });
+    }
+  });
+
+  app.post("/api/developer-autopilot/qa-gate", async (req, res) => {
+    try {
+      const scan = await runAppQaScan(getCurrentUserId(req), Boolean(req.body?.notify), true, false);
+      const prUrl = typeof req.body?.prUrl === "string" ? req.body.prUrl.trim() : null;
+      const gate = evaluateDeveloperReleaseGate(scan, { prUrl });
+      res.json({
+        scan,
+        gate,
+        replitDeploymentRequiresApproval: true,
+        message: gate.status === "pass"
+          ? "QA paso. Puedes revisar el PR, pero Replit sigue esperando aprobacion explicita."
+          : "QA bloqueo el release. No se debe montar en Replit hasta corregir estos hallazgos.",
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to evaluate Developer Autopilot QA gate" });
+    }
+  });
+
+  app.get("/api/app-qa-agent/history", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automations = await ensureDefaultAutomations(userId);
+      const qaAutomation = automations.find((automation) => (automation.metadata as any)?.key === "app-qa-council");
+      if (!qaAutomation) return res.json([]);
+      const limit = Math.min(Number(req.query.limit || 20), 100);
+      const runs = await storage.getAutomationRuns(userId, qaAutomation.id, limit);
+      res.json(runs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch app QA history" });
     }
   });
 

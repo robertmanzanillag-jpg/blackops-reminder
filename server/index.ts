@@ -13,6 +13,7 @@ import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
+import { startAppQaScheduler } from "./app-qa-agent";
 
 const app = express();
 const httpServer = createServer(app);
@@ -348,6 +349,7 @@ app.use((req, res, next) => {
       startMarketNewsScheduler();
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
+      startAppQaScheduler();
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");

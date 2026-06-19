@@ -4,6 +4,7 @@ import { Octokit } from '@octokit/rest';
 let connectionSettings: any;
 
 const MAX_GITHUB_FILE_WRITE_BYTES = 1024 * 1024;
+const MAX_GITHUB_ISSUE_BODY_BYTES = 64 * 1024;
 const BLOCKED_GITHUB_PATH_SEGMENTS = new Set([
   '.git',
   '.ssh',
@@ -52,6 +53,21 @@ export function validateGitHubCommitMessage(message: string): string | null {
   if (trimmed.length < 8) return 'Commit message demasiado corto';
   if (trimmed.length > 200) return 'Commit message demasiado largo';
   if (/[\r\n]/.test(trimmed)) return 'Commit message multilinea no permitido';
+  return null;
+}
+
+export function validateGitHubIssueTitle(title: string): string | null {
+  const trimmed = title.trim();
+  if (trimmed.length < 8) return 'Issue title demasiado corto';
+  if (trimmed.length > 200) return 'Issue title demasiado largo';
+  if (/[\r\n]/.test(trimmed)) return 'Issue title multilinea no permitido';
+  return null;
+}
+
+export function validateGitHubIssueBody(body: string): string | null {
+  const trimmed = body.trim();
+  if (trimmed.length < 20) return 'Issue body demasiado corto';
+  if (Buffer.byteLength(trimmed, 'utf8') > MAX_GITHUB_ISSUE_BODY_BYTES) return 'Issue body demasiado grande';
   return null;
 }
 
@@ -316,6 +332,37 @@ export async function deleteFile(
   return {
     success: true,
     commit: data.commit.sha
+  };
+}
+
+export async function createIssue(
+  owner: string,
+  repo: string,
+  title: string,
+  body: string,
+) {
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const titleError = validateGitHubIssueTitle(title);
+  const bodyError = validateGitHubIssueBody(body);
+  if (ownerError || repoError || titleError || bodyError) {
+    throw githubInputError(ownerError || repoError || titleError || bodyError || 'GitHub issue input invalido');
+  }
+
+  const octokit = await getGitHubClient();
+  const { data } = await octokit.issues.create({
+    owner,
+    repo,
+    title: title.trim(),
+    body: body.trim(),
+  });
+
+  return {
+    id: data.id,
+    number: data.number,
+    title: data.title,
+    html_url: data.html_url,
+    state: data.state,
   };
 }
 

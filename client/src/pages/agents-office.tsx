@@ -15,6 +15,7 @@ import {
   Megaphone,
   MessageSquare,
   Monitor,
+  MousePointerClick,
   Radio,
   Scale,
   Send,
@@ -260,6 +261,24 @@ const agents = [
     bubblePosition: "right-[5%] top-[58%]",
   },
   {
+    id: "app-qa",
+    name: "App QA",
+    role: "Paginas y clicks",
+    href: "/app-qa-agent",
+    icon: MousePointerClick,
+    station: "QA lab",
+    status: "Patrullando",
+    activity: "Entrando a paginas, revisando links, clicks esperados, APIs, errores e ideas de mejora",
+    shortAction: "QA",
+    mode: "working",
+    color: "from-emerald-200 to-teal-400",
+    outfit: "bg-emerald-500",
+    hair: "bg-zinc-950",
+    skin: "bg-orange-100",
+    position: "left-[76%] top-[84%]",
+    bubblePosition: "right-[16%] top-[68%]",
+  },
+  {
     id: "legal",
     name: "Legal / Compliance",
     role: "Legal, privacidad y multas",
@@ -452,6 +471,7 @@ const defaultAgentLocations: AgentLocationMap = {
   clippers: "clippers",
   automations: "ops",
   cybersecurity: "security",
+  "app-qa": "dev",
   legal: "legal",
   control: "security",
 };
@@ -665,6 +685,11 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
     { from: "github", to: "cybersecurity", text: "Te paso contexto de repos y cambios para cruzarlo con amenazas." },
     { from: "cybersecurity", to: "control", text: "Si detecto accion sensible o riesgo alto, lo marco antes de ejecutar." },
   ],
+  "app-qa": [
+    { from: "app-qa", to: "code", text: "Yo patrullo rutas, links, clicks esperados, health endpoints y errores antes de que algo llegue a produccion." },
+    { from: "code", to: "app-qa", text: "Perfecto. Tus hallazgos me dicen donde tocar codigo y que verificar despues." },
+    { from: "app-qa", to: "cybersecurity", text: "Si una pagina cae o un health endpoint falla, te paso la senal para separar bug de riesgo." },
+  ],
   legal: [
     { from: "legal", to: "ceo", text: "Estoy revisando riesgos legales: privacidad, copyright, terminos, contratos y posibles multas." },
     { from: "ceo", to: "legal", text: "Quiero alertas claras: critico, revisar pronto o bajo riesgo. Nada de ruido innecesario." },
@@ -696,6 +721,7 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "dropshipping", text: "Traigo productos virales validados por margen, supplier, shipping y contenido draft." },
   { from: "marketing-cmo", text: "Yo manejo marketing global como agencia interna: cada cliente con su calendario, metricas, skills y learning loop." },
   { from: "cybersecurity", text: "Yo reviso superficie de ataque: apps, dominios, HTTPS, incidents y Telegram alerts." },
+  { from: "app-qa", text: "Yo convierto el app en mapa vivo: paginas, botones esperados, APIs, errores e ideas de mejora." },
 ];
 
 const breakRoomPresence: RoomPresence[] = [
@@ -712,6 +738,7 @@ const meetingRoomPresence: RoomPresence[] = [
   { agent: "dropshipping", position: "left-[57%] top-[71%]" },
   { agent: "marketing-cmo", position: "left-[61%] top-[71%]" },
   { agent: "cybersecurity", position: "left-[65%] top-[71%]" },
+  { agent: "app-qa", position: "left-[69%] top-[71%]" },
 ];
 
 const officeFeed: OfficeFeedItem[] = [
@@ -750,6 +777,12 @@ const officeFeed: OfficeFeedItem[] = [
     title: "Security scan",
     text: "Reviso apps conectadas, HTTPS, incidentes abiertos, repos faltantes y health URLs criticas.",
     sharesWith: "CEO, GitHub, Control",
+  },
+  {
+    agent: "app-qa",
+    title: "Patrulla de producto",
+    text: "Subagentes revisan paginas, links, clicks esperados, health endpoints, errores abiertos y mejoras por area.",
+    sharesWith: "Code, Cybersecurity, CEO",
   },
   {
     agent: "legal",

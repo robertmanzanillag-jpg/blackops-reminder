@@ -26,6 +26,7 @@ const RevenueEnginePage = lazy(() => import("@/pages/revenue-engine"));
 const DropshippingCeoPage = lazy(() => import("@/pages/dropshipping-ceo"));
 const MarketingCommandCenterPage = lazy(() => import("@/pages/marketing-command-center"));
 const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"));
+const AppQaAgentPage = lazy(() => import("@/pages/app-qa-agent"));
 const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
 
 type AuthMe = {
@@ -122,6 +123,7 @@ function Router() {
           <Route path="/dropshipping-ceo" component={DropshippingCeoPage} />
           <Route path="/marketing-command-center" component={MarketingCommandCenterPage} />
           <Route path="/cybersecurity-agent" component={CybersecurityAgentPage} />
+          <Route path="/app-qa-agent" component={AppQaAgentPage} />
           <Route path="/legal-compliance" component={LegalCompliancePage} />
           <Route path="/automations" component={AutomationManagerPage} />
           <Route path="/code-agent" component={CodeAgentPage} />

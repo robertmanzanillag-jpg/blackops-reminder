@@ -193,6 +193,8 @@ test("CEO Assistant aggregate test includes core safety suites", () => {
     "test:ownership",
     "test:code-agent-security",
     "test:github-client-security",
+    "test:developer-autopilot",
+    "test:app-qa-agent",
     "test:google-drive-oauth",
     "test:blackroom-links",
     "test:readiness",

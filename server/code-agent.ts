@@ -23,6 +23,13 @@ interface FileChange {
 // In-memory change history (could be persisted to DB later)
 const changeHistory: FileChange[] = [];
 
+function isInAllowedCodeAgentDir(normalizedPath: string): boolean {
+  return ALLOWED_DIRS.some((dir) => {
+    const normalizedDir = path.normalize(dir);
+    return normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}${path.sep}`);
+  });
+}
+
 export function isCodeAgentPathAllowed(filePath: string): boolean {
   const normalizedPath = path.normalize(filePath);
   
@@ -30,8 +37,7 @@ export function isCodeAgentPathAllowed(filePath: string): boolean {
   if (normalizedPath.includes('..')) return false;
   
   // Check if path starts with allowed directory
-  const isInAllowedDir = ALLOWED_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}${path.sep}`));
-  if (!isInAllowedDir) return false;
+  if (!isInAllowedCodeAgentDir(normalizedPath)) return false;
   
   // Check extension
   const ext = path.extname(normalizedPath);
@@ -170,7 +176,7 @@ export async function listFiles(directory: string): Promise<{ success: boolean; 
     return { success: false, error: `Acceso denegado: path traversal detectado` };
   }
   
-  if (!ALLOWED_DIRS.some(dir => normalizedDir === dir || normalizedDir.startsWith(`${dir}${path.sep}`))) {
+  if (!isInAllowedCodeAgentDir(normalizedDir)) {
     return { success: false, error: `Acceso denegado: ${directory}` };
   }
   
