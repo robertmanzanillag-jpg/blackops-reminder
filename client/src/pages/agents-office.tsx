@@ -1656,7 +1656,10 @@ export default function AgentsOfficePage() {
       ),
     [connectedProjects, githubOverview]
   );
-  const legalAppReports = legalCompliance?.reports.length ? legalCompliance.reports : fallbackLegalAppReports;
+  const legalReportsFromApi = Array.isArray(legalCompliance?.reports) ? legalCompliance.reports : [];
+  const legalSummary = legalCompliance?.summary || { critico: 0, revisar: 0, info: 0 };
+  const legalSourceErrors = Array.isArray(legalCompliance?.sourceErrors) ? legalCompliance.sourceErrors : [];
+  const legalAppReports = legalReportsFromApi.length ? legalReportsFromApi : fallbackLegalAppReports;
   const walkingRoomShortcuts = useMemo(
     () =>
       ["meeting", "break-room"]
@@ -2730,15 +2733,15 @@ export default function AgentsOfficePage() {
                 GitHub: <span className={legalCompliance?.githubConnected ? "text-emerald-200" : "text-amber-200"}>{legalCompliance?.githubConnected ? "conectado" : "manual"}</span>
               </p>
               <p className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-500">
-                Critico: <span className="text-red-100">{legalCompliance?.summary.critico ?? legalAppReports.filter((report) => report.severity === "critico").length}</span>
+                Critico: <span className="text-red-100">{legalReportsFromApi.length ? legalSummary.critico : legalAppReports.filter((report) => report.severity === "critico").length}</span>
               </p>
               <p className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-500">
-                Revisar: <span className="text-amber-100">{legalCompliance?.summary.revisar ?? legalAppReports.filter((report) => report.severity === "revisar").length}</span>
+                Revisar: <span className="text-amber-100">{legalReportsFromApi.length ? legalSummary.revisar : legalAppReports.filter((report) => report.severity === "revisar").length}</span>
               </p>
             </div>
-            {legalCompliance?.sourceErrors?.length ? (
+            {legalSourceErrors.length ? (
               <p className="mb-3 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-2 text-[11px] leading-4 text-amber-100">
-                Fuentes pendientes: {legalCompliance.sourceErrors.slice(0, 2).join(" | ")}
+                Fuentes pendientes: {legalSourceErrors.slice(0, 2).join(" | ")}
               </p>
             ) : null}
             {legalAppReports.length === 0 ? (
