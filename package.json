@@ -50,6 +50,7 @@
     "ceo:backup": "node --import tsx script/ceo-backup.ts",
     "ceo:restore": "node --import tsx script/ceo-restore.ts",
     "ceo:go-live": "node --import tsx script/ceo-go-live.ts",
+    "ceo:create-go-live-task": "node --import tsx script/create-ceo-go-live-task.ts",
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
