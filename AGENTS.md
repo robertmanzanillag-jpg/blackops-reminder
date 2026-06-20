@@ -45,6 +45,7 @@
 - Keep BlackOps in cheap-first mode by default. Target AI/API spend below $500/month until revenue supports scaling, with an operating target around $350/month.
 - Prefer deterministic app routes, cached context, batch planning, Gemini/Gemma scout work, and compact skill context before calling a strong model.
 - Strong models are reserved for final strategy, spend decisions, production changes, security, code review, customer/supplier contact, or cases where the scout is uncertain.
+- For heavy manual work that does not need to run autonomously in BlackOps, prepare a ChatGPT/Codex Pro subscription handoff so Robert can use his membership instead of API spend.
 - Bulk clippers should use campaign-level planning, reusable templates, and batch captions instead of one strong-model pass per clip.
 - Paid generative video, paid ads, external posting, production deployment, or spend increases need Robert approval and a cost estimate first.
 

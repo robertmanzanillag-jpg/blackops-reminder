@@ -135,6 +135,7 @@ export function buildAiCostPolicyContext(origin: CostPolicyOrigin): string {
     "- Cheap-first: use deterministic app routes, cached data, local files, Metricool queues, and direct commands before using a strong model.",
     "- Use Gemini/Gemma-style scout work for summaries, clustering, first drafts, captions, duplicate checks, and bulk clip planning.",
     "- Use OpenAI/strong reasoning only for final strategy, risky decisions, money/spend, production changes, security, code review, or when the cheap scout is uncertain.",
+    "- For heavy manual work that is not required to run autonomously inside the app, prepare a ChatGPT/Codex Pro subscription handoff instead of spending API tokens.",
     "- Claude skills are local instruction text. They improve marketing/design behavior but do not spend Claude API tokens unless a Claude API model is explicitly called.",
     "- Keep responses compact. Do not dump long context, large skill bodies, or repeated history unless it directly changes the answer.",
     "- For clippers, prefer batch planning and reusable templates. Do not analyze every clip with a strong model when one campaign-level plan is enough.",

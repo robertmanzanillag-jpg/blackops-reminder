@@ -13,6 +13,7 @@ const PROMPTS = [
   "Agenda una reunion manana a las 10am",
   "Que tengo hoy?",
   "Recuerdame revisar mi cartera el viernes",
+  "Prepara un brief para usar mi membresia Pro en una campana fuerte",
 ];
 
 export function DashboardAssistantChat() {

@@ -95,6 +95,7 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(policy, /500/);
   assert.match(policy, /cheap-first/);
   assert.match(policy, /paid generative video at scale/);
+  assert.match(policy, /ChatGPT\/Codex Pro subscription handoff/);
   assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
   assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
   assert.match(webAssistant, /getAiConversationHistoryLimit\(\)/);

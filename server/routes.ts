@@ -4905,7 +4905,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "message is required" });
       }
       const result = await createDeveloperAutopilotHandoff(getCurrentUserId(req), message, "web_chat");
-      res.status(result.status === "created" ? 201 : result.status === "needs_repo" ? 422 : 400).json(result);
+      res.status(result.status === "created" ? 201 : result.status === "subscription_brief" ? 200 : result.status === "needs_repo" ? 422 : 400).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to create Developer Autopilot handoff" });
     }

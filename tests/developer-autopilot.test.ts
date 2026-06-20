@@ -6,9 +6,11 @@ import {
   buildCodexPrFirstBrief,
   buildCodexGitHubIssueBody,
   buildReadyForApprovalMessage,
+  buildSubscriptionHandoffBrief,
   createDeveloperAutopilotHandoff,
   evaluateDeveloperReleaseGate,
   parseDeveloperAutopilotRequest,
+  parseSubscriptionHandoffRequest,
 } from "../server/developer-autopilot";
 
 test("developer autopilot policy is PR-first and subscription-based", () => {
@@ -18,6 +20,7 @@ test("developer autopilot policy is PR-first and subscription-based", () => {
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.changeStrategy, "pull_request_first");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.secondReview, "claude_independent_review_before_app_qa");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.replitDeployment, "explicit_human_approval_required");
+  assert.equal(DEVELOPER_AUTOPILOT_POLICY.subscriptionHandoff, "prefer_chatgpt_codex_pro_for_heavy_manual_work");
 });
 
 test("Codex brief blocks direct main commits, API spend, and Replit deploy while requiring Claude review", () => {
@@ -126,6 +129,45 @@ test("developer autopilot detects developer bugs but ignores generic work reques
   assert.equal(request?.kind, "bug");
   assert.equal(request?.repoFullName, "robert/asistente");
   assert.equal(request?.replitRequested, false);
+});
+
+test("subscription handoff routes heavy manual work to ChatGPT/Codex Pro instead of API spend", async () => {
+  const request = parseSubscriptionHandoffRequest(
+    "usa mi membresia Pro para una campana completa de marketing de clippers sin gastar API",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "marketing");
+  const brief = buildSubscriptionHandoffBrief(request!);
+  assert.match(brief, /signed-in ChatGPT\/Codex Pro membership/);
+  assert.match(brief, /Do not spend OpenAI API tokens/);
+  assert.match(brief, /Metricool schedule/);
+
+  const handoff = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "usa mi membresia Pro para una campana completa de marketing de clippers sin gastar API",
+    "web_chat",
+    {
+      getAppProjects: async () => {
+        throw new Error("subscription handoff should not need projects");
+      },
+      listRepositories: async () => {
+        throw new Error("subscription handoff should not need GitHub");
+      },
+      createIssue: async () => {
+        throw new Error("subscription handoff should not create issues");
+      },
+    },
+  );
+
+  assert.equal(handoff.status, "subscription_brief");
+  assert.equal(handoff.handoffType, "subscription_work");
+  assert.match(handoff.message, /membresia ChatGPT\/Codex Pro/);
+  assert.match(handoff.subscriptionBrief || "", /BlackOps subscription handoff/);
+});
+
+test("subscription handoff ignores normal lightweight chat", () => {
+  assert.equal(parseSubscriptionHandoffRequest("que tengo hoy en el calendario", "telegram"), null);
 });
 
 test("developer autopilot does not treat affected URLs as explicit GitHub repos", async () => {
