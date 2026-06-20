@@ -71,6 +71,11 @@ export function validateGitHubIssueBody(body: string): string | null {
   return null;
 }
 
+export function validateGitHubIssueNumber(value: number, label = 'Issue/PR number'): string | null {
+  if (!Number.isInteger(value) || value <= 0 || value > 1_000_000) return `${label} invalido`;
+  return null;
+}
+
 export function validateGitHubFileWriteInput(input: {
   owner: string;
   repo: string;
@@ -363,6 +368,35 @@ export async function createIssue(
     title: data.title,
     html_url: data.html_url,
     state: data.state,
+  };
+}
+
+export async function createIssueComment(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  body: string,
+) {
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const numberError = validateGitHubIssueNumber(issueNumber);
+  const bodyError = validateGitHubIssueBody(body);
+  if (ownerError || repoError || numberError || bodyError) {
+    throw githubInputError(ownerError || repoError || numberError || bodyError || 'GitHub comment input invalido');
+  }
+
+  const octokit = await getGitHubClient();
+  const { data } = await octokit.issues.createComment({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    body: body.trim(),
+  });
+
+  return {
+    id: data.id,
+    html_url: data.html_url,
+    body: data.body,
   };
 }
 

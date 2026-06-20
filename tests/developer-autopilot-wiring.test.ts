@@ -26,6 +26,7 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
   const source = readFileSync("server/routes.ts", "utf8");
 
   assert.match(source, /\/api\/developer-autopilot\/handoff/);
+  assert.match(source, /result\.status === "codex_dispatched"/);
   assert.match(source, /result\.status === "subscription_brief"/);
   assert.match(source, /\/api\/developer-autopilot\/qa-gate/);
   assert.match(source, /runAppQaScan\(getCurrentUserId\(req\), Boolean\(req\.body\?\.notify\), true, false\)/);

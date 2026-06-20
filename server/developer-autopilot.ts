@@ -1,5 +1,5 @@
 import type { AppQaScanResult, AppQaStatus } from "./app-qa-agent";
-import { createIssue, listRepositories } from "./github-client";
+import { createIssue, createIssueComment, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
 
@@ -10,6 +10,7 @@ export type DeveloperAutopilotSource = "web_chat" | "telegram" | "app_qa" | "cyb
 export type DeveloperAutopilotRequest = {
   source: DeveloperAutopilotSource;
   repoFullName?: string | null;
+  pullRequestNumber?: number | null;
   appName?: string | null;
   kind: DeveloperFixKind;
   title: string;
@@ -20,7 +21,7 @@ export type DeveloperAutopilotRequest = {
   replitRequested?: boolean;
 };
 
-export type DeveloperAutopilotHandoffStatus = "created" | "subscription_brief" | "needs_repo" | "github_unavailable" | "invalid_request";
+export type DeveloperAutopilotHandoffStatus = "created" | "codex_dispatched" | "subscription_brief" | "needs_repo" | "github_unavailable" | "invalid_request";
 
 export type SubscriptionHandoffRequest = {
   source: DeveloperAutopilotSource;
@@ -37,6 +38,9 @@ export type DeveloperAutopilotHandoff = {
   repoFullName?: string;
   issueUrl?: string;
   issueNumber?: number;
+  codexDispatchCommentUrl?: string;
+  codexDispatchPrNumber?: number;
+  codexDispatchError?: string;
   codexBrief?: string;
   subscriptionBrief?: string;
   handoffType?: "developer_pr" | "subscription_work";
@@ -79,12 +83,14 @@ type DeveloperAutopilotDeps = {
   getAppProjects(userId: string): Promise<Array<Pick<AppProject, "name" | "description" | "githubRepo" | "publicUrl" | "healthUrl">>>;
   listRepositories(): Promise<MinimalRepo[]>;
   createIssue(owner: string, repo: string, title: string, body: string): Promise<{ number: number; html_url: string }>;
+  createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<{ html_url: string }>;
 };
 
 const defaultDeveloperAutopilotDeps: DeveloperAutopilotDeps = {
   getAppProjects: (userId) => storage.getAppProjects(userId),
   listRepositories,
   createIssue,
+  createIssueComment,
 };
 
 const SENSITIVE_TEXT_PATTERNS = [
@@ -159,6 +165,19 @@ function extractExplicitRepo(message: string): string | null {
   return null;
 }
 
+function extractExplicitPullRequestNumber(message: string): number | null {
+  const patterns = [
+    /\bhttps?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/(\d{1,7})\b/i,
+    /\b(?:pr|pull request)\s*#?\s*(\d{1,7})\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    const number = match ? Number(match[1]) : NaN;
+    if (Number.isInteger(number) && number > 0) return number;
+  }
+  return null;
+}
+
 function scoreRepoMatch(message: string, repo: MinimalRepo, projects: Array<Pick<AppProject, "name" | "description" | "githubRepo">>): number {
   const text = normalizeText(message);
   const repoFullName = normalizeText(repo.full_name);
@@ -218,6 +237,7 @@ export function parseDeveloperAutopilotRequest(message: string, source: Develope
   return {
     source,
     repoFullName: extractExplicitRepo(message),
+    pullRequestNumber: extractExplicitPullRequestNumber(message),
     kind,
     title: titleFromMessage(message, kind),
     description: redactedMessage,
@@ -293,6 +313,27 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
     "",
     "Completion report must include PR URL, files changed, tests run, App QA status, residual risk, rollback plan, and whether Replit deploy is still waiting for approval.",
     "Double-check order: Codex PR -> Claude independent review -> App QA release gate -> Robert approval.",
+  ].join("\n");
+}
+
+export function buildCodexDispatchComment(request: DeveloperAutopilotRequest): string {
+  return [
+    "@codex fix this issue PR-first.",
+    "",
+    "Use the signed-in Codex/GitHub integration. Do not use BlackOps OpenAI API spend.",
+    "",
+    "Task:",
+    request.description,
+    "",
+    "Rules:",
+    "- Work only on this PR branch/context.",
+    "- Keep the change focused and small.",
+    "- Follow AGENTS.md and repo-local instructions.",
+    "- Do not edit secrets, .env, credentials, tokens, .git, node_modules, credentials/, or secrets/.",
+    "- Run the relevant tests/checks and report what passed or failed.",
+    "- Do not merge or deploy. Robert must approve merge/deploy after QA.",
+    "",
+    "When done, comment with files changed, tests run, risk, rollback note, and anything still blocked.",
   ].join("\n");
 }
 
@@ -455,20 +496,44 @@ export async function createDeveloperAutopilotHandoff(
     const requestWithRepo = { ...request, repoFullName: repo.full_name };
     const body = buildCodexGitHubIssueBody(requestWithRepo, repo);
     const issue = await deps.createIssue(owner, repoName, buildCodexGitHubIssueTitle(requestWithRepo, repo), body);
+    let codexDispatchCommentUrl: string | undefined;
+    let codexDispatchError: string | undefined;
+    if (requestWithRepo.pullRequestNumber) {
+      try {
+        const comment = await deps.createIssueComment(
+          owner,
+          repoName,
+          requestWithRepo.pullRequestNumber,
+          buildCodexDispatchComment(requestWithRepo),
+        );
+        codexDispatchCommentUrl = comment.html_url;
+      } catch (commentError: any) {
+        codexDispatchError = commentError?.message || "No pude comentar en el PR";
+      }
+    }
 
     return {
-      status: "created",
+      status: codexDispatchCommentUrl ? "codex_dispatched" : "created",
       request: requestWithRepo,
       handoffType: "developer_pr",
       repoFullName: repo.full_name,
       issueUrl: issue.html_url,
       issueNumber: issue.number,
+      codexDispatchCommentUrl,
+      codexDispatchPrNumber: requestWithRepo.pullRequestNumber || undefined,
+      codexDispatchError,
       codexBrief: buildCodexPrFirstBrief(requestWithRepo),
       message: [
-        "Listo. Cree el handoff PR-first para Codex.",
+        codexDispatchCommentUrl
+          ? "Listo. Cree el handoff PR-first y le mande el fix directo a Codex en el PR."
+          : "Listo. Cree el handoff PR-first para Codex.",
         `Repo: ${repo.full_name}`,
         `Issue: ${issue.html_url}`,
-        "Siguiente paso: Codex debe trabajar en branch y abrir PR. Cuando exista el PR, corre App QA multiagente.",
+        codexDispatchCommentUrl
+          ? `Codex dispatch: ${codexDispatchCommentUrl}`
+          : codexDispatchError
+            ? `Codex dispatch pendiente: ${codexDispatchError}. Verifica el numero/link del PR y vuelve a pedir el dispatch.`
+          : "Siguiente paso: cuando exista un PR, BlackOps puede comentar @codex fix para activar Codex Cloud sin API.",
         "No voy a montar en Replit hasta que apruebes explicitamente el deploy.",
       ].join("\n"),
     };
@@ -547,6 +612,7 @@ export function buildReadyForApprovalMessage(input: {
 export const __developerAutopilotInternals = {
   safetyLines,
   extractExplicitRepo,
+  extractExplicitPullRequestNumber,
   inferFixKind,
   inferSubscriptionHandoffKind,
   redactSensitiveText,

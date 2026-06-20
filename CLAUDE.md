@@ -9,6 +9,7 @@ Read it before code, config, security, deployment, production, or customer-facin
 - Use `docs/codebase-map.md` before broad repo exploration, then inspect source files directly.
 - Do not edit `.env`, secrets, credentials, private keys, OAuth tokens, recovery codes, `credentials/`, `secrets/`, `.git/`, or `node_modules/`.
 - Bug, threat, security, and production fixes are PR-first. Never commit directly to `main` for agent-generated fixes.
+- If BlackOps gives an existing PR number or GitHub PR link, it may dispatch Codex Cloud by commenting `@codex fix` on that PR through the signed-in Codex/GitHub integration. If no PR exists, create or request the PR-first handoff before expecting direct Codex repair.
 - App QA is the release gate. If QA reports warnings or failures, do not deploy.
 - Replit deployment requires explicit Robert approval after the PR and QA summary.
 - Security details should use the least-public channel available.
