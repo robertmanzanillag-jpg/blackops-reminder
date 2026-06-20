@@ -101,6 +101,10 @@ function safeBackupLabel(value: string | null, now = new Date()): string {
   return safe || fallback;
 }
 
+function toPortablePath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
 export function validateRestoreTargetDatabaseEnvName(value: string): string | null {
   if (!/^[A-Z][A-Z0-9_]*$/.test(value)) {
     return "--target-database-url-env must be an uppercase environment variable name.";
@@ -135,7 +139,7 @@ export function parseCeoRestoreRunArgs(argv: string[]): CeoRestoreRunOptions {
     dumpPath: readFlagValue(argv, "--dump"),
     artifactsPath: readFlagValue(argv, "--artifacts"),
     manifestPath: readFlagValue(argv, "--manifest"),
-    artifactsOutputDir: readFlagValue(argv, "--artifacts-output-dir") || path.join("restored-artifacts", safeBackupLabel(null)),
+    artifactsOutputDir: readFlagValue(argv, "--artifacts-output-dir") || toPortablePath(path.join("restored-artifacts", safeBackupLabel(null))),
     targetDatabaseUrlEnv: readFlagValue(argv, "--target-database-url-env") || "RESTORE_DATABASE_URL",
   };
 }
@@ -149,10 +153,10 @@ export function buildCeoBackupRunPlan(input: {
   now?: Date;
 }): CeoBackupRunPlan {
   const label = safeBackupLabel(input.options.label, input.now);
-  const backupDir = path.join(input.options.backupDir, label);
-  const postgresDumpPath = path.join(backupDir, "postgres.dump");
-  const localArtifactsPath = path.join(backupDir, "local-artifacts.tgz");
-  const manifestPath = path.join(backupDir, "backup-manifest.json");
+  const backupDir = toPortablePath(path.join(input.options.backupDir, label));
+  const postgresDumpPath = toPortablePath(path.join(backupDir, "postgres.dump"));
+  const localArtifactsPath = toPortablePath(path.join(backupDir, "local-artifacts.tgz"));
+  const manifestPath = toPortablePath(path.join(backupDir, "backup-manifest.json"));
   const existing = new Set(input.existingArtifactPaths);
   const localArtifactPaths = LOCAL_ARTIFACT_PATHS.filter((artifactPath) => existing.has(artifactPath));
   const sensitiveArtifactPaths = SENSITIVE_ARTIFACT_PATHS.filter((artifactPath) => existing.has(artifactPath));

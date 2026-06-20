@@ -79,11 +79,17 @@ function RadioDjNameResolver({
 }
 
 export function PendingActionsPanel() {
-  const { data: actions = [], isLoading } = useQuery<PendingAction[]>({
+  const { data: actionsResponse, isLoading } = useQuery<PendingAction[]>({
     queryKey: ["pending-actions"],
-    queryFn: () => fetch("/api/pending-actions").then((response) => response.json()),
+    queryFn: async () => {
+      const response = await fetch("/api/pending-actions");
+      const data = await response.json().catch(() => []);
+      if (!response.ok) throw new Error((data as { error?: string }).error || "No se pudieron cargar aprobaciones");
+      return Array.isArray(data) ? data : [];
+    },
     refetchInterval: 30000,
   });
+  const actions = Array.isArray(actionsResponse) ? actionsResponse : [];
 
   const mutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" | "execute" }) => postAction(id, action),

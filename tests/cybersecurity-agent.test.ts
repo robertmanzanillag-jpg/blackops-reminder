@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppProject } from "@shared/schema";
-import { __cybersecurityAgentInternals, analyzeAppProject } from "../server/cybersecurity-agent";
+import {
+  __cybersecurityAgentInternals,
+  analyzeAppProject,
+  type CybersecurityScanResult,
+  type CyberThreat,
+} from "../server/cybersecurity-agent";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -30,6 +35,39 @@ function appProject(overrides: Partial<AppProject> = {}): AppProject {
     createdAt: new Date("2026-06-18T12:00:00.000Z"),
     updatedAt: new Date("2026-06-18T12:00:00.000Z"),
     ...overrides,
+  };
+}
+
+function threat(overrides: Partial<CyberThreat>): CyberThreat {
+  return {
+    id: "threat-1",
+    appName: "Kong Nightlife",
+    appUrl: "https://kong.example",
+    severity: "high",
+    title: "App importante sin health URL",
+    detail: "Inventario incompleto.",
+    recommendation: "Agregar health URL.",
+    signal: "coverage",
+    ...overrides,
+  };
+}
+
+function scanResult(threats: CyberThreat[]): CybersecurityScanResult {
+  return {
+    scannedAt: "2026-06-18T12:00:00.000Z",
+    totalApps: 1,
+    totalLegacyProjects: 0,
+    totalGithubRepos: 0,
+    githubConnected: false,
+    githubError: null,
+    threatCount: threats.length,
+    criticalCount: threats.filter((item) => item.severity === "critical").length,
+    highCount: threats.filter((item) => item.severity === "high").length,
+    telegramSent: false,
+    summary: "Test scan",
+    threats,
+    githubRepos: [],
+    skills: [],
   };
 }
 
@@ -79,4 +117,24 @@ test("treats DROPKIT as an important app repo for inventory import", () => {
   assert.equal(input.githubRepo, "robertmanzanillag-jpg/DROPKIT");
   assert.equal(input.priority, "high");
   assert.deepEqual(input.tags, ["github-import", "needs-health-url"]);
+});
+
+test("automatic Telegram alerts ignore inventory-only cybersecurity gaps", () => {
+  const result = scanResult([
+    threat({ signal: "coverage", title: "App importante sin health URL" }),
+    threat({ signal: "repo", title: "Repo no conectado" }),
+  ]);
+
+  assert.match(__cybersecurityAgentInternals.alertSignature(result), /App importante sin health URL/);
+  assert.equal(__cybersecurityAgentInternals.automaticAlertSignature(result), "");
+});
+
+test("automatic Telegram alerts still include urgent runtime security issues", () => {
+  const result = scanResult([
+    threat({ signal: "uptime", title: "App caída", severity: "critical" }),
+    threat({ signal: "https", title: "URL sin HTTPS" }),
+  ]);
+
+  assert.match(__cybersecurityAgentInternals.automaticAlertSignature(result), /App caída/);
+  assert.match(__cybersecurityAgentInternals.automaticAlertSignature(result), /URL sin HTTPS/);
 });

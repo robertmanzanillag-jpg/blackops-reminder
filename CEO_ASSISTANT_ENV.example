@@ -20,6 +20,15 @@ AI_INTEGRATIONS_GEMINI_API_KEY=replace-with-gemini-api-key
 # Telegram CEO channel
 TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 PUBLIC_APP_URL=https://your-domain.example
+# App QA Visual Click Scout. Use http://127.0.0.1:5000 for local QA, or production domain for hosted QA.
+APP_QA_BASE_URL=https://your-domain.example
+# Lowest-cost QA defaults: lightweight checks every 30 min; browser QA twice daily or when manually requested.
+# No AI API is used by App QA.
+APP_QA_INTERVAL_MINUTES=30
+# Options: off, manual, daily, every_scan. Keep daily/manual for lowest CPU cost.
+APP_QA_VISUAL_MODE=daily
+# Hours in America/New_York when APP_QA_VISUAL_MODE=daily. Default runs deep visual QA at 8 AM and 8 PM.
+APP_QA_VISUAL_HOURS=8,20
 # TELEGRAM_WEBHOOK_URL=https://your-domain.example/api/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=replace-with-telegram-webhook-secret
 # Keep false unless you intentionally want startup to call Telegram setWebhook.
@@ -53,6 +62,16 @@ CEO_BACKUP_DIR=backups/ceo-assistant
 CEO_BACKUP_SECRETS_ENCRYPTED=false
 
 # Optional integrations
+
+# Metricool tracking / social publishing
+# Preferred path for social scheduling, analytics, best-time insights, and multi-brand reporting.
+# Add these only in local/deployment secrets, never in chat or committed docs.
+# Metricool MCP official server: https://ai.metricool.com/mcp
+# Local MCP package command: uvx --upgrade mcp-metricool
+# METRICOOL_USER_TOKEN=replace-with-metricool-user-token
+# METRICOOL_USER_ID=replace-with-metricool-user-id
+# METRICOOL_MCP_URL=https://ai.metricool.com/mcp
+# METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=true
 
 # Revenue Engine email provider
 # Required only when you want the outbox to send approved outreach by API.

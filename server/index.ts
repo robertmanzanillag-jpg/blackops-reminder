@@ -13,6 +13,7 @@ import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
+import { startAppQaScheduler } from "./app-qa-agent";
 
 const app = express();
 const httpServer = createServer(app);
@@ -281,10 +282,51 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+const LOG_BODY_LIMIT = 700;
+const LOG_STRING_LIMIT = 160;
+const LOG_ARRAY_LIMIT = 3;
+const LOG_OBJECT_KEY_LIMIT = 16;
+const SENSITIVE_LOG_KEY_PATTERN = /(access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|secret|password|authorization|cookie|encryptedPayload|api[_-]?key|private[_-]?key)/i;
+
+function redactLogString(value: string): string {
+  return value
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
+    .replace(/(access_token|refresh_token|id_token|client_secret|api_key)=([^&\s]+)/gi, "$1=[redacted]")
+    .replace(/(access_token|refresh_token|id_token|client_secret|api_key)"\s*:\s*"[^"]+"/gi, '$1":"[redacted]"');
+}
+
+function summarizeJsonForLog(value: unknown, depth = 0): unknown {
+  if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const redacted = redactLogString(value);
+    return redacted.length > LOG_STRING_LIMIT ? `${redacted.slice(0, LOG_STRING_LIMIT)}...[truncated ${redacted.length - LOG_STRING_LIMIT} chars]` : redacted;
+  }
+  if (Array.isArray(value)) {
+    const sample = value.slice(0, LOG_ARRAY_LIMIT).map((item) => summarizeJsonForLog(item, depth + 1));
+    return value.length > LOG_ARRAY_LIMIT ? [...sample, `[${value.length - LOG_ARRAY_LIMIT} more items]`] : sample;
+  }
+  if (typeof value === "object") {
+    if (depth >= 4) return "[max depth]";
+    const entries = Object.entries(value as Record<string, unknown>);
+    const summarized: Record<string, unknown> = {};
+    for (const [key, item] of entries.slice(0, LOG_OBJECT_KEY_LIMIT)) {
+      summarized[key] = SENSITIVE_LOG_KEY_PATTERN.test(key) ? "[redacted]" : summarizeJsonForLog(item, depth + 1);
+    }
+    if (entries.length > LOG_OBJECT_KEY_LIMIT) summarized.__omittedKeys = entries.length - LOG_OBJECT_KEY_LIMIT;
+    return summarized;
+  }
+  return String(value);
+}
+
+function formatJsonForLog(value: unknown): string {
+  const text = JSON.stringify(summarizeJsonForLog(value));
+  return text.length > LOG_BODY_LIMIT ? `${text.slice(0, LOG_BODY_LIMIT)}...[truncated ${text.length - LOG_BODY_LIMIT} chars]` : text;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: unknown;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -297,7 +339,7 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${formatJsonForLog(capturedJsonResponse)}`;
       }
 
       log(logLine);
@@ -348,6 +390,7 @@ app.use((req, res, next) => {
       startMarketNewsScheduler();
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
+      startAppQaScheduler();
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
