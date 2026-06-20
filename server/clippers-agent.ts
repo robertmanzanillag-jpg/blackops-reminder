@@ -7,6 +7,7 @@ import path from "path";
 import { ensureAppDriveFolderPath } from "./google-drive";
 import { getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
+import { getMetricoolConfigStatus, getMetricoolTrackingPlan, type MetricoolNetwork } from "./metricool-tracking";
 import { getSystemUserId } from "./user-context";
 import { LOCAL_ENV_FILES, loadLocalEnvFiles } from "./env-loader";
 
@@ -77,6 +78,8 @@ export type ClipperPublisherConnectorStatus = "not_prepared" | "blocked" | "part
 export type ClipperPublisherExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 export type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approval" | "ready_to_send";
 export type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
+export type ClipperMetricoolPublishingStatus = "not_prepared" | "blocked" | "ready_to_connect" | "ready_for_approval_queue";
+export type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 export type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -235,6 +238,8 @@ export interface ClipperStatus {
   appReviewDemoPack: ClipperAppReviewDemoPackSummary;
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -5008,6 +5013,110 @@ export interface ClipperPublisherConnectorSummary {
   nextStep: string;
 }
 
+export interface ClipperMetricoolPublishingChannel {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  metricoolBrandId: string;
+  metricoolBrandName: string;
+  metricoolBrandStatus: "ready_to_connect" | "draft_only" | "optional" | "missing";
+  metricoolBlogId: string | null;
+  metricoolTimezone: string | null;
+  metricoolSource: "live" | "cache" | "plan";
+  networks: MetricoolNetwork[];
+  connectedNetworks: MetricoolNetwork[];
+  accountStatus: ClipperAccountStatus;
+  dailyClipTarget: number;
+  weeklyViewsGoal: number;
+  connectedProfiles: number;
+  requiredProfiles: number;
+  publishGate: "blocked" | "approval_required_ready";
+  connectPortalUrl: string;
+  permissionsToGrant: string[];
+  connectionSteps: string[];
+  evidenceNeeded: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolPublishingSummary {
+  status: ClipperMetricoolPublishingStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  mcpUrl: string;
+  mcpReady: boolean;
+  missingEnv: string[];
+  requireApprovalForPublish: boolean;
+  primaryBridge: "metricool";
+  directPlatformApisNeeded: boolean;
+  recommendedPlan: string;
+  channels: ClipperMetricoolPublishingChannel[];
+  totals: {
+    channels: number;
+    readyForApprovalQueue: number;
+    blocked: number;
+    requiredProfiles: number;
+    connectedProfiles: number;
+  };
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolExecutionQueueItem {
+  id: string;
+  postId: string;
+  queueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  status: "blocked" | "queued_for_approval" | "ready_to_send";
+  approvalRequired: boolean;
+  canSendNow: boolean;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  requestSpec: {
+    bridge: "metricool";
+    endpoint: string;
+    method: "approval_required";
+    payloadFields: string[];
+    mediaSource: string;
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    done: boolean;
+    evidence: string;
+  }>;
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolExecutionQueueSummary {
+  status: ClipperMetricoolExecutionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceAutomationRunId: string | null;
+  publishMode: ClipperReport["publishMode"];
+  realPublishEnabled: boolean;
+  items: ClipperMetricoolExecutionQueueItem[];
+  totals: {
+    items: number;
+    blocked: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
+  };
+  nextStep: string;
+}
+
 export interface ClipperPublisherExecutionQueueItem {
   id: string;
   postId: string;
@@ -5534,6 +5643,13 @@ const MANUAL_POSTING_PACK_CSV_PATH = path.join(SCHEDULED_DIR, "manual-posting-pa
 const PUBLISHING_PACKAGE_PATH = path.join(SCHEDULED_DIR, "publishing-package.json");
 const PUBLISHING_PACKAGE_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "publishing-package.md");
 const PUBLISHING_PACKAGE_CSV_PATH = path.join(SCHEDULED_DIR, "publishing-package.csv");
+const METRICOOL_PUBLISHING_PATH = path.join(SCHEDULED_DIR, "metricool-publishing-plan.json");
+const METRICOOL_PUBLISHING_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-publishing-plan.md");
+const METRICOOL_PUBLISHING_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-publishing-plan.csv");
+const METRICOOL_EXECUTION_QUEUE_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.json");
+const METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.md");
+const METRICOOL_EXECUTION_QUEUE_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.csv");
+const METRICOOL_BRANDS_CACHE_PATH = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
 const AUTOMATION_SCHEDULE_PATH = path.join(ROOT_DIR, "automation-schedule.json");
 const ACCOUNT_IDENTITY_KIT_PATH = path.join(ROOT_DIR, "account-identity-kit.json");
 const ACCOUNT_IDENTITY_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "account-identity-kit.md");
@@ -23519,6 +23635,648 @@ function renderPublisherConnectorMarkdown(summary: ClipperPublisherConnectorSumm
   ].join("\n");
 }
 
+const CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS = ["sports-daily", "meme-radar"];
+
+interface MetricoolConnectedBrand {
+  metricoolBrandId: string;
+  label: string;
+  timezone: string | null;
+  connectedNetworks: MetricoolNetwork[];
+  source: "live" | "cache";
+}
+
+function metricoolNetworkToClipperPlatform(network: MetricoolNetwork): ClipperPlatform | null {
+  if (network === "tiktok" || network === "instagram" || network === "youtube") return network;
+  return null;
+}
+
+function normalizeMetricoolNetwork(value: string): MetricoolNetwork | null {
+  const normalized = value.trim().toLowerCase().replace(/[_\s-]+/g, "").replace(/data$/, "");
+  if (normalized === "tiktok" || normalized === "tik_tok") return "tiktok";
+  if (normalized === "instagram" || normalized === "ig") return "instagram";
+  if (normalized === "youtube" || normalized === "yt") return "youtube";
+  if (normalized === "pinterest") return "pinterest";
+  if (normalized === "facebook" || normalized === "fb") return "facebook";
+  if (normalized === "linkedin" || normalized === "linked-in") return "linkedin";
+  return null;
+}
+
+function collectMetricoolNetworks(value: unknown, parentKey = ""): MetricoolNetwork[] {
+  const found = new Set<MetricoolNetwork>();
+  const fromKey = parentKey ? normalizeMetricoolNetwork(parentKey) : null;
+  if (fromKey && value && !(Array.isArray(value) && value.length === 0)) found.add(fromKey);
+  if (typeof value === "string") {
+    const network = normalizeMetricoolNetwork(value);
+    if (network) found.add(network);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectMetricoolNetworks(item).forEach((network) => found.add(network));
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      const keyNetwork = normalizeMetricoolNetwork(key);
+      if (keyNetwork && nested) found.add(keyNetwork);
+      collectMetricoolNetworks(nested, key).forEach((network) => found.add(network));
+    }
+  }
+  return Array.from(found);
+}
+
+function metricoolBrandMatchesAccount(brand: MetricoolConnectedBrand, account: ClipperAccount): boolean {
+  const label = brand.label.toLowerCase();
+  if (account.category === "sports") return /\bsport|sports|deporte|deportes\b/i.test(label);
+  if (account.category === "memes") return /meme|memes|humor/i.test(label);
+  if (account.category === "streamers") return /stream|streamer|twitch|gaming/i.test(label);
+  return false;
+}
+
+function metricoolConnectionPermissionLabel(network: ClipperPlatform): string {
+  if (network === "tiktok") return "TikTok: autorizar perfil/cuenta, scheduling o publishing de videos y lectura de analytics dentro de Metricool.";
+  if (network === "instagram") return "Instagram: conectar cuenta profesional/creator/business con Facebook Page y autorizar publishing/scheduling de Reels y analytics en Metricool.";
+  return "YouTube: conectar canal y autorizar scheduling/publishing de Shorts y lectura de analytics en Metricool.";
+}
+
+function buildMetricoolConnectionSteps(input: {
+  account: ClipperAccount;
+  connectedBrand: MetricoolConnectedBrand | null;
+  missingProfiles: ClipperPlatform[];
+}): string[] {
+  const brandLabel = input.connectedBrand?.label || input.account.name;
+  return [
+    `Abrir Metricool y entrar a la marca "${brandLabel}".`,
+    "Ir a Connections/Redes sociales dentro de la marca.",
+    ...input.missingProfiles.map((platform) => `Conectar ${platform} con la cuenta externa correcta y aceptar permisos de publishing/scheduling + analytics.`),
+    "Volver a Clippers y presionar Metricool para sincronizar la marca real.",
+    "Confirmar que connectedNetworks muestre la red conectada antes de correr execution queue.",
+  ];
+}
+
+function parseMetricoolConnectedBrand(item: unknown, source: "live" | "cache"): MetricoolConnectedBrand | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as Record<string, unknown>;
+  const id = record.metricoolBrandId ?? record.id ?? record.blogId;
+  const label = record.label ?? record.name;
+  if (id === undefined || typeof label !== "string" || !label.trim()) return null;
+  const networksValue = record.connectedNetworks ?? record.networks ?? record.networksData;
+  return {
+    metricoolBrandId: String(id),
+    label,
+    timezone: typeof record.timezone === "string" ? record.timezone : null,
+    connectedNetworks: collectMetricoolNetworks(networksValue),
+    source,
+  };
+}
+
+async function readMetricoolConnectedBrandsCache(): Promise<MetricoolConnectedBrand[]> {
+  const raw = await readFile(METRICOOL_BRANDS_CACHE_PATH, "utf8").catch(() => null);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as { brands?: unknown[] };
+    return (Array.isArray(parsed.brands) ? parsed.brands : [])
+      .map((item) => parseMetricoolConnectedBrand(item, "cache"))
+      .filter(Boolean) as MetricoolConnectedBrand[];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMetricoolConnectedBrands(): Promise<MetricoolConnectedBrand[]> {
+  const configStatus = getMetricoolConfigStatus();
+  if (!configStatus.readyForMcp || !process.env.METRICOOL_USER_TOKEN || !process.env.METRICOOL_USER_ID) return [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const url = `https://app.metricool.com/api/v2/settings/brands?userId=${encodeURIComponent(process.env.METRICOOL_USER_ID)}&integrationSource=MCP`;
+    const response = await fetch(url, {
+      headers: { "X-Mc-Auth": process.env.METRICOOL_USER_TOKEN },
+      signal: controller.signal,
+    });
+    if (!response.ok) return [];
+    const parsed = await response.json() as { data?: unknown[] };
+    const brands = (Array.isArray(parsed.data) ? parsed.data : [])
+      .map((item) => parseMetricoolConnectedBrand(item, "live"))
+      .filter(Boolean) as MetricoolConnectedBrand[];
+    await mkdir(path.dirname(METRICOOL_BRANDS_CACHE_PATH), { recursive: true }).catch(() => undefined);
+    await writeFile(METRICOOL_BRANDS_CACHE_PATH, JSON.stringify({
+      source: "metricool",
+      userId: process.env.METRICOOL_USER_ID,
+      brandCount: brands.length,
+      brands: brands.map((brand) => ({
+        metricoolBrandId: brand.metricoolBrandId,
+        label: brand.label,
+        timezone: brand.timezone,
+        connectedNetworks: brand.connectedNetworks,
+        syncedAt: new Date().toISOString(),
+      })),
+    }, null, 2)).catch(() => undefined);
+    return brands;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function deriveMetricoolPublishingStatus(
+  generatedAt: string | null,
+  mcpReady: boolean,
+  channels: ClipperMetricoolPublishingChannel[]
+): ClipperMetricoolPublishingStatus {
+  if (!generatedAt) return "not_prepared";
+  if (!mcpReady || channels.length === 0) return "blocked";
+  if (channels.every((channel) => channel.publishGate === "approval_required_ready")) return "ready_for_approval_queue";
+  return "ready_to_connect";
+}
+
+async function buildClipperMetricoolPublishingSummary(
+  accounts: ClipperAccount[],
+  options: { syncLiveBrands?: boolean } = {}
+): Promise<ClipperMetricoolPublishingSummary> {
+  await ensureClipperDirs();
+  const configStatus = getMetricoolConfigStatus();
+  const plan = getMetricoolTrackingPlan();
+  const metricoolBrands = new Map(plan.brands.map((brand) => [brand.id, brand]));
+  const connectedBrands = options.syncLiveBrands
+    ? await fetchMetricoolConnectedBrands()
+    : await readMetricoolConnectedBrandsCache();
+  const launchAccounts = accounts.filter((account) => CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS.includes(account.id));
+  const channels = launchAccounts.map<ClipperMetricoolPublishingChannel>((account) => {
+    const brand = metricoolBrands.get(account.id);
+    const connectedBrand = connectedBrands.find((candidate) => metricoolBrandMatchesAccount(candidate, account)) || null;
+    const networks = (brand?.networks || account.platformAccounts.map((profile) => profile.platform)) as MetricoolNetwork[];
+    const requiredClipperPlatforms = networks
+      .map(metricoolNetworkToClipperPlatform)
+      .filter(Boolean) as ClipperPlatform[];
+    const connectedNetworks = connectedBrand
+      ? connectedBrand.connectedNetworks.filter((network) => requiredClipperPlatforms.includes(network as ClipperPlatform))
+      : [];
+    const connectedProfiles = connectedNetworks.length;
+    const requiredProfiles = requiredClipperPlatforms.length;
+    const missingProfileLabels = requiredClipperPlatforms
+      .filter((platform) => !connectedNetworks.includes(platform as MetricoolNetwork))
+      .map((platform) => platform);
+    const connectPortalUrl = "https://app.metricool.com/";
+    const permissionsToGrant = missingProfileLabels.map(metricoolConnectionPermissionLabel);
+    const connectionSteps = buildMetricoolConnectionSteps({ account, connectedBrand, missingProfiles: missingProfileLabels });
+    const evidenceNeeded = [
+      `Screenshot de la marca Metricool "${connectedBrand?.label || brand?.name || account.name}" mostrando blogId/perfil.`,
+      ...missingProfileLabels.map((platform) => `Screenshot de ${platform} conectado dentro de Metricool para ${account.name}.`),
+      "Captura final de Clippers despues de presionar Metricool mostrando connectedNetworks actualizado.",
+    ];
+    const blockers = [
+      ...(configStatus.readyForMcp ? [] : [`Faltan credenciales Metricool: ${configStatus.missingEnv.join(", ")}`]),
+      ...(brand ? [] : [`Falta la marca Metricool planificada para ${account.name}.`]),
+      ...(connectedBrand ? [] : [`No encontre una marca Metricool real conectada para ${account.name}.`]),
+      ...(connectedBrand && connectedNetworks.length === 0 ? [`La marca Metricool "${connectedBrand.label}" existe pero no tiene TikTok/Instagram/YouTube conectados.`] : []),
+    ];
+    const publishGate: ClipperMetricoolPublishingChannel["publishGate"] = blockers.length === 0
+      ? "approval_required_ready"
+      : "blocked";
+    const missingProfilesNextStep = missingProfileLabels.length > 0
+      ? ` Luego conecta ${missingProfileLabels.join(", ")} en Metricool para ampliar el canal.`
+      : "";
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      category: account.category,
+      metricoolBrandId: brand?.id || account.id,
+      metricoolBrandName: connectedBrand?.label || brand?.name || account.name,
+      metricoolBrandStatus: brand?.status || "missing",
+      metricoolBlogId: connectedBrand?.metricoolBrandId || null,
+      metricoolTimezone: connectedBrand?.timezone || null,
+      metricoolSource: connectedBrand?.source || "plan",
+      networks,
+      connectedNetworks,
+      accountStatus: account.status,
+      dailyClipTarget: account.dailyClipTarget,
+      weeklyViewsGoal: account.weeklyViewsGoal,
+      connectedProfiles,
+      requiredProfiles,
+      publishGate,
+      connectPortalUrl,
+      permissionsToGrant,
+      connectionSteps,
+      evidenceNeeded,
+      blockers,
+      nextStep: publishGate === "approval_required_ready"
+        ? `Enviar clips aprobados a Metricool en modo approval_required para ${connectedNetworks.join(", ")}.${missingProfilesNextStep}`
+        : blockers[0] || "Conectar perfiles sociales en Metricool.",
+    };
+  });
+  const totals = channels.reduce<ClipperMetricoolPublishingSummary["totals"]>((sum, channel) => {
+    sum.channels += 1;
+    sum.requiredProfiles += channel.requiredProfiles;
+    sum.connectedProfiles += channel.connectedProfiles;
+    if (channel.publishGate === "approval_required_ready") sum.readyForApprovalQueue += 1;
+    else sum.blocked += 1;
+    return sum;
+  }, { channels: 0, readyForApprovalQueue: 0, blocked: 0, requiredProfiles: 0, connectedProfiles: 0 });
+  const generatedAt = await stat(METRICOOL_PUBLISHING_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const blockers = [
+    ...(configStatus.readyForMcp ? [] : configStatus.missingEnv.map((envName) => `Falta ${envName}.`)),
+    ...channels.flatMap((channel) => channel.blockers.map((blocker) => `${channel.accountName}: ${blocker}`)),
+  ];
+  return {
+    status: deriveMetricoolPublishingStatus(generatedAt, configStatus.readyForMcp, channels),
+    generatedAt,
+    manifestPath: METRICOOL_PUBLISHING_PATH,
+    markdownPath: METRICOOL_PUBLISHING_MARKDOWN_PATH,
+    csvPath: METRICOOL_PUBLISHING_CSV_PATH,
+    mcpUrl: configStatus.mcpUrl,
+    mcpReady: configStatus.readyForMcp,
+    missingEnv: configStatus.missingEnv,
+    requireApprovalForPublish: process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH !== "false",
+    primaryBridge: "metricool",
+    directPlatformApisNeeded: plan.directPlatformApisNeeded,
+    recommendedPlan: plan.recommendedPlan,
+    channels,
+    totals,
+    blockers,
+    nextStep: !generatedAt
+      ? "Preparar Metricool publishing plan para Sports y Memes."
+      : blockers[0] || "Metricool listo para recibir cola approval_required.",
+  };
+}
+
+function renderMetricoolPublishingMarkdown(summary: ClipperMetricoolPublishingSummary): string {
+  return [
+    "# Clippers Metricool Publishing Plan",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `MCP ready: ${summary.mcpReady ? "yes" : "no"}`,
+    `MCP URL: ${summary.mcpUrl}`,
+    `Primary bridge: ${summary.primaryBridge}`,
+    `Recommended plan: ${summary.recommendedPlan}`,
+    `Approval required: ${summary.requireApprovalForPublish ? "yes" : "no"}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Launch Channels",
+    "",
+    ...summary.channels.flatMap((channel) => [
+      `### ${channel.accountName}`,
+      "",
+      `- Category: ${channel.category}`,
+      `- Metricool brand: ${channel.metricoolBrandName} (${channel.metricoolBrandStatus})`,
+      `- Metricool blogId: ${channel.metricoolBlogId || "pending"}`,
+      `- Sync source: ${channel.metricoolSource}`,
+      `- Timezone: ${channel.metricoolTimezone || "pending"}`,
+      `- Networks: ${channel.networks.join(", ")}`,
+      `- Connected networks: ${channel.connectedNetworks.length ? channel.connectedNetworks.join(", ") : "none"}`,
+      `- Profiles connected: ${channel.connectedProfiles}/${channel.requiredProfiles}`,
+      `- Daily target: ${channel.dailyClipTarget}`,
+      `- Weekly views goal: ${channel.weeklyViewsGoal}`,
+      `- Publish gate: ${channel.publishGate}`,
+      `- Portal: ${channel.connectPortalUrl}`,
+      `- Next step: ${channel.nextStep}`,
+      channel.permissionsToGrant.length ? "- Permissions to grant:" : "- Permissions to grant: none",
+      ...channel.permissionsToGrant.map((permission) => `  - ${permission}`),
+      "- Connection steps:",
+      ...channel.connectionSteps.map((step) => `  - ${step}`),
+      "- Evidence needed:",
+      ...channel.evidenceNeeded.map((evidence) => `  - ${evidence}`),
+      channel.blockers.length ? "- Blockers:" : "- Blockers: none",
+      ...channel.blockers.map((blocker) => `  - ${blocker}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderMetricoolPublishingCsv(summary: ClipperMetricoolPublishingSummary): string {
+  const header = [
+    "account_id",
+    "account_name",
+    "category",
+    "metricool_brand_id",
+    "metricool_brand_name",
+    "metricool_brand_status",
+    "metricool_blog_id",
+    "metricool_timezone",
+    "metricool_source",
+    "networks",
+    "connected_networks",
+    "account_status",
+    "daily_clip_target",
+    "weekly_views_goal",
+    "connected_profiles",
+    "required_profiles",
+    "publish_gate",
+    "connect_portal_url",
+    "permissions_to_grant",
+    "connection_steps",
+    "evidence_needed",
+    "blockers",
+    "next_step",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.channels.map((channel) => [
+      channel.accountId,
+      channel.accountName,
+      channel.category,
+      channel.metricoolBrandId,
+      channel.metricoolBrandName,
+      channel.metricoolBrandStatus,
+      channel.metricoolBlogId || "",
+      channel.metricoolTimezone || "",
+      channel.metricoolSource,
+      channel.networks.join(" | "),
+      channel.connectedNetworks.join(" | "),
+      channel.accountStatus,
+      channel.dailyClipTarget,
+      channel.weeklyViewsGoal,
+      channel.connectedProfiles,
+      channel.requiredProfiles,
+      channel.publishGate,
+      channel.connectPortalUrl,
+      channel.permissionsToGrant.join(" | "),
+      channel.connectionSteps.join(" | "),
+      channel.evidenceNeeded.join(" | "),
+      channel.blockers.join(" | "),
+      channel.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+export async function prepareClipperMetricoolPublishingPlan(userId = getSystemUserId()): Promise<{ metricoolPublishing: ClipperMetricoolPublishingSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const draftSummary = await buildClipperMetricoolPublishingSummary(accounts, { syncLiveBrands: true });
+  const generatedAt = new Date().toISOString();
+  const metricoolPublishing: ClipperMetricoolPublishingSummary = {
+    ...draftSummary,
+    generatedAt,
+    status: deriveMetricoolPublishingStatus(generatedAt, draftSummary.mcpReady, draftSummary.channels),
+    nextStep: draftSummary.blockers[0] || "Metricool listo para recibir cola approval_required.",
+  };
+  await writeFile(METRICOOL_PUBLISHING_PATH, JSON.stringify(metricoolPublishing, null, 2));
+  await writeFile(METRICOOL_PUBLISHING_MARKDOWN_PATH, renderMetricoolPublishingMarkdown(metricoolPublishing));
+  await writeFile(METRICOOL_PUBLISHING_CSV_PATH, renderMetricoolPublishingCsv(metricoolPublishing));
+  return { metricoolPublishing, status: await getClipperStatus(userId) };
+}
+
+function buildMetricoolExecutionQueueSummary(input: {
+  automation: ClipperAutomationSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+}): ClipperMetricoolExecutionQueueSummary {
+  const latestRun = input.automation.lastRun;
+  const realPublishEnabled = process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true" && process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH === "false";
+  const channels = new Map(input.metricoolPublishing.channels.map((channel) => [channel.accountId, channel]));
+  const items = (latestRun?.posts || []).flatMap<ClipperMetricoolExecutionQueueItem>((post) => {
+    const channel = channels.get(post.accountId);
+    if (!channel || !channel.connectedNetworks.includes(post.platform)) return [];
+    const gates = [
+      {
+        id: "metricool-brand",
+        label: "Metricool brand connected",
+        done: Boolean(channel.metricoolBlogId),
+        evidence: channel.metricoolBlogId ? `${channel.metricoolBrandName} blogId ${channel.metricoolBlogId}.` : "Metricool blogId missing.",
+      },
+      {
+        id: "metricool-network",
+        label: `${post.platform} connected in Metricool`,
+        done: channel.connectedNetworks.includes(post.platform),
+        evidence: channel.connectedNetworks.length ? channel.connectedNetworks.join(", ") : "No connectedNetworks detected.",
+      },
+      {
+        id: "source",
+        label: "Source video ready",
+        done: Boolean(post.sourcePath) && post.status !== "blocked_source",
+        evidence: post.sourcePath || "Missing source video.",
+      },
+      {
+        id: "rights",
+        label: "Rights gate passed",
+        done: post.status !== "blocked_rights",
+        evidence: post.status === "blocked_rights" ? "Rights review still required." : "Post is not blocked by rights gate.",
+      },
+      {
+        id: "approval",
+        label: "Human approval required",
+        done: latestRun?.publishMode !== "auto_after_connection" || !realPublishEnabled,
+        evidence: "Metricool queue remains approval_required unless real publish is explicitly enabled and approval requirement disabled.",
+      },
+    ];
+    const blockers = gates.filter((gate) => !gate.done).map((gate) => `${gate.label}: ${gate.evidence}`);
+    const status: ClipperMetricoolExecutionQueueItem["status"] = blockers.length > 0
+      ? "blocked"
+      : realPublishEnabled && latestRun?.publishMode === "auto_after_connection"
+        ? "ready_to_send"
+        : "queued_for_approval";
+    return [{
+      id: hashId(`metricool-${post.id}-${channel.metricoolBlogId || channel.metricoolBrandId}`),
+      postId: post.id,
+      queueItemId: post.queueItemId,
+      accountId: post.accountId,
+      accountName: post.accountName,
+      platform: post.platform,
+      status,
+      approvalRequired: status !== "ready_to_send",
+      canSendNow: status === "ready_to_send",
+      metricoolBrandName: channel.metricoolBrandName,
+      metricoolBlogId: channel.metricoolBlogId,
+      publishAt: post.publishAt,
+      sourcePath: post.sourcePath,
+      hook: post.hook,
+      captionSeed: post.captionSeed,
+      requestSpec: {
+        bridge: "metricool",
+        endpoint: "Metricool scheduling bridge via connected brand/profile",
+        method: "approval_required",
+        payloadFields: [
+          "metricool_blog_id",
+          "network",
+          "publish_at",
+          "caption",
+          "source_video",
+          "approval_status",
+        ],
+        mediaSource: post.sourcePath || "<missing source video>",
+      },
+      gates,
+      blockers,
+      nextStep: status === "blocked"
+        ? blockers[0] || "Resolver bloqueos antes de enviar a Metricool."
+        : status === "ready_to_send"
+          ? "Listo para envio real por Metricool si el operador confirma."
+          : "Revisar video/caption/derechos y aprobar en cola Metricool.",
+    }];
+  });
+  const totals = items.reduce<ClipperMetricoolExecutionQueueSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.status === "queued_for_approval") sum.queuedForApproval += 1;
+    if (item.status === "ready_to_send") sum.readyToSend += 1;
+    if (item.approvalRequired) sum.approvalRequired += 1;
+    return sum;
+  }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
+  const status: ClipperMetricoolExecutionStatus = !latestRun
+    ? "not_prepared"
+    : totals.items === 0
+      ? "blocked"
+      : totals.readyToSend > 0 && totals.blocked === 0
+        ? "ready"
+        : totals.queuedForApproval > 0
+          ? "approval_required"
+          : "blocked";
+  return {
+    status,
+    generatedAt: null,
+    manifestPath: METRICOOL_EXECUTION_QUEUE_PATH,
+    markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
+    csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
+    sourceAutomationRunId: latestRun?.id || null,
+    publishMode: latestRun?.publishMode || "approval_required",
+    realPublishEnabled,
+    items,
+    totals,
+    nextStep: !latestRun
+      ? "Correr ciclo diario para generar posts antes de preparar cola Metricool."
+      : totals.items === 0
+        ? "No hay posts para redes conectadas en Metricool; conecta TikTok/Instagram/YouTube o regenera ciclo."
+        : totals.blocked > 0
+          ? "Resolver source/rights blockers antes de aprobar envios Metricool."
+          : "Cola Metricool lista en approval_required.",
+  };
+}
+
+function renderMetricoolExecutionQueueMarkdown(summary: ClipperMetricoolExecutionQueueSummary): string {
+  return [
+    "# Clippers Metricool Execution Queue",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Automation run: ${summary.sourceAutomationRunId || "none"}`,
+    `Publish mode: ${summary.publishMode}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.map((item) => [
+      `### ${item.accountName} / ${item.platform} / ${item.publishAt}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Metricool brand: ${item.metricoolBrandName}`,
+      `- Metricool blogId: ${item.metricoolBlogId || "pending"}`,
+      `- Source: ${item.sourcePath || "missing"}`,
+      `- Caption seed: ${item.captionSeed}`,
+      `- Approval required: ${item.approvalRequired ? "yes" : "no"}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Gates:",
+      ...item.gates.map((gate) => `- [${gate.done ? "x" : " "}] ${gate.label}: ${gate.evidence}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+    ].join("\n")),
+  ].join("\n");
+}
+
+function renderMetricoolExecutionQueueCsv(summary: ClipperMetricoolExecutionQueueSummary): string {
+  const header = [
+    "id",
+    "post_id",
+    "queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "status",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "publish_at",
+    "source_path",
+    "caption_seed",
+    "approval_required",
+    "can_send_now",
+    "blockers",
+    "next_step",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => [
+      item.id,
+      item.postId,
+      item.queueItemId,
+      item.accountId,
+      item.accountName,
+      item.platform,
+      item.status,
+      item.metricoolBrandName,
+      item.metricoolBlogId || "",
+      item.publishAt,
+      item.sourcePath || "",
+      item.captionSeed,
+      item.approvalRequired ? "yes" : "no",
+      item.canSendNow ? "yes" : "no",
+      item.blockers.join(" | "),
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExecutionQueueSummary> {
+  const raw = await readFile(METRICOOL_EXECUTION_QUEUE_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperMetricoolExecutionQueueSummary;
+      return {
+        status: parsed.status || "not_prepared",
+        generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+        manifestPath: METRICOOL_EXECUTION_QUEUE_PATH,
+        markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
+        csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
+        sourceAutomationRunId: parsed.sourceAutomationRunId || null,
+        publishMode: parsed.publishMode || "approval_required",
+        realPublishEnabled: Boolean(parsed.realPublishEnabled),
+        items: Array.isArray(parsed.items) ? parsed.items : [],
+        totals: parsed.totals || { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Preparar cola Metricool.",
+      };
+    } catch {
+      // Fall through.
+    }
+  }
+  return {
+    status: "not_prepared",
+    generatedAt: null,
+    manifestPath: METRICOOL_EXECUTION_QUEUE_PATH,
+    markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
+    csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
+    sourceAutomationRunId: null,
+    publishMode: "approval_required",
+    realPublishEnabled: false,
+    items: [],
+    totals: { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
+    nextStep: "Correr ciclo diario y preparar Metricool publishing antes de generar la cola.",
+  };
+}
+
+export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUserId()): Promise<{ metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const draftSummary = buildMetricoolExecutionQueueSummary({
+    automation: statusBefore.automation,
+    metricoolPublishing: statusBefore.metricoolPublishing,
+  });
+  const metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary = {
+    ...draftSummary,
+    generatedAt: new Date().toISOString(),
+  };
+  await writeFile(METRICOOL_EXECUTION_QUEUE_PATH, JSON.stringify(metricoolExecutionQueue, null, 2));
+  await writeFile(METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH, renderMetricoolExecutionQueueMarkdown(metricoolExecutionQueue));
+  await writeFile(METRICOOL_EXECUTION_QUEUE_CSV_PATH, renderMetricoolExecutionQueueCsv(metricoolExecutionQueue));
+  return { metricoolExecutionQueue, status: await getClipperStatus(userId) };
+}
+
 export async function prepareClipperPublisherConnectors(userId = getSystemUserId()): Promise<{ publisherConnectors: ClipperPublisherConnectorSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
@@ -36122,6 +36880,8 @@ export async function prepareClipperLaunchCommandCenter(userId = getSystemUserId
   await prepareClipperRightsOutreachPack(userId);
   await prepareClipperManualPostingPack(userId);
   await prepareClipperPublishingPackage(userId);
+  await prepareClipperMetricoolPublishingPlan(userId);
+  await prepareClipperMetricoolExecutionQueue(userId);
   await prepareClipperPublisherExecutionQueue(userId);
   await prepareClipperGoLiveExecutionPack(userId);
   await prepareClipperPlatformPortalChecklist(userId);
@@ -36205,6 +36965,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const connectActions = buildClipperConnectActions();
   const externalSetupQueue = await buildExternalSetupQueueSummary({ accountLaunchKit, developerAppEvidence, permissionTracker, credentialChecks, connectActions, tokenRecords });
   const officialPermissionMatrix = await buildOfficialPermissionMatrixSummary();
+  const metricoolPublishing = await buildClipperMetricoolPublishingSummary(accounts);
+  const metricoolExecutionQueue = await readMetricoolExecutionQueueSummary();
   const publisherConnectors = await buildPublisherConnectorSummary({ tokenRecords, permissionTracker, platformReadiness, productionQueue });
   const publisherExecutionQueue = await readPublisherExecutionQueueSummary();
   const productionUrlSetup = await buildProductionUrlSetupSummary();
@@ -36411,6 +37173,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     developerApplicationDrafts,
     officialPermissionMatrix,
     permissionSubmissionDossier,
+    metricoolPublishing,
+    metricoolExecutionQueue,
     publisherConnectors,
     publisherExecutionQueue,
     productionUrlSetup,

@@ -890,6 +890,20 @@ const learningSuggestions: LearningSuggestion[] = [
 
 const skillSuggestions: SkillSuggestion[] = [
   {
+    id: "assistant-intent-router",
+    agent: "assistant",
+    skill: "Intent Router",
+    helpsWith: "Clasificar cada solicitud y mandarla al agente correcto: Code, GitHub, App QA, Marketing, Legal, Security o CEO.",
+    nextStep: "Usarlo antes de crear tareas nuevas para evitar que varios agentes trabajen lo mismo.",
+  },
+  {
+    id: "ceo-goal-planner",
+    agent: "ceo",
+    skill: "Goal Planner",
+    helpsWith: "Convertir objetivos grandes en pasos pequenos, duenos, bloqueos, checks y decision final de Robert.",
+    nextStep: "Activarlo cuando una solicitud tenga varias areas: codigo, marketing, legal, QA o deployment.",
+  },
+  {
     id: "code-visual-qa",
     agent: "code",
     skill: "Visual QA",
@@ -897,11 +911,25 @@ const skillSuggestions: SkillSuggestion[] = [
     nextStep: "Usarlo en cada cambio visual de la oficina, landing pages y dashboards.",
   },
   {
+    id: "code-test-gap-finder",
+    agent: "code",
+    skill: "Test Gap Finder",
+    helpsWith: "Detectar que prueba falta segun el diff: unit, API, seguridad, UI, build o smoke.",
+    nextStep: "Correrlo antes de entregar cambios a GitHub o Claude Reviewer.",
+  },
+  {
     id: "github-ci-review",
     agent: "github",
     skill: "PR + CI Reviewer",
     helpsWith: "Leer diffs, checks, errores de build y resumir que falta para subir cambios sin romper produccion.",
     nextStep: "Activarlo cuando Code termine un cambio o cuando un repo tenga errores.",
+  },
+  {
+    id: "github-diff-risk-scorer",
+    agent: "github",
+    skill: "Diff Risk Scorer",
+    helpsWith: "Puntuar riesgo por archivos tocados, rutas, auth, pagos, datos, migraciones, deploy y tests faltantes.",
+    nextStep: "Usarlo para decidir si basta test pequeno o si hay que correr QA completo y segundo review.",
   },
   {
     id: "claude-independent-review",
@@ -932,6 +960,13 @@ const skillSuggestions: SkillSuggestion[] = [
     nextStep: "Agregar clientes uno por uno y conectar redes oficiales solo cuando Robert apruebe autoposting por cliente.",
   },
   {
+    id: "automations-loop-worker-guard",
+    agent: "automations",
+    skill: "Loop Worker Guard",
+    helpsWith: "Revisar jobs recurrentes, ultimo resultado, costo, errores, permisos y si siguen aportando valor.",
+    nextStep: "Antes de activar una rutina nueva, dejar objetivo, frecuencia, kill switch y approval claro.",
+  },
+  {
     id: "clippers-source-analytics",
     agent: "clippers",
     skill: "Source + Analytics Scout",
@@ -946,6 +981,13 @@ const skillSuggestions: SkillSuggestion[] = [
     nextStep: "Pedir aprobacion antes de guardar cualquier aprendizaje permanente.",
   },
   {
+    id: "app-qa-browser-regression",
+    agent: "app-qa",
+    skill: "Browser Regression Scout",
+    helpsWith: "Recorrer rutas, botones, links, APIs visibles y errores de consola despues de un cambio de producto.",
+    nextStep: "Correrlo como gate final en cambios customer-facing antes de decir que esta listo.",
+  },
+  {
     id: "cybersecurity-attack-surface",
     agent: "cybersecurity",
     skill: "Attack Surface Mapper",
@@ -958,6 +1000,13 @@ const skillSuggestions: SkillSuggestion[] = [
     skill: "Compliance Monitor",
     helpsWith: "Vigilar privacidad, copyright, terminos de plataformas, contratos, mensajes externos y obligaciones que puedan causar multas.",
     nextStep: "Crear reportes semanales y alertas criticas cuando haya riesgo alto.",
+  },
+  {
+    id: "control-permission-gatekeeper",
+    agent: "control",
+    skill: "Permission Gatekeeper",
+    helpsWith: "Bloquear acciones sensibles: publicar, gastar, deployar, usar credenciales, contactar externos o tocar secretos.",
+    nextStep: "Conectar cada accion sensible a pending approval antes de permitir ejecucion.",
   },
 ];
 

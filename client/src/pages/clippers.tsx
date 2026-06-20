@@ -50,6 +50,7 @@ type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
 type ClipperAgentStatus = "active" | "waiting" | "review_required";
 type ClipperPlatform = "tiktok" | "instagram" | "youtube";
+type MetricoolNetwork = ClipperPlatform | "pinterest" | "facebook" | "linkedin";
 type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
 type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 type ClipperReadinessStatus = "ready" | "missing" | "partial";
@@ -119,6 +120,8 @@ type ClipperPublisherConnectorStatus = "not_prepared" | "blocked" | "partial" | 
 type ClipperPublisherExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approval" | "ready_to_send";
 type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
+type ClipperMetricoolPublishingStatus = "not_prepared" | "blocked" | "ready_to_connect" | "ready_for_approval_queue";
+type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -3308,6 +3311,110 @@ interface ClipperPublisherConnectorSummary {
   nextStep: string;
 }
 
+interface ClipperMetricoolPublishingChannel {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  metricoolBrandId: string;
+  metricoolBrandName: string;
+  metricoolBrandStatus: "ready_to_connect" | "draft_only" | "optional" | "missing";
+  metricoolBlogId: string | null;
+  metricoolTimezone: string | null;
+  metricoolSource: "live" | "cache" | "plan";
+  networks: MetricoolNetwork[];
+  connectedNetworks: MetricoolNetwork[];
+  accountStatus: ClipperAccountStatus;
+  dailyClipTarget: number;
+  weeklyViewsGoal: number;
+  connectedProfiles: number;
+  requiredProfiles: number;
+  publishGate: "blocked" | "approval_required_ready";
+  connectPortalUrl: string;
+  permissionsToGrant: string[];
+  connectionSteps: string[];
+  evidenceNeeded: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolPublishingSummary {
+  status: ClipperMetricoolPublishingStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  mcpUrl: string;
+  mcpReady: boolean;
+  missingEnv: string[];
+  requireApprovalForPublish: boolean;
+  primaryBridge: "metricool";
+  directPlatformApisNeeded: boolean;
+  recommendedPlan: string;
+  channels: ClipperMetricoolPublishingChannel[];
+  totals: {
+    channels: number;
+    readyForApprovalQueue: number;
+    blocked: number;
+    requiredProfiles: number;
+    connectedProfiles: number;
+  };
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolExecutionQueueItem {
+  id: string;
+  postId: string;
+  queueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  status: ClipperPublisherExecutionItemStatus;
+  approvalRequired: boolean;
+  canSendNow: boolean;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  requestSpec: {
+    bridge: "metricool";
+    endpoint: string;
+    method: "approval_required";
+    payloadFields: string[];
+    mediaSource: string;
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    done: boolean;
+    evidence: string;
+  }>;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolExecutionQueueSummary {
+  status: ClipperMetricoolExecutionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceAutomationRunId: string | null;
+  publishMode: "draft_only" | "approval_required" | "auto_after_connection";
+  realPublishEnabled: boolean;
+  items: ClipperMetricoolExecutionQueueItem[];
+  totals: {
+    items: number;
+    blocked: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperPublisherExecutionQueueItem {
   id: string;
   postId: string;
@@ -4938,6 +5045,8 @@ interface ClipperProductionUrlSetupSummary {
   markdownPath: string;
   publicBaseUrl: string;
   productionUrlReady: boolean;
+  productionUrlStable: boolean;
+  productionUrlStability: "local" | "temporary_tunnel" | "stable_public";
   productionUrlNote: string;
   requiredEnvVar: "PUBLIC_BASE_URL";
   requiredProtocol: "https";
@@ -5353,6 +5462,8 @@ interface ClipperStatus {
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -5527,6 +5638,13 @@ function clipperPlatformLabel(platform: ClipperPlatform) {
 function publisherConnectorBadge(status: ClipperPublisherConnectorStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function metricoolPublishingBadge(status: ClipperMetricoolPublishingStatus) {
+  if (status === "ready_for_approval_queue") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "ready_to_connect") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -5773,6 +5891,12 @@ function growthAuditBadge(status: ClipperGrowthAuditStatus) {
 function driveWorkspaceBadge(status: ClipperDriveWorkspaceStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "needs_oauth") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function productionUrlStabilityBadge(stability: ClipperProductionUrlSetupSummary["productionUrlStability"]) {
+  if (stability === "stable_public") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (stability === "temporary_tunnel") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
@@ -6852,6 +6976,52 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar connectors", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolPublishingMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-publishing-plan", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool publishing");
+      return data as { metricoolPublishing: ClipperMetricoolPublishingSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolPublishing: data.metricoolPublishing } : current);
+      }
+      toast({
+        title: "Metricool publishing listo",
+        description: `${data.metricoolPublishing.totals.readyForApprovalQueue}/${data.metricoolPublishing.totals.channels} canales listos; ${data.metricoolPublishing.totals.connectedProfiles}/${data.metricoolPublishing.totals.requiredProfiles} perfiles conectados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolExecutionQueueMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-execution-queue", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar cola Metricool");
+      return data as { metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolExecutionQueue: data.metricoolExecutionQueue } : current);
+      }
+      toast({
+        title: "Cola Metricool lista",
+        description: `${data.metricoolExecutionQueue.totals.queuedForApproval} en approval; ${data.metricoolExecutionQueue.totals.blocked} bloqueados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar cola Metricool", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9215,6 +9385,24 @@ export default function ClippersPage() {
             >
               {publisherConnectorsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
               Publisher connectors
+            </Button>
+            <Button
+              onClick={() => metricoolPublishingMutation.mutate()}
+              disabled={metricoolPublishingMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-metricool-publishing-button"
+            >
+              {metricoolPublishingMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
+              Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolExecutionQueueMutation.mutate()}
+              disabled={metricoolExecutionQueueMutation.isPending || isLoading}
+              className="bg-blue-200 text-zinc-950 hover:bg-blue-100"
+              data-testid="prepare-clippers-metricool-execution-queue-button"
+            >
+              {metricoolExecutionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Cola Metricool
             </Button>
             <Button
               onClick={() => publisherExecutionQueueMutation.mutate()}
@@ -13951,15 +14139,37 @@ export default function ClippersPage() {
                       </div>
                       <Badge className={cn("w-fit border", oauthGoLiveBadge(status.productionUrlSetup.status))}>{status.productionUrlSetup.status}</Badge>
                     </div>
-                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
                       <p>Env: {status.productionUrlSetup.requiredEnvVar}</p>
                       <p>Protocol: {status.productionUrlSetup.requiredProtocol}</p>
                       <p>Prod URL: {status.productionUrlSetup.productionUrlReady ? "yes" : "no"}</p>
+                      <p>Stable: {status.productionUrlSetup.productionUrlStable ? "yes" : "no"}</p>
                       <p>Platforms: {status.productionUrlSetup.platforms.length}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge className={cn("border text-[10px]", productionUrlStabilityBadge(status.productionUrlSetup.productionUrlStability))}>
+                        {status.productionUrlSetup.productionUrlStability}
+                      </Badge>
+                      {status.productionUrlSetup.productionUrlReady && !status.productionUrlSetup.productionUrlStable && (
+                        <Badge className="border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                          pruebas solamente
+                        </Badge>
+                      )}
                     </div>
                     <p className={cn("mt-2 break-all text-xs", status.productionUrlSetup.productionUrlReady ? "text-emerald-200" : "text-amber-200")}>
                       Base: {status.productionUrlSetup.publicBaseUrl} · {status.productionUrlSetup.productionUrlNote}
                     </p>
+                    {status.productionUrlSetup.productionUrlReady && !status.productionUrlSetup.productionUrlStable && (
+                      <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/20 p-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">URL temporal detectada</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                          Los endpoints publicos pasan para pruebas, pero app review/OAuth final necesita dominio propio, Cloudflare named tunnel, deploy estable o dominio reservado.
+                        </p>
+                        {status.productionUrlSetup.blockers[0] && (
+                          <p className="mt-2 text-xs leading-5 text-amber-100">{status.productionUrlSetup.blockers[0]}</p>
+                        )}
+                      </div>
+                    )}
                     {status.productionUrlSetup.saveChecklist.length > 0 && (
                       <div className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Save checklist</p>
@@ -18384,6 +18594,109 @@ export default function ClippersPage() {
                 <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                   {status.automationSchedule.runbook.map((step) => (
                     <p key={step} className="rounded-md border border-white/10 bg-black/30 p-2 text-xs leading-5 text-zinc-500">{step}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            {status?.publisherConnectors && (
+              <>
+                {status.metricoolPublishing && (
+                  <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{status.metricoolPublishing.markdownPath}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{status.metricoolPublishing.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", metricoolPublishingBadge(status.metricoolPublishing.status))}>{status.metricoolPublishing.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                      <p>MCP: {status.metricoolPublishing.mcpReady ? "ready" : "missing"}</p>
+                      <p>Plan: {status.metricoolPublishing.recommendedPlan}</p>
+                      <p>Channels: {status.metricoolPublishing.totals.channels}</p>
+                      <p>Profiles: {status.metricoolPublishing.totals.connectedProfiles}/{status.metricoolPublishing.totals.requiredProfiles}</p>
+                      <p>Approval: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "off"}</p>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {status.metricoolPublishing.channels.map((channel) => (
+                        <div key={channel.accountId} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{channel.accountName}</p>
+                            <Badge className={cn("border text-[10px]", channel.publishGate === "approval_required_ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>{channel.publishGate}</Badge>
+                          </div>
+                          <p className="mt-2 truncate text-xs text-zinc-500">{channel.metricoolBrandName}</p>
+                          <p className="mt-1 text-xs text-zinc-500">BlogId: {channel.metricoolBlogId || "pending"} · Source: {channel.metricoolSource}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Networks: {channel.networks.join(", ")}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Connected: {channel.connectedNetworks.length ? channel.connectedNetworks.join(", ") : "none"}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Profiles: {channel.connectedProfiles}/{channel.requiredProfiles} · Daily: {channel.dailyClipTarget}</p>
+                          {channel.permissionsToGrant.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {channel.permissionsToGrant.slice(0, 3).map((permission) => (
+                                <p key={`${channel.accountId}-${permission}`} className="rounded border border-sky-300/20 bg-sky-300/10 px-2 py-1 text-xs leading-5 text-sky-100">{permission}</p>
+                              ))}
+                            </div>
+                          )}
+                          {channel.connectionSteps.length > 0 && (
+                            <div className="mt-2 grid gap-1">
+                              {channel.connectionSteps.slice(0, 4).map((step, index) => (
+                                <p key={`${channel.accountId}-step-${index}`} className="rounded border border-white/10 bg-black/30 px-2 py-1 text-xs leading-5 text-zinc-400">{step}</p>
+                              ))}
+                            </div>
+                          )}
+                          {channel.blockers.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {channel.blockers.slice(0, 3).map((blocker) => (
+                                <p key={`${channel.accountId}-${blocker}`} className="rounded border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-xs leading-5 text-amber-100">{blocker}</p>
+                              ))}
+                            </div>
+                          )}
+                          <p className="mt-2 text-xs leading-5 text-sky-100">{channel.nextStep}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {status?.metricoolExecutionQueue && (
+              <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{status.metricoolExecutionQueue.markdownPath}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{status.metricoolExecutionQueue.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", publisherExecutionBadge(status.metricoolExecutionQueue.status))}>{status.metricoolExecutionQueue.status}</Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                  <p>Items: {status.metricoolExecutionQueue.totals.items}</p>
+                  <p>Approval: {status.metricoolExecutionQueue.totals.queuedForApproval}</p>
+                  <p>Blocked: {status.metricoolExecutionQueue.totals.blocked}</p>
+                  <p>Ready send: {status.metricoolExecutionQueue.totals.readyToSend}</p>
+                  <p>Run: {status.metricoolExecutionQueue.sourceAutomationRunId || "none"}</p>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {status.metricoolExecutionQueue.items.slice(0, 6).map((item) => (
+                    <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-medium text-white">{item.accountName} / {item.platform}</p>
+                        <Badge className={cn("border text-[10px]", publisherExecutionBadge(item.status))}>{item.status}</Badge>
+                      </div>
+                      <p className="mt-2 truncate text-xs text-zinc-500">{item.metricoolBrandName} · {item.metricoolBlogId || "pending"}</p>
+                      <p className="mt-1 text-xs text-zinc-500">Publish: {item.publishAt}</p>
+                      <p className="mt-1 truncate text-xs text-zinc-500">Source: {item.sourcePath || "missing"}</p>
+                      {item.gates.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {item.gates.slice(0, 4).map((gate) => (
+                            <div key={`${item.id}-${gate.id}`} className="flex items-center justify-between gap-2 rounded border border-white/10 px-2 py-1">
+                              <p className="truncate text-xs text-zinc-400">{gate.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", gate.done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                {gate.done ? "ok" : "missing"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs leading-5 text-blue-100">{item.nextStep}</p>
+                    </div>
                   ))}
                 </div>
               </div>
