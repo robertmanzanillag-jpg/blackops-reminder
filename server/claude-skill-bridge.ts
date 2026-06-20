@@ -9,9 +9,13 @@ interface ClaudeSkill {
 }
 
 const SKILLS_DIR = path.join(process.cwd(), ".claude", "skills");
-const MAX_SKILLS = 4;
-const MAX_BODY_CHARS = 3200;
-const MAX_CONTEXT_CHARS = 14000;
+const DEFAULT_MAX_SKILLS = 2;
+const DEFAULT_MAX_BODY_CHARS = 1400;
+const DEFAULT_MAX_CONTEXT_CHARS = 4200;
+const DEFAULT_MIN_SCORE = 6;
+const DEFAULT_SKILL_CACHE_TTL_MS = 30_000;
+
+let cachedSkills: { loadedAt: number; skills: ClaudeSkill[] } | null = null;
 
 const MARKETING_TERMS = [
   "ad", "ads", "anuncio", "anuncios", "campaign", "campana", "campanas", "cac", "roas", "cpl", "ctr",
@@ -36,6 +40,22 @@ function normalizeText(value = ""): string {
     .trim();
 }
 
+function readPositiveInt(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function skillLimits() {
+  return {
+    maxSkills: readPositiveInt("BLACKOPS_SKILLS_MAX_ACTIVE", DEFAULT_MAX_SKILLS, 1, 6),
+    maxBodyChars: readPositiveInt("BLACKOPS_SKILLS_MAX_BODY_CHARS", DEFAULT_MAX_BODY_CHARS, 400, 4000),
+    maxContextChars: readPositiveInt("BLACKOPS_SKILLS_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS, 1200, 12000),
+    minScore: readPositiveInt("BLACKOPS_SKILLS_MIN_SCORE", DEFAULT_MIN_SCORE, 1, 30),
+    cacheTtlMs: readPositiveInt("BLACKOPS_SKILLS_CACHE_TTL_MS", DEFAULT_SKILL_CACHE_TTL_MS, 0, 300_000),
+  };
+}
+
 function extractFrontmatter(raw: string): { metadata: Record<string, string>; body: string } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { metadata: {}, body: raw.trim() };
@@ -48,8 +68,9 @@ function extractFrontmatter(raw: string): { metadata: Record<string, string>; bo
 }
 
 function scoreSkill(skill: ClaudeSkill, message: string): number {
-  const haystack = normalizeText(`${skill.name} ${skill.description} ${skill.body.slice(0, 1200)}`);
+  const haystack = normalizeText(`${skill.name} ${skill.description} ${skill.body.slice(0, 800)}`);
   const normalizedMessage = normalizeText(message);
+  if (!normalizedMessage) return 0;
   const messageTerms = normalizedMessage.split(/\s+/).filter((term) => term.length > 2);
   let score = 0;
 
@@ -67,7 +88,37 @@ function scoreSkill(skill: ClaudeSkill, message: string): number {
   return score;
 }
 
+function compactSkillBody(body: string, maxChars: number): string {
+  const cleaned = body
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed && !trimmed.startsWith("!`") && !trimmed.startsWith("```");
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (cleaned.length <= maxChars) return cleaned;
+
+  const prioritySections = cleaned
+    .split(/(?=^##\s+)/m)
+    .filter((section) => /purpose|operating|rules|intent|workflow|output|routing|instructions/i.test(section.slice(0, 120)))
+    .join("\n\n")
+    .trim();
+
+  const candidate = prioritySections || cleaned;
+  return candidate.length <= maxChars
+    ? candidate
+    : `${candidate.slice(0, maxChars - 80).trim()}\n\n[Skill truncated for token budget]`;
+}
+
 async function readClaudeSkills(): Promise<ClaudeSkill[]> {
+  const { cacheTtlMs } = skillLimits();
+  if (cachedSkills && Date.now() - cachedSkills.loadedAt < cacheTtlMs) {
+    return cachedSkills.skills;
+  }
+
   const entries = await readdir(SKILLS_DIR, { withFileTypes: true }).catch(() => []);
   const skills: ClaudeSkill[] = [];
 
@@ -85,41 +136,35 @@ async function readClaudeSkills(): Promise<ClaudeSkill[]> {
     });
   }
 
+  cachedSkills = { loadedAt: Date.now(), skills };
   return skills;
 }
 
 export async function buildClaudeSkillContext(message?: string): Promise<string> {
   const skills = await readClaudeSkills();
   if (skills.length === 0) return "";
+  const limits = skillLimits();
 
   const scored = skills
     .map((skill) => ({ skill, score: scoreSkill(skill, message || "") }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score >= limits.minScore)
     .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_SKILLS)
-    .map((item) => item.skill);
+    .slice(0, limits.maxSkills);
 
-  if (scored.length === 0) {
-    return [
-      "## Claude Skills",
-      "BlackOps can read local `.claude/skills/*/SKILL.md` files. No specific skill matched this message; keep normal app rules.",
-      `Available skills: ${skills.map((skill) => skill.name).join(", ")}`,
-    ].join("\n");
-  }
+  if (scored.length === 0) return "";
 
-  const blocks = scored.map((skill) => [
-    `### ${skill.name}`,
-    `Source: ${skill.path}`,
-    skill.description ? `Description: ${skill.description}` : "",
+  const blocks = scored.map(({ skill, score }) => [
+    `### ${skill.name} (score ${score})`,
+    skill.description ? `Trigger: ${skill.description}` : "",
     "",
-    skill.body.slice(0, MAX_BODY_CHARS),
+    compactSkillBody(skill.body, limits.maxBodyChars),
   ].filter(Boolean).join("\n"));
 
   return [
     "## Claude Skills Active For This Message",
-    "Use these local Claude skill instructions as operating guidance for this chat response. They do not grant new tools by themselves; use the app's existing routes, approvals, and integrations. If a skill asks for slash commands, translate the intent into natural BlackOps behavior.",
+    "Use only the selected local skill guidance below. Do not mention skills unless useful. Skills do not grant tools; use existing BlackOps routes, approvals, and integrations.",
     ...blocks,
-  ].join("\n\n").slice(0, MAX_CONTEXT_CHARS);
+  ].join("\n\n").slice(0, limits.maxContextChars);
 }
 
 export async function listClaudeSkillNames(): Promise<string[]> {

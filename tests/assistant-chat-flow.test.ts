@@ -70,6 +70,10 @@ test("BlackOps chat loads local Claude skills into web and Telegram prompts", ()
 
   assert.match(bridge, /buildClaudeSkillContext/);
   assert.match(bridge, /\.claude/);
+  assert.match(bridge, /BLACKOPS_SKILLS_MAX_ACTIVE/);
+  assert.match(bridge, /BLACKOPS_SKILLS_MAX_BODY_CHARS/);
+  assert.match(bridge, /if \(scored\.length === 0\) return ""/);
+  assert.match(bridge, /Skill truncated for token budget/);
   assert.match(webAssistant, /buildClaudeSkillContext\(message\)/);
   assert.match(telegramAssistant, /buildClaudeSkillContext\(userMessage\)/);
   assert.match(marketingSkill, /Metricool/);

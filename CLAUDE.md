@@ -26,6 +26,15 @@ Use these project skills instead of installing a large framework by default:
 - `/design-creative` for design, UI/UX, branding, Canva, flyers, landing pages, promo visuals, layouts, mockups, and visual QA.
 
 The BlackOps web and Telegram assistants also read relevant local `.claude/skills/*/SKILL.md` files through `server/claude-skill-bridge.ts`. Keep marketing/design skill instructions concise because selected skill bodies are injected into chat prompts.
+Token controls for the bridge:
+
+- `BLACKOPS_SKILLS_MAX_ACTIVE` defaults to `2`.
+- `BLACKOPS_SKILLS_MAX_BODY_CHARS` defaults to `1400`.
+- `BLACKOPS_SKILLS_MAX_CONTEXT_CHARS` defaults to `4200`.
+- `BLACKOPS_SKILLS_MIN_SCORE` defaults to `6`.
+- `BLACKOPS_SKILLS_CACHE_TTL_MS` defaults to `30000`.
+
+When no skill matches the current message, the bridge injects no skill context.
 
 Do not add new agents, hooks, MCP servers, dependencies, or automations unless they remove repeated work or enforce an existing safety rule.
 
