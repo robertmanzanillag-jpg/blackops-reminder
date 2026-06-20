@@ -53,6 +53,7 @@
     "ceo:create-go-live-task": "node --import tsx script/create-ceo-go-live-task.ts",
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
+    "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",

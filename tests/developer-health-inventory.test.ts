@@ -1,0 +1,121 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { AppProject, InsertAppProject } from "@shared/schema";
+import { knownDeveloperHealthApps, upsertKnownDeveloperHealthInventory } from "../server/developer-health-inventory";
+
+function appProject(input: InsertAppProject, overrides: Partial<AppProject> = {}): AppProject {
+  return {
+    id: overrides.id || `app-${input.slug}`,
+    userId: overrides.userId || "user-1",
+    name: input.name,
+    slug: input.slug,
+    description: input.description || null,
+    environment: input.environment || "production",
+    publicUrl: input.publicUrl || null,
+    healthUrl: input.healthUrl || null,
+    repoOwner: input.repoOwner || null,
+    repoName: input.repoName || null,
+    githubRepo: input.githubRepo || null,
+    deploymentProvider: input.deploymentProvider || null,
+    deploymentId: input.deploymentId || null,
+    sentryProjectId: input.sentryProjectId || null,
+    stripeAccountId: input.stripeAccountId || null,
+    stripeWebhookEndpointId: input.stripeWebhookEndpointId || null,
+    logSource: input.logSource || null,
+    status: "unknown",
+    priority: input.priority || "normal",
+    ownerLabel: input.ownerLabel || null,
+    tags: input.tags || null,
+    lastSeenAt: null,
+    createdAt: new Date("2026-06-20T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-20T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+test("known Developer Health inventory includes the four tracked app repos", () => {
+  const repos = knownDeveloperHealthApps().map((app) => app.githubRepo).sort();
+
+  assert.deepEqual(repos, [
+    "robertmanzanillag-jpg/DROPKIT",
+    "robertmanzanillag-jpg/blackops-reminder",
+    "robertmanzanillag-jpg/br-website",
+    "robertmanzanillag-jpg/kong-nightlife",
+  ]);
+});
+
+test("upsertKnownDeveloperHealthInventory creates missing apps and is idempotent", async () => {
+  const rows: AppProject[] = [];
+  const deps = {
+    getAppProjects: async () => rows,
+    createAppProject: async (userId: string, project: InsertAppProject) => {
+      const created = appProject(project, { id: `created-${rows.length}`, userId });
+      rows.push(created);
+      return created;
+    },
+    updateAppProject: async (id: string, updates: Partial<AppProject>) => {
+      const index = rows.findIndex((row) => row.id === id);
+      assert.notEqual(index, -1);
+      rows[index] = { ...rows[index], ...updates, updatedAt: new Date("2026-06-20T01:00:00.000Z") };
+      return rows[index];
+    },
+  };
+
+  const first = await upsertKnownDeveloperHealthInventory("user-1", deps);
+  assert.equal(first.created.length, 4);
+  assert.equal(first.updated.length, 0);
+
+  const second = await upsertKnownDeveloperHealthInventory("user-1", deps);
+  assert.equal(second.created.length, 0);
+  assert.equal(second.updated.length, 0);
+  assert.equal(second.unchanged.length, 4);
+});
+
+test("upsertKnownDeveloperHealthInventory adds verified fields without erasing existing URLs", async () => {
+  const known = knownDeveloperHealthApps();
+  const brWebsite = known.find((app) => app.githubRepo === "robertmanzanillag-jpg/br-website")!;
+  const kong = known.find((app) => app.githubRepo === "robertmanzanillag-jpg/kong-nightlife")!;
+  const rows: AppProject[] = [
+    appProject(brWebsite, {
+      id: "br-existing",
+      publicUrl: "https://blackroom.example",
+      healthUrl: "https://blackroom.example/health",
+      deploymentProvider: "custom-domain",
+      tags: ["manual"],
+    }),
+    appProject(kong, {
+      id: "kong-existing",
+      publicUrl: null,
+      healthUrl: null,
+      deploymentProvider: null,
+      tags: ["manual"],
+    }),
+  ];
+  const deps = {
+    getAppProjects: async () => rows,
+    createAppProject: async (userId: string, project: InsertAppProject) => {
+      const created = appProject(project, { id: `created-${rows.length}`, userId });
+      rows.push(created);
+      return created;
+    },
+    updateAppProject: async (id: string, updates: Partial<AppProject>) => {
+      const index = rows.findIndex((row) => row.id === id);
+      assert.notEqual(index, -1);
+      rows[index] = { ...rows[index], ...updates, updatedAt: new Date("2026-06-20T01:00:00.000Z") };
+      return rows[index];
+    },
+  };
+
+  const result = await upsertKnownDeveloperHealthInventory("user-1", deps);
+  const updatedBr = rows.find((row) => row.id === "br-existing")!;
+  const updatedKong = rows.find((row) => row.id === "kong-existing")!;
+
+  assert.equal(result.created.length, 2);
+  assert.equal(updatedBr.publicUrl, "https://blackroom.example");
+  assert.equal(updatedBr.healthUrl, "https://blackroom.example/health");
+  assert.equal(updatedBr.deploymentProvider, "custom-domain");
+  assert.deepEqual((updatedBr.tags as string[]).includes("manual"), true);
+  assert.equal(updatedKong.publicUrl, "https://kong--app.replit.app");
+  assert.equal(updatedKong.healthUrl, "https://kong--app.replit.app/api/health");
+  assert.equal(updatedKong.deploymentProvider, "replit");
+});
