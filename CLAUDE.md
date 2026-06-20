@@ -22,6 +22,10 @@ Use these project skills instead of installing a large framework by default:
 - `/review-pr` when Robert asks to review a pull request, inspect agent-generated PR work, or check a branch before merge.
 - `/qa-gate` before saying a code/config/UI change is ready.
 - `/skill-scout` only when a repeated workflow should become a new skill.
+- `/marketing-autopilot` for ads, campaigns, creatives, hooks, offers, funnels, tracking, Metricool, captions, publishing queues, and marketing analysis.
+- `/design-creative` for design, UI/UX, branding, Canva, flyers, landing pages, promo visuals, layouts, mockups, and visual QA.
+
+The BlackOps web and Telegram assistants also read relevant local `.claude/skills/*/SKILL.md` files through `server/claude-skill-bridge.ts`. Keep marketing/design skill instructions concise because selected skill bodies are injected into chat prompts.
 
 Do not add new agents, hooks, MCP servers, dependencies, or automations unless they remove repeated work or enforce an existing safety rule.
 

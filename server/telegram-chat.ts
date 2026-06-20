@@ -17,6 +17,7 @@ import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
+import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { getGeminiClient } from "./gemini-client";
@@ -1291,13 +1292,14 @@ export async function handleTelegramMessageWithDeps(
       imageData = await downloadTelegramPhoto(botToken, largestPhoto.file_id);
     }
 
-    const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory] = await Promise.all([
+    const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory, claudeSkillContext] = await Promise.all([
       getCalendarContext(),
       getUserProfileContext(userId),
       getPortfolioContext(userId),
       getTasksContext(userId),
       generateTelegramAssistantContext(userId),
       getCeoConversationHistory(userId, 12, userMessage || (hasPhoto ? "[Imagen enviada por Telegram]" : undefined)),
+      buildClaudeSkillContext(userMessage),
     ]);
 
     console.log("[Telegram Chat] Calendar context length:", calendarContext.length);
@@ -1312,6 +1314,8 @@ export async function handleTelegramMessageWithDeps(
 ${calendarContext}
 
 ${ceoContext}
+
+${claudeSkillContext}
 
 ${tasksContext}
 

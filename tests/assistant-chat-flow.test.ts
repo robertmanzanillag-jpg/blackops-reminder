@@ -61,6 +61,23 @@ test("web assistant routes Metricool posting requests into approval-gated automa
   assert.match(executor, /executeMetricoolAutomationAction/);
 });
 
+test("BlackOps chat loads local Claude skills into web and Telegram prompts", () => {
+  const bridge = readFileSync("server/claude-skill-bridge.ts", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+  const telegramAssistant = readFileSync("server/telegram-chat.ts", "utf8");
+  const marketingSkill = readFileSync(".claude/skills/marketing-autopilot/SKILL.md", "utf8");
+  const designSkill = readFileSync(".claude/skills/design-creative/SKILL.md", "utf8");
+
+  assert.match(bridge, /buildClaudeSkillContext/);
+  assert.match(bridge, /\.claude/);
+  assert.match(webAssistant, /buildClaudeSkillContext\(message\)/);
+  assert.match(telegramAssistant, /buildClaudeSkillContext\(userMessage\)/);
+  assert.match(marketingSkill, /Metricool/);
+  assert.match(marketingSkill, /campaigns/);
+  assert.match(designSkill, /UI, UX/);
+  assert.match(designSkill, /Canva/);
+});
+
 test("web assistant prepares clear Google Calendar requests without model routing", () => {
   const direct = buildDirectGoogleCalendarCommand(
     "quiero que agreguemos para este martes en el google calendar: BLACK ROOM RADIO BERLIN 3pm: 4pm: 5pm: 6pm: 7pm:",

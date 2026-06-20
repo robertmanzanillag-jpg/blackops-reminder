@@ -12,6 +12,7 @@ import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-age
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
+import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
@@ -1210,15 +1211,18 @@ export function registerAssistantRoutes(app: Express): void {
         return;
       }
 
-      const calendarContext = await getCalendarContext(userId);
-      const userProfileContext = await getUserProfileContext(userId);
-      const portfolioContext = await getPortfolioContext(userId);
-      const ceoContext = await generateTelegramAssistantContext(userId);
-      const sharedConversationHistory = await getCeoConversationHistory(
-        userId,
-        12,
-        message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
-      );
+      const [calendarContext, userProfileContext, portfolioContext, ceoContext, sharedConversationHistory, claudeSkillContext] = await Promise.all([
+        getCalendarContext(userId),
+        getUserProfileContext(userId),
+        getPortfolioContext(userId),
+        generateTelegramAssistantContext(userId),
+        getCeoConversationHistory(
+          userId,
+          12,
+          message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
+        ),
+        buildClaudeSkillContext(message),
+      ]);
 
       if (message) {
         await saveCeoConversationMessage(userId, "user", message);
@@ -1277,7 +1281,7 @@ export function registerAssistantRoutes(app: Express): void {
       const openAiMessages: ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
+          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${claudeSkillContext}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
         },
         {
           role: "assistant",
