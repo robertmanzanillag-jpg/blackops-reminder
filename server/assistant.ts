@@ -15,6 +15,8 @@ import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitize
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
+import { shouldUseCheapScoutForWebChat } from "./ai-router";
+import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
 import { toFile } from "openai";
@@ -1310,6 +1312,10 @@ export function registerAssistantRoutes(app: Express): void {
       let fullResponse = "";
       const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
       const directMetricoolCommand = buildDirectMetricoolCommand(message);
+      const modelRoute = shouldUseCheapScoutForWebChat({
+        message,
+        hasImages: userMessageParts.some((part) => part.type === "image_url"),
+      });
 
       if (directBlackRoomCommand) {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
@@ -1317,6 +1323,31 @@ export function registerAssistantRoutes(app: Express): void {
       } else if (directMetricoolCommand) {
         fullResponse = `${directMetricoolCommand.content}\n${directMetricoolCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directMetricoolCommand.content })}\n\n`);
+      } else if (modelRoute.tier === "cheap_scout") {
+        const cheapPrompt = [
+          SYSTEM_PROMPT,
+          APP_HELP_CONTEXT,
+          aiCostPolicyContext,
+          claudeSkillContext,
+          userProfileContext,
+          calendarContext,
+          portfolioContext,
+          ceoContext,
+          `## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
+          "",
+          "## Modelo actual",
+          `Route: ${modelRoute.tier}. Provider: ${modelRoute.provider}. Reason: ${modelRoute.reason}.`,
+          "Actua como scout barato: resuelve tareas simples con precision, usa skills/contexto disponible, y recomienda escalar si hay riesgo, dinero, produccion, seguridad o decision final.",
+          "",
+          "## Usuario",
+          message || "[Sin texto]",
+        ].filter(Boolean).join("\n\n");
+        const result = await getGeminiClient().models.generateContent({
+          model: getGeminiChatModel({ hasImage: false }),
+          contents: [{ role: "user", parts: [{ text: cheapPrompt }] }],
+        });
+        fullResponse = result.text || "No pude generar una respuesta util esta vez.";
+        res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute })}\n\n`);
       } else {
         const stream = await getOpenAIClient().chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,

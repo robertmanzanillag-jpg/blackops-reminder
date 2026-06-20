@@ -44,10 +44,12 @@ BlackOps is configured to stay cheap-first by default so Robert can keep AI/API 
 - `BLACKOPS_AI_OPERATING_TARGET_USD` defaults to `350`.
 - `BLACKOPS_AI_HISTORY_MESSAGES` defaults to `8`.
 - `BLACKOPS_OPENAI_MAX_COMPLETION_TOKENS` defaults to `900`.
+- `BLACKOPS_WEB_CHEAP_SCOUT_ENABLED` defaults to enabled; set `false` to force the web chat fallback back to OpenAI.
+- `BLACKOPS_WEB_CHEAP_SCOUT_MAX_MESSAGE_CHARS` defaults to `900` for short low-risk web chat fallback routing.
 - `BLACKOPS_GEMINI_CHAT_MODEL` can override the Telegram/Gemini chat model. Without an override, Telegram text uses `gemini-2.5-flash-lite` and image analysis uses `gemini-2.5-flash`.
 - `BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD` can add provider-dashboard AI usage into the dashboard monthly spend tracker.
 - `BLACKOPS_METRICOOL_MONTHLY_USD` and `BLACKOPS_FIXED_MONTHLY_TOOLS_USD` add fixed subscription/tool costs into the same dashboard tracker.
-- Use cheap scout work for summaries, captions, clustering, clip planning, and first drafts. Use the strong model for final strategy, spend, production, security, code, or high-risk judgment.
+- Use cheap scout work for summaries, captions, clustering, clip planning, first drafts, and low-risk web chat fallback. Use the strong model for final strategy, spend, production, security, code, or high-risk judgment.
 - For heavy manual work, use the subscription handoff flow so Robert can run the deep work in signed-in ChatGPT/Codex Pro instead of BlackOps API spend.
 - Do not trigger paid generative video at scale, paid ad spend, external posting, supplier/customer outreach, or production changes without Robert approval and a cost estimate.
 
