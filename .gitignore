@@ -2,6 +2,7 @@ node_modules
 dist
 .cache
 .DS_Store
+.codex-vite-*.log
 * 2.*
 .env
 .env.local
@@ -15,6 +16,7 @@ vite.config.ts.*
 *.tar.gz
 backups/*
 .backups/*
+.app-qa-screenshots/*
 promo_video_edits/config.json
 promo_video_edits/01_originales/*
 promo_video_edits/03_listos_para_subir/*

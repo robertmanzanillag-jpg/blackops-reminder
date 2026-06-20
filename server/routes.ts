@@ -34,12 +34,14 @@ import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode
 import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getShopifyOAuthStatus } from "./shopify-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionUrl } from "./clippers-agent";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
+import { runAppQaScan } from "./app-qa-agent";
+import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -1440,7 +1442,7 @@ export async function registerRoutes(
   app.post("/api/clippers/run-daily-plan", async (req, res) => {
     try {
       const result = await runClipperDailyPlan(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ report: result.report });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to generate clippers daily plan" });
     }
@@ -1467,7 +1469,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-account-identity-kit", async (req, res) => {
     try {
       const result = await prepareClipperAccountIdentityKit(getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountIdentityKit: result.accountIdentityKit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account identity kit" });
     }
@@ -1476,7 +1478,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-account-launch-kit", async (req, res) => {
     try {
       const result = await prepareClipperAccountLaunchKit(getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountLaunchKit: result.accountLaunchKit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account launch kit" });
     }
@@ -1485,7 +1487,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-account-creation-pack", async (req, res) => {
     try {
       const result = await prepareClipperAccountCreationPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountCreationPack: result.accountCreationPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account creation pack" });
     }
@@ -1494,7 +1496,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-account-setup-session", async (req, res) => {
     try {
       const result = await prepareClipperAccountSetupSession(getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountSetupSession: result.accountSetupSession });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account setup session" });
     }
@@ -1503,7 +1505,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-manual-posting-pack", async (req, res) => {
     try {
       const result = await prepareClipperManualPostingPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ manualPostingPack: result.manualPostingPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers manual posting pack" });
     }
@@ -1512,7 +1514,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-account-evidence-vault", async (req, res) => {
     try {
       const result = await prepareClipperAccountEvidenceVault(getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountEvidence: result.accountEvidence });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account evidence vault" });
     }
@@ -1521,7 +1523,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-account-evidence", async (req, res) => {
     try {
       const result = await recordClipperAccountEvidence(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ accountEvidence: result.accountEvidence });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record clippers account evidence" });
     }
@@ -1530,7 +1532,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-developer-app-evidence-vault", async (req, res) => {
     try {
       const result = await prepareClipperDeveloperAppEvidenceVault(getCurrentUserId(req));
-      res.json(result);
+      res.json({ developerAppEvidence: result.developerAppEvidence });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers developer app evidence vault" });
     }
@@ -1539,7 +1541,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-developer-app-evidence", async (req, res) => {
     try {
       const result = await recordClipperDeveloperAppEvidence(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ developerAppEvidence: result.developerAppEvidence });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record clippers developer app evidence" });
     }
@@ -1548,7 +1550,7 @@ export async function registerRoutes(
   app.post("/api/clippers/preview-launch-evidence-batch", async (req, res) => {
     try {
       const result = await previewClipperLaunchEvidenceBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ launchEvidenceBatchPreview: result.launchEvidenceBatchPreview });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview clippers launch evidence batch" });
     }
@@ -1557,7 +1559,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-launch-evidence-batch", async (req, res) => {
     try {
       const result = await recordClipperLaunchEvidenceBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ launchEvidenceBatch: result.launchEvidenceBatch });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers launch evidence batch" });
     }
@@ -1566,7 +1568,7 @@ export async function registerRoutes(
   app.post("/api/clippers/import-launch-evidence-drop-files", async (req, res) => {
     try {
       const result = await importClipperLaunchEvidenceDropFiles(getCurrentUserId(req), req.body || {});
-      res.json(result);
+      res.json({ launchEvidenceDropImport: result.launchEvidenceDropImport });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import clippers launch evidence drop files" });
     }
@@ -1575,7 +1577,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-go-live-evidence-bundle", async (req, res) => {
     try {
       const result = await prepareClipperGoLiveEvidenceBundle(getCurrentUserId(req));
-      res.json(result);
+      res.json({ goLiveEvidenceBundle: result.goLiveEvidenceBundle });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers go-live evidence bundle" });
     }
@@ -1584,7 +1586,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-credential-setup", async (req, res) => {
     try {
       const result = await prepareClipperCredentialSetupCenter(getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialSetup: result.credentialSetup });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers credential setup center" });
     }
@@ -1593,7 +1595,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-credential-drop-starter", async (req, res) => {
     try {
       const result = await prepareClipperCredentialDropStarter(getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialDropStarter: result.credentialDropStarter });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers credential drop starter" });
     }
@@ -1602,7 +1604,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-credential-doctor", async (req, res) => {
     try {
       const result = await prepareClipperCredentialDoctor(getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialDoctor: result.credentialDoctor });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers credential doctor" });
     }
@@ -1611,7 +1613,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-credential-secret", async (req, res) => {
     try {
       const result = await recordClipperCredentialSecret(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialSecret: result.credentialSecret });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers credential secret" });
     }
@@ -1620,7 +1622,7 @@ export async function registerRoutes(
   app.post("/api/clippers/preview-credential-secrets-batch", async (req, res) => {
     try {
       const result = await previewClipperCredentialSecretsBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialSecretsBatchPreview: result.credentialSecretsBatchPreview });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview clippers credential secrets batch" });
     }
@@ -1629,7 +1631,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-credential-secrets-batch", async (req, res) => {
     try {
       const result = await recordClipperCredentialSecretsBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialSecretsBatch: result.credentialSecretsBatch });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers credential secrets batch" });
     }
@@ -1638,7 +1640,7 @@ export async function registerRoutes(
   app.post("/api/clippers/import-credential-drop-files", async (req, res) => {
     try {
       const result = await importClipperCredentialDropFiles(getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialDropImport: result.credentialDropImport });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import clippers credential drop files" });
     }
@@ -1647,7 +1649,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-production-public-url", async (req, res) => {
     try {
       const result = await recordClipperProductionPublicUrl(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ productionPublicUrl: result.productionPublicUrl });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers production public URL" });
     }
@@ -1656,7 +1658,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-platform-readiness", async (req, res) => {
     try {
       const result = await prepareClipperPlatformReadinessMatrix(getCurrentUserId(req));
-      res.json(result);
+      res.json({ platformReadiness: result.platformReadiness });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers platform readiness matrix" });
     }
@@ -1665,7 +1667,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-external-setup-queue", async (req, res) => {
     try {
       const result = await prepareClipperExternalSetupQueue(getCurrentUserId(req));
-      res.json(result);
+      res.json({ externalSetupQueue: result.externalSetupQueue });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external setup queue" });
     }
@@ -1674,7 +1676,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-external-execution-handoff", async (req, res) => {
     try {
       const result = await prepareClipperExternalExecutionHandoff(getCurrentUserId(req));
-      res.json(result);
+      res.json({ externalExecutionHandoff: result.externalExecutionHandoff });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external execution handoff" });
     }
@@ -1683,7 +1685,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-external-execution-session", async (req, res) => {
     try {
       const result = await prepareClipperExternalExecutionSession(getCurrentUserId(req));
-      res.json(result);
+      res.json({ externalExecutionSession: result.externalExecutionSession });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external execution session" });
     }
@@ -1692,7 +1694,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-external-launch-dossier", async (req, res) => {
     try {
       const result = await prepareClipperExternalLaunchDossier(getCurrentUserId(req));
-      res.json(result);
+      res.json({ externalLaunchDossier: result.externalLaunchDossier });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external launch dossier" });
     }
@@ -1701,7 +1703,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-platform-portal-checklist", async (req, res) => {
     try {
       const result = await prepareClipperPlatformPortalChecklist(getCurrentUserId(req));
-      res.json(result);
+      res.json({ platformPortalChecklist: result.platformPortalChecklist });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers platform portal checklist" });
     }
@@ -1710,16 +1712,37 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-official-permission-matrix", async (req, res) => {
     try {
       const result = await prepareClipperOfficialPermissionMatrix(getCurrentUserId(req));
-      res.json(result);
+      res.json({ officialPermissionMatrix: result.officialPermissionMatrix });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers official permission matrix" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-official-permission-source-audit", async (req, res) => {
+    try {
+      const result = await prepareClipperOfficialPermissionSourceAudit(getCurrentUserId(req));
+      res.json({
+        officialPermissionSourceAudit: result.officialPermissionSourceAudit,
+        officialPermissionMatrix: {
+          status: result.officialPermissionMatrix.status,
+          generatedAt: result.officialPermissionMatrix.generatedAt,
+          manifestPath: result.officialPermissionMatrix.manifestPath,
+          markdownPath: result.officialPermissionMatrix.markdownPath,
+          csvPath: result.officialPermissionMatrix.csvPath,
+          verifiedAt: result.officialPermissionMatrix.verifiedAt,
+          totals: result.officialPermissionMatrix.totals,
+          nextStep: result.officialPermissionMatrix.nextStep,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers official permission source audit" });
     }
   });
 
   app.post("/api/clippers/prepare-app-review-submission-pack", async (req, res) => {
     try {
       const result = await prepareClipperAppReviewSubmissionPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ appReviewSubmissionPack: result.appReviewSubmissionPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers app review submission pack" });
     }
@@ -1728,7 +1751,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-app-review-demo-pack", async (req, res) => {
     try {
       const result = await prepareClipperAppReviewDemoPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ appReviewDemoPack: result.appReviewDemoPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers app review demo pack" });
     }
@@ -1737,7 +1760,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-developer-application-drafts", async (req, res) => {
     try {
       const result = await prepareClipperDeveloperApplicationDrafts(getCurrentUserId(req));
-      res.json(result);
+      res.json({ developerApplicationDrafts: result.developerApplicationDrafts });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers developer application drafts" });
     }
@@ -1746,7 +1769,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-go-live-execution-pack", async (req, res) => {
     try {
       const result = await prepareClipperGoLiveExecutionPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ goLiveExecutionPack: result.goLiveExecutionPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers go-live execution pack" });
     }
@@ -1755,7 +1778,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-go-live-completion-audit", async (req, res) => {
     try {
       const result = await prepareClipperGoLiveCompletionAudit(getCurrentUserId(req));
-      res.json(result);
+      res.json({ goLiveCompletionAudit: result.goLiveCompletionAudit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers go-live completion audit" });
     }
@@ -1764,7 +1787,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-go-live-operator-brief", async (req, res) => {
     try {
       const result = await prepareClipperGoLiveOperatorBrief(getCurrentUserId(req));
-      res.json(result);
+      res.json({ goLiveOperatorBrief: result.goLiveOperatorBrief });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers go-live operator brief" });
     }
@@ -1773,16 +1796,34 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-publisher-connectors", async (req, res) => {
     try {
       const result = await prepareClipperPublisherConnectors(getCurrentUserId(req));
-      res.json(result);
+      res.json({ publisherConnectors: result.publisherConnectors });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers publisher connectors" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-publishing-plan", async (req, res) => {
+    try {
+      const result = await prepareClipperMetricoolPublishingPlan(getCurrentUserId(req));
+      res.json({ metricoolPublishing: result.metricoolPublishing });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool publishing plan" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-execution-queue", async (req, res) => {
+    try {
+      const result = await prepareClipperMetricoolExecutionQueue(getCurrentUserId(req));
+      res.json({ metricoolExecutionQueue: result.metricoolExecutionQueue });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool execution queue" });
     }
   });
 
   app.post("/api/clippers/prepare-publisher-execution-queue", async (req, res) => {
     try {
       const result = await prepareClipperPublisherExecutionQueue(getCurrentUserId(req));
-      res.json(result);
+      res.json({ publisherExecutionQueue: result.publisherExecutionQueue });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers publisher execution queue" });
     }
@@ -1791,7 +1832,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-production-url-setup", async (req, res) => {
     try {
       const result = await prepareClipperProductionUrlSetup(getCurrentUserId(req));
-      res.json(result);
+      res.json({ productionUrlSetup: result.productionUrlSetup });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers production URL setup" });
     }
@@ -1800,16 +1841,25 @@ export async function registerRoutes(
   app.post("/api/clippers/verify-production-url", async (req, res) => {
     try {
       const result = await verifyClipperProductionUrl(getCurrentUserId(req));
-      res.json(result);
+      res.json({ productionUrlVerification: result.productionUrlVerification });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to verify clippers production URL" });
+    }
+  });
+
+  app.post("/api/clippers/verify-production-local-preflight", async (req, res) => {
+    try {
+      const result = await verifyClipperProductionLocalPreflight(getCurrentUserId(req));
+      res.json({ productionLocalPreflight: result.productionLocalPreflight, status: result.status });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to verify clippers local production preflight" });
     }
   });
 
   app.post("/api/clippers/prepare-https-tunnel-plan", async (req, res) => {
     try {
       const result = await prepareClipperHttpsTunnelPlan(getCurrentUserId(req));
-      res.json(result);
+      res.json({ httpsTunnelPlan: result.httpsTunnelPlan });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers HTTPS tunnel plan" });
     }
@@ -1818,7 +1868,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-legal-policy-pack", async (req, res) => {
     try {
       const result = await prepareClipperLegalPolicyPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ legalPolicyPack: result.legalPolicyPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers legal policy pack" });
     }
@@ -1827,7 +1877,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-oauth-go-live", async (req, res) => {
     try {
       const result = await prepareClipperOAuthGoLivePreflight(getCurrentUserId(req));
-      res.json(result);
+      res.json({ oauthGoLive: result.oauthGoLive });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers OAuth go-live preflight" });
     }
@@ -1836,7 +1886,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-oauth-connection-pack", async (req, res) => {
     try {
       const result = await prepareClipperOAuthConnectionPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ oauthConnectionPack: result.oauthConnectionPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers OAuth connection pack" });
     }
@@ -1845,7 +1895,7 @@ export async function registerRoutes(
   app.post("/api/clippers/reload-credentials", async (req, res) => {
     try {
       const result = await reloadClipperCredentials(getCurrentUserId(req));
-      res.json(result);
+      res.json({ credentialReload: result.credentialReload });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to reload clippers credentials" });
     }
@@ -1854,7 +1904,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-command-center", async (req, res) => {
     try {
       const result = await prepareClipperLaunchCommandCenter(getCurrentUserId(req), req.body || {});
-      res.json(result);
+      res.json({ commandCenter: result.commandCenter });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers launch command center" });
     }
@@ -1863,7 +1913,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-blocker-resolution-pack", async (req, res) => {
     try {
       const result = await prepareClipperBlockerResolutionPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ blockerResolutionPack: result.blockerResolutionPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers blocker resolution pack" });
     }
@@ -1872,7 +1922,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-go-live-autopilot-brief", async (req, res) => {
     try {
       const result = await prepareClipperGoLiveAutopilotBrief(getCurrentUserId(req));
-      res.json(result);
+      res.json({ goLiveAutopilotBrief: result.goLiveAutopilotBrief });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers go-live autopilot brief" });
     }
@@ -1881,7 +1931,10 @@ export async function registerRoutes(
   app.post("/api/clippers/run-go-live-autopilot", async (req, res) => {
     try {
       const result = await runClipperGoLiveAutopilot(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({
+        goLiveAutopilotRun: result.goLiveAutopilotRun,
+        goLiveAutopilotBrief: result.goLiveAutopilotBrief,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers go-live autopilot" });
     }
@@ -1890,7 +1943,10 @@ export async function registerRoutes(
   app.post("/api/clippers/run-go-live-prep-sweep", async (req, res) => {
     try {
       const result = await runClipperGoLivePrepSweep(getCurrentUserId(req));
-      res.json(result);
+      res.json({
+        goLivePrepSweep: result.goLivePrepSweep,
+        localDropSync: result.localDropSync,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers go-live prep sweep" });
     }
@@ -1899,7 +1955,12 @@ export async function registerRoutes(
   app.post("/api/clippers/run-post-connect-activation-sweep", async (req, res) => {
     try {
       const result = await runClipperPostConnectActivationSweep(getCurrentUserId(req));
-      res.json(result);
+      res.json({
+        postConnectActivationSweep: result.postConnectActivationSweep,
+        goLivePrepSweep: result.goLivePrepSweep,
+        localDropSync: result.localDropSync,
+        robertNextActions: result.robertNextActions,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers post-connect activation sweep" });
     }
@@ -1947,10 +2008,25 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/run-external-connect-autopilot", async (req, res) => {
+    try {
+      const result = await runClipperExternalConnectAutopilot(getCurrentUserId(req));
+      const externalConnectAutopilot = result.externalConnectAutopilot;
+      res.json({
+        externalConnectAutopilot: {
+          ...externalConnectAutopilot,
+          steps: externalConnectAutopilot.steps.slice(0, 18),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to run clippers external connect autopilot" });
+    }
+  });
+
   app.post("/api/clippers/prepare-owner-connect-pack", async (req, res) => {
     try {
       const result = await prepareClipperOwnerConnectPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ ownerConnectPack: result.ownerConnectPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers owner connect pack" });
     }
@@ -1959,7 +2035,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-dropzone-ready-pack", async (req, res) => {
     try {
       const result = await prepareClipperDropzoneReadyPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ dropzoneReadyPack: result.dropzoneReadyPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers dropzone ready pack" });
     }
@@ -1968,16 +2044,25 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-robert-next-actions", async (req, res) => {
     try {
       const result = await prepareClipperRobertNextActions(getCurrentUserId(req));
-      res.json(result);
+      res.json({ robertNextActions: result.robertNextActions });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers Robert next actions" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-launch-lane-matrix", async (req, res) => {
+    try {
+      const result = await prepareClipperLaunchLaneMatrix(getCurrentUserId(req));
+      res.json({ launchLaneMatrix: result.launchLaneMatrix });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers launch lane matrix" });
     }
   });
 
   app.post("/api/clippers/prepare-launch-evidence-fix-pack", async (req, res) => {
     try {
       const result = await prepareClipperLaunchEvidenceFixPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ launchEvidenceFixPack: result.launchEvidenceFixPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers launch evidence fix pack" });
     }
@@ -1986,7 +2071,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-owner-connect-progress", async (req, res) => {
     try {
       const result = await recordClipperOwnerConnectProgress(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ ownerConnectPack: result.ownerConnectPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record clippers owner connect progress" });
     }
@@ -1995,7 +2080,7 @@ export async function registerRoutes(
   app.post("/api/clippers/run-local-drop-sync", async (req, res) => {
     try {
       const result = await runClipperLocalDropSync(getCurrentUserId(req));
-      res.json(result);
+      res.json({ localDropSync: result.localDropSync });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers local drop sync" });
     }
@@ -2004,7 +2089,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-permissions", async (req, res) => {
     try {
       const result = await prepareClipperPermissionPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ pack: result.pack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers permission pack" });
     }
@@ -2013,7 +2098,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-permission-tracker", async (req, res) => {
     try {
       const result = await prepareClipperPermissionTracker(getCurrentUserId(req));
-      res.json(result);
+      res.json({ permissionTracker: result.permissionTracker });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers permission tracker" });
     }
@@ -2022,7 +2107,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-permission-request-pack", async (req, res) => {
     try {
       const result = await prepareClipperPermissionRequestPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ permissionRequestPack: result.permissionRequestPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers permission request pack" });
     }
@@ -2031,7 +2116,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-permission-submission-dossier", async (req, res) => {
     try {
       const result = await prepareClipperPermissionSubmissionDossier(getCurrentUserId(req));
-      res.json(result);
+      res.json({ permissionSubmissionDossier: result.permissionSubmissionDossier });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers permission submission dossier" });
     }
@@ -2040,7 +2125,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-permission-status", async (req, res) => {
     try {
       const result = await recordClipperPermissionStatus(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ permissionTracker: result.permissionTracker });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record clippers permission status" });
     }
@@ -2049,7 +2134,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-drive-workspace", async (req, res) => {
     try {
       const result = await prepareClipperDriveWorkspace(getCurrentUserId(req));
-      res.json(result);
+      res.json({ driveWorkspace: result.driveWorkspace });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers Google Drive workspace" });
     }
@@ -2058,7 +2143,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-production-queue", async (req, res) => {
     try {
       const result = await prepareClipperProductionQueue(getCurrentUserId(req));
-      res.json(result);
+      res.json({ queue: result.queue });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers production queue" });
     }
@@ -2067,7 +2152,7 @@ export async function registerRoutes(
   app.post("/api/clippers/import-source-drop-files", async (req, res) => {
     try {
       const result = await importClipperSourceDropFiles(getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceDropImport: result.sourceDropImport });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to import clippers source drop files" });
     }
@@ -2076,7 +2161,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-source-acquisition", async (req, res) => {
     try {
       const result = await prepareClipperSourceAcquisitionPlan(getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceAcquisition: result.sourceAcquisition });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers source acquisition plan" });
     }
@@ -2085,9 +2170,18 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-source-supply-drop-kit", async (req, res) => {
     try {
       const result = await prepareClipperSourceSupplyDropKit(getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceSupplyDropKit: result.sourceSupplyDropKit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers source supply drop kit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-source-discovery-handoff", async (req, res) => {
+    try {
+      const result = await prepareClipperSourceDiscoveryHandoff(getCurrentUserId(req));
+      res.json({ sourceDiscoveryHandoff: result.sourceDiscoveryHandoff, status: result.status });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers source discovery handoff" });
     }
   });
 
@@ -2130,7 +2224,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-source-hunt", async (req, res) => {
     try {
       const result = await prepareClipperSourceHuntSheet(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceHunt: result.sourceHunt });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers source hunt sheet" });
     }
@@ -2139,7 +2233,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-source-intake-batch", async (req, res) => {
     try {
       const result = await recordClipperSourceIntakeBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceIntakeBatch: result.sourceIntakeBatch });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers source intake batch" });
     }
@@ -2148,7 +2242,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-viral-discovery", async (req, res) => {
     try {
       const result = await prepareClipperViralDiscoveryPack(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ viralDiscovery: result.viralDiscovery });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers viral discovery pack" });
     }
@@ -2157,7 +2251,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-rights-outreach", async (req, res) => {
     try {
       const result = await prepareClipperRightsOutreachPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ rightsOutreach: result.rightsOutreach });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers rights outreach pack" });
     }
@@ -2166,7 +2260,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-source-rights", async (req, res) => {
     try {
       const result = await recordClipperSourceRights(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ sourceRights: result.sourceRights, queue: result.queue });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record clippers source rights" });
     }
@@ -2175,7 +2269,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-draft-specs", async (req, res) => {
     try {
       const result = await prepareClipperDraftSpecs(getCurrentUserId(req));
-      res.json(result);
+      res.json({ draftSpecs: result.draftSpecs });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers draft specs" });
     }
@@ -2184,7 +2278,7 @@ export async function registerRoutes(
   app.post("/api/clippers/render-draft-videos", async (req, res) => {
     try {
       const result = await renderClipperDraftVideos(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ renderedClips: result.renderedClips });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to render clippers draft videos" });
     }
@@ -2193,7 +2287,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-publishing-package", async (req, res) => {
     try {
       const result = await prepareClipperPublishingPackage(getCurrentUserId(req));
-      res.json(result);
+      res.json({ publishingPackage: result.publishingPackage });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers publishing package" });
     }
@@ -2202,7 +2296,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-intake-kit", async (req, res) => {
     try {
       const result = await prepareClipperIntakeKit(getCurrentUserId(req));
-      res.json(result);
+      res.json({ intakeKit: result.intakeKit });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers intake kit" });
     }
@@ -2211,7 +2305,7 @@ export async function registerRoutes(
   app.post("/api/clippers/ingest-metrics", async (req, res) => {
     try {
       const result = await ingestClipperMetrics(getCurrentUserId(req));
-      res.json(result);
+      res.json({ metrics: result.metrics });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to ingest clippers metrics" });
     }
@@ -2220,7 +2314,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-analytics-reporting-pack", async (req, res) => {
     try {
       const result = await prepareClipperAnalyticsReportingPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ analyticsReportingPack: result.analyticsReportingPack });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers analytics reporting pack" });
     }
@@ -2229,7 +2323,7 @@ export async function registerRoutes(
   app.post("/api/clippers/ingest-trends", async (req, res) => {
     try {
       const result = await ingestClipperTrends(getCurrentUserId(req));
-      res.json(result);
+      res.json({ trendRadar: result.trendRadar });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to ingest clippers trends" });
     }
@@ -2238,7 +2332,7 @@ export async function registerRoutes(
   app.post("/api/clippers/record-trend-candidates-batch", async (req, res) => {
     try {
       const result = await recordClipperTrendCandidatesBatch(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ trendCandidatesBatch: result.trendCandidatesBatch });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to record clippers trend candidates batch" });
     }
@@ -2247,7 +2341,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-trend-rights-outreach", async (req, res) => {
     try {
       const result = await prepareClipperTrendRightsOutreachPack(getCurrentUserId(req));
-      res.json(result);
+      res.json({ trendRightsOutreach: result.trendRightsOutreach });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers trend rights outreach pack" });
     }
@@ -2256,7 +2350,7 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-automation-schedule", async (req, res) => {
     try {
       const result = await prepareClipperAutomationSchedule(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ automationSchedule: result.automationSchedule });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers automation schedule" });
     }
@@ -2265,7 +2359,7 @@ export async function registerRoutes(
   app.post("/api/clippers/run-automation-cycle", async (req, res) => {
     try {
       const result = await runClipperAutomationCycle(req.body || {}, getCurrentUserId(req));
-      res.json(result);
+      res.json({ automation: result.automation });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers automation cycle" });
     }
@@ -2289,6 +2383,29 @@ export async function registerRoutes(
 
   app.get("/api/clippers/oauth/:platform/callback", async (req, res) => {
     try {
+      if (req.query.preflight === "1") {
+        if (req.params.platform !== "tiktok" && req.params.platform !== "instagram" && req.params.platform !== "youtube") {
+          return res.status(400).send(`
+            <html>
+              <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+                <h1>OAuth preflight no conectado</h1>
+                <p>Plataforma no soportada.</p>
+                <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
+              </body>
+            </html>
+          `);
+        }
+        return res.status(200).send(`
+          <html>
+            <body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
+              <h1>OAuth preflight listo</h1>
+              <p>Callback reachable sin guardar OAuth state ni tokens.</p>
+              <p style="color:#94a3b8;">Plataforma: ${escapeHtml(req.params.platform)}</p>
+              <a href="/clippers" style="color:#67e8f9;">Volver a Clippers</a>
+            </body>
+          </html>
+        `);
+      }
       const connection = await recordClipperOAuthCallback({
         platform: req.params.platform,
         code: req.query.code,
@@ -4748,6 +4865,70 @@ export async function registerRoutes(
       res.status(201).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to import GitHub apps" });
+    }
+  });
+
+  app.get("/api/app-qa-agent/status", async (req, res) => {
+    try {
+      const result = await runAppQaScan(getCurrentUserId(req));
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run app QA scan" });
+    }
+  });
+
+  app.post("/api/app-qa-agent/scan", async (req, res) => {
+    try {
+      const notify = Boolean(req.body?.notify);
+      const result = await runAppQaScan(getCurrentUserId(req), notify, true, false);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run app QA scan" });
+    }
+  });
+
+  app.post("/api/developer-autopilot/handoff", async (req, res) => {
+    try {
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+      if (!message) {
+        return res.status(400).json({ error: "message is required" });
+      }
+      const result = await createDeveloperAutopilotHandoff(getCurrentUserId(req), message, "web_chat");
+      res.status(result.status === "created" ? 201 : result.status === "needs_repo" ? 422 : 400).json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to create Developer Autopilot handoff" });
+    }
+  });
+
+  app.post("/api/developer-autopilot/qa-gate", async (req, res) => {
+    try {
+      const scan = await runAppQaScan(getCurrentUserId(req), Boolean(req.body?.notify), true, false);
+      const prUrl = typeof req.body?.prUrl === "string" ? req.body.prUrl.trim() : null;
+      const gate = evaluateDeveloperReleaseGate(scan, { prUrl });
+      res.json({
+        scan,
+        gate,
+        replitDeploymentRequiresApproval: true,
+        message: gate.status === "pass"
+          ? "QA paso. Puedes revisar el PR, pero Replit sigue esperando aprobacion explicita."
+          : "QA bloqueo el release. No se debe montar en Replit hasta corregir estos hallazgos.",
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to evaluate Developer Autopilot QA gate" });
+    }
+  });
+
+  app.get("/api/app-qa-agent/history", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const automations = await ensureDefaultAutomations(userId);
+      const qaAutomation = automations.find((automation) => (automation.metadata as any)?.key === "app-qa-council");
+      if (!qaAutomation) return res.json([]);
+      const limit = Math.min(Number(req.query.limit || 20), 100);
+      const runs = await storage.getAutomationRuns(userId, qaAutomation.id, limit);
+      res.json(runs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch app QA history" });
     }
   });
 

@@ -11,6 +11,7 @@ import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./b
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
 import { toFile } from "openai";
@@ -961,6 +962,30 @@ export function registerAssistantRoutes(app: Express): void {
         })}\n\n`);
         await saveCeoConversationMessage(userId, "assistant", content).catch((historyError) => {
           console.error("Error saving direct approval assistant response:", historyError);
+        });
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const developerAutopilotHandoff = message
+        ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
+        : null;
+      if (developerAutopilotHandoff && developerAutopilotHandoff.status !== "invalid_request") {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+          console.error("Error saving Developer Autopilot user message:", historyError);
+        });
+
+        res.write(`data: ${JSON.stringify({
+          content: developerAutopilotHandoff.message,
+          developerAutopilot: developerAutopilotHandoff,
+        })}\n\n`);
+        await saveCeoConversationMessage(userId, "assistant", developerAutopilotHandoff.message).catch((historyError) => {
+          console.error("Error saving Developer Autopilot assistant response:", historyError);
         });
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();

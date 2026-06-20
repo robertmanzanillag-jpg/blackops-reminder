@@ -6,6 +6,7 @@ import { hasRealValue } from "./ceo-doctor-cli";
 
 const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const lastAutomaticAlertByUser = new Map<string, { signature: string; sentAt: number }>();
+const AUTOMATIC_ALERT_SIGNALS = new Set<CyberThreat["signal"]>(["uptime", "https", "incidents", "github"]);
 const IMPORTANT_APP_REPO_KEYWORDS = ["blackops", "kong", "blackroom", "br-website", "dropkit"];
 const LIKELY_APP_REPO_KEYWORDS = [
   "app",
@@ -492,6 +493,8 @@ export async function importMissingGithubApps(userId: string): Promise<CyberInve
 }
 
 export const __cybersecurityAgentInternals = {
+  alertSignature,
+  automaticAlertSignature,
   githubRepoToAppProjectInput,
   inferPriorityFromRepo,
   isLikelyAppRepo,
@@ -586,8 +589,19 @@ function alertSignature(result: CybersecurityScanResult): string {
     .join("|");
 }
 
+function automaticAlertSignature(result: CybersecurityScanResult): string {
+  return result.threats
+    .filter((threat) => (
+      (threat.severity === "critical" || threat.severity === "high") &&
+      AUTOMATIC_ALERT_SIGNALS.has(threat.signal)
+    ))
+    .map((threat) => `${threat.appName}:${threat.signal}:${threat.severity}:${threat.title}`)
+    .sort()
+    .join("|");
+}
+
 function shouldSendAutomaticAlert(userId: string, result: CybersecurityScanResult): boolean {
-  const signature = alertSignature(result);
+  const signature = automaticAlertSignature(result);
   if (!signature) return false;
 
   const previous = lastAutomaticAlertByUser.get(userId);
@@ -600,7 +614,27 @@ function shouldSendAutomaticAlert(userId: string, result: CybersecurityScanResul
   return true;
 }
 
-export async function runCybersecurityScan(userId: string, notify = false): Promise<CybersecurityScanResult> {
+type CybersecurityScanOptions = {
+  notify?: boolean;
+  allowAutomaticAlert?: boolean;
+};
+
+function normalizeScanOptions(options: boolean | CybersecurityScanOptions): Required<CybersecurityScanOptions> {
+  if (typeof options === "boolean") {
+    return { notify: options, allowAutomaticAlert: options };
+  }
+
+  return {
+    notify: Boolean(options.notify),
+    allowAutomaticAlert: Boolean(options.allowAutomaticAlert),
+  };
+}
+
+export async function runCybersecurityScan(
+  userId: string,
+  options: boolean | CybersecurityScanOptions = false
+): Promise<CybersecurityScanResult> {
+  const scanOptions = normalizeScanOptions(options);
   const [apps, legacyProjects, incidents] = await Promise.all([
     storage.getAppProjects(userId),
     storage.getMonitoredProjects(userId),
@@ -649,7 +683,7 @@ export async function runCybersecurityScan(userId: string, notify = false): Prom
     skills: recommendSkills(threats),
   };
 
-  if (notify || shouldSendAutomaticAlert(userId, result)) {
+  if (scanOptions.notify || (scanOptions.allowAutomaticAlert && shouldSendAutomaticAlert(userId, result))) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
@@ -668,7 +702,7 @@ export function startCybersecurityScheduler(): void {
     try {
       const configs = await storage.getEnabledTelegramConfigs();
       for (const config of configs) {
-        await runCybersecurityScan(config.userId, false);
+        await runCybersecurityScan(config.userId, { allowAutomaticAlert: true });
       }
     } catch (error) {
       console.error("Cybersecurity scheduler error:", error);

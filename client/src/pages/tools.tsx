@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Store,
   Megaphone,
+  MousePointerClick,
   TrendingUp,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -77,6 +78,13 @@ const tools = [
     description: "Monitorea apps, riesgos, HTTPS, incidentes y alertas por Telegram.",
     href: "/cybersecurity-agent",
     icon: ShieldAlert,
+    primary: true,
+  },
+  {
+    title: "App QA",
+    description: "Subagentes revisan paginas, links, clicks esperados, APIs y mejoras.",
+    href: "/app-qa-agent",
+    icon: MousePointerClick,
     primary: true,
   },
   {

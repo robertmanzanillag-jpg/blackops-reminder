@@ -209,7 +209,7 @@ export default function CybersecurityAgentPage() {
                 <h2 className="text-lg font-semibold">{isLoading ? "Escaneando..." : scan?.summary || "Sin datos todavia"}</h2>
                 <p className="mt-1 text-sm text-zinc-500">
                   Ultimo scan: {scan?.scannedAt ? new Date(scan.scannedAt).toLocaleString() : "pendiente"}.
-                  {scan?.telegramSent ? " Telegram enviado." : " Telegram se manda si lo pides o si hay riesgo alto."}
+                  {scan?.telegramSent ? " Telegram enviado." : " Telegram se manda si lo pides o si detecta caidas, HTTPS inseguro o incidentes urgentes."}
                 </p>
                 {importMissingAppsMutation.data && (
                   <p className="mt-2 text-sm text-cyan-100">

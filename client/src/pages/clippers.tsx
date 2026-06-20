@@ -11,6 +11,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  FileCheck2,
   Flame,
   Gauge,
   HardDrive,
@@ -49,6 +50,7 @@ type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
 type ClipperAgentStatus = "active" | "waiting" | "review_required";
 type ClipperPlatform = "tiktok" | "instagram" | "youtube";
+type MetricoolNetwork = ClipperPlatform | "pinterest" | "facebook" | "linkedin";
 type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
 type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 type ClipperReadinessStatus = "ready" | "missing" | "partial";
@@ -81,6 +83,7 @@ type ClipperTrendRightsOutreachStatus = "not_prepared" | "blocked" | "partial" |
 type ClipperTrendRightsOutreachItemStatus = "ready_to_contact" | "permission_recorded";
 type ClipperViralDiscoveryStatus = "not_prepared" | "ready";
 type ClipperViralDiscoveryPriority = "must_scan" | "watch" | "experimental";
+type ClipperSourceDiscoveryHandoffStatus = "not_prepared" | "blocked" | "ready";
 type ClipperAutomationScheduleStatus = "not_prepared" | "prepared";
 type ClipperAccountIdentityKitStatus = "not_prepared" | "ready";
 type ClipperAccountLaunchKitStatus = "not_ready" | "partial" | "ready";
@@ -99,6 +102,7 @@ type ClipperDeveloperAppEvidenceItemStatus = "draft" | "submitted" | "approved" 
 type ClipperLaunchCommandCenterStatus = "ready" | "action_required" | "blocked";
 type ClipperLaunchCommandCenterStepStatus = "done" | "needs_action" | "blocked";
 type ClipperCredentialSetupStatus = "missing" | "partial" | "ready";
+type ClipperGoogleDriveOAuthBridgeStatus = "missing_keys" | "ready_to_authorize" | "connected" | "error";
 type ClipperCredentialDoctorStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperIntakeKitStatus = "not_prepared" | "prepared";
 type ClipperExternalSetupQueueStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -109,12 +113,15 @@ type ClipperPlatformWarRoomStatus = "blocked" | "in_progress" | "ready";
 type ClipperExternalLaunchDossierStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 type ClipperAppReviewSubmissionPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperOfficialPermissionMatrixStatus = "not_prepared" | "verified" | "needs_review";
+type ClipperOfficialPermissionSourceAuditStatus = "not_prepared" | "verified" | "needs_review";
 type ClipperOfficialPermissionSourceStatus = "official_verified" | "official_login_required";
 type ClipperPermissionSubmissionDossierStatus = "not_prepared" | "blocked" | "needs_login_recheck" | "ready_to_submit" | "ready";
 type ClipperPublisherConnectorStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperPublisherExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approval" | "ready_to_send";
 type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
+type ClipperMetricoolPublishingStatus = "not_prepared" | "blocked" | "ready_to_connect" | "ready_for_approval_queue";
+type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
 type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -131,6 +138,8 @@ type ClipperGoLivePrepSweepStatus = "not_run" | "completed" | "partial" | "block
 type ClipperGoLivePrepSweepItemStatus = "completed" | "skipped" | "failed";
 type ClipperPostConnectActivationSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
 type ClipperIntakeRefreshSweepStatus = "not_run" | "ready" | "needs_external_action" | "needs_local_input" | "blocked";
+type ClipperExternalConnectAutopilotStatus = "blocked" | "partial" | "ready";
+type ClipperExternalConnectAutopilotStepStatus = "completed" | "blocked" | "failed";
 type ClipperExternalConnectSprintStatus = "not_prepared" | "blocked" | "ready_to_execute" | "waiting" | "done";
 type ClipperExternalConnectSprintLane = "credentials" | "accounts" | "developer_apps" | "permissions" | "oauth" | "activation";
 type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -141,6 +150,8 @@ type ClipperDropzoneReadyPackLane = "credentials" | "launch_evidence" | "source_
 type ClipperDropzoneReadyPackItemStatus = "missing" | "partial" | "ready";
 type ClipperRobertNextActionsStatus = "not_prepared" | "blocked" | "needs_action" | "ready";
 type ClipperRobertNextActionsLane = "local_drop" | "external_portal" | "evidence" | "source_supply" | "verification";
+type ClipperLaunchLaneMatrixStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
+type ClipperLaunchLaneStatus = "blocked" | "waiting" | "activation_ready" | "ready";
 type ClipperLaunchEvidenceFixPackStatus = "not_prepared" | "needs_fix" | "ready";
 type ClipperBlockerUnlockPhase = "credentials" | "accounts" | "public_url" | "developer_apps" | "permissions" | "oauth" | "content_supply" | "publishing" | "optimization";
 type ClipperGoLiveExecutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -529,6 +540,13 @@ interface ClipperSourceSupplyDropKitItem {
   requiredProof: string[];
   searchBrief: string[];
   viralSearchQueries: string[];
+  discoveryLinks?: Array<{
+    label: string;
+    platform: "google" | "tiktok" | "youtube" | "instagram" | "twitch";
+    query: string;
+    url: string;
+    notes: string;
+  }>;
   viralScoreChecklist: string[];
   rejectIf: string[];
   doneCriteria: string[];
@@ -554,6 +572,7 @@ interface ClipperSourceSupplyDropKitCategoryBatch {
   rightsEvidenceBatchTemplate: string;
   requiredProof: string[];
   viralSearchQueries: string[];
+  discoveryLinks?: NonNullable<ClipperSourceSupplyDropKitItem["discoveryLinks"]>;
   checklist: string[];
   nextStep: string;
 }
@@ -578,6 +597,62 @@ interface ClipperSourceSupplyDropKitSummary {
     minimumWeeklySourceAssets: number;
   };
   intakeBatchTemplate: string;
+  nextStep: string;
+}
+
+interface ClipperSourceDiscoveryHandoffItem {
+  id: string;
+  rank: number;
+  category: ClipperAccountCategory;
+  label: string;
+  platform: ClipperPlatform;
+  accountName: string;
+  priority: ClipperViralDiscoveryPriority | "critical";
+  sourceSupplyItemId: string;
+  viralDiscoveryItemId: string | null;
+  targetFileName: string;
+  suggestedTitle: string;
+  discoveryQuery: string;
+  discoveryUrl: string;
+  sourceDropPath: string;
+  sourceDropManifestPath: string;
+  targetCandidates: number;
+  minimumViews: number;
+  scanMinutes: number;
+  intakeBatchRow: string;
+  trendCandidateBatchRow: string;
+  rightsEvidenceBatchRow: string;
+  proofChecklist: string[];
+  viralScoreChecklist: string[];
+  rejectIf: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceDiscoveryHandoffSummary {
+  status: ClipperSourceDiscoveryHandoffStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceArtifacts: {
+    sourceSupplyDropKitPath: string;
+    viralDiscoveryPath: string;
+    sourceHuntPath: string;
+  };
+  items: ClipperSourceDiscoveryHandoffItem[];
+  totals: {
+    items: number;
+    categories: number;
+    critical: number;
+    mustScan: number;
+    watch: number;
+    experimental: number;
+    discoveryLinks: number;
+    sourceFilesNeeded: number;
+    targetCandidates: number;
+    scanMinutes: number;
+  };
   nextStep: string;
 }
 
@@ -1246,13 +1321,68 @@ interface ClipperAccountSetupSessionItem {
   nextStep: string;
 }
 
+interface ClipperAccountSetupQueueItem {
+  rank: number;
+  id: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  handle: string;
+  status: ClipperAccountSetupSessionItemStatus;
+  priority: ClipperAccountCreationSessionPriority;
+  signupUrl: string;
+  profileLink: string;
+  handleCheckUrls: string[];
+  vaultItemName: string;
+  submittedEvidenceBatchRow: string;
+  verifiedEvidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  evidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  evidencePath: string | null;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperAccountCreationRunbookItem {
+  rank: number;
+  id: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  handle: string;
+  status: ClipperAccountSetupSessionItemStatus;
+  priority: ClipperAccountCreationSessionPriority;
+  signupUrl: string;
+  profileLink: string;
+  handleCheckUrls: string[];
+  vaultSlots: string[];
+  copyPackage: Array<{ label: string; value: string }>;
+  portalFormFields: Array<{ field: string; value: string; note: string }>;
+  operatorSteps: string[];
+  proofChecklist: string[];
+  submittedEvidenceBatchRow: string;
+  verifiedEvidenceBatchRow: string;
+  evidenceRecipeRow: string;
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 interface ClipperAccountSetupSessionSummary {
   status: ClipperAccountSetupSessionStatus;
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
   csvPath: string;
+  accountSetupQueuePath: string;
+  accountSetupQueueMarkdownPath: string;
+  accountSetupQueueCsvPath: string;
+  accountCreationRunbookPath?: string;
+  accountCreationRunbookMarkdownPath?: string;
+  accountCreationRunbookCsvPath?: string;
   items: ClipperAccountSetupSessionItem[];
+  accountSetupQueue: ClipperAccountSetupQueueItem[];
+  accountCreationRunbook?: ClipperAccountCreationRunbookItem[];
   sourceArtifacts: {
     accountCreationPackPath: string;
     accountClaimSheetPath: string;
@@ -1591,6 +1721,58 @@ interface ClipperCredentialTransferKitItem {
   nextStep: string;
 }
 
+interface ClipperCredentialDriveIntakeRunbookItem {
+  rank: number;
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  driveSearchQueries: string[];
+  driveSearchUrls: string[];
+  localDropFileNames: string[];
+  acceptedInputFormats: string[];
+  detectedLocalFiles: string[];
+  detectedEnvVars: string[];
+  acceptedEnvVars: string[];
+  missingSuggestedEnvVars: string[];
+  importReady: boolean;
+  operatorChecklist: string[];
+  nextStep: string;
+}
+
+interface ClipperCredentialSetupQueueItem {
+  rank: number;
+  id: string;
+  label: string;
+  platform: ClipperPlatform | "system";
+  status: ClipperCredentialSetupStatus;
+  portalUrl: string | null;
+  docsUrl: string;
+  configuredEnvVars: string[];
+  missingSuggestedEnvVars: string[];
+  acceptedEnvVarGroups: string[][];
+  localDropFileNames: string[];
+  envTemplate: string;
+  verificationCommand: string;
+  nextStep: string;
+}
+
+interface ClipperGoogleDriveOAuthBridge {
+  status: ClipperGoogleDriveOAuthBridgeStatus;
+  configured: boolean;
+  connected: boolean;
+  provider: string | null;
+  authPath: string;
+  callbackPath: string;
+  scope: string | null;
+  redirectUri: string | null;
+  storageError: string | null;
+  configuredEnvVars: string[];
+  missingEnvVars: string[];
+  requiredEnvVarGroups: string[][];
+  nextStep: string;
+}
+
 type ClipperCredentialDropStarterStatus = "not_prepared" | "prepared" | "ready";
 type ClipperCredentialDropStarterFileStatus = "missing" | "created" | "exists" | "not_needed";
 
@@ -1639,6 +1821,11 @@ interface ClipperCredentialSetupSummary {
   credentialDropDiagnostic: ClipperCredentialDropDiagnosticSummary;
   items: ClipperCredentialSetupItem[];
   importPlan: ClipperCredentialImportPlanItem[];
+  googleDriveOAuthBridge: ClipperGoogleDriveOAuthBridge;
+  credentialSetupQueuePath: string;
+  credentialSetupQueueMarkdownPath: string;
+  credentialSetupQueueCsvPath: string;
+  credentialSetupQueue: ClipperCredentialSetupQueueItem[];
   credentialPastePack: ClipperCredentialPastePackItem[];
   credentialPasteTemplate: string;
   credentialPasteChecklist: string[];
@@ -1649,6 +1836,11 @@ interface ClipperCredentialSetupSummary {
   credentialTransferKitItems: ClipperCredentialTransferKitItem[];
   credentialTransferTemplate: string;
   credentialTransferChecklist: string[];
+  credentialDriveIntakeRunbookPath: string;
+  credentialDriveIntakeRunbookMarkdownPath: string;
+  credentialDriveIntakeRunbookCsvPath: string;
+  credentialDriveIntakeRunbookGeneratedAt: string | null;
+  credentialDriveIntakeRunbook: ClipperCredentialDriveIntakeRunbookItem[];
   credentialDropStarterPath: string;
   credentialDropStarterMarkdownPath: string;
   credentialDropStarterGeneratedAt: string | null;
@@ -2524,6 +2716,48 @@ interface ClipperIntakeRefreshSweepSummary {
   nextStep: string;
 }
 
+interface ClipperExternalConnectAutopilotStep {
+  id: string;
+  label: string;
+  status: ClipperExternalConnectAutopilotStepStatus;
+  message: string;
+  artifactPath: string | null;
+  nextStep: string;
+}
+
+interface ClipperExternalConnectAutopilotSummary {
+  status: ClipperExternalConnectAutopilotStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  steps: ClipperExternalConnectAutopilotStep[];
+  totals: {
+    steps: number;
+    completed: number;
+    blocked: number;
+    failed: number;
+    accountProfiles: number;
+    accountReady: number;
+    accountEvidenceMissing: number;
+    developerAppsExpected: number;
+    developerAppsApproved: number;
+    permissions: number;
+    permissionsApproved: number;
+    oauthConnections: number;
+    oauthReady: number;
+    tokensSaved: number;
+    externalItems: number;
+    externalBlocked: number;
+    ownerItems: number;
+    ownerBlocked: number;
+    sourceItems: number;
+    sourceFilesNeeded: number;
+    activationBlocked: number;
+  };
+  artifactPaths: Record<string, string>;
+  nextStep: string;
+}
+
 interface ClipperExternalConnectSprintItem {
   id: string;
   rank: number;
@@ -2698,16 +2932,43 @@ interface ClipperGoLiveCompletionExternalSessionItem {
   nextStep: string;
 }
 
+interface ClipperGoLiveCompletionCloseoutQueueItem {
+  id: string;
+  rank: number;
+  requirementId: string;
+  label: string;
+  phase: ClipperBlockerUnlockPhase | "go_live";
+  status: ClipperGoLiveCompletionRequirementStatus;
+  owner: string;
+  lane: "external_portal" | "evidence_upload" | "verification" | "done";
+  priority: "critical" | "high" | "medium" | "done";
+  portalUrls: string[];
+  actionUrl: string | null;
+  artifactPath: string;
+  evidenceDropPath: string;
+  evidenceRows: string[];
+  requiredEvidence: string[];
+  blockers: string[];
+  operatorSteps: string[];
+  doneCriteria: string[];
+  verificationCommand: string;
+  nextStep: string;
+}
+
 interface ClipperGoLiveCompletionAuditSummary {
   status: ClipperGoLiveCompletionAuditStatus;
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
   externalSessionCsvPath: string;
+  closeoutQueuePath?: string;
+  closeoutQueueMarkdownPath?: string;
+  closeoutQueueCsvPath?: string;
   readyToPublish: boolean;
   score: number;
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
+  closeoutQueue?: ClipperGoLiveCompletionCloseoutQueueItem[];
   totals: {
     requirements: number;
     verified: number;
@@ -2867,6 +3128,44 @@ interface ClipperOfficialPermissionMatrixSummary {
   nextStep: string;
 }
 
+interface ClipperOfficialPermissionSourceAuditItem {
+  platform: ClipperPlatform;
+  label: string;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  accessMode: "public" | "login_required";
+  submitDecision: "request_now" | "human_login_recheck";
+  scopes: string[];
+  officialUrls: string[];
+  verifiedClaims: string[];
+  reviewerEvidence: string[];
+  launchEvidenceRows: string[];
+  approvalEvidenceRows: string[];
+  recheckSteps: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperOfficialPermissionSourceAuditSummary {
+  status: ClipperOfficialPermissionSourceAuditStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  matrixPath: string;
+  items: ClipperOfficialPermissionSourceAuditItem[];
+  totals: {
+    platforms: number;
+    publicVerified: number;
+    loginRequired: number;
+    requestNow: number;
+    humanRecheck: number;
+    scopes: number;
+    evidenceRows: number;
+    blockers: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperPermissionSubmissionDossierItem {
   id: string;
   platform: ClipperPlatform;
@@ -2895,13 +3194,61 @@ interface ClipperPermissionSubmissionDossierItem {
   nextStep: string;
 }
 
+interface ClipperPermissionSubmissionQueueItem {
+  rank: number;
+  id: string;
+  platform: ClipperPlatform;
+  platformLabel: string;
+  scope: string;
+  status: ClipperPermissionSubmissionDossierStatus;
+  sourceStatus: ClipperOfficialPermissionSourceStatus;
+  submitDecision: "request_now" | "human_login_recheck";
+  accessMode: "public" | "login_required";
+  developerPortalUrl: string;
+  officialReferenceUrl: string;
+  requestedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  reviewerEvidence: string[];
+  submissionSteps: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperPermissionSubmitRunbookItem {
+  rank: number;
+  id: string;
+  platform: ClipperPlatform;
+  platformLabel: string;
+  scope: string;
+  status: ClipperPermissionSubmissionDossierStatus;
+  submitDecision: "request_now" | "human_login_recheck";
+  portalUrl: string;
+  officialReferenceUrl: string;
+  copyBlock: string;
+  requestedEvidenceRow: string;
+  approvedEvidenceRow: string;
+  proofChecklist: string[];
+  portalSteps: string[];
+  blockers: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
 interface ClipperPermissionSubmissionDossierSummary {
   status: ClipperPermissionSubmissionDossierStatus;
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
   csvPath: string;
+  submissionQueuePath: string;
+  submissionQueueMarkdownPath: string;
+  submissionQueueCsvPath: string;
+  submitRunbookPath?: string;
+  submitRunbookMarkdownPath?: string;
+  submitRunbookCsvPath?: string;
   items: ClipperPermissionSubmissionDossierItem[];
+  submissionQueue: ClipperPermissionSubmissionQueueItem[];
+  submitRunbook?: ClipperPermissionSubmitRunbookItem[];
   sourceArtifacts: {
     permissionRequestPackPath: string;
     officialPermissionMatrixPath: string;
@@ -2960,6 +3307,110 @@ interface ClipperPublisherConnectorSummary {
     ready: number;
     partial: number;
     blocked: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperMetricoolPublishingChannel {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  metricoolBrandId: string;
+  metricoolBrandName: string;
+  metricoolBrandStatus: "ready_to_connect" | "draft_only" | "optional" | "missing";
+  metricoolBlogId: string | null;
+  metricoolTimezone: string | null;
+  metricoolSource: "live" | "cache" | "plan";
+  networks: MetricoolNetwork[];
+  connectedNetworks: MetricoolNetwork[];
+  accountStatus: ClipperAccountStatus;
+  dailyClipTarget: number;
+  weeklyViewsGoal: number;
+  connectedProfiles: number;
+  requiredProfiles: number;
+  publishGate: "blocked" | "approval_required_ready";
+  connectPortalUrl: string;
+  permissionsToGrant: string[];
+  connectionSteps: string[];
+  evidenceNeeded: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolPublishingSummary {
+  status: ClipperMetricoolPublishingStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  mcpUrl: string;
+  mcpReady: boolean;
+  missingEnv: string[];
+  requireApprovalForPublish: boolean;
+  primaryBridge: "metricool";
+  directPlatformApisNeeded: boolean;
+  recommendedPlan: string;
+  channels: ClipperMetricoolPublishingChannel[];
+  totals: {
+    channels: number;
+    readyForApprovalQueue: number;
+    blocked: number;
+    requiredProfiles: number;
+    connectedProfiles: number;
+  };
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolExecutionQueueItem {
+  id: string;
+  postId: string;
+  queueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  status: ClipperPublisherExecutionItemStatus;
+  approvalRequired: boolean;
+  canSendNow: boolean;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  requestSpec: {
+    bridge: "metricool";
+    endpoint: string;
+    method: "approval_required";
+    payloadFields: string[];
+    mediaSource: string;
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    done: boolean;
+    evidence: string;
+  }>;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolExecutionQueueSummary {
+  status: ClipperMetricoolExecutionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceAutomationRunId: string | null;
+  publishMode: "draft_only" | "approval_required" | "auto_after_connection";
+  realPublishEnabled: boolean;
+  items: ClipperMetricoolExecutionQueueItem[];
+  totals: {
+    items: number;
+    blocked: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
   };
   nextStep: string;
 }
@@ -3481,6 +3932,139 @@ interface ClipperRobertNextActionsSummary {
   nextStep: string;
 }
 
+interface ClipperLaunchLaneMatrixItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  status: ClipperLaunchLaneStatus;
+  activationScore: number;
+  gates: {
+    account: boolean;
+    developerApp: boolean;
+    permissions: boolean;
+    credentials: boolean;
+    oauth: boolean;
+    sourceSupply: boolean;
+    publishing: boolean;
+  };
+  accountEvidenceStatus: ClipperAccountEvidenceItemStatus | "missing";
+  developerAppStatus: ClipperDeveloperAppEvidenceItemStatus | "missing";
+  permissionsApproved: number;
+  permissionsTotal: number;
+  missingEnvVars: string[];
+  tokenSaved: boolean;
+  sourceReadyItems: number;
+  readyToPostItems: number;
+  publishGate: ClipperPublisherConnectorItem["publishGate"] | "blocked";
+  blockers: string[];
+  nextAction: string;
+  evidenceRows: string[];
+  portalUrls: Array<{ label: string; url: string }>;
+  executionSteps: Array<{
+    id: string;
+    lane: "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_supply" | "publishing";
+    label: string;
+    status: "done" | "ready_to_execute" | "waiting" | "blocked";
+    owner: "robert" | "user" | "platform";
+    portalUrl: string | null;
+    evidenceRow: string | null;
+    proofChecklist: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+}
+
+interface ClipperLaunchLaneExecutionQueueItem {
+  rank: number;
+  id: string;
+  laneId: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  handle: string;
+  actionLane: ClipperLaunchLaneMatrixItem["executionSteps"][number]["lane"];
+  status: ClipperLaunchLaneMatrixItem["executionSteps"][number]["status"];
+  owner: ClipperLaunchLaneMatrixItem["executionSteps"][number]["owner"];
+  label: string;
+  portalUrl: string | null;
+  evidenceRow: string | null;
+  proofChecklist: string[];
+  doneCriteria: string[];
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperLaunchLaneMatrixSummary {
+  status: ClipperLaunchLaneMatrixStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  executionQueuePath: string;
+  executionQueueMarkdownPath: string;
+  executionQueueCsvPath: string;
+  closeoutFiles: {
+    credentialDiagnosticPath: string;
+    launchEvidenceDiagnosticPath: string;
+    ownerEvidenceDropPath: string;
+    sourceDropDiagnosticPath: string;
+    sourceSupplyKitPath: string;
+    completionAuditPath: string;
+  };
+  executionTotals: {
+    steps: number;
+    done: number;
+    readyToExecute: number;
+    waiting: number;
+    blocked: number;
+    robertOwned: number;
+    userOwned: number;
+    platformOwned: number;
+    withPortalUrls: number;
+    withEvidenceRows: number;
+  };
+  executionQueue: ClipperLaunchLaneExecutionQueueItem[];
+  topUnlocks: Array<{
+    rank: number;
+    laneId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    affectedLanes: number;
+    affectedLaneIds: string[];
+    affectedAccounts: string[];
+    stepId: string;
+    lane: ClipperLaunchLaneMatrixItem["executionSteps"][number]["lane"];
+    status: ClipperLaunchLaneMatrixItem["executionSteps"][number]["status"];
+    owner: ClipperLaunchLaneMatrixItem["executionSteps"][number]["owner"];
+    label: string;
+    portalUrl: string | null;
+    evidenceRow: string | null;
+    nextStep: string;
+  }>;
+  items: ClipperLaunchLaneMatrixItem[];
+  totals: {
+    lanes: number;
+    ready: number;
+    activationReady: number;
+    waiting: number;
+    blocked: number;
+    accountsReady: number;
+    developerAppsReady: number;
+    permissionsReady: number;
+    credentialsReady: number;
+    oauthReady: number;
+    sourceReady: number;
+    publishingReady: number;
+    averageActivationScore: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperLaunchEvidenceFixPackItem {
   id: string;
   rank: number;
@@ -3519,6 +4103,95 @@ interface ClipperLaunchEvidenceFixPackSummary {
     format: number;
     currentStateGaps: number;
     rejectedRows: number;
+  };
+  nextStep: string;
+}
+
+type ClipperExternalEvidenceWorkbookStatus = "not_prepared" | "needs_evidence" | "ready";
+
+interface ClipperExternalEvidenceWorkbookItem {
+  id: string;
+  rank: number;
+  priority: "critical" | "high" | "medium";
+  lane: ClipperOwnerConnectPackItem["lane"] | "source_rights" | "public_url" | "format";
+  platform: ClipperPlatform | "system" | "mixed";
+  kind: string;
+  identifier: string | null;
+  label: string;
+  evidenceSource: ClipperLaunchEvidenceFixPackItem["evidenceSource"];
+  fixCategory: ClipperLaunchEvidenceFixPackItem["fixCategory"];
+  portalUrl: string | null;
+  importTarget: string;
+  suggestedReplacementRow: string;
+  requiredFix: string;
+  suggestedNotes: string;
+  ownerConnectItemId: string | null;
+  checklist: string[];
+  doneCriteria: string[];
+  nextStep: string;
+}
+
+interface ClipperExternalEvidenceWorkbookSummary {
+  status: ClipperExternalEvidenceWorkbookStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  importCsvPath: string;
+  sourceArtifacts: {
+    ownerConnectPackPath: string;
+    launchEvidenceFixPackPath: string;
+    ownerConnectEvidenceDropPath: string;
+  };
+  items: ClipperExternalEvidenceWorkbookItem[];
+  importRows: string[];
+  totals: {
+    items: number;
+    critical: number;
+    high: number;
+    medium: number;
+    accountProof: number;
+    developerApps: number;
+    permissionProof: number;
+    publicUrl: number;
+    sourceRights: number;
+    format: number;
+    readyRows: number;
+  };
+  nextStep: string;
+}
+
+type ClipperEvidenceIntegrityAuditStatus = "clean" | "blocked";
+
+interface ClipperEvidenceIntegrityAuditItem {
+  id: string;
+  severity: "critical" | "warning";
+  artifactPath: string;
+  relativePath: string;
+  line: number;
+  category: "fake_or_test" | "placeholder" | "local_url" | "template_value";
+  signal: string;
+  evidencePreview: string;
+  nextStep: string;
+}
+
+interface ClipperEvidenceIntegrityAuditSummary {
+  status: ClipperEvidenceIntegrityAuditStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  scannedFiles: number;
+  scannedPaths: string[];
+  items: ClipperEvidenceIntegrityAuditItem[];
+  totals: {
+    findings: number;
+    critical: number;
+    warning: number;
+    fakeOrTest: number;
+    placeholder: number;
+    localUrl: number;
+    templateValue: number;
   };
   nextStep: string;
 }
@@ -4372,6 +5045,8 @@ interface ClipperProductionUrlSetupSummary {
   markdownPath: string;
   publicBaseUrl: string;
   productionUrlReady: boolean;
+  productionUrlStable: boolean;
+  productionUrlStability: "local" | "temporary_tunnel" | "stable_public";
   productionUrlNote: string;
   requiredEnvVar: "PUBLIC_BASE_URL";
   requiredProtocol: "https";
@@ -4450,6 +5125,25 @@ interface ClipperProductionUrlVerificationSummary {
     pass: number;
     fail: number;
     skipped: number;
+  };
+  nextStep: string;
+}
+
+interface ClipperProductionLocalPreflightSummary {
+  status: "not_run" | "pass" | "partial" | "fail";
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  localBaseUrl: string;
+  productionBaseUrl: string;
+  productionUrlReady: boolean;
+  items: ClipperProductionUrlVerificationItem[];
+  totals: ClipperProductionUrlVerificationSummary["totals"];
+  publicUrlHandoff: {
+    recommendedOptionId: string;
+    publicBaseUrlTemplate: string;
+    registerAfterSave: string[];
+    nextStep: string;
   };
   nextStep: string;
 }
@@ -4732,6 +5426,8 @@ interface ClipperStatus {
   sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
   sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+  sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
+  sourceIngestionSprint: ClipperSourceIngestionSprintSummary;
   sourceHunt: ClipperSourceHuntSummary;
   rightsOutreach: ClipperRightsOutreachSummary;
   draftSpecs: ClipperDraftSpecSummary;
@@ -4766,10 +5462,13 @@ interface ClipperStatus {
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
   productionUrlVerification: ClipperProductionUrlVerificationSummary;
+  productionLocalPreflight: ClipperProductionLocalPreflightSummary;
   httpsTunnelPlan: ClipperHttpsTunnelPlanSummary;
   legalPolicyPack: ClipperLegalPolicyPackSummary;
   oauthGoLive: ClipperOAuthGoLiveSummary;
@@ -4784,11 +5483,15 @@ interface ClipperStatus {
   goLiveAutopilotRun: ClipperGoLiveAutopilotRunSummary;
   localDropSync: ClipperLocalDropSyncSummary;
   goLivePrepSweep: ClipperGoLivePrepSweepSummary;
+  externalConnectAutopilot: ClipperExternalConnectAutopilotSummary | null;
   ownerConnectPack: ClipperOwnerConnectPackSummary;
   dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
   launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
   robertNextActions: ClipperRobertNextActionsSummary;
+  launchLaneMatrix: ClipperLaunchLaneMatrixSummary;
   launchEvidenceFixPack: ClipperLaunchEvidenceFixPackSummary;
+  externalEvidenceWorkbook: ClipperExternalEvidenceWorkbookSummary;
+  evidenceIntegrityAudit: ClipperEvidenceIntegrityAuditSummary;
   growthAudit: ClipperGrowthAudit;
   platformRequirements: ClipperPlatformRequirement[];
   permissionQueue: ClipperPermissionRequest[];
@@ -4918,7 +5621,7 @@ function appReviewSubmissionPackBadge(status: ClipperAppReviewSubmissionPackStat
   return "border-amber-300/30 bg-amber-300/10 text-amber-200";
 }
 
-function officialPermissionMatrixBadge(status: ClipperOfficialPermissionMatrixStatus | ClipperOfficialPermissionSourceStatus) {
+function officialPermissionMatrixBadge(status: ClipperOfficialPermissionMatrixStatus | ClipperOfficialPermissionSourceAuditStatus | ClipperOfficialPermissionSourceStatus) {
   if (status === "verified" || status === "official_verified") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "needs_review" || status === "official_login_required") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -4935,6 +5638,13 @@ function clipperPlatformLabel(platform: ClipperPlatform) {
 function publisherConnectorBadge(status: ClipperPublisherConnectorStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function metricoolPublishingBadge(status: ClipperMetricoolPublishingStatus) {
+  if (status === "ready_for_approval_queue") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "ready_to_connect") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -5034,7 +5744,7 @@ function draftSpecBadge(status: ClipperDraftSpecStatus | ClipperDraftSpecItemSta
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function sourceAcquisitionBadge(status: ClipperSourceAcquisitionStatus | ClipperSourceSupplyDropKitStatus | ClipperSourceAcquisitionCategory["priority"]) {
+function sourceAcquisitionBadge(status: ClipperSourceAcquisitionStatus | ClipperSourceSupplyDropKitStatus | ClipperSourceDiscoveryHandoffStatus | ClipperSourceAcquisitionCategory["priority"]) {
   if (status === "ready" || status === "watch") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial" || status === "high") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -5123,6 +5833,13 @@ function credentialSetupBadge(status: ClipperCredentialSetupStatus) {
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
+function googleDriveOAuthBridgeBadge(status: ClipperGoogleDriveOAuthBridgeStatus) {
+  if (status === "connected") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "ready_to_authorize") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
+  if (status === "missing_keys") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
 function credentialDoctorBadge(status: ClipperCredentialDoctorStatus | ClipperCredentialSetupStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "partial") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
@@ -5158,9 +5875,9 @@ function permissionRequestPackBadge(status: ClipperPermissionRequestPackStatus) 
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
-function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperPostConnectActivationSweepStatus | ClipperIntakeRefreshSweepStatus | ClipperExternalConnectSprintStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
+function goLiveAutopilotBadge(status: ClipperGoLiveAutopilotBriefStatus | ClipperGoLiveAutopilotActionStatus | ClipperGoLiveAutopilotRunStatus | ClipperGoLiveAutopilotRunItemStatus | ClipperLocalDropSyncStatus | ClipperLocalDropSyncItemStatus | ClipperGoLivePrepSweepStatus | ClipperGoLivePrepSweepItemStatus | ClipperPostConnectActivationSweepStatus | ClipperIntakeRefreshSweepStatus | ClipperExternalConnectAutopilotStatus | ClipperExternalConnectAutopilotStepStatus | ClipperExternalConnectSprintStatus | ClipperOwnerConnectPackStatus | ClipperOwnerConnectPackItemStatus | ClipperDropzoneReadyPackStatus | ClipperDropzoneReadyPackItemStatus | ClipperRobertNextActionsStatus | ClipperRobertNextActionItem["status"] | ClipperLaunchLaneMatrixStatus | ClipperLaunchLaneStatus | ClipperLaunchEvidenceFixPackStatus | ClipperPermissionSubmissionDossierStatus) {
   if (status === "ready" || status === "done" || status === "completed") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
-  if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped" || status === "ready_to_execute" || status === "needs_action" || status === "needs_fix" || status === "needs_login_recheck" || status === "ready_to_submit") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  if (status === "in_progress" || status === "run_in_app" || status === "waiting" || status === "partial" || status === "skipped" || status === "ready_to_execute" || status === "activation_ready" || status === "needs_action" || status === "needs_fix" || status === "needs_login_recheck" || status === "ready_to_submit") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   if (status === "not_prepared" || status === "not_run") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -5174,6 +5891,12 @@ function growthAuditBadge(status: ClipperGrowthAuditStatus) {
 function driveWorkspaceBadge(status: ClipperDriveWorkspaceStatus) {
   if (status === "ready") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
   if (status === "needs_oauth") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function productionUrlStabilityBadge(stability: ClipperProductionUrlSetupSummary["productionUrlStability"]) {
+  if (stability === "stable_public") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (stability === "temporary_tunnel") return "border-amber-300/30 bg-amber-300/10 text-amber-200";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
 
@@ -5294,7 +6017,9 @@ export default function ClippersPage() {
   const [sourceDropImport, setSourceDropImport] = useState<ClipperSourceDropImportSummary | null>(null);
   const [sourceIngestionSprint, setSourceIngestionSprint] = useState<ClipperSourceIngestionSprintSummary | null>(null);
   const [intakeRefreshSweep, setIntakeRefreshSweep] = useState<ClipperIntakeRefreshSweepSummary | null>(null);
+  const [externalConnectAutopilot, setExternalConnectAutopilot] = useState<ClipperExternalConnectAutopilotSummary | null>(null);
   const [externalConnectSprint, setExternalConnectSprint] = useState<ClipperExternalConnectSprintSummary | null>(null);
+  const [officialPermissionSourceAudit, setOfficialPermissionSourceAudit] = useState<ClipperOfficialPermissionSourceAuditSummary | null>(null);
   const [renderedClips, setRenderedClips] = useState<ClipperRenderedClipSummary | null>(null);
   const [publishingPackage, setPublishingPackage] = useState<ClipperPublishingPackageSummary | null>(null);
   const [productionPublicUrl, setProductionPublicUrl] = useState("");
@@ -5317,6 +6042,8 @@ export default function ClippersPage() {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
   }, [status?.credentialDoctor]);
+  const visibleExternalConnectAutopilot = externalConnectAutopilot || status?.externalConnectAutopilot || null;
+  const visibleSourceIngestionSprint = sourceIngestionSprint || status?.sourceIngestionSprint || null;
 
   const refreshPostConnectActivationState = async (sourceLabel: string) => {
     try {
@@ -5379,12 +6106,23 @@ export default function ClippersPage() {
         "/api/clippers/prepare-oauth-connection-pack",
         "/api/clippers/prepare-platform-readiness",
       ];
-      let latestStatus: ClipperStatus | null = null;
+      let latestStatus = queryClient.getQueryData<ClipperStatus>(["/api/clippers/status"]) || null;
       for (const endpoint of steps) {
         const response = await fetch(endpoint, { method: "POST" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || `No pude refrescar ${endpoint}`);
-        latestStatus = data.status;
+        if (data.status) {
+          latestStatus = data.status;
+        } else if (latestStatus) {
+          latestStatus = {
+            ...latestStatus,
+            ...(data.credentialReload?.credentialSetup ? { credentialSetup: data.credentialReload.credentialSetup } : {}),
+            ...(data.credentialDoctor ? { credentialDoctor: data.credentialDoctor } : {}),
+            ...(data.oauthGoLive ? { oauthGoLive: data.oauthGoLive } : {}),
+            ...(data.oauthConnectionPack ? { oauthConnectionPack: data.oauthConnectionPack } : {}),
+            ...(data.platformReadiness ? { platformReadiness: data.platformReadiness } : {}),
+          };
+        }
       }
       const sweepResponse = await fetch("/api/clippers/run-post-connect-activation-sweep", { method: "POST" });
       const sweepData = await sweepResponse.json();
@@ -5472,10 +6210,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-account-identity-kit", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar el identity kit");
-      return data as { accountIdentityKit: ClipperAccountIdentityKitSummary; status: ClipperStatus };
+      return data as { accountIdentityKit: ClipperAccountIdentityKitSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountIdentityKit: data.accountIdentityKit } : current);
+      }
       toast({
         title: "Identity kit preparado",
         description: `${data.accountIdentityKit.totals.platformProfiles} perfiles y ${data.accountIdentityKit.totals.firstPostIdeas} ideas iniciales.`,
@@ -5491,10 +6233,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-account-launch-kit", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar el launch kit");
-      return data as { accountLaunchKit: ClipperAccountLaunchKitSummary; status: ClipperStatus };
+      return data as { accountLaunchKit: ClipperAccountLaunchKitSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountLaunchKit: data.accountLaunchKit } : current);
+      }
       toast({
         title: "Launch kit preparado",
         description: `${data.accountLaunchKit.totals.tasks} tareas para crear/verificar cuentas por plataforma.`,
@@ -5529,10 +6275,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-account-creation-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar account creation pack");
-      return data as { accountCreationPack: ClipperAccountCreationPackSummary; status: ClipperStatus };
+      return data as { accountCreationPack: ClipperAccountCreationPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountCreationPack: data.accountCreationPack } : current);
+      }
       toast({
         title: "Account creation pack listo",
         description: `${data.accountCreationPack.totals.profiles} perfiles; ${data.accountCreationPack.totals.evidenceMissing} sin evidencia.`,
@@ -5548,10 +6298,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-account-setup-session", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar account setup session");
-      return data as { accountSetupSession: ClipperAccountSetupSessionSummary; status: ClipperStatus };
+      return data as { accountSetupSession: ClipperAccountSetupSessionSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountSetupSession: data.accountSetupSession } : current);
+      }
       toast({
         title: "Account setup listo",
         description: `${data.accountSetupSession.totals.readyToCreate} cuentas listas para crear; ${data.accountSetupSession.totals.ready} verificadas.`,
@@ -5567,10 +6321,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-account-evidence-vault", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar evidencia de cuentas");
-      return data as { accountEvidence: ClipperAccountEvidenceSummary; status: ClipperStatus };
+      return data as { accountEvidence: ClipperAccountEvidenceSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountEvidence: data.accountEvidence } : current);
+      }
       toast({
         title: "Evidence vault listo",
         description: `${data.accountEvidence.totals.expected} templates, ${data.accountEvidence.totals.verified} verificados.`,
@@ -5586,10 +6344,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-developer-app-evidence-vault", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar evidencia de developer apps");
-      return data as { developerAppEvidence: ClipperDeveloperAppEvidenceSummary; status: ClipperStatus };
+      return data as { developerAppEvidence: ClipperDeveloperAppEvidenceSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, developerAppEvidence: data.developerAppEvidence } : current);
+      }
       toast({
         title: "Developer apps listas",
         description: `${data.developerAppEvidence.totals.expected} templates, ${data.developerAppEvidence.totals.approved} aprobadas.`,
@@ -5609,10 +6371,14 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude registrar evidencia de cuenta");
-      return data as { accountEvidence: ClipperAccountEvidenceSummary; status: ClipperStatus };
+      return data as { accountEvidence: ClipperAccountEvidenceSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, accountEvidence: data.accountEvidence } : current);
+      }
       toast({
         title: "Evidencia registrada",
         description: `${data.accountEvidence.totals.verified}/${data.accountEvidence.totals.expected} cuentas verificadas.`,
@@ -5633,10 +6399,14 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude registrar developer app");
-      return data as { developerAppEvidence: ClipperDeveloperAppEvidenceSummary; status: ClipperStatus };
+      return data as { developerAppEvidence: ClipperDeveloperAppEvidenceSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, developerAppEvidence: data.developerAppEvidence } : current);
+      }
       toast({
         title: "Developer app registrada",
         description: `${data.developerAppEvidence.totals.approved}/${data.developerAppEvidence.totals.expected} apps aprobadas.`,
@@ -5790,10 +6560,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-credential-setup", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar credenciales");
-      return data as { credentialSetup: ClipperCredentialSetupSummary; status: ClipperStatus };
+      return data as { credentialSetup: ClipperCredentialSetupSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, credentialSetup: data.credentialSetup } : current);
+      }
       toast({
         title: "Credential setup listo",
         description: `${data.credentialSetup.totals.ready}/${data.credentialSetup.totals.items} grupos listos.`,
@@ -5809,10 +6583,17 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-credential-drop-starter", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude crear starter files de credenciales");
-      return data as { credentialDropStarter: ClipperCredentialDropStarterSummary; status: ClipperStatus };
+      return data as { credentialDropStarter: ClipperCredentialDropStarterSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? {
+          ...current,
+          credentialSetup: { ...current.credentialSetup, credentialDropStarter: data.credentialDropStarter },
+        } : current);
+      }
       toast({
         title: "Starter files listos",
         description: `${data.credentialDropStarter.totals.created} creados, ${data.credentialDropStarter.totals.existing} existentes; rellena valores reales antes de importar.`,
@@ -5828,10 +6609,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-credential-doctor", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude correr credential doctor");
-      return data as { credentialDoctor: ClipperCredentialDoctorSummary; status: ClipperStatus };
+      return data as { credentialDoctor: ClipperCredentialDoctorSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, credentialDoctor: data.credentialDoctor } : current);
+      }
       toast({
         title: "Credential doctor listo",
         description: `${data.credentialDoctor.totals.ready}/${data.credentialDoctor.totals.items} grupos ready; ${data.credentialDoctor.totals.missing} faltantes.`,
@@ -5851,11 +6636,11 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude guardar la credencial");
-      return data as { credentialSecret: ClipperCredentialSecretWriteSummary; status: ClipperStatus };
+      return data as { credentialSecret: ClipperCredentialSecretWriteSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
       setCredentialSecretValue("");
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
         title: "Credencial guardada",
         description: `${data.credentialSecret.envVar} actualizada en ${data.credentialSecret.envFileName}.`,
@@ -5876,11 +6661,11 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude previsualizar el batch de credenciales");
-      return data as { credentialSecretsBatchPreview: ClipperCredentialSecretBatchWriteSummary; status: ClipperStatus };
+      return data as { credentialSecretsBatchPreview: ClipperCredentialSecretBatchWriteSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
       setCredentialBatchPreview(data.credentialSecretsBatchPreview);
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
         title: "Preview de keys listo",
         description: `${data.credentialSecretsBatchPreview.acceptedEnvVars.length} permitidas; ${data.credentialSecretsBatchPreview.rejectedEnvVars.length} rechazadas; ${data.credentialSecretsBatchPreview.skippedLines} skipped.`,
@@ -5900,12 +6685,12 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude guardar el batch de credenciales");
-      return data as { credentialSecretsBatch: ClipperCredentialSecretBatchWriteSummary; status: ClipperStatus };
+      return data as { credentialSecretsBatch: ClipperCredentialSecretBatchWriteSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
       setCredentialBatchText("");
       setCredentialBatchPreview(data.credentialSecretsBatch);
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
         title: "Credenciales batch guardadas",
         description: `${data.credentialSecretsBatch.acceptedEnvVars.length} guardadas; ${data.credentialSecretsBatch.rejectedEnvVars.length} rechazadas.`,
@@ -5922,11 +6707,11 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/import-credential-drop-files", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude importar archivos de credenciales");
-      return data as { credentialDropImport: ClipperCredentialSecretBatchWriteSummary; status: ClipperStatus };
+      return data as { credentialDropImport: ClipperCredentialSecretBatchWriteSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
       setCredentialBatchPreview(data.credentialDropImport);
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
       toast({
         title: "Drop credentials importadas",
         description: `${data.credentialDropImport.acceptedEnvVars.length} keys; ${data.credentialDropImport.filesImported || 0}/${data.credentialDropImport.filesScanned || 0} archivos.`,
@@ -5943,10 +6728,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/reload-credentials", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude recargar credenciales");
-      return data as { credentialReload: ClipperCredentialReloadSummary; status: ClipperStatus };
+      return data as { credentialReload: ClipperCredentialReloadSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, credentialSetup: data.credentialReload.credentialSetup } : current);
+      }
       const found = data.credentialReload.envFilesFound.length ? data.credentialReload.envFilesFound.join(", ") : "ninguno";
       toast({
         title: "Credenciales recargadas",
@@ -5964,10 +6753,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-platform-readiness", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar platform readiness");
-      return data as { platformReadiness: ClipperPlatformReadinessSummary; status: ClipperStatus };
+      return data as { platformReadiness: ClipperPlatformReadinessSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, platformReadiness: data.platformReadiness } : current);
+      }
       toast({
         title: "Platform readiness lista",
         description: `${data.platformReadiness.totals.ready}/${data.platformReadiness.totals.platforms} plataformas listas; ${data.platformReadiness.totals.blocked} bloqueadas.`,
@@ -5983,10 +6776,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-external-setup-queue", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar external setup");
-      return data as { externalSetupQueue: ClipperExternalSetupQueueSummary; status: ClipperStatus };
+      return data as { externalSetupQueue: ClipperExternalSetupQueueSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, externalSetupQueue: data.externalSetupQueue } : current);
+      }
       toast({
         title: "External setup listo",
         description: `${data.externalSetupQueue.totals.done}/${data.externalSetupQueue.totals.items} tareas listas; ${data.externalSetupQueue.totals.critical} criticas.`,
@@ -6002,10 +6799,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-external-execution-handoff", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar external handoff");
-      return data as { externalExecutionHandoff: ClipperExternalExecutionHandoffSummary; status: ClipperStatus };
+      return data as { externalExecutionHandoff: ClipperExternalExecutionHandoffSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, externalExecutionHandoff: data.externalExecutionHandoff } : current);
+      }
       toast({
         title: "External handoff listo",
         description: `${data.externalExecutionHandoff.totals.items} items; batch ${data.externalExecutionHandoff.batchTemplatePath}`,
@@ -6021,10 +6822,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-external-execution-session", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar external session");
-      return data as { externalExecutionSession: ClipperExternalExecutionSessionSummary; status: ClipperStatus };
+      return data as { externalExecutionSession: ClipperExternalExecutionSessionSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, externalExecutionSession: data.externalExecutionSession } : current);
+      }
       toast({
         title: "External session lista",
         description: `${data.externalExecutionSession.totals.doNow} do_now; ${data.externalExecutionSession.totals.blocked} blocked; ${data.externalExecutionSession.totals.envTemplates} env templates.`,
@@ -6040,10 +6845,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-external-launch-dossier", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar launch dossier");
-      return data as { externalLaunchDossier: ClipperExternalLaunchDossierSummary; status: ClipperStatus };
+      return data as { externalLaunchDossier: ClipperExternalLaunchDossierSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, externalLaunchDossier: data.externalLaunchDossier } : current);
+      }
       toast({
         title: "Launch dossier listo",
         description: `${data.externalLaunchDossier.totals.ready}/${data.externalLaunchDossier.totals.platforms} plataformas listas; ${data.externalLaunchDossier.totals.criticalActions} acciones criticas.`,
@@ -6059,10 +6868,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-platform-portal-checklist", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar platform portal checklist");
-      return data as { platformPortalChecklist: ClipperPlatformPortalChecklistSummary; status: ClipperStatus };
+      return data as { platformPortalChecklist: ClipperPlatformPortalChecklistSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, platformPortalChecklist: data.platformPortalChecklist } : current);
+      }
       toast({
         title: "Portal checklist listo",
         description: `${data.platformPortalChecklist.totals.ready}/${data.platformPortalChecklist.totals.platforms} plataformas listas; ${data.platformPortalChecklist.totals.portalActions} acciones; ${data.platformPortalChecklist.totals.evidenceRows} evidence rows.`,
@@ -6078,10 +6891,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-official-permission-matrix", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar matriz oficial de permisos");
-      return data as { officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary; status: ClipperStatus };
+      return data as { officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, officialPermissionMatrix: data.officialPermissionMatrix } : current);
+      }
       toast({
         title: "Matriz oficial lista",
         description: `${data.officialPermissionMatrix.totals.scopes} scopes; ${data.officialPermissionMatrix.totals.loginRequired} fuente requiere login.`,
@@ -6092,15 +6909,43 @@ export default function ClippersPage() {
     },
   });
 
+  const officialPermissionSourceAuditMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-official-permission-source-audit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar source audit oficial");
+      return data as {
+        officialPermissionSourceAudit: ClipperOfficialPermissionSourceAuditSummary;
+        officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+        status?: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      setOfficialPermissionSourceAudit(data.officialPermissionSourceAudit);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Source audit oficial listo",
+        description: `${data.officialPermissionSourceAudit.totals.publicVerified}/${data.officialPermissionSourceAudit.totals.platforms} public verified; ${data.officialPermissionSourceAudit.totals.loginRequired} requiere login.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar source audit", description: error.message, variant: "destructive" });
+    },
+  });
+
   const appReviewSubmissionPackMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-app-review-submission-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar app review pack");
-      return data as { appReviewSubmissionPack: ClipperAppReviewSubmissionPackSummary; status: ClipperStatus };
+      return data as { appReviewSubmissionPack: ClipperAppReviewSubmissionPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, appReviewSubmissionPack: data.appReviewSubmissionPack } : current);
+      }
       toast({
         title: "App review pack listo",
         description: `${data.appReviewSubmissionPack.totals.answers} respuestas y ${data.appReviewSubmissionPack.totals.evidenceItems} evidencias preparadas.`,
@@ -6116,10 +6961,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-publisher-connectors", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar publisher connectors");
-      return data as { publisherConnectors: ClipperPublisherConnectorSummary; status: ClipperStatus };
+      return data as { publisherConnectors: ClipperPublisherConnectorSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, publisherConnectors: data.publisherConnectors } : current);
+      }
       toast({
         title: "Publisher connectors listos",
         description: `${data.publisherConnectors.totals.ready}/${data.publisherConnectors.totals.platforms} conectores ready; ${data.publisherConnectors.totals.blocked} bloqueados.`,
@@ -6130,15 +6979,65 @@ export default function ClippersPage() {
     },
   });
 
+  const metricoolPublishingMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-publishing-plan", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool publishing");
+      return data as { metricoolPublishing: ClipperMetricoolPublishingSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolPublishing: data.metricoolPublishing } : current);
+      }
+      toast({
+        title: "Metricool publishing listo",
+        description: `${data.metricoolPublishing.totals.readyForApprovalQueue}/${data.metricoolPublishing.totals.channels} canales listos; ${data.metricoolPublishing.totals.connectedProfiles}/${data.metricoolPublishing.totals.requiredProfiles} perfiles conectados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolExecutionQueueMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-execution-queue", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar cola Metricool");
+      return data as { metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolExecutionQueue: data.metricoolExecutionQueue } : current);
+      }
+      toast({
+        title: "Cola Metricool lista",
+        description: `${data.metricoolExecutionQueue.totals.queuedForApproval} en approval; ${data.metricoolExecutionQueue.totals.blocked} bloqueados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar cola Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
   const publisherExecutionQueueMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-publisher-execution-queue", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar publisher execution queue");
-      return data as { publisherExecutionQueue: ClipperPublisherExecutionQueueSummary; status: ClipperStatus };
+      return data as { publisherExecutionQueue: ClipperPublisherExecutionQueueSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, publisherExecutionQueue: data.publisherExecutionQueue } : current);
+      }
       toast({
         title: "Execution queue lista",
         description: `${data.publisherExecutionQueue.totals.items} items; ${data.publisherExecutionQueue.totals.blocked} bloqueados; ${data.publisherExecutionQueue.totals.queuedForApproval} en approval.`,
@@ -6154,10 +7053,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-production-url-setup", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar production URL setup");
-      return data as { productionUrlSetup: ClipperProductionUrlSetupSummary; status: ClipperStatus };
+      return data as { productionUrlSetup: ClipperProductionUrlSetupSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, productionUrlSetup: data.productionUrlSetup } : current);
+      }
       toast({
         title: "Production URL setup listo",
         description: data.productionUrlSetup.productionUrlReady ? "URL publica HTTPS lista para redirect URIs." : "Falta PUBLIC_BASE_URL publica HTTPS para go-live.",
@@ -6187,6 +7090,25 @@ export default function ClippersPage() {
     },
   });
 
+  const productionLocalPreflightMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/verify-production-local-preflight", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude verificar preflight local");
+      return data as { productionLocalPreflight: ClipperProductionLocalPreflightSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Preflight local listo",
+        description: `${data.productionLocalPreflight.totals.pass}/${data.productionLocalPreflight.totals.endpoints} rutas locales pass; ${data.productionLocalPreflight.totals.fail} fail.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude verificar preflight local", description: error.message, variant: "destructive" });
+    },
+  });
+
   const productionPublicUrlMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/record-production-public-url", {
@@ -6196,11 +7118,31 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude guardar PUBLIC_BASE_URL");
-      return data as { productionPublicUrl: { publicBaseUrl: string; nextStep: string }; status: ClipperStatus };
+      return data as {
+        productionPublicUrl: {
+          publicBaseUrl: string;
+          nextStep: string;
+          productionUrlSetup?: ClipperProductionUrlSetupSummary;
+          legalPolicyPack?: ClipperLegalPolicyPackSummary;
+          appReviewDemoPack?: ClipperAppReviewDemoPackSummary;
+          developerApplicationDrafts?: ClipperDeveloperApplicationDraftsSummary;
+        };
+        status?: ClipperStatus;
+      };
     },
     onSuccess: (data) => {
       setProductionPublicUrl("");
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? {
+          ...current,
+          ...(data.productionPublicUrl.productionUrlSetup ? { productionUrlSetup: data.productionPublicUrl.productionUrlSetup } : {}),
+          ...(data.productionPublicUrl.legalPolicyPack ? { legalPolicyPack: data.productionPublicUrl.legalPolicyPack } : {}),
+          ...(data.productionPublicUrl.appReviewDemoPack ? { appReviewDemoPack: data.productionPublicUrl.appReviewDemoPack } : {}),
+          ...(data.productionPublicUrl.developerApplicationDrafts ? { developerApplicationDrafts: data.productionPublicUrl.developerApplicationDrafts } : {}),
+        } : current);
+      }
       toast({
         title: "Production URL guardada",
         description: `${data.productionPublicUrl.publicBaseUrl} quedo lista para redirect URIs.`,
@@ -6216,10 +7158,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-https-tunnel-plan", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar HTTPS tunnel plan");
-      return data as { httpsTunnelPlan: ClipperHttpsTunnelPlanSummary; status: ClipperStatus };
+      return data as { httpsTunnelPlan: ClipperHttpsTunnelPlanSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, httpsTunnelPlan: data.httpsTunnelPlan } : current);
+      }
       toast({
         title: "HTTPS tunnel plan listo",
         description: `${data.httpsTunnelPlan.options.length} opciones; recomendada ${data.httpsTunnelPlan.recommendedOptionId}.`,
@@ -6235,10 +7181,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-legal-policy-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar legal policy pack");
-      return data as { legalPolicyPack: ClipperLegalPolicyPackSummary; status: ClipperStatus };
+      return data as { legalPolicyPack: ClipperLegalPolicyPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, legalPolicyPack: data.legalPolicyPack } : current);
+      }
       toast({
         title: "Legal policy pack listo",
         description: data.legalPolicyPack.productionUrlReady ? "Privacy y Terms listos para app review." : "Privacy y Terms listos localmente; falta URL publica HTTPS.",
@@ -6254,10 +7204,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-app-review-demo-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar app review demo");
-      return data as { appReviewDemoPack: ClipperAppReviewDemoPackSummary; status: ClipperStatus };
+      return data as { appReviewDemoPack: ClipperAppReviewDemoPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, appReviewDemoPack: data.appReviewDemoPack } : current);
+      }
       toast({
         title: "Review demo lista",
         description: data.appReviewDemoPack.productionUrlReady ? "Demo publica lista para app review." : "Demo local lista; falta URL publica HTTPS.",
@@ -6273,10 +7227,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-developer-application-drafts", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar developer application drafts");
-      return data as { developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary; status: ClipperStatus };
+      return data as { developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, developerApplicationDrafts: data.developerApplicationDrafts } : current);
+      }
       toast({
         title: "Developer app drafts listos",
         description: `${data.developerApplicationDrafts.totals.scopes} scopes y ${data.developerApplicationDrafts.totals.checklistItems} pasos preparados.`,
@@ -6292,10 +7250,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-oauth-go-live", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar OAuth go-live");
-      return data as { oauthGoLive: ClipperOAuthGoLiveSummary; status: ClipperStatus };
+      return data as { oauthGoLive: ClipperOAuthGoLiveSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, oauthGoLive: data.oauthGoLive } : current);
+      }
       toast({
         title: "OAuth go-live listo",
         description: `${data.oauthGoLive.totals.ready}/${data.oauthGoLive.totals.platforms} plataformas ready; ${data.oauthGoLive.totals.blocked} bloqueadas.`,
@@ -6311,10 +7273,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-oauth-connection-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar OAuth connection pack");
-      return data as { oauthConnectionPack: ClipperOAuthConnectionPackSummary; status: ClipperStatus };
+      return data as { oauthConnectionPack: ClipperOAuthConnectionPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, oauthConnectionPack: data.oauthConnectionPack } : current);
+      }
       toast({
         title: "OAuth connection pack listo",
         description: `${data.oauthConnectionPack.totals.ready}/${data.oauthConnectionPack.totals.connections} conexiones ready; ${data.oauthConnectionPack.totals.tokensSaved} tokens guardados.`,
@@ -6568,6 +7534,25 @@ export default function ClippersPage() {
     },
   });
 
+  const externalConnectAutopilotMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/run-external-connect-autopilot", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude correr External Connect Autopilot");
+      return data as { externalConnectAutopilot: ClipperExternalConnectAutopilotSummary };
+    },
+    onSuccess: (data) => {
+      setExternalConnectAutopilot(data.externalConnectAutopilot);
+      toast({
+        title: "Connect autopilot listo",
+        description: `${data.externalConnectAutopilot.totals.completed}/${data.externalConnectAutopilot.totals.steps} pasos completos; ${data.externalConnectAutopilot.totals.blocked} bloqueados.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr Connect autopilot", description: error.message, variant: "destructive" });
+    },
+  });
+
   const externalConnectSprintMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-external-connect-sprint", { method: "POST" });
@@ -6653,10 +7638,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-robert-next-actions", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar Robert Next Actions");
-      return data as { robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus };
+      return data as { robertNextActions: ClipperRobertNextActionsSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, robertNextActions: data.robertNextActions } : current);
+      }
       toast({
         title: "Next actions listo",
         description: `${data.robertNextActions.totals.actions} acciones, ${data.robertNextActions.totals.critical} criticas, ${data.robertNextActions.totals.estimatedMinutes} min estimados.`,
@@ -6664,6 +7653,29 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar Next Actions", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const launchLaneMatrixMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-launch-lane-matrix", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Launch Lane Matrix");
+      return data as { launchLaneMatrix: ClipperLaunchLaneMatrixSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, launchLaneMatrix: data.launchLaneMatrix } : current);
+      }
+      toast({
+        title: "Launch lanes listo",
+        description: `${data.launchLaneMatrix.totals.ready}/${data.launchLaneMatrix.totals.lanes} lanes ready; score ${data.launchLaneMatrix.totals.averageActivationScore}%.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Launch lanes", description: error.message, variant: "destructive" });
     },
   });
 
@@ -6729,10 +7741,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-permission-tracker", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar el tracker de permisos");
-      return data as { permissionTracker: ClipperPermissionTrackerSummary; status: ClipperStatus };
+      return data as { permissionTracker: ClipperPermissionTrackerSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, permissionTracker: data.permissionTracker } : current);
+      }
       toast({
         title: "Permission tracker listo",
         description: `${data.permissionTracker.totals.permissions} permisos, ${data.permissionTracker.totals.blocked} bloqueados.`,
@@ -6748,10 +7764,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-permission-request-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar permission request pack");
-      return data as { permissionRequestPack: ClipperPermissionRequestPackSummary; status: ClipperStatus };
+      return data as { permissionRequestPack: ClipperPermissionRequestPackSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, permissionRequestPack: data.permissionRequestPack } : current);
+      }
       toast({
         title: "Permission request pack listo",
         description: `${data.permissionRequestPack.totals.permissions} solicitudes; ${data.permissionRequestPack.totals.blocked} bloqueadas.`,
@@ -6767,10 +7787,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-permission-submission-dossier", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar permission submission dossier");
-      return data as { permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status: ClipperStatus };
+      return data as { permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, permissionSubmissionDossier: data.permissionSubmissionDossier } : current);
+      }
       toast({
         title: "Permission dossier listo",
         description: `${data.permissionSubmissionDossier.totals.platforms} plataformas; ${data.permissionSubmissionDossier.totals.blocked} bloqueadas; ${data.permissionSubmissionDossier.totals.needsLoginRecheck} login recheck.`,
@@ -6790,10 +7814,14 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude registrar el permiso");
-      return data as { permissionTracker: ClipperPermissionTrackerSummary; status: ClipperStatus };
+      return data as { permissionTracker: ClipperPermissionTrackerSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, permissionTracker: data.permissionTracker } : current);
+      }
       toast({
         title: "Permiso actualizado",
         description: `${data.permissionTracker.totals.approved}/${data.permissionTracker.totals.permissions} aprobados; ${data.permissionTracker.totals.requested} solicitados.`,
@@ -6848,10 +7876,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-source-acquisition", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar source plan");
-      return data as { sourceAcquisition: ClipperSourceAcquisitionSummary; status: ClipperStatus };
+      return data as { sourceAcquisition: ClipperSourceAcquisitionSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, sourceAcquisition: data.sourceAcquisition } : current);
+      }
       toast({
         title: "Source plan listo",
         description: `${data.sourceAcquisition.totals.readyQueueSlots}/${data.sourceAcquisition.totals.dailySlots} slots listos; ${data.sourceAcquisition.totals.missingSourceSlots} sin fuente.`,
@@ -6867,10 +7899,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-source-supply-drop-kit", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar source drop kit");
-      return data as { sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary; status: ClipperStatus };
+      return data as { sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, sourceSupplyDropKit: data.sourceSupplyDropKit } : current);
+      }
       toast({
         title: "Source drop kit listo",
         description: `${data.sourceSupplyDropKit.totals.items} filas para cubrir supply semanal.`,
@@ -6878,6 +7914,25 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar source drop kit", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const sourceDiscoveryHandoffMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-source-discovery-handoff", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar source discovery handoff");
+      return data as { sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Source discovery listo",
+        description: `${data.sourceDiscoveryHandoff.totals.items} assets; ${data.sourceDiscoveryHandoff.totals.targetCandidates} candidatos objetivo.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar source discovery", description: error.message, variant: "destructive" });
     },
   });
 
@@ -6890,6 +7945,7 @@ export default function ClippersPage() {
     },
     onSuccess: (data) => {
       setSourceIngestionSprint(data.sourceIngestionSprint);
+      queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, sourceIngestionSprint: data.sourceIngestionSprint } : current);
       toast({
         title: "Source sprint listo",
         description: `${data.sourceIngestionSprint.totals.filesNeeded} files, ${data.sourceIngestionSprint.totals.metadataRowsNeeded} metadata, ${data.sourceIngestionSprint.totals.rightsNeeded} rights.`,
@@ -7088,10 +8144,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-production-queue", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar la cola");
-      return data as { queue: ClipperProductionQueueSummary; status: ClipperStatus };
+      return data as { queue: ClipperProductionQueueSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, productionQueue: data.queue } : current);
+      }
       toast({
         title: "Cola preparada",
         description: `${data.queue.items.length} items de produccion revisados por Rights Gate.`,
@@ -7153,10 +8213,14 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-draft-specs", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar draft specs");
-      return data as { draftSpecs: ClipperDraftSpecSummary; status: ClipperStatus };
+      return data as { draftSpecs: ClipperDraftSpecSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, draftSpecs: data.draftSpecs } : current);
+      }
       toast({
         title: "Draft specs listos",
         description: `${data.draftSpecs.totals.readyForEdit} specs listos para editar.`,
@@ -7196,11 +8260,15 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-publishing-package", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar publishing package");
-      return data as { publishingPackage: ClipperPublishingPackageSummary; status: ClipperStatus };
+      return data as { publishingPackage: ClipperPublishingPackageSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
       setPublishingPackage(data.publishingPackage);
-      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, publishingPackage: data.publishingPackage } : current);
+      }
       toast({
         title: "Publishing package listo",
         description: `${data.publishingPackage.totals.readyForManual}/${data.publishingPackage.totals.items} uploads ready_for_manual.`,
@@ -7777,6 +8845,15 @@ export default function ClippersPage() {
               Verify URL
             </Button>
             <Button
+              onClick={() => productionLocalPreflightMutation.mutate()}
+              disabled={productionLocalPreflightMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="verify-clippers-production-local-preflight-button"
+            >
+              {productionLocalPreflightMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Local preflight
+            </Button>
+            <Button
               onClick={() => httpsTunnelPlanMutation.mutate()}
               disabled={httpsTunnelPlanMutation.isPending || isLoading}
               className="bg-green-200 text-zinc-950 hover:bg-green-100"
@@ -7914,12 +8991,21 @@ export default function ClippersPage() {
             </Button>
             <Button
               onClick={() => externalConnectSprintMutation.mutate()}
-              disabled={externalConnectSprintMutation.isPending}
+              disabled={externalConnectSprintMutation.isPending || externalConnectAutopilotMutation.isPending}
               className="bg-blue-200 text-zinc-950 hover:bg-blue-100"
               data-testid="prepare-clippers-external-connect-sprint-button"
             >
               {externalConnectSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
               Connect sprint
+            </Button>
+            <Button
+              onClick={() => externalConnectAutopilotMutation.mutate()}
+              disabled={externalConnectAutopilotMutation.isPending || externalConnectSprintMutation.isPending || intakeRefreshSweepMutation.isPending}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="run-clippers-external-connect-autopilot-button"
+            >
+              {externalConnectAutopilotMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Connect autopilot
             </Button>
             <Button
               onClick={() => ownerConnectPackMutation.mutate()}
@@ -7947,6 +9033,15 @@ export default function ClippersPage() {
             >
               {robertNextActionsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Target className="mr-2 h-4 w-4" />}
               Next actions
+            </Button>
+            <Button
+              onClick={() => launchLaneMatrixMutation.mutate()}
+              disabled={launchLaneMatrixMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-launch-lane-matrix-button"
+            >
+              {launchLaneMatrixMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Gauge className="mr-2 h-4 w-4" />}
+              Launch lanes
             </Button>
             <Button
               onClick={() => launchEvidenceFixPackMutation.mutate()}
@@ -8140,12 +9235,21 @@ export default function ClippersPage() {
             </Button>
             <Button
               onClick={() => officialPermissionMatrixMutation.mutate()}
-              disabled={officialPermissionMatrixMutation.isPending || isLoading}
+              disabled={officialPermissionMatrixMutation.isPending || officialPermissionSourceAuditMutation.isPending || isLoading}
               className="bg-stone-200 text-zinc-950 hover:bg-stone-100"
               data-testid="prepare-clippers-official-permission-matrix-button"
             >
               {officialPermissionMatrixMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
               Permisos oficiales
+            </Button>
+            <Button
+              onClick={() => officialPermissionSourceAuditMutation.mutate()}
+              disabled={officialPermissionSourceAuditMutation.isPending || officialPermissionMatrixMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-official-permission-source-audit-button"
+            >
+              {officialPermissionSourceAuditMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Source audit
             </Button>
             <Button
               onClick={() => developerApplicationDraftsMutation.mutate()}
@@ -8229,6 +9333,15 @@ export default function ClippersPage() {
               Viral discovery
             </Button>
             <Button
+              onClick={() => sourceDiscoveryHandoffMutation.mutate()}
+              disabled={sourceDiscoveryHandoffMutation.isPending || isLoading}
+              className="bg-amber-200 text-zinc-950 hover:bg-amber-100"
+              data-testid="prepare-clippers-source-discovery-handoff-button"
+            >
+              {sourceDiscoveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+              Source handoff
+            </Button>
+            <Button
               onClick={() => trendRightsOutreachMutation.mutate()}
               disabled={trendRightsOutreachMutation.isPending || isLoading}
               className="bg-amber-200 text-zinc-950 hover:bg-amber-100"
@@ -8272,6 +9385,24 @@ export default function ClippersPage() {
             >
               {publisherConnectorsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
               Publisher connectors
+            </Button>
+            <Button
+              onClick={() => metricoolPublishingMutation.mutate()}
+              disabled={metricoolPublishingMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-metricool-publishing-button"
+            >
+              {metricoolPublishingMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
+              Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolExecutionQueueMutation.mutate()}
+              disabled={metricoolExecutionQueueMutation.isPending || isLoading}
+              className="bg-blue-200 text-zinc-950 hover:bg-blue-100"
+              data-testid="prepare-clippers-metricool-execution-queue-button"
+            >
+              {metricoolExecutionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Cola Metricool
             </Button>
             <Button
               onClick={() => publisherExecutionQueueMutation.mutate()}
@@ -8351,6 +9482,60 @@ export default function ClippersPage() {
           </div>
         )}
 
+        {visibleExternalConnectAutopilot && (
+          <div className="rounded-md border border-teal-300/20 bg-teal-950/20 p-3" data-testid="clippers-external-connect-autopilot-global-result">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Connect autopilot</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{visibleExternalConnectAutopilot.nextStep}</p>
+              </div>
+              <Badge className={cn("w-fit border text-[10px]", goLiveAutopilotBadge(visibleExternalConnectAutopilot.status))}>{visibleExternalConnectAutopilot.status}</Badge>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
+              <p>Steps: {visibleExternalConnectAutopilot.totals.completed}/{visibleExternalConnectAutopilot.totals.steps}</p>
+              <p>Blocked: {visibleExternalConnectAutopilot.totals.blocked}</p>
+              <p>Accounts: {visibleExternalConnectAutopilot.totals.accountReady}/{visibleExternalConnectAutopilot.totals.accountProfiles}</p>
+              <p>Apps: {visibleExternalConnectAutopilot.totals.developerAppsApproved}/{visibleExternalConnectAutopilot.totals.developerAppsExpected}</p>
+              <p>Perms: {visibleExternalConnectAutopilot.totals.permissionsApproved}/{visibleExternalConnectAutopilot.totals.permissions}</p>
+              <p>OAuth: {visibleExternalConnectAutopilot.totals.oauthReady}/{visibleExternalConnectAutopilot.totals.oauthConnections}</p>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3">
+              <p>Tokens: {visibleExternalConnectAutopilot.totals.tokensSaved}</p>
+              <p>Sources needed: {visibleExternalConnectAutopilot.totals.sourceFilesNeeded}/{visibleExternalConnectAutopilot.totals.sourceItems}</p>
+              <p>Activation blocked: {visibleExternalConnectAutopilot.totals.activationBlocked}</p>
+            </div>
+            <div className="mt-2 grid gap-1 text-[10px] leading-4 text-teal-100/70 sm:grid-cols-2">
+              <p className="break-all">{visibleExternalConnectAutopilot.markdownPath}</p>
+              <p className="break-all">{visibleExternalConnectAutopilot.manifestPath}</p>
+            </div>
+          </div>
+        )}
+
+        {officialPermissionSourceAudit && (
+          <div className="rounded-md border border-emerald-300/20 bg-emerald-950/20 p-3" data-testid="clippers-official-permission-source-audit-global-result">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Permission source audit</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{officialPermissionSourceAudit.nextStep}</p>
+              </div>
+              <Badge className={cn("w-fit border text-[10px]", officialPermissionMatrixBadge(officialPermissionSourceAudit.status))}>{officialPermissionSourceAudit.status}</Badge>
+            </div>
+            <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
+              <p>Platforms: {officialPermissionSourceAudit.totals.platforms}</p>
+              <p>Public: {officialPermissionSourceAudit.totals.publicVerified}</p>
+              <p>Login: {officialPermissionSourceAudit.totals.loginRequired}</p>
+              <p>Scopes: {officialPermissionSourceAudit.totals.scopes}</p>
+              <p>Rows: {officialPermissionSourceAudit.totals.evidenceRows}</p>
+              <p>Blockers: {officialPermissionSourceAudit.totals.blockers}</p>
+            </div>
+            <div className="mt-2 grid gap-1 text-[10px] leading-4 text-emerald-100/70 sm:grid-cols-3">
+              <p className="break-all">{officialPermissionSourceAudit.markdownPath}</p>
+              <p className="break-all">{officialPermissionSourceAudit.csvPath}</p>
+              <p className="break-all">{officialPermissionSourceAudit.matrixPath}</p>
+            </div>
+          </div>
+        )}
+
         {externalConnectSprint && (
           <div className="rounded-md border border-cyan-300/20 bg-cyan-950/20 p-3" data-testid="clippers-external-connect-sprint-global-result">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -8375,26 +9560,26 @@ export default function ClippersPage() {
           </div>
         )}
 
-        {sourceIngestionSprint && (
+        {visibleSourceIngestionSprint && (
           <div className="rounded-md border border-sky-300/20 bg-sky-950/20 p-3" data-testid="clippers-source-ingestion-sprint-global-result">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-sky-200">Source sprint</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{sourceIngestionSprint.nextStep}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-300">{visibleSourceIngestionSprint.nextStep}</p>
               </div>
-              <Badge className={cn("w-fit border text-[10px]", sourceIngestionSprint.status === "ready" || sourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : sourceIngestionSprint.status === "needs_rights" || sourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                {sourceIngestionSprint.status}
+              <Badge className={cn("w-fit border text-[10px]", visibleSourceIngestionSprint.status === "ready" || visibleSourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : visibleSourceIngestionSprint.status === "needs_rights" || visibleSourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                {visibleSourceIngestionSprint.status}
               </Badge>
             </div>
             <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-3 lg:grid-cols-6">
-              <p>Items: {sourceIngestionSprint.totals.items}</p>
-              <p>Files: {sourceIngestionSprint.totals.filesNeeded}</p>
-              <p>Metadata: {sourceIngestionSprint.totals.metadataRowsNeeded}</p>
-              <p>Rights: {sourceIngestionSprint.totals.rightsNeeded}</p>
-              <p>Import: {sourceIngestionSprint.totals.importReady}</p>
-              <p>Ready: {sourceIngestionSprint.totals.rightsReadyAssets}/{sourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
+              <p>Items: {visibleSourceIngestionSprint.totals.items}</p>
+              <p>Files: {visibleSourceIngestionSprint.totals.filesNeeded}</p>
+              <p>Metadata: {visibleSourceIngestionSprint.totals.metadataRowsNeeded}</p>
+              <p>Rights: {visibleSourceIngestionSprint.totals.rightsNeeded}</p>
+              <p>Import: {visibleSourceIngestionSprint.totals.importReady}</p>
+              <p>Ready: {visibleSourceIngestionSprint.totals.rightsReadyAssets}/{visibleSourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
             </div>
-            <p className="mt-2 break-all text-[10px] leading-4 text-sky-100/70">{sourceIngestionSprint.markdownPath}</p>
+            <p className="mt-2 break-all text-[10px] leading-4 text-sky-100/70">{visibleSourceIngestionSprint.markdownPath}</p>
           </div>
         )}
 
@@ -8762,6 +9947,113 @@ export default function ClippersPage() {
                   <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveCompletionAudit.generatedAt)}</p>
                 )}
               </div>
+
+              {(status.goLiveCompletionAudit.closeoutQueue || []).length > 0 && (
+                <div className="rounded-md border border-violet-300/20 bg-violet-950/10 p-3" data-testid="clippers-go-live-completion-closeout-queue">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium text-white">Completion Closeout Queue</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Lista priorizada para cerrar lo que falta antes de publicar automaticamente.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="w-fit border border-red-300/30 bg-red-300/10 text-red-100">
+                        {(status.goLiveCompletionAudit.closeoutQueue || []).filter((item) => item.priority === "critical").length} critical
+                      </Badge>
+                      <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                        {(status.goLiveCompletionAudit.closeoutQueue || []).filter((item) => item.priority === "high").length} high
+                      </Badge>
+                      <Badge className="w-fit border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                        {(status.goLiveCompletionAudit.closeoutQueue || []).filter((item) => item.priority === "done").length} done
+                      </Badge>
+                      {(status.goLiveCompletionAudit.closeoutQueue || []).some((item) => item.evidenceRows.length > 0) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                          onClick={() => appendLaunchEvidenceBatchRows((status.goLiveCompletionAudit.closeoutQueue || []).flatMap((item) => item.evidenceRows))}
+                        >
+                          <UploadCloud className="mr-1 h-3 w-3" />
+                          Load closeout evidence
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1 text-xs text-zinc-600">
+                    {status.goLiveCompletionAudit.closeoutQueueMarkdownPath && <p className="break-all">Markdown: {status.goLiveCompletionAudit.closeoutQueueMarkdownPath}</p>}
+                    {status.goLiveCompletionAudit.closeoutQueueCsvPath && <p className="break-all">CSV: {status.goLiveCompletionAudit.closeoutQueueCsvPath}</p>}
+                  </div>
+                  <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5")}>
+                    {(status.goLiveCompletionAudit.closeoutQueue || []).slice(0, 10).map((item) => (
+                      <div key={item.id} className={tunnelBoxClass}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                            <p className="mt-1 text-xs text-zinc-600">{item.phase} · {item.owner}</p>
+                          </div>
+                          <Badge className={cn(
+                            "shrink-0 border text-[10px]",
+                            item.priority === "critical" ? "border-red-300/30 bg-red-300/10 text-red-100"
+                              : item.priority === "high" ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                : item.priority === "done" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                  : "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+                          )}>{item.priority}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className={cn("border text-[10px]", goLiveCompletionAuditBadge(item.status))}>{item.status}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.lane}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.evidenceRows.length} rows</Badge>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-amber-200">{item.nextStep}</p>
+                        {item.blockers.length > 0 && (
+                          <div className="mt-3 rounded-md border border-red-300/15 bg-red-950/10 p-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-red-200">Blocker</p>
+                            <p className="mt-1 line-clamp-3 text-xs leading-4 text-red-100/80">{item.blockers[0]}</p>
+                          </div>
+                        )}
+                        {item.operatorSteps.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs leading-4 text-zinc-500">
+                            {item.operatorSteps.slice(0, 3).map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="mt-3 break-all text-[11px] leading-4 text-zinc-600">Evidence: {item.evidenceDropPath}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.evidenceRows.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-green-300/20 bg-transparent px-2 text-xs text-green-100 hover:bg-green-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows(item.evidenceRows)}
+                            >
+                              <UploadCloud className="mr-1 h-3 w-3" />
+                              Rows
+                            </Button>
+                          )}
+                          {item.actionUrl?.startsWith("/api/clippers/") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                              onClick={() => goLiveAuditActionMutation.mutate(status.goLiveCompletionAudit.requirements.find((requirement) => requirement.id === item.requirementId) || status.goLiveCompletionAudit.requirements[0])}
+                              disabled={goLiveAuditActionMutation.isPending || isLoading}
+                            >
+                              {goLiveAuditActionMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />}
+                              Action
+                            </Button>
+                          )}
+                          {item.portalUrls[0] && (
+                            <a href={item.portalUrls[0]} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-300/20 px-2 text-xs text-violet-100 hover:bg-violet-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {status.goLiveCompletionAudit.externalSession?.length > 0 && (
                 <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3">
@@ -9152,6 +10444,295 @@ export default function ClippersPage() {
                             Use template
                           </Button>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {status.launchLaneMatrix && (
+                <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3" data-testid="clippers-launch-lane-matrix">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Launch Lane Matrix: {status.launchLaneMatrix.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.launchLaneMatrix.nextStep}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-sky-300/20 bg-transparent px-2 text-xs text-sky-100 hover:bg-sky-300/10"
+                        asChild
+                      >
+                        <a href="/clippers/external-portal-launcher" target="_blank" rel="noreferrer" data-testid="open-clippers-launch-lane-portal-launcher">
+                          <ExternalLink className="mr-1 h-3 w-3" />
+                          Portal launcher
+                        </a>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                        onClick={() => appendCredentialBatchTemplate(status.launchLaneMatrix.items.flatMap((lane) => lane.missingEnvVars), "Launch lane missing keys")}
+                        disabled={!status.launchLaneMatrix.items.some((lane) => lane.missingEnvVars.length > 0)}
+                        data-testid="append-clippers-launch-lane-matrix-keys-button"
+                      >
+                        <KeyRound className="mr-1 h-3 w-3" />
+                        All key vars
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.launchLaneMatrix.items.flatMap((lane) => lane.evidenceRows))}
+                        disabled={!status.launchLaneMatrix.items.some((lane) => lane.evidenceRows.length > 0)}
+                        data-testid="append-clippers-launch-lane-matrix-rows-button"
+                      >
+                        <UploadCloud className="mr-1 h-3 w-3" />
+                        All lane rows
+                      </Button>
+                      <Badge className={cn("w-fit border", goLiveAutopilotBadge(status.launchLaneMatrix.status))}>{status.launchLaneMatrix.status}</Badge>
+                      <Badge className="border border-emerald-300/20 bg-emerald-950/30 text-emerald-100">{status.launchLaneMatrix.totals.averageActivationScore}% score</Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Lanes: {status.launchLaneMatrix.totals.lanes}</p>
+                    <p>Ready: {status.launchLaneMatrix.totals.ready}</p>
+                    <p>Activation: {status.launchLaneMatrix.totals.activationReady}</p>
+                    <p>Blocked: {status.launchLaneMatrix.totals.blocked}</p>
+                    <p>Accounts: {status.launchLaneMatrix.totals.accountsReady}/{status.launchLaneMatrix.totals.lanes}</p>
+                    <p>Perms: {status.launchLaneMatrix.totals.permissionsReady}/{status.launchLaneMatrix.totals.lanes}</p>
+                    <p>OAuth: {status.launchLaneMatrix.totals.oauthReady}/{status.launchLaneMatrix.totals.lanes}</p>
+                    <p>Sources: {status.launchLaneMatrix.totals.sourceReady}/{status.launchLaneMatrix.totals.lanes}</p>
+                  </div>
+                  {status.launchLaneMatrix.executionTotals && (
+                    <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-2" data-testid="clippers-launch-lane-execution-summary">
+                      <div className="grid gap-2 text-[11px] leading-4 text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                        <p>Steps: {status.launchLaneMatrix.executionTotals.steps}</p>
+                        <p>Ready exec: {status.launchLaneMatrix.executionTotals.readyToExecute}</p>
+                        <p>Done: {status.launchLaneMatrix.executionTotals.done}</p>
+                        <p>Blocked steps: {status.launchLaneMatrix.executionTotals.blocked}</p>
+                        <p>User: {status.launchLaneMatrix.executionTotals.userOwned}</p>
+                        <p>Robert: {status.launchLaneMatrix.executionTotals.robertOwned}</p>
+                        <p>Platform: {status.launchLaneMatrix.executionTotals.platformOwned}</p>
+                        <p>Rows: {status.launchLaneMatrix.executionTotals.withEvidenceRows}</p>
+                      </div>
+                      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-600 md:grid-cols-2">
+                        <p className="break-all">Credential diag: {status.launchLaneMatrix.closeoutFiles.credentialDiagnosticPath}</p>
+                        <p className="break-all">Evidence drop: {status.launchLaneMatrix.closeoutFiles.ownerEvidenceDropPath}</p>
+                        <p className="break-all">Source diag: {status.launchLaneMatrix.closeoutFiles.sourceDropDiagnosticPath}</p>
+                        <p className="break-all">Completion audit: {status.launchLaneMatrix.closeoutFiles.completionAuditPath}</p>
+                        <p className="break-all">Execution queue: {status.launchLaneMatrix.executionQueueCsvPath}</p>
+                      </div>
+                      {status.launchLaneMatrix.executionQueue?.length > 0 && (
+                        <div className="mt-3 border-t border-white/10 pt-2" data-testid="clippers-launch-lane-execution-queue">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-medium text-white">Execution queue</p>
+                            <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[10px] text-cyan-100">{status.launchLaneMatrix.executionQueue.length} steps</Badge>
+                          </div>
+                          <div className="grid gap-1 md:grid-cols-2">
+                            {status.launchLaneMatrix.executionQueue.slice(0, 4).map((item) => (
+                              <div key={`launch-lane-execution-queue-${item.id}`} className="rounded border border-white/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[10px] font-medium text-white">{item.rank}. {item.accountName} / {item.platform}</p>
+                                    <p className="mt-0.5 truncate text-[9px] text-zinc-500">{item.label}</p>
+                                  </div>
+                                  <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-zinc-500">{item.nextStep}</p>
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">{item.owner}</Badge>
+                                  <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[9px] text-cyan-100">{item.actionLane}</Badge>
+                                  {item.portalUrl && (
+                                    <Button size="sm" variant="outline" className="h-5 border-sky-300/20 bg-transparent px-1.5 text-[9px] text-sky-100 hover:bg-sky-300/10" asChild>
+                                      <a href={item.portalUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-launch-lane-execution-queue-${item.rank}`}>
+                                        <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                        portal
+                                      </a>
+                                    </Button>
+                                  )}
+                                  {item.evidenceRow && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10"
+                                      onClick={() => appendLaunchEvidenceBatchRows([item.evidenceRow].filter(Boolean) as string[])}
+                                      data-testid={`append-clippers-launch-lane-execution-queue-row-${item.rank}`}
+                                    >
+                                      row
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {status.launchLaneMatrix.topUnlocks?.length > 0 && (
+                    <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-2" data-testid="clippers-launch-lane-top-unlocks">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-amber-100">Top unlocks</p>
+                        <Badge className="border border-amber-300/20 bg-amber-950/30 text-[10px] text-amber-100">{status.launchLaneMatrix.topUnlocks.length}</Badge>
+                      </div>
+                      <div className="relative mt-2 flex gap-2 overflow-x-auto pb-1 before:absolute before:left-4 before:right-4 before:top-1/2 before:h-px before:bg-amber-300/20 before:content-['']">
+                        {status.launchLaneMatrix.topUnlocks.slice(0, 6).map((unlock) => (
+                          <div key={`launch-lane-top-unlock-${unlock.laneId}-${unlock.stepId}`} className="relative z-10 min-w-[245px] flex-1 rounded border border-white/10 bg-black/85 p-2 shadow-[0_0_0_3px_rgba(24,24,27,0.92)] md:min-w-[275px]">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-medium text-white">{unlock.rank}. {unlock.accountName} / {unlock.platform}</p>
+                                <p className="mt-1 truncate text-[10px] text-zinc-500">{unlock.label}</p>
+                              </div>
+                              <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(unlock.status))}>{unlock.status}</Badge>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{unlock.nextStep}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-1">
+                              <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">{unlock.owner}</Badge>
+                              <Badge className="border border-amber-300/20 bg-amber-950/30 text-[9px] text-amber-100">{unlock.lane}</Badge>
+                              <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[9px] text-cyan-100">{unlock.affectedLanes} lanes</Badge>
+                              {unlock.portalUrl && (
+                                <Button size="sm" variant="outline" className="h-5 border-sky-300/20 bg-transparent px-1.5 text-[9px] text-sky-100 hover:bg-sky-300/10" asChild>
+                                  <a href={unlock.portalUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-launch-lane-top-unlock-${unlock.rank}`}>
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    portal
+                                  </a>
+                                </Button>
+                              )}
+                              {unlock.evidenceRow && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10"
+                                  onClick={() => appendLaunchEvidenceBatchRows([unlock.evidenceRow].filter(Boolean) as string[])}
+                                  data-testid={`append-clippers-launch-lane-top-unlock-row-${unlock.rank}`}
+                                >
+                                  row
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.launchLaneMatrix.csvPath}</p>
+                  <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                    {status.launchLaneMatrix.items.slice(0, 6).map((lane) => (
+                      <div key={`launch-lane-${lane.id}`} className="rounded-md border border-white/10 bg-black/25 p-2 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-white">{lane.rank}. {lane.accountName} / {lane.platform}</p>
+                            <p className="truncate text-zinc-500">{lane.handle}</p>
+                          </div>
+                          <Badge className={cn("shrink-0 border text-[10px]", goLiveAutopilotBadge(lane.status))}>{lane.status}</Badge>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className={cn("h-full rounded-full", lane.status === "ready" ? "bg-emerald-300" : lane.status === "activation_ready" ? "bg-amber-300" : "bg-rose-300")}
+                            style={{ width: `${lane.activationScore}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 grid grid-cols-4 gap-1 text-[10px] text-zinc-500">
+                          <span className={lane.gates.account ? "text-emerald-200" : "text-rose-200"}>acct</span>
+                          <span className={lane.gates.developerApp ? "text-emerald-200" : "text-rose-200"}>app</span>
+                          <span className={lane.gates.permissions ? "text-emerald-200" : "text-rose-200"}>perm</span>
+                          <span className={lane.gates.oauth ? "text-emerald-200" : "text-rose-200"}>oauth</span>
+                          <span className={lane.gates.credentials ? "text-emerald-200" : "text-rose-200"}>keys</span>
+                          <span className={lane.gates.sourceSupply ? "text-emerald-200" : "text-rose-200"}>src</span>
+                          <span className={lane.gates.publishing ? "text-emerald-200" : "text-rose-200"}>pub</span>
+                          <span>{lane.activationScore}%</span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-500">{lane.nextAction}</p>
+                        {lane.executionSteps?.length > 0 && (
+                          <div className="mt-2 space-y-1" data-testid={`clippers-launch-lane-execution-${lane.id}`}>
+                            {lane.executionSteps.filter((step) => step.status !== "done").slice(0, 3).map((step) => (
+                              <div key={`${lane.id}-${step.id}`} className="rounded border border-white/10 bg-black/25 px-2 py-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-[10px] font-medium text-zinc-200">{step.label}</p>
+                                  <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(step.status))}>{step.status}</Badge>
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{step.nextStep}</p>
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">{step.owner}</Badge>
+                                  {step.portalUrl && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-5 border-sky-300/20 bg-transparent px-1.5 text-[9px] text-sky-100 hover:bg-sky-300/10"
+                                      asChild
+                                    >
+                                      <a href={step.portalUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-launch-lane-step-${lane.id}-${step.id}`}>
+                                        <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                        portal
+                                      </a>
+                                    </Button>
+                                  )}
+                                  {step.evidenceRow && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10"
+                                      onClick={() => appendLaunchEvidenceBatchRows([step.evidenceRow].filter(Boolean) as string[])}
+                                      data-testid={`append-clippers-launch-lane-step-row-${lane.id}-${step.id}`}
+                                    >
+                                      row
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {lane.portalUrls.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {lane.portalUrls.slice(0, 3).map((portal) => (
+                              <Button
+                                key={`${lane.id}-${portal.label}-${portal.url}`}
+                                size="sm"
+                                variant="outline"
+                                className="h-6 border-sky-300/20 bg-transparent px-2 text-[10px] text-sky-100 hover:bg-sky-300/10"
+                                asChild
+                              >
+                                <a
+                                  href={portal.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  data-testid={`open-clippers-launch-lane-portal-${lane.id}-${portal.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                                >
+                                  <ExternalLink className="mr-1 h-3 w-3" />
+                                  {portal.label.replace(`${lane.platform} `, "").slice(0, 18)}
+                                </a>
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-[10px] text-zinc-600">Perms {lane.permissionsApproved}/{lane.permissionsTotal} | Ready posts {lane.readyToPostItems}</p>
+                          {lane.missingEnvVars.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 border-cyan-300/20 bg-transparent px-2 text-[10px] text-cyan-100 hover:bg-cyan-300/10"
+                              onClick={() => appendCredentialBatchTemplate(lane.missingEnvVars, `${lane.accountName} / ${lane.platform}`)}
+                              data-testid={`append-clippers-launch-lane-keys-${lane.id}`}
+                            >
+                              Keys
+                            </Button>
+                          )}
+                          {lane.evidenceRows.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 border-emerald-300/20 bg-transparent px-2 text-[10px] text-emerald-100 hover:bg-emerald-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows(lane.evidenceRows)}
+                              data-testid={`append-clippers-launch-lane-rows-${lane.id}`}
+                            >
+                              Rows
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -10507,6 +12088,102 @@ export default function ClippersPage() {
                 </div>
               )}
 
+              {status.externalEvidenceWorkbook && (
+                <div className="rounded-md border border-lime-300/20 bg-lime-950/10 p-3" data-testid="clippers-external-evidence-workbook">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">External Evidence Workbook: {status.externalEvidenceWorkbook.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.externalEvidenceWorkbook.nextStep}</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.externalEvidenceWorkbook.csvPath}</p>
+                      <p className="mt-1 break-all text-xs text-lime-100/70">Import CSV: {status.externalEvidenceWorkbook.importCsvPath}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", status.externalEvidenceWorkbook.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.externalEvidenceWorkbook.status === "needs_evidence" ? "border-lime-300/30 bg-lime-300/10 text-lime-100" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                      {status.externalEvidenceWorkbook.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5 xl:grid-cols-11">
+                    <p>Items: {status.externalEvidenceWorkbook.totals.items}</p>
+                    <p>Critical: {status.externalEvidenceWorkbook.totals.critical}</p>
+                    <p>High: {status.externalEvidenceWorkbook.totals.high}</p>
+                    <p>Medium: {status.externalEvidenceWorkbook.totals.medium}</p>
+                    <p>Accounts: {status.externalEvidenceWorkbook.totals.accountProof}</p>
+                    <p>Apps: {status.externalEvidenceWorkbook.totals.developerApps}</p>
+                    <p>Perms: {status.externalEvidenceWorkbook.totals.permissionProof}</p>
+                    <p>URLs: {status.externalEvidenceWorkbook.totals.publicUrl}</p>
+                    <p>Rights: {status.externalEvidenceWorkbook.totals.sourceRights}</p>
+                    <p>Format: {status.externalEvidenceWorkbook.totals.format}</p>
+                    <p>Rows: {status.externalEvidenceWorkbook.importRows.length}</p>
+                  </div>
+                  {status.externalEvidenceWorkbook.items.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {status.externalEvidenceWorkbook.items.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                            <Badge className={cn("shrink-0 border text-[10px]", item.priority === "critical" ? "border-rose-300/30 bg-rose-300/10 text-rose-100" : item.priority === "high" ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-lime-300/30 bg-lime-300/10 text-lime-100")}>
+                              {item.priority}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            <Badge className="border border-lime-300/20 bg-lime-950/40 text-[10px] text-lime-100">{item.lane}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.platform}</Badge>
+                            <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.fixCategory}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.requiredFix}</p>
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-md border border-lime-300/20 px-2 py-1 text-xs text-lime-100 hover:bg-lime-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">Target: {item.importTarget}</p>
+                          <p className="mt-2 break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{item.suggestedReplacementRow}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {status.evidenceIntegrityAudit && (
+                <div className="rounded-md border border-rose-300/20 bg-rose-950/10 p-3" data-testid="clippers-evidence-integrity-audit">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">Evidence Integrity Audit: {status.evidenceIntegrityAudit.markdownPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.evidenceIntegrityAudit.nextStep}</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.evidenceIntegrityAudit.csvPath}</p>
+                    </div>
+                    <Badge className={cn("w-fit border", status.evidenceIntegrityAudit.status === "clean" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-rose-300/30 bg-rose-300/10 text-rose-100")}>
+                      {status.evidenceIntegrityAudit.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Scanned: {status.evidenceIntegrityAudit.scannedFiles}</p>
+                    <p>Findings: {status.evidenceIntegrityAudit.totals.findings}</p>
+                    <p>Critical: {status.evidenceIntegrityAudit.totals.critical}</p>
+                    <p>Warning: {status.evidenceIntegrityAudit.totals.warning}</p>
+                    <p>Fake/test: {status.evidenceIntegrityAudit.totals.fakeOrTest}</p>
+                    <p>Placeholder: {status.evidenceIntegrityAudit.totals.placeholder}</p>
+                    <p>Local URL: {status.evidenceIntegrityAudit.totals.localUrl}</p>
+                    <p>Template: {status.evidenceIntegrityAudit.totals.templateValue}</p>
+                  </div>
+                  {status.evidenceIntegrityAudit.items.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {status.evidenceIntegrityAudit.items.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.relativePath}:{item.line}</p>
+                            <Badge className="shrink-0 border border-rose-300/30 bg-rose-300/10 text-[10px] text-rose-100">{item.category}</Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.signal}</p>
+                          <p className="mt-2 break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{item.evidencePreview}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {(status.goLiveAutopilotBrief.agentSessions || []).length > 0 && (
                 <div className="rounded-md border border-violet-300/20 bg-violet-950/10 p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -11542,8 +13219,124 @@ export default function ClippersPage() {
                   </div>
                   <p className="mt-2 break-all text-xs text-zinc-600">Readme: {status.credentialSetup.readmePath}</p>
                   <p className="mt-1 break-all text-xs text-zinc-600">Missing env: {status.credentialSetup.missingTemplatePath}</p>
+                  <p className="mt-1 break-all text-xs text-zinc-600">Queue CSV: {status.credentialSetup.credentialSetupQueueCsvPath}</p>
                   <p className="mt-1 text-xs text-zinc-600">Busca: {status.credentialSetup.envFilesChecked.join(", ")}</p>
                   <p className="mt-1 break-all text-xs text-zinc-600">Drop dirs: {(status.credentialSetup.credentialDropDirs || []).join(", ")}</p>
+                </div>
+
+                {status.credentialSetup.googleDriveOAuthBridge && (
+                <div className="rounded-md border border-sky-300/20 bg-sky-950/10 p-3" data-testid="clippers-google-drive-oauth-bridge">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">Google Drive OAuth Bridge</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.credentialSetup.googleDriveOAuthBridge.nextStep}</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">Auth: {status.credentialSetup.googleDriveOAuthBridge.authPath}</p>
+                      <p className="mt-1 break-all text-xs text-zinc-600">Redirect: {status.credentialSetup.googleDriveOAuthBridge.redirectUri || "n/a"}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn("w-fit border", googleDriveOAuthBridgeBadge(status.credentialSetup.googleDriveOAuthBridge.status))}>{status.credentialSetup.googleDriveOAuthBridge.status}</Badge>
+                      <a href={status.credentialSetup.googleDriveOAuthBridge.authPath} target="_blank" rel="noreferrer" className={cn("inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10", status.credentialSetup.googleDriveOAuthBridge.status === "missing_keys" && "pointer-events-none opacity-50")}>
+                        Autorizar Drive
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-sky-100/80 md:grid-cols-4">
+                    <p>Configured: {status.credentialSetup.googleDriveOAuthBridge.configured ? "yes" : "no"}</p>
+                    <p>Connected: {status.credentialSetup.googleDriveOAuthBridge.connected ? "yes" : "no"}</p>
+                    <p>Provider: {status.credentialSetup.googleDriveOAuthBridge.provider || "none"}</p>
+                    <p>Missing: {status.credentialSetup.googleDriveOAuthBridge.missingEnvVars.length}</p>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                      <p className="text-[10px] font-medium uppercase text-zinc-400">Configured env names</p>
+                      <p className="mt-1 break-all font-mono text-[11px] leading-4 text-sky-100/80">{status.credentialSetup.googleDriveOAuthBridge.configuredEnvVars.join(" | ") || "none"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                      <p className="text-[10px] font-medium uppercase text-zinc-400">Missing env names</p>
+                      <p className="mt-1 break-all font-mono text-[11px] leading-4 text-amber-100/80">{status.credentialSetup.googleDriveOAuthBridge.missingEnvVars.join(" | ") || "none"}</p>
+                    </div>
+                  </div>
+                  {status.credentialSetup.googleDriveOAuthBridge.storageError && (
+                    <p className="mt-3 text-xs leading-5 text-rose-200">{status.credentialSetup.googleDriveOAuthBridge.storageError}</p>
+                  )}
+                </div>
+                )}
+
+                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-credential-setup-queue">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">Credential Setup Queue</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Orden exacto para completar OAuth, Drive y token vault sin exponer valores secretos.</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">Runbook: {status.credentialSetup.credentialSetupQueueMarkdownPath}</p>
+                      <p className="mt-1 break-all text-xs text-zinc-600">CSV: {status.credentialSetup.credentialSetupQueueCsvPath}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                      onClick={() => appendCredentialBatchText(
+                        (status.credentialSetup.credentialSetupQueue || [])
+                          .filter((item) => item.missingSuggestedEnvVars.length > 0)
+                          .map((item) => item.envTemplate)
+                          .join("\n\n"),
+                        "Credential setup queue cargada",
+                      )}
+                      data-testid="load-clippers-credential-setup-queue-button"
+                    >
+                      <KeyRound className="mr-1 h-3 w-3" />
+                      Load queue
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-cyan-100/80 md:grid-cols-4">
+                    <p>{(status.credentialSetup.credentialSetupQueue || []).length} credentials</p>
+                    <p>{(status.credentialSetup.credentialSetupQueue || []).filter((item) => item.status === "ready").length} ready</p>
+                    <p>{(status.credentialSetup.credentialSetupQueue || []).filter((item) => item.status === "partial").length} partial</p>
+                    <p>{(status.credentialSetup.credentialSetupQueue || []).filter((item) => item.status === "missing").length} missing</p>
+                  </div>
+                  <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5")}>
+                    {(status.credentialSetup.credentialSetupQueue || []).map((item) => (
+                      <div key={`credential-setup-${item.id}`} className={cn(tunnelBoxClass, "bg-black/30 p-3")}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", credentialSetupBadge(item.status))}>{item.status}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Badge className="border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{item.platform}</Badge>
+                          <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.missingSuggestedEnvVars.length} missing</Badge>
+                        </div>
+                        <p className="mt-2 break-all font-mono text-[11px] leading-4 text-cyan-100/80">{item.missingSuggestedEnvVars.length ? item.missingSuggestedEnvVars.join(" | ") : "ready"}</p>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        {item.localDropFileNames[0] && (
+                          <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">Drop: {item.localDropFileNames[0]}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.docsUrl && (
+                            <a href={item.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                              Docs
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.missingSuggestedEnvVars.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                              onClick={() => appendCredentialBatchText(item.envTemplate, `${item.label} queue template agregado`)}
+                            >
+                              Env
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {(status.credentialSetup.credentialPastePack || []).some((item) => item.status !== "ready") && (
@@ -11792,6 +13585,101 @@ export default function ClippersPage() {
                             >
                               Env
                             </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-blue-300/15 bg-blue-950/10 p-3" data-testid="clippers-credential-drive-intake-runbook">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">Drive Credential Intake Runbook</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">Ruta segura para traer las keys que ya estan en Drive hacia archivos locales importables.</p>
+                      <p className="mt-2 break-all text-xs text-zinc-600">Runbook: {status.credentialSetup.credentialDriveIntakeRunbookMarkdownPath}</p>
+                      <p className="mt-1 break-all text-xs text-zinc-600">CSV: {status.credentialSetup.credentialDriveIntakeRunbookCsvPath}</p>
+                      {status.credentialSetup.credentialDriveIntakeRunbookGeneratedAt && (
+                        <p className="mt-1 text-xs text-zinc-600">actualizado: {formatDate(status.credentialSetup.credentialDriveIntakeRunbookGeneratedAt)}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className="w-fit border border-blue-300/20 bg-blue-300/10 text-blue-100">
+                        {(status.credentialSetup.credentialDriveIntakeRunbook || []).filter((item) => item.importReady).length} import-ready
+                      </Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-blue-300/30 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10"
+                        onClick={() => credentialDropImportMutation.mutate()}
+                        disabled={credentialDropImportMutation.isPending || !(status.credentialSetup.credentialDriveIntakeRunbook || []).some((item) => item.importReady)}
+                        data-testid="import-clippers-drive-intake-credentials-button"
+                      >
+                        {credentialDropImportMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <UploadCloud className="mr-1 h-3 w-3" />}
+                        Import ready files
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    {(status.credentialSetup.credentialDriveIntakeRunbook || []).map((item) => (
+                      <div key={`drive-intake-${item.id}`} className="rounded-md border border-white/10 bg-black/30 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{item.rank}. {item.label}</p>
+                          <Badge className={cn("shrink-0 border text-[10px]", item.importReady ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : credentialSetupBadge(item.status))}>
+                            {item.importReady ? "import-ready" : item.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Badge className="border border-blue-300/20 bg-blue-950/40 text-[10px] text-blue-100">{item.platform}</Badge>
+                          <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.detectedLocalFiles.length} local</Badge>
+                          <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.missingSuggestedEnvVars.length} missing</Badge>
+                        </div>
+                        <div className="mt-2 rounded-md border border-blue-300/10 bg-blue-950/10 p-2">
+                          <p className="text-[10px] font-medium uppercase text-blue-200">Drive search</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {item.driveSearchQueries.slice(0, 3).map((query, index) => (
+                              <a
+                                key={`drive-intake-${item.id}-${query}`}
+                                href={item.driveSearchUrls?.[index] || googleDriveSearchUrl(query)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-300/20 px-1.5 py-0.5 text-[10px] text-blue-100 hover:bg-blue-300/10"
+                              >
+                                <span className="truncate">Query {index + 1}</span>
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                              </a>
+                            ))}
+                          </div>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-blue-100/75">{item.driveSearchQueries[0] || item.nextStep}</p>
+                        </div>
+                        <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2">
+                          <p className="text-[10px] font-medium uppercase text-zinc-400">Drop target</p>
+                          <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{item.localDropFileNames[0] || "credentials/"}</p>
+                          {item.detectedLocalFiles.length > 0 && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/75">Detected: {item.detectedLocalFiles.slice(0, 2).join(" | ")}</p>
+                          )}
+                        </div>
+                        <p className="mt-2 break-all font-mono text-[11px] leading-4 text-blue-100/80">
+                          {item.acceptedEnvVars.length ? item.acceptedEnvVars.join(" | ") : item.missingSuggestedEnvVars.join(" | ") || "ready"}
+                        </p>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {item.missingSuggestedEnvVars.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10"
+                              onClick={() => appendCredentialBatchText(
+                                [`# ${item.label}`, ...item.missingSuggestedEnvVars.map((envVar) => `${envVar}=`)].join("\n"),
+                                `${item.label} drive intake template agregado`,
+                              )}
+                            >
+                              Env
+                            </Button>
+                          )}
+                          {item.acceptedInputFormats[0] && (
+                            <Badge className="border border-blue-300/20 bg-blue-950/40 text-[10px] text-blue-100">{item.acceptedInputFormats[0]}</Badge>
                           )}
                         </div>
                       </div>
@@ -12251,15 +14139,37 @@ export default function ClippersPage() {
                       </div>
                       <Badge className={cn("w-fit border", oauthGoLiveBadge(status.productionUrlSetup.status))}>{status.productionUrlSetup.status}</Badge>
                     </div>
-                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
                       <p>Env: {status.productionUrlSetup.requiredEnvVar}</p>
                       <p>Protocol: {status.productionUrlSetup.requiredProtocol}</p>
                       <p>Prod URL: {status.productionUrlSetup.productionUrlReady ? "yes" : "no"}</p>
+                      <p>Stable: {status.productionUrlSetup.productionUrlStable ? "yes" : "no"}</p>
                       <p>Platforms: {status.productionUrlSetup.platforms.length}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge className={cn("border text-[10px]", productionUrlStabilityBadge(status.productionUrlSetup.productionUrlStability))}>
+                        {status.productionUrlSetup.productionUrlStability}
+                      </Badge>
+                      {status.productionUrlSetup.productionUrlReady && !status.productionUrlSetup.productionUrlStable && (
+                        <Badge className="border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                          pruebas solamente
+                        </Badge>
+                      )}
                     </div>
                     <p className={cn("mt-2 break-all text-xs", status.productionUrlSetup.productionUrlReady ? "text-emerald-200" : "text-amber-200")}>
                       Base: {status.productionUrlSetup.publicBaseUrl} · {status.productionUrlSetup.productionUrlNote}
                     </p>
+                    {status.productionUrlSetup.productionUrlReady && !status.productionUrlSetup.productionUrlStable && (
+                      <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/20 p-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">URL temporal detectada</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                          Los endpoints publicos pasan para pruebas, pero app review/OAuth final necesita dominio propio, Cloudflare named tunnel, deploy estable o dominio reservado.
+                        </p>
+                        {status.productionUrlSetup.blockers[0] && (
+                          <p className="mt-2 text-xs leading-5 text-amber-100">{status.productionUrlSetup.blockers[0]}</p>
+                        )}
+                      </div>
+                    )}
                     {status.productionUrlSetup.saveChecklist.length > 0 && (
                       <div className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Save checklist</p>
@@ -12395,6 +14305,39 @@ export default function ClippersPage() {
                               <p className="mt-1 break-all text-zinc-500">{item.url}</p>
                               <p className="mt-1 text-zinc-500">HTTP {item.statusCode ?? "n/a"} · {item.responseMs ?? "n/a"}ms</p>
                               {item.error && <p className="mt-1 text-red-200">{item.error}</p>}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {status.productionLocalPreflight && (
+                      <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-2" data-testid="clippers-production-local-preflight-panel">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-lime-200">Local production preflight</p>
+                            <p className="mt-1 break-all text-xs text-zinc-500">{status.productionLocalPreflight.markdownPath}</p>
+                          </div>
+                          <Badge className={cn("w-fit border", status.productionLocalPreflight.status === "pass" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.productionLocalPreflight.status === "partial" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                            {status.productionLocalPreflight.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                          <p>Pass: {status.productionLocalPreflight.totals.pass}</p>
+                          <p>Fail: {status.productionLocalPreflight.totals.fail}</p>
+                          <p>Skipped: {status.productionLocalPreflight.totals.skipped}</p>
+                          <p>Total: {status.productionLocalPreflight.totals.endpoints}</p>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-zinc-400">{status.productionLocalPreflight.nextStep}</p>
+                        <p className="mt-2 break-all text-xs text-lime-100/80">{status.productionLocalPreflight.publicUrlHandoff.publicBaseUrlTemplate}</p>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {status.productionLocalPreflight.items.slice(0, 6).map((item) => (
+                            <a key={`local-preflight-${item.id}`} href={item.url} target="_blank" rel="noreferrer" className="rounded-md border border-white/10 bg-black/25 p-2 text-xs text-lime-100 hover:bg-white/5">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate font-medium text-white">{item.label}</p>
+                                <Badge className={cn("border text-[10px]", item.status === "pass" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : item.status === "skipped" ? "border-zinc-500/30 bg-zinc-500/10 text-zinc-300" : "border-red-300/30 bg-red-300/10 text-red-200")}>{item.status}</Badge>
+                              </div>
+                              <p className="mt-1 break-all text-zinc-500">{item.url}</p>
+                              <p className="mt-1 text-zinc-500">HTTP {item.statusCode ?? "n/a"} · {item.responseMs ?? "n/a"}ms</p>
                             </a>
                           ))}
                         </div>
@@ -13627,7 +15570,145 @@ export default function ClippersPage() {
                       <p className="mt-1 break-all">Official matrix: {status.permissionSubmissionDossier.sourceArtifacts.officialPermissionMatrixPath}</p>
                       <p className="mt-1 break-all">App drafts: {status.permissionSubmissionDossier.sourceArtifacts.developerApplicationDraftsPath}</p>
                       <p className="mt-1 break-all">Evidence bundle: {status.permissionSubmissionDossier.sourceArtifacts.goLiveEvidenceBundlePath}</p>
+                      <p className="mt-1 break-all">Submission queue: {status.permissionSubmissionDossier.submissionQueueCsvPath}</p>
+                      {status.permissionSubmissionDossier.submitRunbookMarkdownPath && (
+                        <p className="mt-1 break-all">Submit runbook: {status.permissionSubmissionDossier.submitRunbookMarkdownPath}</p>
+                      )}
                     </div>
+                    {(status.permissionSubmissionDossier.submitRunbook || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-blue-300/20 bg-blue-950/10 p-2" data-testid="clippers-permission-submit-runbook">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-white">Permission Submit Runbook</p>
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-500">Scope-by-scope portal, proof checklist y evidence rows para enviar permisos.</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="border border-blue-300/20 bg-blue-950/30 text-[10px] text-blue-100">{(status.permissionSubmissionDossier.submitRunbook || []).length} scopes</Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-blue-300/20 bg-transparent px-2 text-xs text-blue-100 hover:bg-blue-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows((status.permissionSubmissionDossier.submitRunbook || []).map((item) => item.requestedEvidenceRow))}
+                              data-testid="append-clippers-permission-submit-runbook-requested"
+                            >
+                              Requested rows
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows((status.permissionSubmissionDossier.submitRunbook || []).map((item) => item.approvedEvidenceRow))}
+                              data-testid="append-clippers-permission-submit-runbook-approved"
+                            >
+                              Approved rows
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {(status.permissionSubmissionDossier.submitRunbook || []).slice(0, 6).map((item) => (
+                            <div key={item.id} className="rounded border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-[11px] font-medium text-white">{item.rank}. {item.platformLabel}</p>
+                                  <p className="mt-0.5 truncate text-[10px] text-zinc-500">{item.scope}</p>
+                                </div>
+                                <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                              </div>
+                              <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                              {item.blockers.length > 0 && (
+                                <p className="mt-1 line-clamp-1 text-[9px] text-amber-200">{item.blockers[0]}</p>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <Button size="sm" variant="outline" className="h-5 border-sky-300/20 bg-transparent px-1.5 text-[9px] text-sky-100 hover:bg-sky-300/10" asChild>
+                                  <a href={item.portalUrl} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    portal
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-cyan-300/20 bg-transparent px-1.5 text-[9px] text-cyan-100 hover:bg-cyan-300/10" asChild>
+                                  <a href={item.officialReferenceUrl} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    official
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-blue-300/20 bg-transparent px-1.5 text-[9px] text-blue-100 hover:bg-blue-300/10" onClick={() => appendLaunchEvidenceBatchRows([item.requestedEvidenceRow])}>
+                                  requested
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows([item.approvedEvidenceRow])}>
+                                  approved
+                                </Button>
+                              </div>
+                              {item.proofChecklist.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-[10px] leading-4 text-zinc-500">
+                                  {item.proofChecklist.slice(0, 3).map((proof) => (
+                                    <li key={proof}>{proof}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {status.permissionSubmissionDossier.submissionQueue?.length > 0 && (
+                      <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-2" data-testid="clippers-permission-submission-queue">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">Permission submission queue</p>
+                          <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[10px] text-cyan-100">{status.permissionSubmissionDossier.submissionQueue.length} scopes</Badge>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {status.permissionSubmissionDossier.submissionQueue.slice(0, 6).map((item) => (
+                            <div key={`permission-submission-queue-${item.id}`} className="rounded border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-[11px] font-medium text-white">{item.rank}. {item.platform}</p>
+                                  <p className="mt-0.5 truncate text-[10px] text-zinc-500">{item.scope}</p>
+                                </div>
+                                <Badge className={cn("shrink-0 border text-[9px]", goLiveAutopilotBadge(item.status))}>{item.status}</Badge>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                              {item.blockers.length > 0 && (
+                                <p className="mt-1 line-clamp-1 text-[9px] text-amber-200">{item.blockers[0]}</p>
+                              )}
+                              <div className="mt-2 flex flex-wrap items-center gap-1">
+                                <Badge className={cn("border text-[9px]", officialPermissionMatrixBadge(item.sourceStatus))}>{item.sourceStatus}</Badge>
+                                <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">{item.submitDecision}</Badge>
+                                <Button size="sm" variant="outline" className="h-5 border-sky-300/20 bg-transparent px-1.5 text-[9px] text-sky-100 hover:bg-sky-300/10" asChild>
+                                  <a href={item.developerPortalUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-permission-submission-queue-portal-${item.rank}`}>
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    portal
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-cyan-300/20 bg-transparent px-1.5 text-[9px] text-cyan-100 hover:bg-cyan-300/10" asChild>
+                                  <a href={item.officialReferenceUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-permission-submission-queue-official-${item.rank}`}>
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    official
+                                  </a>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 border-blue-300/20 bg-transparent px-1.5 text-[9px] text-blue-100 hover:bg-blue-300/10"
+                                  onClick={() => appendLaunchEvidenceBatchRows([item.requestedEvidenceRow])}
+                                  data-testid={`append-clippers-permission-submission-queue-requested-${item.rank}`}
+                                >
+                                  requested
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10"
+                                  onClick={() => appendLaunchEvidenceBatchRows([item.approvedEvidenceRow])}
+                                  data-testid={`append-clippers-permission-submission-queue-approved-${item.rank}`}
+                                >
+                                  approved
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {status.permissionSubmissionDossier.items.length > 0 && (
                       <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
                         {status.permissionSubmissionDossier.items.map((item) => (
@@ -14878,7 +16959,142 @@ export default function ClippersPage() {
                       <p className="mt-1 break-all">Evidence kit: {status.accountSetupSession.sourceArtifacts.accountEvidenceConnectionKitPath}</p>
                       <p className="mt-1 break-all">Account evidence template: {status.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath}</p>
                       <p className="mt-1 break-all">Owner pack: {status.accountSetupSession.sourceArtifacts.ownerConnectPackPath}</p>
+                      <p className="mt-1 break-all">Account setup queue: {status.accountSetupSession.accountSetupQueueCsvPath}</p>
+                      {status.accountSetupSession.accountCreationRunbookMarkdownPath && (
+                        <p className="mt-1 break-all">Creation runbook: {status.accountSetupSession.accountCreationRunbookMarkdownPath}</p>
+                      )}
                     </div>
+                    {(status.accountSetupSession.accountCreationRunbook || []).length > 0 && (
+                      <div className="mt-3 rounded-md border border-lime-300/20 bg-lime-950/10 p-2" data-testid="clippers-account-creation-runbook">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs font-medium text-white">Account Creation Runbook</p>
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-500">Cuenta por cuenta: portal, vault slots, proof checklist y evidence rows.</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="border border-lime-300/20 bg-lime-950/30 text-[10px] text-lime-100">{(status.accountSetupSession.accountCreationRunbook || []).length} accounts</Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-yellow-300/20 bg-transparent px-2 text-xs text-yellow-100 hover:bg-yellow-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows((status.accountSetupSession.accountCreationRunbook || []).map((item) => item.submittedEvidenceBatchRow))}
+                              data-testid="append-clippers-account-creation-runbook-submitted"
+                            >
+                              Submitted rows
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                              onClick={() => appendLaunchEvidenceBatchRows((status.accountSetupSession.accountCreationRunbook || []).map((item) => item.verifiedEvidenceBatchRow))}
+                              data-testid="append-clippers-account-creation-runbook-verified"
+                            >
+                              Verified rows
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {(status.accountSetupSession.accountCreationRunbook || []).slice(0, 6).map((item) => (
+                            <div key={item.id} className="rounded border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-[11px] font-medium text-white">{item.rank}. {item.accountName} / {item.platform}</p>
+                                  <p className="mt-0.5 truncate text-[10px] text-zinc-500">{item.handle}</p>
+                                </div>
+                                <Badge className={cn("shrink-0 border text-[9px]", accountCreationPackBadge(item.status))}>{item.status}</Badge>
+                              </div>
+                              <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <Button size="sm" variant="outline" className="h-5 border-lime-300/20 bg-transparent px-1.5 text-[9px] text-lime-100 hover:bg-lime-300/10" asChild>
+                                  <a href={item.signupUrl} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    signup
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-cyan-300/20 bg-transparent px-1.5 text-[9px] text-cyan-100 hover:bg-cyan-300/10" asChild>
+                                  <a href={item.profileLink} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    profile
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-yellow-300/20 bg-transparent px-1.5 text-[9px] text-yellow-100 hover:bg-yellow-300/10" onClick={() => appendLaunchEvidenceBatchRows([item.submittedEvidenceBatchRow])}>
+                                  submitted
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10" onClick={() => appendLaunchEvidenceBatchRows([item.verifiedEvidenceBatchRow])}>
+                                  verified
+                                </Button>
+                              </div>
+                              {item.proofChecklist.length > 0 && (
+                                <ul className="mt-2 space-y-1 text-[10px] leading-4 text-zinc-500">
+                                  {item.proofChecklist.slice(0, 3).map((proof) => (
+                                    <li key={proof}>{proof}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {status.accountSetupSession.accountSetupQueue?.length > 0 && (
+                      <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-2" data-testid="clippers-account-setup-queue">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">Account setup queue</p>
+                          <Badge className="border border-lime-300/20 bg-lime-950/30 text-[10px] text-lime-100">{status.accountSetupSession.accountSetupQueue.length} accounts</Badge>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {status.accountSetupSession.accountSetupQueue.slice(0, 6).map((item) => (
+                            <div key={`account-setup-queue-${item.id}`} className="rounded border border-white/10 bg-black/30 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-[11px] font-medium text-white">{item.rank}. {item.accountName} / {item.platform}</p>
+                                  <p className="mt-0.5 truncate text-[10px] text-zinc-500">{item.handle}</p>
+                                </div>
+                                <Badge className={cn("shrink-0 border text-[9px]", accountCreationPackBadge(item.status))}>{item.status}</Badge>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{item.nextStep}</p>
+                              {item.blockers.length > 0 && (
+                                <p className="mt-1 line-clamp-1 text-[9px] text-amber-200">{item.blockers[0]}</p>
+                              )}
+                              <div className="mt-2 flex flex-wrap items-center gap-1">
+                                <Badge className="border border-white/10 bg-white/5 text-[9px] text-zinc-300">{item.priority}</Badge>
+                                <Badge className={cn("border text-[9px]", accountEvidenceBadge(item.evidenceStatus))}>{item.evidenceStatus}</Badge>
+                                <Button size="sm" variant="outline" className="h-5 border-lime-300/20 bg-transparent px-1.5 text-[9px] text-lime-100 hover:bg-lime-300/10" asChild>
+                                  <a href={item.signupUrl} target="_blank" rel="noreferrer" data-testid={`open-clippers-account-setup-queue-signup-${item.rank}`}>
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    signup
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-5 border-cyan-300/20 bg-transparent px-1.5 text-[9px] text-cyan-100 hover:bg-cyan-300/10" asChild>
+                                  <a href={item.profileLink} target="_blank" rel="noreferrer" data-testid={`open-clippers-account-setup-queue-profile-${item.rank}`}>
+                                    <ExternalLink className="mr-1 h-2.5 w-2.5" />
+                                    profile
+                                  </a>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 border-yellow-300/20 bg-transparent px-1.5 text-[9px] text-yellow-100 hover:bg-yellow-300/10"
+                                  onClick={() => appendLaunchEvidenceBatchRows([item.submittedEvidenceBatchRow])}
+                                  data-testid={`append-clippers-account-setup-queue-submitted-${item.rank}`}
+                                >
+                                  submitted
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 border-emerald-300/20 bg-transparent px-1.5 text-[9px] text-emerald-100 hover:bg-emerald-300/10"
+                                  onClick={() => appendLaunchEvidenceBatchRows([item.verifiedEvidenceBatchRow])}
+                                  data-testid={`append-clippers-account-setup-queue-verified-${item.rank}`}
+                                >
+                                  verified
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {status.accountSetupSession.items.length > 0 && (
                       <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3")}>
                         {status.accountSetupSession.items.map((item) => {
@@ -16383,6 +18599,109 @@ export default function ClippersPage() {
               </div>
             )}
             {status?.publisherConnectors && (
+              <>
+                {status.metricoolPublishing && (
+                  <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{status.metricoolPublishing.markdownPath}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{status.metricoolPublishing.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", metricoolPublishingBadge(status.metricoolPublishing.status))}>{status.metricoolPublishing.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                      <p>MCP: {status.metricoolPublishing.mcpReady ? "ready" : "missing"}</p>
+                      <p>Plan: {status.metricoolPublishing.recommendedPlan}</p>
+                      <p>Channels: {status.metricoolPublishing.totals.channels}</p>
+                      <p>Profiles: {status.metricoolPublishing.totals.connectedProfiles}/{status.metricoolPublishing.totals.requiredProfiles}</p>
+                      <p>Approval: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "off"}</p>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      {status.metricoolPublishing.channels.map((channel) => (
+                        <div key={channel.accountId} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{channel.accountName}</p>
+                            <Badge className={cn("border text-[10px]", channel.publishGate === "approval_required_ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>{channel.publishGate}</Badge>
+                          </div>
+                          <p className="mt-2 truncate text-xs text-zinc-500">{channel.metricoolBrandName}</p>
+                          <p className="mt-1 text-xs text-zinc-500">BlogId: {channel.metricoolBlogId || "pending"} · Source: {channel.metricoolSource}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Networks: {channel.networks.join(", ")}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Connected: {channel.connectedNetworks.length ? channel.connectedNetworks.join(", ") : "none"}</p>
+                          <p className="mt-1 text-xs text-zinc-500">Profiles: {channel.connectedProfiles}/{channel.requiredProfiles} · Daily: {channel.dailyClipTarget}</p>
+                          {channel.permissionsToGrant.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {channel.permissionsToGrant.slice(0, 3).map((permission) => (
+                                <p key={`${channel.accountId}-${permission}`} className="rounded border border-sky-300/20 bg-sky-300/10 px-2 py-1 text-xs leading-5 text-sky-100">{permission}</p>
+                              ))}
+                            </div>
+                          )}
+                          {channel.connectionSteps.length > 0 && (
+                            <div className="mt-2 grid gap-1">
+                              {channel.connectionSteps.slice(0, 4).map((step, index) => (
+                                <p key={`${channel.accountId}-step-${index}`} className="rounded border border-white/10 bg-black/30 px-2 py-1 text-xs leading-5 text-zinc-400">{step}</p>
+                              ))}
+                            </div>
+                          )}
+                          {channel.blockers.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {channel.blockers.slice(0, 3).map((blocker) => (
+                                <p key={`${channel.accountId}-${blocker}`} className="rounded border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-xs leading-5 text-amber-100">{blocker}</p>
+                              ))}
+                            </div>
+                          )}
+                          <p className="mt-2 text-xs leading-5 text-sky-100">{channel.nextStep}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {status?.metricoolExecutionQueue && (
+              <div className="rounded-md border border-white/10 bg-black/35 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{status.metricoolExecutionQueue.markdownPath}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{status.metricoolExecutionQueue.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", publisherExecutionBadge(status.metricoolExecutionQueue.status))}>{status.metricoolExecutionQueue.status}</Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                  <p>Items: {status.metricoolExecutionQueue.totals.items}</p>
+                  <p>Approval: {status.metricoolExecutionQueue.totals.queuedForApproval}</p>
+                  <p>Blocked: {status.metricoolExecutionQueue.totals.blocked}</p>
+                  <p>Ready send: {status.metricoolExecutionQueue.totals.readyToSend}</p>
+                  <p>Run: {status.metricoolExecutionQueue.sourceAutomationRunId || "none"}</p>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {status.metricoolExecutionQueue.items.slice(0, 6).map((item) => (
+                    <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-medium text-white">{item.accountName} / {item.platform}</p>
+                        <Badge className={cn("border text-[10px]", publisherExecutionBadge(item.status))}>{item.status}</Badge>
+                      </div>
+                      <p className="mt-2 truncate text-xs text-zinc-500">{item.metricoolBrandName} · {item.metricoolBlogId || "pending"}</p>
+                      <p className="mt-1 text-xs text-zinc-500">Publish: {item.publishAt}</p>
+                      <p className="mt-1 truncate text-xs text-zinc-500">Source: {item.sourcePath || "missing"}</p>
+                      {item.gates.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {item.gates.slice(0, 4).map((gate) => (
+                            <div key={`${item.id}-${gate.id}`} className="flex items-center justify-between gap-2 rounded border border-white/10 px-2 py-1">
+                              <p className="truncate text-xs text-zinc-400">{gate.label}</p>
+                              <Badge className={cn("shrink-0 border text-[10px]", gate.done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>
+                                {gate.done ? "ok" : "missing"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs leading-5 text-blue-100">{item.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {status?.publisherConnectors && (
               <div className="rounded-md border border-white/10 bg-black/35 p-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
@@ -16634,6 +18953,84 @@ export default function ClippersPage() {
                   ))}
                 </div>
 
+                {status.sourceDiscoveryHandoff && (
+                  <div className="rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-source-discovery-handoff">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{status.sourceDiscoveryHandoff.markdownPath}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.sourceDiscoveryHandoff.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", sourceAcquisitionBadge(status.sourceDiscoveryHandoff.status))}>{status.sourceDiscoveryHandoff.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                      <p>Items: {status.sourceDiscoveryHandoff.totals.items}</p>
+                      <p>Critical: {status.sourceDiscoveryHandoff.totals.critical}</p>
+                      <p>Links: {status.sourceDiscoveryHandoff.totals.discoveryLinks}</p>
+                      <p>Candidates: {status.sourceDiscoveryHandoff.totals.targetCandidates}</p>
+                      <p>Minutes: {status.sourceDiscoveryHandoff.totals.scanMinutes}</p>
+                      <p>Files: {status.sourceDiscoveryHandoff.totals.sourceFilesNeeded}</p>
+                    </div>
+                    <p className="mt-2 break-all text-xs text-amber-100/70">CSV: {status.sourceDiscoveryHandoff.csvPath}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-orange-300/30 px-3 text-xs text-orange-100 hover:bg-orange-300/10"
+                        onClick={() => appendTrendCandidateBatchRows(status.sourceDiscoveryHandoff.items.map((item) => item.trendCandidateBatchRow))}
+                        disabled={!status.sourceDiscoveryHandoff.items.length}
+                        data-testid="add-source-discovery-trend-rows-button"
+                      >
+                        <Search className="mr-2 h-3.5 w-3.5" />
+                        Trend rows
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-cyan-300/30 px-3 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                        onClick={() => appendSourceIntakeBatchRows(status.sourceDiscoveryHandoff.items.map((item) => item.intakeBatchRow))}
+                        disabled={!status.sourceDiscoveryHandoff.items.length}
+                        data-testid="add-source-discovery-intake-rows-button"
+                      >
+                        <UploadCloud className="mr-2 h-3.5 w-3.5" />
+                        Intake rows
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-emerald-300/30 px-3 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                        onClick={() => appendLaunchEvidenceBatchRows(status.sourceDiscoveryHandoff.items.map((item) => item.rightsEvidenceBatchRow))}
+                        disabled={!status.sourceDiscoveryHandoff.items.length}
+                        data-testid="add-source-discovery-rights-rows-button"
+                      >
+                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        Rights rows
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {status.sourceDiscoveryHandoff.items.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-medium text-white">{item.targetFileName}</p>
+                            <Badge className={cn("border text-[10px]", item.priority === "critical" ? "border-red-300/40 bg-red-950/30 text-red-100" : viralDiscoveryBadge(item.priority as ClipperViralDiscoveryPriority))}>{item.priority}</Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">{item.accountName} · {item.platform}</p>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-amber-100">{item.discoveryQuery}</p>
+                          <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] text-zinc-500">
+                            <p>{item.targetCandidates} targets</p>
+                            <p>{formatNumber(item.minimumViews)} views</p>
+                            <p>{item.scanMinutes} min</p>
+                          </div>
+                          <a href={item.discoveryUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-xs text-amber-100 hover:bg-amber-300/10">
+                            Buscar
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {status.rightsOutreach && (
                   <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -16806,6 +19203,16 @@ export default function ClippersPage() {
                               <p className="mt-1 break-all text-[11px] leading-4 text-sky-100/70">Manifest: {batch.sourceDropManifestPath}</p>
                               <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">README: {batch.sourceDropReadmePath}</p>
                               <p className="mt-2 text-xs leading-5 text-zinc-500">{batch.nextStep}</p>
+                              {(batch.discoveryLinks || []).length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {(batch.discoveryLinks || []).slice(0, 4).map((link) => (
+                                    <a key={`${batch.id}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border border-orange-300/20 px-2 text-xs text-orange-100 hover:bg-orange-300/10">
+                                      {link.platform}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <Button size="sm" variant="outline" className="h-7 border-orange-300/20 bg-transparent px-2 text-xs text-orange-100 hover:bg-orange-300/10" onClick={() => setTrendCandidatesBatchText(batch.trendCandidateBatchTemplate || trendCandidatesBatchHeader)}>
                                   Trend CSV
@@ -16833,6 +19240,16 @@ export default function ClippersPage() {
                             </div>
                             <p className="mt-2 text-xs leading-5 text-zinc-500">{item.suggestedTitle}</p>
                             <p className="mt-2 text-xs leading-5 text-cyan-200">{item.viralSearchQueries?.[0]}</p>
+                            {(item.discoveryLinks || []).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {(item.discoveryLinks || []).slice(0, 3).map((link) => (
+                                  <a key={`${item.id}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded-md border border-orange-300/15 px-2 text-[11px] text-orange-100 hover:bg-orange-300/10">
+                                    {link.platform}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                             <div className="mt-2 space-y-1">
                               {(item.viralScoreChecklist || []).slice(0, 2).map((criteria) => (
                                 <p key={criteria} className="text-xs leading-5 text-zinc-500">- {criteria}</p>
@@ -16873,29 +19290,29 @@ export default function ClippersPage() {
                       </div>
                     </div>
                   )}
-                  {sourceIngestionSprint && (
+                  {visibleSourceIngestionSprint && (
                     <div className="rounded-md border border-sky-300/20 bg-sky-950/10 p-3" data-testid="clippers-source-ingestion-sprint-result">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white">Source ingestion sprint</p>
-                          <p className="mt-1 text-xs leading-5 text-zinc-500">{sourceIngestionSprint.nextStep}</p>
-                          <p className="mt-2 break-all text-[11px] leading-4 text-sky-100/70">Sprint: {sourceIngestionSprint.markdownPath}</p>
-                          <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">CSV: {sourceIngestionSprint.csvPath}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{visibleSourceIngestionSprint.nextStep}</p>
+                          <p className="mt-2 break-all text-[11px] leading-4 text-sky-100/70">Sprint: {visibleSourceIngestionSprint.markdownPath}</p>
+                          <p className="mt-1 break-all text-[11px] leading-4 text-cyan-100/70">CSV: {visibleSourceIngestionSprint.csvPath}</p>
                         </div>
-                        <Badge className={cn("w-fit border", sourceIngestionSprint.status === "ready" || sourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : sourceIngestionSprint.status === "needs_rights" || sourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                          {sourceIngestionSprint.status}
+                        <Badge className={cn("w-fit border", visibleSourceIngestionSprint.status === "ready" || visibleSourceIngestionSprint.status === "ready_to_import" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : visibleSourceIngestionSprint.status === "needs_rights" || visibleSourceIngestionSprint.status === "needs_metadata" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                          {visibleSourceIngestionSprint.status}
                         </Badge>
                       </div>
                       <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-6">
-                        <p>Items: {sourceIngestionSprint.totals.items}</p>
-                        <p>Files: {sourceIngestionSprint.totals.filesNeeded}</p>
-                        <p>Metadata: {sourceIngestionSprint.totals.metadataRowsNeeded}</p>
-                        <p>Rights: {sourceIngestionSprint.totals.rightsNeeded}</p>
-                        <p>Import: {sourceIngestionSprint.totals.importReady}</p>
-                        <p>Ready: {sourceIngestionSprint.totals.rightsReadyAssets}/{sourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
+                        <p>Items: {visibleSourceIngestionSprint.totals.items}</p>
+                        <p>Files: {visibleSourceIngestionSprint.totals.filesNeeded}</p>
+                        <p>Metadata: {visibleSourceIngestionSprint.totals.metadataRowsNeeded}</p>
+                        <p>Rights: {visibleSourceIngestionSprint.totals.rightsNeeded}</p>
+                        <p>Import: {visibleSourceIngestionSprint.totals.importReady}</p>
+                        <p>Ready: {visibleSourceIngestionSprint.totals.rightsReadyAssets}/{visibleSourceIngestionSprint.totals.minimumWeeklySourceAssets}</p>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-3">
-                        {sourceIngestionSprint.categories.map((category) => (
+                        {visibleSourceIngestionSprint.categories.map((category) => (
                           <div key={`source-sprint-${category.category}`} className="rounded-md border border-white/10 bg-black/30 p-2">
                             <div className="flex items-center justify-between gap-2">
                               <p className="truncate text-xs font-medium text-white">{category.label}</p>
@@ -16908,7 +19325,7 @@ export default function ClippersPage() {
                         ))}
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-3">
-                        {sourceIngestionSprint.items.slice(0, 6).map((item) => (
+                        {visibleSourceIngestionSprint.items.slice(0, 6).map((item) => (
                           <div key={`source-sprint-item-${item.id}`} className="rounded-md border border-white/10 bg-black/25 p-2">
                             <div className="flex items-center justify-between gap-2">
                               <p className="truncate text-xs font-medium text-white">{item.targetFileName}</p>

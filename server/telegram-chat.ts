@@ -17,6 +17,7 @@ import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
+import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { getGeminiClient } from "./gemini-client";
 import type { PendingActionStatus } from "@shared/schema";
 
@@ -601,6 +602,11 @@ function routeTelegramWorkRequest(message: string): string[] {
 }
 
 async function handleTelegramWorkRequest(userId: string, message: string): Promise<string | null> {
+  const developerAutopilotHandoff = await createDeveloperAutopilotHandoff(userId, message, "telegram");
+  if (developerAutopilotHandoff.status !== "invalid_request") {
+    return developerAutopilotHandoff.message;
+  }
+
   const actionIds = routeTelegramWorkRequest(message);
   if (actionIds.length === 0) return null;
 

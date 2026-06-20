@@ -33,6 +33,7 @@ test("loadLocalEnvFiles loads known local env files without overriding existing 
   const cwd = mkdtempSync(path.join(tmpdir(), "env-loader-"));
   const env: NodeJS.ProcessEnv = {
     ENV_LOADER_TEST_EXISTING: "runtime",
+    ENV_LOADER_TEST_EMPTY_RUNTIME: "",
   };
 
   try {
@@ -41,6 +42,7 @@ test("loadLocalEnvFiles loads known local env files without overriding existing 
       [
         "ENV_LOADER_TEST_ALPHA=from-env",
         "ENV_LOADER_TEST_EXISTING=from-file",
+        "ENV_LOADER_TEST_EMPTY_FILE=",
         "env_loader_test_lowercase=ignored",
       ].join("\n"),
     );
@@ -49,6 +51,8 @@ test("loadLocalEnvFiles loads known local env files without overriding existing 
       [
         "ENV_LOADER_TEST_ALPHA=from-local",
         "ENV_LOADER_TEST_BETA='local beta'",
+        "ENV_LOADER_TEST_EMPTY_FILE=from-local-after-empty",
+        "ENV_LOADER_TEST_EMPTY_RUNTIME=from-local-after-runtime-empty",
       ].join("\n"),
     );
     writeFileSync(path.join(cwd, "CEO_ASSISTANT_ENV"), "ENV_LOADER_TEST_GAMMA=from-ceo-file\n");
@@ -58,6 +62,8 @@ test("loadLocalEnvFiles loads known local env files without overriding existing 
     assert.equal(env.ENV_LOADER_TEST_EXISTING, "runtime");
     assert.equal(env.ENV_LOADER_TEST_BETA, "local beta");
     assert.equal(env.ENV_LOADER_TEST_GAMMA, "from-ceo-file");
+    assert.equal(env.ENV_LOADER_TEST_EMPTY_FILE, "from-local-after-empty");
+    assert.equal(env.ENV_LOADER_TEST_EMPTY_RUNTIME, "from-local-after-runtime-empty");
     assert.equal(env.env_loader_test_lowercase, undefined);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
