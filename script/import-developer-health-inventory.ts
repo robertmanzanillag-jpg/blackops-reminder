@@ -9,7 +9,13 @@ function readArg(name: string, argv = process.argv): string | undefined {
   const inline = argv.find((arg) => arg.startsWith(prefix));
   if (inline) return inline.slice(prefix.length);
   const index = argv.indexOf(name);
-  if (index >= 0) return argv[index + 1];
+  if (index >= 0) {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("-")) {
+      throw new Error(`${name} requires a value.`);
+    }
+    return value;
+  }
   return undefined;
 }
 

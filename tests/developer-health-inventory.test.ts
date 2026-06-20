@@ -146,6 +146,18 @@ test("Developer Health inventory CLI rejects placeholder user ids", () => {
     /--user-id must be a real user id/,
   );
 
+  assert.throws(
+    () => resolveDeveloperHealthInventoryUserId(
+      {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-session-secret",
+        DEFAULT_USER_ID: "real-user-id",
+      } as NodeJS.ProcessEnv,
+      ["node", "script/import-developer-health-inventory.ts", "--user-id", "--execute"],
+    ),
+    /--user-id requires a value/,
+  );
+
   assert.equal(
     resolveDeveloperHealthInventoryUserId(
       {
