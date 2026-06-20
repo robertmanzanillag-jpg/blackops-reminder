@@ -42,6 +42,7 @@ import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-a
 import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
+import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -4486,6 +4487,16 @@ export async function registerRoutes(
       res.json(prep);
     } catch (error) {
       res.status(500).json({ error: "Failed to build meeting prep" });
+    }
+  });
+
+  app.get("/api/ai-spend/monthly", async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      const runs = await storage.getAutomationRuns(userId, undefined, 500);
+      res.json(buildMonthlyAiSpendReport(runs));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to build AI spend report" });
     }
   });
 

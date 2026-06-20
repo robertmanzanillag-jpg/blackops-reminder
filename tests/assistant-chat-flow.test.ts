@@ -104,6 +104,23 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(agentRules, /Target AI\/API spend below \$500\/month/);
 });
 
+test("dashboard exposes monthly AI spend tracking", () => {
+  const policy = readFileSync("server/ai-cost-policy.ts", "utf8");
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const dashboard = readFileSync("client/src/pages/dashboard.tsx", "utf8");
+  const panel = readFileSync("client/src/components/monthly-spend-panel.tsx", "utf8");
+
+  assert.match(policy, /buildMonthlyAiSpendReport/);
+  assert.match(policy, /BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD/);
+  assert.match(policy, /BLACKOPS_METRICOOL_MONTHLY_USD/);
+  assert.match(routes, /\/api\/ai-spend\/monthly/);
+  assert.match(routes, /buildMonthlyAiSpendReport\(runs\)/);
+  assert.match(dashboard, /MonthlySpendPanel/);
+  assert.match(panel, /monthly-spend-panel/);
+  assert.match(panel, /\/api\/ai-spend\/monthly/);
+  assert.match(panel, /Gasto mensual/);
+});
+
 test("web assistant prepares clear Google Calendar requests without model routing", () => {
   const direct = buildDirectGoogleCalendarCommand(
     "quiero que agreguemos para este martes en el google calendar: BLACK ROOM RADIO BERLIN 3pm: 4pm: 5pm: 6pm: 7pm:",
