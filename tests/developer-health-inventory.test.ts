@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppProject, InsertAppProject } from "@shared/schema";
 import { knownDeveloperHealthApps, upsertKnownDeveloperHealthInventory } from "../server/developer-health-inventory";
+import { resolveDeveloperHealthInventoryUserId } from "../script/import-developer-health-inventory";
 
 function appProject(input: InsertAppProject, overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -118,4 +119,42 @@ test("upsertKnownDeveloperHealthInventory adds verified fields without erasing e
   assert.equal(updatedKong.publicUrl, "https://kong--app.replit.app");
   assert.equal(updatedKong.healthUrl, "https://kong--app.replit.app/api/health");
   assert.equal(updatedKong.deploymentProvider, "replit");
+});
+
+test("Developer Health inventory CLI rejects placeholder user ids", () => {
+  assert.throws(
+    () => resolveDeveloperHealthInventoryUserId(
+      {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-session-secret",
+        DEFAULT_USER_ID: "replace-after-auth-create-user",
+      } as NodeJS.ProcessEnv,
+      ["node", "script/import-developer-health-inventory.ts"],
+    ),
+    /DEFAULT_USER_ID is required|placeholder/,
+  );
+
+  assert.throws(
+    () => resolveDeveloperHealthInventoryUserId(
+      {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-session-secret",
+        DEFAULT_USER_ID: "real-user-id",
+      } as NodeJS.ProcessEnv,
+      ["node", "script/import-developer-health-inventory.ts", "--user-id=replace-with-user-id"],
+    ),
+    /--user-id must be a real user id/,
+  );
+
+  assert.equal(
+    resolveDeveloperHealthInventoryUserId(
+      {
+        NODE_ENV: "production",
+        SESSION_SECRET: "production-session-secret",
+        DEFAULT_USER_ID: "real-user-id",
+      } as NodeJS.ProcessEnv,
+      ["node", "script/import-developer-health-inventory.ts"],
+    ),
+    "real-user-id",
+  );
 });
