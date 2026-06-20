@@ -66,7 +66,8 @@ export function loadEnvFile(filePath: string, env: NodeJS.ProcessEnv = process.e
 
   for (const line of raw.split(/\r?\n/)) {
     const parsed = parseEnvLine(line);
-    if (!parsed || env[parsed.key] !== undefined) continue;
+    const existing = parsed ? env[parsed.key] : undefined;
+    if (!parsed || (existing !== undefined && existing.trim() !== "")) continue;
 
     env[parsed.key] = parsed.value;
     loaded += 1;

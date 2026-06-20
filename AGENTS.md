@@ -14,6 +14,31 @@
 - Agents must not edit `.env`, secrets, credentials, private keys, OAuth tokens, recovery codes, or files under `credentials/`, `secrets/`, `.git/`, or `node_modules/`.
 - If App QA finds any warning or failure, do not deploy. Send the report and ask whether to create a follow-up Codex fix.
 
+## Cross-Agent Review Gate
+
+- Work performed in this Codex workspace should be reviewed by a second agent before it is considered complete whenever code, configuration, production behavior, security, deployment, or customer-visible UI is changed.
+- Use a maker/checker flow: one agent implements the change, then another agent reviews the diff, runs the relevant checks, and looks for bugs, regressions, security issues, missing tests, and incomplete requirements.
+- The checker should inspect `git diff`, changed files, affected routes/APIs, relevant tests, build/typecheck commands, and any App QA findings before approving the work.
+- If the checker finds a problem, the agents should fix it, rerun the relevant checks, and repeat review until the blocker is cleared or Robert is asked how to proceed.
+- Do not mark work as done only because the implementing agent says it is done. Completion requires passing evidence from the checker or a clear note that cross-agent review could not run.
+- Keep handoffs short and concrete: goal, files changed, commands run, known risks, what still needs verification, and rollback notes when applicable.
+- Do not let multiple agents edit the same files in the same branch at the same time. Use separate branches or wait for one agent to finish before another applies fixes.
+
+## Local Codebase Map
+
+- Before broad repo exploration, architecture questions, route/API lookup, test targeting, or Claude handoffs, read `docs/codebase-map.md` first and use it to pick the smallest relevant source files.
+- Refresh the map with `npm run codebase:map` after major file moves, route changes, new tests, or new server/client modules.
+- Treat the map as a routing aid, not proof. Read source files directly before editing or making strong claims.
+- The generator is local-only and must keep skipping `.env`, `credentials/`, `secrets/`, build outputs, media-heavy folders, and large data exports.
+
+## Marketing Autopilot
+
+- Robert should not need slash commands for marketing work. Treat natural-language requests about ads, campaigns, CAC, ROAS, CPL, CTR, creatives, hooks, offers, landing pages, funnels, tracking, attribution, Meta, Google Ads, YouTube, TikTok, LinkedIn, Microsoft Ads, Apple Ads, Amazon Ads, or budget allocation as marketing-agent requests.
+- For marketing-agent requests, automatically route to the installed `ads` skills by intent. Use the main `ads` skill for broad or unclear requests, and use focused skills such as `ads-audit`, `ads-google`, `ads-meta`, `ads-landing`, `ads-creative`, `ads-budget`, `ads-plan`, `ads-attribution`, and `ads-server-side-tracking` when the user's wording points to that area.
+- Ask follow-up questions only when required data is missing and a reasonable assumption would materially change the answer. Otherwise make practical assumptions, say what was assumed, and produce a useful audit, plan, creative set, tracking review, or next-action list.
+- When marketing work touches code, tracking snippets, landing-page implementation, production behavior, or customer-visible UI, keep the normal PR-first and cross-agent QA rules in force.
+- Use Gemma as a low-cost local scout for summaries, clustering, duplicate detection, first-pass issue triage, and draft variants when useful, but do not treat Gemma as the final reviewer for spend, security, tracking, deployment, or production decisions.
+
 ## PR Review Standard
 
 Every agent-generated PR should answer:

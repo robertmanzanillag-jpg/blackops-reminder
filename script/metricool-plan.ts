@@ -1,3 +1,4 @@
+import "../server/env-loader";
 import { buildMetricoolMcpClientConfig, getMetricoolConfigStatus, getMetricoolTrackingPlan } from "../server/metricool-tracking";
 
 const status = getMetricoolConfigStatus();

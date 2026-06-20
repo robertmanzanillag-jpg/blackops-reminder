@@ -7,6 +7,7 @@
     "dev:client": "vite dev --port 5000",
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "node --import tsx script/build.ts",
+    "codebase:map": "node --import tsx script/codebase-map.ts",
     "test:dropshipping-ceo": "node --import tsx --test tests/dropshipping-ceo.test.ts",
     "test:ceo": "node --import tsx --test tests/ceo-briefing.test.ts",
     "test:ceo-brief-cli": "node --import tsx --test tests/ceo-brief-cli.test.ts",
