@@ -9,10 +9,10 @@ interface ClaudeSkill {
 }
 
 const SKILLS_DIR = path.join(process.cwd(), ".claude", "skills");
-const DEFAULT_MAX_SKILLS = 2;
-const DEFAULT_MAX_BODY_CHARS = 1400;
-const DEFAULT_MAX_CONTEXT_CHARS = 4200;
-const DEFAULT_MIN_SCORE = 6;
+const DEFAULT_MAX_SKILLS = 1;
+const DEFAULT_MAX_BODY_CHARS = 900;
+const DEFAULT_MAX_CONTEXT_CHARS = 2500;
+const DEFAULT_MIN_SCORE = 8;
 const DEFAULT_SKILL_CACHE_TTL_MS = 30_000;
 
 let cachedSkills: { loadedAt: number; skills: ClaudeSkill[] } | null = null;

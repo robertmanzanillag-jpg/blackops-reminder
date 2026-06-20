@@ -18,9 +18,10 @@ import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, forma
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
+import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
-import { getGeminiClient } from "./gemini-client";
+import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingActionStatus } from "@shared/schema";
 
 const TELEGRAM_WEBHOOK_PATH = "/api/telegram/webhook";
@@ -1292,13 +1293,15 @@ export async function handleTelegramMessageWithDeps(
       imageData = await downloadTelegramPhoto(botToken, largestPhoto.file_id);
     }
 
+    const historyLimit = getAiConversationHistoryLimit();
+    const aiCostPolicyContext = buildAiCostPolicyContext("telegram");
     const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory, claudeSkillContext] = await Promise.all([
       getCalendarContext(),
       getUserProfileContext(userId),
       getPortfolioContext(userId),
       getTasksContext(userId),
       generateTelegramAssistantContext(userId),
-      getCeoConversationHistory(userId, 12, userMessage || (hasPhoto ? "[Imagen enviada por Telegram]" : undefined)),
+      getCeoConversationHistory(userId, historyLimit, userMessage || (hasPhoto ? "[Imagen enviada por Telegram]" : undefined)),
       buildClaudeSkillContext(userMessage),
     ]);
 
@@ -1314,6 +1317,8 @@ export async function handleTelegramMessageWithDeps(
 ${calendarContext}
 
 ${ceoContext}
+
+${aiCostPolicyContext}
 
 ${claudeSkillContext}
 
@@ -1348,7 +1353,7 @@ ${conversationHistory}
     }
 
     const result = await getGeminiClient().models.generateContent({
-      model: "gemini-2.5-flash",
+      model: getGeminiChatModel({ hasImage: !!imageData }),
       contents: [{ role: "user", parts }],
     });
     const responseText = result.text || "";

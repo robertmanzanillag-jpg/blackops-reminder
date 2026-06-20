@@ -14,6 +14,7 @@ import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, forma
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
+import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
 import { toFile } from "openai";
@@ -1211,6 +1212,8 @@ export function registerAssistantRoutes(app: Express): void {
         return;
       }
 
+      const historyLimit = getAiConversationHistoryLimit();
+      const aiCostPolicyContext = buildAiCostPolicyContext("web");
       const [calendarContext, userProfileContext, portfolioContext, ceoContext, sharedConversationHistory, claudeSkillContext] = await Promise.all([
         getCalendarContext(userId),
         getUserProfileContext(userId),
@@ -1218,7 +1221,7 @@ export function registerAssistantRoutes(app: Express): void {
         generateTelegramAssistantContext(userId),
         getCeoConversationHistory(
           userId,
-          12,
+          historyLimit,
           message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
         ),
         buildClaudeSkillContext(message),
@@ -1281,7 +1284,7 @@ export function registerAssistantRoutes(app: Express): void {
       const openAiMessages: ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${claudeSkillContext}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
+          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${aiCostPolicyContext}\n\n${claudeSkillContext}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
         },
         {
           role: "assistant",
@@ -1289,7 +1292,7 @@ export function registerAssistantRoutes(app: Express): void {
         },
         ...conversationHistory
           .filter((msg: { role: string; content: string }) => msg?.content && (msg.role === "assistant" || msg.role === "user"))
-          .slice(-12)
+          .slice(-historyLimit)
           .map((msg: { role: string; content: string }) => ({
             role: msg.role === "assistant" ? "assistant" as const : "user" as const,
             content: msg.content,
@@ -1319,7 +1322,7 @@ export function registerAssistantRoutes(app: Express): void {
           model: OPENAI_ASSISTANT_MODEL,
           messages: openAiMessages,
           stream: true,
-          max_completion_tokens: 1200,
+          max_completion_tokens: getOpenAiMaxCompletionTokens(),
         });
 
         for await (const chunk of stream) {

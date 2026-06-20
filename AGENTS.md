@@ -40,6 +40,14 @@
 - When marketing work touches code, tracking snippets, landing-page implementation, production behavior, or customer-visible UI, keep the normal PR-first and cross-agent QA rules in force.
 - Use Gemma as a low-cost local scout for summaries, clustering, duplicate detection, first-pass issue triage, and draft variants when useful, but do not treat Gemma as the final reviewer for spend, security, tracking, deployment, or production decisions.
 
+## AI Cost Discipline
+
+- Keep BlackOps in cheap-first mode by default. Target AI/API spend below $500/month until revenue supports scaling, with an operating target around $350/month.
+- Prefer deterministic app routes, cached context, batch planning, Gemini/Gemma scout work, and compact skill context before calling a strong model.
+- Strong models are reserved for final strategy, spend decisions, production changes, security, code review, customer/supplier contact, or cases where the scout is uncertain.
+- Bulk clippers should use campaign-level planning, reusable templates, and batch captions instead of one strong-model pass per clip.
+- Paid generative video, paid ads, external posting, production deployment, or spend increases need Robert approval and a cost estimate first.
+
 ## PR Review Standard
 
 Every agent-generated PR should answer:

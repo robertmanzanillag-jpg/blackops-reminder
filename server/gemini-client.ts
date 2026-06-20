@@ -15,3 +15,9 @@ export function getGeminiClient(): GoogleGenAI {
     },
   });
 }
+
+export function getGeminiChatModel(options: { hasImage?: boolean } = {}): string {
+  const explicitModel = process.env.BLACKOPS_GEMINI_CHAT_MODEL || process.env.AI_INTEGRATIONS_GEMINI_MODEL;
+  if (hasRealValue(explicitModel)) return explicitModel;
+  return options.hasImage ? "gemini-2.5-flash" : "gemini-2.5-flash-lite";
+}

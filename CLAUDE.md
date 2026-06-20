@@ -28,13 +28,25 @@ Use these project skills instead of installing a large framework by default:
 The BlackOps web and Telegram assistants also read relevant local `.claude/skills/*/SKILL.md` files through `server/claude-skill-bridge.ts`. Keep marketing/design skill instructions concise because selected skill bodies are injected into chat prompts.
 Token controls for the bridge:
 
-- `BLACKOPS_SKILLS_MAX_ACTIVE` defaults to `2`.
-- `BLACKOPS_SKILLS_MAX_BODY_CHARS` defaults to `1400`.
-- `BLACKOPS_SKILLS_MAX_CONTEXT_CHARS` defaults to `4200`.
-- `BLACKOPS_SKILLS_MIN_SCORE` defaults to `6`.
+- `BLACKOPS_SKILLS_MAX_ACTIVE` defaults to `1`.
+- `BLACKOPS_SKILLS_MAX_BODY_CHARS` defaults to `900`.
+- `BLACKOPS_SKILLS_MAX_CONTEXT_CHARS` defaults to `2500`.
+- `BLACKOPS_SKILLS_MIN_SCORE` defaults to `8`.
 - `BLACKOPS_SKILLS_CACHE_TTL_MS` defaults to `30000`.
 
 When no skill matches the current message, the bridge injects no skill context.
+
+## AI Cost Controls
+
+BlackOps is configured to stay cheap-first by default so Robert can keep AI/API spend under the business target before scaling.
+
+- `BLACKOPS_AI_MONTHLY_BUDGET_USD` defaults to `500`.
+- `BLACKOPS_AI_OPERATING_TARGET_USD` defaults to `350`.
+- `BLACKOPS_AI_HISTORY_MESSAGES` defaults to `8`.
+- `BLACKOPS_OPENAI_MAX_COMPLETION_TOKENS` defaults to `900`.
+- `BLACKOPS_GEMINI_CHAT_MODEL` can override the Telegram/Gemini chat model. Without an override, Telegram text uses `gemini-2.5-flash-lite` and image analysis uses `gemini-2.5-flash`.
+- Use cheap scout work for summaries, captions, clustering, clip planning, and first drafts. Use the strong model for final strategy, spend, production, security, code, or high-risk judgment.
+- Do not trigger paid generative video at scale, paid ad spend, external posting, supplier/customer outreach, or production changes without Robert approval and a cost estimate.
 
 Do not add new agents, hooks, MCP servers, dependencies, or automations unless they remove repeated work or enforce an existing safety rule.
 

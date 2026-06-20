@@ -72,6 +72,8 @@ test("BlackOps chat loads local Claude skills into web and Telegram prompts", ()
   assert.match(bridge, /\.claude/);
   assert.match(bridge, /BLACKOPS_SKILLS_MAX_ACTIVE/);
   assert.match(bridge, /BLACKOPS_SKILLS_MAX_BODY_CHARS/);
+  assert.match(bridge, /DEFAULT_MAX_SKILLS = 1/);
+  assert.match(bridge, /DEFAULT_MAX_CONTEXT_CHARS = 2500/);
   assert.match(bridge, /if \(scored\.length === 0\) return ""/);
   assert.match(bridge, /Skill truncated for token budget/);
   assert.match(webAssistant, /buildClaudeSkillContext\(message\)/);
@@ -80,6 +82,26 @@ test("BlackOps chat loads local Claude skills into web and Telegram prompts", ()
   assert.match(marketingSkill, /campaigns/);
   assert.match(designSkill, /UI, UX/);
   assert.match(designSkill, /Canva/);
+});
+
+test("BlackOps chat enforces cheap-first AI cost policy", () => {
+  const policy = readFileSync("server/ai-cost-policy.ts", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+  const telegramAssistant = readFileSync("server/telegram-chat.ts", "utf8");
+  const geminiClient = readFileSync("server/gemini-client.ts", "utf8");
+  const agentRules = readFileSync("AGENTS.md", "utf8");
+
+  assert.match(policy, /BLACKOPS_AI_MONTHLY_BUDGET_USD/);
+  assert.match(policy, /500/);
+  assert.match(policy, /cheap-first/);
+  assert.match(policy, /paid generative video at scale/);
+  assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
+  assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
+  assert.match(webAssistant, /getAiConversationHistoryLimit\(\)/);
+  assert.match(telegramAssistant, /buildAiCostPolicyContext\("telegram"\)/);
+  assert.match(telegramAssistant, /getGeminiChatModel\(\{ hasImage: !!imageData \}\)/);
+  assert.match(geminiClient, /gemini-2\.5-flash-lite/);
+  assert.match(agentRules, /Target AI\/API spend below \$500\/month/);
 });
 
 test("web assistant prepares clear Google Calendar requests without model routing", () => {
