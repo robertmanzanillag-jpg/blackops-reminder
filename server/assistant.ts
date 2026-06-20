@@ -11,6 +11,7 @@ import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./b
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
@@ -18,6 +19,8 @@ import { toFile } from "openai";
 import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 const ASSISTANT_TIMEZONE = "America/New_York";
+
+export { buildDirectMetricoolCommand };
 
 function normalizeApprovalText(message: string): string {
   return message
@@ -775,6 +778,7 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
 - [BLACKROOM_TIMER_ADD: {"title": "...", "date": "YYYY-MM-DDTHH:mm", "url": "https://...", "partyTitle": "..."}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -827,6 +831,14 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 - El sistema escoge templates automáticamente según el contenido/carpeta: party, dinner, pool, yacht, guestlist, nightlife.
 - No uses screenshots, screen recordings o capturas; el editor solo debe tomar videos reales de promo.
 - No inventes que publicaste en redes; por ahora quedan listos para descargar/subir manualmente.
+
+## METRICOOL / SOCIAL PUBLISHING:
+Puedes preparar campanas, clips y colas de publicacion con Metricool usando METRICOOL_AUTOMATION.
+- Usa este comando cuando el usuario pida postear, publicar, programar, correr campanas, preparar cola, o automatizar clips/redes con Metricool.
+- publishMode por defecto debe ser "approval_required".
+- Usa "auto_after_connection" solo si el usuario pide explicitamente automatico/live; aun asi el sistema lo pondra como accion pendiente y el backend mantiene las banderas de seguridad.
+- Nunca digas que ya publicaste en redes. Di que preparaste la cola o que quedo pendiente de aprobacion.
+- Si el usuario pide publicar inmediatamente, crea la accion Metricool y explica que necesita aprobacion y que real publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true y METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=false.
 
 ## RADIO YOUTUBE CLIPS:
 Si el usuario manda un link de YouTube y pide clips/videos/edits de radio, usa RADIO_YOUTUBE_CLIPS con youtubeUrl y driveFolderPath.
@@ -1290,10 +1302,14 @@ export function registerAssistantRoutes(app: Express): void {
 
       let fullResponse = "";
       const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
+      const directMetricoolCommand = buildDirectMetricoolCommand(message);
 
       if (directBlackRoomCommand) {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
+      } else if (directMetricoolCommand) {
+        fullResponse = `${directMetricoolCommand.content}\n${directMetricoolCommand.command}`;
+        res.write(`data: ${JSON.stringify({ content: directMetricoolCommand.content })}\n\n`);
       } else {
         const stream = await getOpenAIClient().chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,
@@ -1688,6 +1704,46 @@ export function registerAssistantRoutes(app: Express): void {
           res.write(`data: ${JSON.stringify({ communicationDraftCreated: true, pendingActionId: pendingAction.id })}\n\n`);
         } catch (e) {
           console.error("Error creating communication draft from assistant:", e);
+        }
+      }
+
+      const metricoolAutomationRegex = /\[METRICOOL_AUTOMATION:\s*(\{[^}]+\})\]/g;
+      let metricoolAutomationMatch;
+      while ((metricoolAutomationMatch = metricoolAutomationRegex.exec(fullResponse)) !== null) {
+        try {
+          const metricoolData = sanitizeMetricoolAutomationInput(JSON.parse(metricoolAutomationMatch[1]));
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.metricool_automation",
+            resourceType: "metricool_execution_queue",
+            title: metricoolData.publishMode === "auto_after_connection"
+              ? "Preparar Metricool auto publish"
+              : "Preparar cola Metricool",
+            description: buildMetricoolPendingDescription(metricoolData),
+            input: metricoolData,
+            proposedChanges: {
+              publishMode: metricoolData.publishMode,
+              clipsPerAccount: metricoolData.clipsPerAccount,
+              riskTolerance: metricoolData.riskTolerance,
+              platforms: metricoolData.platforms,
+              campaign: metricoolData.campaign,
+            },
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title, metricoolAutomationQueued: true })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ metricoolAutomationError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction, metricoolAutomationPending: true })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error creating Metricool automation pending action:", e);
+          res.write(`data: ${JSON.stringify({ metricoolAutomationError: e.message || "No pude preparar Metricool" })}\n\n`);
         }
       }
 

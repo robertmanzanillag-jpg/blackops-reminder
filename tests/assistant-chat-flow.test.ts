@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildDirectBlackRoomCommand,
   buildDirectGoogleCalendarCommand,
+  buildDirectMetricoolCommand,
   buildDirectPromoVideoCommand,
   userAlreadyApprovedExecution,
 } from "../server/assistant";
@@ -45,6 +46,19 @@ test("web assistant routes natural promo video requests to the local video agent
   assert.match(direct.command, /PROMO_VIDEO_GENERATE/);
   assert.match(direct.command, /"count":5/);
   assert.match(direct.command, /"platform":"tiktok"/);
+});
+
+test("web assistant routes Metricool posting requests into approval-gated automation", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const executor = readFileSync("server/trust-executor.ts", "utf8");
+  const direct = buildDirectMetricoolCommand("prepara Metricool para postear 6 clips en TikTok automatico");
+
+  assert.ok(direct);
+  assert.match(direct.command, /METRICOOL_AUTOMATION/);
+  assert.match(direct.command, /"clipsPerAccount":6/);
+  assert.match(direct.command, /"publishMode":"auto_after_connection"/);
+  assert.match(source, /marketing\.metricool_automation/);
+  assert.match(executor, /executeMetricoolAutomationAction/);
 });
 
 test("web assistant prepares clear Google Calendar requests without model routing", () => {

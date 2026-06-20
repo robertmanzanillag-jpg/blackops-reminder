@@ -381,8 +381,8 @@ export default function AssistantPage() {
                   return updated;
                 });
               }
-              if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError) {
-                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError}`;
+              if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError) {
+                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError}`;
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[updated.length - 1] = {

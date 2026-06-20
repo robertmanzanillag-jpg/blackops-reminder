@@ -143,8 +143,8 @@ export function DashboardAssistantChat() {
                 return next;
               });
             }
-            if (data.googleEventError || data.radioError || data.blackRoomLinkError) {
-              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError}`;
+            if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError}`;
               setMessages((prev) => {
                 const next = [...prev];
                 next[next.length - 1] = {

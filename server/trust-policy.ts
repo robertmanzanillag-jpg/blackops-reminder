@@ -69,6 +69,7 @@ const ACTION_RISK: Record<string, RiskLevel> = {
   "marketing.blackroom_link_update": "high",
   "marketing.blackroom_link_deactivate": "high",
   "marketing.blackroom_timer_add": "high",
+  "marketing.metricool_automation": "critical",
   "radio_edit.resolve_dj_name": "low",
   "radio_edit.youtube_to_drive": "medium",
   "google_drive.create_folder": "low",
