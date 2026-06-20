@@ -344,6 +344,40 @@ test("autopilot winner approval promotes product and prepares launch approvals w
   assert.equal(result.run.safety.inventoryPurchased, false);
 });
 
+test("autopilot winner approval can queue local launch approvals without spend or sample", () => {
+  const result = runDropshippingAutopilotProductHunter({
+    focusNiche: "mixed",
+    maxCandidates: 5,
+    requestedBudgetUsd: 100,
+    dailyOrganicPosts: 3,
+    postsPerPlatform: 1,
+  });
+
+  recordDropshippingApprovalDecision({
+    targetId: result.run.winnerProductId,
+    targetType: "product",
+    decision: "approved",
+    approvedAction: "Approve Autopilot winner for launch",
+    maxSpendUsd: 0,
+  });
+  const preview = prepareDropshippingLaunchPackApprovalQueue({
+    launchPackId: result.run.launchPackId,
+    includeSpendApproval: false,
+    includeSampleApproval: false,
+  });
+  const outbox = recordDropshippingApprovalOutboxRequests(preview.requests, "Trust Center unavailable in Autopilot test.");
+
+  const queuedTypes = outbox.queued.map((item) => item.actionType);
+  assert.equal(outbox.queued.length, preview.requests.length);
+  assert.equal(queuedTypes.includes("dropshipping.publish_product"), true);
+  assert.equal(queuedTypes.includes("dropshipping.create_shopify_draft"), true);
+  assert.equal(queuedTypes.includes("dropshipping.publish_social"), true);
+  assert.equal(queuedTypes.includes("dropshipping.contact_supplier"), true);
+  assert.equal(queuedTypes.includes("dropshipping.spend"), false);
+  assert.equal(queuedTypes.includes("dropshipping.order_sample"), false);
+  assert.equal(outbox.snapshot.metrics.localApprovalOutbox, preview.requests.length);
+});
+
 test("autopilot winner rejection blocks winner and candidate without queueing launch approvals", () => {
   const result = runDropshippingAutopilotProductHunter({
     focusNiche: "mixed",
