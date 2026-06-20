@@ -17,6 +17,7 @@
 ## Cross-Agent Review Gate
 
 - Work performed in this Codex workspace should be reviewed by a second agent before it is considered complete whenever code, configuration, production behavior, security, deployment, or customer-visible UI is changed.
+- Use `/review-pr` for pull request review, branch readiness checks, and review of agent-generated PR work before Robert is told it is ready.
 - Use a maker/checker flow: one agent implements the change, then another agent reviews the diff, runs the relevant checks, and looks for bugs, regressions, security issues, missing tests, and incomplete requirements.
 - The checker should inspect `git diff`, changed files, affected routes/APIs, relevant tests, build/typecheck commands, and any App QA findings before approving the work.
 - If the checker finds a problem, the agents should fix it, rerun the relevant checks, and repeat review until the blocker is cleared or Robert is asked how to proceed.

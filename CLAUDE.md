@@ -19,6 +19,7 @@ Use these project skills instead of installing a large framework by default:
 
 - `/project-scout` before architecture lookup, route/API lookup, impact analysis, or test targeting.
 - `/pr-first-fix` for bug, production, threat, or security repair work.
+- `/review-pr` when Robert asks to review a pull request, inspect agent-generated PR work, or check a branch before merge.
 - `/qa-gate` before saying a code/config/UI change is ready.
 - `/skill-scout` only when a repeated workflow should become a new skill.
 
