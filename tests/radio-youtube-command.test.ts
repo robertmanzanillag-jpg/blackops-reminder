@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "../server/radio-youtube-command";
+import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "../server/radio-youtube-command";
 
 test("extracts Drive folder path from radio YouTube request", () => {
   assert.deepEqual(
@@ -30,6 +30,23 @@ test("builds direct radio YouTube command only for radio clip requests", () => {
   assert.deepEqual(command?.driveFolderPath, ["Radio Junio"]);
 
   assert.equal(buildDirectRadioYoutubeCommand("mira este link https://youtu.be/abc123"), null);
+});
+
+test("builds direct YouTube clip command when Drive destination is requested without saying radio", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU quiero que me saques los clips de este video y me lo agregues en la carpeta Robert A/Videos de Lucia Reina del Drive");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.deepEqual(command?.driveFolderPath, ["Robert A", "Videos de Lucia Reina"]);
+  assert.match(command?.command || "", /RADIO_YOUTUBE_CLIPS/);
+});
+
+test("uses YouTube title as Drive folder when requested", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU quiero que me saques los clips de este video y me lo agregues en la carpeta de drive con el titulo");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.equal(command?.driveFolderPathFromYoutubeTitle, true);
+  assert.equal(command?.createFolderIfMissing, true);
+  assert.deepEqual(command?.driveFolderPath, []);
+  assert.match(command?.command || "", /driveFolderPathFromYoutubeTitle/);
+  assert.equal(command ? directRadioYoutubeCommandNeedsDriveFolder(command) : true, false);
 });
 
 test("extracts music URL for drop-based radio edits", () => {

@@ -10,7 +10,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
@@ -1116,7 +1116,7 @@ export function registerAssistantRoutes(app: Express): void {
 
         res.write(`data: ${JSON.stringify({ content: directRadioYoutubeCommand.content })}\n\n`);
 
-        if (!directRadioYoutubeCommand.driveFolderPath.length || directRadioYoutubeCommand.needsMusicUrl) {
+        if (directRadioYoutubeCommandNeedsDriveFolder(directRadioYoutubeCommand) || directRadioYoutubeCommand.needsMusicUrl) {
           await saveCeoConversationMessage(userId, "assistant", directRadioYoutubeCommand.content).catch((historyError) => {
             console.error("Error saving direct radio YouTube folder question:", historyError);
           });
