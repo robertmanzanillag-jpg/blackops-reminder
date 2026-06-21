@@ -144,8 +144,9 @@ function inferSubscriptionHandoffKind(message: string): SubscriptionHandoffKind 
     && /\b(usa|usar|usalo|mandalo|envia|pasalo|prepara|handoff|brief|trabajo pesado|fuerte|sin api|no gastar api)\b/.test(text);
   const heavyManualWork = /\b(campana completa|estrategia completa|plan completo|analisis profundo|reporte profundo|disena.*flyers?|flyers?.*completo|marketing completo|dropshipping.*estrategia|clippers.*campana)\b/.test(text)
     && /\b(fuerte|pro|membresia|sin api|no gastar api|codex|chatgpt)\b/.test(text);
+  const strictCostHeavyWork = /\b(campana completa|campanas completas|estrategia completa|plan completo|analisis profundo|reporte profundo|decision final|retorno de inversion|presupuesto de ads|budget de ads|marketing completo|dropshipping.*estrategia|clippers.*campana|multiples cuentas|muchos videos|10 cuentas|pack de flyers|flyers finales|flyer final|disena.*flyers?)\b/.test(text);
 
-  if (!explicitSubscriptionIntent && !heavyManualWork) return null;
+  if (!explicitSubscriptionIntent && !heavyManualWork && !strictCostHeavyWork) return null;
   if (/\b(diseno|disena|diseña|flyer|flyers|visual|brand|branding|canva|landing|ui|ux)\b/.test(text)) return "design";
   if (/\b(marketing|campana|campanas|ads|anuncios|metricool|caption|hooks|creativos|clippers)\b/.test(text)) return "marketing";
   if (/\b(analisis|analiza|reporte|metricas|retorno|roas|cac|data)\b/.test(text)) return "analysis";

@@ -1323,6 +1323,18 @@ export function registerAssistantRoutes(app: Express): void {
       } else if (directMetricoolCommand) {
         fullResponse = `${directMetricoolCommand.content}\n${directMetricoolCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directMetricoolCommand.content })}\n\n`);
+      } else if (modelRoute.tier === "subscription_handoff") {
+        const handoff = await createDeveloperAutopilotHandoff(userId, message || "trabajo pesado para membresia", "web_chat");
+        fullResponse = handoff.status === "subscription_brief"
+          ? handoff.message
+          : [
+              "Para ahorrar API, este trabajo debe ir por tu membresia ChatGPT/Codex Pro en vez de resolverse con modelo fuerte dentro del app.",
+              "",
+              "Mandame el objetivo con un poco mas de detalle y lo convierto en un brief listo para pegar en Codex/ChatGPT Pro.",
+              "",
+              `Ruta: ${modelRoute.reason}`,
+            ].join("\n");
+        res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute })}\n\n`);
       } else if (modelRoute.tier === "cheap_scout") {
         const cheapPrompt = [
           SYSTEM_PROMPT,

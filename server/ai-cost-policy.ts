@@ -44,6 +44,7 @@ export function getAiCostPolicySnapshot() {
     historyMessages: getAiConversationHistoryLimit(),
     openAiMaxCompletionTokens: getOpenAiMaxCompletionTokens(),
     defaultMode: process.env.BLACKOPS_AI_DEFAULT_MODE || "cheap_first",
+    strictCostMode: (process.env.BLACKOPS_STRICT_COST_MODE || "true").toLowerCase() !== "false",
   };
 }
 
@@ -129,13 +130,14 @@ export function buildAiCostPolicyContext(origin: CostPolicyOrigin): string {
   return [
     "## BlackOps AI Cost Policy",
     `Budget goal: keep AI/API spend under $${policy.monthlyBudgetUsd}/month, with a normal operating target near $${policy.operatingTargetUsd}/month until revenue justifies more.`,
-    `Channel: ${origin}. Default mode: ${policy.defaultMode}.`,
+    `Channel: ${origin}. Default mode: ${policy.defaultMode}. Strict cost mode: ${policy.strictCostMode ? "on" : "off"}.`,
     "",
     "Operating rules:",
     "- Cheap-first: use deterministic app routes, cached data, local files, Metricool queues, and direct commands before using a strong model.",
     "- Use Gemini/Gemma-style scout work for summaries, clustering, first drafts, captions, duplicate checks, and bulk clip planning.",
-    "- Use OpenAI/strong reasoning only for final strategy, risky decisions, money/spend, production changes, security, code review, or when the cheap scout is uncertain.",
-    "- For heavy manual work that is not required to run autonomously inside the app, prepare a ChatGPT/Codex Pro subscription handoff instead of spending API tokens.",
+    "- Use OpenAI/strong reasoning only when the work must happen autonomously inside the app and cannot be handled by rules, Gemma/Gemini scout work, or a subscription handoff.",
+    "- In strict cost mode, heavy manual work routes to a ChatGPT/Codex Pro subscription handoff by default instead of spending API tokens.",
+    "- For code, bugs, PR fixes, and reviews, prefer Codex/Claude signed-in membership workflows over app API calls.",
     "- Claude skills are local instruction text. They improve marketing/design behavior but do not spend Claude API tokens unless a Claude API model is explicitly called.",
     "- Keep responses compact. Do not dump long context, large skill bodies, or repeated history unless it directly changes the answer.",
     "- For clippers, prefer batch planning and reusable templates. Do not analyze every clip with a strong model when one campaign-level plan is enough.",

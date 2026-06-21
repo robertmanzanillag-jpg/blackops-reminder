@@ -98,10 +98,14 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(policy, /cheap-first/);
   assert.match(policy, /paid generative video at scale/);
   assert.match(policy, /ChatGPT\/Codex Pro subscription handoff/);
+  assert.match(policy, /BLACKOPS_STRICT_COST_MODE/);
+  assert.match(policy, /Strict cost mode/);
   assert.match(router, /BLACKOPS_WEB_CHEAP_SCOUT_ENABLED/);
   assert.match(router, /cheap_scout/);
+  assert.match(router, /subscription_handoff/);
   assert.match(router, /strong_supervisor/);
   assert.match(webAssistant, /shouldUseCheapScoutForWebChat/);
+  assert.match(webAssistant, /modelRoute\.tier === "subscription_handoff"/);
   assert.match(webAssistant, /getGeminiClient\(\)\.models\.generateContent/);
   assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
   assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
@@ -127,7 +131,11 @@ test("AI router sends low-risk work to cheap scout and risky work to strong supe
     );
     assert.equal(
       shouldUseCheapScoutForWebChat({ message: "decide presupuesto y estrategia completa de ads" }).tier,
-      "strong_supervisor",
+      "subscription_handoff",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "prepara una campana completa para clippers con multiples cuentas" }).provider,
+      "membership",
     );
     assert.equal(
       shouldUseCheapScoutForWebChat({ message: "arregla bug de produccion en github repo" }).provider,

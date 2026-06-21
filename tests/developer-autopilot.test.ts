@@ -170,6 +170,33 @@ test("subscription handoff routes heavy manual work to ChatGPT/Codex Pro instead
   assert.match(handoff.subscriptionBrief || "", /BlackOps subscription handoff/);
 });
 
+test("strict cost mode routes heavy manual work to subscription handoff without magic words", async () => {
+  const handoff = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "prepara una campana completa para clippers con multiples cuentas y retorno de inversion",
+    "web_chat",
+    {
+      getAppProjects: async () => {
+        throw new Error("heavy manual handoff should not need projects");
+      },
+      listRepositories: async () => {
+        throw new Error("heavy manual handoff should not need GitHub");
+      },
+      createIssue: async () => {
+        throw new Error("heavy manual handoff should not create issues");
+      },
+      createIssueComment: async () => {
+        throw new Error("heavy manual handoff should not create comments");
+      },
+    },
+  );
+
+  assert.equal(handoff.status, "subscription_brief");
+  assert.equal(handoff.handoffType, "subscription_work");
+  assert.match(handoff.message, /membresia ChatGPT\/Codex Pro/);
+  assert.match(handoff.subscriptionBrief || "", /Do not spend OpenAI API tokens/);
+});
+
 test("subscription handoff ignores normal lightweight chat", () => {
   assert.equal(parseSubscriptionHandoffRequest("que tengo hoy en el calendario", "telegram"), null);
 });

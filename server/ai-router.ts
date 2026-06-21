@@ -1,8 +1,8 @@
 import { hasRealValue } from "./ceo-doctor-cli";
 
 export type AssistantModelRoute = {
-  tier: "cheap_scout" | "strong_supervisor";
-  provider: "gemini" | "openai";
+  tier: "cheap_scout" | "strong_supervisor" | "subscription_handoff";
+  provider: "gemini" | "openai" | "membership";
   reason: string;
 };
 
@@ -20,7 +20,23 @@ function hasAny(text: string, terms: string[]): boolean {
   return terms.some((term) => text.includes(term));
 }
 
+function isStrictCostMode(): boolean {
+  return (process.env.BLACKOPS_STRICT_COST_MODE || "true").toLowerCase() !== "false";
+}
+
 export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImages?: boolean }): AssistantModelRoute {
+  const text = normalizeText(input.message);
+  const heavyManualTerms = [
+    "campana completa", "campanas completas", "estrategia completa", "plan completo", "analisis profundo",
+    "reporte profundo", "modelo fuerte", "revisalo fuerte", "decision final", "copy final",
+    "flyer final", "flyers finales", "pack de flyers", "disena flyers", "disena los flyers",
+    "marketing completo", "dropshipping estrategia", "clippers campana", "muchos videos",
+    "multiples cuentas", "10 cuentas", "presupuesto de ads", "budget de ads", "retorno de inversion",
+  ];
+  if (isStrictCostMode() && text && hasAny(text, heavyManualTerms)) {
+    return { tier: "subscription_handoff", provider: "membership", reason: "strict cost mode routes heavy manual work to subscription handoff" };
+  }
+
   if (process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED === "false") {
     return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout disabled by env" };
   }
@@ -31,7 +47,6 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     return { tier: "strong_supervisor", provider: "openai", reason: "image analysis uses strong supervisor in web chat" };
   }
 
-  const text = normalizeText(input.message);
   if (!text) {
     return { tier: "strong_supervisor", provider: "openai", reason: "empty text fallback" };
   }
