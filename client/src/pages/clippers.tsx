@@ -132,6 +132,7 @@ type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_re
 type ClipperMetricoolMvpLaunchStatus = "blocked" | "ready_for_review";
 type ClipperMetricoolApprovalSessionStatus = "not_prepared" | "blocked" | "ready_for_operator";
 type ClipperMetricoolApprovalSessionItemStatus = "blocked" | "ready_for_review";
+type ClipperMetricoolApprovalReportStatus = "not_prepared" | "blocked" | "needs_operator" | "needs_evidence" | "ready_to_import";
 type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -4037,6 +4038,53 @@ interface ClipperMetricoolApprovalEvidenceImportSummary {
   nextStep: string;
 }
 
+interface ClipperMetricoolApprovalReportSummary {
+  status: ClipperMetricoolApprovalReportStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  approvalSessionPath: string;
+  evidenceImportCsvPath: string;
+  importedMetricsPath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  totals: {
+    queueItems: number;
+    readyForReview: number;
+    blocked: number;
+    evidenceRows: number;
+    imported: number;
+    skipped: number;
+    rejected: number;
+    pendingLive: number;
+    publishedRows: number;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+  };
+  rows: Array<{
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform | "unknown";
+    queueStatus: ClipperMetricoolApprovalSessionItemStatus | "missing_queue_item";
+    evidenceResult: "imported" | "skipped" | "rejected" | "missing";
+    finalStatus: string;
+    publishedPostUrl: string | null;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    reason: string;
+    nextStep: string;
+  }>;
+  nextActions: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperMetricoolAccountEvidenceResult {
   generatedAt: string;
   source: "metricool";
@@ -6172,6 +6220,7 @@ interface ClipperStatus {
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -6365,6 +6414,13 @@ function metricoolMvpBadge(status: ClipperMetricoolMvpLaunchStatus) {
 
 function metricoolApprovalSessionBadge(status: ClipperMetricoolApprovalSessionStatus | ClipperMetricoolApprovalSessionItemStatus) {
   if (status === "ready_for_operator" || status === "ready_for_review") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
+  return "border-red-300/30 bg-red-300/10 text-red-200";
+}
+
+function metricoolApprovalReportBadge(status: ClipperMetricoolApprovalReportStatus) {
+  if (status === "ready_to_import") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  if (status === "needs_operator" || status === "needs_evidence") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
   if (status === "not_prepared") return "border-zinc-600 bg-zinc-900 text-zinc-300";
   return "border-red-300/30 bg-red-300/10 text-red-200";
 }
@@ -7920,6 +7976,29 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar evidencia Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolApprovalReportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-approval-report", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar reporte Metricool");
+      return data as { metricoolApprovalReport: ClipperMetricoolApprovalReportSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolApprovalReport: data.metricoolApprovalReport } : current);
+      }
+      toast({
+        title: "Reporte Metricool listo",
+        description: `${data.metricoolApprovalReport.totals.imported} filas validas para importar; ${data.metricoolApprovalReport.totals.pendingLive} pendientes; ${data.metricoolApprovalReport.totals.rejected} rechazadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar reporte Metricool", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9984,6 +10063,8 @@ export default function ClippersPage() {
   const metricoolApprovalSessionAccounts = new Set(metricoolApprovalSessionItems.map((item) => item.accountLabel || item.accountName || item.accountId)).size;
   const metricoolApprovalSessionCategories = new Set(metricoolApprovalSessionItems.map((item) => item.category || (item.accountId.includes("sports") ? "sports" : item.accountId.includes("meme") ? "memes" : item.accountId.includes("streamer") ? "streamers" : "uncategorized"))).size;
   const metricoolApprovalSessionPlatforms = new Set(metricoolApprovalSessionItems.map((item) => item.platform)).size;
+  const metricoolApprovalReport = status?.metricoolApprovalReport;
+  const metricoolApprovalReportRows = metricoolApprovalReport?.rows || [];
   const lastMetricoolApprovalEvidenceImport = metricoolApprovalEvidenceImportMutation.data?.metricoolApprovalEvidenceImport;
   const externalSprintTotals = visibleExternalAccountPermissionSprint?.totals;
   const metricoolEffectiveApprovalGate = metricoolPublishing?.effectiveApprovalGate ?? true;
@@ -10825,6 +10906,15 @@ export default function ClippersPage() {
               Import Metricool evidence
             </Button>
             <Button
+              onClick={() => metricoolApprovalReportMutation.mutate()}
+              disabled={metricoolApprovalReportMutation.isPending || isLoading}
+              className="bg-indigo-200 text-zinc-950 hover:bg-indigo-100"
+              data-testid="prepare-clippers-metricool-approval-report-button"
+            >
+              {metricoolApprovalReportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart3 className="mr-2 h-4 w-4" />}
+              Metricool report
+            </Button>
+            <Button
               onClick={() => metricoolAccountEvidenceMutation.mutate()}
               disabled={metricoolAccountEvidenceMutation.isPending || isLoading}
               className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
@@ -11239,6 +11329,51 @@ export default function ClippersPage() {
                   <p>Views: {formatNumber(lastMetricoolApprovalEvidenceImport.totals.views)}</p>
                 </div>
                 <p className="mt-2 break-all text-[10px] leading-4 text-cyan-100/60">Metrics CSV: {lastMetricoolApprovalEvidenceImport.metricsOutputPath}</p>
+              </div>
+            )}
+            {metricoolApprovalReport && (
+              <div className="mt-3 rounded-md border border-indigo-300/20 bg-indigo-950/15 p-3" data-testid="clippers-metricool-approval-report-panel">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-indigo-100">Metricool approval report</p>
+                    <p className="mt-1 text-xs leading-5 text-indigo-100/75">{metricoolApprovalReport.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", metricoolApprovalReportBadge(metricoolApprovalReport.status))}>{metricoolApprovalReport.status}</Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-indigo-100/70 md:grid-cols-4 lg:grid-cols-7">
+                  <p>Queue: {metricoolApprovalReport.totals.queueItems}</p>
+                  <p>Review: {metricoolApprovalReport.totals.readyForReview}</p>
+                  <p>Blocked: {metricoolApprovalReport.totals.blocked}</p>
+                  <p>Valid evidence: {metricoolApprovalReport.totals.imported}</p>
+                  <p>Pending: {metricoolApprovalReport.totals.pendingLive}</p>
+                  <p>Rejected: {metricoolApprovalReport.totals.rejected}</p>
+                  <p>Views: {formatNumber(metricoolApprovalReport.totals.views)}</p>
+                </div>
+                {metricoolApprovalReport.nextActions.length > 0 && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {metricoolApprovalReport.nextActions.slice(0, 4).map((action) => (
+                      <p key={action} className="rounded-md border border-white/10 bg-black/20 p-2 text-xs leading-5 text-indigo-100/80">{action}</p>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 grid gap-2 text-[10px] leading-4 text-indigo-100/60 md:grid-cols-3">
+                  <p className="break-all">Markdown: {metricoolApprovalReport.markdownPath}</p>
+                  <p className="break-all">CSV: {metricoolApprovalReport.csvPath}</p>
+                  <p className="break-all">Evidence: {metricoolApprovalReport.evidenceImportCsvPath}</p>
+                </div>
+                {metricoolApprovalReportRows.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+                    {metricoolApprovalReportRows.slice(0, 5).map((row) => (
+                      <div key={`${row.metricoolQueueItemId}-${row.evidenceResult}`} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[minmax(0,1fr)_110px_110px_90px_minmax(0,1.4fr)] md:items-center">
+                        <p className="truncate font-medium text-white">{row.accountName || row.accountId}</p>
+                        <p className="truncate text-zinc-500">{row.platform}</p>
+                        <Badge className={cn("w-fit border text-[10px]", metricoolApprovalSessionBadge(row.queueStatus === "missing_queue_item" ? "blocked" : row.queueStatus))}>{row.queueStatus}</Badge>
+                        <p className="text-indigo-100/80">{row.evidenceResult}</p>
+                        <p className="line-clamp-2 text-[11px] leading-4 text-indigo-100/70">{row.nextStep}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {metricoolApprovalSessionItems.length > 0 && (
