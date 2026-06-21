@@ -170,6 +170,16 @@ function sanitizeDownloadedVideoName(value: string): string {
     .slice(0, 120) || "radio_youtube_video";
 }
 
+function folderNameFromDownloadedYoutubeVideo(videoPath: string): string {
+  const parsed = path.parse(videoPath);
+  const cleaned = parsed.name
+    .replace(/-[a-zA-Z0-9_-]{8,16}$/g, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 120) || "YouTube video clips";
+}
+
 function isYouTubeUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -206,6 +216,8 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
   const commonArgs = [
     "--no-playlist",
+    "--js-runtimes",
+    "node",
     "-f",
     "bv*+ba/best",
     "--merge-output-format",
@@ -257,6 +269,8 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
   const commonArgs = [
     "--no-playlist",
+    "--js-runtimes",
+    "node",
     "-f",
     "ba/bestaudio",
     "--restrict-filenames",
@@ -991,6 +1005,7 @@ export async function processYoutubeRadioVideoLink(params: {
   youtubeUrl: string;
   driveFolderPath: string[] | string;
   createFolderIfMissing?: boolean;
+  driveFolderPathFromYoutubeTitle?: boolean;
   sourceDir?: string;
   outputDir?: string;
   force?: boolean;
@@ -1001,8 +1016,16 @@ export async function processYoutubeRadioVideoLink(params: {
   const driveFolderPath = Array.isArray(params.driveFolderPath)
     ? params.driveFolderPath.map((part) => part.trim()).filter(Boolean)
     : splitDriveFolderPath(params.driveFolderPath);
-  if (driveFolderPath.length === 0) {
+  if (driveFolderPath.length === 0 && !params.driveFolderPathFromYoutubeTitle) {
     throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
+  }
+
+  const sourceDir = params.sourceDir || path.join(process.cwd(), "radio_video_edits", "01_originales", "youtube");
+  const videoPath = params.driveFolderPathFromYoutubeTitle
+    ? await downloadYoutubeVideo(params.youtubeUrl, sourceDir)
+    : null;
+  if (params.driveFolderPathFromYoutubeTitle && videoPath) {
+    driveFolderPath.push(folderNameFromDownloadedYoutubeVideo(videoPath));
   }
 
   const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId);
@@ -1039,14 +1062,13 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderCreated = true;
   }
 
-  const sourceDir = params.sourceDir || path.join(process.cwd(), "radio_video_edits", "01_originales", "youtube");
-  const videoPath = await downloadYoutubeVideo(params.youtubeUrl, sourceDir);
+  const resolvedVideoPath = videoPath || await downloadYoutubeVideo(params.youtubeUrl, sourceDir);
   const musicPath = params.musicPath || (params.musicUrl
     ? await downloadYoutubeAudio(params.musicUrl, path.join(sourceDir, "audio"))
     : undefined);
   const result = await processRadioVideo({
     userId: params.userId,
-    videoPath,
+    videoPath: resolvedVideoPath,
     sourceDir,
     outputDir: params.outputDir,
     force: params.force,
