@@ -11,6 +11,7 @@ Read it before code, config, security, deployment, production, or customer-facin
 - Bug, threat, security, and production fixes are PR-first. Never commit directly to `main` for agent-generated fixes.
 - If BlackOps gives an existing PR number or GitHub PR link, it may dispatch Codex Cloud by commenting `@codex fix` on that PR through the signed-in Codex/GitHub integration. If no PR exists, create or request the PR-first handoff before expecting direct Codex repair.
 - App QA is the release gate. If QA reports warnings or failures, do not deploy.
+- Bug Patrol is allowed to create PR-first Codex handoff issues for new critical/high App QA findings when the affected app has a GitHub repo. It must not merge or deploy automatically.
 - Replit deployment requires explicit Robert approval after the PR and QA summary.
 - Security details should use the least-public channel available.
 

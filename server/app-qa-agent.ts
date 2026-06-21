@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { recordScheduledAutomationRun } from "./automation-registry";
 import { hasRealValue } from "./ceo-doctor-cli";
+import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
 import { storage } from "./storage";
@@ -69,8 +70,33 @@ export type AppQaScanResult = {
   routeMap: AppQaRouteProbe[];
   visualScans: AppQaVisualRouteScan[];
   githubApps: AppQaGithubRepoCheck[];
+  bugPatrol: BugPatrolReport;
   findings: AppQaFinding[];
   improvementIdeas: AppQaFinding[];
+};
+
+export type BugPatrolHandoff = {
+  findingId: string;
+  appName: string;
+  severity: AppQaSeverity;
+  title: string;
+  repoFullName: string | null;
+  status: "created" | "codex_dispatched" | "skipped" | "failed";
+  issueUrl?: string;
+  issueNumber?: number;
+  codexDispatchCommentUrl?: string;
+  reason?: string;
+};
+
+export type BugPatrolReport = {
+  enabled: boolean;
+  scannedFindings: number;
+  candidates: number;
+  created: number;
+  dispatched: number;
+  skipped: number;
+  failed: number;
+  handoffs: BugPatrolHandoff[];
 };
 
 export type AppQaVisualRouteScan = {
@@ -123,10 +149,12 @@ const AUTO_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const lastAutomaticAlertByUser = new Map<string, { signature: string; sentAt: number }>();
 const lastDailyDigestByUser = new Map<string, string>();
 const lastDailyVisualByUser = new Map<string, string>();
+const lastBugPatrolHandoffByUser = new Map<string, Map<string, number>>();
 const APP_QA_TIMEZONE = "America/New_York";
 const DAILY_DIGEST_HOUR = 8;
 const DEFAULT_VISUAL_HOURS = [8, 20];
 const APP_QA_DEFAULT_INTERVAL_MINUTES = 30;
+const BUG_PATROL_DEFAULT_COOLDOWN_HOURS = 24;
 const VISUAL_SCREENSHOT_DIR = path.join(process.cwd(), ".app-qa-screenshots");
 const SAFE_CLICK_TEXT_BLOCKLIST = [
   "delete",
@@ -247,6 +275,172 @@ function shouldSendDailyDigest(userId: string, now = new Date()): boolean {
   if (lastDailyDigestByUser.get(userId) === dateKey) return false;
   lastDailyDigestByUser.set(userId, dateKey);
   return true;
+}
+
+function isBugPatrolEnabled(): boolean {
+  return (process.env.BUG_PATROL_ENABLED || "true").toLowerCase() !== "false";
+}
+
+function getBugPatrolCooldownMs(): number {
+  const hours = Number(process.env.BUG_PATROL_COOLDOWN_HOURS || BUG_PATROL_DEFAULT_COOLDOWN_HOURS);
+  const safeHours = Number.isFinite(hours) && hours >= 1 ? hours : BUG_PATROL_DEFAULT_COOLDOWN_HOURS;
+  return safeHours * 60 * 60 * 1000;
+}
+
+function emptyBugPatrolReport(enabled = isBugPatrolEnabled()): BugPatrolReport {
+  return {
+    enabled,
+    scannedFindings: 0,
+    candidates: 0,
+    created: 0,
+    dispatched: 0,
+    skipped: 0,
+    failed: 0,
+    handoffs: [],
+  };
+}
+
+function isBugPatrolCandidate(finding: AppQaFinding): boolean {
+  if (!["critical", "high"].includes(finding.severity)) return false;
+  if (finding.sourceAgent === "improvement-scout" || finding.sourceAgent === "route-scout") return false;
+  if (finding.title === "GitHub no conectado para App QA") return false;
+  return true;
+}
+
+function appRepoFullName(app: AppProject | undefined): string | null {
+  if (!app) return null;
+  if (app.githubRepo?.trim()) return app.githubRepo.trim();
+  if (app.repoOwner?.trim() && app.repoName?.trim()) return `${app.repoOwner.trim()}/${app.repoName.trim()}`;
+  return null;
+}
+
+function bugPatrolSignature(finding: AppQaFinding, repoFullName: string | null): string {
+  return [
+    repoFullName || finding.appName,
+    finding.sourceAgent,
+    finding.severity,
+    finding.title,
+    finding.url || finding.area,
+  ].join("|").toLowerCase();
+}
+
+function getBugPatrolUserMap(userId: string): Map<string, number> {
+  let userMap = lastBugPatrolHandoffByUser.get(userId);
+  if (!userMap) {
+    userMap = new Map();
+    lastBugPatrolHandoffByUser.set(userId, userMap);
+  }
+  return userMap;
+}
+
+function isBugPatrolHandoffOnCooldown(userId: string, signature: string, now = Date.now()): boolean {
+  const userMap = getBugPatrolUserMap(userId);
+  const previous = userMap.get(signature);
+  return Boolean(previous && now - previous < getBugPatrolCooldownMs());
+}
+
+function markBugPatrolHandoffCreated(userId: string, signature: string, now = Date.now()): void {
+  getBugPatrolUserMap(userId).set(signature, now);
+}
+
+function buildBugPatrolAutopilotMessage(finding: AppQaFinding, repoFullName: string): string {
+  return [
+    `arregla este bug en ${repoFullName}`,
+    "",
+    "Bug Patrol detecto un fallo real durante App QA.",
+    `App: ${finding.appName}`,
+    `Severidad: ${finding.severity}`,
+    `Area: ${finding.area}`,
+    `Titulo: ${finding.title}`,
+    `Detalle: ${finding.detail}`,
+    `URL: ${finding.url || "no disponible"}`,
+    `Recomendacion QA: ${finding.recommendation}`,
+    "",
+    "Usa flujo PR-first. No hagas merge ni deploy sin aprobacion de Robert.",
+  ].join("\n");
+}
+
+export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], findings: AppQaFinding[]): Promise<BugPatrolReport> {
+  if (!isBugPatrolEnabled()) return emptyBugPatrolReport(false);
+
+  const appByName = new Map(apps.map((app) => [app.name.toLowerCase(), app]));
+  const candidates = findings.filter(isBugPatrolCandidate);
+  const handoffs: BugPatrolHandoff[] = [];
+
+  for (const finding of candidates) {
+    const app = appByName.get(finding.appName.toLowerCase());
+    const repoFullName = appRepoFullName(app);
+    const signature = bugPatrolSignature(finding, repoFullName);
+
+    if (!repoFullName) {
+      handoffs.push({
+        findingId: finding.id,
+        appName: finding.appName,
+        severity: finding.severity,
+        title: finding.title,
+        repoFullName: null,
+        status: "skipped",
+        reason: "App sin repo GitHub conectado; agrega githubRepo o repoOwner/repoName en Developer Health.",
+      });
+      continue;
+    }
+
+    if (isBugPatrolHandoffOnCooldown(userId, signature)) {
+      handoffs.push({
+        findingId: finding.id,
+        appName: finding.appName,
+        severity: finding.severity,
+        title: finding.title,
+        repoFullName,
+        status: "skipped",
+        reason: `Handoff repetido en cooldown de ${Math.round(getBugPatrolCooldownMs() / 60 / 60 / 1000)}h.`,
+      });
+      continue;
+    }
+
+    const handoff = await createDeveloperAutopilotHandoff(
+      userId,
+      buildBugPatrolAutopilotMessage(finding, repoFullName),
+      "app_qa",
+    );
+
+    if (handoff.status === "created" || handoff.status === "codex_dispatched") {
+      markBugPatrolHandoffCreated(userId, signature);
+      handoffs.push({
+        findingId: finding.id,
+        appName: finding.appName,
+        severity: finding.severity,
+        title: finding.title,
+        repoFullName,
+        status: handoff.status,
+        issueUrl: handoff.issueUrl,
+        issueNumber: handoff.issueNumber,
+        codexDispatchCommentUrl: handoff.codexDispatchCommentUrl,
+      });
+      continue;
+    }
+
+    handoffs.push({
+      findingId: finding.id,
+      appName: finding.appName,
+      severity: finding.severity,
+      title: finding.title,
+      repoFullName,
+      status: "failed",
+      reason: handoff.message,
+    });
+  }
+
+  return {
+    enabled: true,
+    scannedFindings: findings.length,
+    candidates: candidates.length,
+    created: handoffs.filter((handoff) => handoff.status === "created").length,
+    dispatched: handoffs.filter((handoff) => handoff.status === "codex_dispatched").length,
+    skipped: handoffs.filter((handoff) => handoff.status === "skipped").length,
+    failed: handoffs.filter((handoff) => handoff.status === "failed").length,
+    handoffs,
+  };
 }
 
 function getAppQaIntervalMs(): number {
@@ -449,6 +643,7 @@ function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date
     routeMap: LOCAL_ROUTE_MAP,
     visualScans: visualReport.visualScans,
     githubApps: [],
+    bugPatrol: emptyBugPatrolReport(),
     findings,
     improvementIdeas: [],
   };
@@ -487,7 +682,8 @@ function formatTelegramReport(result: AppQaScanResult): string {
     `Paginas: ${result.totalRoutes}\n` +
     `Checks: ${result.totalChecks}\n` +
     `Fallos altos/criticos: ${result.failCount}\n` +
-    `Avisos: ${result.warnCount}\n\n` +
+    `Avisos: ${result.warnCount}\n` +
+    `Bug Patrol handoffs: ${result.bugPatrol.created + result.bugPatrol.dispatched}\n\n` +
     `Fallos principales:\n${failureLines}${warningLines}\n\n` +
     `QA Council: ${result.council.status.toUpperCase()} - ${result.council.summary}\n\n` +
     `Subagentes:\n${agentLines}`
@@ -512,6 +708,11 @@ function formatDailyDigest(result: AppQaScanResult): string {
     `Subagentes sanos: ${healthyAgents}/${result.subAgents.length}\n` +
     `Fallos altos/criticos: ${result.failCount}\n` +
     `Avisos: ${result.warnCount}\n\n` +
+    `Bug Patrol:\n` +
+    `- Handoffs creados: ${result.bugPatrol.created}\n` +
+    `- Codex despachado: ${result.bugPatrol.dispatched}\n` +
+    `- Saltados/pendientes: ${result.bugPatrol.skipped}\n` +
+    `- Fallidos: ${result.bugPatrol.failed}\n\n` +
     `Acciones urgentes:\n${topActions}\n\n` +
     `Siguientes pasos:\n${nextSteps}`
   );
@@ -1375,6 +1576,9 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
   const improvementIdeas = findings.filter((finding) => finding.sourceAgent === "improvement-scout");
   const failCount = findings.filter((finding) => ["critical", "high"].includes(finding.severity)).length;
   const warnCount = findings.filter((finding) => ["medium", "low"].includes(finding.severity)).length;
+  const bugPatrol = recordHistory
+    ? await runBugPatrolHandoffs(userId, apps, findings)
+    : emptyBugPatrolReport();
   const council = buildQaCouncil({
     subAgents,
     findings,
@@ -1407,6 +1611,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
     routeMap: LOCAL_ROUTE_MAP,
     visualScans: visualReport.visualScans,
     githubApps: githubReport.githubApps,
+    bugPatrol,
     findings,
     improvementIdeas,
   };
@@ -1453,6 +1658,23 @@ async function recordAppQaHistory(userId: string, result: AppQaScanResult, start
         githubConnected: result.githubConnected,
         telegramSent: result.telegramSent,
         dailyDigestSent: result.dailyDigestSent,
+        bugPatrol: {
+          enabled: result.bugPatrol.enabled,
+          candidates: result.bugPatrol.candidates,
+          created: result.bugPatrol.created,
+          dispatched: result.bugPatrol.dispatched,
+          skipped: result.bugPatrol.skipped,
+          failed: result.bugPatrol.failed,
+          handoffs: result.bugPatrol.handoffs.map((handoff) => ({
+            appName: handoff.appName,
+            title: handoff.title,
+            severity: handoff.severity,
+            repoFullName: handoff.repoFullName,
+            status: handoff.status,
+            issueUrl: handoff.issueUrl,
+            reason: handoff.reason,
+          })),
+        },
         subAgents: result.subAgents.map((agent) => ({
           id: agent.id,
           status: agent.status,
@@ -1487,9 +1709,12 @@ export const __appQaAgentInternals = {
   analyzeImprovementIdeas,
   buildAppQaStorageUnavailableResult,
   buildQaCouncil,
+  emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  isBugPatrolCandidate,
   isLikelyGithubAppRepo,
+  runBugPatrolHandoffs,
   runVisualClickScout,
   shouldRunVisualScout,
   shouldSendDailyDigest,

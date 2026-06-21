@@ -165,8 +165,8 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
   },
   {
     key: "app-qa-council",
-    name: "App QA Council",
-    description: "Coordinates QA subagents for app routes, GitHub repos, health endpoints, errors, improvements, Telegram alerts, and daily digest.",
+    name: "Bug Patrol + App QA Daily Report",
+    description: "Checks app routes, GitHub repos, health endpoints, runtime errors, creates Codex PR-first handoffs for real bugs, sends urgent alerts, and sends the daily QA summary.",
     type: "agent_run",
     assignedAgentId: "app-qa",
     schedule: { kind: "interval", everyMinutes: 30 },
@@ -175,7 +175,7 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
     permissionLevel: "autonomous",
     requiresApproval: false,
     costEstimate: "0",
-    metadata: { source: "server/app-qa-agent.ts", function: "runAppQaScan", digest: "daily" },
+    metadata: { source: "server/app-qa-agent.ts", function: "runAppQaScan", bugPatrol: true, codexHandoff: "pr_first", digest: "daily" },
   },
   {
     key: "radio-slot-check",
