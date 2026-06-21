@@ -5580,6 +5580,20 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.totals.actions >= robertNextActions.items.length);
     assert.ok(robertNextActions.totals.estimatedMinutes > 0);
     assert.ok(robertNextActions.items.some((item) => item.lane === "local_drop" || item.lane === "external_portal" || item.lane === "source_supply"));
+    if (status.metricoolApprovalSession.status === "ready_for_operator") {
+      const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-approval-session");
+      assert.ok(metricoolAction);
+      assert.equal(metricoolAction.rank, 1);
+      assert.equal(metricoolAction.status, "ready_to_execute");
+      assert.equal(metricoolAction.priority, "critical");
+      assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-approval-session");
+      assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
+      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
+      assert.ok(metricoolAction.evidenceRows.length > 0);
+      assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
+      assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
+      assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+    }
     assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
     const hasLaunchEvidenceAction = robertNextActions.items.some((item) =>
       item.artifactPath?.endsWith("launch-evidence-drop-repair-worksheet.csv") ||
@@ -5607,6 +5621,11 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawMarkdown.includes("Intake console"));
     assert.ok(rawMarkdown.includes("Priority Actions"));
     assert.ok(rawMarkdown.includes("Operator steps"));
+    if (status.metricoolApprovalSession.status === "ready_for_operator") {
+      assert.ok(rawMarkdown.includes("Review Metricool approval session"));
+      assert.ok(rawCsv.includes("metricool-approval-session"));
+      assert.ok(rawCsv.includes("metricool-approval-session.md"));
+    }
     assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
     assert.ok(rawConnectNow.includes("Connection Tunnel"));
     assert.ok(rawConnectNow.includes("Credentials"));

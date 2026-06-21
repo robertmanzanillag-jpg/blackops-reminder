@@ -37599,6 +37599,7 @@ async function buildRobertNextActionsSummary(input: {
   tokenVault: ClipperTokenVaultSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   productionQueue: ClipperProductionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
 }): Promise<ClipperRobertNextActionsSummary> {
   const generatedAt = await stat(ROBERT_NEXT_ACTIONS_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const dropItems = input.dropzoneReadyPack.items
@@ -37746,8 +37747,44 @@ async function buildRobertNextActionsSummary(input: {
     nextStep: input.launchEvidenceFixPack.nextStep,
   }] : [];
 
+  const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
+    && input.metricoolApprovalSession.totals.readyForReview > 0
+    ? [{
+      id: "metricool-approval-session",
+      rank: 0,
+      lane: "external_portal",
+      label: "Review Metricool approval session",
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: Math.max(15, Math.min(90, input.metricoolApprovalSession.totals.readyForReview * 4)),
+      platform: "mixed",
+      actionUrl: "/api/clippers/prepare-metricool-approval-session",
+      artifactPath: input.metricoolApprovalSession.markdownPath,
+      portalUrl: "https://app.metricool.com/",
+      dropDirs: [],
+      evidenceRows: input.metricoolApprovalSession.items.slice(0, 5).map((item) => item.evidenceCaptureRow),
+      operatorSteps: [
+        "Open Metricool and switch to the listed SPORT or memes brand before reviewing each row.",
+        "Approve/schedule only items marked ready_for_review in the Metricool Approval Session.",
+        "Do not mark anything published until Metricool or the platform shows a real live post URL.",
+        `After posting, fill ${input.metricoolApprovalSession.evidenceImportCsvPath} with real Metricool/post URLs and 24h metrics.`,
+        "Refresh Analytics Reporting and Robert Next Actions after importing real metrics.",
+      ],
+      blockers: [
+        "This is Metricool approval_required only; it does not enable full direct autopublish.",
+        ...(input.metricoolApprovalSession.totals.blocked > 0 ? [`${input.metricoolApprovalSession.totals.blocked} Metricool item(s) still blocked.`] : []),
+      ],
+      doneCriteria: [
+        "Every ready_for_review item was reviewed in Metricool by the operator.",
+        "Approved/scheduled/live rows have real Metricool or platform URLs captured.",
+        "Evidence import CSV is filled without tokens, cookies, passwords or private screenshots.",
+      ],
+      nextStep: input.metricoolApprovalSession.nextStep,
+    }]
+    : [];
+
   const deduped = new Map<string, ClipperRobertNextActionItem>();
-  [...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
+  [...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
     const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
     if (!deduped.has(key)) deduped.set(key, item);
   });
@@ -39670,6 +39707,7 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     tokenVault: statusBefore.tokenVault,
     publisherConnectors: statusBefore.publisherConnectors,
     productionQueue: statusBefore.productionQueue,
+    metricoolApprovalSession: statusBefore.metricoolApprovalSession,
   });
   const robertNextActions: ClipperRobertNextActionsSummary = {
     ...draftSummary,
@@ -41797,6 +41835,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     tokenVault,
     publisherConnectors,
     productionQueue,
+    metricoolApprovalSession,
   });
   const launchLaneMatrix = await buildLaunchLaneMatrixSummary({
     accounts,
