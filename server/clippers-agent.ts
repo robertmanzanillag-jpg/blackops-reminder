@@ -5038,12 +5038,26 @@ export interface ClipperGoLiveExecutionPlatform {
   nextStep: string;
 }
 
+export interface ClipperGoLiveMetricoolMvpLane {
+  status: "blocked" | "ready_for_operator";
+  bridge: "metricool";
+  approvalRequired: true;
+  realPublishEnabled: false;
+  queuedForApproval: number;
+  readyForReview: number;
+  blocked: number;
+  accountsReady: number;
+  accounts: number;
+  nextStep: string;
+}
+
 export interface ClipperGoLiveExecutionPackSummary {
   status: ClipperGoLiveExecutionPackStatus;
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
   platforms: ClipperGoLiveExecutionPlatform[];
+  metricoolMvp: ClipperGoLiveMetricoolMvpLane;
   totals: {
     platforms: number;
     ready: number;
@@ -24404,6 +24418,8 @@ async function buildGoLiveExecutionPackSummary(input: {
   publisherConnectors: ClipperPublisherConnectorSummary;
   appReviewSubmissionPack: ClipperAppReviewSubmissionPackSummary;
   manualPostingPack: ClipperManualPostingPackSummary;
+  metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
 }): Promise<ClipperGoLiveExecutionPackSummary> {
   const platforms = PLATFORM_REQUIREMENTS.map((requirement) => {
     const accountTasks = input.accountLaunchKit.tasks.filter((task) => task.platform === requirement.platform);
@@ -24597,6 +24613,26 @@ async function buildGoLiveExecutionPackSummary(input: {
     return sum;
   }, { platforms: 0, ready: 0, inProgress: 0, blocked: 0, phases: 0, done: 0, readyToExecute: 0 });
   const generatedAt = await stat(GO_LIVE_EXECUTION_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const metricoolMvpReady = input.metricoolMvpLaunchPack.status === "ready_for_review"
+    && input.metricoolApprovalSession.status === "ready_for_operator"
+    && input.metricoolApprovalSession.totals.readyForReview > 0
+    && input.metricoolApprovalSession.approvalRequired
+    && !input.metricoolApprovalSession.realPublishEnabled;
+  const metricoolMvp: ClipperGoLiveMetricoolMvpLane = {
+    status: metricoolMvpReady ? "ready_for_operator" : "blocked",
+    bridge: "metricool",
+    approvalRequired: true,
+    realPublishEnabled: false,
+    queuedForApproval: input.metricoolMvpLaunchPack.totals.queuedForApproval,
+    readyForReview: input.metricoolApprovalSession.totals.readyForReview,
+    blocked: input.metricoolApprovalSession.totals.blocked,
+    accountsReady: input.metricoolMvpLaunchPack.totals.readyAccounts,
+    accounts: input.metricoolMvpLaunchPack.totals.accounts,
+    nextStep: metricoolMvpReady
+      ? `Metricool MVP ready for operator review (${input.metricoolApprovalSession.totals.readyForReview} queued); full direct autopublish still requires OAuth/app-review blockers.`
+      : input.metricoolApprovalSession.nextStep || input.metricoolMvpLaunchPack.nextStep,
+  };
+  const directNextStep = platforms.find((platform) => platform.status !== "ready")?.nextStep || "Go-live execution listo; correr dry-run y revisar metricas.";
   return {
     status: !generatedAt
       ? "not_prepared"
@@ -24609,8 +24645,9 @@ async function buildGoLiveExecutionPackSummary(input: {
     manifestPath: GO_LIVE_EXECUTION_PACK_PATH,
     markdownPath: GO_LIVE_EXECUTION_PACK_MARKDOWN_PATH,
     platforms,
+    metricoolMvp,
     totals,
-    nextStep: platforms.find((platform) => platform.status !== "ready")?.nextStep || "Go-live execution listo; correr dry-run y revisar metricas.",
+    nextStep: directNextStep,
   };
 }
 
@@ -24625,6 +24662,18 @@ function renderGoLiveExecutionPackMarkdown(summary: ClipperGoLiveExecutionPackSu
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Metricool MVP Lane",
+    "",
+    `- Status: ${summary.metricoolMvp.status}`,
+    `- Bridge: ${summary.metricoolMvp.bridge}`,
+    `- Approval required: ${summary.metricoolMvp.approvalRequired ? "yes" : "no"}`,
+    `- Real publish enabled: ${summary.metricoolMvp.realPublishEnabled ? "yes" : "no"}`,
+    `- Accounts ready: ${summary.metricoolMvp.accountsReady}/${summary.metricoolMvp.accounts}`,
+    `- Queued for approval: ${summary.metricoolMvp.queuedForApproval}`,
+    `- Ready for review: ${summary.metricoolMvp.readyForReview}`,
+    `- Blocked: ${summary.metricoolMvp.blocked}`,
+    `- Next step: ${summary.metricoolMvp.nextStep}`,
     "",
     "## Platforms",
     "",
@@ -24683,10 +24732,25 @@ export async function prepareClipperGoLiveExecutionPack(userId = getSystemUserId
   const officialPermissionMatrix = await buildOfficialPermissionMatrixSummary();
   const appReviewSubmissionPack = await buildAppReviewSubmissionPackSummary({ accounts, officialPermissionMatrix, productionUrlSetup, developerAppEvidence, legalPolicyPack, appReviewDemoPack });
   const productionQueue = await buildProductionQueueSummary(accounts);
+  const publishingPackage = await buildPublishingPackageSummary(accounts);
   const publisherConnectors = await buildPublisherConnectorSummary({ tokenRecords, permissionTracker, platformReadiness, productionQueue });
   const oauthGoLive = await buildOAuthGoLiveSummary({ credentialChecks, connectActions, tokenVault, tokenExchanges, tokenRecords, developerAppEvidence, permissionTracker, publisherConnectors });
   const manualPostingPack = await buildManualPostingPackSummary(productionQueue, accountLaunchKit);
-  const draftSummary = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack });
+  const metricoolPublishing = await buildClipperMetricoolPublishingSummary(accounts);
+  const metricoolExecutionQueue = await readMetricoolExecutionQueueSummary();
+  const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    metricoolPublishing,
+    metricoolExecutionQueue,
+    publishingPackage,
+    accountEvidence,
+    developerAppEvidence,
+    permissionTracker,
+  });
+  const metricoolApprovalSession = buildMetricoolApprovalSessionSummary({
+    metricoolExecutionQueue,
+    metricoolMvpLaunchPack,
+  });
+  const draftSummary = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack, metricoolMvpLaunchPack, metricoolApprovalSession });
   const goLiveExecutionPack: ClipperGoLiveExecutionPackSummary = {
     ...draftSummary,
     generatedAt: new Date().toISOString(),
@@ -27662,7 +27726,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
       && (item.status === "ready_for_manual" || item.status === "scheduled")
       && channel.connectedNetworks.includes(item.platform)
     ).length;
-    const manualReadyPosts = Math.max(queuedForApproval, manualPackageReadyPosts);
+    const manualReadyPosts = manualPackageReadyPosts;
     const primaryNetwork = channel.connectedNetworks[0] || null;
     const blockers = [
       channel.publishGate !== "approval_required_ready" ? `Metricool channel blocked: ${channel.blockers[0] || channel.nextStep}` : null,
@@ -27774,7 +27838,7 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
     `- Accounts: ${summary.totals.readyAccounts}/${summary.totals.accounts} ready`,
     `- Connected profiles: ${summary.totals.connectedProfiles}`,
     `- Queued for approval: ${summary.totals.queuedForApproval}`,
-    `- Manual-ready posts: ${summary.totals.manualReadyPosts}`,
+    `- Manual package-ready posts: ${summary.totals.manualReadyPosts}`,
     `- Rights-ready assets: ${summary.totals.rightsReadyAssets}/${summary.totals.minimumWeeklySourceAssets}`,
     `- Full automation blockers: ${summary.totals.fullAutomationBlockers}`,
     "",
@@ -27797,7 +27861,7 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
       `- Weekly target clips: ${row.weeklyTargetClips}`,
       `- Rights-ready assets: ${row.rightsReadyAssets}/${row.minimumWeeklySourceAssets}`,
       `- Queued for approval: ${row.queuedForApproval}`,
-      `- Manual-ready posts: ${row.manualReadyPosts}`,
+      `- Manual package-ready posts: ${row.manualReadyPosts}`,
       `- Next step: ${row.nextStep}`,
       row.blockers.length ? "- Blockers:" : "- Blockers: none",
       ...row.blockers.map((blocker) => `  - ${blocker}`),
@@ -34224,7 +34288,7 @@ function renderPostConnectActivationSweepMarkdown(summary: ClipperPostConnectAct
     "",
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
-    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Ready for approval-gated launch: ${summary.readyToPublish ? "yes" : "no"}`,
     `Prep sweep: ${summary.prepSweepStatus}`,
     `Local drop sync: ${summary.localDropSyncStatus}`,
     "",
@@ -34464,7 +34528,7 @@ function renderIntakeRefreshSweepMarkdown(summary: ClipperIntakeRefreshSweepSumm
     "",
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
-    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Ready for approval-gated launch: ${summary.readyToPublish ? "yes" : "no"}`,
     `Prep sweep: ${summary.prepSweepStatus}`,
     `Local drop sync: ${summary.localDropSyncStatus}`,
     `Post-connect activation: ${summary.postConnectStatus}`,
@@ -34745,7 +34809,7 @@ export async function runClipperExternalConnectAutopilot(userId = getSystemUserI
   await runStep("robert-next-actions", "Robert Next Actions", ROBERT_NEXT_ACTIONS_MARKDOWN_PATH, () => prepareClipperRobertNextActions(userId), (result) => result.robertNextActions.status === "ready", (result) => `${result.robertNextActions.totals.actions} next actions; ${result.robertNextActions.totals.critical} critical.`, (result) => result.robertNextActions.nextStep);
   const externalConnectSprint = await runStep("external-connect-sprint", "External Connect Sprint", EXTERNAL_CONNECT_SPRINT_MARKDOWN_PATH, () => prepareClipperExternalConnectSprint(userId), (result) => result.externalConnectSprint.status === "done", (result) => `${result.externalConnectSprint.totals.done}/${result.externalConnectSprint.totals.items} external items done; ${result.externalConnectSprint.totals.blocked} blocked.`, (result) => result.externalConnectSprint.nextStep);
   const sourceIngestionSprint = await runStep("source-ingestion-sprint", "Source Ingestion Sprint", SOURCE_INGESTION_SPRINT_MARKDOWN_PATH, () => prepareClipperSourceIngestionSprint(userId), (result) => result.sourceIngestionSprint.status === "ready" || result.sourceIngestionSprint.status === "ready_to_import", (result) => `${result.sourceIngestionSprint.totals.items} sources; ${result.sourceIngestionSprint.totals.filesNeeded} files needed; ${result.sourceIngestionSprint.totals.rightsNeeded} rights needed.`, (result) => result.sourceIngestionSprint.nextStep);
-  const intakeRefresh = await runStep("intake-refresh-sweep", "Intake Refresh Sweep", INTAKE_REFRESH_SWEEP_MARKDOWN_PATH, () => runClipperIntakeRefreshSweep(userId, { mode: "cached" }), (result) => result.intakeRefreshSweep.status === "ready", (result) => `${result.intakeRefreshSweep.readyToPublish ? "Ready to publish" : "Not ready to publish"}; ${result.intakeRefreshSweep.blockers.length} blocker(s).`, (result) => result.intakeRefreshSweep.nextStep);
+  const intakeRefresh = await runStep("intake-refresh-sweep", "Intake Refresh Sweep", INTAKE_REFRESH_SWEEP_MARKDOWN_PATH, () => runClipperIntakeRefreshSweep(userId, { mode: "cached" }), (result) => result.intakeRefreshSweep.status === "ready", (result) => `${result.intakeRefreshSweep.readyToPublish ? "Ready for approval-gated launch" : "Not ready for approval-gated launch"}; ${result.intakeRefreshSweep.blockers.length} blocker(s).`, (result) => result.intakeRefreshSweep.nextStep);
   await runStep("go-live-completion-audit", "Go-Live Completion Audit", GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH, () => prepareClipperGoLiveCompletionAudit(userId), (result) => result.goLiveCompletionAudit.status === "ready", (result) => `${result.goLiveCompletionAudit.totals.verified}/${result.goLiveCompletionAudit.totals.requirements} requirements verified; ${result.goLiveCompletionAudit.totals.blocked} blocked.`, (result) => result.goLiveCompletionAudit.nextStep);
 
   const totals = {
@@ -37880,7 +37944,7 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     `- Minimum weekly source assets: ${handoff.weeklyRunway.minimumWeeklySourceAssets}`,
     `- Source asset gap: ${handoff.weeklyRunway.sourceAssetGap}`,
     `- Blocked tunnel gates: ${handoff.weeklyRunway.blockedGates}`,
-    `- Ready to publish: ${handoff.weeklyRunway.readyToPublish ? "yes" : "no"}`,
+    `- Ready for approval-gated launch: ${handoff.weeklyRunway.readyToPublish ? "yes" : "no"}`,
     `- Next step: ${handoff.weeklyRunway.nextStep}`,
     "",
     handoff.weeklyRunway.categories.length ? "Category runway:" : "Category runway: none",
@@ -40346,7 +40410,7 @@ function goLiveExternalTypesForRequirement(requirement: ClipperGoLiveCompletionR
   if (requirement.id === "permissions-approved") return ["permission"];
   if (requirement.id === "credentials-loaded") return ["credential"];
   if (requirement.id === "production-url-compliance") return ["developer_app"];
-  if (requirement.id === "oauth-tokens-saved") return ["oauth"];
+  if (requirement.id === "publishing-bridge-connected") return ["oauth"];
   if (requirement.id === "publisher-connectors-ready") return ["oauth", "permission"];
   if (requirement.phase === "accounts") return ["account"];
   if (requirement.phase === "developer_apps") return ["developer_app"];
@@ -40690,19 +40754,34 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.productionUrlVerification.status === "pass";
   const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
   const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
-  const metricoolBridgeReady = input.metricoolPublishing.status === "ready_for_approval_queue" && input.metricoolPublishing.totals.readyForApprovalQueue > 0;
-  const metricoolBridgeProgress = metricoolBridgeReady
+  const metricoolApprovalQueueReady = input.metricoolPublishing.status === "ready_for_approval_queue"
+    && input.metricoolPublishing.totals.readyForApprovalQueue > 0
+    && input.metricoolExecutionQueue.status === "approval_required"
+    && input.metricoolExecutionQueue.totals.queuedForApproval > 0
+    && input.metricoolExecutionQueue.totals.readyToSend === 0
+    && !input.metricoolExecutionQueue.realPublishEnabled;
+  const metricoolBridgeProgress = metricoolApprovalQueueReady
     || input.metricoolPublishing.status === "ready_to_connect"
     || input.metricoolPublishing.totals.connectedProfiles > 0
     || input.metricoolExecutionQueue.totals.items > 0;
   const metricoolBridgeEvidence = `Metricool bridge=${input.metricoolPublishing.status}; ${input.metricoolPublishing.totals.readyForApprovalQueue}/${input.metricoolPublishing.totals.channels} channels ready; ${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} profiles connected; queue=${input.metricoolExecutionQueue.status} (${input.metricoolExecutionQueue.totals.queuedForApproval} approval, ${input.metricoolExecutionQueue.totals.blocked} blocked).`;
-  const metricoolBridgeBlockers = input.metricoolPublishing.blockers.length
+  const metricoolPublishingBlockers = input.metricoolPublishing.blockers.length
     ? input.metricoolPublishing.blockers
     : input.metricoolPublishing.channels
       .filter((channel) => channel.publishGate !== "approval_required_ready")
       .flatMap((channel) => channel.blockers.length
         ? channel.blockers.map((blocker) => `${channel.accountName}/Metricool: ${blocker}`)
         : [`${channel.accountName}/Metricool: ${channel.nextStep}`]);
+  const metricoolApprovalQueueBlockers = [
+    input.metricoolExecutionQueue.status !== "approval_required" ? `Metricool execution queue is ${input.metricoolExecutionQueue.status}, not approval_required.` : null,
+    input.metricoolExecutionQueue.totals.queuedForApproval <= 0 ? "Metricool execution queue has no queued_for_approval items." : null,
+    input.metricoolExecutionQueue.totals.readyToSend > 0 ? "Metricool execution queue still has direct ready_to_send items." : null,
+    input.metricoolExecutionQueue.realPublishEnabled ? "Metricool realPublishEnabled must remain false for MVP go-live." : null,
+  ].filter((item): item is string => Boolean(item));
+  const metricoolBridgeBlockers = [
+    ...metricoolPublishingBlockers,
+    ...metricoolApprovalQueueBlockers,
+  ];
   const directOAuthReady = input.oauthConnectionPack.totals.ready >= input.oauthConnectionPack.totals.connections && input.oauthConnectionPack.totals.connections > 0 && tokenRecords >= 3;
   const directOAuthProgress = input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0;
   const directPublisherReady = input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready";
@@ -40848,31 +40927,31 @@ async function buildGoLiveCompletionAuditSummary(input: {
         : input.productionUrlSetup.nextStep,
     },
     {
-      id: "oauth-tokens-saved",
-      label: "OAuth or Metricool publishing bridge connected",
+      id: "publishing-bridge-connected",
+      label: "Metricool approval bridge or direct OAuth connected",
       phase: "oauth",
       status: completionStatusFromReady(
-        metricoolBridgeReady || directOAuthReady,
+        metricoolApprovalQueueReady || directOAuthReady,
         metricoolBridgeProgress || directOAuthProgress,
       ),
       owner: "Publisher",
       requiredEvidence: [
-        "Either Metricool live sync verifies the brand/blogId publishing bridge, or direct OAuth is connected for every platform/account.",
+        "Either Metricool live sync verifies the brand/blogId approval bridge and queued_for_approval workflow, or direct OAuth is connected for every platform/account.",
         "No raw OAuth token, Metricool token, cookies or private credential appears in evidence or markdown.",
         "If direct APIs are used later, Encrypted token vault contains saved records for required platforms.",
       ],
       currentEvidence: `${metricoolBridgeEvidence} Direct OAuth ${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} connections ready; ${input.oauthConnectionPack.totals.tokensSaved} connection tokens; ${tokenRecords} token vault records.`,
-      proofSource: metricoolBridgeReady ? input.metricoolPublishing.markdownPath : input.oauthConnectionPack.markdownPath,
-      actionUrl: metricoolBridgeReady ? "/api/clippers/record-metricool-account-evidence" : "/api/clippers/prepare-oauth-connection-pack",
+      proofSource: metricoolApprovalQueueReady ? input.metricoolExecutionQueue.markdownPath : input.oauthConnectionPack.markdownPath,
+      actionUrl: metricoolApprovalQueueReady ? "/api/clippers/prepare-metricool-approval-session" : "/api/clippers/prepare-oauth-connection-pack",
       portalUrl: null,
-      blockers: metricoolBridgeReady
+      blockers: metricoolApprovalQueueReady
         ? []
         : [
           ...metricoolBridgeBlockers,
           ...input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
         ].slice(0, 8),
-      nextStep: metricoolBridgeReady
-        ? "Metricool publishing bridge is connected for the first guarded queue; keep direct OAuth optional until direct API posting is needed."
+      nextStep: metricoolApprovalQueueReady
+        ? "Metricool approval bridge is connected for the first guarded queue; keep direct OAuth optional until direct API posting is needed."
         : input.metricoolPublishing.nextStep || input.oauthConnectionPack.nextStep || input.oauthGoLive.nextStep,
     },
     {
@@ -40880,7 +40959,7 @@ async function buildGoLiveCompletionAuditSummary(input: {
       label: "Publishing connectors ready for guarded posting",
       phase: "publishing",
       status: completionStatusFromReady(
-        metricoolBridgeReady || directPublisherReady,
+        metricoolApprovalQueueReady || directPublisherReady,
         metricoolBridgeProgress || directPublisherProgress,
       ),
       owner: "Publisher",
@@ -40890,16 +40969,16 @@ async function buildGoLiveCompletionAuditSummary(input: {
         "Execution queue is generated without secrets and cannot send until source/rights gates pass.",
       ],
       currentEvidence: `${metricoolBridgeEvidence} Direct connectors ${input.publisherConnectors.totals.ready}/${input.publisherConnectors.totals.platforms} ready; go-live pack ${input.goLiveExecutionPack.status}.`,
-      proofSource: metricoolBridgeReady ? input.metricoolPublishing.markdownPath : input.publisherConnectors.markdownPath,
-      actionUrl: metricoolBridgeReady ? "/api/clippers/prepare-metricool-execution-queue" : "/api/clippers/prepare-publisher-connectors",
+      proofSource: metricoolApprovalQueueReady ? input.metricoolExecutionQueue.markdownPath : input.publisherConnectors.markdownPath,
+      actionUrl: metricoolApprovalQueueReady ? "/api/clippers/prepare-metricool-approval-session" : "/api/clippers/prepare-publisher-connectors",
       portalUrl: null,
-      blockers: metricoolBridgeReady
+      blockers: metricoolApprovalQueueReady
         ? []
         : [
           ...metricoolBridgeBlockers,
           ...input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
         ].slice(0, 8),
-      nextStep: metricoolBridgeReady
+      nextStep: metricoolApprovalQueueReady
         ? input.metricoolExecutionQueue.nextStep
         : input.metricoolPublishing.nextStep || input.publisherConnectors.nextStep || input.goLiveExecutionPack.nextStep,
     },
@@ -41037,7 +41116,7 @@ function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAud
     "# Clippers Go-Live Completion Audit",
     "",
     `Status: ${summary.status}`,
-    `Ready to publish: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Ready for approval-gated launch: ${summary.readyToPublish ? "yes" : "no"}`,
     `Score: ${summary.score}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Totals: ${summary.totals.verified}/${summary.totals.requirements} verified, ${summary.totals.needsEvidence} needs_evidence, ${summary.totals.blocked} blocked`,
@@ -41151,7 +41230,7 @@ async function buildGoLiveOperatorBriefSummary(input: {
   const credentialSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "credentials-loaded");
   const publicUrlSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "production-url-compliance");
   const contentSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "content-rights-supply");
-  const oauthSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "oauth-tokens-saved");
+  const oauthSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "publishing-bridge-connected");
   const publishSession = input.goLiveCompletionAudit.externalSession.find((item) => item.requirementId === "publisher-connectors-ready");
 
   const lanes: ClipperGoLiveOperatorBriefLane[] = [
@@ -41562,8 +41641,6 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const oauthGoLive = await buildOAuthGoLiveSummary({ credentialChecks, connectActions, tokenVault, tokenExchanges, tokenRecords, developerAppEvidence, permissionTracker, publisherConnectors });
   const oauthConnectionPack = await buildOAuthConnectionPackSummary({ accounts, connectActions, tokenVault, tokenRecords, accountEvidence, developerAppEvidence, permissionTracker });
   const externalLaunchDossier = await buildExternalLaunchDossierSummary({ accountLaunchKit, developerAppEvidence, permissionTracker, credentialSetup, externalSetupQueue, oauthGoLive, publisherConnectors, officialPermissionMatrix });
-  const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack });
-  const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const publishingPackage = await buildPublishingPackageSummary(accounts);
   const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
     metricoolPublishing,
@@ -41577,6 +41654,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     metricoolExecutionQueue,
     metricoolMvpLaunchPack,
   });
+  const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack, metricoolMvpLaunchPack, metricoolApprovalSession });
+  const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, analyticsReportingPack, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
   const commandCenter = await buildLaunchCommandCenterSummary({ accounts, credentialChecks, tokenVault, credentialSetup, credentialDoctor, platformReadiness, permissionPack, productionQueue, sourceAcquisition, sourceSupplyDropKit, sourceHunt, rightsOutreach, draftSpecs, manualPostingPack, publishingPackage, automation, automationSchedule, driveWorkspace, metrics, analyticsReportingPack, trendRadar, trendRightsOutreach, intakeKit, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, accountCreationPack, permissionTracker, permissionRequestPack, oauthConnectionPack, externalSetupQueue, externalLaunchDossier, platformPortalChecklist, appReviewSubmissionPack, appReviewDemoPack, developerApplicationDrafts, officialPermissionMatrix, metricoolPublishing, metricoolExecutionQueue, publisherConnectors, publisherExecutionQueue, productionUrlSetup, productionUrlVerification, httpsTunnelPlan, legalPolicyPack, oauthGoLive, goLiveExecutionPack });
   const blockerResolutionPack = await buildBlockerResolutionPackSummary({ commandCenter, growthAudit, sourceScout, metricoolExecutionQueue });

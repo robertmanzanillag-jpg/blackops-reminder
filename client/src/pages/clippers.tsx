@@ -2852,12 +2852,26 @@ interface ClipperGoLiveExecutionPlatform {
   nextStep: string;
 }
 
+interface ClipperGoLiveMetricoolMvpLane {
+  status: "blocked" | "ready_for_operator";
+  bridge: "metricool";
+  approvalRequired: true;
+  realPublishEnabled: false;
+  queuedForApproval: number;
+  readyForReview: number;
+  blocked: number;
+  accountsReady: number;
+  accounts: number;
+  nextStep: string;
+}
+
 interface ClipperGoLiveExecutionPackSummary {
   status: ClipperGoLiveExecutionPackStatus;
   generatedAt: string | null;
   manifestPath: string;
   markdownPath: string;
   platforms: ClipperGoLiveExecutionPlatform[];
+  metricoolMvp: ClipperGoLiveMetricoolMvpLane;
   totals: {
     platforms: number;
     ready: number;
@@ -10973,7 +10987,7 @@ export default function ClippersPage() {
             <div className="mt-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2 lg:grid-cols-5">
               <p>Accounts ready: {metricoolMvpLaunchPack.totals.readyAccounts}/{metricoolMvpLaunchPack.totals.accounts}</p>
               <p>Queued approval: {metricoolMvpLaunchPack.totals.queuedForApproval}</p>
-              <p>Manual-ready posts: {metricoolMvpLaunchPack.totals.manualReadyPosts}</p>
+              <p>Manual package-ready: {metricoolMvpLaunchPack.totals.manualReadyPosts}</p>
               <p>Rights assets: {metricoolMvpLaunchPack.totals.rightsReadyAssets}/{metricoolMvpLaunchPack.totals.minimumWeeklySourceAssets}</p>
               <p>Full-auto blockers: {metricoolMvpLaunchPack.totals.fullAutomationBlockers}</p>
             </div>
@@ -10989,7 +11003,7 @@ export default function ClippersPage() {
                   </div>
                   <div className="mt-3 grid gap-2 text-[11px] leading-4 text-zinc-400 sm:grid-cols-2">
                     <p>Queue: {row.queuedForApproval}</p>
-                    <p>Manual-ready: {row.manualReadyPosts}</p>
+                    <p>Manual package-ready: {row.manualReadyPosts}</p>
                     <p>Assets: {row.rightsReadyAssets}/{row.minimumWeeklySourceAssets}</p>
                     <p>Networks: {row.connectedNetworks.join(", ") || "none"}</p>
                   </div>
@@ -16183,6 +16197,24 @@ export default function ClippersPage() {
                       <p>Progress: {status.goLiveExecutionPack.totals.inProgress}</p>
                       <p>Phases: {status.goLiveExecutionPack.totals.done}/{status.goLiveExecutionPack.totals.phases}</p>
                       <p>Runnable: {status.goLiveExecutionPack.totals.readyToExecute}</p>
+                    </div>
+                    <div className="mt-3 rounded-md border border-emerald-300/20 bg-black/25 p-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Metricool MVP lane</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-400">{status.goLiveExecutionPack.metricoolMvp.nextStep}</p>
+                        </div>
+                        <Badge className={cn("w-fit border", status.goLiveExecutionPack.metricoolMvp.status === "ready_for_operator" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                          {status.goLiveExecutionPack.metricoolMvp.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2 lg:grid-cols-5">
+                        <p>Accounts: {status.goLiveExecutionPack.metricoolMvp.accountsReady}/{status.goLiveExecutionPack.metricoolMvp.accounts}</p>
+                        <p>Queued approval: {status.goLiveExecutionPack.metricoolMvp.queuedForApproval}</p>
+                        <p>Review-ready: {status.goLiveExecutionPack.metricoolMvp.readyForReview}</p>
+                        <p>Blocked: {status.goLiveExecutionPack.metricoolMvp.blocked}</p>
+                        <p>Real publish: {status.goLiveExecutionPack.metricoolMvp.realPublishEnabled ? "on" : "off"}</p>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                       {status.goLiveExecutionPack.platforms.map((platform) => (
