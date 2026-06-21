@@ -144,8 +144,8 @@ export function DashboardAssistantChat() {
                 return next;
               });
             }
-            if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError) {
-              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError}`;
+            if (data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.metricoolAutomationError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.metricoolAutomationError}`;
               setMessages((prev) => {
                 const next = [...prev];
                 next[next.length - 1] = {
