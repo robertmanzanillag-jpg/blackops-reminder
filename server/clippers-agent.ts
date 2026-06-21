@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, open, readdir, readFile, rename, stat, writeFile } from "fs/promises";
+import { chmod, copyFile, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "fs/promises";
 import { existsSync, readFileSync, statSync } from "fs";
 import { spawn } from "child_process";
 import { createCipheriv, createHash, randomBytes } from "crypto";
@@ -5739,6 +5739,42 @@ export interface ClipperMetricoolApprovalSessionSummary {
   nextStep: string;
 }
 
+export interface ClipperMetricoolApprovalEvidenceImportRow {
+  metricoolQueueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform | "unknown";
+  finalStatus: string;
+  publishedPostUrl: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  result: "imported" | "skipped" | "rejected";
+  reason: string;
+}
+
+export interface ClipperMetricoolApprovalEvidenceImportSummary {
+  status: "missing" | "needs_records" | "imported";
+  generatedAt: string;
+  evidenceImportCsvPath: string;
+  metricsOutputPath: string;
+  rows: ClipperMetricoolApprovalEvidenceImportRow[];
+  totals: {
+    rows: number;
+    imported: number;
+    skipped: number;
+    rejected: number;
+    pendingLive: number;
+    publishedRows: number;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+  };
+  nextStep: string;
+}
+
 export interface ClipperMetricoolAccountEvidenceResult {
   generatedAt: string;
   source: "metricool";
@@ -6323,6 +6359,7 @@ const METRICOOL_APPROVAL_SESSION_PATH = path.join(SCHEDULED_DIR, "metricool-appr
 const METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.md");
 const METRICOOL_APPROVAL_SESSION_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.csv");
 const METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "metricool-approval-evidence-import.csv");
+const METRICOOL_APPROVAL_IMPORTED_METRICS_PATH = path.join(METRICS_DIR, "metricool-approval-imported-metrics.csv");
 const METRICOOL_BRANDS_CACHE_PATH = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
 const AUTOMATION_SCHEDULE_PATH = path.join(ROOT_DIR, "automation-schedule.json");
 const ACCOUNT_IDENTITY_KIT_PATH = path.join(ROOT_DIR, "account-identity-kit.json");
@@ -13583,16 +13620,16 @@ function normalizeMetricRecord(
   if (!accounts[0]) return null;
   const account = resolveMetricAccount(rawRecord, accounts);
   const platform = normalizePlatformLabel(firstString(rawRecord, ["platform", "network", "source"])) || "unknown";
-  const clipId = firstString(rawRecord, ["clip_id", "clipid", "video_id", "videoid", "post_id", "postid", "id", "url"]) || `${sourceFile}-${index + 1}`;
-  const hook = firstString(rawRecord, ["hook", "caption", "title", "description", "creative", "format"]) || "Sin hook/caption";
-  const views = firstNumber(rawRecord, ["views", "view_count", "plays", "impressions", "reproductions", "vistas"]);
-  const likes = firstNumber(rawRecord, ["likes", "like_count", "me_gusta"]);
-  const comments = firstNumber(rawRecord, ["comments", "comment_count", "comentarios"]);
-  const shares = firstNumber(rawRecord, ["shares", "share_count", "compartidos"]);
+  const clipId = firstString(rawRecord, ["clip_id", "clipid", "published_post_url", "post_url", "video_id", "videoid", "post_id", "postid", "metricool_queue_item_id", "id", "url"]) || `${sourceFile}-${index + 1}`;
+  const hook = firstString(rawRecord, ["hook", "caption_seed", "caption", "title", "description", "creative", "format"]) || "Sin hook/caption";
+  const views = firstNumber(rawRecord, ["views_24h", "views", "view_count", "plays", "impressions", "reproductions", "vistas"]);
+  const likes = firstNumber(rawRecord, ["likes_24h", "likes", "like_count", "me_gusta"]);
+  const comments = firstNumber(rawRecord, ["comments_24h", "comments", "comment_count", "comentarios"]);
+  const shares = firstNumber(rawRecord, ["shares_24h", "shares", "share_count", "compartidos"]);
   const saves = firstNumber(rawRecord, ["saves", "save_count", "bookmarks", "guardados"]);
   const retentionRate = firstNullableNumber(rawRecord, ["retention", "retention_rate", "avg_retention", "average_percentage_viewed", "completion_rate"]);
   const watchTimeSeconds = firstNullableNumber(rawRecord, ["watch_time_seconds", "watch_time", "avg_watch_time", "average_view_duration"]);
-  const publishedAt = firstString(rawRecord, ["published_at", "created_at", "date", "post_date"]) || null;
+  const publishedAt = firstString(rawRecord, ["published_at", "scheduled_for", "publish_at", "created_at", "date", "post_date"]) || null;
 
   if (views <= 0 && likes <= 0 && comments <= 0 && shares <= 0 && saves <= 0) return null;
 
@@ -27964,6 +28001,133 @@ function metricoolApprovalEvidenceRow(item: ClipperMetricoolExecutionQueueItem):
   ].map(csvEscape).join(",");
 }
 
+function metricoolApprovalEvidenceHasSecretSignal(record: Record<string, unknown>): boolean {
+  return Object.values(record)
+    .map((value) => typeof value === "string" || typeof value === "number" ? String(value) : "")
+    .some((value) => /(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-\s]?key|x-api-key|password|cookie|secret\s*[:=]|authorization:\s*bearer|bearer\s+[A-Za-z0-9._-]{12,}|sk-[A-Za-z0-9_-]+)/i.test(value));
+}
+
+function metricoolApprovalAccountKey(value: string): string {
+  return value.trim().toLowerCase().replace(/^@/, "");
+}
+
+function resolveMetricoolApprovalEvidenceAccount(record: Record<string, unknown>, accounts: ClipperAccount[]): ClipperAccount | null {
+  const accountValue = firstString(record, ["account_id", "accountid", "account", "account_name", "profile", "handle", "username"]);
+  const normalized = metricoolApprovalAccountKey(accountValue);
+  if (!normalized) return null;
+  return accounts.find((account) => {
+    const accountKeys = [
+      account.id,
+      account.name,
+      ...account.platformAccounts.map((platformAccount) => platformAccount.handle),
+    ].map(metricoolApprovalAccountKey);
+    return accountKeys.includes(normalized);
+  }) || null;
+}
+
+function metricoolApprovalPublishedUrlMatchesPlatform(rawUrl: string, platform: ClipperPlatform | "unknown"): boolean {
+  if (platform === "unknown") return false;
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname.includes("metricool.com")) return false;
+    if (platform === "tiktok") return hostname === "tiktok.com" || hostname.endsWith(".tiktok.com");
+    if (platform === "instagram") return hostname === "instagram.com" || hostname.endsWith(".instagram.com");
+    if (platform === "youtube") return hostname === "youtube.com" || hostname.endsWith(".youtube.com") || hostname === "youtu.be";
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function metricoolApprovalEvidenceToMetricRow(record: Record<string, unknown>, index: number, accounts: ClipperAccount[]): {
+  auditRow: ClipperMetricoolApprovalEvidenceImportRow;
+  metricRow: string[] | null;
+} {
+  const metricoolQueueItemId = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) || `metricool-row-${index + 1}`;
+  const account = resolveMetricoolApprovalEvidenceAccount(record, accounts);
+  const rawAccountId = firstString(record, ["account_id", "accountid", "account"]) || "unknown";
+  const accountId = account?.id || rawAccountId;
+  const accountName = account?.name || firstString(record, ["account_name", "profile", "handle"]) || accountId;
+  const platform = normalizePlatformLabel(firstString(record, ["platform", "network", "source"])) || "unknown";
+  const finalStatus = firstString(record, ["final_status", "status"]).toLowerCase();
+  const publishedPostUrl = firstString(record, ["published_post_url", "post_url", "url", "permalink"]);
+  const scheduledFor = firstString(record, ["scheduled_for", "published_at", "publish_at", "date"]) || null;
+  const captionSeed = firstString(record, ["caption_seed", "hook", "caption", "title", "description"]) || metricoolQueueItemId;
+  const sourcePath = firstString(record, ["source_path", "source_file", "source"]);
+  const views = firstNumber(record, ["views_24h", "views", "view_count", "plays", "impressions", "vistas"]);
+  const likes = firstNumber(record, ["likes_24h", "likes", "like_count", "me_gusta"]);
+  const comments = firstNumber(record, ["comments_24h", "comments", "comment_count", "comentarios"]);
+  const shares = firstNumber(record, ["shares_24h", "shares", "share_count", "compartidos"]);
+  let result: ClipperMetricoolApprovalEvidenceImportRow["result"] = "skipped";
+  let reason = "pending_live_post";
+  let metricRow: string[] | null = null;
+
+  if (metricoolApprovalEvidenceHasSecretSignal(record)) {
+    result = "rejected";
+    reason = "secret_like_value_detected";
+  } else if (!account) {
+    result = "rejected";
+    reason = "unknown_account_id";
+  } else if (finalStatus === "rejected") {
+    reason = "operator_rejected";
+  } else if (finalStatus === "approved" || finalStatus === "scheduled") {
+    reason = "pending_live_post";
+  } else if (finalStatus !== "published") {
+    reason = "final_status_must_be_published";
+  } else if (!publishedPostUrl || hasTemplatePlaceholder(publishedPostUrl) || !/^https?:\/\//i.test(publishedPostUrl)) {
+    reason = "missing_real_published_post_url";
+  } else if (!metricoolApprovalPublishedUrlMatchesPlatform(publishedPostUrl, platform)) {
+    result = "rejected";
+    reason = "published_post_url_not_platform_post";
+  } else if (hasTemplatePlaceholder(captionSeed)) {
+    reason = "placeholder_value_detected";
+  } else if (views <= 0 && likes <= 0 && comments <= 0 && shares <= 0) {
+    reason = "missing_24h_metrics";
+  } else {
+    result = "imported";
+    reason = "imported_to_metrics";
+    metricRow = [
+      accountId,
+      platform,
+      publishedPostUrl,
+      captionSeed,
+      scheduledFor || "",
+      String(views),
+      String(likes),
+      String(comments),
+      String(shares),
+      "0",
+      sourcePath,
+    ];
+  }
+
+  return {
+    auditRow: {
+      metricoolQueueItemId,
+      accountId,
+      accountName,
+      platform,
+      finalStatus: finalStatus || "missing",
+      publishedPostUrl: publishedPostUrl && !hasTemplatePlaceholder(publishedPostUrl) ? publishedPostUrl : null,
+      views,
+      likes,
+      comments,
+      shares,
+      result,
+      reason,
+    },
+    metricRow,
+  };
+}
+
+function renderMetricoolApprovalImportedMetricsCsv(rows: string[][]): string {
+  const header = ["account_id", "platform", "clip_id", "hook", "published_at", "views", "likes", "comments", "shares", "saves", "source_file"];
+  return [
+    header.map(csvEscape).join(","),
+    ...rows.map((row) => row.map(csvEscape).join(",")),
+  ].join("\n");
+}
+
 function buildMetricoolApprovalSessionSummary(input: {
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
@@ -28200,6 +28364,68 @@ export async function prepareClipperMetricoolApprovalSession(userId = getSystemU
     metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
   }));
   return { metricoolApprovalSession, status: await getClipperStatus(userId) };
+}
+
+export async function importClipperMetricoolApprovalEvidence(userId = getSystemUserId()): Promise<{ metricoolApprovalEvidenceImport: ClipperMetricoolApprovalEvidenceImportSummary; metrics: ClipperMetricsSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const generatedAt = new Date().toISOString();
+  const raw = await readFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
+  const parsedRows = raw ? parseCsvRecords(raw) : [];
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const importedMetricRows: string[][] = [];
+  const rows = parsedRows.map((record, index) => {
+    const result = metricoolApprovalEvidenceToMetricRow(record, index, accounts);
+    if (result.metricRow) importedMetricRows.push(result.metricRow);
+    return result.auditRow;
+  });
+  const totals = rows.reduce<ClipperMetricoolApprovalEvidenceImportSummary["totals"]>((sum, row) => {
+    sum.rows += 1;
+    if (row.result === "imported") {
+      sum.imported += 1;
+      sum.publishedRows += 1;
+      sum.views += row.views;
+      sum.likes += row.likes;
+      sum.comments += row.comments;
+      sum.shares += row.shares;
+    } else if (row.result === "rejected") {
+      sum.rejected += 1;
+    } else {
+      sum.skipped += 1;
+      if (row.reason === "pending_live_post") sum.pendingLive += 1;
+    }
+    return sum;
+  }, { rows: 0, imported: 0, skipped: 0, rejected: 0, pendingLive: 0, publishedRows: 0, views: 0, likes: 0, comments: 0, shares: 0 });
+
+  if (importedMetricRows.length > 0) {
+    await writeFile(METRICOOL_APPROVAL_IMPORTED_METRICS_PATH, renderMetricoolApprovalImportedMetricsCsv(importedMetricRows));
+  } else {
+    await unlink(METRICOOL_APPROVAL_IMPORTED_METRICS_PATH).catch(() => undefined);
+  }
+
+  const metrics = await buildMetricsSummary(accounts);
+  await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
+
+  const status: ClipperMetricoolApprovalEvidenceImportSummary["status"] = raw === null
+    ? "missing"
+    : totals.imported > 0
+      ? "imported"
+      : "needs_records";
+  const metricoolApprovalEvidenceImport: ClipperMetricoolApprovalEvidenceImportSummary = {
+    status,
+    generatedAt,
+    evidenceImportCsvPath: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    metricsOutputPath: METRICOOL_APPROVAL_IMPORTED_METRICS_PATH,
+    rows,
+    totals,
+    nextStep: status === "missing"
+      ? "Prepare Metricool approval session, then fill the evidence import CSV after real posts are live."
+      : totals.imported > 0
+        ? "Analytics updated from Metricool approval evidence; review reports and adjust hooks/windows."
+        : "Fill published rows with real post URLs, final_status=published and 24h metrics before importing again.",
+  };
+  return { metricoolApprovalEvidenceImport, metrics, status: await getClipperStatus(userId) };
 }
 
 export async function recordClipperMetricoolAccountEvidence(userId = getSystemUserId()): Promise<{ metricoolAccountEvidence: ClipperMetricoolAccountEvidenceResult; status: ClipperStatus }> {

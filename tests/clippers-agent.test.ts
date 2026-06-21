@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -3585,6 +3585,64 @@ test("prepareClipperMetricoolApprovalSession prepares operator evidence for queu
       if (previous === null) await unlink(filePath).catch(() => undefined);
       else await writeFile(filePath, previous);
     }
+  }
+});
+
+test("importClipperMetricoolApprovalEvidence converts published evidence into analytics metrics safely", async () => {
+  const statusBefore = await getClipperStatus();
+  const evidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const importedMetricsPath = path.join(statusBefore.rootDir, "metrics", "metricool-approval-imported-metrics.csv");
+  const metricsSummaryPath = path.join(statusBefore.rootDir, "metrics", "metrics-summary.json");
+  const previousEvidence = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousImportedMetrics = await readFile(importedMetricsPath, "utf8").catch(() => null);
+  const previousMetricsSummary = await readFile(metricsSummaryPath, "utf8").catch(() => null);
+  await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
+  await mkdir(path.dirname(importedMetricsPath), { recursive: true });
+  await writeFile(evidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    "metricool-import-good,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/owned-sports.mp4,Great final-minute hook,https://app.metricool.com/planner/post/metricool-import-good,https://www.tiktok.com/@sportsdaily/video/metricoolimportgood,published,12500,700,82,44,Live post URL and 24h metrics captured from Metricool export",
+    "metricool-import-pending,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T13:00:00.000Z,/tmp/owned-meme.mp4,Pending meme hook,https://app.metricool.com/planner/post/metricool-import-pending,,scheduled,0,0,0,0,Scheduled but not live yet",
+    "metricool-import-planner-url,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T14:00:00.000Z,/tmp/owned-planner.mp4,Planner URL hook,https://app.metricool.com/planner/post/metricool-import-planner-url,https://app.metricool.com/planner/post/metricool-import-planner-url,published,999,9,9,9,Metricool planner URL is not a public post",
+    "metricool-import-unknown-account,unknown-account,Unknown Account,tiktok,memes,6431685,2026-06-21T15:00:00.000Z,/tmp/owned-unknown.mp4,Unknown account hook,https://app.metricool.com/planner/post/metricool-import-unknown-account,https://www.tiktok.com/@memeradar/video/metricoolunknown,published,888,8,8,8,Unknown account must not fall back to first account",
+    "metricool-import-secret,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T16:00:00.000Z,/tmp/owned-secret.mp4,Secret row hook,https://app.metricool.com/planner/post/metricool-import-secret,https://www.tiktok.com/@memeradar/video/metricoolsecret,published,999,9,9,9,api_key=should-not-be-stored",
+  ].join("\n"));
+
+  try {
+    const { metricoolApprovalEvidenceImport, metrics, status } = await importClipperMetricoolApprovalEvidence();
+    assert.equal(metricoolApprovalEvidenceImport.status, "imported");
+    assert.equal(metricoolApprovalEvidenceImport.totals.rows, 5);
+    assert.equal(metricoolApprovalEvidenceImport.totals.imported, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.pendingLive, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.rejected, 3);
+    assert.equal(metricoolApprovalEvidenceImport.totals.views, 12500);
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-secret" && row.result === "rejected"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-planner-url" && row.result === "rejected" && row.reason === "published_post_url_not_platform_post"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-unknown-account" && row.result === "rejected" && row.reason === "unknown_account_id"));
+    assert.ok(metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood" && record.views === 12500));
+    assert.ok(status.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"));
+
+    const rawImportedMetrics = await readFile(importedMetricsPath, "utf8");
+    assert.ok(rawImportedMetrics.includes("metricoolimportgood"));
+    assert.equal(rawImportedMetrics.includes("api_key"), false);
+    assert.equal(rawImportedMetrics.includes("metricoolsecret"), false);
+    assert.equal(rawImportedMetrics.includes("metricool-import-planner-url"), false);
+
+    await writeFile(evidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      "metricool-import-pending-only,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-22T13:00:00.000Z,/tmp/owned-meme.mp4,Pending-only hook,https://app.metricool.com/planner/post/metricool-import-pending-only,,scheduled,0,0,0,0,Scheduled but not live yet",
+    ].join("\n"));
+    const secondImport = await importClipperMetricoolApprovalEvidence();
+    assert.equal(secondImport.metricoolApprovalEvidenceImport.status, "needs_records");
+    assert.equal(secondImport.metricoolApprovalEvidenceImport.totals.imported, 0);
+    assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
+    assert.equal(secondImport.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"), false);
+  } finally {
+    if (previousEvidence === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousEvidence);
+    if (previousImportedMetrics === null) await unlink(importedMetricsPath).catch(() => undefined);
+    else await writeFile(importedMetricsPath, previousImportedMetrics);
+    if (previousMetricsSummary === null) await unlink(metricsSummaryPath).catch(() => undefined);
+    else await writeFile(metricsSummaryPath, previousMetricsSummary);
   }
 });
 

@@ -3940,6 +3940,40 @@ interface ClipperMetricoolApprovalSessionSummary {
   nextStep: string;
 }
 
+interface ClipperMetricoolApprovalEvidenceImportSummary {
+  status: "missing" | "needs_records" | "imported";
+  generatedAt: string;
+  evidenceImportCsvPath: string;
+  metricsOutputPath: string;
+  rows: Array<{
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform | "unknown";
+    finalStatus: string;
+    publishedPostUrl: string | null;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    result: "imported" | "skipped" | "rejected";
+    reason: string;
+  }>;
+  totals: {
+    rows: number;
+    imported: number;
+    skipped: number;
+    rejected: number;
+    pendingLive: number;
+    publishedRows: number;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperMetricoolAccountEvidenceResult {
   generatedAt: string;
   source: "metricool";
@@ -7806,6 +7840,25 @@ export default function ClippersPage() {
     },
   });
 
+  const metricoolApprovalEvidenceImportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/import-metricool-approval-evidence", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude importar evidencia Metricool");
+      return data as { metricoolApprovalEvidenceImport: ClipperMetricoolApprovalEvidenceImportSummary; metrics: ClipperMetricsSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: data.metricoolApprovalEvidenceImport.status === "imported" ? "Evidencia Metricool importada" : "Evidencia Metricool pendiente",
+        description: `${data.metricoolApprovalEvidenceImport.totals.imported} publicados importados; ${formatNumber(data.metricoolApprovalEvidenceImport.totals.views)} views.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude importar evidencia Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
   const metricoolAccountEvidenceMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/record-metricool-account-evidence", { method: "POST" });
@@ -9848,6 +9901,7 @@ export default function ClippersPage() {
   const metricoolApprovalSessionAccounts = new Set(metricoolApprovalSessionItems.map((item) => item.accountLabel || item.accountName || item.accountId)).size;
   const metricoolApprovalSessionCategories = new Set(metricoolApprovalSessionItems.map((item) => item.category || (item.accountId.includes("sports") ? "sports" : item.accountId.includes("meme") ? "memes" : item.accountId.includes("streamer") ? "streamers" : "uncategorized"))).size;
   const metricoolApprovalSessionPlatforms = new Set(metricoolApprovalSessionItems.map((item) => item.platform)).size;
+  const lastMetricoolApprovalEvidenceImport = metricoolApprovalEvidenceImportMutation.data?.metricoolApprovalEvidenceImport;
   const externalSprintTotals = visibleExternalAccountPermissionSprint?.totals;
   const metricoolEffectiveApprovalGate = metricoolPublishing?.effectiveApprovalGate ?? true;
   const metricoolMode = metricoolEffectiveApprovalGate || metricoolExecutionQueue?.publishMode === "approval_required"
@@ -10670,6 +10724,15 @@ export default function ClippersPage() {
               Metricool review
             </Button>
             <Button
+              onClick={() => metricoolApprovalEvidenceImportMutation.mutate()}
+              disabled={metricoolApprovalEvidenceImportMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="import-clippers-metricool-approval-evidence-button"
+            >
+              {metricoolApprovalEvidenceImportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart3 className="mr-2 h-4 w-4" />}
+              Import Metricool evidence
+            </Button>
+            <Button
               onClick={() => metricoolAccountEvidenceMutation.mutate()}
               disabled={metricoolAccountEvidenceMutation.isPending || isLoading}
               className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
@@ -11065,6 +11128,27 @@ export default function ClippersPage() {
               <p className="break-all">CSV: {metricoolApprovalSession.csvPath}</p>
               <p className="break-all">Evidence import CSV: {metricoolApprovalSession.evidenceImportCsvPath}</p>
             </div>
+            {lastMetricoolApprovalEvidenceImport && (
+              <div className="mt-3 rounded-md border border-cyan-300/20 bg-cyan-950/15 p-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-cyan-100">Metricool evidence import</p>
+                    <p className="mt-1 text-xs leading-5 text-cyan-100/75">{lastMetricoolApprovalEvidenceImport.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", lastMetricoolApprovalEvidenceImport.status === "imported" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                    {lastMetricoolApprovalEvidenceImport.status}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-cyan-100/70 md:grid-cols-5">
+                  <p>Rows: {lastMetricoolApprovalEvidenceImport.totals.rows}</p>
+                  <p>Imported: {lastMetricoolApprovalEvidenceImport.totals.imported}</p>
+                  <p>Pending live: {lastMetricoolApprovalEvidenceImport.totals.pendingLive}</p>
+                  <p>Rejected: {lastMetricoolApprovalEvidenceImport.totals.rejected}</p>
+                  <p>Views: {formatNumber(lastMetricoolApprovalEvidenceImport.totals.views)}</p>
+                </div>
+                <p className="mt-2 break-all text-[10px] leading-4 text-cyan-100/60">Metrics CSV: {lastMetricoolApprovalEvidenceImport.metricsOutputPath}</p>
+              </div>
+            )}
             {metricoolApprovalSessionItems.length > 0 && (
               <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/25">
                 {metricoolApprovalSessionItems.slice(0, 6).map((item) => {
