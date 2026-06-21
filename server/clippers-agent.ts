@@ -838,6 +838,11 @@ export interface ClipperSourceScoutPermissionItem {
   permissionRecordTemplate: string;
   sourceScoutIntakeCsvRow: string;
   proofNeeded: string[];
+  officialSourcePolicyPlatform: string | null;
+  officialSourcePolicyUrl: string | null;
+  officialSourcePermissionScope: string | null;
+  officialSourceRules: string[];
+  officialSourceNextAction: string | null;
   nextStep: string;
 }
 
@@ -10869,12 +10874,39 @@ function sourceScoutPermissionRecordTemplate(candidate: ClipperSourceScoutCandid
   ].join("\n");
 }
 
+function sourceScoutOfficialSourcePolicy(candidate: ClipperSourceScoutCandidate): Pick<ClipperSourceScoutPermissionItem, "officialSourcePolicyPlatform" | "officialSourcePolicyUrl" | "officialSourcePermissionScope" | "officialSourceRules" | "officialSourceNextAction"> {
+  if (candidate.category !== "streamers") {
+    return {
+      officialSourcePolicyPlatform: null,
+      officialSourcePolicyUrl: null,
+      officialSourcePermissionScope: null,
+      officialSourceRules: [],
+      officialSourceNextAction: null,
+    };
+  }
+
+  return {
+    officialSourcePolicyPlatform: "twitch",
+    officialSourcePolicyUrl: "https://dev.twitch.tv/docs/api/reference/#create-clip",
+    officialSourcePermissionScope: "clips:edit",
+    officialSourceRules: [
+      "Twitch Create Clip can create a clip from a broadcaster stream, but this does not grant repost rights outside Twitch.",
+      "Use Twitch clips only with broadcaster, creator, or rightsholder permission captured in Source Scout intake.",
+      "Editor evidence is acceptable only when it explicitly proves delegated off-platform reuse rights from the broadcaster/rightsholder.",
+      "If permission is missing, switch the candidate to recreate_only/explainer with owned visuals and no raw streamer footage.",
+      "Do not download, edit or publish streamer footage until exact URL, source file, and rights evidence all pass gates.",
+    ],
+    officialSourceNextAction: "For streamer candidates, request broadcaster/creator permission or official policy evidence; clips:edit only proves API capability, not reuse rights.",
+  };
+}
+
 function buildSourceScoutPermissionItem(candidate: ClipperSourceScoutCandidate, intake: ClipperSourceScoutIntakeSummary): ClipperSourceScoutPermissionItem {
   const matchingIntake = intake.items.find((item) => item.candidateId === candidate.id || item.sourceUrl === candidate.sourceUrl) || null;
   const permissionRecorded = matchingIntake?.rightsStatus === "owned_or_permissioned" && matchingIntake.evidenceAccepted;
   const exactUrlNeeded = candidate.sourceUrlKind !== "exact_video_or_post" && !matchingIntake;
   const sourceFileNeeded = Boolean(permissionRecorded && !(matchingIntake?.sourceFileExists || matchingIntake?.targetSourceExists));
   const blocked = candidate.rightsRisk === "blocked" || candidate.sourceUrlKind === "discovery_search";
+  const officialSourcePolicy = sourceScoutOfficialSourcePolicy(candidate);
   const status: ClipperTrendRightsOutreachItemStatus = permissionRecorded ? "permission_recorded" : "ready_to_contact";
   const evidenceFileName = sourceScoutPermissionEvidenceFileName(candidate);
   const subject = `Permission request: ${candidate.title}`;
@@ -10911,7 +10943,11 @@ function buildSourceScoutPermissionItem(candidate: ClipperSourceScoutCandidate, 
       "Allowed platforms and required credit/caption.",
       "Local source file or approved recreate asset before production.",
       "Notes with real evidence; no placeholders, ok/yes/approved alone.",
+      ...(officialSourcePolicy.officialSourcePolicyPlatform === "twitch"
+        ? ["For Twitch/streamer clips, broadcaster/creator/rightsholder permission or allowlist proof is required; clips:edit is not repost permission."]
+        : []),
     ],
+    ...officialSourcePolicy,
     nextStep: permissionRecorded
       ? sourceFileNeeded
         ? "Permission is recorded; upload/generate the source file before Metricool approval."
@@ -10966,7 +11002,7 @@ async function buildSourceScoutPermissionPackSummary(input: {
 }
 
 function renderSourceScoutPermissionPackCsv(summary: ClipperSourceScoutPermissionPackSummary): string {
-  const headers = ["status", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "source", "rights_risk", "viral_score", "metricool_fit", "exact_url_needed", "source_file_needed", "subject", "message", "evidence_file", "permission_record_template", "source_scout_intake_csv_row", "proof_needed", "next_step"];
+  const headers = ["status", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "source", "rights_risk", "viral_score", "metricool_fit", "exact_url_needed", "source_file_needed", "official_source_policy_platform", "official_source_policy_url", "official_source_permission_scope", "official_source_rules", "official_source_next_action", "subject", "message", "evidence_file", "permission_record_template", "source_scout_intake_csv_row", "proof_needed", "next_step"];
   const rows = summary.items.map((item) => [
     item.status,
     item.candidateId,
@@ -10981,6 +11017,11 @@ function renderSourceScoutPermissionPackCsv(summary: ClipperSourceScoutPermissio
     item.metricoolFit ? "yes" : "no",
     item.exactUrlNeeded ? "yes" : "no",
     item.sourceFileNeeded ? "yes" : "no",
+    item.officialSourcePolicyPlatform || "",
+    item.officialSourcePolicyUrl || "",
+    item.officialSourcePermissionScope || "",
+    item.officialSourceRules.join(" | "),
+    item.officialSourceNextAction || "",
     item.outreachSubject,
     item.outreachMessage,
     item.evidenceFileName,
@@ -11029,9 +11070,20 @@ function renderSourceScoutPermissionPackMarkdown(summary: ClipperSourceScoutPerm
       `- Metricool fit: ${item.metricoolFit ? "yes" : "no"}`,
       `- Exact URL needed: ${item.exactUrlNeeded ? "yes" : "no"}`,
       `- Source file needed: ${item.sourceFileNeeded ? "yes" : "no"}`,
+      ...(item.officialSourcePolicyPlatform ? [
+        `- Official source policy: ${item.officialSourcePolicyPlatform}`,
+        `- Official source policy URL: ${item.officialSourcePolicyUrl}`,
+        `- Official source permission scope: ${item.officialSourcePermissionScope}`,
+        `- Official source next action: ${item.officialSourceNextAction}`,
+      ] : []),
       `- Evidence file: clippers_workspace/allowlist/${item.evidenceFileName}`,
       `- Next step: ${item.nextStep}`,
       "",
+      ...(item.officialSourceRules.length ? [
+        "Official source rules:",
+        ...item.officialSourceRules.map((rule) => `- ${rule}`),
+        "",
+      ] : []),
       `Subject: ${item.outreachSubject}`,
       "",
       item.outreachMessage,
@@ -43470,6 +43522,7 @@ export const __clipperInternals = {
   requireSourceRightsEvidence,
   validateSourceScoutEvidence,
   calculateSourceScoutViralScore,
+  sourceScoutOfficialSourcePolicy,
   weeklyFunnelDailyTargets,
   weeklyFunnelStatus,
   permissionStatusRecordsPath: PERMISSION_STATUS_RECORDS_PATH,

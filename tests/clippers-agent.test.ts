@@ -6140,6 +6140,7 @@ test("prepareClipperSourceScoutPermissionPack writes outreach and intake rows wi
     const rawMarkdown = await readFile(sourceScoutPermissionPack.markdownPath, "utf8");
     const rawCsv = await readFile(sourceScoutPermissionPack.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("does not grant rights"));
+    assert.ok(rawCsv.includes("official_source_policy_url"));
     assert.ok(rawCsv.includes("source_scout_intake_csv_row"));
     assert.equal(rawMarkdown.includes("client_secret"), false);
     assert.equal(rawCsv.includes("refresh_token"), false);
@@ -6151,6 +6152,26 @@ test("prepareClipperSourceScoutPermissionPack writes outreach and intake rows wi
     if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-permission-pack.csv")).catch(() => undefined);
     else await writeFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.csv"), previousCsv);
   }
+});
+
+test("source scout permission policy requires Twitch streamer rights beyond clips API scope", () => {
+  const policy = __clipperInternals.sourceScoutOfficialSourcePolicy({
+    category: "streamers",
+  } as any);
+
+  assert.equal(policy.officialSourcePolicyPlatform, "twitch");
+  assert.equal(policy.officialSourcePermissionScope, "clips:edit");
+  assert.ok(policy.officialSourcePolicyUrl.includes("dev.twitch.tv"));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("does not grant repost rights")));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("broadcaster, creator, or rightsholder permission")));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("delegated off-platform reuse rights")));
+  assert.ok(policy.officialSourceNextAction.includes("not reuse rights"));
+
+  const sportsPolicy = __clipperInternals.sourceScoutOfficialSourcePolicy({
+    category: "sports",
+  } as any);
+  assert.equal(sportsPolicy.officialSourcePolicyPlatform, null);
+  assert.deepEqual(sportsPolicy.officialSourceRules, []);
 });
 
 test("prepareClipperSourceScoutWorkQueue writes prioritized blocker queue without publishing", async () => {
