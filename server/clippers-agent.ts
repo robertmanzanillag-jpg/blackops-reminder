@@ -220,6 +220,7 @@ export interface ClipperStatus {
   sourceScoutPermissionPack: ClipperSourceScoutPermissionPackSummary;
   sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
   sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+  sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary;
   sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
   weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
   sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
@@ -961,6 +962,55 @@ export interface ClipperSourceScoutExactUrlKitSummary {
     streamers: number;
     metricoolFit: number;
   };
+  nextStep: string;
+}
+
+export type ClipperSourceScoutDailySprintStatus = "blocked" | "behind" | "ready";
+
+export interface ClipperSourceScoutDailySprintCategoryRow {
+  category: ClipperAccountCategory;
+  label: string;
+  leadTarget: number;
+  exactUrlTarget: number;
+  currentScoutLeads: number;
+  currentExactUrls: number;
+  leadGap: number;
+  exactUrlGap: number;
+  searchMinutes: number;
+  priority: "critical" | "high" | "watch";
+  searchBrief: string[];
+  intakeTemplateRows: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutDailySprintSummary {
+  status: ClipperSourceScoutDailySprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceScoutPath: string;
+  exactUrlKitPath: string;
+  weeklyFunnelPath: string;
+  targets: {
+    dailyScoutLeads: number;
+    dailyExactUrls: number;
+    dailyRightsOrRecreate: number;
+    dailySourceReady: number;
+    metricoolApprovalMin: number;
+    metricoolApprovalMax: number;
+  };
+  totals: {
+    currentScoutLeads: number;
+    currentExactUrls: number;
+    leadGap: number;
+    exactUrlGap: number;
+    exactUrlTasks: number;
+    criticalCategories: number;
+    searchMinutes: number;
+  };
+  categoryRows: ClipperSourceScoutDailySprintCategoryRow[];
+  guardrails: string[];
   nextStep: string;
 }
 
@@ -6323,6 +6373,9 @@ const SOURCE_SCOUT_WORK_QUEUE_CSV_PATH = path.join(ROOT_DIR, "source-scout-work-
 const SOURCE_SCOUT_EXACT_URL_KIT_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.json");
 const SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.md");
 const SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.csv");
+const SOURCE_SCOUT_DAILY_SPRINT_PATH = path.join(ROOT_DIR, "source-scout-daily-sprint.json");
+const SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-daily-sprint.md");
+const SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH = path.join(ROOT_DIR, "source-scout-daily-sprint.csv");
 const SOURCE_SCOUT_SOURCE_FILE_KIT_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.json");
 const SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.md");
 const SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.csv");
@@ -11684,6 +11737,270 @@ export async function prepareClipperSourceScoutExactUrlKit(userId = getSystemUse
   return { sourceScoutExactUrlKit, status: await getClipperStatus(userId) };
 }
 
+const SOURCE_SCOUT_DAILY_CATEGORY_TARGETS: Record<ClipperAccountCategory, { leadTarget: number; exactUrlTarget: number; searchMinutes: number }> = {
+  sports: { leadTarget: 27, exactUrlTarget: 18, searchMinutes: 45 },
+  memes: { leadTarget: 18, exactUrlTarget: 12, searchMinutes: 35 },
+  streamers: { leadTarget: 0, exactUrlTarget: 0, searchMinutes: 0 },
+};
+
+function sourceScoutDailySearchBrief(category: ClipperAccountCategory): string[] {
+  if (category === "sports") {
+    return [
+      "Prioritize official/team/player posts, press conferences, locker-room clips, and owned commentary angles from today's games.",
+      "Avoid broadcast/league footage unless permission or official policy evidence is captured.",
+      "Look for 10k+ views/hour, comments arguing, injury/trade/news angles, or last-minute highlights that can be recreated with owned narration.",
+    ];
+  }
+  if (category === "memes") {
+    return [
+      "Prioritize simple formats that can be recreated with owned text, voiceover, screenshots cleared for use, or generated assets.",
+      "Avoid reposting creator watermarked videos unless permission evidence is captured.",
+      "Look for fast comment velocity, repeated caption patterns, and formats that can be localized for the account voice.",
+    ];
+  }
+  return [
+    "Keep streamers at watch mode until account/source/rights are ready.",
+    "Use only creator-approved VODs, broadcaster allowlists, or recreate-only explainers with owned visuals.",
+    "Do not advance raw streamer footage without permission evidence.",
+  ];
+}
+
+function sourceScoutDailyIntakeTemplateRows(category: ClipperAccountCategory, count: number): string[] {
+  return Array.from({ length: Math.min(5, Math.max(0, count)) }, (_, index) => [
+    "",
+    `<paste viral ${category} title ${index + 1}>`,
+    category,
+    "tiktok",
+    "<paste exact video/post URL only>",
+    "<paste creator/source>",
+    "review_required",
+    "creator_permission",
+    "<paste proof URL/path when available>",
+    "Real exact URL intake row; do not use search/explore/results URLs.",
+    "",
+    "",
+    "",
+    "<views>",
+    "<likes>",
+    "<comments>",
+    "<shares>",
+  ].map(csvCell).join(","));
+}
+
+function buildSourceScoutDailySprintCategoryRow(input: {
+  category: ClipperAccountCategory;
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  exactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+}): ClipperSourceScoutDailySprintCategoryRow {
+  const target = SOURCE_SCOUT_DAILY_CATEGORY_TARGETS[input.category];
+  const currentScoutLeads = input.sourceScout.candidates.filter((candidate) => candidate.category === input.category).length;
+  const currentExactUrls = sourceScoutUniqueExactUrlCount({
+    category: input.category,
+    sourceScout: input.sourceScout,
+    sourceScoutIntake: input.sourceScoutIntake,
+  });
+  const leadGap = Math.max(0, target.leadTarget - currentScoutLeads);
+  const exactUrlGap = Math.max(0, target.exactUrlTarget - currentExactUrls);
+  const priority: ClipperSourceScoutDailySprintCategoryRow["priority"] = exactUrlGap > 0 || leadGap >= 10
+    ? "critical"
+    : leadGap > 0
+      ? "high"
+      : "watch";
+  const existingExactTasks = input.exactUrlKit.items.filter((item) => item.category === input.category).length;
+  return {
+    category: input.category,
+    label: getClipperCategoryLabel(input.category),
+    leadTarget: target.leadTarget,
+    exactUrlTarget: target.exactUrlTarget,
+    currentScoutLeads,
+    currentExactUrls,
+    leadGap,
+    exactUrlGap,
+    searchMinutes: leadGap > 0 || exactUrlGap > 0 ? target.searchMinutes : 0,
+    priority,
+    searchBrief: sourceScoutDailySearchBrief(input.category),
+    intakeTemplateRows: sourceScoutDailyIntakeTemplateRows(input.category, Math.max(leadGap, exactUrlGap - existingExactTasks)),
+    nextStep: exactUrlGap > 0
+      ? `Convert ${exactUrlGap} ${getClipperCategoryLabel(input.category)} lead(s) into exact video/post URLs; search/explore URLs do not count.`
+      : leadGap > 0
+        ? `Find ${leadGap} more ${getClipperCategoryLabel(input.category)} viral lead(s) for today's Source Scout target.`
+        : `${getClipperCategoryLabel(input.category)} daily Source Scout intake is on pace; keep rights/source checks current.`,
+  };
+}
+
+async function buildSourceScoutDailySprintSummary(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  exactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+  weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
+}): Promise<ClipperSourceScoutDailySprintSummary> {
+  const categoryRows = (["sports", "memes", "streamers"] as ClipperAccountCategory[]).map((category) => buildSourceScoutDailySprintCategoryRow({
+    category,
+    sourceScout: input.sourceScout,
+    sourceScoutIntake: input.sourceScoutIntake,
+    exactUrlKit: input.exactUrlKit,
+  }));
+  const totals = categoryRows.reduce<ClipperSourceScoutDailySprintSummary["totals"]>((sum, row) => {
+    sum.currentScoutLeads += row.currentScoutLeads;
+    sum.currentExactUrls += row.currentExactUrls;
+    sum.leadGap += row.leadGap;
+    sum.exactUrlGap += row.exactUrlGap;
+    if (row.priority === "critical") sum.criticalCategories += 1;
+    sum.searchMinutes += row.searchMinutes;
+    return sum;
+  }, {
+    currentScoutLeads: 0,
+    currentExactUrls: 0,
+    leadGap: 0,
+    exactUrlGap: 0,
+    exactUrlTasks: input.exactUrlKit.totals.items,
+    criticalCategories: 0,
+    searchMinutes: 0,
+  });
+  const status: ClipperSourceScoutDailySprintStatus = totals.exactUrlGap > 0
+    ? "blocked"
+    : totals.leadGap > 0
+      ? "behind"
+      : "ready";
+  const generatedAt = await stat(SOURCE_SCOUT_DAILY_SPRINT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status,
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_DAILY_SPRINT_PATH,
+    markdownPath: SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH,
+    sourceScoutPath: input.sourceScout.manifestPath,
+    exactUrlKitPath: input.exactUrlKit.markdownPath,
+    weeklyFunnelPath: input.weeklyProductionFunnel.markdownPath,
+    targets: {
+      dailyScoutLeads: input.weeklyProductionFunnel.totals.dailyScoutTarget,
+      dailyExactUrls: input.weeklyProductionFunnel.totals.dailyExactUrlTarget,
+      dailyRightsOrRecreate: input.weeklyProductionFunnel.totals.dailyRightsTarget,
+      dailySourceReady: input.weeklyProductionFunnel.totals.dailySourceReadyTarget,
+      metricoolApprovalMin: input.weeklyProductionFunnel.totals.dailyMetricoolTargetMin,
+      metricoolApprovalMax: input.weeklyProductionFunnel.totals.dailyMetricoolTargetMax,
+    },
+    totals,
+    categoryRows,
+    guardrails: [
+      "Discovery/search/explore/hashtag URLs never count as exact URLs.",
+      "Do not mark rights approved without proof URL/path and concrete notes.",
+      "Do not use broadcast, watermarked creator reposts, unlicensed music, or raw streamer footage without permission.",
+      "Metricool remains approval_required; this sprint only feeds review queues.",
+      "If permission is unclear, choose recreate_only with owned assets or keep blocked.",
+    ],
+    nextStep: totals.exactUrlGap > 0
+      ? `Run exact URL intake for ${totals.exactUrlGap} more item(s); use Source Scout Exact URL Kit and paste only exact video/post URLs.`
+      : totals.leadGap > 0
+        ? `Find ${totals.leadGap} more viral lead(s) today, then run Source Scout and rights intake.`
+        : "Daily Source Scout targets are on pace; focus on rights proof, source files and Metricool approval evidence.",
+  };
+}
+
+function renderSourceScoutDailySprintCsv(summary: ClipperSourceScoutDailySprintSummary): string {
+  const headers = ["category", "label", "priority", "lead_target", "current_scout_leads", "lead_gap", "exact_url_target", "current_exact_urls", "exact_url_gap", "search_minutes", "search_brief", "intake_template_rows", "next_step"];
+  const rows = summary.categoryRows.map((row) => [
+    row.category,
+    row.label,
+    row.priority,
+    row.leadTarget,
+    row.currentScoutLeads,
+    row.leadGap,
+    row.exactUrlTarget,
+    row.currentExactUrls,
+    row.exactUrlGap,
+    row.searchMinutes,
+    row.searchBrief.join(" | "),
+    row.intakeTemplateRows.join("\n"),
+    row.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutDailySprintMarkdown(summary: ClipperSourceScoutDailySprintSummary): string {
+  return [
+    "# Clippers Source Scout Daily Sprint",
+    "",
+    "Daily operating plan for feeding the 100 clips/week funnel without fake readiness. This does not create accounts, grant rights, download media, or publish anything.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Source Scout: ${summary.sourceScoutPath}`,
+    `Exact URL Kit: ${summary.exactUrlKitPath}`,
+    `Weekly Funnel: ${summary.weeklyFunnelPath}`,
+    "",
+    "## Targets",
+    "",
+    `- Scout leads today: ${summary.targets.dailyScoutLeads}`,
+    `- Exact URLs today: ${summary.targets.dailyExactUrls}`,
+    `- Rights/recreate decisions today: ${summary.targets.dailyRightsOrRecreate}`,
+    `- Source-ready assets today: ${summary.targets.dailySourceReady}`,
+    `- Metricool approval queue: ${summary.targets.metricoolApprovalMin}-${summary.targets.metricoolApprovalMax}`,
+    "",
+    "## Current Gaps",
+    "",
+    `- Current scout leads: ${summary.totals.currentScoutLeads}`,
+    `- Current exact URLs: ${summary.totals.currentExactUrls}`,
+    `- Lead gap: ${summary.totals.leadGap}`,
+    `- Exact URL gap: ${summary.totals.exactUrlGap}`,
+    `- Exact URL tasks already queued: ${summary.totals.exactUrlTasks}`,
+    `- Search minutes: ${summary.totals.searchMinutes}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Categories",
+    "",
+    ...summary.categoryRows.flatMap((row) => [
+      `### ${row.label}`,
+      "",
+      `- Priority: ${row.priority}`,
+      `- Leads: ${row.currentScoutLeads}/${row.leadTarget} (gap ${row.leadGap})`,
+      `- Exact URLs: ${row.currentExactUrls}/${row.exactUrlTarget} (gap ${row.exactUrlGap})`,
+      `- Search minutes: ${row.searchMinutes}`,
+      `- Next step: ${row.nextStep}`,
+      "",
+      "Search brief:",
+      ...row.searchBrief.map((brief) => `- ${brief}`),
+      "",
+      row.intakeTemplateRows.length ? "Intake template rows:" : "Intake template rows: none",
+      ...(row.intakeTemplateRows.length ? ["", "```csv", ...row.intakeTemplateRows, "```"] : []),
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeSourceScoutDailySprintArtifacts(summary: ClipperSourceScoutDailySprintSummary): Promise<ClipperSourceScoutDailySprintSummary> {
+  const withGeneratedAt: ClipperSourceScoutDailySprintSummary = { ...summary, generatedAt: new Date().toISOString() };
+  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH, renderSourceScoutDailySprintMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH, renderSourceScoutDailySprintCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+export async function prepareClipperSourceScoutDailySprint(userId = getSystemUserId()): Promise<{ sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  await prepareClipperSourceScout(userId);
+  await prepareClipperSourceScoutWorkQueue(userId);
+  await prepareClipperSourceScoutExactUrlKit(userId);
+  await prepareClipperWeeklyProductionFunnel(userId);
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutDailySprint = await writeSourceScoutDailySprintArtifacts(await buildSourceScoutDailySprintSummary({
+    sourceScout: statusBefore.sourceScout,
+    sourceScoutIntake: statusBefore.sourceScoutIntake,
+    exactUrlKit: statusBefore.sourceScoutExactUrlKit,
+    weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
+  }));
+  return { sourceScoutDailySprint, status: await getClipperStatus(userId) };
+}
+
 function sourceScoutSourceFileName(item: ClipperSourceScoutWorkQueueItem): string {
   const existing = item.sourceDropPath ? path.basename(item.sourceDropPath) : "";
   if (existing && /\.[a-z0-9]{2,5}$/i.test(existing)) return existing;
@@ -11925,6 +12242,56 @@ function weeklyFunnelBiggestBlocker(bottlenecks: ClipperWeeklyProductionFunnelBo
   return bottlenecks[0]?.label || "none";
 }
 
+function sourceScoutExactUrlUniqueKey(input: { candidateId?: string | null; sourceUrl?: string | null; category: ClipperAccountCategory; platform: ClipperPlatform; title?: string | null }): string {
+  if (input.candidateId) return `candidate:${input.candidateId}`;
+  let normalizedUrl = (input.sourceUrl || "").trim().toLowerCase();
+  try {
+    const parsed = new URL(normalizedUrl);
+    const hostname = parsed.hostname.replace(/^www\./, "");
+    if ((hostname === "youtube.com" || hostname.endsWith(".youtube.com")) && parsed.pathname === "/watch") {
+      const videoId = parsed.searchParams.get("v");
+      normalizedUrl = videoId ? `${parsed.protocol}//${hostname}${parsed.pathname}?v=${videoId.toLowerCase()}` : `${parsed.protocol}//${hostname}${parsed.pathname}`;
+    } else {
+      normalizedUrl = `${parsed.protocol}//${hostname}${parsed.pathname}`.replace(/\/+$/g, "");
+    }
+  } catch {
+    normalizedUrl = normalizedUrl.replace(/[?#].*$/g, "").replace(/\/+$/g, "");
+  }
+  if (normalizedUrl) return `url:${normalizedUrl}`;
+  return `fallback:${input.category}:${input.platform}:${(input.title || "").trim().toLowerCase()}`;
+}
+
+function sourceScoutUniqueExactUrlCount(input: {
+  category?: ClipperAccountCategory;
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+}): number {
+  const exactKeys = new Set<string>();
+  input.sourceScout.candidates
+    .filter((candidate) => (!input.category || candidate.category === input.category) && candidate.sourceUrlKind === "exact_video_or_post")
+    .forEach((candidate) => {
+      exactKeys.add(sourceScoutExactUrlUniqueKey({
+        candidateId: candidate.id,
+        sourceUrl: candidate.sourceUrl,
+        category: candidate.category,
+        platform: candidate.platform,
+        title: candidate.title,
+      }));
+    });
+  input.sourceScoutIntake.items
+    .filter((item) => (!input.category || item.category === input.category) && item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected")
+    .forEach((item) => {
+      exactKeys.add(sourceScoutExactUrlUniqueKey({
+        candidateId: item.candidateId,
+        sourceUrl: item.sourceUrl,
+        category: item.category,
+        platform: item.platform,
+        title: item.title,
+      }));
+    });
+  return exactKeys.size;
+}
+
 async function buildWeeklyProductionFunnelSummary(input: {
   sourceScout: ClipperSourceScoutSummary;
   sourceScoutIntake: ClipperSourceScoutIntakeSummary;
@@ -11937,8 +12304,7 @@ async function buildWeeklyProductionFunnelSummary(input: {
   const targetWeeklyClips = 100;
   const targetDailyClips = weeklyFunnelDailyTargets();
   const sourceAssetsReady = uniqueUsableRightsReadyAssets(input.productionQueue.sourceAssets);
-  const exactUrls = input.sourceScout.candidates.filter((candidate) => candidate.sourceUrlKind === "exact_video_or_post").length
-    + input.sourceScoutIntake.items.filter((item) => item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected").length;
+  const exactUrls = sourceScoutUniqueExactUrlCount({ sourceScout: input.sourceScout, sourceScoutIntake: input.sourceScoutIntake });
   const rightsApproved = input.sourceScoutIntake.items.filter((item) => item.rightsStatus === "owned_or_permissioned" && item.evidenceAccepted).length
     + sourceAssetsReady.length;
   const recreateOnly = input.sourceScoutIntake.totals.recreateOnly;
@@ -11954,8 +12320,7 @@ async function buildWeeklyProductionFunnelSummary(input: {
   });
   const categoryRows: ClipperWeeklyProductionFunnelCategoryRow[] = (["sports", "memes", "streamers"] as ClipperAccountCategory[]).map((category) => {
     const currentSourceReady = sourceAssetsReady.filter((asset) => asset.category === category).length;
-    const categoryExactUrls = input.sourceScout.candidates.filter((candidate) => candidate.category === category && candidate.sourceUrlKind === "exact_video_or_post").length
-      + input.sourceScoutIntake.items.filter((item) => item.category === category && item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected").length;
+    const categoryExactUrls = sourceScoutUniqueExactUrlCount({ category, sourceScout: input.sourceScout, sourceScoutIntake: input.sourceScoutIntake });
     const categoryRightsApproved = input.sourceScoutIntake.items.filter((item) => item.category === category && item.rightsStatus === "owned_or_permissioned" && item.evidenceAccepted).length
       + currentSourceReady;
     const categoryRecreateOnly = input.sourceScoutIntake.items.filter((item) => item.category === category && item.requestedStatus === "recreate_only").length;
@@ -41909,6 +42274,12 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     sourceScout,
     sourceScoutWorkQueue,
   });
+  const sourceScoutDailySprint = await buildSourceScoutDailySprintSummary({
+    sourceScout,
+    sourceScoutIntake,
+    exactUrlKit: sourceScoutExactUrlKit,
+    weeklyProductionFunnel,
+  });
   const sourceScoutSourceFileKit = await buildSourceScoutSourceFileKitSummary({
     sourceScoutWorkQueue,
   });
@@ -42116,6 +42487,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     sourceScoutPermissionPack,
     sourceScoutWorkQueue,
     sourceScoutExactUrlKit,
+    sourceScoutDailySprint,
     sourceScoutSourceFileKit,
     weeklyProductionFunnel,
     sourceDiscoveryHandoff,
@@ -43888,6 +44260,7 @@ export const __clipperInternals = {
   validateSourceScoutEvidence,
   calculateSourceScoutViralScore,
   sourceScoutOfficialSourcePolicy,
+  sourceScoutUniqueExactUrlCount,
   weeklyFunnelDailyTargets,
   weeklyFunnelStatus,
   permissionStatusRecordsPath: PERMISSION_STATUS_RECORDS_PATH,

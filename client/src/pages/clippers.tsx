@@ -893,6 +893,7 @@ interface ClipperSourceScoutWorkQueueSummary {
 }
 
 type ClipperSourceScoutExactUrlKitStatus = "not_prepared" | "blocked" | "ready";
+type ClipperSourceScoutDailySprintStatus = "blocked" | "behind" | "ready";
 
 interface ClipperSourceScoutExactUrlItem {
   id: string;
@@ -913,6 +914,53 @@ interface ClipperSourceScoutExactUrlItem {
   sourceContextUrl: string;
   intakeCsvRow: string;
   validationChecklist: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceScoutDailySprintCategoryRow {
+  category: ClipperAccountCategory;
+  label: string;
+  leadTarget: number;
+  exactUrlTarget: number;
+  currentScoutLeads: number;
+  currentExactUrls: number;
+  leadGap: number;
+  exactUrlGap: number;
+  searchMinutes: number;
+  priority: "critical" | "high" | "watch";
+  searchBrief: string[];
+  intakeTemplateRows: string[];
+  nextStep: string;
+}
+
+interface ClipperSourceScoutDailySprintSummary {
+  status: ClipperSourceScoutDailySprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceScoutPath: string;
+  exactUrlKitPath: string;
+  weeklyFunnelPath: string;
+  targets: {
+    dailyScoutLeads: number;
+    dailyExactUrls: number;
+    dailyRightsOrRecreate: number;
+    dailySourceReady: number;
+    metricoolApprovalMin: number;
+    metricoolApprovalMax: number;
+  };
+  totals: {
+    currentScoutLeads: number;
+    currentExactUrls: number;
+    leadGap: number;
+    exactUrlGap: number;
+    exactUrlTasks: number;
+    criticalCategories: number;
+    searchMinutes: number;
+  };
+  categoryRows: ClipperSourceScoutDailySprintCategoryRow[];
+  guardrails: string[];
   nextStep: string;
 }
 
@@ -6066,6 +6114,7 @@ interface ClipperStatus {
   sourceScoutPermissionPack: ClipperSourceScoutPermissionPackSummary;
   sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
   sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+  sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary;
   sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
   weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
   sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
@@ -9117,6 +9166,25 @@ export default function ClippersPage() {
     },
   });
 
+  const sourceScoutDailySprintMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-source-scout-daily-sprint", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Daily Scout Sprint");
+      return data as { sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Daily Scout Sprint listo",
+        description: `${data.sourceScoutDailySprint.totals.leadGap} lead gap; ${data.sourceScoutDailySprint.totals.exactUrlGap} exact URL gap.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Daily Scout Sprint", description: error.message, variant: "destructive" });
+    },
+  });
+
   const sourceScoutSourceFileKitMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-source-scout-source-file-kit", { method: "POST" });
@@ -10632,6 +10700,15 @@ export default function ClippersPage() {
             >
               {sourceScoutExactUrlKitMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Exact URL kit
+            </Button>
+            <Button
+              onClick={() => sourceScoutDailySprintMutation.mutate()}
+              disabled={sourceScoutDailySprintMutation.isPending || isLoading}
+              className="bg-rose-200 text-zinc-950 hover:bg-rose-100"
+              data-testid="prepare-clippers-source-scout-daily-sprint-button"
+            >
+              {sourceScoutDailySprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Target className="mr-2 h-4 w-4" />}
+              Daily scout sprint
             </Button>
             <Button
               onClick={() => sourceScoutSourceFileKitMutation.mutate()}
@@ -20248,6 +20325,51 @@ export default function ClippersPage() {
                               </a>
                             )}
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {status.sourceScoutDailySprint && (
+                  <div className="rounded-md border border-rose-300/20 bg-rose-950/10 p-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">Source Scout Daily Sprint · {status.sourceScoutDailySprint.markdownPath}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{status.sourceScoutDailySprint.nextStep}</p>
+                      </div>
+                      <Badge className={cn("w-fit border", status.sourceScoutDailySprint.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.sourceScoutDailySprint.status === "behind" ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                        {status.sourceScoutDailySprint.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                      <p>Scout: {status.sourceScoutDailySprint.totals.currentScoutLeads}/{status.sourceScoutDailySprint.targets.dailyScoutLeads}</p>
+                      <p>Exact: {status.sourceScoutDailySprint.totals.currentExactUrls}/{status.sourceScoutDailySprint.targets.dailyExactUrls}</p>
+                      <p>Lead gap: {status.sourceScoutDailySprint.totals.leadGap}</p>
+                      <p>Exact gap: {status.sourceScoutDailySprint.totals.exactUrlGap}</p>
+                      <p>Queued tasks: {status.sourceScoutDailySprint.totals.exactUrlTasks}</p>
+                      <p>Minutes: {status.sourceScoutDailySprint.totals.searchMinutes}</p>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      {status.sourceScoutDailySprint.categoryRows.map((row) => (
+                        <div key={row.category} className="rounded-md border border-white/10 bg-black/30 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-white">{row.label}</p>
+                            <Badge className={cn("border text-[10px]", row.priority === "critical" ? "border-red-300/30 bg-red-300/10 text-red-200" : row.priority === "high" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>{row.priority}</Badge>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                            <p>Leads {row.currentScoutLeads}/{row.leadTarget}</p>
+                            <p>Exact {row.currentExactUrls}/{row.exactUrlTarget}</p>
+                            <p>Lead gap {row.leadGap}</p>
+                            <p>Exact gap {row.exactUrlGap}</p>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-rose-100/80">{row.nextStep}</p>
+                          {row.intakeTemplateRows.length > 0 && (
+                            <Button type="button" size="sm" variant="outline" className="mt-3 h-7 border-rose-300/20 bg-transparent px-2 text-xs text-rose-100 hover:bg-rose-300/10" onClick={() => appendSourceScoutIntakeBatchRows(row.intakeTemplateRows)}>
+                              <Plus className="mr-1 h-3 w-3" />
+                              Add intake rows
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>

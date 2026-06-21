@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -6636,6 +6636,81 @@ test("prepareClipperSourceScoutExactUrlKit writes search links for discovery lea
   }
 });
 
+test("prepareClipperSourceScoutDailySprint writes daily lead and exact URL gaps without fake readiness", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifactNames = [
+    "source-scout-candidates.json",
+    "source-scout-candidates.md",
+    "source-scout-candidates.csv",
+    "source-scout-work-queue.json",
+    "source-scout-work-queue.md",
+    "source-scout-work-queue.csv",
+    "source-scout-exact-url-kit.json",
+    "source-scout-exact-url-kit.md",
+    "source-scout-exact-url-kit.csv",
+    "source-scout-daily-sprint.json",
+    "source-scout-daily-sprint.md",
+    "source-scout-daily-sprint.csv",
+    "weekly-production-funnel.json",
+    "weekly-production-funnel.md",
+    "weekly-production-funnel.csv",
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const fileName of artifactNames) {
+    const filePath = path.join(beforeStatus.rootDir, fileName);
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    const { sourceScoutDailySprint, status } = await prepareClipperSourceScoutDailySprint();
+
+    assert.ok(sourceScoutDailySprint.manifestPath.endsWith("source-scout-daily-sprint.json"));
+    assert.ok(sourceScoutDailySprint.markdownPath.endsWith("source-scout-daily-sprint.md"));
+    assert.ok(sourceScoutDailySprint.csvPath.endsWith("source-scout-daily-sprint.csv"));
+    assert.equal(status.sourceScoutDailySprint.manifestPath, sourceScoutDailySprint.manifestPath);
+    assert.equal(sourceScoutDailySprint.targets.dailyScoutLeads, 45);
+    assert.equal(sourceScoutDailySprint.targets.dailyExactUrls, 30);
+    assert.equal(sourceScoutDailySprint.targets.metricoolApprovalMin, 14);
+    assert.equal(sourceScoutDailySprint.targets.metricoolApprovalMax, 16);
+    assert.equal(sourceScoutDailySprint.totals.currentScoutLeads, status.sourceScout.totals.candidates);
+    assert.equal(sourceScoutDailySprint.totals.currentExactUrls, status.weeklyProductionFunnel.totals.exactUrls);
+    assert.equal(sourceScoutDailySprint.totals.exactUrlTasks, status.sourceScoutExactUrlKit.totals.items);
+    assert.ok(sourceScoutDailySprint.totals.leadGap >= 0);
+    assert.ok(sourceScoutDailySprint.totals.exactUrlGap >= 0);
+    assert.ok(sourceScoutDailySprint.guardrails.some((guardrail) => guardrail.includes("Discovery/search")));
+    assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "sports" && row.leadTarget > 0 && row.exactUrlTarget > 0));
+    assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "memes" && row.leadTarget > 0 && row.exactUrlTarget > 0));
+    assert.ok(sourceScoutDailySprint.categoryRows.every((row) => row.intakeTemplateRows.every((templateRow) => templateRow.includes("<paste exact video/post URL only>"))));
+    const sportsTemplate = sourceScoutDailySprint.categoryRows.find((row) => row.category === "sports")?.intakeTemplateRows[0];
+    if (sportsTemplate) {
+      const cells = sportsTemplate.split(",");
+      assert.equal(cells[0], "");
+      assert.ok(cells[1].includes("<paste viral sports title"));
+      assert.equal(cells[2], "sports");
+      assert.equal(cells[3], "tiktok");
+      assert.equal(cells[4], "<paste exact video/post URL only>");
+      assert.equal(cells[6], "review_required");
+    }
+    assert.ok(await readFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.md"), "utf8"));
+    assert.ok(await readFile(path.join(beforeStatus.rootDir, "weekly-production-funnel.md"), "utf8"));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(sourceScoutDailySprint.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutDailySprint.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("without fake readiness"));
+    assert.ok(rawMarkdown.includes("Discovery/search/explore/hashtag URLs never count"));
+    assert.ok(rawCsv.includes("lead_gap"));
+    assert.equal(rawMarkdown.includes("access_token"), false);
+    assert.equal(rawCsv.includes("client_secret"), false);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
 test("prepareClipperSourceScoutSourceFileKit writes source-drop checklist without fake media", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json"), "utf8").catch(() => null);
@@ -6734,6 +6809,120 @@ test("source scout URL classifier separates exact posts from discovery searches"
   assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.instagram.com/reel/"));
   assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://evil-tiktok.com/@creator/video/1234567890123456789"));
   assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://example.com/comeback"));
+});
+
+test("source scout exact URL counting dedupes candidates already recorded in intake", () => {
+  const count = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    sourceScout: {
+      candidates: [
+        {
+          id: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+        },
+        {
+          id: "candidate-2",
+          category: "sports",
+          platform: "tiktok",
+          title: "Discovery lead",
+          sourceUrl: "https://www.tiktok.com/search?q=sports",
+          sourceUrlKind: "discovery_search",
+        },
+      ],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "tiktok",
+          title: "Second exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/9999999999999999999?share=1",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "memes",
+          platform: "tiktok",
+          title: "Other category",
+          sourceUrl: "https://www.tiktok.com/@memeradar/video/8888888888888888888",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  const sportsCount = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    category: "sports",
+    sourceScout: {
+      candidates: [
+        {
+          id: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+        },
+      ],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  const youtubeWatchCount = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    sourceScout: {
+      candidates: [],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "youtube",
+          title: "Watch A",
+          sourceUrl: "https://www.youtube.com/watch?v=aaa111&utm_source=share",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "youtube",
+          title: "Watch B",
+          sourceUrl: "https://www.youtube.com/watch?v=bbb222&utm_source=share",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  assert.equal(count, 3);
+  assert.equal(sportsCount, 1);
+  assert.equal(youtubeWatchCount, 2);
 });
 
 test("source asset scanner flags fixture-like file names as non-production artifacts", () => {
