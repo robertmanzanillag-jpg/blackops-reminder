@@ -3257,8 +3257,10 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
   const previousCache = await readFile(cachePath, "utf8").catch(() => null);
   const previousToken = process.env.METRICOOL_USER_TOKEN;
   const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
   process.env.METRICOOL_USER_TOKEN = "token_live";
   process.env.METRICOOL_USER_ID = "12345";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
   const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
     data: [
       { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
@@ -3280,7 +3282,10 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     assert.ok(metricoolPublishing.channels.every((channel) => channel.evidenceNeeded.some((evidence) => evidence.includes("Screenshot"))));
     assert.equal(metricoolPublishing.totals.readyForApprovalQueue, 2);
     assert.equal(metricoolPublishing.directPlatformApisNeeded, false);
+    assert.equal(metricoolPublishing.requireApprovalForPublish, false);
+    assert.equal(metricoolPublishing.effectiveApprovalGate, true);
     assert.equal(status.metricoolPublishing.primaryBridge, "metricool");
+    assert.equal(status.metricoolPublishing.effectiveApprovalGate, true);
     assert.equal(fetchMock.mock.callCount(), 1);
 
     const rawManifest = await readFile(metricoolPublishing.manifestPath, "utf8");
@@ -3288,6 +3293,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     const rawCsv = await readFile(metricoolPublishing.csvPath, "utf8");
     assert.match(rawManifest, /SPORT/);
     assert.match(rawMarkdown, /memes/);
+    assert.match(rawMarkdown, /Approval env preference: legacy override requested/);
+    assert.match(rawMarkdown, /Effective approval gate: required/);
     assert.match(rawCsv, /sports-daily/);
     assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
   } finally {
@@ -3296,6 +3303,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     else process.env.METRICOOL_USER_TOKEN = previousToken;
     if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
     else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
     if (previousManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.metricoolPublishing.markdownPath).catch(() => undefined);

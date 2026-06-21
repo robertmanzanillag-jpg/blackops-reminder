@@ -3742,6 +3742,7 @@ interface ClipperMetricoolPublishingSummary {
   mcpReady: boolean;
   missingEnv: string[];
   requireApprovalForPublish: boolean;
+  effectiveApprovalGate: true;
   primaryBridge: "metricool";
   directPlatformApisNeeded: boolean;
   recommendedPlan: string;
@@ -9848,9 +9849,14 @@ export default function ClippersPage() {
   const metricoolApprovalSessionCategories = new Set(metricoolApprovalSessionItems.map((item) => item.category || (item.accountId.includes("sports") ? "sports" : item.accountId.includes("meme") ? "memes" : item.accountId.includes("streamer") ? "streamers" : "uncategorized"))).size;
   const metricoolApprovalSessionPlatforms = new Set(metricoolApprovalSessionItems.map((item) => item.platform)).size;
   const externalSprintTotals = visibleExternalAccountPermissionSprint?.totals;
-  const metricoolMode = metricoolPublishing?.requireApprovalForPublish || metricoolExecutionQueue?.publishMode === "approval_required"
+  const metricoolEffectiveApprovalGate = metricoolPublishing?.effectiveApprovalGate ?? true;
+  const metricoolMode = metricoolEffectiveApprovalGate || metricoolExecutionQueue?.publishMode === "approval_required"
     ? "approval_required"
     : metricoolExecutionQueue?.publishMode || "not prepared";
+  const metricoolApprovalQueueReady = metricoolExecutionQueue?.status === "approval_required"
+    && (metricoolExecutionQueue?.totals.queuedForApproval || 0) > 0
+    && (metricoolExecutionQueue?.totals.readyToSend || 0) === 0
+    && metricoolExecutionQueue.realPublishEnabled === false;
   const metricoolBridgeByAccountPlatform = new Map<string, {
     brandName: string;
     blogId: string | null;
@@ -9880,10 +9886,14 @@ export default function ClippersPage() {
     },
     {
       icon: CheckCircle2,
-      label: "Ready for approval queue",
+      label: metricoolApprovalQueueReady ? "Approval queue ready" : "Needs approval queue",
       value: `${formatNumber(metricoolPublishing?.totals.readyForApprovalQueue || 0)} channels / ${formatNumber(metricoolExecutionQueue?.totals.queuedForApproval || 0)} queued`,
-      detail: `Metricool ${metricoolMode}; ${metricoolExecutionQueue?.realPublishEnabled ? "real publish enabled" : "real publish off"}.`,
-      tone: "border-emerald-300/20 bg-emerald-950/20 text-emerald-100",
+      detail: `Metricool ${metricoolMode}; ${metricoolExecutionQueue?.realPublishEnabled ? "real publish enabled" : "real publish off"}; direct send-ready ${formatNumber(metricoolExecutionQueue?.totals.readyToSend || 0)}.`,
+      tone: metricoolApprovalQueueReady
+        ? "border-emerald-300/20 bg-emerald-950/20 text-emerald-100"
+        : metricoolExecutionQueue?.realPublishEnabled || (metricoolExecutionQueue?.totals.readyToSend || 0) > 0
+          ? "border-red-300/20 bg-red-950/20 text-red-100"
+          : "border-amber-300/20 bg-amber-950/20 text-amber-100",
     },
     {
       icon: ExternalLink,
@@ -20748,12 +20758,13 @@ export default function ClippersPage() {
                       </div>
                       <Badge className={cn("w-fit border", metricoolPublishingBadge(status.metricoolPublishing.status))}>{status.metricoolPublishing.status}</Badge>
                     </div>
-                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-3 xl:grid-cols-6">
                       <p>MCP: {status.metricoolPublishing.mcpReady ? "ready" : "missing"}</p>
                       <p>Plan: {status.metricoolPublishing.recommendedPlan}</p>
                       <p>Channels: {status.metricoolPublishing.totals.channels}</p>
                       <p>Profiles: {status.metricoolPublishing.totals.connectedProfiles}/{status.metricoolPublishing.totals.requiredProfiles}</p>
-                      <p>Approval: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "off"}</p>
+                      <p>Effective approval: {status.metricoolPublishing.effectiveApprovalGate ? "required" : "off"}</p>
+                      <p>Env preference: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "legacy override"}</p>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {status.metricoolPublishing.channels.map((channel) => (
@@ -20935,7 +20946,7 @@ export default function ClippersPage() {
                   <p>Items: {status.publisherExecutionQueue.totals.items}</p>
                   <p>Blocked: {status.publisherExecutionQueue.totals.blocked}</p>
                   <p>Approval: {status.publisherExecutionQueue.totals.queuedForApproval}</p>
-                  <p>Approval-ready: {status.publisherExecutionQueue.totals.readyToSend}</p>
+                  <p>Direct send-ready: {status.publisherExecutionQueue.totals.readyToSend}</p>
                   <p>Real publish: {status.publisherExecutionQueue.realPublishEnabled ? "on" : "off"}</p>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">

@@ -5544,6 +5544,7 @@ export interface ClipperMetricoolPublishingSummary {
   mcpReady: boolean;
   missingEnv: string[];
   requireApprovalForPublish: boolean;
+  effectiveApprovalGate: true;
   primaryBridge: "metricool";
   directPlatformApisNeeded: boolean;
   recommendedPlan: string;
@@ -27159,6 +27160,7 @@ async function buildClipperMetricoolPublishingSummary(
     mcpReady: configStatus.readyForMcp,
     missingEnv: configStatus.missingEnv,
     requireApprovalForPublish: process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH !== "false",
+    effectiveApprovalGate: true,
     primaryBridge: "metricool",
     directPlatformApisNeeded: plan.directPlatformApisNeeded,
     recommendedPlan: plan.recommendedPlan,
@@ -27181,7 +27183,8 @@ function renderMetricoolPublishingMarkdown(summary: ClipperMetricoolPublishingSu
     `MCP URL: ${summary.mcpUrl}`,
     `Primary bridge: ${summary.primaryBridge}`,
     `Recommended plan: ${summary.recommendedPlan}`,
-    `Approval required: ${summary.requireApprovalForPublish ? "yes" : "no"}`,
+    `Approval env preference: ${summary.requireApprovalForPublish ? "required" : "legacy override requested"}`,
+    `Effective approval gate: ${summary.effectiveApprovalGate ? "required" : "off"}`,
     "",
     "## Next Step",
     "",
