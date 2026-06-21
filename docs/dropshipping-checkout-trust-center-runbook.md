@@ -88,6 +88,7 @@ El endpoint no ejecuta acciones externas. Solo crea approvals.
 ## Requisitos para migrar outbox
 
 1. Configurar `DATABASE_URL`.
+   - En Replit, usa la herramienta Database/Postgres del proyecto. Replit genera el connection string y lo guarda/expone como secret `DATABASE_URL`.
 2. Aplicar schema:
    `npm run db:push`
 3. Confirmar DB:
@@ -109,6 +110,16 @@ Defaults versionados en `CEO_ASSISTANT_ENV.example`:
 - `DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE=true`
 
 Con estos defaults, el CEO puede crear research, drafts, posts y reports. No puede gastar, publicar, comprar sample, fulfill ni contactar externamente sin approval y cuenta conectada.
+
+## Social publisher
+
+- Si hay un webhook propio compatible, configurar `DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL`.
+- Si ya existe Metricool (`METRICOOL_USER_TOKEN` + `METRICOOL_USER_ID`), Dropshipping CEO lo reconoce como puente social listo para preparar cola/aprobacion.
+- Metricool no elimina el approval gate: el primer publish real sigue requiriendo approval y evidencia de URL publicada o un wrapper webhook probado.
+
+## Policy URLs
+
+Cuando `PUBLIC_APP_URL` esta configurado, Dropshipping CEO usa automaticamente las rutas publicas locales de privacy/refund/shipping/terms/checkout-readiness. `DROPSHIPPING_RETURN_POLICY_URL` y `DROPSHIPPING_PRIVACY_POLICY_URL` quedan como overrides opcionales para URLs finales de Shopify.
 
 ## Comandos de validacion
 

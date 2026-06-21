@@ -1,7 +1,9 @@
 // Google Calendar Integration - using Replit connector
-import { google } from 'googleapis';
-
 let connectionSettings: any;
+
+async function getGoogleApis() {
+  return (await import("googleapis")).google;
+}
 
 export function hasReplitGoogleConnectorEnv() {
   return Boolean(
@@ -52,7 +54,8 @@ export async function getGoogleCalendarClient() {
   return getGoogleOAuthCalendarClient(accessToken);
 }
 
-export function getGoogleOAuthClient(accessToken: string) {
+export async function getGoogleOAuthClient(accessToken: string) {
+  const google = await getGoogleApis();
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({
     access_token: accessToken
@@ -61,8 +64,9 @@ export function getGoogleOAuthClient(accessToken: string) {
   return oauth2Client;
 }
 
-function getGoogleOAuthCalendarClient(accessToken: string) {
-  const oauth2Client = getGoogleOAuthClient(accessToken);
+async function getGoogleOAuthCalendarClient(accessToken: string) {
+  const google = await getGoogleApis();
+  const oauth2Client = await getGoogleOAuthClient(accessToken);
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { storage } from "./storage";
 import { sendTelegramPlainMessage } from "./telegram";
+import { getMetricoolConfigStatus } from "./metricool-tracking";
 
 function envMoney(name: string, fallback: number, min: number, max: number) {
   const raw = Number(process.env[name] || fallback);
@@ -96,6 +97,17 @@ export const dropshippingProductScoutPromotionSchema = z.object({
 });
 
 export type DropshippingProductScoutPromotionInput = z.infer<typeof dropshippingProductScoutPromotionSchema>;
+
+export const dropshippingAutopilotProductHunterSchema = z.object({
+  focusNiche: z.enum(["mixed", "home_problem_solvers", "kitchen_organization", "car_accessories", "pet_supplies", "beauty_low_claims"]).default("mixed"),
+  maxCandidates: z.coerce.number().int().min(3).max(8).default(5),
+  requestedBudgetUsd: z.coerce.number().min(0).max(STARTING_MONTHLY_BUDGET_USD).default(0),
+  dailyOrganicPosts: z.coerce.number().int().min(1).max(10).default(3),
+  postsPerPlatform: z.coerce.number().int().min(1).max(4).default(1),
+  notes: z.string().trim().max(1200).optional().default(""),
+});
+
+export type DropshippingAutopilotProductHunterInput = z.infer<typeof dropshippingAutopilotProductHunterSchema>;
 
 export const dropshippingSupplierReviewSchema = z.object({
   supplierName: z.string().trim().min(2).max(160),
@@ -345,7 +357,20 @@ type DropshippingProductScoutCandidate = DropshippingProductScoutCandidateInput 
   id: string;
   createdAt: string;
   updatedAt: string;
-  status: "shortlisted" | "needs_supplier" | "ready_for_research" | "promoted" | "rejected";
+  status: "seed_candidate" | "needs_tiktok_validation" | "needs_supplier" | "ready_for_research" | "shortlisted" | "promoted" | "rejected";
+  validation: {
+    status: "seed_only" | "needs_external_validation" | "externally_validated";
+    confidence: "low" | "medium" | "high";
+    evidenceScore: number;
+    evidence: Array<{
+      source: "tiktok_creative_center" | "tiktok_search" | "aliexpress_search" | "google_trends" | "shopify_trends" | "manual";
+      label: string;
+      url: string;
+      status: "seed_reference" | "needs_review" | "verified";
+      signal: string;
+    }>;
+    missingProof: string[];
+  };
   scorecard: {
     total: number;
     grade: "A" | "B" | "C" | "D";
@@ -368,6 +393,40 @@ type DropshippingProductScoutCandidate = DropshippingProductScoutCandidateInput 
   researchInput: DropshippingProductResearchInput;
   nextActions: string[];
   promotedProductId: string;
+};
+
+type DropshippingAutopilotProductHunterRun = DropshippingAutopilotProductHunterInput & {
+  id: string;
+  createdAt: string;
+  status: "prepared_for_robert_review" | "blocked_no_candidate";
+  winnerCandidateId: string;
+  winnerProductId: string;
+  supplierId: string;
+  launchPackId: string;
+  confidence: "low" | "medium" | "high";
+  summary: string;
+  rankedCandidates: Array<{
+    candidateId: string;
+    candidateName: string;
+    rank: number;
+    score: number;
+    confidence: "low" | "medium" | "high";
+    evidenceScore: number;
+    reason: string;
+  }>;
+  approvalRequired: Array<{
+    actionType: "dropshipping.publish_product" | "dropshipping.create_shopify_draft" | "dropshipping.publish_social" | "dropshipping.spend" | "dropshipping.order_sample";
+    title: string;
+    reason: string;
+    maxSpendUsd: number;
+  }>;
+  nextActions: string[];
+  safety: {
+    spentUsd: number;
+    publishedExternally: boolean;
+    inventoryPurchased: boolean;
+    message: string;
+  };
 };
 
 type DropshippingSupplierReview = DropshippingSupplierReviewInput & {
@@ -726,7 +785,7 @@ type DropshippingExecutionSetup = {
     id: "shopify" | "social_publisher" | "telegram" | "supplier_ops" | "approvals" | "payments_tax";
     label: string;
     status: "ready" | "needs_setup" | "blocked";
-    mode: "api" | "webhook" | "manual" | "dry_run";
+    mode: "api" | "webhook" | "metricool_mcp" | "manual" | "dry_run";
     ownerAgent: string;
     capabilities: string[];
     requiredEnv: string[];
@@ -1019,6 +1078,7 @@ const fulfillmentActions: DropshippingFulfillmentAction[] = [];
 const capitalPlans: DropshippingCapitalPlan[] = [];
 const growthSprints: DropshippingGrowthSprint[] = [];
 const launchPacks: DropshippingLaunchPack[] = [];
+const autopilotProductHunterRuns: DropshippingAutopilotProductHunterRun[] = [];
 const approvalOutbox: DropshippingApprovalOutboxItem[] = [];
 
 let productsLoaded = false;
@@ -1039,6 +1099,7 @@ let fulfillmentActionsLoaded = false;
 let capitalPlansLoaded = false;
 let growthSprintsLoaded = false;
 let launchPacksLoaded = false;
+let autopilotProductHunterRunsLoaded = false;
 let approvalOutboxLoaded = false;
 
 let productsPathOverride: string | null = null;
@@ -1059,6 +1120,7 @@ let fulfillmentActionsPathOverride: string | null = null;
 let capitalPlansPathOverride: string | null = null;
 let growthSprintsPathOverride: string | null = null;
 let launchPacksPathOverride: string | null = null;
+let autopilotProductHunterRunsPathOverride: string | null = null;
 let approvalOutboxPathOverride: string | null = null;
 
 function getDataPath(name: string, override: string | null, envName: string) {
@@ -1121,7 +1183,26 @@ const productScoutCandidatePersistedSchema: z.ZodType<DropshippingProductScoutCa
   id: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  status: z.enum(["shortlisted", "needs_supplier", "ready_for_research", "promoted", "rejected"]),
+  status: z.enum(["seed_candidate", "needs_tiktok_validation", "needs_supplier", "ready_for_research", "shortlisted", "promoted", "rejected"]),
+  validation: z.object({
+    status: z.enum(["seed_only", "needs_external_validation", "externally_validated"]),
+    confidence: z.enum(["low", "medium", "high"]),
+    evidenceScore: z.number(),
+    evidence: z.array(z.object({
+      source: z.enum(["tiktok_creative_center", "tiktok_search", "aliexpress_search", "google_trends", "shopify_trends", "manual"]),
+      label: z.string(),
+      url: z.string(),
+      status: z.enum(["seed_reference", "needs_review", "verified"]),
+      signal: z.string(),
+    })),
+    missingProof: z.array(z.string()),
+  }).default({
+    status: "needs_external_validation",
+    confidence: "low",
+    evidenceScore: 0,
+    evidence: [],
+    missingProof: ["validar videos reales en TikTok", "validar supplier real", "validar competidores/precio"],
+  }),
   scorecard: z.object({
     total: z.number(),
     grade: z.enum(["A", "B", "C", "D"]),
@@ -1144,6 +1225,40 @@ const productScoutCandidatePersistedSchema: z.ZodType<DropshippingProductScoutCa
   researchInput: dropshippingProductResearchSchema,
   nextActions: z.array(z.string()),
   promotedProductId: z.string(),
+});
+
+const autopilotProductHunterRunPersistedSchema: z.ZodType<DropshippingAutopilotProductHunterRun, z.ZodTypeDef, unknown> = dropshippingAutopilotProductHunterSchema.extend({
+  id: z.string(),
+  createdAt: z.string(),
+  status: z.enum(["prepared_for_robert_review", "blocked_no_candidate"]),
+  winnerCandidateId: z.string(),
+  winnerProductId: z.string(),
+  supplierId: z.string(),
+  launchPackId: z.string(),
+  confidence: z.enum(["low", "medium", "high"]),
+  summary: z.string(),
+  rankedCandidates: z.array(z.object({
+    candidateId: z.string(),
+    candidateName: z.string(),
+    rank: z.number(),
+    score: z.number(),
+    confidence: z.enum(["low", "medium", "high"]),
+    evidenceScore: z.number(),
+    reason: z.string(),
+  })),
+  approvalRequired: z.array(z.object({
+    actionType: z.enum(["dropshipping.publish_product", "dropshipping.create_shopify_draft", "dropshipping.publish_social", "dropshipping.spend", "dropshipping.order_sample"]),
+    title: z.string(),
+    reason: z.string(),
+    maxSpendUsd: z.number(),
+  })),
+  nextActions: z.array(z.string()),
+  safety: z.object({
+    spentUsd: z.number(),
+    publishedExternally: z.boolean(),
+    inventoryPurchased: z.boolean(),
+    message: z.string(),
+  }),
 });
 
 const supplierPersistedSchema: z.ZodType<DropshippingSupplierReview, z.ZodTypeDef, unknown> = dropshippingSupplierReviewSchema.extend({
@@ -1663,6 +1778,12 @@ function loadLaunchPacks() {
   launchPacks.splice(0, launchPacks.length, ...readJsonArray(getLaunchPacksPath(), launchPackPersistedSchema, "Launch packs dropshipping invalidos."));
 }
 
+function loadAutopilotProductHunterRuns() {
+  if (autopilotProductHunterRunsLoaded) return;
+  autopilotProductHunterRunsLoaded = true;
+  autopilotProductHunterRuns.splice(0, autopilotProductHunterRuns.length, ...readJsonArray(getAutopilotProductHunterRunsPath(), autopilotProductHunterRunPersistedSchema, "Autopilot Product Hunter dropshipping invalido."));
+}
+
 function loadApprovalOutbox() {
   if (approvalOutboxLoaded) return;
   approvalOutboxLoaded = true;
@@ -1688,6 +1809,7 @@ function loadAll() {
   loadCapitalPlans();
   loadGrowthSprints();
   loadLaunchPacks();
+  loadAutopilotProductHunterRuns();
   loadApprovalOutbox();
 }
 
@@ -1761,6 +1883,10 @@ function persistGrowthSprints() {
 
 function persistLaunchPacks() {
   writeJsonArray(getLaunchPacksPath(), launchPacks);
+}
+
+function persistAutopilotProductHunterRuns() {
+  writeJsonArray(getAutopilotProductHunterRunsPath(), autopilotProductHunterRuns);
 }
 
 function persistApprovalOutbox() {
@@ -1837,6 +1963,10 @@ function getGrowthSprintsPath() {
 
 function getLaunchPacksPath() {
   return getDataPath("launch_packs", launchPacksPathOverride, "DROPSHIPPING_LAUNCH_PACKS_PATH");
+}
+
+function getAutopilotProductHunterRunsPath() {
+  return getDataPath("autopilot_product_hunter_runs", autopilotProductHunterRunsPathOverride, "DROPSHIPPING_AUTOPILOT_PRODUCT_HUNTER_RUNS_PATH");
 }
 
 function getApprovalOutboxPath() {
@@ -2063,11 +2193,80 @@ function buildScoutScorecard(input: DropshippingProductScoutCandidateInput, econ
   };
 }
 
+function encodedQuery(value: string) {
+  return encodeURIComponent(value.trim().replace(/\s+/g, " "));
+}
+
+function buildScoutValidation(input: DropshippingProductScoutCandidateInput, scorecard: ReturnType<typeof buildScoutScorecard>) {
+  const query = encodedQuery(input.candidateName);
+  const evidence: DropshippingProductScoutCandidate["validation"]["evidence"] = [
+    {
+      source: "tiktok_creative_center",
+      label: "TikTok Creative Center trend/ad check",
+      url: `https://ads.tiktok.com/creative/creativeCenter?query=${query}`,
+      status: "needs_review",
+      signal: "Buscar top ads, hooks, engagement y formato creativo antes de aprobar.",
+    },
+    {
+      source: "tiktok_search",
+      label: "TikTok search validation",
+      url: `https://www.tiktok.com/search?q=${query}`,
+      status: "needs_review",
+      signal: "Confirmar videos reales, comments de compra y repeticion del problema.",
+    },
+    {
+      source: "aliexpress_search",
+      label: "AliExpress supplier scan",
+      url: `https://www.aliexpress.us/w/wholesale-${query}.html`,
+      status: "needs_review",
+      signal: "Confirmar proveedor, reviews, ordenes, fotos reales, shipping y returns.",
+    },
+    {
+      source: "google_trends",
+      label: "Google Trends interest check",
+      url: `https://trends.google.com/trends/explore?geo=US&q=${query}`,
+      status: "needs_review",
+      signal: "Validar que la demanda no sea solo una idea aislada.",
+    },
+  ];
+  if (input.sourceUrl) {
+    evidence.unshift({
+      source: input.trendSource === "shopify_2026" ? "shopify_trends" : "manual",
+      label: input.sourceLabel || "Seed trend source",
+      url: input.sourceUrl,
+      status: "seed_reference",
+      signal: "Referencia inicial, no prueba suficiente para gastar ads.",
+    });
+  }
+
+  const evidenceScore = [
+    input.sourceUrl ? 12 : 0,
+    input.demandSignal === "breakout" ? 20 : input.demandSignal === "strong" ? 14 : input.demandSignal === "medium" ? 8 : 2,
+    input.supplierRating >= 4.5 && input.reviewCount >= 300 ? 16 : input.supplierRating >= 4 && input.reviewCount >= 100 ? 10 : 3,
+    input.shippingDaysMax <= 18 ? 10 : input.shippingDaysMax <= 25 ? 6 : 2,
+    scorecard.total >= 85 ? 12 : scorecard.total >= 70 ? 8 : 3,
+  ].reduce((sum, item) => sum + item, 0);
+  const confidence: DropshippingProductScoutCandidate["validation"]["confidence"] = evidenceScore >= 70 ? "high" : evidenceScore >= 45 ? "medium" : "low";
+  const externallyValidated = evidence.every((item) => item.status === "verified");
+  return {
+    status: externallyValidated ? "externally_validated" as const : input.sourceUrl ? "needs_external_validation" as const : "seed_only" as const,
+    confidence,
+    evidenceScore,
+    evidence,
+    missingProof: [
+      "captura o link de 3-5 videos TikTok/Creative Center con senal real",
+      "supplier principal y backup verificados con shipping/returns",
+      "comparacion de 3 competidores y precio final",
+      "primer contenido organico medido antes de ads",
+    ],
+  };
+}
+
 function buildScoutCandidateStatus(input: DropshippingProductScoutCandidateInput, scorecard: ReturnType<typeof buildScoutScorecard>) {
   if (input.legalRisk === "high" || input.qualityRisk === "high" || scorecard.total < 45) return "rejected" as const;
-  if (scorecard.pass) return "ready_for_research" as const;
+  if (scorecard.pass) return "needs_tiktok_validation" as const;
   if (input.supplierRating < 4 || input.reviewCount < 100) return "needs_supplier" as const;
-  return "shortlisted" as const;
+  return "seed_candidate" as const;
 }
 
 export function createDropshippingProductScoutCandidate(input: DropshippingProductScoutCandidateInput) {
@@ -2083,15 +2282,16 @@ export function createDropshippingProductScoutCandidate(input: DropshippingProdu
     createdAt: now,
     updatedAt: now,
     status,
+    validation: buildScoutValidation(parsed, scorecard),
     scorecard,
     economics,
     researchInput,
     nextActions:
-      status === "ready_for_research"
-        ? ["promover a investigacion formal", "buscar supplier backup", "crear hooks organicos"]
+      status === "needs_tiktok_validation"
+        ? ["validar en TikTok/Creative Center", "buscar supplier backup", "crear hooks organicos"]
         : status === "needs_supplier"
           ? ["buscar proveedor con rating/reviews mejores", "confirmar shipping y tracking", "no gastar todavia"]
-          : status === "shortlisted"
+          : status === "seed_candidate"
             ? ["comparar contra otros candidatos", "mejorar evidencia de demanda", "revisar margen"]
             : ["descartar por riesgo o baja senal", "no usar budget"],
     promotedProductId: "",
@@ -2161,6 +2361,201 @@ export function promoteDropshippingScoutCandidate(input: DropshippingProductScou
   ];
   persistProductScoutCandidates();
   return { candidate, product, snapshot: getDropshippingCeoSnapshot() };
+}
+
+function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidate[]) {
+  return candidateList
+    .filter((candidate) => candidate.status !== "rejected")
+    .map((candidate) => {
+      const samplePenalty = candidate.requiresSample ? 6 : 0;
+      const shippingPenalty = candidate.shippingDaysMax > 21 ? 10 : candidate.shippingDaysMax > 18 ? 4 : 0;
+      const qualityPenalty = candidate.qualityRisk === "medium" ? 4 : candidate.qualityRisk === "high" ? 30 : 0;
+      const legalPenalty = candidate.legalRisk === "medium" ? 6 : candidate.legalRisk === "high" ? 40 : 0;
+      const sourceBonus = candidate.validation.evidence.some((item) => item.source === "tiktok_creative_center" || item.source === "tiktok_search") ? 6 : 0;
+      const score = candidate.scorecard.total + candidate.validation.evidenceScore + sourceBonus - samplePenalty - shippingPenalty - qualityPenalty - legalPenalty;
+      return {
+        candidate,
+        score,
+        reason: [
+          `${candidate.scorecard.grade}${candidate.scorecard.total} product score`,
+          `${candidate.economics.grossMarginPercent}% margin`,
+          `${candidate.validation.confidence} confidence`,
+          candidate.requiresSample ? "sample recommended before scale" : "no sample required for first organic prep",
+        ].join(" / "),
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
+function candidateMatchesAutopilotFocus(candidate: DropshippingProductScoutCandidate, focusNiche: DropshippingAutopilotProductHunterInput["focusNiche"]) {
+  if (focusNiche === "mixed") return true;
+  const libraryMatch = productScoutLibrary.find((item) => item.candidateName.toLowerCase() === candidate.candidateName.toLowerCase());
+  return candidate.niche === focusNiche || Boolean(libraryMatch?.focusTags.includes(focusNiche));
+}
+
+export function runDropshippingAutopilotProductHunter(input: Partial<DropshippingAutopilotProductHunterInput> = {}) {
+  loadAll();
+  const parsed = dropshippingAutopilotProductHunterSchema.parse(input);
+  const batch = runDropshippingProductScoutBatch({
+    focusNiche: parsed.focusNiche,
+    maxCandidates: parsed.maxCandidates,
+    budgetUsd: 0,
+    notes: [parsed.notes, "Autopilot hunter: seed scan only, no spend, no publishing."].filter(Boolean).join(" "),
+  });
+  const scopedCandidates = batch.createdCandidates.length
+    ? batch.createdCandidates
+    : productScoutCandidates.filter((candidate) => candidateMatchesAutopilotFocus(candidate, parsed.focusNiche));
+  const ranked = rankAutopilotCandidates(scopedCandidates);
+  const now = new Date().toISOString();
+
+  if (!ranked.length) {
+    const run: DropshippingAutopilotProductHunterRun = {
+      ...parsed,
+      id: `drop-autopilot-hunter-${Date.now()}-${autopilotProductHunterRuns.length + 1}`,
+      createdAt: now,
+      status: "blocked_no_candidate",
+      winnerCandidateId: "",
+      winnerProductId: "",
+      supplierId: "",
+      launchPackId: "",
+      confidence: "low",
+      summary: "Autopilot no encontro candidato aceptable. No se preparo launch ni gasto.",
+      rankedCandidates: [],
+      approvalRequired: [],
+      nextActions: ["correr otro niche", "agregar evidencia manual", "no gastar"],
+      safety: {
+        spentUsd: 0,
+        publishedExternally: false,
+        inventoryPurchased: false,
+        message: "No se ejecuto ninguna accion externa.",
+      },
+    };
+    autopilotProductHunterRuns.unshift(run);
+    persistAutopilotProductHunterRuns();
+    return { run, batch, product: null, supplier: null, launchPack: null, approvalsPreview: null, snapshot: getDropshippingCeoSnapshot() };
+  }
+
+  const winner = ranked[0].candidate;
+  const promoted = promoteDropshippingScoutCandidate({
+    candidateId: winner.id,
+    approvalToPromote: true,
+    notes: "Autopilot winner selected for Robert review. Still requires external validation before spend.",
+  });
+  const product = promoted.product;
+  const supplierResult = reviewDropshippingSupplier({
+    supplierName: `${winner.supplierPlatform} supplier candidate`,
+    platform: winner.supplierPlatform,
+    productName: winner.candidateName,
+    rating: winner.supplierRating,
+    reviewCount: winner.reviewCount,
+    ordersCount: Math.max(100, winner.reviewCount),
+    shipsFrom: "China",
+    estimatedShippingDays: winner.shippingDaysMax,
+    hasTracking: true,
+    hasReturns: winner.qualityRisk === "low",
+    hasMultipleSuppliers: false,
+    notes: `Autopilot supplier precheck. Verify manually before first paid order. Source: ${winner.sourceUrl || winner.sourceLabel || "seed"}`,
+  });
+  const launchPackResult = buildDropshippingLaunchPack({
+    productId: product?.id || "",
+    mode: "starter_validation",
+    dailyOrganicPosts: parsed.dailyOrganicPosts,
+    platforms: ["tiktok", "instagram"],
+    postsPerPlatform: parsed.postsPerPlatform,
+    requestedBudgetUsd: parsed.requestedBudgetUsd,
+    approvalToPrepareDraft: false,
+    approvalToPublish: false,
+    approvalToSpend: false,
+    notes: "Autopilot prepared package. Robert must approve product, Shopify draft, social posts and any spend.",
+  });
+  const approvalsPreview = prepareDropshippingLaunchPackApprovalQueue({
+    launchPackId: launchPackResult.launchPack.id,
+    includeSpendApproval: false,
+    includeSampleApproval: false,
+  });
+  const approvalRequired: DropshippingAutopilotProductHunterRun["approvalRequired"] = [
+    {
+      actionType: "dropshipping.publish_product",
+      title: `Aprobar producto ganador: ${winner.candidateName}`,
+      reason: "Autopilot eligio este candidato, pero Robert debe aprobar antes de publicar.",
+      maxSpendUsd: 0,
+    },
+    {
+      actionType: "dropshipping.create_shopify_draft",
+      title: `Preparar Shopify draft: ${winner.candidateName}`,
+      reason: "Crear draft no publica el producto, pero sigue requiriendo aprobacion.",
+      maxSpendUsd: 0,
+    },
+    {
+      actionType: "dropshipping.publish_social",
+      title: `Publicar posts organicos: ${winner.candidateName}`,
+      reason: "Primero validar hooks organicos antes de ads.",
+      maxSpendUsd: 0,
+    },
+  ];
+  if (parsed.requestedBudgetUsd > 0) {
+    approvalRequired.push({
+      actionType: "dropshipping.spend",
+      title: `Preparar micro test de ads: ${money.format(parsed.requestedBudgetUsd)}`,
+      reason: "El budget queda locked hasta Profit Guard, evidencia y approval.",
+      maxSpendUsd: parsed.requestedBudgetUsd,
+    });
+  }
+  if (winner.requiresSample) {
+    approvalRequired.push({
+      actionType: "dropshipping.order_sample",
+      title: `Pedir sample: ${winner.candidateName}`,
+      reason: "Fit/calidad requieren muestra antes de escalar.",
+      maxSpendUsd: winner.economics.landedCostUsd,
+    });
+  }
+
+  const rankedCandidates = ranked.slice(0, parsed.maxCandidates).map((item, index) => ({
+    candidateId: item.candidate.id,
+    candidateName: item.candidate.candidateName,
+    rank: index + 1,
+    score: item.score,
+    confidence: item.candidate.validation.confidence,
+    evidenceScore: item.candidate.validation.evidenceScore,
+    reason: item.reason,
+  }));
+  const run: DropshippingAutopilotProductHunterRun = {
+    ...parsed,
+    id: `drop-autopilot-hunter-${Date.now()}-${autopilotProductHunterRuns.length + 1}`,
+    createdAt: now,
+    status: "prepared_for_robert_review",
+    winnerCandidateId: winner.id,
+    winnerProductId: product?.id || "",
+    supplierId: supplierResult.supplier.id,
+    launchPackId: launchPackResult.launchPack.id,
+    confidence: winner.validation.confidence,
+    summary: `Autopilot recomienda ${winner.candidateName}. Paquete preparado para review: producto, supplier precheck, launch pack, social drafts y approvals. No se gasto ni publico nada.`,
+    rankedCandidates,
+    approvalRequired,
+    nextActions: [
+      "Robert revisa producto ganador y evidencia externa",
+      "abrir links de TikTok/Creative Center/AliExpress si quiere validar manualmente",
+      "aprobar producto/draft/posts antes de cualquier accion externa",
+      parsed.requestedBudgetUsd > 0 ? "mantener ads locked hasta Profit Guard + approval" : "lanzar organico primero, sin ads",
+    ],
+    safety: {
+      spentUsd: 0,
+      publishedExternally: false,
+      inventoryPurchased: false,
+      message: "Autopilot solo preparo drafts y approvals. No compro, no publico, no gasto.",
+    },
+  };
+  autopilotProductHunterRuns.unshift(run);
+  persistAutopilotProductHunterRuns();
+  return {
+    run,
+    batch,
+    product,
+    supplier: supplierResult.supplier,
+    launchPack: launchPackResult.launchPack,
+    approvalsPreview,
+    snapshot: getDropshippingCeoSnapshot(),
+  };
 }
 
 function buildProductSubagentReviews(input: DropshippingProductResearchInput, economics: ReturnType<typeof calculateProductEconomics>, scorecard: ReturnType<typeof buildProductScorecard>) {
@@ -2424,19 +2819,42 @@ export function recordDropshippingOrder(input: DropshippingOrderInput) {
 }
 
 function applyApprovalDecisionToTargets(decision: DropshippingApprovalDecision) {
-  if (decision.decision !== "approved" || decision.guardrail.status !== "recorded") return;
+  if (decision.guardrail.status !== "recorded") return;
   const now = new Date().toISOString();
 
   if (decision.targetType === "product") {
     const product = products.find((item) => item.id === decision.targetId);
-    if (product && product.status !== "blocked") {
+    if (product && decision.decision === "approved" && product.status !== "blocked") {
       product.status = "launch_ready";
       product.updatedAt = now;
       product.requiredApprovals = [];
       product.nextActions = ["crear launch plan", "preparar Shopify draft", "crear campana organica"];
       persistProducts();
     }
+    if (product && decision.decision === "rejected") {
+      product.status = "blocked";
+      product.updatedAt = now;
+      product.requiredApprovals = [];
+      product.nextActions = ["descartar producto", "correr Autopilot Product Hunter otra vez", "no gastar en este producto"];
+      persistProducts();
+      const candidate = productScoutCandidates.find((item) => item.promotedProductId === product.id);
+      if (candidate) {
+        candidate.status = "rejected";
+        candidate.updatedAt = now;
+        candidate.nextActions = ["descartado por Robert", "no promover otra vez", "buscar otro candidato"];
+        persistProductScoutCandidates();
+      }
+    }
+    if (product && decision.decision === "needs_changes" && product.status !== "blocked") {
+      product.status = "approval_required";
+      product.updatedAt = now;
+      product.requiredApprovals = ["resolver cambios pedidos por Robert antes de launch"];
+      product.nextActions = ["ajustar oferta/evidencia/proveedor", "revisar producto otra vez", "mantener todo sin publicar"];
+      persistProducts();
+    }
   }
+
+  if (decision.decision !== "approved") return;
 
   if (decision.targetType === "launch_plan") {
     const plan = launchPlans.find((item) => item.id === decision.targetId);
@@ -3500,9 +3918,39 @@ function platformLabel(platform: DropshippingSocialPlatform) {
 }
 
 function getSocialPublisherConfig() {
+  const metricool = getMetricoolConfigStatus();
+  const webhookUrl = (process.env.DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL || "").trim();
+  const webhookToken = (process.env.DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN || "").trim();
   return {
-    webhookUrl: (process.env.DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL || "").trim(),
-    webhookToken: (process.env.DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN || "").trim(),
+    webhookUrl,
+    webhookToken,
+    metricoolMcpUrl: metricool.mcpUrl,
+    metricoolReady: metricool.readyForMcp,
+    metricoolMissingEnv: metricool.missingEnv,
+    mode: webhookUrl ? "webhook" as const : metricool.readyForMcp ? "metricool_mcp" as const : "manual" as const,
+  };
+}
+
+function cleanBaseUrl(value: string | undefined) {
+  const trimmed = (value || "").trim();
+  if (!trimmed || /^https:\/\/your-domain\.example/i.test(trimmed)) return "";
+  return trimmed.replace(/\/$/, "");
+}
+
+function publicPolicyUrl(pathname: string, envName: "DROPSHIPPING_RETURN_POLICY_URL" | "DROPSHIPPING_PRIVACY_POLICY_URL") {
+  const explicit = (process.env[envName] || "").trim();
+  if (explicit) return explicit;
+  const publicBaseUrl = cleanBaseUrl(process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN);
+  return publicBaseUrl ? `${publicBaseUrl}${pathname}` : pathname;
+}
+
+function getDropshippingPolicyUrls() {
+  return {
+    privacy: publicPolicyUrl("/dropshipping/legal/privacy", "DROPSHIPPING_PRIVACY_POLICY_URL"),
+    refund: publicPolicyUrl("/dropshipping/legal/refund-policy", "DROPSHIPPING_RETURN_POLICY_URL"),
+    shipping: `${cleanBaseUrl(process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN) || ""}/dropshipping/legal/shipping-policy`.replace(/^\/\//, "/"),
+    terms: `${cleanBaseUrl(process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN) || ""}/dropshipping/legal/terms`.replace(/^\/\//, "/"),
+    checkoutReadiness: `${cleanBaseUrl(process.env.PUBLIC_APP_URL || process.env.EXPO_PUBLIC_DOMAIN) || ""}/dropshipping/legal/checkout-readiness`.replace(/^\/\//, "/"),
   };
 }
 
@@ -3529,7 +3977,10 @@ function isDatabaseUrlConfigured() {
 
 function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
   const shopifyMissing = missingEnv(["SHOPIFY_SHOP_DOMAIN", "SHOPIFY_ADMIN_ACCESS_TOKEN"]);
-  const socialMissing = missingEnv(["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL"]);
+  const socialConfig = getSocialPublisherConfig();
+  const socialMissing = socialConfig.mode === "manual"
+    ? ["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL or METRICOOL_USER_TOKEN + METRICOOL_USER_ID"]
+    : [];
   const telegramMissing = missingEnv(["TELEGRAM_BOT_TOKEN"]);
   const supplierConfig = getSupplierExecutionConfig();
   const supplierRequiredEnv = supplierConfig.preferredMode === "manual"
@@ -3538,7 +3989,8 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
   const supplierMissing = supplierConfig.preferredMode === "manual" ? [] : missingEnv(supplierRequiredEnv);
   const approvalsMissing = isDatabaseUrlConfigured() ? [] : ["DATABASE_URL"];
   const approvalsReady = approvalsMissing.length === 0;
-  const paymentsTaxMissing = ["STORE_PAYMENT_PROCESSOR", "DROPSHIPPING_RETURN_POLICY_URL", "DROPSHIPPING_PRIVACY_POLICY_URL"].filter((name) => !(process.env[name] || "").trim());
+  const policyUrls = getDropshippingPolicyUrls();
+  const paymentsTaxMissing = ["STORE_PAYMENT_PROCESSOR"].filter((name) => !(process.env[name] || "").trim());
   const connectors: DropshippingExecutionSetup["connectors"] = [
     {
       id: "shopify",
@@ -3559,16 +4011,26 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
       id: "social_publisher",
       label: "Social publisher",
       status: socialMissing.length ? "needs_setup" : "ready",
-      mode: socialMissing.length ? "manual" : "webhook",
+      mode: socialConfig.mode,
       ownerAgent: "Social Media Manager",
       capabilities: socialMissing.length
         ? ["crear posts", "cola interna", "registro manual de URL publicada"]
-        : ["enviar posts aprobados por webhook", "guardar respuesta externa", "mantener posts queued si falla"],
-      requiredEnv: ["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL", "DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN"],
+        : socialConfig.mode === "metricool_mcp"
+          ? ["preparar posts aprobados para Metricool", "mantener cola interna", "registrar URL publicada o usar wrapper webhook compatible"]
+          : ["enviar posts aprobados por webhook", "guardar respuesta externa", "mantener posts queued si falla"],
+      requiredEnv: ["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL", "DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN", "or METRICOOL_USER_TOKEN + METRICOOL_USER_ID"],
       missingEnv: socialMissing,
       approvalGate: "Robert aprueba publish_social antes de publicar.",
-      nextAction: socialMissing.length ? "Conectar webhook de publisher o operar manual." : "Ejecutar dry-run antes del primer publish real.",
-      evidence: socialMissing.length ? ["Sin webhook social configurado."] : ["Webhook social detectado."],
+      nextAction: socialMissing.length
+        ? "Conectar webhook de publisher, configurar Metricool MCP o publicar manual registrando URL."
+        : socialConfig.mode === "metricool_mcp"
+          ? "Usar Metricool como publisher controlado; para POST automatico agrega un wrapper webhook compatible."
+          : "Ejecutar dry-run antes del primer publish real.",
+      evidence: socialMissing.length
+        ? ["Sin webhook social ni Metricool MCP listo."]
+        : socialConfig.mode === "metricool_mcp"
+          ? [`Metricool MCP listo en ${socialConfig.metricoolMcpUrl}.`]
+          : ["Webhook social detectado."],
     },
     {
       id: "telegram",
@@ -3620,11 +4082,13 @@ function buildDropshippingExecutionSetupCenter(): DropshippingExecutionSetup {
       mode: "manual",
       ownerAgent: "Legal + Security",
       capabilities: ["checklist de checkout", "politicas de returns/privacy", "riesgo tax/import"],
-      requiredEnv: ["STORE_PAYMENT_PROCESSOR", "DROPSHIPPING_RETURN_POLICY_URL", "DROPSHIPPING_PRIVACY_POLICY_URL"],
+      requiredEnv: ["STORE_PAYMENT_PROCESSOR"],
       missingEnv: paymentsTaxMissing,
       approvalGate: "No publicar tienda sin politicas visibles y checkout confirmado.",
-      nextAction: paymentsTaxMissing.length ? "Definir processor y URLs de politicas antes de publicar tienda." : "Revisar checkout con producto draft.",
-      evidence: paymentsTaxMissing.length ? ["Faltan datos de payments/policies."] : ["Policies/payment markers configurados."],
+      nextAction: paymentsTaxMissing.length ? "Definir processor antes de publicar tienda; policies ya tienen fallback publico." : "Revisar checkout con producto draft.",
+      evidence: paymentsTaxMissing.length
+        ? [`Policy URLs listas: refund=${policyUrls.refund}, privacy=${policyUrls.privacy}. Falta payment processor.`]
+        : [`Policy URLs listas: refund=${policyUrls.refund}, privacy=${policyUrls.privacy}. Payment marker configurado.`],
     },
   ];
   const hardBlocks = connectors
@@ -3713,15 +4177,17 @@ function buildDropshippingLaunchReadinessCenter(input: {
     : false;
   const shopifyReady = missingEnv(["SHOPIFY_SHOP_DOMAIN", "SHOPIFY_ADMIN_ACCESS_TOKEN"]).length === 0;
   const paymentProcessorConfigured = Boolean((process.env.STORE_PAYMENT_PROCESSOR || "").trim());
-  const socialReady = missingEnv(["DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL"]).length === 0;
+  const socialConfig = getSocialPublisherConfig();
+  const socialReady = socialConfig.mode !== "manual";
   const telegramConfigured = missingEnv(["TELEGRAM_BOT_TOKEN"]).length === 0;
   const databaseUrlConfigured = isDatabaseUrlConfigured();
+  const policyUrls = getDropshippingPolicyUrls();
   const policyRoutes = [
-    "/dropshipping/legal/privacy",
-    "/dropshipping/legal/refund-policy",
-    "/dropshipping/legal/shipping-policy",
-    "/dropshipping/legal/terms",
-    "/dropshipping/legal/checkout-readiness",
+    policyUrls.privacy,
+    policyUrls.refund,
+    policyUrls.shipping,
+    policyUrls.terms,
+    policyUrls.checkoutReadiness,
   ];
   const requiredAccounts = [
     !shopifyReady && "Shopify Admin/API",
@@ -3852,7 +4318,7 @@ function buildDropshippingLaunchReadinessCenter(input: {
       "Postgres DATABASE_URL para Trust Center persistente.",
       "Shopify + payment processor para checkout real y orden de prueba.",
       "Telegram Bot + chat para reportes diarios reales.",
-      "Redes/social publisher para publicar automaticamente.",
+      "Redes/social publisher: webhook compatible o Metricool MCP con publicacion aprobada.",
       "Supplier portal/API para fulfillment real por orden pagada.",
     ],
     hardBlocks,
@@ -3861,7 +4327,7 @@ function buildDropshippingLaunchReadinessCenter(input: {
       "Abrir Approvals > Revisar y luego Migrar outbox local.",
       "Conectar Shopify/payment y hacer una orden de prueba.",
       "Conectar Telegram y enviar reporte de prueba.",
-      "Conectar redes o webhook social y publicar solo posts aprobados.",
+      "Conectar redes por Metricool o webhook social y publicar solo posts aprobados.",
       "Validar supplier primario/backup y pedir sample solo con approval.",
     ],
   };
@@ -5490,7 +5956,7 @@ export function getDropshippingCeoSnapshot() {
   const approvalQueue = approvalQueueCount(products, launchPlans, marketingCampaigns, socialPosts, orderRecords, fulfillmentActions);
   const profitGuard = buildProfitGuard(ledger, approvalQueue, socialMetrics);
   const qualifiedProducts = products.filter((product) => product.status !== "blocked");
-  const scoutReadyCandidates = productScoutCandidates.filter((candidate) => candidate.status === "ready_for_research").length;
+  const scoutReadyCandidates = productScoutCandidates.filter((candidate) => candidate.status === "ready_for_research" || candidate.status === "needs_tiktok_validation").length;
   const launchReadyProducts = products.filter((product) => product.status === "launch_ready" || product.status === "approval_required").length;
   const latestLearning = learningReviews[0];
   const latestCycle = ceoCycles[0];
@@ -5498,11 +5964,12 @@ export function getDropshippingCeoSnapshot() {
   const latestCapitalPlan = capitalPlans[0];
   const latestGrowthSprint = growthSprints[0];
   const latestLaunchPack = launchPacks[0];
+  const latestAutopilotProductHunterRun = autopilotProductHunterRuns[0];
   const latestSocialAnalysis = socialAnalyses[0];
   const shopifyConfig = getShopifyConfig();
   const socialPublisherConfig = getSocialPublisherConfig();
   const shopifyReady = Boolean(shopifyConfig.shopDomain && shopifyConfig.accessToken);
-  const socialPublisherReady = Boolean(socialPublisherConfig.webhookUrl);
+  const socialPublisherReady = socialPublisherConfig.mode !== "manual";
   const executionSetup = buildDropshippingExecutionSetupCenter();
   const socialRevenueUsd = Number(socialMetrics.reduce((sum, metric) => sum + metric.revenueUsd, 0).toFixed(2));
   const socialSpendUsd = Number(socialMetrics.reduce((sum, metric) => sum + metric.spendUsd, 0).toFixed(2));
@@ -5600,6 +6067,7 @@ export function getDropshippingCeoSnapshot() {
       capitalPlans: capitalPlans.length,
       growthSprints: growthSprints.length,
       launchPacks: launchPacks.length,
+      autopilotProductHunterRuns: autopilotProductHunterRuns.length,
       localApprovalOutbox,
       orderRevenueUsd,
       orderProfitUsd,
@@ -5673,7 +6141,11 @@ export function getDropshippingCeoSnapshot() {
         id: "social_publisher",
         label: "Publisher social",
         status: socialPublisherReady ? "ready" as const : "needs_setup" as const,
-        detail: socialPublisherReady ? "Webhook social configurado para posts aprobados." : "Sin webhook social; usar cola/manual hasta conectar redes.",
+        detail: socialPublisherReady
+          ? socialPublisherConfig.mode === "metricool_mcp"
+            ? "Metricool MCP listo para cola social aprobada."
+            : "Webhook social configurado para posts aprobados."
+          : "Sin webhook social/Metricool; usar cola/manual hasta conectar redes.",
       },
       {
         id: "budget_guard",
@@ -5724,11 +6196,13 @@ export function getDropshippingCeoSnapshot() {
     recentCapitalPlans: capitalPlans.slice(0, 8),
     recentGrowthSprints: growthSprints.slice(0, 6),
     recentLaunchPacks: launchPacks.slice(0, 6),
+    recentAutopilotProductHunterRuns: autopilotProductHunterRuns.slice(0, 5),
     recentApprovalOutbox: approvalOutbox.slice(0, 8),
     latestCampaign,
     latestCapitalPlan,
     latestGrowthSprint,
     latestLaunchPack,
+    latestAutopilotProductHunterRun,
     latestCycle,
     latestLearning,
     latestSocialAnalysis,
@@ -5969,6 +6443,10 @@ export function setDropshippingLaunchPacksPathForTests(value: string | null) {
   launchPacksPathOverride = value;
 }
 
+export function setDropshippingAutopilotProductHunterRunsPathForTests(value: string | null) {
+  autopilotProductHunterRunsPathOverride = value;
+}
+
 export function setDropshippingApprovalOutboxPathForTests(value: string | null) {
   approvalOutboxPathOverride = value;
 }
@@ -5992,6 +6470,7 @@ export function resetDropshippingEngineForTests() {
   capitalPlans.splice(0, capitalPlans.length);
   growthSprints.splice(0, growthSprints.length);
   launchPacks.splice(0, launchPacks.length);
+  autopilotProductHunterRuns.splice(0, autopilotProductHunterRuns.length);
   approvalOutbox.splice(0, approvalOutbox.length);
   productsLoaded = true;
   productScoutCandidatesLoaded = true;
@@ -6011,6 +6490,7 @@ export function resetDropshippingEngineForTests() {
   capitalPlansLoaded = true;
   growthSprintsLoaded = true;
   launchPacksLoaded = true;
+  autopilotProductHunterRunsLoaded = true;
   approvalOutboxLoaded = true;
   for (const filePath of [
     getProductsPath(),
@@ -6031,6 +6511,7 @@ export function resetDropshippingEngineForTests() {
     getCapitalPlansPath(),
     getGrowthSprintsPath(),
     getLaunchPacksPath(),
+    getAutopilotProductHunterRunsPath(),
     getApprovalOutboxPath(),
   ]) {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);

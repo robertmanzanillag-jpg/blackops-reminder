@@ -96,6 +96,8 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 
 # Dropshipping CEO / Social publisher
 # Optional generic webhook for approved posts. Without it, posts stay in draft/queue/manual mode.
+# Optional if Metricool MCP is configured with METRICOOL_USER_TOKEN + METRICOOL_USER_ID.
+# Use this only for a compatible wrapper that accepts Dropshipping CEO publish payloads.
 # DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL=https://your-social-publisher.example/webhook
 # DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_TOKEN=replace-with-webhook-token
 
@@ -108,6 +110,9 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 
 # Dropshipping CEO / Store policy readiness markers
 # STORE_PAYMENT_PROCESSOR=shopify_payments
+# Optional overrides. Defaults derive from PUBLIC_APP_URL:
+#   /dropshipping/legal/refund-policy
+#   /dropshipping/legal/privacy
 # DROPSHIPPING_RETURN_POLICY_URL=https://your-store.example/policies/refund-policy
 # DROPSHIPPING_PRIVACY_POLICY_URL=https://your-store.example/policies/privacy-policy
 

@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "stream";
-import { google } from "googleapis";
 import { getGoogleAccessToken, getGoogleOAuthClient, hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
@@ -28,6 +27,10 @@ export interface DriveFolderSetupResult {
   }>;
 }
 
+async function getGoogleApis() {
+  return (await import("googleapis")).google;
+}
+
 function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
@@ -46,6 +49,7 @@ function readOptionalRealDriveFolderId(envName: string): string | null {
 }
 
 async function getDriveClient(userId: string) {
+  const google = await getGoogleApis();
   if (
     getGoogleDriveRefreshTokenFromEnv() ||
     hasGoogleDriveOAuthClientConfig()
@@ -58,7 +62,7 @@ async function getDriveClient(userId: string) {
   }
 
   const accessToken = await getGoogleAccessToken();
-  return google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) });
+  return google.drive({ version: "v3", auth: await getGoogleOAuthClient(accessToken) });
 }
 
 async function findFolder(drive: any, name: string, parentId: string): Promise<string | null> {

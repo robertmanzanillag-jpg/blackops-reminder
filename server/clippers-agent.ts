@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "fs/promises";
+import { chmod, copyFile, mkdir, open, readdir, readFile, rename, stat, writeFile } from "fs/promises";
 import { existsSync, readFileSync, statSync } from "fs";
 import { spawn } from "child_process";
 import { createCipheriv, createHash, randomBytes } from "crypto";
@@ -80,6 +80,9 @@ export type ClipperPublisherExecutionItemStatus = "blocked" | "queued_for_approv
 export type ClipperPublisherBlockingCategory = "account" | "developer_app" | "permission" | "credential" | "token" | "content" | "compliance";
 export type ClipperMetricoolPublishingStatus = "not_prepared" | "blocked" | "ready_to_connect" | "ready_for_approval_queue";
 export type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_required" | "ready";
+export type ClipperMetricoolMvpLaunchStatus = "blocked" | "ready_for_review";
+export type ClipperMetricoolApprovalSessionStatus = "not_prepared" | "blocked" | "ready_for_operator";
+export type ClipperMetricoolApprovalSessionItemStatus = "blocked" | "ready_for_review";
 export type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -100,6 +103,11 @@ export type ClipperExternalConnectAutopilotStatus = "blocked" | "partial" | "rea
 export type ClipperExternalConnectAutopilotStepStatus = "completed" | "blocked" | "failed";
 export type ClipperExternalConnectSprintStatus = "not_prepared" | "blocked" | "ready_to_execute" | "waiting" | "done";
 export type ClipperExternalConnectSprintLane = "credentials" | "accounts" | "developer_apps" | "permissions" | "oauth" | "activation";
+export type Clipper100ClipsExecutionSprintStatus = "not_prepared" | "blocked" | "ready";
+export type Clipper100ClipsExecutionSprintItemType = "source_scout" | "account_create" | "account_verify" | "permission_request" | "credential_missing" | "metricool_profile" | "metricool_queue";
+export type Clipper100ClipsExecutionSprintPriority = "critical" | "high" | "medium";
+export type Clipper100ClipsExecutionSprintLane = "source_scout" | "account" | "permission" | "credential" | "metricool";
+export type Clipper100ClipsExecutionSprintItemStatus = "needs_account_setup" | "needs_permission_proof" | "credential_missing" | "connect_metricool_profile" | "approval_only" | "blocked" | "ready_to_execute";
 export type ClipperOwnerConnectPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
 export type ClipperOwnerConnectPackLane = "account" | "developer_app" | "permission" | "credential" | "oauth" | "source_video" | "launch_evidence" | "official_recheck";
 export type ClipperOwnerConnectPackItemStatus = "ready_to_execute" | "blocked" | "waiting" | "done";
@@ -125,6 +133,11 @@ export type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
+export type ClipperSourceScoutStatus = "not_prepared" | "blocked" | "ready_for_review";
+export type ClipperSourceScoutRightsRisk = "low" | "medium" | "high" | "blocked";
+export type ClipperSourceScoutUrlKind = "exact_video_or_post" | "discovery_search";
+export type ClipperSourceScoutIntakeStatus = "blocked" | "review_required" | "recreate_only" | "owned_or_permissioned";
+export type ClipperSourceScoutIntakeDecision = "rejected" | "blocked_rights" | "blocked_source_file" | "ready_for_intake";
 export type ClipperSourceDiscoveryHandoffStatus = "not_prepared" | "blocked" | "ready";
 export type ClipperSourceIngestionSprintStatus = "not_prepared" | "needs_files" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
 export type ClipperSourceIngestionSprintItemStatus = "needs_file" | "needs_metadata" | "needs_rights" | "ready_to_import" | "ready";
@@ -202,6 +215,13 @@ export interface ClipperStatus {
   sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
   sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  sourceScoutPermissionPack: ClipperSourceScoutPermissionPackSummary;
+  sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
+  sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+  sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
+  weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
   sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
   sourceIngestionSprint: ClipperSourceIngestionSprintSummary;
   sourceHunt: ClipperSourceHuntSummary;
@@ -240,6 +260,8 @@ export interface ClipperStatus {
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
   metricoolPublishing: ClipperMetricoolPublishingSummary;
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -260,6 +282,8 @@ export interface ClipperStatus {
   localDropSync: ClipperLocalDropSyncSummary;
   goLivePrepSweep: ClipperGoLivePrepSweepSummary;
   externalConnectAutopilot: ClipperExternalConnectAutopilotSummary | null;
+  hundredClipsExecutionSprint: Clipper100ClipsExecutionSprintSummary;
+  externalAccountPermissionSprint: Clipper100ClipsExecutionSprintSummary;
   ownerConnectPack: ClipperOwnerConnectPackSummary;
   dropzoneReadyPack: ClipperDropzoneReadyPackSummary;
   launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
@@ -414,6 +438,8 @@ export interface ClipperSourceAsset {
   path: string;
   sizeBytes: number;
   updatedAt: string;
+  usable: boolean;
+  invalidReason: string | null;
   rightsStatus: ClipperAssetRightsStatus;
   evidencePath: string | null;
   notes: string;
@@ -484,6 +510,7 @@ export interface ClipperSourceDropDiagnosticFile {
   category: ClipperAccountCategory | null;
   location: "category_dir" | "root" | "unsupported_dir";
   isVideo: boolean;
+  usableVideo: boolean;
   importEligible: boolean;
   targetFolder: string | null;
   rightsEvidencePath: string | null;
@@ -521,6 +548,7 @@ export interface ClipperSourceDropDiagnosticCategory {
   manifestPlaceholderRows: number;
   manifestMissingFiles: number;
   sourceAssets: number;
+  invalidSourceAssets: number;
   rightsReadyAssets: number;
   minimumWeeklySourceAssets: number;
   missingSourceAssets: number;
@@ -550,6 +578,7 @@ export interface ClipperSourceDropDiagnosticSummary {
     categoriesReady: number;
     minimumWeeklySourceAssets: number;
     currentSourceAssets: number;
+    invalidSourceAssets: number;
     rightsReadyAssets: number;
     missingSourceAssets: number;
   };
@@ -677,6 +706,377 @@ export interface ClipperSourceSupplyDropKitSummary {
     minimumWeeklySourceAssets: number;
   };
   intakeBatchTemplate: string;
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutCandidate {
+  id: string;
+  rank: number;
+  sourceUrl: string;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  title: string;
+  category: ClipperAccountCategory;
+  suggestedAccount: string;
+  platform: ClipperPlatform;
+  source: string;
+  sourceType: ClipperViralDiscoveryItem["sourceType"];
+  discoveredFrom: string;
+  discoveredAt: string;
+  trendScore: number;
+  rightsRisk: ClipperSourceScoutRightsRisk;
+  rightsStatus: ClipperAssetRightsStatus;
+  canUseNow: boolean;
+  publishGate: "blocked_rights" | "blocked_source_file" | "ready_for_intake";
+  nextAction: string;
+  hookAngle: string;
+  metricoolFit: boolean;
+  trendCandidateBatchRow: string;
+  targetFileName: string | null;
+  sourceDropPath: string | null;
+  rightsEvidenceNeeded: string[];
+  rejectIf: string[];
+}
+
+export interface ClipperSourceScoutSummary {
+  status: ClipperSourceScoutStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceDiscoveryHandoffPath: string;
+  trendRadarPath: string;
+  candidates: ClipperSourceScoutCandidate[];
+  totals: {
+    candidates: number;
+    readyForIntake: number;
+    blockedRights: number;
+    blockedSourceFile: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutIntakeItem {
+  id: string;
+  candidateId: string | null;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  title: string;
+  sourceUrl: string;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  source: string;
+  postedAt: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  viralScore: number;
+  requestedStatus: ClipperSourceScoutIntakeStatus;
+  rightsStatus: ClipperAssetRightsStatus;
+  decision: ClipperSourceScoutIntakeDecision;
+  publishGate: ClipperSourceScoutCandidate["publishGate"];
+  targetFileName: string | null;
+  sourceDropPath: string | null;
+  sourceFileExists: boolean;
+  targetSourcePath: string | null;
+  targetSourceExists: boolean;
+  evidencePath: string | null;
+  evidenceType: string | null;
+  evidenceAccepted: boolean;
+  recreatePlan: string | null;
+  metricoolFit: boolean;
+  trendCandidateBatchRow: string;
+  sourceDropManifestPath: string | null;
+  importedSourcePath: string | null;
+  nextStep: string;
+  rejectReason: string | null;
+}
+
+export interface ClipperSourceScoutIntakeSummary {
+  status: "blocked" | "partial" | "ready";
+  generatedAt: string;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperSourceScoutIntakeItem[];
+  totals: {
+    items: number;
+    accepted: number;
+    rejected: number;
+    readyForIntake: number;
+    blockedRights: number;
+    blockedSourceFile: number;
+    recreateOnly: number;
+    exactUrls: number;
+    discoveryRejected: number;
+    metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutPermissionItem {
+  id: string;
+  candidateId: string;
+  status: ClipperTrendRightsOutreachItemStatus;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  title: string;
+  sourceUrl: string;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  source: string;
+  rightsRisk: ClipperSourceScoutRightsRisk;
+  viralScore: number;
+  metricoolFit: boolean;
+  exactUrlNeeded: boolean;
+  sourceFileNeeded: boolean;
+  evidenceFileName: string;
+  outreachSubject: string;
+  outreachMessage: string;
+  permissionRecordTemplate: string;
+  sourceScoutIntakeCsvRow: string;
+  proofNeeded: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutPermissionPackSummary {
+  status: ClipperTrendRightsOutreachStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceScoutPath: string;
+  sourceScoutIntakePath: string;
+  items: ClipperSourceScoutPermissionItem[];
+  totals: {
+    candidates: number;
+    readyToContact: number;
+    permissionRecorded: number;
+    needsExactUrl: number;
+    needsSourceFile: number;
+    blocked: number;
+    metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export type ClipperSourceScoutWorkQueueStatus = "not_prepared" | "blocked" | "ready";
+export type ClipperSourceScoutWorkQueueItemType = "exact_url_intake" | "rights_evidence" | "source_file" | "metricool_approval";
+
+export interface ClipperSourceScoutWorkQueueItem {
+  id: string;
+  type: ClipperSourceScoutWorkQueueItemType;
+  priority: "critical" | "high" | "medium";
+  candidateId: string | null;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  title: string;
+  sourceUrl: string;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  source: string;
+  viralScore: number;
+  metricoolFit: boolean;
+  publishGate: ClipperSourceScoutCandidate["publishGate"] | "approval_required";
+  owner: "operator" | "rights" | "source" | "metricool";
+  blocker: string;
+  action: string;
+  intakeCsvRow: string;
+  evidenceTemplate: string;
+  sourceDropPath: string | null;
+  sourceFileExists: boolean;
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutWorkQueueSummary {
+  status: ClipperSourceScoutWorkQueueStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceScoutPath: string;
+  sourceScoutIntakePath: string;
+  permissionPackPath: string;
+  weeklyFunnelPath: string;
+  items: ClipperSourceScoutWorkQueueItem[];
+  totals: {
+    items: number;
+    exactUrlIntake: number;
+    rightsEvidence: number;
+    sourceFile: number;
+    metricoolApproval: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    critical: number;
+    metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export type ClipperSourceScoutExactUrlKitStatus = "not_prepared" | "blocked" | "ready";
+
+export interface ClipperSourceScoutExactUrlItem {
+  id: string;
+  candidateId: string;
+  priority: "critical" | "high" | "medium";
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  title: string;
+  source: string;
+  currentUrl: string;
+  currentUrlKind: ClipperSourceScoutUrlKind;
+  currentRejectReason: string | null;
+  viralScore: number;
+  metricoolFit: boolean;
+  searchQuery: string;
+  platformSearchUrl: string;
+  googleSearchUrl: string;
+  sourceContextUrl: string;
+  intakeCsvRow: string;
+  validationChecklist: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutExactUrlKitSummary {
+  status: ClipperSourceScoutExactUrlKitStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  sourceScoutPath: string;
+  workQueuePath: string;
+  items: ClipperSourceScoutExactUrlItem[];
+  totals: {
+    items: number;
+    critical: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export type ClipperSourceScoutSourceFileKitStatus = "not_prepared" | "blocked" | "ready";
+
+export interface ClipperSourceScoutSourceFileItem {
+  id: string;
+  workQueueItemId: string;
+  candidateId: string | null;
+  priority: "critical" | "high" | "medium";
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  title: string;
+  source: string;
+  sourceUrl: string;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  targetFileName: string;
+  expectedSourcePath: string;
+  sourceFileExists: boolean;
+  sourceDropDir: string;
+  sourceDropManifestPath: string;
+  manifestRow: string;
+  intakeCsvRow: string;
+  productionNotesTemplate: string;
+  checklist: string[];
+  nextStep: string;
+}
+
+export interface ClipperSourceScoutSourceFileKitSummary {
+  status: ClipperSourceScoutSourceFileKitStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  workQueuePath: string;
+  items: ClipperSourceScoutSourceFileItem[];
+  totals: {
+    items: number;
+    missingSourceFiles: number;
+    existingSourceFiles: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    highPriority: number;
+  };
+  nextStep: string;
+}
+
+export type ClipperWeeklyProductionFunnelStatus = "blocked" | "behind" | "on_track" | "scaling";
+
+export interface ClipperWeeklyProductionFunnelCategoryRow {
+  category: ClipperAccountCategory;
+  label: string;
+  targetWeeklyClips: number;
+  currentSourceReady: number;
+  exactUrls: number;
+  rightsApproved: number;
+  recreateOnly: number;
+  draftReady: number;
+  metricoolApprovalQueued: number;
+  connectedMetricoolProfiles: number;
+  nextStep: string;
+}
+
+export interface ClipperWeeklyProductionFunnelBottleneck {
+  id: "exact_urls" | "rights" | "source_files" | "metricool" | "accounts" | "metrics";
+  label: string;
+  severity: "critical" | "high" | "watch";
+  current: number;
+  target: number;
+  nextStep: string;
+}
+
+export interface ClipperWeeklyProductionFunnelSummary {
+  status: ClipperWeeklyProductionFunnelStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  targetWeeklyClips: number;
+  targetDailyClips: Record<string, number>;
+  totals: {
+    scoutLeads: number;
+    exactUrls: number;
+    rightsApproved: number;
+    recreateOnly: number;
+    sourceFilesReady: number;
+    draftReady: number;
+    metricoolApprovalQueued: number;
+    blockedRights: number;
+    blockedSourceFile: number;
+    publishedCount: number;
+    dailyScoutTarget: number;
+    dailyExactUrlTarget: number;
+    dailyRightsTarget: number;
+    dailySourceReadyTarget: number;
+    dailyMetricoolTargetMin: number;
+    dailyMetricoolTargetMax: number;
+  };
+  categoryRows: ClipperWeeklyProductionFunnelCategoryRow[];
+  bottlenecks: ClipperWeeklyProductionFunnelBottleneck[];
+  dailyReport: {
+    clipsTargetToday: number;
+    candidatesFound: number;
+    exactUrls: number;
+    rightsApprovedOrRecreateOnly: number;
+    sourceFilesReady: number;
+    metricoolApprovalQueue: number;
+    published: number;
+    biggestBlocker: string;
+    tomorrowAction: string;
+  };
+  weeklyReport: {
+    viewsPerAccount: Array<{ accountId: string; accountName: string; views: number }>;
+    clipsPostedPerAccount: Array<{ accountId: string; accountName: string; clips: number }>;
+    bestCategory: string;
+    bestHookPattern: string;
+    bestPostingWindow: string;
+    worstBlocker: string;
+    nextWeekVolumeTarget: number;
+  };
   nextStep: string;
 }
 
@@ -992,6 +1392,7 @@ export interface ClipperRightsOutreachSummary {
   manifestPath: string;
   markdownPath: string;
   templatesPath: string;
+  permissionRecordTemplate: string;
   items: ClipperRightsOutreachItem[];
   templates: ClipperRightsOutreachTemplate[];
   totals: {
@@ -2927,6 +3328,80 @@ export interface ClipperExternalConnectSprintSummary {
   nextStep: string;
 }
 
+export interface Clipper100ClipsExecutionSprintItem {
+  id: string;
+  rank: number;
+  type: Clipper100ClipsExecutionSprintItemType;
+  lane: Clipper100ClipsExecutionSprintLane;
+  label: string;
+  status: Clipper100ClipsExecutionSprintItemStatus;
+  priority: Clipper100ClipsExecutionSprintPriority;
+  accountId: string | null;
+  category: ClipperAccountCategory | null;
+  platform: ClipperPlatform | "system";
+  ownerAction: string;
+  action: string;
+  portalUrl: string | null;
+  artifactPath: string;
+  requiredEvidence: string[];
+  evidencePath: string | null;
+  blockedBy: string[];
+  blocker: string | null;
+  nextStep: string;
+  publishGuardrail: string;
+}
+
+export interface Clipper100ClipsExecutionSprintSummary {
+  status: Clipper100ClipsExecutionSprintStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  guardrail: string;
+  publishMode: "approval_required";
+  realPublishEnabled: boolean;
+  metricoolMode: "approval_required";
+  targetWeeklyClips: number;
+  targetDailyClips: Record<string, number>;
+  items: Clipper100ClipsExecutionSprintItem[];
+  sourceArtifacts: {
+    sourceScoutWorkQueuePath: string;
+    sourceScoutExactUrlKitPath: string;
+    sourceScoutSourceFileKitPath: string;
+    weeklyProductionFunnelPath: string;
+    accountSetupSessionPath: string;
+    accountCreationPackPath: string;
+    permissionRequestPackPath: string;
+    metricoolPublishingPath: string;
+    metricoolExecutionQueuePath: string;
+    ownerConnectPackPath: string;
+    robertNextActionsPath: string;
+    launchLaneMatrixPath: string;
+    goLiveCompletionAuditPath: string;
+  };
+  totals: {
+    items: number;
+    sourceScout: number;
+    accountCreate: number;
+    accountVerify: number;
+    permissionRequest: number;
+    credentialMissing: number;
+    metricoolProfile: number;
+    metricoolQueue: number;
+    blocked: number;
+    ready: number;
+    sourceScoutBlockers: number;
+    accountsNeedingSetup: number;
+    permissionProofNeeded: number;
+    credentialsMissing: number;
+    metricoolProfilesToConnect: number;
+    approvalOnly: number;
+    externalBlockers: number;
+    readyToExecute: number;
+  };
+  nextStep: string;
+}
+
 export interface ClipperOwnerConnectPackItem {
   id: string;
   rank: number;
@@ -3312,6 +3787,7 @@ export interface ClipperRobertNextActionsSummary {
     commandCenterPath: string;
     ownerConnectPackPath: string;
     dropzoneReadyPackPath: string;
+    launchEvidenceFixPackPath: string;
     goLiveCompletionAuditPath: string;
     externalExecutionSessionPath: string;
     sourceSupplyDropKitPath: string;
@@ -5097,6 +5573,35 @@ export interface ClipperMetricoolExecutionQueueItem {
   nextStep: string;
 }
 
+export interface ClipperMetricoolSourceReadinessCategory {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  connectedNetworks: MetricoolNetwork[];
+  dailyClipTarget: number;
+  weeklyTargetClips: number;
+  minimumWeeklySourceAssets: number;
+  rightsReadyAssets: number;
+  missingSourceAssets: number;
+  sourceDropDir: string;
+  nextStep: string;
+}
+
+export interface ClipperMetricoolSourceReadinessSummary {
+  status: "ready" | "blocked";
+  categories: ClipperMetricoolSourceReadinessCategory[];
+  totals: {
+    accounts: number;
+    connectedNetworks: number;
+    dailyClipTarget: number;
+    weeklyTargetClips: number;
+    minimumWeeklySourceAssets: number;
+    rightsReadyAssets: number;
+    missingSourceAssets: number;
+  };
+  nextStep: string;
+}
+
 export interface ClipperMetricoolExecutionQueueSummary {
   status: ClipperMetricoolExecutionStatus;
   generatedAt: string | null;
@@ -5106,6 +5611,7 @@ export interface ClipperMetricoolExecutionQueueSummary {
   sourceAutomationRunId: string | null;
   publishMode: ClipperReport["publishMode"];
   realPublishEnabled: boolean;
+  sourceReadiness: ClipperMetricoolSourceReadinessSummary;
   items: ClipperMetricoolExecutionQueueItem[];
   totals: {
     items: number;
@@ -5114,6 +5620,123 @@ export interface ClipperMetricoolExecutionQueueSummary {
     readyToSend: number;
     approvalRequired: number;
   };
+  nextStep: string;
+}
+
+export interface ClipperMetricoolMvpLaunchAccountRow {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  connectedNetworks: MetricoolNetwork[];
+  primaryNetwork: MetricoolNetwork | null;
+  dailyClipTarget: number;
+  weeklyTargetClips: number;
+  rightsReadyAssets: number;
+  minimumWeeklySourceAssets: number;
+  queuedForApproval: number;
+  manualReadyPosts: number;
+  status: ClipperMetricoolMvpLaunchStatus;
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolMvpLaunchSummary {
+  status: ClipperMetricoolMvpLaunchStatus;
+  generatedAt: string;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  mode: "metricool_approval_required_mvp";
+  primaryBridge: "metricool";
+  directPlatformApisNeeded: false;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  targetAccounts: string[];
+  rows: ClipperMetricoolMvpLaunchAccountRow[];
+  totals: {
+    accounts: number;
+    readyAccounts: number;
+    blockedAccounts: number;
+    connectedProfiles: number;
+    queuedForApproval: number;
+    manualReadyPosts: number;
+    rightsReadyAssets: number;
+    minimumWeeklySourceAssets: number;
+    fullAutomationBlockers: number;
+  };
+  fullAutomationStillBlockedBy: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolApprovalSessionItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  sourceFileName: string;
+  hook: string;
+  captionSeed: string;
+  status: ClipperMetricoolApprovalSessionItemStatus;
+  reviewChecklist: string[];
+  evidenceCaptureRow: string;
+  blockers: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolApprovalSessionSummary {
+  status: ClipperMetricoolApprovalSessionStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  evidenceImportCsvPath: string;
+  metricoolQueuePath: string;
+  mvpPackPath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  items: ClipperMetricoolApprovalSessionItem[];
+  totals: {
+    items: number;
+    readyForReview: number;
+    blocked: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    tiktok: number;
+    instagram: number;
+    youtube: number;
+  };
+  operatorSteps: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolAccountEvidenceResult {
+  generatedAt: string;
+  source: "metricool";
+  metricoolPublishingStatus: ClipperMetricoolPublishingStatus;
+  recorded: Array<{
+    accountId: string;
+    accountName: string;
+    platform: ClipperPlatform;
+    metricoolBrandName: string;
+    metricoolBlogId: string | null;
+    evidencePath: string;
+  }>;
+  skipped: Array<{
+    accountId: string;
+    accountName: string;
+    platform: MetricoolNetwork;
+    reason: string;
+  }>;
   nextStep: string;
 }
 
@@ -5615,6 +6238,9 @@ const ANALYTICS_REPORTING_PACK_PATH = path.join(ROOT_DIR, "analytics-reporting-p
 const ANALYTICS_REPORTING_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "analytics-reporting-pack.md");
 const ANALYTICS_REPORTING_PACK_CSV_PATH = path.join(ROOT_DIR, "analytics-reporting-pack.csv");
 const TRENDS_SUMMARY_PATH = path.join(TRENDS_DIR, "trend-radar-summary.json");
+const TREND_RADAR_MAX_INPUT_FILES = 60;
+const MIN_STALE_TREND_CANDIDATE_BYTES = 900;
+const STALE_TREND_CANDIDATE_GRACE_MS = 6 * 60 * 60 * 1000;
 const TREND_RIGHTS_OUTREACH_PATH = path.join(ROOT_DIR, "trend-rights-outreach-pack.json");
 const TREND_RIGHTS_OUTREACH_MARKDOWN_PATH = path.join(ROOT_DIR, "trend-rights-outreach-pack.md");
 const TREND_RIGHTS_OUTREACH_CSV_PATH = path.join(ROOT_DIR, "trend-rights-outreach-pack.csv");
@@ -5626,6 +6252,27 @@ const SOURCE_ACQUISITION_PLAN_MARKDOWN_PATH = path.join(ROOT_DIR, "source-acquis
 const SOURCE_SUPPLY_DROP_KIT_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.json");
 const SOURCE_SUPPLY_DROP_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.md");
 const SOURCE_SUPPLY_DROP_KIT_CSV_PATH = path.join(ROOT_DIR, "source-supply-drop-kit.csv");
+const SOURCE_SCOUT_PATH = path.join(ROOT_DIR, "source-scout-candidates.json");
+const SOURCE_SCOUT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-candidates.md");
+const SOURCE_SCOUT_CSV_PATH = path.join(ROOT_DIR, "source-scout-candidates.csv");
+const SOURCE_SCOUT_INTAKE_PATH = path.join(ROOT_DIR, "source-scout-intake.json");
+const SOURCE_SCOUT_INTAKE_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-intake.md");
+const SOURCE_SCOUT_INTAKE_CSV_PATH = path.join(ROOT_DIR, "source-scout-intake.csv");
+const SOURCE_SCOUT_PERMISSION_PACK_PATH = path.join(ROOT_DIR, "source-scout-permission-pack.json");
+const SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-permission-pack.md");
+const SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH = path.join(ROOT_DIR, "source-scout-permission-pack.csv");
+const SOURCE_SCOUT_WORK_QUEUE_PATH = path.join(ROOT_DIR, "source-scout-work-queue.json");
+const SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-work-queue.md");
+const SOURCE_SCOUT_WORK_QUEUE_CSV_PATH = path.join(ROOT_DIR, "source-scout-work-queue.csv");
+const SOURCE_SCOUT_EXACT_URL_KIT_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.json");
+const SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.md");
+const SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH = path.join(ROOT_DIR, "source-scout-exact-url-kit.csv");
+const SOURCE_SCOUT_SOURCE_FILE_KIT_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.json");
+const SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.md");
+const SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.csv");
+const WEEKLY_PRODUCTION_FUNNEL_PATH = path.join(ROOT_DIR, "weekly-production-funnel.json");
+const WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH = path.join(ROOT_DIR, "weekly-production-funnel.md");
+const WEEKLY_PRODUCTION_FUNNEL_CSV_PATH = path.join(ROOT_DIR, "weekly-production-funnel.csv");
 const SOURCE_DISCOVERY_HANDOFF_PATH = path.join(ROOT_DIR, "source-discovery-handoff.json");
 const SOURCE_DISCOVERY_HANDOFF_MARKDOWN_PATH = path.join(ROOT_DIR, "source-discovery-handoff.md");
 const SOURCE_DISCOVERY_HANDOFF_CSV_PATH = path.join(ROOT_DIR, "source-discovery-handoff.csv");
@@ -5649,6 +6296,13 @@ const METRICOOL_PUBLISHING_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-publis
 const METRICOOL_EXECUTION_QUEUE_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.json");
 const METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.md");
 const METRICOOL_EXECUTION_QUEUE_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.csv");
+const METRICOOL_MVP_LAUNCH_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.json");
+const METRICOOL_MVP_LAUNCH_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.md");
+const METRICOOL_MVP_LAUNCH_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.csv");
+const METRICOOL_APPROVAL_SESSION_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.json");
+const METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.md");
+const METRICOOL_APPROVAL_SESSION_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.csv");
+const METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "metricool-approval-evidence-import.csv");
 const METRICOOL_BRANDS_CACHE_PATH = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
 const AUTOMATION_SCHEDULE_PATH = path.join(ROOT_DIR, "automation-schedule.json");
 const ACCOUNT_IDENTITY_KIT_PATH = path.join(ROOT_DIR, "account-identity-kit.json");
@@ -5763,6 +6417,9 @@ const EXTERNAL_CONNECT_AUTOPILOT_MARKDOWN_PATH = path.join(ROOT_DIR, "external-c
 const EXTERNAL_CONNECT_SPRINT_PATH = path.join(ROOT_DIR, "external-connect-sprint.json");
 const EXTERNAL_CONNECT_SPRINT_MARKDOWN_PATH = path.join(ROOT_DIR, "external-connect-sprint.md");
 const EXTERNAL_CONNECT_SPRINT_CSV_PATH = path.join(ROOT_DIR, "external-connect-sprint.csv");
+const HUNDRED_CLIPS_EXECUTION_SPRINT_PATH = path.join(ROOT_DIR, "100-clips-execution-sprint.json");
+const HUNDRED_CLIPS_EXECUTION_SPRINT_MARKDOWN_PATH = path.join(ROOT_DIR, "100-clips-execution-sprint.md");
+const HUNDRED_CLIPS_EXECUTION_SPRINT_CSV_PATH = path.join(ROOT_DIR, "100-clips-execution-sprint.csv");
 const OWNER_CONNECT_PACK_PATH = path.join(ROOT_DIR, "owner-connect-pack.json");
 const OWNER_CONNECT_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "owner-connect-pack.md");
 const OWNER_CONNECT_PACK_CSV_PATH = path.join(ROOT_DIR, "owner-connect-pack.csv");
@@ -5953,7 +6610,8 @@ const PERMISSION_PACK_FILES: Array<Omit<ClipperPermissionPackFile, "path" | "exi
   },
 ];
 
-const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm"]);
+const MIN_USABLE_SOURCE_VIDEO_BYTES = 8 * 1024;
 
 const SOURCE_FOLDERS: ClipperSourceFolder[] = [
   {
@@ -6105,7 +6763,7 @@ const PLATFORM_SCOPES: Record<ClipperPlatform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
 };
 
-const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-20";
+const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-21";
 
 const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
   {
@@ -6229,7 +6887,7 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
         officialReferenceUrl: "https://developers.tiktok.com/doc/tiktok-api-scopes/",
         verificationStatus: "official_verified",
         verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
-        verificationNote: "TikTok official scopes reference lists video.upload as sharing/uploading content as a draft; keep as fallback until direct public posting is fully reviewed.",
+        verificationNote: "TikTok official scopes reference lists video.upload as sharing/uploading content as a draft; keep it as fallback until direct public posting is fully reviewed.",
         requestPortalUrl: "https://developers.tiktok.com/",
         requestAction: "En TikTok for Developers, solicitar video.upload para Upload/Draft posting como fallback seguro.",
         verificationChecklist: [
@@ -6408,7 +7066,7 @@ const OFFICIAL_PERMISSION_MATRIX_ITEMS: ClipperOfficialPermissionMatrixItem[] = 
         officialReferenceUrl: "https://developers.google.com/youtube/v3/docs/videos/insert",
         verificationStatus: "official_verified",
         verifiedAt: OFFICIAL_PERMISSION_DOCS_CHECKED_AT,
-        verificationNote: "YouTube official videos.insert docs require OAuth authorization; Google OAuth scope docs list youtube.upload for uploading YouTube videos.",
+        verificationNote: "YouTube official videos.insert docs require OAuth authorization; the official upload sample uses youtube.upload for authenticated uploads.",
         requestPortalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
         requestAction: "Activar YouTube Data API v3, configurar OAuth consent y autorizar el scope youtube.upload por canal.",
         verificationChecklist: [
@@ -8108,6 +8766,76 @@ async function findRightsEvidence(filePath: string): Promise<string | null> {
   return null;
 }
 
+async function sourceFileLooksUsableVideo(filePath: string, fileStat: Awaited<ReturnType<typeof stat>>): Promise<boolean> {
+  if (!fileStat.isFile() || fileStat.size < MIN_USABLE_SOURCE_VIDEO_BYTES) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  const handle = await open(filePath, "r").catch(() => null);
+  if (!handle) return false;
+  const head = Buffer.alloc(64);
+  const bytesRead = await handle.read(head, 0, head.length, 0)
+    .then((result) => result.bytesRead)
+    .catch(() => 0)
+    .finally(() => handle.close().catch(() => undefined));
+  if (bytesRead <= 0) return false;
+  const header = head.subarray(0, bytesRead);
+  if (ext === ".mp4" || ext === ".mov" || ext === ".m4v") return header.includes(Buffer.from("ftyp"));
+  if (ext === ".webm") return header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3;
+  return false;
+}
+
+function pathIsInsideDir(parentDir: string, targetPath: string): boolean {
+  const relative = path.relative(path.resolve(parentDir), path.resolve(targetPath));
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function safeSourceDropPathForIntake(category: ClipperAccountCategory, requestedPath: string, fallbackFileName: string): string {
+  const categoryDir = path.join(SOURCE_DROP_DIR, category);
+  const fallbackPath = path.join(categoryDir, fallbackFileName);
+  if (!requestedPath.trim()) return fallbackPath;
+  const resolved = path.resolve(requestedPath);
+  return pathIsInsideDir(categoryDir, resolved) ? resolved : fallbackPath;
+}
+
+async function sourceIntakeFileLooksReady(filePath: string): Promise<boolean> {
+  try {
+    const fileStat = await stat(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    return VIDEO_EXTENSIONS.has(ext) && await sourceFileLooksUsableVideo(filePath, fileStat);
+  } catch {
+    return false;
+  }
+}
+
+function logicalSourceAssetName(fileName: string): string {
+  return fileName.replace(/(-\d{2})-\d+(?=\.[^.]+$)/, "$1");
+}
+
+function sourceAssetLooksDuplicateCopy(fileName: string): boolean {
+  return /-\d{2}-\d+(?=\.[^.]+$)/.test(fileName);
+}
+
+function sourceAssetLooksTestArtifact(fileName: string): boolean {
+  const stem = path.parse(fileName).name.toLowerCase();
+  return [
+    /(^|[-_])test($|[-_])/,
+    /(^|[-_])fixture($|[-_])/,
+    /(^|[-_])fake($|[-_])/,
+    /(^|[-_])preview($|[-_])/,
+    /^sample[-_]/,
+    /^source-scout-ready-test/,
+  ].some((pattern) => pattern.test(stem));
+}
+
+function uniqueUsableRightsReadyAssets(assets: ClipperSourceAsset[]): ClipperSourceAsset[] {
+  const unique = new Map<string, ClipperSourceAsset>();
+  for (const asset of assets) {
+    if (!asset.usable || asset.rightsStatus !== "owned_or_permissioned") continue;
+    const key = `${asset.category}:${logicalSourceAssetName(asset.fileName)}`;
+    if (!unique.has(key)) unique.set(key, asset);
+  }
+  return Array.from(unique.values());
+}
+
 async function listSourceAssets(): Promise<ClipperSourceAsset[]> {
   await ensureClipperDirs();
   const categories: ClipperAccountCategory[] = ["sports", "memes", "streamers"];
@@ -8118,11 +8846,21 @@ async function listSourceAssets(): Promise<ClipperSourceAsset[]> {
     const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       if (!entry.isFile()) continue;
+      if (sourceAssetLooksDuplicateCopy(entry.name)) continue;
       const ext = path.extname(entry.name).toLowerCase();
       if (!VIDEO_EXTENSIONS.has(ext)) continue;
       const filePath = path.join(folder, entry.name);
-      const fileStat = await stat(filePath);
+      const fileStat = await stat(filePath).catch(() => null);
+      if (!fileStat) continue;
       const evidencePath = await findRightsEvidence(filePath);
+      const usableVideo = await sourceFileLooksUsableVideo(filePath, fileStat);
+      const testArtifact = sourceAssetLooksTestArtifact(entry.name);
+      const invalidReason = !usableVideo
+        ? "Archivo fuente no parece un video usable o es demasiado pequeno."
+        : testArtifact
+          ? "Nombre reservado para pruebas/fixtures; no cuenta como source real de produccion."
+          : null;
+      const rightsReady = Boolean(evidencePath && usableVideo && !testArtifact);
       assets.push({
         id: hashId(filePath),
         category,
@@ -8130,9 +8868,13 @@ async function listSourceAssets(): Promise<ClipperSourceAsset[]> {
         path: filePath,
         sizeBytes: fileStat.size,
         updatedAt: fileStat.mtime.toISOString(),
-        rightsStatus: evidencePath ? "owned_or_permissioned" : "review_required",
+        usable: usableVideo && !testArtifact,
+        invalidReason,
+        rightsStatus: rightsReady ? "owned_or_permissioned" : "review_required",
         evidencePath,
-        notes: evidencePath
+        notes: invalidReason
+          ? `${invalidReason} Reemplazalo por media real antes de producir.`
+          : evidencePath
           ? "Evidencia encontrada en allowlist; listo para draft/revision final."
           : "Falta evidencia de permiso/licencia en allowlist antes de publicar.",
       });
@@ -8247,6 +8989,18 @@ function buildProductionQueueItems(accounts: ClipperAccount[], assets: ClipperSo
     lookup[asset.category].push(asset);
     return lookup;
   }, { sports: [], memes: [], streamers: [] });
+  for (const category of Object.keys(assetsByCategory) as ClipperAccountCategory[]) {
+    assetsByCategory[category].sort((left, right) => {
+      const leftReady = left.usable && left.rightsStatus === "owned_or_permissioned";
+      const rightReady = right.usable && right.rightsStatus === "owned_or_permissioned";
+      if (leftReady !== rightReady) return leftReady ? -1 : 1;
+      if (left.usable !== right.usable) return left.usable ? -1 : 1;
+      const leftDuplicate = sourceAssetLooksDuplicateCopy(left.fileName);
+      const rightDuplicate = sourceAssetLooksDuplicateCopy(right.fileName);
+      if (leftDuplicate !== rightDuplicate) return leftDuplicate ? 1 : -1;
+      return left.fileName.localeCompare(right.fileName);
+    });
+  }
 
   return accounts.flatMap((account, accountIndex) => {
     const categoryAssets = assetsByCategory[account.category];
@@ -8314,11 +9068,12 @@ async function readLatestProductionQueue(): Promise<ClipperProductionQueueSummar
 async function buildProductionQueueSummary(accounts: ClipperAccount[]): Promise<ClipperProductionQueueSummary> {
   const assets = await listSourceAssets();
   const latestQueue = await readLatestProductionQueue();
-  const items = buildProductionQueueItems(accounts, assets);
+  const usableAssets = assets.filter((asset) => asset.usable);
+  const items = buildProductionQueueItems(accounts, usableAssets);
   const readyCount = items.filter((item) => item.status === "draft_ready").length;
   const reviewCount = items.filter((item) => item.status === "rights_review").length;
-  const status = assets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty";
-  const nextStep = assets.length === 0
+  const status = usableAssets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty";
+  const nextStep = usableAssets.length === 0
     ? "Agrega videos propios/licenciados a las carpetas de fuentes para que Clip Factory pueda crear drafts reales."
     : readyCount > 0
       ? "Genera cola de produccion para congelar los drafts y revisar publicacion."
@@ -8363,8 +9118,8 @@ function buildSourceAcquisitionCategories(
     const dailySlots = categoryAccounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
     const weeklyTargetSlots = dailySlots > 0 ? Math.max(1, Math.round(targetWeeklyClips * (dailySlots / totalDailySlots))) : 0;
     const weeklyConfiguredSlots = dailySlots * 7;
-    const categoryAssets = queue.sourceAssets.filter((asset) => asset.category === category);
-    const rightsReadyAssets = categoryAssets.filter((asset) => asset.rightsStatus === "owned_or_permissioned").length;
+    const categoryAssets = queue.sourceAssets.filter((asset) => asset.category === category && asset.usable);
+    const rightsReadyAssets = uniqueUsableRightsReadyAssets(categoryAssets).length;
     const categoryItems = queue.items.filter((item) => item.category === category);
     const readyQueueSlots = categoryItems.filter((item) => item.status === "draft_ready").length;
     const rightsReviewSlots = categoryItems.filter((item) => item.status === "rights_review").length;
@@ -9350,6 +10105,2269 @@ async function writeSourceDiscoveryHandoffArtifacts(summary: ClipperSourceDiscov
   return withGeneratedAt;
 }
 
+function sourceScoutTrendRow(candidate: Pick<ClipperSourceScoutCandidate, "category" | "platform" | "title" | "sourceUrl" | "source" | "rightsStatus" | "hookAngle">): string {
+  return [
+    candidate.category,
+    candidate.platform,
+    candidate.title,
+    candidate.sourceUrl,
+    candidate.source,
+    new Date().toISOString(),
+    "",
+    "",
+    "",
+    "",
+    candidate.rightsStatus === "owned_or_permissioned" ? "approved_after_proof" : "review_required",
+    candidate.hookAngle,
+  ].map(csvCell).join(",");
+}
+
+function sourceScoutRightsRisk(input: {
+  sourceType: ClipperViralDiscoveryItem["sourceType"];
+  rightsStatus: ClipperAssetRightsStatus;
+  sourceUrl: string;
+}): ClipperSourceScoutRightsRisk {
+  if (input.rightsStatus === "owned_or_permissioned") return "low";
+  if (!/^https:\/\//.test(input.sourceUrl)) return "blocked";
+  if (input.sourceType === "official_channel" || input.sourceType === "news_or_forum") return "medium";
+  return "high";
+}
+
+function sourceScoutCandidateFromTrend(candidate: ClipperTrendCandidate, rank: number): ClipperSourceScoutCandidate {
+  const platform = candidate.platform === "unknown" ? "tiktok" : candidate.platform;
+  const normalizedSource = candidate.source === "metricool_source_readiness" ? "trend_radar_import" : candidate.source;
+  const sourceType: ClipperViralDiscoveryItem["sourceType"] = candidate.source.startsWith("@") || /creator|channel/i.test(candidate.source)
+    ? "creator_watchlist"
+    : "platform_search";
+  const sourceUrl = candidate.url || `https://www.google.com/search?q=${encodeURIComponent(candidate.title)}`;
+  const sourceUrlRejectReason = exactSourceUrlRejectReason(sourceUrl);
+  const sourceUrlKind: ClipperSourceScoutUrlKind = sourceUrlRejectReason ? "discovery_search" : "exact_video_or_post";
+  const rightsRisk = sourceScoutRightsRisk({ sourceType, rightsStatus: candidate.rightsStatus, sourceUrl });
+  const canUseNow = sourceUrlKind === "exact_video_or_post" && candidate.rightsStatus === "owned_or_permissioned" && rightsRisk === "low";
+  const publishGate: ClipperSourceScoutCandidate["publishGate"] = canUseNow ? "blocked_source_file" : "blocked_rights";
+  const hookAngle = candidate.hookAngle || `Convertir ${categoryLabelsForBackend(candidate.category)} en clip con contexto y cierre en loop.`;
+  return {
+    id: `source-scout-${candidate.id}`,
+    rank,
+    sourceUrl,
+    sourceUrlKind,
+    title: candidate.title,
+    category: candidate.category,
+    suggestedAccount: candidate.category === "sports" ? "Sports Daily" : candidate.category === "memes" ? "Meme Radar" : "Streamer Cuts",
+    platform,
+    source: normalizedSource,
+    sourceType,
+    discoveredFrom: "trend_radar_import",
+    discoveredAt: new Date().toISOString(),
+    trendScore: candidate.viralScore,
+    rightsRisk,
+    rightsStatus: candidate.rightsStatus,
+    canUseNow,
+    publishGate,
+    nextAction: canUseNow
+      ? "Cargar el video fuente/archivo permitido en source-drop y mantener Metricool en approval_required."
+      : sourceUrlKind === "discovery_search"
+        ? "Convertir discovery/search en URL exacta de video/post o recrear con assets propios antes de mover a source-drop."
+        : "Pedir permiso, recrear con assets propios o guardar evidencia antes de mover a source-drop.",
+    hookAngle,
+    metricoolFit: sourceUrlKind === "exact_video_or_post" && ["sports", "memes"].includes(candidate.category) && platform === "tiktok",
+    trendCandidateBatchRow: sourceScoutTrendRow({
+      category: candidate.category,
+      platform,
+      title: candidate.title,
+      sourceUrl,
+      source: normalizedSource,
+      rightsStatus: candidate.rightsStatus,
+      hookAngle,
+    }),
+    targetFileName: null,
+    sourceDropPath: null,
+    rightsEvidenceNeeded: [
+      "URL original exacta del video o post.",
+      "Prueba de permiso, licencia, allowlist, politica oficial de clips o plan de recreacion con assets propios.",
+      "Nota de transformacion segura si se usara narracion/comentario/reaccion.",
+    ],
+    rejectIf: [
+      "Solo es repost de broadcast, streamer o creator sin permiso.",
+      "Tiene watermark de otra cuenta o musica/licencia no clara.",
+      "No hay URL exacta del source original.",
+    ],
+  };
+}
+
+function sourceScoutCandidateFromHandoff(item: ClipperSourceDiscoveryHandoffItem, rank: number): ClipperSourceScoutCandidate {
+  const sourceType: ClipperViralDiscoveryItem["sourceType"] = item.viralDiscoveryItemId ? "platform_search" : "news_or_forum";
+  const rightsStatus: ClipperAssetRightsStatus = "review_required";
+  const rightsRisk = sourceScoutRightsRisk({ sourceType, rightsStatus, sourceUrl: item.discoveryUrl });
+  const title = item.suggestedTitle || item.discoveryQuery;
+  const hookAngle = `Buscar candidato exacto para ${item.label}; si no hay permiso, recrear con assets propios y narracion original.`;
+  return {
+    id: `source-scout-${item.id}`,
+    rank,
+    sourceUrl: item.discoveryUrl,
+    sourceUrlKind: "discovery_search",
+    title,
+    category: item.category,
+    suggestedAccount: item.accountName,
+    platform: item.platform,
+    source: "source_discovery_handoff",
+    sourceType,
+    discoveredFrom: item.sourceSupplyItemId,
+    discoveredAt: new Date().toISOString(),
+    trendScore: Math.max(1, item.minimumViews + item.targetCandidates * 1000 - item.scanMinutes * 100),
+    rightsRisk,
+    rightsStatus,
+    canUseNow: false,
+    publishGate: "blocked_rights",
+    nextAction: "Abrir sourceUrl, escoger video/post exacto, registrar creator/source y proof antes de importar.",
+    hookAngle,
+    metricoolFit: ["sports", "memes"].includes(item.category) && item.platform === "tiktok",
+    trendCandidateBatchRow: sourceScoutTrendRow({
+      category: item.category,
+      platform: item.platform,
+      title,
+      sourceUrl: item.discoveryUrl,
+      source: "source_discovery_handoff",
+      rightsStatus,
+      hookAngle,
+    }),
+    targetFileName: item.targetFileName,
+    sourceDropPath: item.sourceDropPath,
+    rightsEvidenceNeeded: item.proofChecklist,
+    rejectIf: item.rejectIf,
+  };
+}
+
+function sourceScoutCandidateFromMetricoolBacklog(
+  item: ClipperMetricoolSourceReadinessCategory,
+  rank: number,
+  slot: number
+): ClipperSourceScoutCandidate {
+  const platform = (item.connectedNetworks[0] as ClipperPlatform | undefined) || "tiktok";
+  const targetFileName = `${item.category}-metricool-${String(slot).padStart(2, "0")}.mp4`;
+  const title = sourceSupplySuggestedTitle(item.category, slot);
+  const query = sourceSupplyViralQueries(item.category, slot)[0] || `${categoryLabelsForBackend(item.category)} viral source today rights`;
+  const sourceUrl = sourceSupplySearchUrl(platform === "youtube" || platform === "instagram" || platform === "tiktok" ? platform : "google", query);
+  const hookAngle = `Cubrir backlog Metricool de ${item.accountName}: buscar fuente exacta, conseguir proof y editar ${targetFileName}.`;
+  const rightsStatus: ClipperAssetRightsStatus = "review_required";
+  return {
+    id: `source-scout-metricool-${item.accountId}-${slot}`,
+    rank,
+    sourceUrl,
+    sourceUrlKind: "discovery_search",
+    title,
+    category: item.category,
+    suggestedAccount: item.accountName,
+    platform,
+    source: "metricool_source_readiness",
+    sourceType: "platform_search",
+    discoveredFrom: "metricool_source_readiness",
+    discoveredAt: new Date().toISOString(),
+    trendScore: Math.max(1, item.weeklyTargetClips * 1000 - slot),
+    rightsRisk: "high",
+    rightsStatus,
+    canUseNow: false,
+    publishGate: "blocked_rights",
+    nextAction: `Encontrar fuente exacta para ${targetFileName}, guardar proof de derechos y subir el archivo a ${item.sourceDropDir}.`,
+    hookAngle,
+    metricoolFit: true,
+    trendCandidateBatchRow: sourceScoutTrendRow({
+      category: item.category,
+      platform,
+      title,
+      sourceUrl,
+      source: "metricool_source_readiness",
+      rightsStatus,
+      hookAngle,
+    }),
+    targetFileName,
+    sourceDropPath: path.join(item.sourceDropDir, targetFileName),
+    rightsEvidenceNeeded: [
+      ...sourceSupplyRequiredProof(item.category),
+      `Target source file: ${path.join(item.sourceDropDir, targetFileName)}`,
+    ],
+    rejectIf: sourceSupplyRejectIf(item.category),
+  };
+}
+
+async function buildSourceScoutSummary(input: {
+  sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
+  trendRadar: ClipperTrendRadarSummary;
+  metricoolSourceReadiness?: ClipperMetricoolSourceReadinessSummary;
+}): Promise<ClipperSourceScoutSummary> {
+  const metricoolBacklogCandidates = (input.metricoolSourceReadiness?.categories || [])
+    .flatMap((category) => Array.from({ length: category.missingSourceAssets }, (_, index) =>
+      sourceScoutCandidateFromMetricoolBacklog(category, index + 1, index + 1)
+    ));
+  const remainingCandidateSlots = Math.max(0, 30 - metricoolBacklogCandidates.length);
+  const trendCandidates = input.trendRadar.candidates
+    .filter((candidate) => candidate.url || candidate.title)
+    .slice(0, Math.min(20, remainingCandidateSlots))
+    .map((candidate, index) => sourceScoutCandidateFromTrend(candidate, metricoolBacklogCandidates.length + index + 1));
+  const handoffCandidates = input.sourceDiscoveryHandoff.items
+    .slice(0, Math.max(0, 30 - metricoolBacklogCandidates.length - trendCandidates.length))
+    .map((item, index) => sourceScoutCandidateFromHandoff(item, metricoolBacklogCandidates.length + trendCandidates.length + index + 1));
+  const deduped = Array.from(new Map([...metricoolBacklogCandidates, ...trendCandidates, ...handoffCandidates].map((candidate) => [candidate.id, candidate])).values())
+    .sort((left, right) =>
+      Number(right.metricoolFit) - Number(left.metricoolFit)
+      || Number(right.canUseNow) - Number(left.canUseNow)
+      || right.trendScore - left.trendScore
+      || left.rank - right.rank
+    )
+    .slice(0, 30)
+    .sort((left, right) =>
+      Number(right.canUseNow) - Number(left.canUseNow)
+      || right.trendScore - left.trendScore
+      || left.rank - right.rank
+    )
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+  const totals = deduped.reduce<ClipperSourceScoutSummary["totals"]>((sum, candidate) => {
+    sum.candidates += 1;
+    if (candidate.publishGate === "ready_for_intake") sum.readyForIntake += 1;
+    if (candidate.publishGate === "blocked_rights") sum.blockedRights += 1;
+    if (candidate.publishGate === "blocked_source_file") sum.blockedSourceFile += 1;
+    if (candidate.category === "sports") sum.sports += 1;
+    if (candidate.category === "memes") sum.memes += 1;
+    if (candidate.category === "streamers") sum.streamers += 1;
+    if (candidate.metricoolFit) sum.metricoolFit += 1;
+    return sum;
+  }, {
+    candidates: 0,
+    readyForIntake: 0,
+    blockedRights: 0,
+    blockedSourceFile: 0,
+    sports: 0,
+    memes: 0,
+    streamers: 0,
+    metricoolFit: 0,
+  });
+  const generatedAt = await stat(SOURCE_SCOUT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status: deduped.length ? "ready_for_review" : generatedAt ? "blocked" : "not_prepared",
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_PATH,
+    markdownPath: SOURCE_SCOUT_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_CSV_PATH,
+    sourceDiscoveryHandoffPath: input.sourceDiscoveryHandoff.markdownPath,
+    trendRadarPath: input.trendRadar.summaryPath,
+    candidates: deduped,
+    totals,
+    nextStep: totals.blockedRights > 0
+      ? "Rights Checker activo: resolver permisos/recreacion antes de cargar source-drop o aprobar en Metricool."
+      : totals.blockedSourceFile > 0
+        ? "Cargar archivos fuente permitidos en source-drop y regenerar cola Metricool."
+        : "Source Scout no tiene candidatos; corre Viral Discovery y Source Discovery Handoff.",
+  };
+}
+
+function renderSourceScoutCsv(summary: ClipperSourceScoutSummary): string {
+  const header = ["rank", "category", "platform", "suggested_account", "title", "source_url", "source_url_kind", "source", "source_type", "trend_score", "rights_risk", "rights_status", "can_use_now", "publish_gate", "metricool_fit", "target_file_name", "source_drop_path", "next_action", "hook_angle", "trend_candidate_batch_row", "rights_evidence_needed", "reject_if"];
+  const rows = summary.candidates.map((candidate) => [
+    candidate.rank,
+    candidate.category,
+    candidate.platform,
+    candidate.suggestedAccount,
+    candidate.title,
+    candidate.sourceUrl,
+    candidate.sourceUrlKind,
+    candidate.source,
+    candidate.sourceType,
+    candidate.trendScore,
+    candidate.rightsRisk,
+    candidate.rightsStatus,
+    candidate.canUseNow ? "yes" : "no",
+    candidate.publishGate,
+    candidate.metricoolFit ? "yes" : "no",
+    candidate.targetFileName || "",
+    candidate.sourceDropPath || "",
+    candidate.nextAction,
+    candidate.hookAngle,
+    candidate.trendCandidateBatchRow,
+    candidate.rightsEvidenceNeeded.join(" | "),
+    candidate.rejectIf.join(" | "),
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutMarkdown(summary: ClipperSourceScoutSummary): string {
+  return [
+    "# Clippers Source Scout Candidates",
+    "",
+    "Candidate queue for viral source discovery. This report does not grant rights, download media or publish posts. Rights Checker blocks every candidate until permission, owned-source proof or a safe recreation plan is recorded.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Candidates: ${summary.totals.candidates}`,
+    `Ready for intake: ${summary.totals.readyForIntake}`,
+    `Blocked rights: ${summary.totals.blockedRights}`,
+    `Blocked source file: ${summary.totals.blockedSourceFile}`,
+    `Metricool fit: ${summary.totals.metricoolFit}`,
+    `Source Discovery Handoff: ${summary.sourceDiscoveryHandoffPath}`,
+    `Trend Radar: ${summary.trendRadarPath}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Candidates",
+    "",
+    ...summary.candidates.map((candidate) => [
+      `### ${candidate.rank}. ${candidate.title}`,
+      "",
+      `- Source URL: ${candidate.sourceUrl}`,
+      `- Source URL kind: ${candidate.sourceUrlKind}`,
+      `- Category: ${candidate.category}`,
+      `- Platform: ${candidate.platform}`,
+      `- Suggested account: ${candidate.suggestedAccount}`,
+      `- Trend score: ${candidate.trendScore}`,
+      `- Rights risk: ${candidate.rightsRisk}`,
+      `- Rights status: ${candidate.rightsStatus}`,
+      `- Publish gate: ${candidate.publishGate}`,
+      `- Metricool fit: ${candidate.metricoolFit ? "yes" : "no"}`,
+      `- Target file: ${candidate.targetFileName || "pending"}`,
+      `- Source drop path: ${candidate.sourceDropPath || "pending"}`,
+      `- Next action: ${candidate.nextAction}`,
+      `- Hook angle: ${candidate.hookAngle}`,
+      `- Trend row: ${candidate.trendCandidateBatchRow}`,
+      "",
+      "Rights evidence needed:",
+      ...candidate.rightsEvidenceNeeded.map((item) => `- [ ] ${item}`),
+      "",
+      "Reject if:",
+      ...candidate.rejectIf.map((item) => `- ${item}`),
+      "",
+    ].join("\n")),
+  ].join("\n");
+}
+
+async function writeSourceScoutArtifacts(summary: ClipperSourceScoutSummary): Promise<ClipperSourceScoutSummary> {
+  const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
+  await writeFile(SOURCE_SCOUT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_MARKDOWN_PATH, renderSourceScoutMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_CSV_PATH, renderSourceScoutCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+function parseSourceScoutIntakeRows(input: unknown): Record<string, unknown>[] {
+  if (!input || typeof input !== "object") throw new Error("Payload requerido.");
+  const incoming = input as Record<string, unknown>;
+  if (Array.isArray(incoming.records)) {
+    return incoming.records.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+  }
+  if (incoming.record && typeof incoming.record === "object") return [incoming.record as Record<string, unknown>];
+  const raw = typeof incoming.batchText === "string" ? incoming.batchText.trim() : "";
+  if (!raw) return [incoming];
+  if (raw.startsWith("[") || raw.startsWith("{")) return parseJsonMetricRecords(raw);
+  return parseCsvRecords(raw);
+}
+
+function parseOptionalCount(value: string): number | null {
+  if (!value) return null;
+  const parsed = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sourceScoutRecencyBoost(postedAt: string | null): number {
+  if (!postedAt) return 0.7;
+  const date = new Date(postedAt);
+  if (Number.isNaN(date.getTime())) return 0.7;
+  const ageHours = Math.max(0, (Date.now() - date.getTime()) / (1000 * 60 * 60));
+  if (ageHours <= 12) return 1.5;
+  if (ageHours <= 24) return 1.3;
+  if (ageHours <= 72) return 1.0;
+  if (ageHours <= 168) return 0.65;
+  return 0.7;
+}
+
+function sourceScoutPlatformBoost(platform: ClipperPlatform): number {
+  if (platform === "tiktok") return 1.15;
+  if (platform === "youtube") return 1.05;
+  return 1.0;
+}
+
+function sourceScoutRightsPenalty(status: ClipperSourceScoutIntakeStatus): number {
+  if (status === "owned_or_permissioned") return 1.0;
+  if (status === "recreate_only") return 0.75;
+  if (status === "review_required") return 0.45;
+  return 0;
+}
+
+function sourceScoutUrlPenalty(kind: ClipperSourceScoutUrlKind): number {
+  return kind === "exact_video_or_post" ? 1.0 : 0.55;
+}
+
+function calculateSourceScoutViralScore(input: {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  postedAt: string | null;
+  platform: ClipperPlatform;
+  rightsStatus: ClipperSourceScoutIntakeStatus;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+}): number {
+  const viewsScore = Math.min((input.views || 0) / 1000, 5000);
+  const engagementScore = (input.likes || 0) * 0.05 + (input.comments || 0) * 2 + (input.shares || 0) * 4;
+  return Math.round(
+    (viewsScore + engagementScore)
+    * sourceScoutRecencyBoost(input.postedAt)
+    * sourceScoutPlatformBoost(input.platform)
+    * sourceScoutRightsPenalty(input.rightsStatus)
+    * sourceScoutUrlPenalty(input.sourceUrlKind)
+  );
+}
+
+function exactSourceUrlRejectReason(rawUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return "URL invalida.";
+  }
+  if (parsed.protocol !== "https:") return "La URL exacta debe usar https.";
+  const normalized = `${parsed.hostname}${parsed.pathname}${parsed.search}`.toLowerCase();
+  const searchMarkers = [
+    "/search",
+    "/explore",
+    "/results",
+    "/hashtag",
+    "/tag/",
+    "/tags/",
+    "/discover",
+    "/r/popular",
+    "/r/all",
+    "search_query=",
+    "?q=",
+    "&q=",
+    "keyword=",
+  ];
+  if (searchMarkers.some((marker) => normalized.includes(marker))) {
+    return "La URL parece busqueda/explore/results; pega el link exacto del video/post.";
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isHost = (domain: string) => host === domain || host.endsWith(`.${domain}`);
+  const pathSegments = parsed.pathname.split("/").filter(Boolean);
+  const firstAfter = (label: string) => {
+    const index = pathSegments.findIndex((segment) => segment.toLowerCase() === label);
+    return index >= 0 ? pathSegments[index + 1] || "" : "";
+  };
+  const youtubeVideoId = parsed.searchParams.get("v")?.trim() || "";
+  const exactPatterns = [
+    isHost("tiktok.com") && /\/(?:@[^/]+\/)?video\/\d+/.test(parsed.pathname),
+    isHost("instagram.com") && ["p", "reel", "reels", "tv"].some((label) => firstAfter(label).length > 0),
+    isHost("youtube.com") && ((parsed.pathname === "/watch" && youtubeVideoId.length > 0) || firstAfter("shorts").length > 0),
+    isHost("youtu.be") && pathSegments.length === 1 && pathSegments[0].length > 0,
+    (isHost("twitch.tv") && firstAfter("clip").length > 0) || (host === "clips.twitch.tv" && pathSegments.length >= 1 && pathSegments[0].length > 0),
+    isHost("reddit.com") && /\/comments\/[a-z0-9]+/i.test(parsed.pathname),
+  ];
+  return exactPatterns.some(Boolean) ? null : "No pude confirmar que sea video/post exacto; no se tratara como publishable.";
+}
+
+function sourceScoutIntakeRequestedStatus(record: Record<string, unknown>): ClipperSourceScoutIntakeStatus {
+  const raw = firstString(record, ["status", "rights_status", "rightsStatus", "permission", "license", "decision"]).toLowerCase();
+  if (/recreate|remake|inspir/i.test(raw)) return "recreate_only";
+  if (/owned|licensed|permission|approved|allowlist|official/i.test(raw)) return "owned_or_permissioned";
+  if (/block|reject|no usable|unsafe/i.test(raw)) return "blocked";
+  return "review_required";
+}
+
+const SOURCE_SCOUT_ALLOWED_EVIDENCE_TYPES = new Set([
+  "owned_source",
+  "creator_permission",
+  "licensed_asset",
+  "official_policy_allowlist",
+  "recreate_plan_approved",
+]);
+
+function validateSourceScoutEvidence(input: {
+  requestedStatus: ClipperSourceScoutIntakeStatus;
+  sourceUrlKind: ClipperSourceScoutUrlKind;
+  proof: string;
+  notes: string;
+  evidenceType: string;
+  sourceFileExists: boolean;
+}): { evidencePath: string; evidenceType: string } {
+  const evidenceType = input.evidenceType.trim().toLowerCase();
+  if (!SOURCE_SCOUT_ALLOWED_EVIDENCE_TYPES.has(evidenceType)) {
+    throw new Error(`evidenceType requerido: ${Array.from(SOURCE_SCOUT_ALLOWED_EVIDENCE_TYPES).join(", ")}.`);
+  }
+  if (input.sourceUrlKind !== "exact_video_or_post" && !input.sourceFileExists && evidenceType !== "recreate_plan_approved") {
+    throw new Error("owned_or_permissioned requiere URL exacta o archivo fuente propio existente.");
+  }
+  const proof = requireSourceRightsEvidence(input.proof);
+  if (evidenceDropValueLooksPlaceholder(proof)) {
+    throw new Error("proofUrl/evidencePath parece placeholder o URL de ejemplo; pega evidencia real verificable.");
+  }
+  const notes = input.notes.trim();
+  if (notes.length < 20 || hasTemplatePlaceholder(notes) || /^(approved|permissioned|ok|yes|si|sí)$/i.test(notes)) {
+    throw new Error("notes requiere evidencia descriptiva real de al menos 20 caracteres; no acepto approved/ok/yes solos.");
+  }
+  if (/^(approved|permissioned|ok|yes|si|sí)$/i.test(proof.trim())) {
+    throw new Error("proofUrl/evidencePath no puede ser solo approved/ok/yes.");
+  }
+  return { evidencePath: proof, evidenceType };
+}
+
+function buildSourceScoutIntakeManifestRow(item: ClipperSourceScoutIntakeItem): string {
+  return [
+    item.category,
+    item.title,
+    item.sourceUrl,
+    item.source,
+    item.platform,
+    item.targetFileName || path.basename(item.sourceDropPath || item.sourceUrl),
+    item.rightsStatus,
+    item.evidencePath || "",
+    item.requestedStatus === "owned_or_permissioned" ? "high" : "review",
+    item.recreatePlan || item.nextStep,
+  ].map(csvCell).join(",");
+}
+
+async function upsertSourceDropManifestForIntake(item: ClipperSourceScoutIntakeItem): Promise<string | null> {
+  if (!item.sourceDropPath || !item.targetFileName || item.rightsStatus !== "owned_or_permissioned" || !item.evidenceAccepted) return null;
+  const categoryDir = path.join(SOURCE_DROP_DIR, item.category);
+  await mkdir(categoryDir, { recursive: true });
+  const manifestPath = path.join(categoryDir, "source-drop-manifest.csv");
+  const header = "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes";
+  const row = buildSourceScoutIntakeManifestRow(item);
+  const existing = await readFile(manifestPath, "utf8").catch(() => "");
+  const lines = existing.trim()
+    ? existing.split(/\r?\n/).filter((line) => line.trim())
+    : [header];
+  const withoutExisting = lines.filter((line, index) => index === 0 || !line.includes(item.targetFileName || "__never__"));
+  await writeFile(manifestPath, [...withoutExisting, row, ""].join("\n"));
+  return manifestPath;
+}
+
+function renderSourceScoutIntakeCsv(summary: ClipperSourceScoutIntakeSummary): string {
+  const header = ["id", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "source", "viral_score", "requested_status", "rights_status", "decision", "publish_gate", "target_file_name", "source_drop_path", "source_file_exists", "target_source_path", "target_source_exists", "evidence_type", "evidence_path", "evidence_accepted", "metricool_fit", "trend_candidate_batch_row", "manifest_path", "imported_source_path", "next_step", "reject_reason"];
+  return [
+    header.map(csvCell).join(","),
+    ...summary.items.map((item) => [
+      item.id,
+      item.candidateId || "",
+      item.category,
+      item.platform,
+      item.title,
+      item.sourceUrl,
+      item.sourceUrlKind,
+      item.source,
+      item.viralScore,
+      item.requestedStatus,
+      item.rightsStatus,
+      item.decision,
+      item.publishGate,
+      item.targetFileName || "",
+      item.sourceDropPath || "",
+      item.sourceFileExists ? "yes" : "no",
+      item.targetSourcePath || "",
+      item.targetSourceExists ? "yes" : "no",
+      item.evidenceType || "",
+      item.evidencePath || "",
+      item.evidenceAccepted ? "yes" : "no",
+      item.metricoolFit ? "yes" : "no",
+      item.trendCandidateBatchRow,
+      item.sourceDropManifestPath || "",
+      item.importedSourcePath || "",
+      item.nextStep,
+      item.rejectReason || "",
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
+function renderSourceScoutIntakeMarkdown(summary: ClipperSourceScoutIntakeSummary): string {
+  return [
+    "# Clippers Source Scout Intake",
+    "",
+    "Exact URL and rights-evidence intake for Source Scout. This does not publish automatically; Metricool remains approval_required and real publish stays off.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt}`,
+    `CSV: ${summary.csvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Accepted: ${summary.totals.accepted}`,
+    `- Rejected: ${summary.totals.rejected}`,
+    `- Ready for intake: ${summary.totals.readyForIntake}`,
+    `- Blocked rights: ${summary.totals.blockedRights}`,
+    `- Blocked source file: ${summary.totals.blockedSourceFile}`,
+    `- Recreate only: ${summary.totals.recreateOnly}`,
+    `- Exact URLs: ${summary.totals.exactUrls}`,
+    `- Discovery rejected: ${summary.totals.discoveryRejected}`,
+    `- Metricool fit: ${summary.totals.metricoolFit}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.title}`,
+      "",
+      `- Decision: ${item.decision}`,
+      `- Requested status: ${item.requestedStatus}`,
+      `- Rights status: ${item.rightsStatus}`,
+      `- Publish gate: ${item.publishGate}`,
+      `- URL kind: ${item.sourceUrlKind}`,
+      `- URL: ${item.sourceUrl}`,
+      `- Source: ${item.source}`,
+      `- Viral score: ${item.viralScore}`,
+      `- Target file: ${item.targetFileName || "pending"}`,
+      `- Source drop path: ${item.sourceDropPath || "pending"}`,
+      `- Source file exists: ${item.sourceFileExists ? "yes" : "no"}`,
+      `- Evidence type: ${item.evidenceType || "none"}`,
+      `- Evidence: ${item.evidencePath || "none"}`,
+      `- Manifest: ${item.sourceDropManifestPath || "none"}`,
+      `- Imported source: ${item.importedSourcePath || "none"}`,
+      item.recreatePlan ? `- Recreate plan: ${item.recreatePlan}` : null,
+      item.rejectReason ? `- Reject reason: ${item.rejectReason}` : null,
+      `- Next step: ${item.nextStep}`,
+      "",
+    ].filter((line): line is string => Boolean(line))),
+  ].join("\n");
+}
+
+async function writeSourceScoutIntakeArtifacts(summary: ClipperSourceScoutIntakeSummary): Promise<void> {
+  await writeFile(summary.manifestPath, JSON.stringify(summary, null, 2));
+  await writeFile(summary.markdownPath, renderSourceScoutIntakeMarkdown(summary));
+  await writeFile(summary.csvPath, renderSourceScoutIntakeCsv(summary));
+}
+
+function sourceScoutIntakeItemKey(item: Pick<ClipperSourceScoutIntakeItem, "candidateId" | "sourceUrl" | "targetFileName" | "sourceDropPath" | "category" | "platform">): string {
+  if (item.candidateId) return `candidate:${item.candidateId}`;
+  const fileName = item.targetFileName || path.basename(item.sourceDropPath || "");
+  return `source:${item.category}:${item.platform}:${item.sourceUrl}:${fileName}`;
+}
+
+function summarizeSourceScoutIntakeItems(items: ClipperSourceScoutIntakeItem[]): ClipperSourceScoutIntakeSummary["totals"] {
+  return items.reduce<ClipperSourceScoutIntakeSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.decision !== "rejected") sum.accepted += 1;
+    if (item.decision === "rejected") sum.rejected += 1;
+    if (item.decision === "ready_for_intake") sum.readyForIntake += 1;
+    if (item.decision === "blocked_rights") sum.blockedRights += 1;
+    if (item.decision === "blocked_source_file") sum.blockedSourceFile += 1;
+    if (item.requestedStatus === "recreate_only") sum.recreateOnly += 1;
+    if (item.sourceUrlKind === "exact_video_or_post") sum.exactUrls += 1;
+    if (item.rejectReason) sum.discoveryRejected += 1;
+    if (item.metricoolFit) sum.metricoolFit += 1;
+    return sum;
+  }, { items: 0, accepted: 0, rejected: 0, readyForIntake: 0, blockedRights: 0, blockedSourceFile: 0, recreateOnly: 0, exactUrls: 0, discoveryRejected: 0, metricoolFit: 0 });
+}
+
+async function revalidateCachedSourceScoutIntakeItem(item: ClipperSourceScoutIntakeItem): Promise<ClipperSourceScoutIntakeItem> {
+  const sourceFileExists = item.sourceDropPath ? await sourceIntakeFileLooksReady(item.sourceDropPath) : false;
+  const targetSourceExists = item.targetSourcePath ? await sourceIntakeFileLooksReady(item.targetSourcePath) : false;
+  if ((item.decision === "ready_for_intake" || item.publishGate === "ready_for_intake") && !sourceFileExists && !targetSourceExists) {
+    return {
+      ...item,
+      decision: "blocked_source_file",
+      publishGate: "blocked_source_file",
+      sourceFileExists,
+      targetSourceExists,
+      nextStep: `Archivo fuente ya no esta disponible o no parece usable; vuelve a subirlo en ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.`,
+    };
+  }
+  return {
+    ...item,
+    sourceFileExists,
+    targetSourceExists,
+  };
+}
+
+function mergeSourceScoutIntakeItems(existing: ClipperSourceScoutIntakeItem[], incoming: ClipperSourceScoutIntakeItem[]): ClipperSourceScoutIntakeItem[] {
+  const byKey = new Map(existing.map((item) => [sourceScoutIntakeItemKey(item), item]));
+  for (const item of incoming) byKey.set(sourceScoutIntakeItemKey(item), item);
+  return Array.from(byKey.values()).sort((left, right) => right.viralScore - left.viralScore || left.title.localeCompare(right.title));
+}
+
+async function readCachedSourceScoutIntakeSummary(): Promise<ClipperSourceScoutIntakeSummary> {
+  const raw = await readFile(SOURCE_SCOUT_INTAKE_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperSourceScoutIntakeSummary;
+      const items = await Promise.all((Array.isArray(parsed.items) ? parsed.items : []).map(revalidateCachedSourceScoutIntakeItem));
+      const totals = summarizeSourceScoutIntakeItems(items);
+      const status: ClipperSourceScoutIntakeSummary["status"] = totals.readyForIntake > 0
+        ? "ready"
+        : totals.accepted > 0
+          ? "partial"
+          : "blocked";
+      return {
+        ...parsed,
+        status,
+        manifestPath: SOURCE_SCOUT_INTAKE_PATH,
+        markdownPath: SOURCE_SCOUT_INTAKE_MARKDOWN_PATH,
+        csvPath: SOURCE_SCOUT_INTAKE_CSV_PATH,
+        items,
+        totals,
+        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Source Scout Intake for exact URLs and rights evidence.",
+      };
+    } catch {
+      // Fall through.
+    }
+  }
+  return {
+    status: "blocked",
+    generatedAt: "",
+    manifestPath: SOURCE_SCOUT_INTAKE_PATH,
+    markdownPath: SOURCE_SCOUT_INTAKE_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_INTAKE_CSV_PATH,
+    items: [],
+    totals: { items: 0, accepted: 0, rejected: 0, readyForIntake: 0, blockedRights: 0, blockedSourceFile: 0, recreateOnly: 0, exactUrls: 0, discoveryRejected: 0, metricoolFit: 0 },
+    nextStep: "Run Source Scout Intake for exact URLs and rights evidence.",
+  };
+}
+
+function sourceScoutPermissionEvidenceFileName(candidate: ClipperSourceScoutCandidate): string {
+  return `${candidate.category}-${candidate.id.replace(/[^a-z0-9-]/gi, "-").toLowerCase()}-permission.md`;
+}
+
+function sourceScoutPermissionIntakeRow(candidate: ClipperSourceScoutCandidate): string {
+  return [
+    candidate.id,
+    candidate.title,
+    candidate.category,
+    candidate.platform,
+    candidate.sourceUrlKind === "exact_video_or_post" ? candidate.sourceUrl : "<paste exact video/post URL>",
+    candidate.source,
+    "owned_or_permissioned",
+    "creator_permission",
+    "<paste proof URL or evidence path>",
+    "Creator/rightsholder permission confirmed in writing for edited short-form use.",
+    candidate.targetFileName || "",
+    candidate.sourceDropPath || "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ].map(csvCell).join(",");
+}
+
+function sourceScoutPermissionRecordTemplate(candidate: ClipperSourceScoutCandidate): string {
+  return [
+    `candidate_id: ${candidate.id}`,
+    `category: ${candidate.category}`,
+    `platform: ${candidate.platform}`,
+    `title: ${candidate.title}`,
+    `source_url: ${candidate.sourceUrl}`,
+    `source_url_kind: ${candidate.sourceUrlKind}`,
+    `creator_or_rightsholder: ${candidate.source}`,
+    "rights_status: owned_or_permissioned",
+    "evidence_type: creator_permission",
+    `evidence_file: ${path.join(ROOT_DIR, "allowlist", sourceScoutPermissionEvidenceFileName(candidate))}`,
+    "proof_url_or_path: <paste proof URL/path>",
+    "allowed_platforms: TikTok, Instagram Reels, YouTube Shorts",
+    "credit_required: <paste exact credit/caption>",
+    "usage_limits: <paste limits/expiry or none>",
+    "notes: <real notes, no placeholders before approval>",
+  ].join("\n");
+}
+
+function buildSourceScoutPermissionItem(candidate: ClipperSourceScoutCandidate, intake: ClipperSourceScoutIntakeSummary): ClipperSourceScoutPermissionItem {
+  const matchingIntake = intake.items.find((item) => item.candidateId === candidate.id || item.sourceUrl === candidate.sourceUrl) || null;
+  const permissionRecorded = matchingIntake?.rightsStatus === "owned_or_permissioned" && matchingIntake.evidenceAccepted;
+  const exactUrlNeeded = candidate.sourceUrlKind !== "exact_video_or_post" && !matchingIntake;
+  const sourceFileNeeded = Boolean(permissionRecorded && !(matchingIntake?.sourceFileExists || matchingIntake?.targetSourceExists));
+  const blocked = candidate.rightsRisk === "blocked" || candidate.sourceUrlKind === "discovery_search";
+  const status: ClipperTrendRightsOutreachItemStatus = permissionRecorded ? "permission_recorded" : "ready_to_contact";
+  const evidenceFileName = sourceScoutPermissionEvidenceFileName(candidate);
+  const subject = `Permission request: ${candidate.title}`;
+  const message = [
+    `Hi, we are requesting permission to use or recreate a short-form clip based on: "${candidate.title}".`,
+    `Source/context: ${candidate.sourceUrl}.`,
+    "We will only publish after written approval, required credit/caption, and any usage limits are recorded.",
+    "If repost use is not allowed, we can recreate the idea with owned assets and no raw footage.",
+    "Please reply with approval/denial, allowed platforms, required credit, expiration/limits, and the exact source you authorize.",
+  ].join(" ");
+  return {
+    id: `source-scout-permission-${candidate.id}`,
+    candidateId: candidate.id,
+    status,
+    category: candidate.category,
+    platform: candidate.platform,
+    title: candidate.title,
+    sourceUrl: candidate.sourceUrl,
+    sourceUrlKind: candidate.sourceUrlKind,
+    source: candidate.source,
+    rightsRisk: candidate.rightsRisk,
+    viralScore: candidate.trendScore,
+    metricoolFit: candidate.metricoolFit,
+    exactUrlNeeded,
+    sourceFileNeeded,
+    evidenceFileName,
+    outreachSubject: subject,
+    outreachMessage: message,
+    permissionRecordTemplate: sourceScoutPermissionRecordTemplate(candidate),
+    sourceScoutIntakeCsvRow: sourceScoutPermissionIntakeRow(candidate),
+    proofNeeded: [
+      "Written creator/rightsholder approval or official policy URL.",
+      "Exact video/post URL; discovery/search URLs are not enough.",
+      "Allowed platforms and required credit/caption.",
+      "Local source file or approved recreate asset before production.",
+      "Notes with real evidence; no placeholders, ok/yes/approved alone.",
+    ],
+    nextStep: permissionRecorded
+      ? sourceFileNeeded
+        ? "Permission is recorded; upload/generate the source file before Metricool approval."
+        : "Permission evidence is recorded; candidate can proceed through source/draft gates."
+      : blocked
+        ? "Get exact URL and rights evidence, or switch to recreate_only with owned assets."
+        : "Send outreach, save proof, then register Source Scout intake.",
+  };
+}
+
+async function buildSourceScoutPermissionPackSummary(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+}): Promise<ClipperSourceScoutPermissionPackSummary> {
+  const items = input.sourceScout.candidates.map((candidate) => buildSourceScoutPermissionItem(candidate, input.sourceScoutIntake));
+  const totals = items.reduce<ClipperSourceScoutPermissionPackSummary["totals"]>((sum, item) => {
+    sum.candidates += 1;
+    if (item.status === "ready_to_contact") sum.readyToContact += 1;
+    if (item.status === "permission_recorded") sum.permissionRecorded += 1;
+    if (item.exactUrlNeeded) sum.needsExactUrl += 1;
+    if (item.sourceFileNeeded) sum.needsSourceFile += 1;
+    if (item.rightsRisk === "blocked") sum.blocked += 1;
+    if (item.metricoolFit) sum.metricoolFit += 1;
+    return sum;
+  }, { candidates: 0, readyToContact: 0, permissionRecorded: 0, needsExactUrl: 0, needsSourceFile: 0, blocked: 0, metricoolFit: 0 });
+  const generatedAt = await stat(SOURCE_SCOUT_PERMISSION_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const status: ClipperTrendRightsOutreachStatus = !generatedAt
+    ? "not_prepared"
+    : totals.candidates === 0
+      ? "blocked"
+      : totals.readyToContact > 0 || totals.needsExactUrl > 0 || totals.needsSourceFile > 0
+        ? "partial"
+        : "ready";
+  return {
+    status,
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_PERMISSION_PACK_PATH,
+    markdownPath: SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH,
+    sourceScoutPath: input.sourceScout.manifestPath,
+    sourceScoutIntakePath: input.sourceScoutIntake.manifestPath,
+    items,
+    totals,
+    nextStep: totals.needsExactUrl > 0
+      ? `Convert ${totals.needsExactUrl} discovery/search leads into exact video/post URLs before permission can count.`
+      : totals.readyToContact > 0
+        ? `Send ${totals.readyToContact} permission requests and register proof in Source Scout intake.`
+        : totals.needsSourceFile > 0
+          ? `Upload/generate ${totals.needsSourceFile} source files for permissioned leads.`
+          : "Source Scout permissions are ready for downstream source/draft gates.",
+  };
+}
+
+function renderSourceScoutPermissionPackCsv(summary: ClipperSourceScoutPermissionPackSummary): string {
+  const headers = ["status", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "source", "rights_risk", "viral_score", "metricool_fit", "exact_url_needed", "source_file_needed", "subject", "message", "evidence_file", "permission_record_template", "source_scout_intake_csv_row", "proof_needed", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.status,
+    item.candidateId,
+    item.category,
+    item.platform,
+    item.title,
+    item.sourceUrl,
+    item.sourceUrlKind,
+    item.source,
+    item.rightsRisk,
+    item.viralScore,
+    item.metricoolFit ? "yes" : "no",
+    item.exactUrlNeeded ? "yes" : "no",
+    item.sourceFileNeeded ? "yes" : "no",
+    item.outreachSubject,
+    item.outreachMessage,
+    item.evidenceFileName,
+    item.permissionRecordTemplate,
+    item.sourceScoutIntakeCsvRow,
+    item.proofNeeded.join(" | "),
+    item.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutPermissionPackMarkdown(summary: ClipperSourceScoutPermissionPackSummary): string {
+  return [
+    "# Clippers Source Scout Permission Pack",
+    "",
+    "Permission/request workspace for Source Scout leads. This does not grant rights, create accounts, send messages, or publish anything automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Source Scout: ${summary.sourceScoutPath}`,
+    `Source Scout Intake: ${summary.sourceScoutIntakePath}`,
+    `Candidates: ${summary.totals.candidates}`,
+    `Ready to contact: ${summary.totals.readyToContact}`,
+    `Permission recorded: ${summary.totals.permissionRecorded}`,
+    `Needs exact URL: ${summary.totals.needsExactUrl}`,
+    `Needs source file: ${summary.totals.needsSourceFile}`,
+    `Blocked risk: ${summary.totals.blocked}`,
+    `Metricool fit: ${summary.totals.metricoolFit}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.title}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Category: ${item.category}`,
+      `- Platform: ${item.platform}`,
+      `- Source: ${item.source}`,
+      `- URL kind: ${item.sourceUrlKind}`,
+      `- URL: ${item.sourceUrl}`,
+      `- Rights risk: ${item.rightsRisk}`,
+      `- Metricool fit: ${item.metricoolFit ? "yes" : "no"}`,
+      `- Exact URL needed: ${item.exactUrlNeeded ? "yes" : "no"}`,
+      `- Source file needed: ${item.sourceFileNeeded ? "yes" : "no"}`,
+      `- Evidence file: clippers_workspace/allowlist/${item.evidenceFileName}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      `Subject: ${item.outreachSubject}`,
+      "",
+      item.outreachMessage,
+      "",
+      "Proof needed:",
+      ...item.proofNeeded.map((proof) => `- [ ] ${proof}`),
+      "",
+      "Permission record template:",
+      "",
+      "```yaml",
+      item.permissionRecordTemplate,
+      "```",
+      "",
+      "Source Scout intake CSV row:",
+      "",
+      "```csv",
+      item.sourceScoutIntakeCsvRow,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeSourceScoutPermissionPackArtifacts(summary: ClipperSourceScoutPermissionPackSummary): Promise<ClipperSourceScoutPermissionPackSummary> {
+  const status: ClipperSourceScoutPermissionPackSummary["status"] = summary.totals.candidates === 0
+    ? "blocked"
+    : summary.totals.readyToContact > 0 || summary.totals.needsExactUrl > 0 || summary.totals.needsSourceFile > 0
+      ? "partial"
+      : "ready";
+  const withGeneratedAt: ClipperSourceScoutPermissionPackSummary = { ...summary, generatedAt: new Date().toISOString(), status };
+  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH, renderSourceScoutPermissionPackMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH, renderSourceScoutPermissionPackCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+export async function prepareClipperSourceScoutPermissionPack(userId = getSystemUserId()): Promise<{ sourceScoutPermissionPack: ClipperSourceScoutPermissionPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutPermissionPack = await writeSourceScoutPermissionPackArtifacts(await buildSourceScoutPermissionPackSummary({
+    sourceScout: statusBefore.sourceScout,
+    sourceScoutIntake: statusBefore.sourceScoutIntake,
+  }));
+  return { sourceScoutPermissionPack, status: await getClipperStatus(userId) };
+}
+
+function sourceScoutWorkQueueIntakeRow(candidate: ClipperSourceScoutCandidate, status: ClipperSourceScoutIntakeStatus): string {
+  const evidenceType = status === "owned_or_permissioned"
+    ? "creator_permission"
+    : status === "recreate_only"
+      ? "recreate_plan_approved"
+      : "";
+  const proof = status === "owned_or_permissioned" ? "<paste proof URL or evidence path>" : "";
+  const notes = status === "owned_or_permissioned"
+    ? "<summarize written permission, allowed platforms, credit, limits>"
+    : status === "recreate_only"
+      ? "<approved recreate plan using owned assets only>"
+      : "";
+  const recreatePlan = status === "recreate_only"
+    ? `Recreate trend with owned visuals, own voiceover/captions, no raw repost: ${candidate.hookAngle}`
+    : "";
+  return [
+    candidate.id,
+    candidate.title,
+    candidate.category,
+    candidate.platform,
+    candidate.sourceUrlKind === "exact_video_or_post" ? candidate.sourceUrl : "<paste exact video/post URL>",
+    candidate.source,
+    status,
+    evidenceType,
+    proof,
+    notes,
+    candidate.targetFileName || "",
+    candidate.sourceDropPath || "",
+    recreatePlan,
+    "",
+    "",
+    "",
+    "",
+  ].map(csvCell).join(",");
+}
+
+function sourceScoutWorkQueueEvidenceTemplate(candidate: ClipperSourceScoutCandidate, type: ClipperSourceScoutWorkQueueItemType): string {
+  return [
+    `candidate_id: ${candidate.id}`,
+    `task_type: ${type}`,
+    `category: ${candidate.category}`,
+    `platform: ${candidate.platform}`,
+    `title: ${candidate.title}`,
+    `current_url: ${candidate.sourceUrl}`,
+    `current_url_kind: ${candidate.sourceUrlKind}`,
+    `creator_or_source: ${candidate.source}`,
+    "exact_video_or_post_url: <paste exact URL>",
+    "rights_status: <review_required|recreate_only|owned_or_permissioned|blocked>",
+    "evidence_type: <creator_permission|licensed_asset|official_policy_allowlist|recreate_plan_approved|owned_source>",
+    "proof_url_or_path: <paste real proof>",
+    "source_file_path: <paste local source-drop file path>",
+    "notes: <real notes, minimum 20 chars, no placeholders>",
+  ].join("\n");
+}
+
+function buildSourceScoutWorkQueueItems(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+}): ClipperSourceScoutWorkQueueItem[] {
+  const intakeByCandidate = new Map(input.sourceScoutIntake.items.map((item) => [item.candidateId || item.sourceUrl, item]));
+  const items: ClipperSourceScoutWorkQueueItem[] = [];
+  for (const candidate of input.sourceScout.candidates) {
+    const matchingIntake = intakeByCandidate.get(candidate.id) || intakeByCandidate.get(candidate.sourceUrl) || null;
+    const sourceFileExists = Boolean(matchingIntake?.sourceFileExists || matchingIntake?.targetSourceExists);
+    const common = {
+      candidateId: candidate.id,
+      category: candidate.category,
+      platform: candidate.platform,
+      title: candidate.title,
+      sourceUrl: candidate.sourceUrl,
+      sourceUrlKind: candidate.sourceUrlKind,
+      source: candidate.source,
+      viralScore: candidate.trendScore,
+      metricoolFit: candidate.metricoolFit,
+      sourceDropPath: candidate.sourceDropPath || matchingIntake?.sourceDropPath || matchingIntake?.targetSourcePath || null,
+      sourceFileExists,
+    };
+    if (candidate.sourceUrlKind !== "exact_video_or_post" && !matchingIntake) {
+      items.push({
+        ...common,
+        id: `source-scout-work-exact-url-${candidate.id}`,
+        type: "exact_url_intake",
+        priority: candidate.metricoolFit ? "critical" : "high",
+        publishGate: "blocked_rights",
+        owner: "operator",
+        blocker: "Discovery/search URL cannot count as exact source.",
+        action: "Open the source/context, find the exact video/post URL, then paste it into Source Scout intake.",
+        intakeCsvRow: sourceScoutWorkQueueIntakeRow(candidate, "review_required"),
+        evidenceTemplate: sourceScoutWorkQueueEvidenceTemplate(candidate, "exact_url_intake"),
+        nextStep: "Convert discovery_search into exact_video_or_post before asking Metricool to queue it.",
+      });
+      continue;
+    }
+    if (candidate.publishGate === "blocked_rights" || matchingIntake?.publishGate === "blocked_rights") {
+      items.push({
+        ...common,
+        id: `source-scout-work-rights-${candidate.id}`,
+        type: "rights_evidence",
+        priority: candidate.metricoolFit ? "critical" : "high",
+        publishGate: "blocked_rights",
+        owner: "rights",
+        blocker: "Rights proof is missing or still review_required.",
+        action: "Send permission request or choose recreate_only; record proof/notes in Source Scout intake.",
+        intakeCsvRow: sourceScoutWorkQueueIntakeRow(candidate, "owned_or_permissioned"),
+        evidenceTemplate: sourceScoutWorkQueueEvidenceTemplate(candidate, "rights_evidence"),
+        nextStep: "Do not use the original video until permission or approved recreate plan is recorded.",
+      });
+      continue;
+    }
+    if (candidate.publishGate === "blocked_source_file" || matchingIntake?.publishGate === "blocked_source_file" || (candidate.metricoolFit && !sourceFileExists)) {
+      items.push({
+        ...common,
+        id: `source-scout-work-source-file-${candidate.id}`,
+        type: "source_file",
+        priority: candidate.metricoolFit ? "high" : "medium",
+        publishGate: "blocked_source_file",
+        owner: "source",
+        blocker: "Rights/recreate path exists but no local source file or owned asset is ready.",
+        action: "Upload or generate the owned source asset into source-drop and register the file path.",
+        intakeCsvRow: sourceScoutWorkQueueIntakeRow(candidate, matchingIntake?.requestedStatus === "recreate_only" ? "recreate_only" : "owned_or_permissioned"),
+        evidenceTemplate: sourceScoutWorkQueueEvidenceTemplate(candidate, "source_file"),
+        nextStep: `Place source file in ${path.join(SOURCE_DROP_DIR, candidate.category)} before Metricool approval.`,
+      });
+    }
+  }
+  for (const item of input.metricoolExecutionQueue.items) {
+    if (item.status !== "queued_for_approval") continue;
+    const category = item.accountId.includes("sports") ? "sports" : item.accountId.includes("meme") ? "memes" : "streamers";
+    items.push({
+      id: `source-scout-work-metricool-${item.id}`,
+      type: "metricool_approval",
+      priority: "medium",
+      candidateId: null,
+      category,
+      platform: item.platform,
+      title: item.hook,
+      sourceUrl: item.sourcePath || "",
+      sourceUrlKind: "exact_video_or_post",
+      source: item.accountName,
+      viralScore: 0,
+      metricoolFit: true,
+      publishGate: "approval_required",
+      owner: "metricool",
+      blocker: "Human review is required before Metricool scheduling.",
+      action: "Review video, caption, source rights and approve in Metricool manually.",
+      intakeCsvRow: "",
+      evidenceTemplate: [
+        `metricool_item_id: ${item.id}`,
+        `account_id: ${item.accountId}`,
+        `platform: ${item.platform}`,
+        `source_path: ${item.sourcePath || "<missing source path>"}`,
+        "approval_status: <approved|blocked>",
+        "notes: <approval notes>",
+      ].join("\n"),
+      sourceDropPath: item.sourcePath || null,
+      sourceFileExists: Boolean(item.sourcePath),
+      nextStep: "Approve manually in Metricool only after the source/rights check still passes.",
+    });
+  }
+  const priorityRank = { critical: 0, high: 1, medium: 2 };
+  const typeRank: Record<ClipperSourceScoutWorkQueueItemType, number> = {
+    exact_url_intake: 0,
+    rights_evidence: 1,
+    source_file: 2,
+    metricool_approval: 3,
+  };
+  return items.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || typeRank[a.type] - typeRank[b.type] || b.viralScore - a.viralScore);
+}
+
+async function buildSourceScoutWorkQueueSummary(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  sourceScoutPermissionPack: ClipperSourceScoutPermissionPackSummary;
+  weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+}): Promise<ClipperSourceScoutWorkQueueSummary> {
+  const items = buildSourceScoutWorkQueueItems(input);
+  const totals = items.reduce<ClipperSourceScoutWorkQueueSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.type === "exact_url_intake") sum.exactUrlIntake += 1;
+    if (item.type === "rights_evidence") sum.rightsEvidence += 1;
+    if (item.type === "source_file") sum.sourceFile += 1;
+    if (item.type === "metricool_approval") sum.metricoolApproval += 1;
+    if (item.category === "sports") sum.sports += 1;
+    if (item.category === "memes") sum.memes += 1;
+    if (item.category === "streamers") sum.streamers += 1;
+    if (item.priority === "critical") sum.critical += 1;
+    if (item.metricoolFit) sum.metricoolFit += 1;
+    return sum;
+  }, { items: 0, exactUrlIntake: 0, rightsEvidence: 0, sourceFile: 0, metricoolApproval: 0, sports: 0, memes: 0, streamers: 0, critical: 0, metricoolFit: 0 });
+  const generatedAt = await stat(SOURCE_SCOUT_WORK_QUEUE_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status: generatedAt ? "ready" : "not_prepared",
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_WORK_QUEUE_PATH,
+    markdownPath: SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_WORK_QUEUE_CSV_PATH,
+    sourceScoutPath: input.sourceScout.manifestPath,
+    sourceScoutIntakePath: input.sourceScoutIntake.manifestPath,
+    permissionPackPath: input.sourceScoutPermissionPack.manifestPath,
+    weeklyFunnelPath: input.weeklyProductionFunnel.manifestPath,
+    items,
+    totals,
+    nextStep: totals.exactUrlIntake > 0
+      ? `Convert ${totals.exactUrlIntake} discovery/search leads into exact video/post URLs.`
+      : totals.rightsEvidence > 0
+        ? `Record rights evidence or recreate decisions for ${totals.rightsEvidence} exact leads.`
+        : totals.sourceFile > 0
+          ? `Upload/generate ${totals.sourceFile} source files for approved leads.`
+          : totals.metricoolApproval > 0
+            ? `Review and approve ${totals.metricoolApproval} Metricool queue item(s) manually.`
+            : "No Source Scout blockers are queued right now.",
+  };
+}
+
+function renderSourceScoutWorkQueueCsv(summary: ClipperSourceScoutWorkQueueSummary): string {
+  const headers = ["priority", "type", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "source", "viral_score", "metricool_fit", "publish_gate", "owner", "blocker", "action", "source_drop_path", "source_file_exists", "intake_csv_row", "evidence_template", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.priority,
+    item.type,
+    item.candidateId || "",
+    item.category,
+    item.platform,
+    item.title,
+    item.sourceUrl,
+    item.sourceUrlKind,
+    item.source,
+    item.viralScore,
+    item.metricoolFit ? "yes" : "no",
+    item.publishGate,
+    item.owner,
+    item.blocker,
+    item.action,
+    item.sourceDropPath || "",
+    item.sourceFileExists ? "yes" : "no",
+    item.intakeCsvRow,
+    item.evidenceTemplate,
+    item.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutWorkQueueMarkdown(summary: ClipperSourceScoutWorkQueueSummary): string {
+  return [
+    "# Clippers Source Scout Work Queue",
+    "",
+    "Operator queue for converting Source Scout blockers into exact URLs, rights evidence, source files, and Metricool manual approvals. It does not create accounts, grant permissions, or publish automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Items: ${summary.totals.items}`,
+    `Critical: ${summary.totals.critical}`,
+    `Exact URL intake: ${summary.totals.exactUrlIntake}`,
+    `Rights evidence: ${summary.totals.rightsEvidence}`,
+    `Source file: ${summary.totals.sourceFile}`,
+    `Metricool approval: ${summary.totals.metricoolApproval}`,
+    `Metricool fit: ${summary.totals.metricoolFit}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Work Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.priority.toUpperCase()} · ${item.type} · ${item.title}`,
+      "",
+      `- Owner: ${item.owner}`,
+      `- Category: ${item.category}`,
+      `- Platform: ${item.platform}`,
+      `- Candidate: ${item.candidateId || "Metricool queue item"}`,
+      `- Source URL kind: ${item.sourceUrlKind}`,
+      `- Source URL/path: ${item.sourceUrl || item.sourceDropPath || "n/a"}`,
+      `- Publish gate: ${item.publishGate}`,
+      `- Blocker: ${item.blocker}`,
+      `- Action: ${item.action}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      item.intakeCsvRow ? "Source Scout intake CSV row:" : "Evidence template:",
+      "",
+      item.intakeCsvRow ? "```csv" : "```yaml",
+      item.intakeCsvRow || item.evidenceTemplate,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeSourceScoutWorkQueueArtifacts(summary: ClipperSourceScoutWorkQueueSummary): Promise<ClipperSourceScoutWorkQueueSummary> {
+  const status: ClipperSourceScoutWorkQueueStatus = summary.totals.items > 0 ? "ready" : "blocked";
+  const withGeneratedAt: ClipperSourceScoutWorkQueueSummary = { ...summary, status, generatedAt: new Date().toISOString() };
+  await writeFile(SOURCE_SCOUT_WORK_QUEUE_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH, renderSourceScoutWorkQueueMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_WORK_QUEUE_CSV_PATH, renderSourceScoutWorkQueueCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+export async function prepareClipperSourceScoutWorkQueue(userId = getSystemUserId()): Promise<{ sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutWorkQueue = await writeSourceScoutWorkQueueArtifacts(await buildSourceScoutWorkQueueSummary({
+    sourceScout: statusBefore.sourceScout,
+    sourceScoutIntake: statusBefore.sourceScoutIntake,
+    sourceScoutPermissionPack: statusBefore.sourceScoutPermissionPack,
+    weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+  }));
+  return { sourceScoutWorkQueue, status: await getClipperStatus(userId) };
+}
+
+function sourceScoutExactUrlSearchQuery(candidate: ClipperSourceScoutCandidate): string {
+  return [
+    candidate.title,
+    candidate.source.replace(/^@/, ""),
+    candidate.platform,
+    candidate.category,
+  ].join(" ").replace(/\s+/g, " ").trim();
+}
+
+function sourceScoutExactUrlPlatformSearchUrl(platform: ClipperPlatform, query: string): string {
+  const encoded = encodeURIComponent(query);
+  if (platform === "youtube") return `https://www.youtube.com/results?search_query=${encoded}`;
+  if (platform === "instagram") return `https://www.instagram.com/explore/search/keyword/?q=${encoded}`;
+  return `https://www.tiktok.com/search?q=${encoded}`;
+}
+
+function sourceScoutExactUrlGoogleSearchUrl(platform: ClipperPlatform, query: string): string {
+  const site = platform === "youtube"
+    ? "(site:youtube.com/shorts OR site:youtube.com/watch OR site:youtu.be)"
+    : platform === "instagram"
+      ? "(site:instagram.com/reel OR site:instagram.com/p)"
+      : "site:tiktok.com/@";
+  return `https://www.google.com/search?q=${encodeURIComponent(`${site} ${query}`)}`;
+}
+
+function buildSourceScoutExactUrlItem(candidate: ClipperSourceScoutCandidate, workItem: ClipperSourceScoutWorkQueueItem | null): ClipperSourceScoutExactUrlItem {
+  const searchQuery = sourceScoutExactUrlSearchQuery(candidate);
+  const priority = workItem?.priority || (candidate.metricoolFit ? "critical" : "high");
+  return {
+    id: `source-scout-exact-url-${candidate.id}`,
+    candidateId: candidate.id,
+    priority,
+    category: candidate.category,
+    platform: candidate.platform,
+    title: candidate.title,
+    source: candidate.source,
+    currentUrl: candidate.sourceUrl,
+    currentUrlKind: candidate.sourceUrlKind,
+    currentRejectReason: exactSourceUrlRejectReason(candidate.sourceUrl),
+    viralScore: candidate.trendScore,
+    metricoolFit: candidate.metricoolFit,
+    searchQuery,
+    platformSearchUrl: sourceScoutExactUrlPlatformSearchUrl(candidate.platform, searchQuery),
+    googleSearchUrl: sourceScoutExactUrlGoogleSearchUrl(candidate.platform, searchQuery),
+    sourceContextUrl: candidate.sourceUrl,
+    intakeCsvRow: sourceScoutWorkQueueIntakeRow(candidate, "review_required"),
+    validationChecklist: [
+      "Open the platform or Google search link and find one exact video/post page.",
+      "Reject search, explore, results, hashtag, category, channel, or profile-only URLs.",
+      "Accept only TikTok /video/, YouTube /shorts or /watch?v=, Instagram /reel/ or /p/, or Twitch clip URLs.",
+      "Confirm creator/source matches the candidate before pasting the URL.",
+      "Paste the exact URL into Source Scout intake; rights still remain review_required until proof is recorded.",
+    ],
+    nextStep: "Paste the exact video/post URL into the intake row, then run Source Scout intake.",
+  };
+}
+
+async function buildSourceScoutExactUrlKitSummary(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
+}): Promise<ClipperSourceScoutExactUrlKitSummary> {
+  const exactWorkItems = new Map(input.sourceScoutWorkQueue.items
+    .filter((item) => item.type === "exact_url_intake" && item.candidateId)
+    .map((item) => [item.candidateId, item]));
+  const items = input.sourceScout.candidates
+    .filter((candidate) => candidate.sourceUrlKind !== "exact_video_or_post")
+    .map((candidate) => buildSourceScoutExactUrlItem(candidate, exactWorkItems.get(candidate.id) || null))
+    .sort((a, b) => {
+      const priorityRank = { critical: 0, high: 1, medium: 2 };
+      return priorityRank[a.priority] - priorityRank[b.priority] || b.viralScore - a.viralScore;
+    });
+  const totals = items.reduce<ClipperSourceScoutExactUrlKitSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.priority === "critical") sum.critical += 1;
+    if (item.category === "sports") sum.sports += 1;
+    if (item.category === "memes") sum.memes += 1;
+    if (item.category === "streamers") sum.streamers += 1;
+    if (item.metricoolFit) sum.metricoolFit += 1;
+    return sum;
+  }, { items: 0, critical: 0, sports: 0, memes: 0, streamers: 0, metricoolFit: 0 });
+  const generatedAt = await stat(SOURCE_SCOUT_EXACT_URL_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status: generatedAt ? totals.items > 0 ? "blocked" : "ready" : "not_prepared",
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_EXACT_URL_KIT_PATH,
+    markdownPath: SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH,
+    sourceScoutPath: input.sourceScout.manifestPath,
+    workQueuePath: input.sourceScoutWorkQueue.manifestPath,
+    items,
+    totals,
+    nextStep: totals.items > 0
+      ? `Open exact URL searches for ${totals.items} discovery/search leads, then paste exact video/post URLs into Source Scout intake.`
+      : "No discovery/search Source Scout leads need exact URL conversion.",
+  };
+}
+
+function renderSourceScoutExactUrlKitCsv(summary: ClipperSourceScoutExactUrlKitSummary): string {
+  const headers = ["priority", "candidate_id", "category", "platform", "title", "source", "current_url", "current_url_kind", "current_reject_reason", "viral_score", "metricool_fit", "search_query", "platform_search_url", "google_search_url", "intake_csv_row", "validation_checklist", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.priority,
+    item.candidateId,
+    item.category,
+    item.platform,
+    item.title,
+    item.source,
+    item.currentUrl,
+    item.currentUrlKind,
+    item.currentRejectReason || "",
+    item.viralScore,
+    item.metricoolFit ? "yes" : "no",
+    item.searchQuery,
+    item.platformSearchUrl,
+    item.googleSearchUrl,
+    item.intakeCsvRow,
+    item.validationChecklist.join(" | "),
+    item.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutExactUrlKitMarkdown(summary: ClipperSourceScoutExactUrlKitSummary): string {
+  return [
+    "# Clippers Source Scout Exact URL Kit",
+    "",
+    "Search and intake kit for converting discovery/search leads into exact video/post URLs. This does not verify rights, create accounts, or publish anything.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Items: ${summary.totals.items}`,
+    `Critical: ${summary.totals.critical}`,
+    `Sports: ${summary.totals.sports}`,
+    `Memes: ${summary.totals.memes}`,
+    `Streamers: ${summary.totals.streamers}`,
+    `Metricool fit: ${summary.totals.metricoolFit}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.priority.toUpperCase()} · ${item.title}`,
+      "",
+      `- Candidate: ${item.candidateId}`,
+      `- Category: ${item.category}`,
+      `- Platform: ${item.platform}`,
+      `- Source: ${item.source}`,
+      `- Current URL kind: ${item.currentUrlKind}`,
+      `- Current URL: ${item.currentUrl}`,
+      `- Current reject reason: ${item.currentRejectReason || "n/a"}`,
+      `- Platform search: ${item.platformSearchUrl}`,
+      `- Google search: ${item.googleSearchUrl}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Validation checklist:",
+      ...item.validationChecklist.map((check) => `- [ ] ${check}`),
+      "",
+      "Source Scout intake CSV row:",
+      "",
+      "```csv",
+      item.intakeCsvRow,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeSourceScoutExactUrlKitArtifacts(summary: ClipperSourceScoutExactUrlKitSummary): Promise<ClipperSourceScoutExactUrlKitSummary> {
+  const status: ClipperSourceScoutExactUrlKitStatus = summary.totals.items > 0 ? "blocked" : "ready";
+  const withGeneratedAt: ClipperSourceScoutExactUrlKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
+  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH, renderSourceScoutExactUrlKitMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH, renderSourceScoutExactUrlKitCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+export async function prepareClipperSourceScoutExactUrlKit(userId = getSystemUserId()): Promise<{ sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutExactUrlKit = await writeSourceScoutExactUrlKitArtifacts(await buildSourceScoutExactUrlKitSummary({
+    sourceScout: statusBefore.sourceScout,
+    sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
+  }));
+  return { sourceScoutExactUrlKit, status: await getClipperStatus(userId) };
+}
+
+function sourceScoutSourceFileName(item: ClipperSourceScoutWorkQueueItem): string {
+  const existing = item.sourceDropPath ? path.basename(item.sourceDropPath) : "";
+  if (existing && /\.[a-z0-9]{2,5}$/i.test(existing)) return existing;
+  const safeTitle = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "source-scout";
+  return `${item.category}-${safeTitle}.mp4`;
+}
+
+function sourceScoutSourceFileManifestRow(item: ClipperSourceScoutSourceFileItem): string {
+  return [
+    item.category,
+    item.title,
+    item.sourceUrl,
+    item.source,
+    item.platform,
+    item.targetFileName,
+    item.sourceUrlKind === "exact_video_or_post" ? "owned_or_permissioned" : "review_required",
+    "<paste proof URL or evidence path>",
+    item.priority === "high" ? "high" : "review",
+    "Add only owned/licensed/permissioned source file; do not use raw repost without proof.",
+  ].map(csvCell).join(",");
+}
+
+async function buildSourceScoutSourceFileItem(workItem: ClipperSourceScoutWorkQueueItem): Promise<ClipperSourceScoutSourceFileItem> {
+  const sourceDropDir = path.join(SOURCE_DROP_DIR, workItem.category);
+  const targetFileName = sourceScoutSourceFileName(workItem);
+  const expectedSourcePath = workItem.sourceDropPath || path.join(sourceDropDir, targetFileName);
+  const sourceFileExists = await sourceIntakeFileLooksReady(expectedSourcePath);
+  const draft: Omit<ClipperSourceScoutSourceFileItem, "manifestRow"> = {
+    id: `source-scout-source-file-${workItem.id}`,
+    workQueueItemId: workItem.id,
+    candidateId: workItem.candidateId,
+    priority: workItem.priority,
+    category: workItem.category,
+    platform: workItem.platform,
+    title: workItem.title,
+    source: workItem.source,
+    sourceUrl: workItem.sourceUrl,
+    sourceUrlKind: workItem.sourceUrlKind,
+    targetFileName,
+    expectedSourcePath,
+    sourceFileExists,
+    sourceDropDir,
+    sourceDropManifestPath: path.join(sourceDropDir, "source-drop-manifest.csv"),
+    intakeCsvRow: workItem.intakeCsvRow,
+    productionNotesTemplate: [
+      `title: ${workItem.title}`,
+      `candidate_id: ${workItem.candidateId || "n/a"}`,
+      `source_url: ${workItem.sourceUrl || "n/a"}`,
+      `source_url_kind: ${workItem.sourceUrlKind}`,
+      `expected_source_path: ${expectedSourcePath}`,
+      "asset_origin: <owned_recording|licensed_asset|creator_permission|generated_owned_asset>",
+      "proof_url_or_path: <paste proof>",
+      "edit_notes: <trim/caption/voiceover/render notes>",
+      "do_not_use: raw repost without proof, copyrighted broadcast footage, unlicensed music",
+    ].join("\n"),
+    checklist: [
+      "Confirm exact URL or approved recreate plan is recorded before rendering.",
+      "Create or obtain an owned/licensed/permissioned source file; do not use placeholder media.",
+      `Save the file at ${expectedSourcePath}.`,
+      `Add/update manifest row in ${path.join(sourceDropDir, "source-drop-manifest.csv")}.`,
+      "Run source-drop import/local sync so the production queue can see the real file.",
+    ],
+    nextStep: sourceFileExists
+      ? "Source file is usable; import/sync source-drop and refresh Metricool approval queue."
+      : `Create or upload the real source file to ${expectedSourcePath}.`,
+  };
+  return {
+    ...draft,
+    manifestRow: sourceScoutSourceFileManifestRow({ ...draft, manifestRow: "" }),
+  };
+}
+
+async function buildSourceScoutSourceFileKitSummary(input: {
+  sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
+}): Promise<ClipperSourceScoutSourceFileKitSummary> {
+  const items = (await Promise.all(input.sourceScoutWorkQueue.items
+    .filter((item) => item.type === "source_file")
+    .map(buildSourceScoutSourceFileItem)))
+    .sort((a, b) => Number(a.sourceFileExists) - Number(b.sourceFileExists) || (a.priority === "high" ? -1 : 1));
+  const totals = items.reduce<ClipperSourceScoutSourceFileKitSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.sourceFileExists) sum.existingSourceFiles += 1;
+    else sum.missingSourceFiles += 1;
+    if (item.category === "sports") sum.sports += 1;
+    if (item.category === "memes") sum.memes += 1;
+    if (item.category === "streamers") sum.streamers += 1;
+    if (item.priority === "high" || item.priority === "critical") sum.highPriority += 1;
+    return sum;
+  }, { items: 0, missingSourceFiles: 0, existingSourceFiles: 0, sports: 0, memes: 0, streamers: 0, highPriority: 0 });
+  const generatedAt = await stat(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status: generatedAt ? totals.missingSourceFiles > 0 ? "blocked" : "ready" : "not_prepared",
+    generatedAt,
+    manifestPath: SOURCE_SCOUT_SOURCE_FILE_KIT_PATH,
+    markdownPath: SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH,
+    workQueuePath: input.sourceScoutWorkQueue.manifestPath,
+    items,
+    totals,
+    nextStep: totals.missingSourceFiles > 0
+      ? `Create/upload ${totals.missingSourceFiles} real source file(s) into source-drop; placeholders do not count.`
+      : totals.items > 0
+        ? "All Source Scout source files exist; import/sync source-drop and refresh Metricool approval queue."
+        : "No Source Scout source file tasks are queued right now.",
+  };
+}
+
+function renderSourceScoutSourceFileKitCsv(summary: ClipperSourceScoutSourceFileKitSummary): string {
+  const headers = ["priority", "candidate_id", "category", "platform", "title", "source_url", "source_url_kind", "target_file_name", "expected_source_path", "source_file_exists", "source_drop_manifest_path", "manifest_row", "intake_csv_row", "production_notes_template", "checklist", "next_step"];
+  const rows = summary.items.map((item) => [
+    item.priority,
+    item.candidateId || "",
+    item.category,
+    item.platform,
+    item.title,
+    item.sourceUrl,
+    item.sourceUrlKind,
+    item.targetFileName,
+    item.expectedSourcePath,
+    item.sourceFileExists ? "yes" : "no",
+    item.sourceDropManifestPath,
+    item.manifestRow,
+    item.intakeCsvRow,
+    item.productionNotesTemplate,
+    item.checklist.join(" | "),
+    item.nextStep,
+  ]);
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+function renderSourceScoutSourceFileKitMarkdown(summary: ClipperSourceScoutSourceFileKitSummary): string {
+  return [
+    "# Clippers Source Scout Source File Kit",
+    "",
+    "Source file workspace for turning permissioned/recreate Source Scout leads into real local files. This does not create fake videos, grant rights, or publish anything.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Items: ${summary.totals.items}`,
+    `Missing source files: ${summary.totals.missingSourceFiles}`,
+    `Existing source files: ${summary.totals.existingSourceFiles}`,
+    `High priority: ${summary.totals.highPriority}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.priority.toUpperCase()} · ${item.title}`,
+      "",
+      `- Candidate: ${item.candidateId || "n/a"}`,
+      `- Category: ${item.category}`,
+      `- Platform: ${item.platform}`,
+      `- Expected source path: ${item.expectedSourcePath}`,
+      `- Source file exists: ${item.sourceFileExists ? "yes" : "no"}`,
+      `- Manifest path: ${item.sourceDropManifestPath}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Checklist:",
+      ...item.checklist.map((check) => `- [ ] ${check}`),
+      "",
+      "Manifest row:",
+      "",
+      "```csv",
+      item.manifestRow,
+      "```",
+      "",
+      "Production notes template:",
+      "",
+      "```yaml",
+      item.productionNotesTemplate,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeSourceScoutSourceFileKitArtifacts(summary: ClipperSourceScoutSourceFileKitSummary): Promise<ClipperSourceScoutSourceFileKitSummary> {
+  const status: ClipperSourceScoutSourceFileKitStatus = summary.totals.missingSourceFiles > 0 ? "blocked" : "ready";
+  const withGeneratedAt: ClipperSourceScoutSourceFileKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
+  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH, renderSourceScoutSourceFileKitMarkdown(withGeneratedAt));
+  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH, renderSourceScoutSourceFileKitCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+export async function prepareClipperSourceScoutSourceFileKit(userId = getSystemUserId()): Promise<{ sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutSourceFileKit = await writeSourceScoutSourceFileKitArtifacts(await buildSourceScoutSourceFileKitSummary({
+    sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
+  }));
+  return { sourceScoutSourceFileKit, status: await getClipperStatus(userId) };
+}
+
+function weeklyFunnelDailyTargets(): Record<string, number> {
+  return {
+    monday: 14,
+    tuesday: 14,
+    wednesday: 14,
+    thursday: 14,
+    friday: 16,
+    saturday: 14,
+    sunday: 14,
+  };
+}
+
+function weeklyFunnelTodayTarget(targets = weeklyFunnelDailyTargets(), now = new Date()): number {
+  const keys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  return targets[keys[now.getDay()]] || 14;
+}
+
+function weeklyFunnelCategoryTargets(input: {
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  productionQueue: ClipperProductionQueueSummary;
+}): Record<ClipperAccountCategory, number> {
+  const streamerMetricoolReady = input.metricoolPublishing.channels.some((channel) =>
+    channel.category === "streamers" && channel.connectedProfiles > 0
+  );
+  const streamerSourceReady = input.productionQueue.sourceAssets.some((asset) =>
+    asset.category === "streamers" && asset.rightsStatus === "owned_or_permissioned"
+  );
+  return streamerMetricoolReady && streamerSourceReady
+    ? { sports: 50, memes: 35, streamers: 15 }
+    : { sports: 60, memes: 40, streamers: 0 };
+}
+
+function weeklyFunnelStatus(sourceFilesReady: number, dailyQueueActive: boolean, approvalQueueStable: boolean): ClipperWeeklyProductionFunnelStatus {
+  if (sourceFilesReady < 30) return "blocked";
+  if (sourceFilesReady < 80) return "behind";
+  if (sourceFilesReady < 120) return dailyQueueActive ? "on_track" : "behind";
+  return approvalQueueStable ? "scaling" : "on_track";
+}
+
+function weeklyFunnelBiggestBlocker(bottlenecks: ClipperWeeklyProductionFunnelBottleneck[]): string {
+  return bottlenecks[0]?.label || "none";
+}
+
+async function buildWeeklyProductionFunnelSummary(input: {
+  sourceScout: ClipperSourceScoutSummary;
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  productionQueue: ClipperProductionQueueSummary;
+  draftSpecs: ClipperDraftSpecSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metrics: ClipperMetricsSummary;
+}): Promise<ClipperWeeklyProductionFunnelSummary> {
+  const targetWeeklyClips = 100;
+  const targetDailyClips = weeklyFunnelDailyTargets();
+  const sourceAssetsReady = uniqueUsableRightsReadyAssets(input.productionQueue.sourceAssets);
+  const exactUrls = input.sourceScout.candidates.filter((candidate) => candidate.sourceUrlKind === "exact_video_or_post").length
+    + input.sourceScoutIntake.items.filter((item) => item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected").length;
+  const rightsApproved = input.sourceScoutIntake.items.filter((item) => item.rightsStatus === "owned_or_permissioned" && item.evidenceAccepted).length
+    + sourceAssetsReady.length;
+  const recreateOnly = input.sourceScoutIntake.totals.recreateOnly;
+  const draftReady = input.productionQueue.items.filter((item) => item.status === "draft_ready").length;
+  const metricoolApprovalQueued = input.metricoolExecutionQueue.totals.queuedForApproval;
+  const blockedRights = input.sourceScout.totals.blockedRights + input.sourceScoutIntake.totals.blockedRights;
+  const blockedSourceFile = input.sourceScout.totals.blockedSourceFile + input.sourceScoutIntake.totals.blockedSourceFile;
+  const dailyQueueActive = metricoolApprovalQueued > 0 || draftReady >= weeklyFunnelTodayTarget(targetDailyClips);
+  const approvalQueueStable = metricoolApprovalQueued >= 14 && input.metricoolExecutionQueue.realPublishEnabled === false;
+  const categoryTargets = weeklyFunnelCategoryTargets({
+    metricoolPublishing: input.metricoolPublishing,
+    productionQueue: input.productionQueue,
+  });
+  const categoryRows: ClipperWeeklyProductionFunnelCategoryRow[] = (["sports", "memes", "streamers"] as ClipperAccountCategory[]).map((category) => {
+    const currentSourceReady = sourceAssetsReady.filter((asset) => asset.category === category).length;
+    const categoryExactUrls = input.sourceScout.candidates.filter((candidate) => candidate.category === category && candidate.sourceUrlKind === "exact_video_or_post").length
+      + input.sourceScoutIntake.items.filter((item) => item.category === category && item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected").length;
+    const categoryRightsApproved = input.sourceScoutIntake.items.filter((item) => item.category === category && item.rightsStatus === "owned_or_permissioned" && item.evidenceAccepted).length
+      + currentSourceReady;
+    const categoryRecreateOnly = input.sourceScoutIntake.items.filter((item) => item.category === category && item.requestedStatus === "recreate_only").length;
+    const categoryDraftReady = input.productionQueue.items.filter((item) => item.category === category && item.status === "draft_ready").length;
+    const categoryMetricoolQueued = input.metricoolExecutionQueue.items.filter((item) => item.status === "queued_for_approval" && item.accountId.includes(category === "sports" ? "sports" : category === "memes" ? "meme" : "streamer")).length;
+    const connectedMetricoolProfiles = input.metricoolPublishing.channels
+      .filter((channel) => channel.category === category)
+      .reduce((sum, channel) => sum + channel.connectedProfiles, 0);
+    const targetWeekly = categoryTargets[category];
+    return {
+      category,
+      label: categoryLabelsForBackend(category),
+      targetWeeklyClips: targetWeekly,
+      currentSourceReady,
+      exactUrls: categoryExactUrls,
+      rightsApproved: categoryRightsApproved,
+      recreateOnly: categoryRecreateOnly,
+      draftReady: categoryDraftReady,
+      metricoolApprovalQueued: categoryMetricoolQueued,
+      connectedMetricoolProfiles,
+      nextStep: targetWeekly === 0
+        ? "Mantener en espera hasta conectar cuenta/source/derechos."
+        : currentSourceReady < Math.ceil(targetWeekly * 1.3)
+          ? `Faltan source assets con derechos para ${categoryLabelsForBackend(category)}.`
+          : categoryMetricoolQueued < Math.floor(targetWeekly / 7)
+            ? "Preparar Draft Specs y Metricool approval queue."
+            : "Categoria lista para escalar con approval_required.",
+    };
+  });
+  const totals: ClipperWeeklyProductionFunnelSummary["totals"] = {
+    scoutLeads: input.sourceScout.totals.candidates,
+    exactUrls,
+    rightsApproved,
+    recreateOnly,
+    sourceFilesReady: sourceAssetsReady.length,
+    draftReady,
+    metricoolApprovalQueued,
+    blockedRights,
+    blockedSourceFile,
+    publishedCount: input.metrics.totals.clips,
+    dailyScoutTarget: 45,
+    dailyExactUrlTarget: 30,
+    dailyRightsTarget: 20,
+    dailySourceReadyTarget: 15,
+    dailyMetricoolTargetMin: 14,
+    dailyMetricoolTargetMax: 16,
+  };
+  const bottlenecks: ClipperWeeklyProductionFunnelBottleneck[] = [
+    totals.exactUrls < totals.dailyExactUrlTarget ? {
+      id: "exact_urls",
+      label: "Exact URL intake",
+      severity: "critical",
+      current: totals.exactUrls,
+      target: totals.dailyExactUrlTarget,
+      nextStep: "Run exact URL intake; discovery_search does not count as an exact source.",
+    } : null,
+    totals.blockedRights > totals.rightsApproved ? {
+      id: "rights",
+      label: "Rights/recreate decisions",
+      severity: "critical",
+      current: totals.rightsApproved + totals.recreateOnly,
+      target: totals.dailyRightsTarget,
+      nextStep: "Record rights evidence, request permission, or mark recreate_only with an owned-asset plan.",
+    } : null,
+    totals.sourceFilesReady < 30 || totals.blockedSourceFile > 0 ? {
+      id: "source_files",
+      label: "Source files",
+      severity: totals.sourceFilesReady < 30 ? "critical" : "high",
+      current: totals.sourceFilesReady,
+      target: 130,
+      nextStep: "Upload/generate source assets with proof; blocked_source_file does not count as draft-ready.",
+    } : null,
+    totals.metricoolApprovalQueued < totals.dailyMetricoolTargetMin && totals.sourceFilesReady > 0 ? {
+      id: "metricool",
+      label: "Metricool approval queue",
+      severity: "high",
+      current: totals.metricoolApprovalQueued,
+      target: totals.dailyMetricoolTargetMin,
+      nextStep: "Prepare Metricool queue after source/draft gates pass; queued is not published.",
+    } : null,
+    input.metricoolPublishing.totals.connectedProfiles < input.metricoolPublishing.totals.requiredProfiles ? {
+      id: "accounts",
+      label: "Connected accounts",
+      severity: "watch",
+      current: input.metricoolPublishing.totals.connectedProfiles,
+      target: input.metricoolPublishing.totals.requiredProfiles,
+      nextStep: "Connect missing profiles in Metricool when Robert finishes account setup.",
+    } : null,
+    input.metrics.status !== "ready" ? {
+      id: "metrics",
+      label: "Metrics reporting",
+      severity: "watch",
+      current: input.metrics.totals.clips,
+      target: targetWeeklyClips,
+      nextStep: "Import Metricool/platform analytics after posting to optimize hooks and windows.",
+    } : null,
+  ].filter((item): item is ClipperWeeklyProductionFunnelBottleneck => Boolean(item))
+    .sort((left, right) => {
+      const weight = { critical: 0, high: 1, watch: 2 };
+      return weight[left.severity] - weight[right.severity];
+    });
+  const status = weeklyFunnelStatus(totals.sourceFilesReady, dailyQueueActive, approvalQueueStable);
+  const topCategory = categoryRows.slice().sort((a, b) => b.currentSourceReady - a.currentSourceReady)[0];
+  const topClip = input.metrics.topClips[0] || null;
+  const bestWindow = input.metrics.records.reduce<Record<string, number>>((sum, record) => {
+    const hour = record.publishedAt ? new Date(record.publishedAt).getHours() : -1;
+    if (hour >= 0) sum[String(hour)] = (sum[String(hour)] || 0) + record.views;
+    return sum;
+  }, {});
+  const bestHour = Object.entries(bestWindow).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const generatedAt = await stat(WEEKLY_PRODUCTION_FUNNEL_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  return {
+    status,
+    generatedAt,
+    manifestPath: WEEKLY_PRODUCTION_FUNNEL_PATH,
+    markdownPath: WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH,
+    csvPath: WEEKLY_PRODUCTION_FUNNEL_CSV_PATH,
+    targetWeeklyClips,
+    targetDailyClips,
+    totals,
+    categoryRows,
+    bottlenecks,
+    dailyReport: {
+      clipsTargetToday: weeklyFunnelTodayTarget(targetDailyClips),
+      candidatesFound: totals.scoutLeads,
+      exactUrls: totals.exactUrls,
+      rightsApprovedOrRecreateOnly: totals.rightsApproved + totals.recreateOnly,
+      sourceFilesReady: totals.sourceFilesReady,
+      metricoolApprovalQueue: totals.metricoolApprovalQueued,
+      published: totals.publishedCount,
+      biggestBlocker: weeklyFunnelBiggestBlocker(bottlenecks),
+      tomorrowAction: bottlenecks[0]?.nextStep || "Keep filling approval_required queue and import metrics.",
+    },
+    weeklyReport: {
+      viewsPerAccount: input.metrics.accountPerformance.map((account) => ({ accountId: account.accountId, accountName: account.accountName, views: account.views })),
+      clipsPostedPerAccount: input.metrics.accountPerformance.map((account) => ({ accountId: account.accountId, accountName: account.accountName, clips: account.clips })),
+      bestCategory: topCategory?.label || "none",
+      bestHookPattern: topClip?.hook || "No posted clips yet.",
+      bestPostingWindow: bestHour ? `${bestHour}:00` : "No posting window data yet.",
+      worstBlocker: weeklyFunnelBiggestBlocker(bottlenecks),
+      nextWeekVolumeTarget: status === "scaling" ? 125 : targetWeeklyClips,
+    },
+    nextStep: bottlenecks[0]?.nextStep || "Weekly funnel is ready; keep Metricool approval_required and scale source-ready inventory.",
+  };
+}
+
+function renderWeeklyProductionFunnelMarkdown(summary: ClipperWeeklyProductionFunnelSummary): string {
+  return [
+    "# Clippers Weekly 100 Clips Funnel",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Target weekly clips: ${summary.targetWeeklyClips}`,
+    `CSV: ${summary.csvPath}`,
+    "",
+    "## Funnel",
+    "",
+    `- Scout leads: ${summary.totals.scoutLeads}`,
+    `- Exact URLs: ${summary.totals.exactUrls}`,
+    `- Rights approved: ${summary.totals.rightsApproved}`,
+    `- Recreate only: ${summary.totals.recreateOnly}`,
+    `- Source files ready: ${summary.totals.sourceFilesReady}`,
+    `- Draft ready: ${summary.totals.draftReady}`,
+    `- Metricool approval queued: ${summary.totals.metricoolApprovalQueued}`,
+    `- Blocked rights: ${summary.totals.blockedRights}`,
+    `- Blocked source file: ${summary.totals.blockedSourceFile}`,
+    `- Published count: ${summary.totals.publishedCount}`,
+    "",
+    "## Daily Report",
+    "",
+    `- Clips target today: ${summary.dailyReport.clipsTargetToday}`,
+    `- Candidates found: ${summary.dailyReport.candidatesFound}`,
+    `- Exact URLs: ${summary.dailyReport.exactUrls}`,
+    `- Rights approved/recreate_only: ${summary.dailyReport.rightsApprovedOrRecreateOnly}`,
+    `- Source files ready: ${summary.dailyReport.sourceFilesReady}`,
+    `- Metricool approval queue: ${summary.dailyReport.metricoolApprovalQueue}`,
+    `- Published: ${summary.dailyReport.published}`,
+    `- Biggest blocker: ${summary.dailyReport.biggestBlocker}`,
+    `- Tomorrow action: ${summary.dailyReport.tomorrowAction}`,
+    "",
+    "## Category Split",
+    "",
+    ...summary.categoryRows.flatMap((row) => [
+      `### ${row.label}`,
+      "",
+      `- Target/current: ${row.currentSourceReady}/${row.targetWeeklyClips}`,
+      `- Exact URLs: ${row.exactUrls}`,
+      `- Rights approved: ${row.rightsApproved}`,
+      `- Recreate only: ${row.recreateOnly}`,
+      `- Draft ready: ${row.draftReady}`,
+      `- Metricool approval queued: ${row.metricoolApprovalQueued}`,
+      `- Connected Metricool profiles: ${row.connectedMetricoolProfiles}`,
+      `- Next: ${row.nextStep}`,
+      "",
+    ]),
+    "## Bottlenecks",
+    "",
+    ...(summary.bottlenecks.length ? summary.bottlenecks.flatMap((item) => [
+      `- ${item.label} (${item.severity}): ${item.current}/${item.target}`,
+      `  - Next: ${item.nextStep}`,
+    ]) : ["- none"]),
+    "",
+    "## Weekly Report",
+    "",
+    `- Best category: ${summary.weeklyReport.bestCategory}`,
+    `- Best hook pattern: ${summary.weeklyReport.bestHookPattern}`,
+    `- Best posting window: ${summary.weeklyReport.bestPostingWindow}`,
+    `- Worst blocker: ${summary.weeklyReport.worstBlocker}`,
+    `- Next week volume target: ${summary.weeklyReport.nextWeekVolumeTarget}`,
+    "",
+    "## Product Rule",
+    "",
+    "Metricool remains approval_required. Queued is not published. Discovery search, review_required, and blocked_source_file do not count as ready.",
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+  ].join("\n");
+}
+
+function renderWeeklyProductionFunnelCsv(summary: ClipperWeeklyProductionFunnelSummary): string {
+  const header = ["category", "target_weekly_clips", "current_source_ready", "exact_urls", "rights_approved", "recreate_only", "draft_ready", "metricool_approval_queued", "connected_metricool_profiles", "next_step"];
+  return [
+    header.map(csvCell).join(","),
+    ...summary.categoryRows.map((row) => [
+      row.category,
+      row.targetWeeklyClips,
+      row.currentSourceReady,
+      row.exactUrls,
+      row.rightsApproved,
+      row.recreateOnly,
+      row.draftReady,
+      row.metricoolApprovalQueued,
+      row.connectedMetricoolProfiles,
+      row.nextStep,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
+async function writeWeeklyProductionFunnelArtifacts(summary: ClipperWeeklyProductionFunnelSummary): Promise<ClipperWeeklyProductionFunnelSummary> {
+  const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
+  await writeFile(WEEKLY_PRODUCTION_FUNNEL_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH, renderWeeklyProductionFunnelMarkdown(withGeneratedAt));
+  await writeFile(WEEKLY_PRODUCTION_FUNNEL_CSV_PATH, renderWeeklyProductionFunnelCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+async function readCachedWeeklyProductionFunnelSummary(): Promise<ClipperWeeklyProductionFunnelSummary> {
+  const raw = await readFile(WEEKLY_PRODUCTION_FUNNEL_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperWeeklyProductionFunnelSummary;
+      return {
+        ...parsed,
+        manifestPath: WEEKLY_PRODUCTION_FUNNEL_PATH,
+        markdownPath: WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH,
+        csvPath: WEEKLY_PRODUCTION_FUNNEL_CSV_PATH,
+        categoryRows: Array.isArray(parsed.categoryRows) ? parsed.categoryRows : [],
+        bottlenecks: Array.isArray(parsed.bottlenecks) ? parsed.bottlenecks : [],
+      };
+    } catch {
+      // Fall through.
+    }
+  }
+  return {
+    status: "blocked",
+    generatedAt: null,
+    manifestPath: WEEKLY_PRODUCTION_FUNNEL_PATH,
+    markdownPath: WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH,
+    csvPath: WEEKLY_PRODUCTION_FUNNEL_CSV_PATH,
+    targetWeeklyClips: 100,
+    targetDailyClips: weeklyFunnelDailyTargets(),
+    totals: { scoutLeads: 0, exactUrls: 0, rightsApproved: 0, recreateOnly: 0, sourceFilesReady: 0, draftReady: 0, metricoolApprovalQueued: 0, blockedRights: 0, blockedSourceFile: 0, publishedCount: 0, dailyScoutTarget: 45, dailyExactUrlTarget: 30, dailyRightsTarget: 20, dailySourceReadyTarget: 15, dailyMetricoolTargetMin: 14, dailyMetricoolTargetMax: 16 },
+    categoryRows: [],
+    bottlenecks: [],
+    dailyReport: { clipsTargetToday: weeklyFunnelTodayTarget(), candidatesFound: 0, exactUrls: 0, rightsApprovedOrRecreateOnly: 0, sourceFilesReady: 0, metricoolApprovalQueue: 0, published: 0, biggestBlocker: "source files", tomorrowAction: "Prepare Weekly Production Funnel." },
+    weeklyReport: { viewsPerAccount: [], clipsPostedPerAccount: [], bestCategory: "none", bestHookPattern: "No posted clips yet.", bestPostingWindow: "No posting window data yet.", worstBlocker: "source files", nextWeekVolumeTarget: 100 },
+    nextStep: "Prepare Weekly Production Funnel.",
+  };
+}
+
+export async function prepareClipperWeeklyProductionFunnel(userId = getSystemUserId()): Promise<{ weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const weeklyProductionFunnel = await writeWeeklyProductionFunnelArtifacts(await buildWeeklyProductionFunnelSummary({
+    sourceScout: statusBefore.sourceScout,
+    sourceScoutIntake: statusBefore.sourceScoutIntake,
+    productionQueue: statusBefore.productionQueue,
+    draftSpecs: statusBefore.draftSpecs,
+    metricoolPublishing: statusBefore.metricoolPublishing,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metrics: statusBefore.metrics,
+  }));
+  return { weeklyProductionFunnel, status: await getClipperStatus(userId) };
+}
+
+export async function recordClipperSourceScoutIntake(input: unknown, userId = getSystemUserId()): Promise<{ sourceScoutIntake: ClipperSourceScoutIntakeSummary; trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null; sourceDropImport: ClipperSourceDropImportSummary | null; metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScoutById = new Map(statusBefore.sourceScout.candidates.map((candidate) => [candidate.id, candidate]));
+  const metricoolConnectedByCategoryPlatform = new Set(statusBefore.metricoolPublishing.channels.flatMap((channel) =>
+    channel.connectedNetworks.map((network) => `${channel.category}:${network}`)
+  ));
+  const rows = parseSourceScoutIntakeRows(input);
+  const items: ClipperSourceScoutIntakeItem[] = [];
+
+  for (const record of rows) {
+    const candidateId = firstString(record, ["candidate_id", "candidateId", "id"]) || null;
+    const candidate = candidateId ? sourceScoutById.get(candidateId) || null : null;
+    const category = normalizeTrendCategory(firstString(record, ["category", "vertical", "niche"]) || candidate?.category || "memes");
+    const platform = sourceDiscoveryPlatformFromHint(firstString(record, ["platform", "network"]) || candidate?.platform || "tiktok");
+    const sourceUrl = firstString(record, ["source_url", "url", "video_url", "post_url", "link"]) || candidate?.sourceUrl || "";
+    const rejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
+    const sourceUrlKind: ClipperSourceScoutUrlKind = rejectReason ? "discovery_search" : "exact_video_or_post";
+    const requestedStatus = sourceScoutIntakeRequestedStatus(record);
+    const proofRaw = firstString(record, ["permission_url", "proof_path", "proof", "evidence_path", "evidence_link", "license", "rights_notes", "notes"]);
+    const evidenceTypeRaw = firstString(record, ["evidence_type", "evidenceType", "proof_type", "proofType"]);
+    const notesRaw = firstString(record, ["notes", "rights_notes", "permission_note", "evidence_notes"]);
+    const recreatePlan = firstString(record, ["recreate_plan", "recreatePlan", "remake_plan", "owned_asset_plan"]);
+    let evidencePath: string | null = null;
+    let evidenceType: string | null = null;
+    let evidenceAccepted = false;
+    let rightsStatus: ClipperAssetRightsStatus = "review_required";
+    let decision: ClipperSourceScoutIntakeDecision = "blocked_rights";
+    let publishGate: ClipperSourceScoutCandidate["publishGate"] = "blocked_rights";
+    let nextStep = "Resolver derechos/evidencia antes de source-drop o Metricool.";
+
+    const targetFileName = safeSourceFileName(path.basename(firstString(record, ["target_file_name", "targetFileName", "file_name", "filename"]) || candidate?.targetFileName || `${category}-source-scout.mp4`), `${category}-source-scout`);
+    const requestedSourceDropPath = firstString(record, ["source_drop_path", "sourceDropPath"])
+      || candidate?.sourceDropPath
+      || "";
+    const sourceDropPath = safeSourceDropPathForIntake(category, requestedSourceDropPath, targetFileName);
+    const targetSourcePath = path.join(getSourceFolderForCategory(category), targetFileName);
+    const sourceFileExists = await sourceIntakeFileLooksReady(sourceDropPath);
+    const targetSourceExists = await sourceIntakeFileLooksReady(targetSourcePath);
+
+    if (!rejectReason && requestedStatus === "owned_or_permissioned") {
+      try {
+        const evidence = validateSourceScoutEvidence({
+          requestedStatus,
+          sourceUrlKind,
+          proof: proofRaw,
+          notes: notesRaw || proofRaw,
+          evidenceType: evidenceTypeRaw,
+          sourceFileExists: sourceFileExists || targetSourceExists,
+        });
+        evidencePath = evidence.evidencePath;
+        evidenceType = evidence.evidenceType;
+        evidenceAccepted = true;
+        rightsStatus = "owned_or_permissioned";
+      } catch (error) {
+        decision = "rejected";
+        nextStep = error instanceof Error ? error.message : "owned_or_permissioned requiere proof concreto.";
+      }
+    }
+
+    if (!rejectReason && requestedStatus === "recreate_only") {
+      if (!recreatePlan || hasTemplatePlaceholder(recreatePlan)) {
+        decision = "rejected";
+        nextStep = "recreate_only requiere un plan de recreacion con assets propios/licenciados.";
+      } else {
+        if (evidenceTypeRaw && evidenceTypeRaw !== "recreate_plan_approved") evidenceType = evidenceTypeRaw.toLowerCase();
+        else evidenceType = "recreate_plan_approved";
+        evidencePath = proofRaw && !hasTemplatePlaceholder(proofRaw) && !/^(approved|permissioned|ok|yes|si|sí)$/i.test(proofRaw) ? proofRaw : null;
+        evidenceAccepted = Boolean(evidencePath || recreatePlan);
+        decision = "blocked_source_file";
+        publishGate = "blocked_source_file";
+        nextStep = "Recrear con assets propios/licenciados, subir archivo fuente y guardar proof antes de Metricool.";
+      }
+    }
+
+    if (rejectReason) {
+      decision = "rejected";
+      publishGate = "blocked_rights";
+      nextStep = rejectReason;
+    } else if (requestedStatus === "blocked") {
+      decision = "rejected";
+      publishGate = "blocked_rights";
+      nextStep = "Marcado blocked/no usable; no avanza a produccion.";
+    } else if (requestedStatus === "review_required") {
+      decision = "blocked_rights";
+      publishGate = "blocked_rights";
+      nextStep = "URL exacta guardada; falta permiso/licencia/recreate plan antes de source-drop.";
+    } else if (requestedStatus === "owned_or_permissioned" && evidenceAccepted) {
+      if (sourceFileExists || targetSourceExists) {
+        decision = "ready_for_intake";
+        publishGate = "ready_for_intake";
+        nextStep = "Archivo y proof detectados; import source-drop/production queue puede desbloquear Metricool approval_required.";
+      } else {
+        decision = "blocked_source_file";
+        publishGate = "blocked_source_file";
+        nextStep = `Proof aceptado; falta archivo local usable en ${sourceDropPath}.`;
+      }
+    }
+
+    const title = firstString(record, ["title", "hook", "caption", "description"]) || candidate?.title || targetFileName;
+    const source = firstString(record, ["source", "creator", "handle", "channel", "rightsholder"]) || candidate?.source || "source-scout-intake";
+    const hookAngle = firstString(record, ["angle", "hook_angle", "why_it_works"]) || candidate?.hookAngle || `Exact source intake for ${title}.`;
+    const postedAt = firstString(record, ["posted_at", "published_at", "created_at", "date"]) || null;
+    const views = parseOptionalCount(firstString(record, ["views", "view_count", "plays", "impressions"]));
+    const likes = parseOptionalCount(firstString(record, ["likes", "like_count"]));
+    const comments = parseOptionalCount(firstString(record, ["comments", "comment_count"]));
+    const shares = parseOptionalCount(firstString(record, ["shares", "share_count"]));
+    const viralScore = calculateSourceScoutViralScore({
+      views,
+      likes,
+      comments,
+      shares,
+      postedAt,
+      platform,
+      rightsStatus: requestedStatus,
+      sourceUrlKind,
+    });
+    const item: ClipperSourceScoutIntakeItem = {
+      id: hashId(`${sourceUrl}-${targetFileName}-${Date.now()}-${items.length}`),
+      candidateId,
+      category,
+      platform,
+      title,
+      sourceUrl,
+      sourceUrlKind,
+      source,
+      postedAt,
+      views,
+      likes,
+      comments,
+      shares,
+      viralScore,
+      requestedStatus,
+      rightsStatus,
+      decision,
+      publishGate,
+      targetFileName,
+      sourceDropPath,
+      sourceFileExists,
+      targetSourcePath,
+      targetSourceExists,
+      evidencePath,
+      evidenceType,
+      evidenceAccepted,
+      recreatePlan: recreatePlan || null,
+      metricoolFit: metricoolConnectedByCategoryPlatform.has(`${category}:${platform}`),
+      trendCandidateBatchRow: sourceScoutTrendRow({
+        category,
+        platform,
+        title,
+        sourceUrl,
+        source,
+        rightsStatus,
+        hookAngle,
+      }),
+      sourceDropManifestPath: null,
+      importedSourcePath: null,
+      nextStep,
+      rejectReason,
+    };
+    item.sourceDropManifestPath = await upsertSourceDropManifestForIntake(item);
+    items.push(item);
+  }
+
+  let trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null = null;
+  const trendRows = items.filter((item) => item.sourceUrlKind === "exact_video_or_post" && item.decision !== "rejected");
+  if (trendRows.length) {
+    const batchResult = await recordClipperTrendCandidatesBatch({
+      records: trendRows.map((item) => ({
+        category: item.category,
+        platform: item.platform,
+        title: item.title,
+        url: item.sourceUrl,
+        source: item.source,
+        posted_at: item.postedAt || new Date().toISOString(),
+        views: item.viralScore || item.views || "",
+        likes: item.likes || "",
+        comments: item.comments || "",
+        shares: item.shares || "",
+        rights: item.rightsStatus,
+        angle: item.recreatePlan || item.nextStep,
+      })),
+    }, userId);
+    trendCandidatesBatch = batchResult.trendCandidatesBatch;
+  }
+
+  let sourceDropImport: ClipperSourceDropImportSummary | null = null;
+  if (items.some((item) => item.decision === "ready_for_intake" && item.sourceFileExists && item.sourceDropManifestPath)) {
+    const importResult = await importClipperSourceDropFiles(userId);
+    sourceDropImport = importResult.sourceDropImport;
+    for (const item of items) {
+      const imported = sourceDropImport.items.find((importItem) => path.basename(importItem.sourcePath) === path.basename(item.sourceDropPath || ""));
+      if (imported?.targetPath) item.importedSourcePath = imported.targetPath;
+    }
+  }
+
+  const queueResult = await prepareClipperMetricoolExecutionQueue(userId);
+  const mergedItems = mergeSourceScoutIntakeItems(statusBefore.sourceScoutIntake.items || [], items);
+  const totals = summarizeSourceScoutIntakeItems(mergedItems);
+  const sourceScoutIntake: ClipperSourceScoutIntakeSummary = {
+    status: totals.readyForIntake > 0 ? "ready" : totals.accepted > 0 ? "partial" : "blocked",
+    generatedAt: new Date().toISOString(),
+    manifestPath: SOURCE_SCOUT_INTAKE_PATH,
+    markdownPath: SOURCE_SCOUT_INTAKE_MARKDOWN_PATH,
+    csvPath: SOURCE_SCOUT_INTAKE_CSV_PATH,
+    items: mergedItems,
+    totals,
+    nextStep: totals.readyForIntake > 0
+      ? "Regenerar Production Queue/Draft Specs y revisar Metricool approval_required; real publish sigue off."
+      : totals.blockedSourceFile > 0
+        ? "Subir archivos fuente faltantes a source-drop o crear assets propios para recreate_only."
+        : "Pegar proof real o recreate plan aceptable para desbloquear los candidatos exactos.",
+  };
+  await writeSourceScoutIntakeArtifacts(sourceScoutIntake);
+  return { sourceScoutIntake, trendCandidatesBatch, sourceDropImport, metricoolExecutionQueue: queueResult.metricoolExecutionQueue, status: await getClipperStatus(userId) };
+}
+
 async function readCachedSourceDropDiagnosticSummary(): Promise<ClipperSourceDropDiagnosticSummary> {
   const raw = await readFile(SOURCE_DROP_DIAGNOSTIC_PATH, "utf8").catch(() => null);
   if (raw) {
@@ -9364,8 +12382,14 @@ async function readCachedSourceDropDiagnosticSummary(): Promise<ClipperSourceDro
         dropDir: parsed.dropDir || SOURCE_DROP_DIR,
         files: Array.isArray(parsed.files) ? parsed.files : [],
         manifests: Array.isArray(parsed.manifests) ? parsed.manifests : [],
-        categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-        totals: parsed.totals || {
+        categories: Array.isArray(parsed.categories) ? parsed.categories.map((category) => ({
+          ...category,
+          invalidSourceAssets: category.invalidSourceAssets || 0,
+        })) : [],
+        totals: parsed.totals ? {
+          ...parsed.totals,
+          invalidSourceAssets: parsed.totals.invalidSourceAssets || 0,
+        } : {
           files: 0,
           importEligible: 0,
           manifestReady: 0,
@@ -9378,6 +12402,7 @@ async function readCachedSourceDropDiagnosticSummary(): Promise<ClipperSourceDro
           categoriesReady: 0,
           minimumWeeklySourceAssets: 0,
           currentSourceAssets: 0,
+          invalidSourceAssets: 0,
           rightsReadyAssets: 0,
           missingSourceAssets: 0,
         },
@@ -9410,6 +12435,7 @@ async function readCachedSourceDropDiagnosticSummary(): Promise<ClipperSourceDro
       categoriesReady: 0,
       minimumWeeklySourceAssets: 0,
       currentSourceAssets: 0,
+      invalidSourceAssets: 0,
       rightsReadyAssets: 0,
       missingSourceAssets: 0,
     },
@@ -10138,6 +13164,7 @@ async function buildRightsOutreachSummary(sourceHunt: ClipperSourceHuntSummary):
     manifestPath: RIGHTS_OUTREACH_PATH,
     markdownPath: RIGHTS_OUTREACH_MARKDOWN_PATH,
     templatesPath: RIGHTS_OUTREACH_TEMPLATES_PATH,
+    permissionRecordTemplate: "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
     items,
     templates,
     totals,
@@ -10160,6 +13187,8 @@ function renderRightsOutreachMarkdown(summary: ClipperRightsOutreachSummary): st
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    `Completion hint: ${summary.nextStep}`,
     "",
     "## Outreach Items",
     "",
@@ -10434,12 +13463,20 @@ function requirePermissionEvidence(value: string): string {
 }
 
 function requireSourceRightsEvidence(value: string): string {
-  return requireEvidenceSignal(
+  const evidence = requireEvidenceSignal(
     value,
     "Source rights notes",
     /(https?:\/\/|drive|screenshot|captura|email|contract|contrato|license|licencia|allowlist|official source|fuente oficial|owner note|ownership note|proof (?:url|path|id)|evidence (?:url|path|id)|signed|agreement|ticket|case)/i,
     "Drive/proof link, screenshot path, email/contract/license, allowlist entry, official-source proof, owner note, ticket/case, or signed agreement",
   );
+  if (evidenceDropValueLooksPlaceholder(evidence)) {
+    throw new Error("Source rights notes parece placeholder o URL de ejemplo; pega evidencia real verificable.");
+  }
+  const compactEvidence = evidence.trim().toLowerCase().replace(/[.:;\s]+$/g, "");
+  if (/^(ok|yes|approved|aprobado|permissioned|permitted|owned|licensed|license|licencia|owner note|ownership note|allowlist)$/i.test(compactEvidence)) {
+    throw new Error("Source rights notes requiere evidencia concreta, no solo una palabra de estado.");
+  }
+  return evidence;
 }
 
 function firstNumber(record: Record<string, unknown>, keys: string[]): number {
@@ -10617,7 +13654,32 @@ async function findTrendRightsEvidence(title: string, url: string | null): Promi
   return null;
 }
 
-async function normalizeTrendCandidate(rawRecord: Record<string, unknown>, sourceFile: string, index: number): Promise<ClipperTrendCandidate | null> {
+function trendRightsEvidenceSlug(title: string, url: string | null): string {
+  return (url || title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+}
+
+async function buildTrendRightsEvidenceIndex(): Promise<Map<string, string>> {
+  const allowlistDir = path.join(ROOT_DIR, "allowlist");
+  const entries = await readdir(allowlistDir, { withFileTypes: true }).catch(() => []);
+  const evidenceIndex = new Map<string, string>();
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const ext = path.extname(entry.name).toLowerCase();
+    if (ext !== ".md" && ext !== ".json") continue;
+    const slug = path.basename(entry.name, ext).toLowerCase();
+    if (!evidenceIndex.has(slug)) {
+      evidenceIndex.set(slug, path.join(allowlistDir, entry.name));
+    }
+  }
+  return evidenceIndex;
+}
+
+function findTrendRightsEvidenceInIndex(title: string, url: string | null, evidenceIndex?: Map<string, string>): string | null {
+  if (!evidenceIndex) return null;
+  return evidenceIndex.get(trendRightsEvidenceSlug(title, url)) || null;
+}
+
+async function normalizeTrendCandidate(rawRecord: Record<string, unknown>, sourceFile: string, index: number, evidenceIndex?: Map<string, string>): Promise<ClipperTrendCandidate | null> {
   const title = firstString(rawRecord, ["title", "hook", "caption", "description", "topic", "trend"]);
   const url = firstString(rawRecord, ["url", "link", "video_url", "post_url"]) || null;
   if (!title && !url) return null;
@@ -10632,8 +13694,11 @@ async function normalizeTrendCandidate(rawRecord: Record<string, unknown>, sourc
   const comments = firstNumber(rawRecord, ["comments", "comment_count"]);
   const shares = firstNumber(rawRecord, ["shares", "share_count"]);
   const rightsHint = firstString(rawRecord, ["rights", "rights_status", "permission", "license"]).toLowerCase();
-  const evidencePath = await findTrendRightsEvidence(title || url || sourceFile, url);
-  const rightsStatus: ClipperAssetRightsStatus = evidencePath || /owned|licensed|permission|approved|allowlist/.test(rightsHint)
+  const evidencePath = evidenceIndex
+    ? findTrendRightsEvidenceInIndex(title || url || sourceFile, url, evidenceIndex)
+    : await findTrendRightsEvidence(title || url || sourceFile, url);
+  const hasRightsHint = /owned|licensed|permission|approved|allowlist/.test(rightsHint);
+  const rightsStatus: ClipperAssetRightsStatus = evidencePath
     ? "owned_or_permissioned"
     : "review_required";
   const velocityScore = Math.round((views / (ageHours || 24)) + shares * 8 + comments * 2 + likes * 0.5);
@@ -10661,6 +13726,8 @@ async function normalizeTrendCandidate(rawRecord: Record<string, unknown>, sourc
     hookAngle: firstString(rawRecord, ["angle", "hook_angle", "why_it_works"]) || `Recrear con contexto ${categoryLabelsForBackend(category)} y final en loop.`,
     nextStep: rightsStatus === "owned_or_permissioned"
       ? "Mover a source/draft y crear 2 variantes de hook."
+      : hasRightsHint
+        ? "Rights hint detectado, pero falta evidencia local verificable en allowlist; mantener review_required."
       : "Pedir permiso o agregar evidencia en allowlist antes de producir.",
   };
 }
@@ -10669,13 +13736,13 @@ function categoryLabelsForBackend(category: ClipperAccountCategory): string {
   return category === "sports" ? "deportivo" : category === "streamers" ? "streamer" : "meme";
 }
 
-async function readTrendCandidatesFromFile(filePath: string): Promise<{ candidates: ClipperTrendCandidate[]; error: string | null }> {
+async function readTrendCandidatesFromFile(filePath: string, evidenceIndex?: Map<string, string>): Promise<{ candidates: ClipperTrendCandidate[]; error: string | null }> {
   try {
     const raw = await readFile(filePath, "utf8");
     const ext = path.extname(filePath).toLowerCase();
     const rows = ext === ".json" ? parseJsonMetricRecords(raw) : parseCsvRecords(raw);
     const fileName = path.basename(filePath);
-    const candidates = await Promise.all(rows.map((row, index) => normalizeTrendCandidate(row, fileName, index)));
+    const candidates = await Promise.all(rows.map((row, index) => normalizeTrendCandidate(row, fileName, index, evidenceIndex)));
     return {
       candidates: candidates.filter((candidate): candidate is ClipperTrendCandidate => Boolean(candidate)),
       error: null,
@@ -10685,6 +13752,84 @@ async function readTrendCandidatesFromFile(filePath: string): Promise<{ candidat
       candidates: [],
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+function isTrendCandidateInputFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  return [".csv", ".json"].includes(ext) && /^trend-candidates-\d{4}-\d{2}-\d{2}t/i.test(fileName);
+}
+
+function normalizeTrendCandidateUrlForDedupe(value: string): string {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.hostname.includes("youtube.com") && parsed.pathname === "/watch") {
+      const videoId = parsed.searchParams.get("v");
+      parsed.search = videoId ? `?v=${videoId}` : "";
+    } else {
+      parsed.search = "";
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return raw.replace(/#.*$/, "").replace(/\/+$/, "");
+  }
+}
+
+function trendCandidateDedupeKey(input: { url?: string | null; title?: string | null; platform?: string | null; category?: string | null }): string {
+  const url = normalizeTrendCandidateUrlForDedupe(input.url || "");
+  if (url) return `url:${url}`;
+  return [
+    "title",
+    (input.category || "").trim().toLowerCase(),
+    (input.platform || "").trim().toLowerCase(),
+    (input.title || "").trim().toLowerCase().replace(/\s+/g, " "),
+  ].join(":");
+}
+
+function dedupeTrendCandidates(candidates: ClipperTrendCandidate[]): ClipperTrendCandidate[] {
+  const byKey = new Map<string, ClipperTrendCandidate>();
+  for (const candidate of candidates) {
+    const key = trendCandidateDedupeKey(candidate);
+    const existing = byKey.get(key);
+    const candidatePermissioned = candidate.rightsStatus === "owned_or_permissioned";
+    const existingPermissioned = existing?.rightsStatus === "owned_or_permissioned";
+    if (!existing || (candidatePermissioned && !existingPermissioned) || (candidatePermissioned === existingPermissioned && candidate.viralScore > existing.viralScore)) {
+      byKey.set(key, candidate);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+async function readCachedTrendRadarSummary(): Promise<ClipperTrendRadarSummary | null> {
+  const raw = await readFile(TRENDS_SUMMARY_PATH, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ClipperTrendRadarSummary;
+    const files = Array.isArray(parsed.files)
+      ? parsed.files.filter((file) => file && typeof file.fileName === "string" && isTrendCandidateInputFile(file.fileName))
+      : [];
+    const candidates = Array.isArray(parsed.candidates) ? dedupeTrendCandidates(parsed.candidates) : [];
+    const sorted = [...candidates].sort((a, b) => (b.viralScore || 0) - (a.viralScore || 0));
+    return {
+      status: parsed.status || (files.length ? "needs_review" : "empty"),
+      trendsDir: TRENDS_DIR,
+      summaryPath: TRENDS_SUMMARY_PATH,
+      generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
+      files,
+      candidates: sorted,
+      topCandidates: sorted.slice(0, 8),
+      recommendations: Array.isArray(parsed.recommendations) && parsed.recommendations.length
+        ? parsed.recommendations
+        : buildTrendRecommendations(sorted),
+      nextStep: typeof parsed.nextStep === "string" && parsed.nextStep.trim()
+        ? parsed.nextStep
+        : "Refrescar Trend Radar para recalcular candidatos y derechos.",
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -11047,15 +14192,28 @@ async function buildTrendRadarSummary(): Promise<ClipperTrendRadarSummary> {
   const entries = await readdir(TRENDS_DIR, { withFileTypes: true }).catch(() => []);
   const trendFiles = entries
     .filter((entry) => entry.isFile())
-    .filter((entry) => [".csv", ".json"].includes(path.extname(entry.name).toLowerCase()))
-    .filter((entry) => entry.name !== path.basename(TRENDS_SUMMARY_PATH))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((entry) => isTrendCandidateInputFile(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(-TREND_RADAR_MAX_INPUT_FILES);
+  const evidenceIndex = await buildTrendRightsEvidenceIndex();
   const files: ClipperTrendFile[] = [];
   const candidates: ClipperTrendCandidate[] = [];
   for (const file of trendFiles) {
     const filePath = path.join(TRENDS_DIR, file.name);
-    const importedAt = (await stat(filePath)).mtime.toISOString();
-    const result = await readTrendCandidatesFromFile(filePath);
+    const fileStat = await stat(filePath);
+    const importedAt = fileStat.mtime.toISOString();
+    if (fileStat.size < MIN_STALE_TREND_CANDIDATE_BYTES && Date.now() - fileStat.mtimeMs > STALE_TREND_CANDIDATE_GRACE_MS) {
+      files.push({
+        fileName: file.name,
+        path: filePath,
+        records: 0,
+        importedAt,
+        status: "skipped",
+        error: "Skipped stale tiny trend candidate file before read; re-import if still needed.",
+      });
+      continue;
+    }
+    const result = await readTrendCandidatesFromFile(filePath, evidenceIndex);
     candidates.push(...result.candidates);
     files.push({
       fileName: file.name,
@@ -11066,7 +14224,7 @@ async function buildTrendRadarSummary(): Promise<ClipperTrendRadarSummary> {
       error: result.error,
     });
   }
-  const sorted = candidates.sort((a, b) => b.viralScore - a.viralScore);
+  const sorted = dedupeTrendCandidates(candidates).sort((a, b) => b.viralScore - a.viralScore);
   const readyCount = sorted.filter((candidate) => candidate.rightsStatus === "owned_or_permissioned").length;
   return {
     status: files.length === 0 ? "empty" : readyCount > 0 ? "ready" : "needs_review",
@@ -13426,6 +16584,7 @@ function launchEvidenceDropFileAllowed(fileName: string): boolean {
 function launchEvidenceDropFileIgnored(fileName: string): boolean {
   return fileName === "README.md"
     || fileName === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH)
+    || fileName === path.basename(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH)
     || fileName === path.basename(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH)
     || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH);
 }
@@ -22453,9 +25612,9 @@ function officialPermissionSourceAudit(item: ClipperOfficialPermissionMatrixItem
   const loginRequired = item.sourceStatus === "official_login_required" || scope.verificationStatus === "official_login_required";
   const publicEvidence = item.platform === "tiktok"
     ? [
-      "TikTok public Direct Post API reference exposes Content Posting API flow, video.publish scope, user authorization and unaudited-client visibility restrictions.",
+      "TikTok public Content Posting API documentation exposes the registered app/product setup, video.publish authorization, and unaudited-client visibility restrictions for Direct Post.",
       scope.scope === "video.upload"
-        ? "TikTok public Content Posting API navigation separates Upload from Direct Post; final video.upload scope availability still needs portal confirmation before use."
+        ? "TikTok public scopes reference lists video.upload as the draft/upload scope; keep it as fallback until Direct Post is approved for public posting."
         : "TikTok public Direct Post API reference lists video.publish as the required Direct Post scope.",
     ]
     : item.platform === "youtube"
@@ -22481,8 +25640,8 @@ function officialPermissionSourceProofPack(item: ClipperOfficialPermissionMatrix
   if (item.platform === "tiktok") {
     const verifiedClaims = scope.scope === "video.upload"
       ? [
-        "Official TikTok Content Posting API navigation lists Upload separately from Direct Post.",
-        "The video.upload fallback must be confirmed in the TikTok developer portal before requesting.",
+        "Official TikTok scopes reference lists video.upload as sharing content as a draft.",
+        "Use video.upload as the safer draft/upload fallback while Direct Post remains under review.",
         "Use this only as fallback until Direct Post/public visibility audit is complete.",
       ]
       : [
@@ -24018,16 +27177,95 @@ export async function prepareClipperMetricoolPublishingPlan(userId = getSystemUs
   return { metricoolPublishing, status: await getClipperStatus(userId) };
 }
 
-function buildMetricoolExecutionQueueSummary(input: {
+function buildMetricoolSourceReadinessSummary(input: {
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  sourceAcquisition: ClipperSourceAcquisitionSummary;
+}): ClipperMetricoolSourceReadinessSummary {
+  const categoriesByName = new Map(input.sourceAcquisition.categories.map((category) => [category.category, category]));
+  const categories = input.metricoolPublishing.channels
+    .filter((channel) => channel.publishGate === "approval_required_ready" && channel.connectedNetworks.length > 0)
+    .map<ClipperMetricoolSourceReadinessCategory>((channel) => {
+      const sourceCategory = categoriesByName.get(channel.category);
+      const minimumWeeklySourceAssets = sourceCategory?.minimumWeeklySourceAssets || Math.ceil((channel.dailyClipTarget * 7) / 3);
+      const rightsReadyAssets = sourceCategory?.rightsReadyAssets || 0;
+      const missingSourceAssets = Math.max(0, minimumWeeklySourceAssets - rightsReadyAssets);
+      return {
+        accountId: channel.accountId,
+        accountName: channel.accountName,
+        category: channel.category,
+        connectedNetworks: channel.connectedNetworks,
+        dailyClipTarget: channel.dailyClipTarget,
+        weeklyTargetClips: channel.dailyClipTarget * 7,
+        minimumWeeklySourceAssets,
+        rightsReadyAssets,
+        missingSourceAssets,
+        sourceDropDir: path.join(SOURCE_DROP_DIR, channel.category),
+        nextStep: missingSourceAssets > 0
+          ? `Agregar ${missingSourceAssets} source asset(s) con derechos para ${channel.accountName} en ${path.join(SOURCE_DROP_DIR, channel.category)}.`
+          : `${channel.accountName} tiene source assets suficientes para el primer launch Metricool.`,
+      };
+    });
+  const totals = categories.reduce<ClipperMetricoolSourceReadinessSummary["totals"]>((sum, category) => {
+    sum.accounts += 1;
+    sum.connectedNetworks += category.connectedNetworks.length;
+    sum.dailyClipTarget += category.dailyClipTarget;
+    sum.weeklyTargetClips += category.weeklyTargetClips;
+    sum.minimumWeeklySourceAssets += category.minimumWeeklySourceAssets;
+    sum.rightsReadyAssets += category.rightsReadyAssets;
+    sum.missingSourceAssets += category.missingSourceAssets;
+    return sum;
+  }, {
+    accounts: 0,
+    connectedNetworks: 0,
+    dailyClipTarget: 0,
+    weeklyTargetClips: 0,
+    minimumWeeklySourceAssets: 0,
+    rightsReadyAssets: 0,
+    missingSourceAssets: 0,
+  });
+  return {
+    status: totals.missingSourceAssets === 0 && totals.accounts > 0 ? "ready" : "blocked",
+    categories,
+    totals,
+    nextStep: totals.accounts === 0
+      ? "Conectar al menos una cuenta/red en Metricool antes de calcular source readiness."
+      : totals.missingSourceAssets > 0
+        ? `Agregar ${totals.missingSourceAssets} source asset(s) rights-ready para cubrir el primer launch Metricool.`
+        : "Source readiness listo para la cola Metricool; preparar drafts y approval queue.",
+  };
+}
+
+async function metricoolSourceGate(sourcePath: string | null, blockedBySource: boolean): Promise<{ done: boolean; evidence: string }> {
+  if (!sourcePath || blockedBySource) return { done: false, evidence: sourcePath || "Missing source video." };
+  try {
+    const fileStat = await stat(sourcePath);
+    const ext = path.extname(sourcePath).toLowerCase();
+    if (!VIDEO_EXTENSIONS.has(ext)) return { done: false, evidence: `Unsupported source extension ${ext || "none"}.` };
+    if (!(await sourceFileLooksUsableVideo(sourcePath, fileStat))) {
+      return { done: false, evidence: "Source path exists but is not a usable video file; replace placeholder/stub media first." };
+    }
+    return { done: true, evidence: sourcePath };
+  } catch {
+    return { done: false, evidence: `Source file missing: ${sourcePath}` };
+  }
+}
+
+async function buildMetricoolExecutionQueueSummary(input: {
   automation: ClipperAutomationSummary;
   metricoolPublishing: ClipperMetricoolPublishingSummary;
-}): ClipperMetricoolExecutionQueueSummary {
+  sourceAcquisition: ClipperSourceAcquisitionSummary;
+  productionQueue: ClipperProductionQueueSummary;
+}): Promise<ClipperMetricoolExecutionQueueSummary> {
   const latestRun = input.automation.lastRun;
-  const realPublishEnabled = process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true" && process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH === "false";
+  const realPublishEnabled = false;
+  const approvalQueueTarget = 14;
+  const sourceReadiness = buildMetricoolSourceReadinessSummary({
+    metricoolPublishing: input.metricoolPublishing,
+    sourceAcquisition: input.sourceAcquisition,
+  });
   const channels = new Map(input.metricoolPublishing.channels.map((channel) => [channel.accountId, channel]));
-  const items = (latestRun?.posts || []).flatMap<ClipperMetricoolExecutionQueueItem>((post) => {
-    const channel = channels.get(post.accountId);
-    if (!channel || !channel.connectedNetworks.includes(post.platform)) return [];
+  const postToMetricoolItem = async (post: ClipperScheduledPost, channel: ClipperMetricoolPublishingChannel): Promise<ClipperMetricoolExecutionQueueItem> => {
+    const sourceGate = await metricoolSourceGate(post.sourcePath, post.status === "blocked_source");
     const gates = [
       {
         id: "metricool-brand",
@@ -24043,9 +27281,9 @@ function buildMetricoolExecutionQueueSummary(input: {
       },
       {
         id: "source",
-        label: "Source video ready",
-        done: Boolean(post.sourcePath) && post.status !== "blocked_source",
-        evidence: post.sourcePath || "Missing source video.",
+        label: "Source video usable",
+        done: sourceGate.done,
+        evidence: sourceGate.evidence,
       },
       {
         id: "rights",
@@ -24056,17 +27294,15 @@ function buildMetricoolExecutionQueueSummary(input: {
       {
         id: "approval",
         label: "Human approval required",
-        done: latestRun?.publishMode !== "auto_after_connection" || !realPublishEnabled,
-        evidence: "Metricool queue remains approval_required unless real publish is explicitly enabled and approval requirement disabled.",
+        done: true,
+        evidence: "Metricool queue remains approval_required; real publishing is disabled for Clippers.",
       },
     ];
     const blockers = gates.filter((gate) => !gate.done).map((gate) => `${gate.label}: ${gate.evidence}`);
     const status: ClipperMetricoolExecutionQueueItem["status"] = blockers.length > 0
       ? "blocked"
-      : realPublishEnabled && latestRun?.publishMode === "auto_after_connection"
-        ? "ready_to_send"
-        : "queued_for_approval";
-    return [{
+      : "queued_for_approval";
+    return {
       id: hashId(`metricool-${post.id}-${channel.metricoolBlogId || channel.metricoolBrandId}`),
       postId: post.id,
       queueItemId: post.queueItemId,
@@ -24074,8 +27310,8 @@ function buildMetricoolExecutionQueueSummary(input: {
       accountName: post.accountName,
       platform: post.platform,
       status,
-      approvalRequired: status !== "ready_to_send",
-      canSendNow: status === "ready_to_send",
+      approvalRequired: true,
+      canSendNow: false,
       metricoolBrandName: channel.metricoolBrandName,
       metricoolBlogId: channel.metricoolBlogId,
       publishAt: post.publishAt,
@@ -24100,11 +27336,46 @@ function buildMetricoolExecutionQueueSummary(input: {
       blockers,
       nextStep: status === "blocked"
         ? blockers[0] || "Resolver bloqueos antes de enviar a Metricool."
-        : status === "ready_to_send"
-          ? "Listo para envio real por Metricool si el operador confirma."
-          : "Revisar video/caption/derechos y aprobar en cola Metricool.",
-    }];
-  });
+        : "Revisar video/caption/derechos y aprobar en cola Metricool.",
+    };
+  };
+  const itemCandidates = await Promise.all((latestRun?.posts || []).map(async (post): Promise<ClipperMetricoolExecutionQueueItem | null> => {
+    const channel = channels.get(post.accountId);
+    if (!channel || !channel.connectedNetworks.includes(post.platform)) return null;
+    return postToMetricoolItem(post, channel);
+  }));
+  const items = itemCandidates.filter((item): item is ClipperMetricoolExecutionQueueItem => Boolean(item));
+  const queuedKeys = new Set(items.map((item) => `${item.queueItemId}:${item.platform}`));
+  let queuedForApprovalCount = items.filter((item) => item.status === "queued_for_approval").length;
+  for (const queueItem of input.productionQueue.items) {
+    if (queuedForApprovalCount >= approvalQueueTarget) break;
+    if (queueItem.status !== "draft_ready") continue;
+    const channel = channels.get(queueItem.accountId);
+    if (!channel) continue;
+    for (const platform of queueItem.platforms.map(normalizePlatformLabel).filter((item): item is ClipperPlatform => Boolean(item))) {
+      if (queuedForApprovalCount >= approvalQueueTarget) break;
+      if (!channel.connectedNetworks.includes(platform)) continue;
+      const key = `${queueItem.id}:${platform}`;
+      if (queuedKeys.has(key)) continue;
+      const item = await postToMetricoolItem({
+        id: hashId(`metricool-supplement-${queueItem.id}-${platform}`),
+        queueItemId: queueItem.id,
+        accountId: queueItem.accountId,
+        accountName: queueItem.accountName,
+        platform,
+        status: "ready_for_manual",
+        publishAt: buildPublishDate(queueItem.publishWindow, items.length),
+        sourcePath: queueItem.sourcePath,
+        hook: queueItem.hook,
+        captionSeed: buildCaptionSeed(queueItem, platform),
+        blocker: null,
+        nextStep: "Revisar y aprobar manualmente antes de publicar.",
+      }, channel);
+      items.push(item);
+      queuedKeys.add(key);
+      if (item.status === "queued_for_approval") queuedForApprovalCount += 1;
+    }
+  }
   const totals = items.reduce<ClipperMetricoolExecutionQueueSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.status === "blocked") sum.blocked += 1;
@@ -24117,9 +27388,7 @@ function buildMetricoolExecutionQueueSummary(input: {
     ? "not_prepared"
     : totals.items === 0
       ? "blocked"
-      : totals.readyToSend > 0 && totals.blocked === 0
-        ? "ready"
-        : totals.queuedForApproval > 0
+      : totals.queuedForApproval > 0
           ? "approval_required"
           : "blocked";
   return {
@@ -24131,6 +27400,7 @@ function buildMetricoolExecutionQueueSummary(input: {
     sourceAutomationRunId: latestRun?.id || null,
     publishMode: latestRun?.publishMode || "approval_required",
     realPublishEnabled,
+    sourceReadiness,
     items,
     totals,
     nextStep: !latestRun
@@ -24156,6 +27426,23 @@ function renderMetricoolExecutionQueueMarkdown(summary: ClipperMetricoolExecutio
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Source Readiness",
+    "",
+    `Status: ${summary.sourceReadiness.status}`,
+    `Accounts: ${summary.sourceReadiness.totals.accounts}`,
+    `Connected networks: ${summary.sourceReadiness.totals.connectedNetworks}`,
+    `Daily target: ${summary.sourceReadiness.totals.dailyClipTarget}`,
+    `Weekly target clips: ${summary.sourceReadiness.totals.weeklyTargetClips}`,
+    `Rights-ready assets: ${summary.sourceReadiness.totals.rightsReadyAssets}/${summary.sourceReadiness.totals.minimumWeeklySourceAssets}`,
+    `Missing source assets: ${summary.sourceReadiness.totals.missingSourceAssets}`,
+    `Next: ${summary.sourceReadiness.nextStep}`,
+    "",
+    ...summary.sourceReadiness.categories.flatMap((category) => [
+      `- ${category.accountName} (${category.category}/${category.connectedNetworks.join(", ")}): ${category.rightsReadyAssets}/${category.minimumWeeklySourceAssets} assets ready; missing ${category.missingSourceAssets}.`,
+      `  - Drop dir: ${category.sourceDropDir}`,
+      `  - Next: ${category.nextStep}`,
+    ]),
     "",
     "## Items",
     "",
@@ -24227,17 +27514,36 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as ClipperMetricoolExecutionQueueSummary;
+      const items = (Array.isArray(parsed.items) ? parsed.items : []).map((item) => ({
+        ...item,
+        status: item.status === "ready_to_send" ? "queued_for_approval" : item.status,
+        approvalRequired: true,
+        canSendNow: false,
+      }));
+      const totals = items.reduce<ClipperMetricoolExecutionQueueSummary["totals"]>((sum, item) => {
+        sum.items += 1;
+        if (item.status === "blocked") sum.blocked += 1;
+        if (item.status === "queued_for_approval") sum.queuedForApproval += 1;
+        if (item.approvalRequired) sum.approvalRequired += 1;
+        return sum;
+      }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
       return {
-        status: parsed.status || "not_prepared",
+        status: parsed.status === "ready" ? "approval_required" : parsed.status || "not_prepared",
         generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
         manifestPath: METRICOOL_EXECUTION_QUEUE_PATH,
         markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
         csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
         sourceAutomationRunId: parsed.sourceAutomationRunId || null,
         publishMode: parsed.publishMode || "approval_required",
-        realPublishEnabled: Boolean(parsed.realPublishEnabled),
-        items: Array.isArray(parsed.items) ? parsed.items : [],
-        totals: parsed.totals || { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
+        realPublishEnabled: false,
+        sourceReadiness: parsed.sourceReadiness || {
+          status: "blocked",
+          categories: [],
+          totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+          nextStep: "Regenerar cola Metricool para calcular source readiness.",
+        },
+        items,
+        totals,
         nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Preparar cola Metricool.",
       };
     } catch {
@@ -24253,6 +27559,12 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
     sourceAutomationRunId: null,
     publishMode: "approval_required",
     realPublishEnabled: false,
+    sourceReadiness: {
+      status: "blocked",
+      categories: [],
+      totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+      nextStep: "Preparar Metricool publishing y source acquisition antes de generar la cola.",
+    },
     items: [],
     totals: { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
     nextStep: "Correr ciclo diario y preparar Metricool publishing antes de generar la cola.",
@@ -24263,9 +27575,11 @@ export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUs
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const statusBefore = await getClipperStatus(userId);
-  const draftSummary = buildMetricoolExecutionQueueSummary({
+  const draftSummary = await buildMetricoolExecutionQueueSummary({
     automation: statusBefore.automation,
     metricoolPublishing: statusBefore.metricoolPublishing,
+    sourceAcquisition: statusBefore.sourceAcquisition,
+    productionQueue: statusBefore.productionQueue,
   });
   const metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary = {
     ...draftSummary,
@@ -24275,6 +27589,542 @@ export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUs
   await writeFile(METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH, renderMetricoolExecutionQueueMarkdown(metricoolExecutionQueue));
   await writeFile(METRICOOL_EXECUTION_QUEUE_CSV_PATH, renderMetricoolExecutionQueueCsv(metricoolExecutionQueue));
   return { metricoolExecutionQueue, status: await getClipperStatus(userId) };
+}
+
+function buildMetricoolMvpLaunchPackSummary(input: {
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  publishingPackage: ClipperPublishingPackageSummary;
+  accountEvidence: ClipperAccountEvidenceSummary;
+  developerAppEvidence: ClipperDeveloperAppEvidenceSummary;
+  permissionTracker: ClipperPermissionTrackerSummary;
+}): ClipperMetricoolMvpLaunchSummary {
+  const sourceReadinessByAccount = new Map(input.metricoolExecutionQueue.sourceReadiness.categories.map((category) => [category.accountId, category]));
+  const rows = input.metricoolPublishing.channels.map<ClipperMetricoolMvpLaunchAccountRow>((channel) => {
+    const sourceReadiness = sourceReadinessByAccount.get(channel.accountId) || null;
+    const queuedForApproval = input.metricoolExecutionQueue.items.filter((item) =>
+      item.accountId === channel.accountId && item.status === "queued_for_approval"
+    ).length;
+    const manualPackageReadyPosts = input.publishingPackage.items.filter((item) =>
+      item.accountId === channel.accountId
+      && (item.status === "ready_for_manual" || item.status === "scheduled")
+      && channel.connectedNetworks.includes(item.platform)
+    ).length;
+    const manualReadyPosts = Math.max(queuedForApproval, manualPackageReadyPosts);
+    const primaryNetwork = channel.connectedNetworks[0] || null;
+    const blockers = [
+      channel.publishGate !== "approval_required_ready" ? `Metricool channel blocked: ${channel.blockers[0] || channel.nextStep}` : null,
+      !primaryNetwork ? "No connected Metricool profile for MVP account." : null,
+      !sourceReadiness || sourceReadiness.missingSourceAssets > 0 ? `Missing source assets: ${sourceReadiness?.missingSourceAssets ?? "unknown"}.` : null,
+      queuedForApproval === 0 ? "No approval queue items for this Metricool account." : null,
+      input.metricoolExecutionQueue.realPublishEnabled ? "realPublishEnabled must remain false for MVP approval mode." : null,
+    ].filter((item): item is string => Boolean(item));
+    return {
+      accountId: channel.accountId,
+      accountName: channel.accountName,
+      category: channel.category,
+      metricoolBrandName: channel.metricoolBrandName,
+      metricoolBlogId: channel.metricoolBlogId,
+      connectedNetworks: channel.connectedNetworks,
+      primaryNetwork,
+      dailyClipTarget: channel.dailyClipTarget,
+      weeklyTargetClips: channel.dailyClipTarget * 7,
+      rightsReadyAssets: sourceReadiness?.rightsReadyAssets || 0,
+      minimumWeeklySourceAssets: sourceReadiness?.minimumWeeklySourceAssets || 0,
+      queuedForApproval,
+      manualReadyPosts,
+      status: blockers.length ? "blocked" : "ready_for_review",
+      blockers,
+      nextStep: blockers[0] || `Open Metricool brand "${channel.metricoolBrandName}", review queued ${primaryNetwork} clips, approve/schedule manually, then export metrics after 24h.`,
+    };
+  });
+  const fullAutomationStillBlockedBy = [
+    input.developerAppEvidence.totals.approved < input.developerAppEvidence.totals.expected
+      ? `${input.developerAppEvidence.totals.missing} developer app(s) still missing/unfinished for direct API publishing.`
+      : null,
+    input.permissionTracker.totals.approved < input.permissionTracker.totals.permissions
+      ? `${input.permissionTracker.totals.blocked} platform permission request(s) still blocked for direct API publishing.`
+      : null,
+    input.accountEvidence.totals.verified < input.accountEvidence.totals.expected
+      ? `${input.accountEvidence.totals.missing} account proof item(s) still missing for full multi-platform launch.`
+      : null,
+    input.metricoolPublishing.totals.connectedProfiles < input.metricoolPublishing.totals.requiredProfiles
+      ? `${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} Metricool profiles connected; IG/YT expansion still pending.`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+  const totals = rows.reduce<ClipperMetricoolMvpLaunchSummary["totals"]>((sum, row) => {
+    sum.accounts += 1;
+    if (row.status === "ready_for_review") sum.readyAccounts += 1;
+    else sum.blockedAccounts += 1;
+    sum.connectedProfiles += row.connectedNetworks.length;
+    sum.queuedForApproval += row.queuedForApproval;
+    sum.manualReadyPosts += row.manualReadyPosts;
+    sum.rightsReadyAssets += row.rightsReadyAssets;
+    sum.minimumWeeklySourceAssets += row.minimumWeeklySourceAssets;
+    return sum;
+  }, {
+    accounts: 0,
+    readyAccounts: 0,
+    blockedAccounts: 0,
+    connectedProfiles: 0,
+    queuedForApproval: 0,
+    manualReadyPosts: 0,
+    rightsReadyAssets: 0,
+    minimumWeeklySourceAssets: 0,
+    fullAutomationBlockers: fullAutomationStillBlockedBy.length,
+  });
+  const status: ClipperMetricoolMvpLaunchStatus = totals.accounts > 0 && totals.blockedAccounts === 0 && totals.queuedForApproval > 0
+    ? "ready_for_review"
+    : "blocked";
+  return {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_MVP_LAUNCH_PATH,
+    markdownPath: METRICOOL_MVP_LAUNCH_MARKDOWN_PATH,
+    csvPath: METRICOOL_MVP_LAUNCH_CSV_PATH,
+    mode: "metricool_approval_required_mvp",
+    primaryBridge: "metricool",
+    directPlatformApisNeeded: false,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    targetAccounts: rows.map((row) => row.accountName),
+    rows,
+    totals,
+    fullAutomationStillBlockedBy,
+    guardrails: [
+      "This pack is for Metricool approval_required review only; it does not auto-publish.",
+      "Do not count queued_for_approval as published; import post URLs/metrics only after manual approval/posting.",
+      "Do not enable direct platform publishing until account proof, developer apps, scopes and permissions are verified.",
+      "Use only rights-ready local source assets; blocked rights/source items stay out of the MVP queue.",
+    ],
+    nextStep: status === "ready_for_review"
+      ? `Open Metricool and review ${totals.queuedForApproval} queued TikTok clips for ${rows.map((row) => row.metricoolBrandName).join(", ")}.`
+      : rows.find((row) => row.status === "blocked")?.nextStep || "Prepare Metricool publishing plan and execution queue.",
+  };
+}
+
+function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunchSummary): string {
+  return [
+    "# Clippers Metricool MVP Launch Pack",
+    "",
+    "MVP path for SPORT and memes through Metricool approval_required. This is separate from full direct-API autopublishing.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt}`,
+    `Mode: ${summary.mode}`,
+    `Primary bridge: ${summary.primaryBridge}`,
+    `Direct platform APIs needed for MVP: ${summary.directPlatformApisNeeded ? "yes" : "no"}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    "",
+    "## Totals",
+    "",
+    `- Accounts: ${summary.totals.readyAccounts}/${summary.totals.accounts} ready`,
+    `- Connected profiles: ${summary.totals.connectedProfiles}`,
+    `- Queued for approval: ${summary.totals.queuedForApproval}`,
+    `- Manual-ready posts: ${summary.totals.manualReadyPosts}`,
+    `- Rights-ready assets: ${summary.totals.rightsReadyAssets}/${summary.totals.minimumWeeklySourceAssets}`,
+    `- Full automation blockers: ${summary.totals.fullAutomationBlockers}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Accounts",
+    "",
+    ...summary.rows.flatMap((row) => [
+      `### ${row.accountName}`,
+      "",
+      `- Status: ${row.status}`,
+      `- Category: ${row.category}`,
+      `- Metricool brand: ${row.metricoolBrandName}`,
+      `- Metricool blogId: ${row.metricoolBlogId || "pending"}`,
+      `- Connected networks: ${row.connectedNetworks.join(", ") || "none"}`,
+      `- Primary MVP network: ${row.primaryNetwork || "none"}`,
+      `- Daily target: ${row.dailyClipTarget}`,
+      `- Weekly target clips: ${row.weeklyTargetClips}`,
+      `- Rights-ready assets: ${row.rightsReadyAssets}/${row.minimumWeeklySourceAssets}`,
+      `- Queued for approval: ${row.queuedForApproval}`,
+      `- Manual-ready posts: ${row.manualReadyPosts}`,
+      `- Next step: ${row.nextStep}`,
+      row.blockers.length ? "- Blockers:" : "- Blockers: none",
+      ...row.blockers.map((blocker) => `  - ${blocker}`),
+      "",
+    ]),
+    "## Full Automation Still Blocked By",
+    "",
+    ...(summary.fullAutomationStillBlockedBy.length ? summary.fullAutomationStillBlockedBy.map((item) => `- ${item}`) : ["- none"]),
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+  ].join("\n");
+}
+
+function renderMetricoolMvpLaunchPackCsv(summary: ClipperMetricoolMvpLaunchSummary): string {
+  const header = ["status", "account_id", "account_name", "category", "metricool_brand", "metricool_blog_id", "connected_networks", "primary_network", "daily_clip_target", "weekly_target_clips", "rights_ready_assets", "minimum_weekly_source_assets", "queued_for_approval", "manual_ready_posts", "blockers", "next_step"];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.rows.map((row) => [
+      row.status,
+      row.accountId,
+      row.accountName,
+      row.category,
+      row.metricoolBrandName,
+      row.metricoolBlogId || "",
+      row.connectedNetworks.join(" | "),
+      row.primaryNetwork || "",
+      row.dailyClipTarget,
+      row.weeklyTargetClips,
+      row.rightsReadyAssets,
+      row.minimumWeeklySourceAssets,
+      row.queuedForApproval,
+      row.manualReadyPosts,
+      row.blockers.join(" | "),
+      row.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+export async function prepareClipperMetricoolMvpLaunchPack(userId = getSystemUserId()): Promise<{ metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    metricoolPublishing: statusBefore.metricoolPublishing,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    publishingPackage: statusBefore.publishingPackage,
+    accountEvidence: statusBefore.accountEvidence,
+    developerAppEvidence: statusBefore.developerAppEvidence,
+    permissionTracker: statusBefore.permissionTracker,
+  });
+  await writeFile(METRICOOL_MVP_LAUNCH_PATH, JSON.stringify(metricoolMvpLaunchPack, null, 2));
+  await writeFile(METRICOOL_MVP_LAUNCH_MARKDOWN_PATH, renderMetricoolMvpLaunchPackMarkdown(metricoolMvpLaunchPack));
+  await writeFile(METRICOOL_MVP_LAUNCH_CSV_PATH, renderMetricoolMvpLaunchPackCsv(metricoolMvpLaunchPack));
+  return { metricoolMvpLaunchPack, status: await getClipperStatus(userId) };
+}
+
+function metricoolApprovalEvidenceRow(item: ClipperMetricoolExecutionQueueItem): string {
+  return [
+    item.id,
+    item.accountId,
+    item.accountName,
+    item.platform,
+    item.metricoolBrandName,
+    item.metricoolBlogId || "",
+    item.publishAt,
+    item.sourcePath || "",
+    item.captionSeed,
+    "<metricool scheduled/approved/post URL>",
+    "<published post URL after live>",
+    "<approved|scheduled|published|rejected>",
+    "<views after 24h>",
+    "<likes after 24h>",
+    "<comments after 24h>",
+    "<shares after 24h>",
+    "<operator notes without tokens>",
+  ].map(csvEscape).join(",");
+}
+
+function buildMetricoolApprovalSessionSummary(input: {
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
+}): ClipperMetricoolApprovalSessionSummary {
+  const items = input.metricoolExecutionQueue.items.map<ClipperMetricoolApprovalSessionItem>((item, index) => {
+    const status: ClipperMetricoolApprovalSessionItemStatus = item.status === "queued_for_approval" ? "ready_for_review" : "blocked";
+    const sourceFileName = item.sourcePath ? path.basename(item.sourcePath) : "";
+    const reviewChecklist = [
+      `Open Metricool brand ${item.metricoolBrandName}${item.metricoolBlogId ? ` / blogId ${item.metricoolBlogId}` : ""}.`,
+      `Confirm network ${item.platform} is the connected destination.`,
+      `Attach or verify source video ${sourceFileName || "<missing source>"}.`,
+      "Review caption, hook, rights gate and scheduled time before approving.",
+      "Do not mark published until Metricool/platform shows a live post URL.",
+      "After posting, paste the Metricool/post URL and 24h metrics into the evidence import CSV.",
+    ];
+    return {
+      id: item.id,
+      rank: index + 1,
+      accountId: item.accountId,
+      accountName: item.accountName,
+      platform: item.platform,
+      metricoolBrandName: item.metricoolBrandName,
+      metricoolBlogId: item.metricoolBlogId,
+      publishAt: item.publishAt,
+      sourcePath: item.sourcePath,
+      sourceFileName,
+      hook: item.hook,
+      captionSeed: item.captionSeed,
+      status,
+      reviewChecklist,
+      evidenceCaptureRow: metricoolApprovalEvidenceRow(item),
+      blockers: item.blockers,
+      nextStep: status === "ready_for_review"
+        ? `Review and approve this ${item.platform} slot in Metricool; keep evidence row unfilled until a real URL exists.`
+        : item.blockers[0] || "Resolve blocked gates before this item enters Metricool approval.",
+    };
+  });
+  const totals = items.reduce<ClipperMetricoolApprovalSessionSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.status === "ready_for_review") sum.readyForReview += 1;
+    if (item.status === "blocked") sum.blocked += 1;
+    if (item.accountId.includes("sports")) sum.sports += 1;
+    if (item.accountId.includes("meme")) sum.memes += 1;
+    if (item.accountId.includes("streamer")) sum.streamers += 1;
+    if (item.platform === "tiktok") sum.tiktok += 1;
+    if (item.platform === "instagram") sum.instagram += 1;
+    if (item.platform === "youtube") sum.youtube += 1;
+    return sum;
+  }, { items: 0, readyForReview: 0, blocked: 0, sports: 0, memes: 0, streamers: 0, tiktok: 0, instagram: 0, youtube: 0 });
+  const status: ClipperMetricoolApprovalSessionStatus = totals.items === 0
+    ? "not_prepared"
+    : totals.blocked > 0
+      ? "blocked"
+      : "ready_for_operator";
+  return {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_APPROVAL_SESSION_PATH,
+    markdownPath: METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH,
+    csvPath: METRICOOL_APPROVAL_SESSION_CSV_PATH,
+    evidenceImportCsvPath: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    metricoolQueuePath: input.metricoolExecutionQueue.markdownPath,
+    mvpPackPath: input.metricoolMvpLaunchPack.markdownPath,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    items,
+    totals,
+    operatorSteps: [
+      "Open Metricool and switch to the listed brand before touching each queued item.",
+      "Review one row at a time: source video, caption, rights evidence, schedule time and destination network.",
+      "Approve/schedule only rows marked ready_for_review.",
+      "Do not use blocked rows; resolve their source/rights/account blockers first.",
+      "After a post is live, fill the evidence import CSV with real Metricool/post URLs and 24h metrics.",
+      "Regenerate analytics reporting after importing real post metrics.",
+    ],
+    guardrails: [
+      "This session is an operator checklist; it cannot publish automatically.",
+      "queued_for_approval is not published.",
+      "Never paste Metricool tokens, cookies, passwords, recovery codes or private screenshots into this CSV.",
+      "If a source, caption, account or rights item looks wrong, reject it and leave a note instead of posting.",
+    ],
+    nextStep: status === "ready_for_operator"
+      ? `Open Metricool and review ${totals.readyForReview} ready item(s); then capture real URLs in ${METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH}.`
+      : totals.items === 0
+        ? "Prepare Metricool execution queue before creating an approval session."
+        : `Resolve ${totals.blocked} blocked Metricool approval item(s) before operator review.`,
+  };
+}
+
+function renderMetricoolApprovalSessionMarkdown(summary: ClipperMetricoolApprovalSessionSummary): string {
+  return [
+    "# Clippers Metricool Approval Session",
+    "",
+    "Operator checklist for reviewing Metricool queued clips. This does not publish automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    `Metricool queue: ${summary.metricoolQueuePath}`,
+    `MVP pack: ${summary.mvpPackPath}`,
+    `Evidence import CSV: ${summary.evidenceImportCsvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Ready for review: ${summary.totals.readyForReview}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Sports: ${summary.totals.sports}`,
+    `- Memes: ${summary.totals.memes}`,
+    `- Streamers: ${summary.totals.streamers}`,
+    `- TikTok: ${summary.totals.tiktok}`,
+    `- Instagram: ${summary.totals.instagram}`,
+    `- YouTube: ${summary.totals.youtube}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Operator Steps",
+    "",
+    ...summary.operatorSteps.map((step) => `- [ ] ${step}`),
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.accountName} / ${item.platform} / ${item.publishAt}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Metricool brand: ${item.metricoolBrandName}`,
+      `- Metricool blogId: ${item.metricoolBlogId || "pending"}`,
+      `- Source: ${item.sourcePath || "missing"}`,
+      `- Hook: ${item.hook}`,
+      `- Caption: ${item.captionSeed}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Review checklist:",
+      ...item.reviewChecklist.map((step) => `- [ ] ${step}`),
+      "",
+      item.blockers.length ? "Blockers:" : "Blockers: none",
+      ...item.blockers.map((blocker) => `- ${blocker}`),
+      "",
+      "Evidence capture row:",
+      "```csv",
+      item.evidenceCaptureRow,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderMetricoolApprovalSessionCsv(summary: ClipperMetricoolApprovalSessionSummary): string {
+  const header = [
+    "rank",
+    "id",
+    "status",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "publish_at",
+    "source_path",
+    "hook",
+    "caption_seed",
+    "blockers",
+    "next_step",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => [
+      item.rank,
+      item.id,
+      item.status,
+      item.accountId,
+      item.accountName,
+      item.platform,
+      item.metricoolBrandName,
+      item.metricoolBlogId || "",
+      item.publishAt,
+      item.sourcePath || "",
+      item.hook,
+      item.captionSeed,
+      item.blockers.join(" | "),
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+function renderMetricoolApprovalEvidenceImportCsv(summary: ClipperMetricoolApprovalSessionSummary): string {
+  const header = [
+    "metricool_queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "scheduled_for",
+    "source_path",
+    "caption_seed",
+    "metricool_approval_url",
+    "published_post_url",
+    "final_status",
+    "views_24h",
+    "likes_24h",
+    "comments_24h",
+    "shares_24h",
+    "operator_notes",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => item.evidenceCaptureRow),
+  ].join("\n");
+}
+
+async function writeMetricoolApprovalSessionArtifacts(summary: ClipperMetricoolApprovalSessionSummary): Promise<ClipperMetricoolApprovalSessionSummary> {
+  await writeFile(METRICOOL_APPROVAL_SESSION_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH, renderMetricoolApprovalSessionMarkdown(summary));
+  await writeFile(METRICOOL_APPROVAL_SESSION_CSV_PATH, renderMetricoolApprovalSessionCsv(summary));
+  await writeFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, renderMetricoolApprovalEvidenceImportCsv(summary));
+  return summary;
+}
+
+export async function prepareClipperMetricoolApprovalSession(userId = getSystemUserId()): Promise<{ metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const metricoolApprovalSession = await writeMetricoolApprovalSessionArtifacts(buildMetricoolApprovalSessionSummary({
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
+  }));
+  return { metricoolApprovalSession, status: await getClipperStatus(userId) };
+}
+
+export async function recordClipperMetricoolAccountEvidence(userId = getSystemUserId()): Promise<{ metricoolAccountEvidence: ClipperMetricoolAccountEvidenceResult; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const metricoolPublishing = await buildClipperMetricoolPublishingSummary(accounts, { syncLiveBrands: true });
+  const recorded: ClipperMetricoolAccountEvidenceResult["recorded"] = [];
+  const skipped: ClipperMetricoolAccountEvidenceResult["skipped"] = [];
+
+  for (const channel of metricoolPublishing.channels) {
+    const account = accounts.find((item) => item.id === channel.accountId);
+    if (!account) continue;
+    for (const network of channel.connectedNetworks) {
+      const platform = metricoolNetworkToClipperPlatform(network);
+      if (!platform) {
+        skipped.push({ accountId: channel.accountId, accountName: channel.accountName, platform: network, reason: "Network is outside Clippers publishing platforms." });
+        continue;
+      }
+      const platformAccount = account.platformAccounts.find((item) => item.platform === platform);
+      if (!platformAccount) {
+        skipped.push({ accountId: channel.accountId, accountName: channel.accountName, platform: network, reason: "No matching Clippers platform account." });
+        continue;
+      }
+      const evidencePath = accountEvidenceJsonPath(account.id, platform);
+      const profileUrl = profileLinkForPlatform(platform, platformAccount.handle);
+      const notes = [
+        `Metricool live sync detected ${platform} bridge connection for ${channel.metricoolBrandName} blogId ${channel.metricoolBlogId || "pending"}.`,
+        `Expected public profile URL ${profileUrl} and handle ${platformAccount.handle}.`,
+        "This is bridge evidence only; it does not verify the external social account until the exact profile/security proof is attached.",
+        "Security/2FA is managed in the connected social account and Metricool operator workspace; no secrets stored here.",
+        `Proof source: Metricool settings brands sync cached in ${METRICOOL_BRANDS_CACHE_PATH}; capture exact profile proof from Metricool brand connections before marking verified.`,
+      ].join(" ");
+      await recordClipperAccountEvidence({
+        accountId: account.id,
+        platform,
+        status: "submitted",
+        notes,
+      }, userId);
+      recorded.push({
+        accountId: account.id,
+        accountName: account.name,
+        platform,
+        metricoolBrandName: channel.metricoolBrandName,
+        metricoolBlogId: channel.metricoolBlogId,
+        evidencePath,
+      });
+    }
+  }
+
+  const metricoolAccountEvidence: ClipperMetricoolAccountEvidenceResult = {
+    generatedAt: new Date().toISOString(),
+    source: "metricool",
+    metricoolPublishingStatus: metricoolPublishing.status,
+    recorded,
+    skipped,
+    nextStep: recorded.length > 0
+      ? "Refrescar launch kit/readiness y preparar cola Metricool despues de registrar evidencia."
+      : "No se detectaron redes Metricool conectadas nuevas para registrar como evidencia.",
+  };
+  return { metricoolAccountEvidence, status: await getClipperStatus(userId) };
 }
 
 export async function prepareClipperPublisherConnectors(userId = getSystemUserId()): Promise<{ publisherConnectors: ClipperPublisherConnectorSummary; status: ClipperStatus }> {
@@ -24330,10 +28180,10 @@ function buildPublisherExecutionQueueSummary(input: {
   publisherConnectors: ClipperPublisherConnectorSummary;
 }): ClipperPublisherExecutionQueueSummary {
   const latestRun = input.automation.lastRun;
-  const realPublishEnabled = process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true";
+  const realPublishEnabled = false;
   const items = (latestRun?.posts || []).map<ClipperPublisherExecutionQueueItem>((post) => {
     const connector = input.publisherConnectors.items.find((item) => item.platform === post.platform);
-    const approvalRequired = latestRun?.publishMode !== "auto_after_connection";
+    const approvalRequired = true;
     const gates = [
       {
         id: "post-not-blocked",
@@ -24350,12 +28200,8 @@ function buildPublisherExecutionQueueSummary(input: {
       {
         id: "approval-mode",
         label: "Aprobacion humana antes de enviar",
-        done: approvalRequired || realPublishEnabled,
-        evidence: approvalRequired
-          ? "Publish mode mantiene approval_required."
-          : realPublishEnabled
-            ? "Real publish habilitado explicitamente por CLIPPERS_ENABLE_REAL_PUBLISH=true."
-            : "Auto publish solicitado pero CLIPPERS_ENABLE_REAL_PUBLISH no esta habilitado.",
+        done: true,
+        evidence: "Publisher queue mantiene approval_required; real publish deshabilitado para Clippers.",
       },
       {
         id: "token-source",
@@ -24373,9 +28219,8 @@ function buildPublisherExecutionQueueSummary(input: {
     const blockers = [
       ...(post.blocker ? [post.blocker] : []),
       ...(connector?.blockers || ["Publisher connector no preparado."]),
-      ...(!approvalRequired && !realPublishEnabled ? ["Auto publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true."] : []),
     ].filter((blocker, index, all) => blocker && all.indexOf(blocker) === index);
-    const canSendNow = blockers.length === 0 && realPublishEnabled && latestRun?.publishMode === "auto_after_connection";
+    const canSendNow = false;
     const status: ClipperPublisherExecutionItemStatus = blockers.length > 0
       ? "blocked"
       : canSendNow
@@ -24430,7 +28275,7 @@ function buildPublisherExecutionQueueSummary(input: {
     markdownPath: PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH,
     csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
     sourceAutomationRunId: latestRun?.id || null,
-    publishMode: latestRun?.publishMode || "approval_required",
+    publishMode: "approval_required",
     realPublishEnabled,
     items,
     totals,
@@ -24522,11 +28367,29 @@ async function readPublisherExecutionQueueSummary(): Promise<ClipperPublisherExe
   try {
     const raw = await readFile(PUBLISHER_EXECUTION_QUEUE_PATH, "utf8");
     const parsed = JSON.parse(raw) as ClipperPublisherExecutionQueueSummary;
+    const items = (Array.isArray(parsed.items) ? parsed.items : []).map((item) => ({
+      ...item,
+      status: item.status === "ready_to_send" ? "queued_for_approval" : item.status,
+      approvalRequired: true,
+      canSendNow: false,
+    }));
+    const totals = items.reduce<ClipperPublisherExecutionQueueSummary["totals"]>((sum, item) => {
+      sum.items += 1;
+      if (item.status === "blocked") sum.blocked += 1;
+      if (item.status === "queued_for_approval") sum.queuedForApproval += 1;
+      if (item.approvalRequired) sum.approvalRequired += 1;
+      return sum;
+    }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
     return {
       ...parsed,
+      status: parsed.status === "ready" ? "approval_required" : parsed.status || "not_prepared",
       manifestPath: PUBLISHER_EXECUTION_QUEUE_PATH,
       markdownPath: PUBLISHER_EXECUTION_QUEUE_MARKDOWN_PATH,
       csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
+      publishMode: "approval_required",
+      realPublishEnabled: false,
+      items,
+      totals,
     };
   } catch {
     return {
@@ -24537,7 +28400,7 @@ async function readPublisherExecutionQueueSummary(): Promise<ClipperPublisherExe
       csvPath: PUBLISHER_EXECUTION_QUEUE_CSV_PATH,
       sourceAutomationRunId: null,
       publishMode: "approval_required",
-      realPublishEnabled: process.env.CLIPPERS_ENABLE_REAL_PUBLISH === "true",
+      realPublishEnabled: false,
       items: [],
       totals: { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
       nextStep: "Correr Automation Cycle para generar posts antes de preparar publisher execution queue.",
@@ -27906,6 +31769,8 @@ async function buildLaunchCommandCenterSummary(input: {
   appReviewDemoPack: ClipperAppReviewDemoPackSummary;
   developerApplicationDrafts: ClipperDeveloperApplicationDraftsSummary;
   officialPermissionMatrix: ClipperOfficialPermissionMatrixSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -27931,6 +31796,14 @@ async function buildLaunchCommandCenterSummary(input: {
   const productionUrlNextStep = productionUrlVerified
     ? input.productionUrlSetup.nextStep
     : input.productionUrlVerification.nextStep;
+  const metricoolLaunchReady = input.metricoolPublishing.status === "ready_for_approval_queue";
+  const metricoolConnectedNetworks = Array.from(new Set(input.metricoolPublishing.channels.flatMap((channel) => channel.connectedNetworks))).sort();
+  const metricoolDirectApiEvidence = `Metricool bridge ready; direct platform API keys optional for this launch path. Connected Metricool networks: ${metricoolConnectedNetworks.join(", ") || "none"}.`;
+  const metricoolDirectApiNextStep = "No necesitas TikTok/Meta/YouTube API keys para publicar por Metricool; conecta perfiles faltantes dentro de Metricool y prioriza source/rights.";
+  const driveWorkspaceReady = input.driveWorkspace.status === "ready";
+  const metricoolDriveWorkspaceNextStep = driveWorkspaceReady
+    ? `${input.driveWorkspace.nextStep} Drive queda como workspace de orden; Metricool puede publicar usando source-drop local.`
+    : `Drive es opcional para publicar por Metricool; usa source-drop local (${SOURCE_DROP_DIR}) para subir assets con derechos y autoriza Drive despues para orden/evidencia.`;
 
   const steps: ClipperLaunchCommandCenterStep[] = [
     {
@@ -27945,21 +31818,25 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "credential-setup",
-      label: "Credenciales y aliases",
+      label: metricoolLaunchReady ? "Credenciales directas opcionales" : "Credenciales y aliases",
       owner: "Platform Ops",
-      status: input.credentialSetup.status === "ready" ? "done" : input.credentialSetup.status === "partial" ? "needs_action" : "blocked",
-      evidence: `${input.credentialSetup.totals.ready}/${input.credentialSetup.totals.items} grupos listos; env files encontrados: ${input.credentialSetup.envFilesFound.length || 0}.`,
-      nextStep: input.credentialSetup.nextStep,
+      status: metricoolLaunchReady ? "done" : input.credentialSetup.status === "ready" ? "done" : input.credentialSetup.status === "partial" ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct env groups ${input.credentialSetup.totals.ready}/${input.credentialSetup.totals.items}; env files ${input.credentialSetup.envFilesFound.length || 0}.`
+        : `${input.credentialSetup.totals.ready}/${input.credentialSetup.totals.items} grupos listos; env files encontrados: ${input.credentialSetup.envFilesFound.length || 0}.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.credentialSetup.nextStep,
       artifactPath: input.credentialSetup.readmePath,
       actionUrl: "/api/clippers/prepare-credential-setup",
     },
     {
       id: "credential-doctor",
-      label: "Credential Doctor",
+      label: metricoolLaunchReady ? "Credential Doctor opcional" : "Credential Doctor",
       owner: "Platform Ops",
-      status: input.credentialDoctor.status === "ready" ? "done" : input.credentialDoctor.status === "partial" ? "needs_action" : "blocked",
-      evidence: `${input.credentialDoctor.totals.ready}/${input.credentialDoctor.totals.items} grupos detectados; ${input.credentialDoctor.totals.missing} faltantes.`,
-      nextStep: input.credentialDoctor.nextStep,
+      status: metricoolLaunchReady ? "done" : input.credentialDoctor.status === "ready" ? "done" : input.credentialDoctor.status === "partial" ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct credential doctor ${input.credentialDoctor.totals.ready}/${input.credentialDoctor.totals.items}; ${input.credentialDoctor.totals.missing} optional missing.`
+        : `${input.credentialDoctor.totals.ready}/${input.credentialDoctor.totals.items} grupos detectados; ${input.credentialDoctor.totals.missing} faltantes.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.credentialDoctor.nextStep,
       artifactPath: input.credentialDoctor.markdownPath,
       actionUrl: "/api/clippers/prepare-credential-doctor",
     },
@@ -28005,11 +31882,11 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "drive-workspace",
-      label: "Google Drive Clippers",
+      label: metricoolLaunchReady ? "Google Drive opcional" : "Google Drive Clippers",
       owner: "Workspace Ops",
-      status: input.driveWorkspace.status === "ready" ? "done" : input.driveWorkspace.status === "needs_oauth" ? "needs_action" : "blocked",
-      evidence: `${input.driveWorkspace.folders.filter((folder) => Boolean(folder.folderId)).length}/${input.driveWorkspace.folders.length} carpetas con folderId; status ${input.driveWorkspace.status}.`,
-      nextStep: input.driveWorkspace.nextStep,
+      status: driveWorkspaceReady ? "done" : metricoolLaunchReady ? "needs_action" : input.driveWorkspace.status === "needs_oauth" ? "needs_action" : "blocked",
+      evidence: `${input.driveWorkspace.folders.filter((folder) => Boolean(folder.folderId)).length}/${input.driveWorkspace.folders.length} carpetas con folderId; status ${input.driveWorkspace.status}; ${metricoolLaunchReady ? "Metricool puede usar source-drop local" : "Drive required for this workspace path"}.`,
+      nextStep: metricoolLaunchReady ? metricoolDriveWorkspaceNextStep : input.driveWorkspace.nextStep,
       artifactPath: input.driveWorkspace.manifestPath,
       actionUrl: input.driveWorkspace.status === "needs_oauth" ? "/api/google-drive/auth" : "/api/clippers/prepare-drive-workspace",
     },
@@ -28055,21 +31932,25 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "developer-apps",
-      label: "Apps developer y app review",
+      label: metricoolLaunchReady ? "Apps developer opcionales" : "Apps developer y app review",
       owner: "Permission Ops",
-      status: input.developerAppEvidence.status === "ready" ? "done" : input.developerAppEvidence.items.length > 0 ? "needs_action" : "blocked",
-      evidence: `${input.developerAppEvidence.totals.approved}/${input.developerAppEvidence.totals.expected} apps aprobadas; ${input.developerAppEvidence.totals.missing} sin evidencia.`,
-      nextStep: input.developerAppEvidence.nextStep,
+      status: metricoolLaunchReady ? "done" : input.developerAppEvidence.status === "ready" ? "done" : input.developerAppEvidence.items.length > 0 ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct developer apps ${input.developerAppEvidence.totals.approved}/${input.developerAppEvidence.totals.expected}; optional while Metricool owns posting.`
+        : `${input.developerAppEvidence.totals.approved}/${input.developerAppEvidence.totals.expected} apps aprobadas; ${input.developerAppEvidence.totals.missing} sin evidencia.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.developerAppEvidence.nextStep,
       artifactPath: input.developerAppEvidence.readmePath,
       actionUrl: null,
     },
     {
       id: "oauth-token-vault",
-      label: "OAuth y token vault",
+      label: metricoolLaunchReady ? "OAuth directo opcional" : "OAuth y token vault",
       owner: "Publisher",
-      status: connectedTokens >= 3 ? "done" : missingCredentialCount === 0 && input.tokenVault.configured ? "needs_action" : "blocked",
-      evidence: `${connectedTokens}/3 tokens cifrados; ${missingCredentialCount} env vars faltantes; vault ${input.tokenVault.status}.`,
-      nextStep: input.tokenVault.nextStep,
+      status: metricoolLaunchReady ? "done" : connectedTokens >= 3 ? "done" : missingCredentialCount === 0 && input.tokenVault.configured ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct token vault ${connectedTokens}/3 tokens; ${missingCredentialCount} optional env vars missing; vault ${input.tokenVault.status}.`
+        : `${connectedTokens}/3 tokens cifrados; ${missingCredentialCount} env vars faltantes; vault ${input.tokenVault.status}.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.tokenVault.nextStep,
       artifactPath: input.tokenVault.vaultPath,
       actionUrl: null,
     },
@@ -28145,21 +32026,25 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "oauth-go-live",
-      label: "OAuth Go-Live",
+      label: metricoolLaunchReady ? "OAuth Go-Live opcional" : "OAuth Go-Live",
       owner: "Publisher",
-      status: input.oauthGoLive.status === "ready" ? "done" : input.oauthGoLive.status === "partial" ? "needs_action" : "blocked",
-      evidence: `${input.oauthGoLive.totals.ready}/${input.oauthGoLive.totals.platforms} plataformas go-live; ${input.oauthGoLive.totals.blocked} bloqueadas.`,
-      nextStep: input.oauthGoLive.nextStep,
+      status: metricoolLaunchReady ? "done" : input.oauthGoLive.status === "ready" ? "done" : input.oauthGoLive.status === "partial" ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct OAuth go-live ${input.oauthGoLive.totals.ready}/${input.oauthGoLive.totals.platforms}; optional while publishing through Metricool.`
+        : `${input.oauthGoLive.totals.ready}/${input.oauthGoLive.totals.platforms} plataformas go-live; ${input.oauthGoLive.totals.blocked} bloqueadas.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.oauthGoLive.nextStep,
       artifactPath: input.oauthGoLive.markdownPath,
       actionUrl: "/api/clippers/prepare-oauth-go-live",
     },
     {
       id: "oauth-connection-pack",
-      label: "OAuth Connection Pack",
+      label: metricoolLaunchReady ? "OAuth Connection Pack opcional" : "OAuth Connection Pack",
       owner: "Publisher",
-      status: input.oauthConnectionPack.status === "ready" ? "done" : input.oauthConnectionPack.status === "partial" ? "needs_action" : "blocked",
-      evidence: `${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} conexiones cuenta/plataforma listas; ${input.oauthConnectionPack.totals.tokensSaved} tokens; CSV ${input.oauthConnectionPack.csvPath}.`,
-      nextStep: input.oauthConnectionPack.nextStep,
+      status: metricoolLaunchReady ? "done" : input.oauthConnectionPack.status === "ready" ? "done" : input.oauthConnectionPack.status === "partial" ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct OAuth connections ${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections}; ${input.oauthConnectionPack.totals.tokensSaved} direct tokens.`
+        : `${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} conexiones cuenta/plataforma listas; ${input.oauthConnectionPack.totals.tokensSaved} tokens; CSV ${input.oauthConnectionPack.csvPath}.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.oauthConnectionPack.nextStep,
       artifactPath: input.oauthConnectionPack.markdownPath,
       actionUrl: "/api/clippers/prepare-oauth-connection-pack",
     },
@@ -28187,21 +32072,25 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "permission-approvals",
-      label: "Permisos de publicacion",
+      label: metricoolLaunchReady ? "Permisos API directos opcionales" : "Permisos de publicacion",
       owner: "Permission Ops",
-      status: input.permissionTracker.status === "ready" ? "done" : input.permissionTracker.generatedAt ? "needs_action" : "blocked",
-      evidence: `${input.permissionTracker.totals.approved}/${input.permissionTracker.totals.permissions} permisos aprobados; ${input.permissionTracker.totals.blocked} bloqueados.`,
-      nextStep: input.permissionTracker.nextStep,
+      status: metricoolLaunchReady ? "done" : input.permissionTracker.status === "ready" ? "done" : input.permissionTracker.generatedAt ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct API scopes ${input.permissionTracker.totals.approved}/${input.permissionTracker.totals.permissions}; optional for Metricool launch.`
+        : `${input.permissionTracker.totals.approved}/${input.permissionTracker.totals.permissions} permisos aprobados; ${input.permissionTracker.totals.blocked} bloqueados.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.permissionTracker.nextStep,
       artifactPath: input.permissionTracker.markdownPath,
       actionUrl: null,
     },
     {
       id: "permission-request-pack",
-      label: "Permission Request Pack",
+      label: metricoolLaunchReady ? "Permission Request Pack opcional" : "Permission Request Pack",
       owner: "Permission Ops",
-      status: input.permissionRequestPack.status === "ready" ? "done" : input.permissionRequestPack.generatedAt ? "needs_action" : "blocked",
-      evidence: `${input.permissionRequestPack.totals.ready}/${input.permissionRequestPack.totals.permissions} permisos ready; CSV ${input.permissionRequestPack.csvPath}.`,
-      nextStep: input.permissionRequestPack.nextStep,
+      status: metricoolLaunchReady ? "done" : input.permissionRequestPack.status === "ready" ? "done" : input.permissionRequestPack.generatedAt ? "needs_action" : "blocked",
+      evidence: metricoolLaunchReady
+        ? `${metricoolDirectApiEvidence} Direct permission request pack ${input.permissionRequestPack.totals.ready}/${input.permissionRequestPack.totals.permissions}; optional for Metricool.`
+        : `${input.permissionRequestPack.totals.ready}/${input.permissionRequestPack.totals.permissions} permisos ready; CSV ${input.permissionRequestPack.csvPath}.`,
+      nextStep: metricoolLaunchReady ? metricoolDirectApiNextStep : input.permissionRequestPack.nextStep,
       artifactPath: input.permissionRequestPack.markdownPath,
       actionUrl: "/api/clippers/prepare-permission-request-pack",
     },
@@ -28336,6 +32225,28 @@ async function buildLaunchCommandCenterSummary(input: {
       actionUrl: "/api/clippers/prepare-publishing-package",
     },
     {
+      id: "metricool-publishing-bridge",
+      label: "Metricool Publishing Bridge",
+      owner: "Publisher",
+      status: input.metricoolPublishing.status === "ready_for_approval_queue" ? "done" : input.metricoolPublishing.status === "ready_to_connect" ? "needs_action" : "blocked",
+      evidence: `${input.metricoolPublishing.totals.readyForApprovalQueue}/${input.metricoolPublishing.totals.channels} Metricool channels ready; ${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} profiles connected.`,
+      nextStep: input.metricoolPublishing.nextStep,
+      artifactPath: input.metricoolPublishing.markdownPath,
+      actionUrl: "/api/clippers/prepare-metricool-publishing-plan",
+    },
+    {
+      id: "metricool-approval-queue",
+      label: "Metricool Approval Queue",
+      owner: "Publisher",
+      status: input.metricoolExecutionQueue.status === "ready" ? "done" : input.metricoolExecutionQueue.status === "approval_required" ? "needs_action" : "blocked",
+      evidence: `${input.metricoolExecutionQueue.totals.items} Metricool items; ${input.metricoolExecutionQueue.totals.queuedForApproval} approval; ${input.metricoolExecutionQueue.totals.blocked} blocked; ${input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets} source assets missing; real publish ${input.metricoolExecutionQueue.realPublishEnabled ? "on" : "off"}.`,
+      nextStep: input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets > 0
+        ? input.metricoolExecutionQueue.sourceReadiness.nextStep
+        : input.metricoolExecutionQueue.nextStep,
+      artifactPath: input.metricoolExecutionQueue.markdownPath,
+      actionUrl: "/api/clippers/prepare-metricool-execution-queue",
+    },
+    {
       id: "publisher-connectors",
       label: "Publisher Connectors",
       owner: "Publisher",
@@ -28404,13 +32315,14 @@ function renderLaunchCommandCenterMarkdown(summary: ClipperLaunchCommandCenterSu
 }
 
 function blockerActionType(step: ClipperLaunchCommandCenterStep): ClipperBlockerResolutionAction["actionType"] {
-  if (/credential|key|env/i.test(`${step.id} ${step.label} ${step.nextStep}`)) return "credential";
+  const source = `${step.id} ${step.label} ${step.evidence} ${step.nextStep}`;
+  if (/credential|key|env/i.test(source)) return "credential";
   if (/account|cuenta/i.test(`${step.id} ${step.label}`)) return "account";
   if (/developer|app review|demo|legal|terms|privacy/i.test(`${step.id} ${step.label}`)) return "developer_app";
-  if (/permission|permiso|scope/i.test(`${step.id} ${step.label} ${step.nextStep}`)) return "permission";
+  if (/permission|permiso|scope/i.test(source)) return "permission";
   if (/oauth|token/i.test(`${step.id} ${step.label}`)) return "oauth";
-  if (/source|trend|video/i.test(`${step.id} ${step.label}`)) return "source";
   if (/rights|allowlist|derecho/i.test(`${step.id} ${step.label}`)) return "rights";
+  if (/source assets missing|falta video fuente|sin fuente|source|trend|video/i.test(source)) return "source";
   if (/metric|optimizer/i.test(`${step.id} ${step.label}`)) return "metrics";
   if (/automation|schedule|daily/i.test(`${step.id} ${step.label}`)) return "automation";
   return step.actionUrl ? "in_app" : "external";
@@ -28597,6 +32509,64 @@ function blockerChecklist(step: ClipperLaunchCommandCenterStep, actionType: Clip
   return Array.from(new Set(base.filter(Boolean)));
 }
 
+function metricoolSourceBacklogCandidates(sourceScout?: ClipperSourceScoutSummary): ClipperSourceScoutCandidate[] {
+  return (sourceScout?.candidates || [])
+    .filter((candidate) =>
+      candidate.source === "metricool_source_readiness"
+      && Boolean(candidate.targetFileName)
+      && Boolean(candidate.sourceDropPath)
+    )
+    .sort((left, right) => left.rank - right.rank);
+}
+
+function enrichSourceBacklogBlockerAction(
+  action: ClipperBlockerResolutionAction,
+  sourceScout?: ClipperSourceScoutSummary,
+  metricoolExecutionQueue?: ClipperMetricoolExecutionQueueSummary
+): ClipperBlockerResolutionAction {
+  if (!["source-supply", "metricool-approval-queue", "publisher-execution-queue", "draft-factory", "publishing-package", "manual-posting-pack"].includes(action.sourceStepId)) {
+    return action;
+  }
+
+  const backlogCandidates = metricoolSourceBacklogCandidates(sourceScout);
+  const missingSourceAssets = metricoolExecutionQueue?.sourceReadiness?.totals.missingSourceAssets || backlogCandidates.length;
+  if (missingSourceAssets <= 0 && backlogCandidates.length === 0) return action;
+
+  const targetLines = backlogCandidates.slice(0, 8).map((candidate) =>
+    `${candidate.targetFileName}: ${candidate.sourceDropPath}`
+  );
+  const targetChecklist = [
+    `Metricool source backlog: ${missingSourceAssets} rights-ready asset(s) missing before approval.`,
+    sourceScout?.csvPath ? `Use Source Scout CSV: ${sourceScout.csvPath}` : null,
+    sourceScout?.markdownPath ? `Use Source Scout markdown: ${sourceScout.markdownPath}` : null,
+    ...targetLines.map((line) => `Target file: ${line}`),
+    backlogCandidates.length > targetLines.length ? `Remaining target files: ${backlogCandidates.length - targetLines.length} more listed in Source Scout.` : null,
+    "Cada target necesita archivo real + URL/source original + proof de permiso/licencia/owned-content antes de importarlo.",
+    "Despues de subir archivos: correr Import source drop files, Production Queue, Draft Specs y Metricool Execution Queue.",
+  ].filter((item): item is string => Boolean(item));
+
+  const targetDoneCriteria = [
+    `${missingSourceAssets} Metricool source asset(s) faltantes tienen archivo en source-drop o sources con evidencia owned_or_permissioned.`,
+    "Source Intake Batch no contiene placeholders para esos targets.",
+    "Source Rights evidence pasa validacion concreta para cada target antes de renderizar o aprobar Metricool.",
+    "Metricool Approval Queue cambia a approval_required o ready sin source assets missing.",
+  ];
+
+  return {
+    ...action,
+    actionType: action.actionType === "metrics" ? "source" : action.actionType,
+    unlockPhase: action.unlockPhase === "optimization" ? "content_supply" : action.unlockPhase,
+    dependsOn: action.unlockPhase === "optimization" ? blockerPhaseDependencies("content_supply") : action.dependsOn,
+    executionMode: action.executionMode === "in_app" ? "evidence_upload" : action.executionMode,
+    estimatedMinutes: Math.max(action.estimatedMinutes, Math.min(180, missingSourceAssets * 8)),
+    proofCommand: "Fill the exact Source Scout targets with rights-ready files, import source drop files, then run POST /api/clippers/prepare-metricool-execution-queue and POST /api/clippers/prepare-command-center.",
+    nextStep: `Agregar ${missingSourceAssets} source asset(s) rights-ready para Metricool usando los target paths de Source Scout.`,
+    unblockCondition: `${missingSourceAssets} source asset(s) rights-ready existen con proof concreto y Metricool Execution Queue ya no reporta source assets missing.`,
+    doneCriteria: Array.from(new Set([...targetDoneCriteria, ...action.doneCriteria])),
+    checklist: Array.from(new Set([...targetChecklist, ...action.checklist])),
+  };
+}
+
 function blockerUnblockCondition(step: ClipperLaunchCommandCenterStep): string {
   if (step.status === "done") return "Ya esta desbloqueado.";
   if (step.actionUrl) return `El paso ${step.label} cambia a done/needs_action despues de ejecutar ${step.actionUrl} y resolver evidencia.`;
@@ -28606,6 +32576,8 @@ function blockerUnblockCondition(step: ClipperLaunchCommandCenterStep): string {
 async function buildBlockerResolutionPackSummary(input: {
   commandCenter: ClipperLaunchCommandCenterSummary;
   growthAudit: ClipperGrowthAudit;
+  sourceScout?: ClipperSourceScoutSummary;
+  metricoolExecutionQueue?: ClipperMetricoolExecutionQueueSummary;
 }): Promise<ClipperBlockerResolutionPackSummary> {
   const actionableSteps = input.commandCenter.steps
     .filter((step) => step.status !== "done");
@@ -28640,7 +32612,8 @@ async function buildBlockerResolutionPackSummary(input: {
       doneCriteria: blockerDoneCriteria(step, actionType, evidenceImportRow),
       checklist: blockerChecklist(step, actionType),
     };
-  }).sort((a, b) => {
+  }).map((action) => enrichSourceBacklogBlockerAction(action, input.sourceScout, input.metricoolExecutionQueue))
+    .sort((a, b) => {
     const statusWeight = (status: ClipperBlockerResolutionActionStatus) => status === "blocked" ? 0 : status === "next" ? 1 : 2;
     const severityWeight = (severity: ClipperBlockerResolutionAction["severity"]) => severity === "critical" ? 0 : severity === "high" ? 1 : 2;
     const priorityWeight = (action: ClipperBlockerResolutionAction) => action.sourceStepId === "go-live-operator-brief" ? -1 : 0;
@@ -28768,6 +32741,8 @@ export async function prepareClipperBlockerResolutionPack(userId = getSystemUser
   const draftSummary = await buildBlockerResolutionPackSummary({
     commandCenter: statusBeforePack.commandCenter,
     growthAudit: statusBeforePack.growthAudit,
+    sourceScout: statusBeforePack.sourceScout,
+    metricoolExecutionQueue: statusBeforePack.metricoolExecutionQueue,
   });
   const blockerResolutionPack: ClipperBlockerResolutionPackSummary = {
     ...draftSummary,
@@ -29645,6 +33620,7 @@ function buildLocalDropSyncMissingInputs(
     && (
       diagnostics.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0
       || diagnostics.sourceDropDiagnostic.totals.manifestMissingFiles > 0
+      || diagnostics.sourceDropDiagnostic.totals.invalidSourceAssets > 0
       || diagnostics.sourceDropDiagnostic.totals.missingSourceAssets > 0
     ));
 
@@ -30779,6 +34755,436 @@ export async function runClipperExternalConnectAutopilot(userId = getSystemUserI
   return { externalConnectAutopilot, status: null };
 }
 
+function sanitizeSprintEvidence(value: string): string {
+  return value
+    .replace(/client[_-]?secret/gi, "client credential")
+    .replace(/password/gi, "private credential")
+    .replace(/token/gi, "authorization credential");
+}
+
+function sprintEvidence(values: Array<string | null | undefined>): string[] {
+  return uniqueStrings(values)
+    .map((value) => sanitizeSprintEvidence(value).trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function sprintPriorityRank(priority: Clipper100ClipsExecutionSprintPriority): number {
+  if (priority === "critical") return 0;
+  if (priority === "high") return 1;
+  return 2;
+}
+
+function sprintLaneFromType(type: Clipper100ClipsExecutionSprintItemType): Clipper100ClipsExecutionSprintLane {
+  if (type === "source_scout") return "source_scout";
+  if (type === "account_create" || type === "account_verify") return "account";
+  if (type === "permission_request") return "permission";
+  if (type === "credential_missing") return "credential";
+  return "metricool";
+}
+
+function sprintStatusFromItem(item: Omit<Clipper100ClipsExecutionSprintItem, "rank" | "lane" | "label" | "status" | "action" | "evidencePath" | "blocker">): Clipper100ClipsExecutionSprintItemStatus {
+  if (item.type === "credential_missing") return "credential_missing";
+  if (item.type === "account_create" || item.type === "account_verify") return item.blockedBy.length ? "blocked" : "needs_account_setup";
+  if (item.type === "permission_request") return item.blockedBy.length ? "blocked" : "needs_permission_proof";
+  if (item.type === "metricool_profile") return item.blockedBy.length ? "blocked" : "connect_metricool_profile";
+  if (item.type === "metricool_queue") return item.blockedBy.length ? "blocked" : "approval_only";
+  return item.blockedBy.length ? "blocked" : "ready_to_execute";
+}
+
+function completeSprintItem(item: Omit<Clipper100ClipsExecutionSprintItem, "rank" | "lane" | "label" | "status" | "action" | "evidencePath" | "blocker">, rank: number): Clipper100ClipsExecutionSprintItem {
+  return {
+    ...item,
+    rank,
+    lane: sprintLaneFromType(item.type),
+    label: item.ownerAction,
+    status: sprintStatusFromItem(item),
+    action: item.ownerAction,
+    evidencePath: item.requiredEvidence.find((evidence) => evidence.includes("/") || evidence.includes("\\")) || null,
+    blocker: item.blockedBy.length ? item.blockedBy.join(" | ") : null,
+  };
+}
+
+function sourceScoutSprintPriority(priority: "critical" | "high" | "medium"): Clipper100ClipsExecutionSprintPriority {
+  return priority;
+}
+
+function accountSetupSprintPriority(priority: ClipperAccountCreationSessionPriority): Clipper100ClipsExecutionSprintPriority {
+  if (priority === "critical" || priority === "high") return priority;
+  return "medium";
+}
+
+function buildClipper100ClipsExecutionSprintSummary(input: {
+  generatedAt?: string | null;
+  accountCreationPack: ClipperAccountCreationPackSummary;
+  accountSetupSession: ClipperAccountSetupSessionSummary;
+  permissionRequestPack: ClipperPermissionRequestPackSummary;
+  credentialChecks: ClipperCredentialCheck[];
+  sourceScoutWorkQueue: ClipperSourceScoutWorkQueueSummary;
+  sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
+  sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
+  weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+}): Clipper100ClipsExecutionSprintSummary {
+  const categoryByAccountPlatform = new Map(input.accountCreationPack.items.map((item) => [`${item.accountId}:${item.platform}`, item.category]));
+  const items: Array<Omit<Clipper100ClipsExecutionSprintItem, "rank" | "lane" | "label" | "status" | "action" | "evidencePath" | "blocker">> = [];
+  const metricoolPublishGuardrail = `Metricool remains approval_required; realPublishEnabled=${input.metricoolExecutionQueue.realPublishEnabled ? "true" : "false"}. No live publish happens from this sprint.`;
+
+  for (const item of input.sourceScoutWorkQueue.items) {
+    items.push({
+      id: `source-work-${item.id}`,
+      type: "source_scout",
+      priority: sourceScoutSprintPriority(item.priority),
+      accountId: null,
+      category: item.category,
+      platform: item.platform,
+      ownerAction: item.action,
+      portalUrl: item.sourceUrlKind === "exact_video_or_post" ? item.sourceUrl : null,
+      artifactPath: input.sourceScoutWorkQueue.markdownPath,
+      requiredEvidence: sprintEvidence([item.intakeCsvRow, item.evidenceTemplate, item.sourceDropPath]),
+      blockedBy: item.blocker ? [item.blocker] : [],
+      nextStep: item.nextStep,
+      publishGuardrail: "Source must be owned, licensed, official, recreated, or permissioned before any queue item can move forward.",
+    });
+  }
+
+  for (const item of input.sourceScoutExactUrlKit.items) {
+    items.push({
+      id: `source-exact-url-${item.id}`,
+      type: "source_scout",
+      priority: sourceScoutSprintPriority(item.priority),
+      accountId: null,
+      category: item.category,
+      platform: item.platform,
+      ownerAction: `Find and verify exact source URL for ${item.title}.`,
+      portalUrl: item.platformSearchUrl || item.googleSearchUrl,
+      artifactPath: input.sourceScoutExactUrlKit.markdownPath,
+      requiredEvidence: sprintEvidence([item.intakeCsvRow, ...item.validationChecklist]),
+      blockedBy: item.currentRejectReason ? [item.currentRejectReason] : [],
+      nextStep: item.nextStep,
+      publishGuardrail: "Discovery/search URLs are not publish-ready evidence; use only exact video/post URLs or recreate-safe evidence.",
+    });
+  }
+
+  for (const item of input.sourceScoutSourceFileKit.items.filter((sourceItem) => !sourceItem.sourceFileExists)) {
+    items.push({
+      id: `source-file-${item.id}`,
+      type: "source_scout",
+      priority: sourceScoutSprintPriority(item.priority),
+      accountId: null,
+      category: item.category,
+      platform: item.platform,
+      ownerAction: `Drop or import source file ${item.targetFileName}.`,
+      portalUrl: item.sourceUrlKind === "exact_video_or_post" ? item.sourceUrl : null,
+      artifactPath: input.sourceScoutSourceFileKit.markdownPath,
+      requiredEvidence: sprintEvidence([item.manifestRow, item.intakeCsvRow, item.expectedSourcePath]),
+      blockedBy: [`Missing source file: ${item.expectedSourcePath}`],
+      nextStep: item.nextStep,
+      publishGuardrail: "Do not draft from a missing local source file unless the item is explicitly recreate-only and rights-safe.",
+    });
+  }
+
+  for (const item of input.accountSetupSession.items.filter((accountItem) => accountItem.status !== "ready")) {
+    const type: Clipper100ClipsExecutionSprintItemType = item.status === "in_progress" ? "account_verify" : "account_create";
+    items.push({
+      id: `account-${item.id}`,
+      type,
+      priority: accountSetupSprintPriority(item.priority),
+      accountId: item.accountId,
+      category: categoryByAccountPlatform.get(`${item.accountId}:${item.platform}`) || null,
+      platform: item.platform,
+      ownerAction: type === "account_verify"
+        ? `Verify ${item.handle} and import verified account evidence.`
+        : `Create or claim ${item.handle} and import submitted account evidence.`,
+      portalUrl: item.signupUrl,
+      artifactPath: input.accountSetupSession.markdownPath,
+      requiredEvidence: sprintEvidence([item.submittedEvidenceBatchRow, item.verifiedEvidenceBatchRow, item.evidenceRecipeRow]),
+      blockedBy: item.status === "blocked" ? item.blockers : [],
+      nextStep: item.nextStep,
+      publishGuardrail: "External account must have real profile/security evidence before OAuth, Metricool, or publishing activation.",
+    });
+  }
+
+  for (const item of input.permissionRequestPack.items.filter((permissionItem) => permissionItem.packStatus !== "ready")) {
+    items.push({
+      id: `permission-${item.platform}-${item.scope.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+      type: "permission_request",
+      priority: item.packStatus === "blocked" ? "critical" : "high",
+      accountId: null,
+      category: null,
+      platform: item.platform,
+      ownerAction: item.requestReadiness === "submitted"
+        ? `Monitor ${item.scope} review and import approval evidence.`
+        : `Request ${item.scope} in the platform developer portal.`,
+      portalUrl: item.developerPortalUrl,
+      artifactPath: input.permissionRequestPack.markdownPath,
+      requiredEvidence: sprintEvidence([item.evidenceBatchRow, item.evidenceRecipeRow, ...item.reviewerEvidence]),
+      blockedBy: item.packStatus === "blocked" ? sprintEvidence(item.blockers.length ? item.blockers : item.missingEvidence) : [],
+      nextStep: item.nextStep,
+      publishGuardrail: "Permission approval is required before direct API publishing; use manual or approval_required fallback until approved.",
+    });
+  }
+
+  for (const check of input.credentialChecks.filter((credential) => credential.status !== "ready")) {
+    items.push({
+      id: `credential-${check.platform}`,
+      type: "credential_missing",
+      priority: "critical",
+      accountId: null,
+      category: null,
+      platform: check.platform,
+      ownerAction: `Add missing credential names for ${check.label}: ${check.missingEnvVars.join(", ")}.`,
+      portalUrl: PLATFORM_REQUIREMENTS.find((requirement) => requirement.platform === check.platform)?.developerPortalUrl || null,
+      artifactPath: CREDENTIAL_SETUP_MISSING_TEMPLATE_PATH,
+      requiredEvidence: sprintEvidence([
+        "Credential Doctor shows the platform credential group ready.",
+        "Runtime reload completed after local secret manager update.",
+      ]),
+      blockedBy: check.missingEnvVars.map((envVar) => `Missing ${envVar}`),
+      nextStep: check.nextStep,
+      publishGuardrail: "Credentials must be configured outside generated artifacts before OAuth or API publishing can be enabled.",
+    });
+  }
+
+  for (const channel of input.metricoolPublishing.channels.filter((channelItem) => channelItem.publishGate !== "approval_required_ready" || channelItem.connectedProfiles < channelItem.requiredProfiles)) {
+    const missingProfiles = channel.networks.filter((network) => !channel.connectedNetworks.includes(network));
+    items.push({
+      id: `metricool-profile-${channel.accountId}`,
+      type: "metricool_profile",
+      priority: channel.publishGate === "blocked" ? "critical" : "high",
+      accountId: channel.accountId,
+      category: channel.category,
+      platform: "system",
+      ownerAction: `Connect Metricool profiles for ${channel.accountName}${missingProfiles.length ? `: ${missingProfiles.join(", ")}` : ""}.`,
+      portalUrl: channel.connectPortalUrl,
+      artifactPath: input.metricoolPublishing.markdownPath,
+      requiredEvidence: sprintEvidence(channel.evidenceNeeded),
+      blockedBy: channel.blockers.length ? channel.blockers : [`${channel.connectedProfiles}/${channel.requiredProfiles} Metricool profiles connected.`],
+      nextStep: channel.nextStep,
+      publishGuardrail: metricoolPublishGuardrail,
+    });
+  }
+
+  for (const item of input.metricoolExecutionQueue.items.filter((queueItem) => queueItem.status !== "ready_to_send")) {
+    items.push({
+      id: `metricool-queue-${item.id}`,
+      type: "metricool_queue",
+      priority: item.status === "blocked" ? "high" : "medium",
+      accountId: item.accountId,
+      category: categoryByAccountPlatform.get(`${item.accountId}:${item.platform}`) || null,
+      platform: item.platform,
+      ownerAction: item.status === "queued_for_approval"
+        ? `Review queued Metricool post ${item.postId} for ${item.accountName}.`
+        : `Resolve Metricool queue blocker for ${item.postId}.`,
+      portalUrl: "https://app.metricool.com/",
+      artifactPath: input.metricoolExecutionQueue.markdownPath,
+      requiredEvidence: sprintEvidence(item.gates.map((gate) => `${gate.label}: ${gate.evidence}`)),
+      blockedBy: item.status === "blocked" ? item.blockers : [],
+      nextStep: item.nextStep,
+      publishGuardrail: metricoolPublishGuardrail,
+    });
+  }
+
+  const sortedItems = items.sort((a, b) => {
+    const aBlocked = a.blockedBy.length > 0 ? 0 : 1;
+    const bBlocked = b.blockedBy.length > 0 ? 0 : 1;
+    return aBlocked - bBlocked
+      || sprintPriorityRank(a.priority) - sprintPriorityRank(b.priority)
+      || a.type.localeCompare(b.type)
+      || a.id.localeCompare(b.id);
+  }).map((item, index) => completeSprintItem(item, index + 1));
+  const totals = sortedItems.reduce<Clipper100ClipsExecutionSprintSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.type === "source_scout") sum.sourceScout += 1;
+    if (item.type === "account_create") sum.accountCreate += 1;
+    if (item.type === "account_verify") sum.accountVerify += 1;
+    if (item.type === "permission_request") sum.permissionRequest += 1;
+    if (item.type === "credential_missing") sum.credentialMissing += 1;
+    if (item.type === "metricool_profile") sum.metricoolProfile += 1;
+    if (item.type === "metricool_queue") sum.metricoolQueue += 1;
+    if (item.blockedBy.length > 0) sum.blocked += 1;
+    else sum.ready += 1;
+    return sum;
+  }, {
+    items: 0,
+    sourceScout: 0,
+    accountCreate: 0,
+    accountVerify: 0,
+    permissionRequest: 0,
+    credentialMissing: 0,
+    metricoolProfile: 0,
+    metricoolQueue: 0,
+    blocked: 0,
+    ready: 0,
+    sourceScoutBlockers: 0,
+    accountsNeedingSetup: 0,
+    permissionProofNeeded: 0,
+    credentialsMissing: 0,
+    metricoolProfilesToConnect: 0,
+    approvalOnly: 0,
+    externalBlockers: 0,
+    readyToExecute: 0,
+  });
+  totals.sourceScoutBlockers = sortedItems.filter((item) => item.type === "source_scout" && item.blockedBy.length > 0).length;
+  totals.accountsNeedingSetup = totals.accountCreate + totals.accountVerify;
+  totals.permissionProofNeeded = totals.permissionRequest;
+  totals.credentialsMissing = totals.credentialMissing;
+  totals.metricoolProfilesToConnect = totals.metricoolProfile;
+  totals.approvalOnly = sortedItems.filter((item) => item.type === "metricool_queue").length;
+  totals.externalBlockers = totals.blocked;
+  totals.readyToExecute = totals.ready;
+  const status: Clipper100ClipsExecutionSprintStatus = totals.items === 0
+    ? "not_prepared"
+    : totals.blocked > 0
+      ? "blocked"
+      : "ready";
+  return {
+    status,
+    generatedAt: input.generatedAt ?? null,
+    manifestPath: HUNDRED_CLIPS_EXECUTION_SPRINT_PATH,
+    markdownPath: HUNDRED_CLIPS_EXECUTION_SPRINT_MARKDOWN_PATH,
+    csvPath: HUNDRED_CLIPS_EXECUTION_SPRINT_CSV_PATH,
+    guardrail: metricoolPublishGuardrail,
+    publishMode: "approval_required",
+    realPublishEnabled: false,
+    metricoolMode: "approval_required",
+    targetWeeklyClips: input.weeklyProductionFunnel.targetWeeklyClips || 100,
+    targetDailyClips: input.weeklyProductionFunnel.targetDailyClips,
+    items: sortedItems,
+    sourceArtifacts: {
+      sourceScoutWorkQueuePath: input.sourceScoutWorkQueue.markdownPath,
+      sourceScoutExactUrlKitPath: input.sourceScoutExactUrlKit.markdownPath,
+      sourceScoutSourceFileKitPath: input.sourceScoutSourceFileKit.markdownPath,
+      weeklyProductionFunnelPath: input.weeklyProductionFunnel.markdownPath,
+      accountSetupSessionPath: input.accountSetupSession.markdownPath,
+      accountCreationPackPath: input.accountCreationPack.markdownPath,
+      permissionRequestPackPath: input.permissionRequestPack.markdownPath,
+      metricoolPublishingPath: input.metricoolPublishing.markdownPath,
+      metricoolExecutionQueuePath: input.metricoolExecutionQueue.markdownPath,
+      ownerConnectPackPath: OWNER_CONNECT_PACK_MARKDOWN_PATH,
+      robertNextActionsPath: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
+      launchLaneMatrixPath: LAUNCH_LANE_MATRIX_MARKDOWN_PATH,
+      goLiveCompletionAuditPath: GO_LIVE_COMPLETION_AUDIT_MARKDOWN_PATH,
+    },
+    totals,
+    nextStep: status === "not_prepared"
+      ? "Prepare Source Scout, Account Setup, Permission Request Pack and Metricool queue first."
+      : sortedItems.find((item) => item.priority === "critical" && item.blockedBy.length > 0)?.nextStep
+        || sortedItems.find((item) => item.blockedBy.length > 0)?.nextStep
+        || sortedItems[0]?.nextStep
+        || "100 Clips Sprint has no open coordination actions.",
+  };
+}
+
+function renderClipper100ClipsExecutionSprintMarkdown(summary: Clipper100ClipsExecutionSprintSummary): string {
+  return [
+    "# Clippers 100 Clips Execution Sprint",
+    "",
+    "Small coordination layer for reaching 100 clips/week. It references existing Source Scout, Account Setup, Permission Request and Metricool artifacts; it does not create accounts, submit permissions, store secrets or publish content.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Target weekly clips: ${summary.targetWeeklyClips}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Source Scout: ${summary.totals.sourceScout}`,
+    `- Account create: ${summary.totals.accountCreate}`,
+    `- Account verify: ${summary.totals.accountVerify}`,
+    `- Permission request: ${summary.totals.permissionRequest}`,
+    `- Credential missing: ${summary.totals.credentialMissing}`,
+    `- Metricool profile: ${summary.totals.metricoolProfile}`,
+    `- Metricool queue: ${summary.totals.metricoolQueue}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Ready: ${summary.totals.ready}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Source Artifacts",
+    "",
+    ...Object.entries(summary.sourceArtifacts).map(([label, artifactPath]) => `- ${label}: ${artifactPath}`),
+    "",
+    "## Actions",
+    "",
+    ...summary.items.flatMap((item, index) => [
+      `### ${index + 1}. ${item.ownerAction}`,
+      "",
+      `- Type: ${item.type}`,
+      `- Priority: ${item.priority}`,
+      `- Account: ${item.accountId || "n/a"}`,
+      `- Category: ${item.category || "n/a"}`,
+      `- Platform: ${item.platform}`,
+      `- Portal: ${item.portalUrl || "n/a"}`,
+      `- Artifact: ${item.artifactPath}`,
+      `- Next step: ${item.nextStep}`,
+      `- Publish guardrail: ${item.publishGuardrail}`,
+      "",
+      item.requiredEvidence.length ? "Required evidence:" : "Required evidence: none",
+      ...item.requiredEvidence.map((evidence) => `- ${evidence}`),
+      "",
+      item.blockedBy.length ? "Blocked by:" : "Blocked by: none",
+      ...item.blockedBy.map((blocker) => `- ${blocker}`),
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderClipper100ClipsExecutionSprintCsv(summary: Clipper100ClipsExecutionSprintSummary): string {
+  const header = ["id", "type", "priority", "account_id", "category", "platform", "owner_action", "portal_url", "artifact_path", "required_evidence", "blocked_by", "next_step", "publish_guardrail"];
+  const rows = summary.items.map((item) => [
+    item.id,
+    item.type,
+    item.priority,
+    item.accountId || "",
+    item.category || "",
+    item.platform,
+    item.ownerAction,
+    item.portalUrl || "",
+    item.artifactPath,
+    item.requiredEvidence.join(" | "),
+    item.blockedBy.join(" | "),
+    item.nextStep,
+    item.publishGuardrail,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+export async function prepareClipper100ClipsExecutionSprint(userId = getSystemUserId()): Promise<{ hundredClipsExecutionSprint: Clipper100ClipsExecutionSprintSummary; externalAccountPermissionSprint: Clipper100ClipsExecutionSprintSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const generatedAt = new Date().toISOString();
+  const hundredClipsExecutionSprint = buildClipper100ClipsExecutionSprintSummary({
+    generatedAt,
+    accountCreationPack: statusBefore.accountCreationPack,
+    accountSetupSession: statusBefore.accountSetupSession,
+    permissionRequestPack: statusBefore.permissionRequestPack,
+    credentialChecks: statusBefore.credentialChecks,
+    sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
+    sourceScoutExactUrlKit: statusBefore.sourceScoutExactUrlKit,
+    sourceScoutSourceFileKit: statusBefore.sourceScoutSourceFileKit,
+    weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
+    metricoolPublishing: statusBefore.metricoolPublishing,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+  });
+  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_PATH, JSON.stringify(hundredClipsExecutionSprint, null, 2));
+  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_MARKDOWN_PATH, renderClipper100ClipsExecutionSprintMarkdown(hundredClipsExecutionSprint));
+  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_CSV_PATH, renderClipper100ClipsExecutionSprintCsv(hundredClipsExecutionSprint));
+  return {
+    hundredClipsExecutionSprint,
+    externalAccountPermissionSprint: hundredClipsExecutionSprint,
+    status: await getClipperStatus(userId),
+  };
+}
+
+export async function prepareClipperExternalAccountPermissionSprint(userId = getSystemUserId()): Promise<{ hundredClipsExecutionSprint: Clipper100ClipsExecutionSprintSummary; externalAccountPermissionSprint: Clipper100ClipsExecutionSprintSummary; status: ClipperStatus }> {
+  return prepareClipper100ClipsExecutionSprint(userId);
+}
+
 function externalConnectStatusFromRobertStatus(status: "blocked" | "ready_to_execute" | "waiting" | "done"): ClipperExternalConnectSprintStatus {
   return status;
 }
@@ -31629,7 +36035,15 @@ async function buildDropzoneReadyPackSummary(input: {
   const sourceManifestBlockers = [
     ...(input.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0 ? [`${input.sourceDropDiagnostic.totals.manifestPlaceholderRows} source manifest rows still have placeholders.`] : []),
     ...(input.sourceDropDiagnostic.totals.manifestMissingFiles > 0 ? [`${input.sourceDropDiagnostic.totals.manifestMissingFiles} expected source files are missing from source-drop.`] : []),
+    ...(input.sourceDropDiagnostic.totals.invalidSourceAssets > 0 ? [`${input.sourceDropDiagnostic.totals.invalidSourceAssets} source asset(s) are invalid/stub media and must be replaced.`] : []),
     ...(input.sourceDropDiagnostic.totals.missingSourceAssets > 0 ? [`${input.sourceDropDiagnostic.totals.missingSourceAssets} rights-ready source assets missing for weekly coverage.`] : []),
+  ];
+  const sourceVideosMissingInput = missingById.get("source_videos");
+  const sourceVideoBlockers = [
+    ...sourceManifestBlockers,
+    ...(sourceManifestBlockers.length
+      ? []
+      : ["source assets still need a completed source-drop import with rights evidence."]),
   ];
 
   const items: ClipperDropzoneReadyPackItem[] = [
@@ -31707,18 +36121,16 @@ async function buildDropzoneReadyPackSummary(input: {
       rank: 3,
       lane: "source_videos",
       label: "Rights-cleared source video drop intake",
-      status: dropzoneStatusFromMissingInput(missingById.get("source_videos"), input.sourceSupplyDropKit.totals.rightsReadyAssets > 0),
+      status: dropzoneStatusFromMissingInput(sourceVideosMissingInput, input.sourceSupplyDropKit.totals.rightsReadyAssets > 0),
       priority: "high",
       dropDirs: sourceDropDirs.length ? sourceDropDirs : [SOURCE_DROP_DIR],
       acceptedFormats: ["mp4", "mov", "m4v", "webm", "CSV/JSON source intake rows"],
       expectedFiles: sourceBatches.flatMap((batch) => batch.sourceDropPaths).slice(0, 60),
       copyReadyTemplate: input.sourceSupplyDropKit.intakeBatchTemplate || "",
-      sourceArtifactPath: sourceManifestBlockers.length
-        ? input.sourceDropDiagnostic.repairWorksheetCsvPath
-        : input.sourceSupplyDropKit.markdownPath,
+      sourceArtifactPath: input.sourceDropDiagnostic.repairWorksheetCsvPath,
       localActionUrl: "/api/clippers/import-source-drop-files",
       actionLabel: "Import source drop files",
-      blockers: sourceManifestBlockers,
+      blockers: sourceVideoBlockers,
       unlocks: [
         "Production queue source availability",
         "Draft rendering",
@@ -33161,8 +37573,44 @@ async function buildRobertNextActionsSummary(input: {
       nextStep: batch.nextStep,
     }));
 
+  const launchEvidenceDropItem = input.dropzoneReadyPack.items.find((item) => item.id === "launch_evidence");
+  const launchEvidenceFixArtifactPath = launchEvidenceDropItem?.sourceArtifactPath || input.launchEvidenceFixPack.markdownPath;
+  const launchEvidenceFixItems: ClipperRobertNextActionItem[] = input.launchEvidenceFixPack.items.length > 0 ? [{
+    id: "launch-evidence-fixpack",
+    rank: dropItems.length + ownerItems.length + auditItems.length + sourceItems.length + 1,
+    lane: "evidence",
+    label: "Launch evidence fix pack",
+    status: "ready_to_execute",
+    priority: "critical",
+    estimatedMinutes: Math.max(15, Math.min(60, input.launchEvidenceFixPack.items.length * 4)),
+    platform: "mixed",
+    actionUrl: "/api/clippers/record-launch-evidence-batch",
+    artifactPath: launchEvidenceFixArtifactPath,
+    portalUrl: null,
+    dropDirs: [input.launchEvidenceFixPack.sourceArtifacts.evidenceDropDir],
+    evidenceRows: input.launchEvidenceFixPack.items.map((item) => item.suggestedReplacementRow).slice(0, 5),
+    operatorSteps: [
+      `Open the fix pack: ${input.launchEvidenceFixPack.markdownPath}.`,
+      `Use the suggested import CSV: ${input.launchEvidenceFixPack.suggestedImportCsvPath}.`,
+      "Replace every placeholder with real proof URL, local proof path, app ID, ticket ID or approval note.",
+      `Import the completed rows into: ${input.launchEvidenceFixPack.sourceArtifacts.ownerConnectEvidencePath}.`,
+      "Refresh Launch Evidence Fix Pack and Completion Audit after import.",
+    ],
+    blockers: [
+      `${input.launchEvidenceFixPack.totals.items} launch evidence item(s) still need real proof before full go-live.`,
+      ...(input.launchEvidenceFixPack.totals.currentStateGaps > 0 ? [`${input.launchEvidenceFixPack.totals.currentStateGaps} current-state proof gaps.`] : []),
+      ...(input.launchEvidenceFixPack.totals.rejectedRows > 0 ? [`${input.launchEvidenceFixPack.totals.rejectedRows} rejected evidence row(s).`] : []),
+    ],
+    doneCriteria: [
+      "Every suggested row has real non-placeholder proof.",
+      "Completed evidence rows are imported through Launch Evidence Batch.",
+      "Launch Evidence Fix Pack returns zero items or Completion Audit no longer needs that evidence.",
+    ],
+    nextStep: input.launchEvidenceFixPack.nextStep,
+  }] : [];
+
   const deduped = new Map<string, ClipperRobertNextActionItem>();
-  [...dropItems, ...ownerItems, ...auditItems, ...sourceItems].forEach((item) => {
+  [...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
     const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
     if (!deduped.has(key)) deduped.set(key, item);
   });
@@ -33209,6 +37657,7 @@ async function buildRobertNextActionsSummary(input: {
       commandCenterPath: input.commandCenter.markdownPath,
       ownerConnectPackPath: input.ownerConnectPack.markdownPath,
       dropzoneReadyPackPath: input.dropzoneReadyPack.markdownPath,
+      launchEvidenceFixPackPath: input.launchEvidenceFixPack.markdownPath,
       goLiveCompletionAuditPath: input.goLiveCompletionAudit.markdownPath,
       externalExecutionSessionPath: input.externalExecutionSession.markdownPath,
       sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
@@ -33241,6 +37690,7 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     `- Command Center: ${summary.sourceArtifacts.commandCenterPath}`,
     `- Owner Connect Pack: ${summary.sourceArtifacts.ownerConnectPackPath}`,
     `- Dropzone Ready Pack: ${summary.sourceArtifacts.dropzoneReadyPackPath}`,
+    `- Launch Evidence Fix Pack: ${summary.sourceArtifacts.launchEvidenceFixPackPath}`,
     `- Completion Audit: ${summary.sourceArtifacts.goLiveCompletionAuditPath}`,
     `- External Execution Session: ${summary.sourceArtifacts.externalExecutionSessionPath}`,
     `- Source Supply Drop Kit: ${summary.sourceArtifacts.sourceSupplyDropKitPath}`,
@@ -35136,9 +39586,22 @@ function launchEvidenceSuggestedNotes(item: ClipperLaunchEvidenceBatchRejectedIt
   const category = launchEvidenceFixCategory(item.reason);
   if (category === "account_proof") return `${identifier} verified with profile URL <profile_url>, handle <handle>, 2FA enabled, proof stored at <proof_path_or_url>.`;
   if (category === "permission_proof") return `${identifier} permission requested/approved in platform portal; review ticket <ticket_id>; proof stored at <proof_path_or_url>.`;
-  if (category === "public_url") return "Developer app uses public HTTPS URL <https://your-domain.example> for privacy/terms/redirect/app review proof.";
+  if (category === "public_url") return `Developer app uses public HTTPS URL ${launchEvidenceSuggestedPublicBaseUrl(item.publicBaseUrl)} for privacy/terms/redirect/app review proof.`;
   if (category === "source_rights") return `${identifier} source is owned/licensed/permissioned; rights proof <proof_path_or_url>; allowed for reposting and editing.`;
   return "Replace placeholders with real evidence and keep secrets/tokens out of this row.";
+}
+
+function launchEvidenceSuggestedPublicBaseUrl(candidate?: string | null): string {
+  const storedPublicBaseUrl = process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL === "true"
+    ? null
+    : readStoredProductionPublicBaseUrl();
+  const candidatePublicBaseUrl = candidate && isProductionPublicBaseUrl(candidate) && !evidenceDropValueLooksPlaceholder(candidate)
+    ? candidate.trim()
+    : null;
+  const envPublicBaseUrl = process.env.PUBLIC_BASE_URL && isProductionPublicBaseUrl(process.env.PUBLIC_BASE_URL) && !evidenceDropValueLooksPlaceholder(process.env.PUBLIC_BASE_URL)
+    ? process.env.PUBLIC_BASE_URL.trim()
+    : null;
+  return storedPublicBaseUrl || candidatePublicBaseUrl || envPublicBaseUrl || "<https://your-domain.example>";
 }
 
 function launchEvidenceSuggestedReplacementRow(item: ClipperLaunchEvidenceBatchRejectedItem): string {
@@ -35160,7 +39623,7 @@ function launchEvidenceSuggestedReplacementRow(item: ClipperLaunchEvidenceBatchR
     || (isDeveloperApp ? "submitted" : isPermission ? "requested" : isSourceRights ? "owned_or_permissioned" : "verified");
   const scope = isPermission ? item.scope || item.identifier || "<scope>" : "";
   const appIdentifier = isDeveloperApp ? item.appIdentifier || "<app_identifier>" : "";
-  const publicBaseUrl = isDeveloperApp ? item.publicBaseUrl || "<https://your-domain.example>" : "";
+  const publicBaseUrl = isDeveloperApp ? launchEvidenceSuggestedPublicBaseUrl(item.publicBaseUrl) : "";
   return [kind, accountId, platform, status, scope, appIdentifier, publicBaseUrl, launchEvidenceSuggestedNotes(item)].map(csvCell).join(",");
 }
 
@@ -35201,7 +39664,7 @@ async function buildCurrentStateLaunchEvidenceFixItems(startRank: number): Promi
   }
 
   for (const item of developerAppEvidence.connectionKitItems.filter((app) => app.status !== "approved")) {
-    const publicBaseUrl = item.publicBaseUrl && !evidenceDropValueLooksPlaceholder(item.publicBaseUrl) ? item.publicBaseUrl : "<https://your-domain.example>";
+    const publicBaseUrl = launchEvidenceSuggestedPublicBaseUrl(item.publicBaseUrl);
     const appIdentifier = item.appIdentifier && !evidenceDropValueLooksPlaceholder(item.appIdentifier) ? item.appIdentifier : `<${item.platform}_app_identifier>`;
     const redirectUri = publicBaseUrl.startsWith("https://")
       ? `${publicBaseUrl}/api/clippers/oauth/${item.platform}/callback`
@@ -36148,6 +40611,8 @@ async function buildGoLiveCompletionAuditSummary(input: {
   appReviewDemoPack: ClipperAppReviewDemoPackSummary;
   oauthConnectionPack: ClipperOAuthConnectionPackSummary;
   oauthGoLive: ClipperOAuthGoLiveSummary;
+  metricoolPublishing: ClipperMetricoolPublishingSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
   productionQueue: ClipperProductionQueueSummary;
@@ -36173,6 +40638,23 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.productionUrlVerification.status === "pass";
   const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
   const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
+  const metricoolBridgeReady = input.metricoolPublishing.status === "ready_for_approval_queue" && input.metricoolPublishing.totals.readyForApprovalQueue > 0;
+  const metricoolBridgeProgress = metricoolBridgeReady
+    || input.metricoolPublishing.status === "ready_to_connect"
+    || input.metricoolPublishing.totals.connectedProfiles > 0
+    || input.metricoolExecutionQueue.totals.items > 0;
+  const metricoolBridgeEvidence = `Metricool bridge=${input.metricoolPublishing.status}; ${input.metricoolPublishing.totals.readyForApprovalQueue}/${input.metricoolPublishing.totals.channels} channels ready; ${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} profiles connected; queue=${input.metricoolExecutionQueue.status} (${input.metricoolExecutionQueue.totals.queuedForApproval} approval, ${input.metricoolExecutionQueue.totals.blocked} blocked).`;
+  const metricoolBridgeBlockers = input.metricoolPublishing.blockers.length
+    ? input.metricoolPublishing.blockers
+    : input.metricoolPublishing.channels
+      .filter((channel) => channel.publishGate !== "approval_required_ready")
+      .flatMap((channel) => channel.blockers.length
+        ? channel.blockers.map((blocker) => `${channel.accountName}/Metricool: ${blocker}`)
+        : [`${channel.accountName}/Metricool: ${channel.nextStep}`]);
+  const directOAuthReady = input.oauthConnectionPack.totals.ready >= input.oauthConnectionPack.totals.connections && input.oauthConnectionPack.totals.connections > 0 && tokenRecords >= 3;
+  const directOAuthProgress = input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0;
+  const directPublisherReady = input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready";
+  const directPublisherProgress = input.publisherConnectors.status === "partial" || input.goLiveExecutionPack.status === "in_progress";
   const requirements: ClipperGoLiveCompletionRequirement[] = [
     {
       id: "accounts-created-verified",
@@ -36315,45 +40797,59 @@ async function buildGoLiveCompletionAuditSummary(input: {
     },
     {
       id: "oauth-tokens-saved",
-      label: "OAuth connected and tokens encrypted",
+      label: "OAuth or Metricool publishing bridge connected",
       phase: "oauth",
       status: completionStatusFromReady(
-        input.oauthConnectionPack.totals.ready >= input.oauthConnectionPack.totals.connections && input.oauthConnectionPack.totals.connections > 0 && tokenRecords >= 3,
-        input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0,
+        metricoolBridgeReady || directOAuthReady,
+        metricoolBridgeProgress || directOAuthProgress,
       ),
       owner: "Publisher",
       requiredEvidence: [
-        "OAuth auth URL generated and completed for every platform/account connection.",
-        "No raw OAuth token appears in evidence or markdown.",
-        "Encrypted token vault contains saved records for required platforms.",
+        "Either Metricool live sync verifies the brand/blogId publishing bridge, or direct OAuth is connected for every platform/account.",
+        "No raw OAuth token, Metricool token, cookies or private credential appears in evidence or markdown.",
+        "If direct APIs are used later, Encrypted token vault contains saved records for required platforms.",
       ],
-      currentEvidence: `${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} OAuth connections ready; ${input.oauthConnectionPack.totals.tokensSaved} connection tokens; ${tokenRecords} token vault records.`,
-      proofSource: input.oauthConnectionPack.markdownPath,
-      actionUrl: "/api/clippers/prepare-oauth-connection-pack",
+      currentEvidence: `${metricoolBridgeEvidence} Direct OAuth ${input.oauthConnectionPack.totals.ready}/${input.oauthConnectionPack.totals.connections} connections ready; ${input.oauthConnectionPack.totals.tokensSaved} connection tokens; ${tokenRecords} token vault records.`,
+      proofSource: metricoolBridgeReady ? input.metricoolPublishing.markdownPath : input.oauthConnectionPack.markdownPath,
+      actionUrl: metricoolBridgeReady ? "/api/clippers/record-metricool-account-evidence" : "/api/clippers/prepare-oauth-connection-pack",
       portalUrl: null,
-      blockers: input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
-      nextStep: input.oauthConnectionPack.nextStep || input.oauthGoLive.nextStep,
+      blockers: metricoolBridgeReady
+        ? []
+        : [
+          ...metricoolBridgeBlockers,
+          ...input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
+        ].slice(0, 8),
+      nextStep: metricoolBridgeReady
+        ? "Metricool publishing bridge is connected for the first guarded queue; keep direct OAuth optional until direct API posting is needed."
+        : input.metricoolPublishing.nextStep || input.oauthConnectionPack.nextStep || input.oauthGoLive.nextStep,
     },
     {
       id: "publisher-connectors-ready",
       label: "Publishing connectors ready for guarded posting",
       phase: "publishing",
       status: completionStatusFromReady(
-        input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready",
-        input.publisherConnectors.status === "partial" || input.goLiveExecutionPack.status === "in_progress",
+        metricoolBridgeReady || directPublisherReady,
+        metricoolBridgeProgress || directPublisherProgress,
       ),
       owner: "Publisher",
       requiredEvidence: [
-        "TikTok, Instagram and YouTube connector preflights pass.",
-        "Go-live phases are done for all platforms.",
-        "Publish gate is ready and manual approval mode is still respected for new accounts.",
+        "Metricool SPORT/memes brand and blogId are live-synced, or TikTok, Instagram and YouTube direct connector preflights pass.",
+        "The guarded publish gate is in manual approval mode for new accounts.",
+        "Execution queue is generated without secrets and cannot send until source/rights gates pass.",
       ],
-      currentEvidence: `${input.publisherConnectors.totals.ready}/${input.publisherConnectors.totals.platforms} publisher connectors ready; go-live pack ${input.goLiveExecutionPack.status}.`,
-      proofSource: input.publisherConnectors.markdownPath,
-      actionUrl: "/api/clippers/prepare-publisher-connectors",
+      currentEvidence: `${metricoolBridgeEvidence} Direct connectors ${input.publisherConnectors.totals.ready}/${input.publisherConnectors.totals.platforms} ready; go-live pack ${input.goLiveExecutionPack.status}.`,
+      proofSource: metricoolBridgeReady ? input.metricoolPublishing.markdownPath : input.publisherConnectors.markdownPath,
+      actionUrl: metricoolBridgeReady ? "/api/clippers/prepare-metricool-execution-queue" : "/api/clippers/prepare-publisher-connectors",
       portalUrl: null,
-      blockers: input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
-      nextStep: input.publisherConnectors.nextStep || input.goLiveExecutionPack.nextStep,
+      blockers: metricoolBridgeReady
+        ? []
+        : [
+          ...metricoolBridgeBlockers,
+          ...input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
+        ].slice(0, 8),
+      nextStep: metricoolBridgeReady
+        ? input.metricoolExecutionQueue.nextStep
+        : input.metricoolPublishing.nextStep || input.publisherConnectors.nextStep || input.goLiveExecutionPack.nextStep,
     },
     {
       id: "content-rights-supply",
@@ -36677,7 +41173,7 @@ async function buildGoLiveOperatorBriefSummary(input: {
       owner: "Content Ops",
       priority: "critical",
       done: input.sourceDropDiagnostic.totals.rightsReadyAssets,
-      total: input.sourceDropDiagnostic.totals.minimumWeeklySourceAssets,
+      total: Math.max(input.sourceDropDiagnostic.totals.minimumWeeklySourceAssets, input.sourceDropDiagnostic.totals.rightsReadyAssets),
       artifactPath: input.sourceDropDiagnostic.markdownPath,
       actionUrl: "/api/clippers/import-source-drop",
       portalUrls: [],
@@ -36946,7 +41442,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const driveWorkspace = await buildDriveWorkspaceSummary();
   const metrics = await buildMetricsSummary(accounts);
   const analyticsReportingPack = await buildAnalyticsReportingPackSummary(accounts, metrics, automationSchedule);
-  const trendRadar = await buildTrendRadarSummary();
+  const trendRadar = await readCachedTrendRadarSummary() || await buildTrendRadarSummary();
   const trendRightsOutreach = await buildTrendRightsOutreachSummary(trendRadar);
   const viralDiscovery = await buildViralDiscoverySummary();
   const sourceDiscoveryHandoff = await buildSourceDiscoveryHandoffSummary({ sourceSupplyDropKit, viralDiscovery, sourceHunt });
@@ -36967,6 +41463,39 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const officialPermissionMatrix = await buildOfficialPermissionMatrixSummary();
   const metricoolPublishing = await buildClipperMetricoolPublishingSummary(accounts);
   const metricoolExecutionQueue = await readMetricoolExecutionQueueSummary();
+  const sourceScout = await buildSourceScoutSummary({
+    sourceDiscoveryHandoff,
+    trendRadar,
+    metricoolSourceReadiness: metricoolExecutionQueue.sourceReadiness,
+  });
+  const sourceScoutIntake = await readCachedSourceScoutIntakeSummary();
+  const sourceScoutPermissionPack = await buildSourceScoutPermissionPackSummary({
+    sourceScout,
+    sourceScoutIntake,
+  });
+  const weeklyProductionFunnel = await buildWeeklyProductionFunnelSummary({
+    sourceScout,
+    sourceScoutIntake,
+    productionQueue,
+    draftSpecs,
+    metricoolPublishing,
+    metricoolExecutionQueue,
+    metrics,
+  });
+  const sourceScoutWorkQueue = await buildSourceScoutWorkQueueSummary({
+    sourceScout,
+    sourceScoutIntake,
+    sourceScoutPermissionPack,
+    weeklyProductionFunnel,
+    metricoolExecutionQueue,
+  });
+  const sourceScoutExactUrlKit = await buildSourceScoutExactUrlKitSummary({
+    sourceScout,
+    sourceScoutWorkQueue,
+  });
+  const sourceScoutSourceFileKit = await buildSourceScoutSourceFileKitSummary({
+    sourceScoutWorkQueue,
+  });
   const publisherConnectors = await buildPublisherConnectorSummary({ tokenRecords, permissionTracker, platformReadiness, productionQueue });
   const publisherExecutionQueue = await readPublisherExecutionQueueSummary();
   const productionUrlSetup = await buildProductionUrlSetupSummary();
@@ -36984,9 +41513,21 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack });
   const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const publishingPackage = await buildPublishingPackageSummary(accounts);
+  const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    metricoolPublishing,
+    metricoolExecutionQueue,
+    publishingPackage,
+    accountEvidence,
+    developerAppEvidence,
+    permissionTracker,
+  });
+  const metricoolApprovalSession = buildMetricoolApprovalSessionSummary({
+    metricoolExecutionQueue,
+    metricoolMvpLaunchPack,
+  });
   const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, analyticsReportingPack, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
-  const commandCenter = await buildLaunchCommandCenterSummary({ accounts, credentialChecks, tokenVault, credentialSetup, credentialDoctor, platformReadiness, permissionPack, productionQueue, sourceAcquisition, sourceSupplyDropKit, sourceHunt, rightsOutreach, draftSpecs, manualPostingPack, publishingPackage, automation, automationSchedule, driveWorkspace, metrics, analyticsReportingPack, trendRadar, trendRightsOutreach, intakeKit, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, accountCreationPack, permissionTracker, permissionRequestPack, oauthConnectionPack, externalSetupQueue, externalLaunchDossier, platformPortalChecklist, appReviewSubmissionPack, appReviewDemoPack, developerApplicationDrafts, officialPermissionMatrix, publisherConnectors, publisherExecutionQueue, productionUrlSetup, productionUrlVerification, httpsTunnelPlan, legalPolicyPack, oauthGoLive, goLiveExecutionPack });
-  const blockerResolutionPack = await buildBlockerResolutionPackSummary({ commandCenter, growthAudit });
+  const commandCenter = await buildLaunchCommandCenterSummary({ accounts, credentialChecks, tokenVault, credentialSetup, credentialDoctor, platformReadiness, permissionPack, productionQueue, sourceAcquisition, sourceSupplyDropKit, sourceHunt, rightsOutreach, draftSpecs, manualPostingPack, publishingPackage, automation, automationSchedule, driveWorkspace, metrics, analyticsReportingPack, trendRadar, trendRightsOutreach, intakeKit, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, accountCreationPack, permissionTracker, permissionRequestPack, oauthConnectionPack, externalSetupQueue, externalLaunchDossier, platformPortalChecklist, appReviewSubmissionPack, appReviewDemoPack, developerApplicationDrafts, officialPermissionMatrix, metricoolPublishing, metricoolExecutionQueue, publisherConnectors, publisherExecutionQueue, productionUrlSetup, productionUrlVerification, httpsTunnelPlan, legalPolicyPack, oauthGoLive, goLiveExecutionPack });
+  const blockerResolutionPack = await buildBlockerResolutionPackSummary({ commandCenter, growthAudit, sourceScout, metricoolExecutionQueue });
   const goLiveAutopilotBrief = await buildGoLiveAutopilotBriefSummary({ blockerResolutionPack, externalLaunchDossier, goLiveExecutionPack, driveWorkspace, viralDiscovery, trendRightsOutreach });
   const goLiveAutopilotRun = await buildGoLiveAutopilotRunSummary();
   const launchEvidenceDropDiagnostic = await writeLaunchEvidenceDropDiagnosticArtifacts(await buildLaunchEvidenceDropDiagnosticSummary());
@@ -37063,6 +41604,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     appReviewDemoPack,
     oauthConnectionPack,
     oauthGoLive,
+    metricoolPublishing,
+    metricoolExecutionQueue,
     publisherConnectors,
     sourceAcquisition,
     productionQueue,
@@ -37116,6 +41659,20 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     accountEvidence,
   });
   const externalConnectAutopilot = await readCachedExternalConnectAutopilotSummary();
+  const hundredClipsExecutionSprintGeneratedAt = await stat(HUNDRED_CLIPS_EXECUTION_SPRINT_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
+  const hundredClipsExecutionSprint = buildClipper100ClipsExecutionSprintSummary({
+    generatedAt: hundredClipsExecutionSprintGeneratedAt,
+    accountCreationPack,
+    accountSetupSession,
+    permissionRequestPack,
+    credentialChecks,
+    sourceScoutWorkQueue,
+    sourceScoutExactUrlKit,
+    sourceScoutSourceFileKit,
+    weeklyProductionFunnel,
+    metricoolPublishing,
+    metricoolExecutionQueue,
+  });
 
   return {
     rootDir: ROOT_DIR,
@@ -37137,6 +41694,13 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     sourceDropDiagnostic,
     sourceAcquisition,
     sourceSupplyDropKit,
+    sourceScout,
+    sourceScoutIntake,
+    sourceScoutPermissionPack,
+    sourceScoutWorkQueue,
+    sourceScoutExactUrlKit,
+    sourceScoutSourceFileKit,
+    weeklyProductionFunnel,
     sourceDiscoveryHandoff,
     sourceIngestionSprint,
     sourceHunt,
@@ -37175,6 +41739,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     permissionSubmissionDossier,
     metricoolPublishing,
     metricoolExecutionQueue,
+    metricoolMvpLaunchPack,
+    metricoolApprovalSession,
     publisherConnectors,
     publisherExecutionQueue,
     productionUrlSetup,
@@ -37195,6 +41761,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     localDropSync,
     goLivePrepSweep,
     externalConnectAutopilot,
+    hundredClipsExecutionSprint,
+    externalAccountPermissionSprint: hundredClipsExecutionSprint,
     ownerConnectPack,
     dropzoneReadyPack,
     launchEvidenceDropDiagnostic,
@@ -37319,20 +41887,21 @@ export async function prepareClipperProductionQueue(userId = getSystemUserId()):
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
   const assets = await listSourceAssets();
-  const items = buildProductionQueueItems(accounts, assets);
+  const usableAssets = assets.filter((asset) => asset.usable);
+  const items = buildProductionQueueItems(accounts, usableAssets);
   const readyCount = items.filter((item) => item.status === "draft_ready").length;
   const reviewCount = items.filter((item) => item.status === "rights_review").length;
   const id = new Date().toISOString().replace(/[:.]/g, "-");
   const queuePath = path.join(DRAFTS_DIR, `production-queue-${id}.json`);
   const queue: ClipperProductionQueueSummary = {
-    status: assets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty",
+    status: usableAssets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty",
     queuePath,
     generatedAt: new Date().toISOString(),
     sourceAssets: assets,
     items,
     nextStep: readyCount > 0
       ? "Revisar drafts listos, renderizar videos verticales y mantener approval_required hasta conectar cuentas."
-      : assets.length > 0
+      : usableAssets.length > 0
         ? "Agregar evidencia en allowlist para desbloquear derechos antes de producir drafts."
         : "Agregar videos fuente por categoria para producir drafts reales.",
   };
@@ -37508,13 +42077,15 @@ async function buildSourceDropDiagnosticManifests(input: {
   for (const category of ["sports", "memes", "streamers"] as ClipperAccountCategory[]) {
     candidateFileKeysByCategory.set(category, new Set());
   }
-  input.candidateFiles.forEach((filePath) => {
+  await Promise.all(input.candidateFiles.map(async (filePath) => {
     const category = sourceDropCategoryFromPath(filePath);
     const ext = path.extname(filePath).toLowerCase();
     if (!category || !VIDEO_EXTENSIONS.has(ext)) return;
+    const fileStat = await stat(filePath).catch(() => null);
+    if (!fileStat || !(await sourceFileLooksUsableVideo(filePath, fileStat))) return;
     const keys = candidateFileKeysByCategory.get(category);
     sourceDropFileMatchKeys(path.basename(filePath)).forEach((key) => keys?.add(key));
-  });
+  }));
 
   return Promise.all(input.manifestFiles.map(async (manifestPath): Promise<ClipperSourceDropDiagnosticManifest> => {
     try {
@@ -37621,6 +42192,8 @@ async function writeSourceRightsFromDropManifest(input: {
       path: input.targetPath,
       sizeBytes: 0,
       updatedAt: new Date().toISOString(),
+      usable: true,
+      invalidReason: null,
       rightsStatus: "owned_or_permissioned",
       evidencePath: null,
       notes: "",
@@ -37694,10 +42267,12 @@ async function buildSourceDropDiagnosticSummary(input: {
     const isVideo = VIDEO_EXTENSIONS.has(ext);
     const category = sourceDropCategoryFromPath(filePath);
     const location = sourceDropDiagnosticLocation(filePath, category);
-    const importEligible = Boolean(category && isVideo && location === "category_dir");
+    const fileStat = isVideo ? await stat(filePath).catch(() => null) : null;
+    const usableVideo = Boolean(fileStat && await sourceFileLooksUsableVideo(filePath, fileStat));
+    const importEligible = Boolean(category && isVideo && usableVideo && location === "category_dir");
     const targetFolder = category ? getSourceFolderForCategory(category) : null;
-    const manifestRecord = importEligible ? sourceDropManifestRecordForFile(filePath, sourceDropManifests.records) : null;
-    const manifestEvidenceReady = sourceDropManifestRightsReady(manifestRecord);
+    const manifestRecord = category && isVideo && location === "category_dir" ? sourceDropManifestRecordForFile(filePath, sourceDropManifests.records) : null;
+    const manifestEvidenceReady = usableVideo && sourceDropManifestRightsReady(manifestRecord);
     const rightsEvidencePath = importEligible
       ? await findRightsEvidence(filePath) || (manifestEvidenceReady ? manifestRecord.manifestPath : null)
       : null;
@@ -37707,6 +42282,8 @@ async function buildSourceDropDiagnosticSummary(input: {
         ? "Archivo fuera de sports/, memes/ o streamers/."
         : location !== "category_dir"
           ? "Archivo en ubicacion incorrecta; debe estar dentro de una carpeta de categoria."
+          : !usableVideo
+          ? "Archivo fuente no parece un video usable o es demasiado pequeno."
           : null;
     return {
       relativePath: path.relative(SOURCE_DROP_DIR, filePath) || path.basename(filePath),
@@ -37714,6 +42291,7 @@ async function buildSourceDropDiagnosticSummary(input: {
       category,
       location,
       isVideo,
+      usableVideo,
       importEligible,
       targetFolder,
       rightsEvidencePath,
@@ -37732,6 +42310,7 @@ async function buildSourceDropDiagnosticSummary(input: {
   const categories = input.sourceAcquisition.categories.map<ClipperSourceDropDiagnosticCategory>((category) => {
     const categoryFiles = files.filter((file) => file.category === category.category);
     const categoryManifests = manifests.filter((manifest) => manifest.category === category.category);
+    const invalidSourceAssets = input.productionQueue.sourceAssets.filter((asset) => asset.category === category.category && !asset.usable).length;
     const importEligible = categoryFiles.filter((file) => file.importEligible).length;
     const manifestReady = categoryFiles.filter((file) => file.manifestEvidenceReady).length;
     const missingSourceAssets = Math.max(0, category.minimumWeeklySourceAssets - category.rightsReadyAssets);
@@ -37749,10 +42328,13 @@ async function buildSourceDropDiagnosticSummary(input: {
       manifestPlaceholderRows: categoryManifests.reduce((sum, manifest) => sum + manifest.placeholderRows, 0),
       manifestMissingFiles: categoryManifests.reduce((sum, manifest) => sum + manifest.missingFiles.length, 0),
       sourceAssets: category.sourceAssets,
+      invalidSourceAssets,
       rightsReadyAssets: category.rightsReadyAssets,
       minimumWeeklySourceAssets: category.minimumWeeklySourceAssets,
       missingSourceAssets,
-      nextStep: categoryManifests.some((manifest) => manifest.placeholderRows > 0)
+      nextStep: invalidSourceAssets > 0
+        ? `Reemplazar ${invalidSourceAssets} archivo(s) fuente invalidos/stub por videos reales en ${getSourceFolderForCategory(category.category)}.`
+        : categoryManifests.some((manifest) => manifest.placeholderRows > 0)
         ? `Rellenar ${categoryManifests.reduce((sum, manifest) => sum + manifest.placeholderRows, 0)} fila(s) placeholder en source-drop-manifest.csv y subir archivos reales.`
         : missingSourceAssets > 0
         ? `Agregar ${missingSourceAssets} video(s) con permiso/evidencia para cubrir ${category.weeklyTargetSlots} clips/semana.`
@@ -37762,6 +42344,7 @@ async function buildSourceDropDiagnosticSummary(input: {
   const totals = categories.reduce<ClipperSourceDropDiagnosticSummary["totals"]>((sum, category) => {
     sum.minimumWeeklySourceAssets += category.minimumWeeklySourceAssets;
     sum.currentSourceAssets += category.sourceAssets;
+    sum.invalidSourceAssets += category.invalidSourceAssets;
     sum.rightsReadyAssets += category.rightsReadyAssets;
     sum.missingSourceAssets += category.missingSourceAssets;
     sum.manifestReady += category.manifestReady;
@@ -37770,7 +42353,7 @@ async function buildSourceDropDiagnosticSummary(input: {
     sum.manifestReadyRows += category.manifestReadyRows;
     sum.manifestPlaceholderRows += category.manifestPlaceholderRows;
     sum.manifestMissingFiles += category.manifestMissingFiles;
-    if (category.missingSourceAssets === 0) sum.categoriesReady += 1;
+    if (category.missingSourceAssets === 0 && category.invalidSourceAssets === 0) sum.categoriesReady += 1;
     return sum;
   }, {
     files: files.length,
@@ -37785,10 +42368,13 @@ async function buildSourceDropDiagnosticSummary(input: {
     categoriesReady: 0,
     minimumWeeklySourceAssets: 0,
     currentSourceAssets: 0,
+    invalidSourceAssets: 0,
     rightsReadyAssets: 0,
     missingSourceAssets: 0,
   });
-  const status: ClipperSourceDropDiagnosticStatus = totals.missingSourceAssets === 0
+  const status: ClipperSourceDropDiagnosticStatus = totals.invalidSourceAssets > 0
+    ? "needs_rights"
+    : totals.missingSourceAssets === 0
     ? "ready"
     : totals.importEligible > 0
       ? "ready_to_import"
@@ -37807,14 +42393,16 @@ async function buildSourceDropDiagnosticSummary(input: {
     manifests,
     categories,
     totals,
-    nextStep: status === "ready"
+    nextStep: totals.invalidSourceAssets > 0
+      ? `Hay ${totals.invalidSourceAssets} archivo(s) fuente invalidos/stub; reemplazalos por videos reales antes de producir o enviar a Metricool.`
+      : status === "ready"
       ? "Source supply listo para la meta semanal actual; preparar drafts y mantener rights gate."
       : status === "ready_to_import"
         ? "Hay videos en source-drop listos para importar; ejecuta Import source-drop y luego agrega evidencia de derechos."
-        : status === "needs_rights"
-          ? "Hay assets fuente, pero faltan permisos/evidencia suficientes para cubrir la meta semanal."
-          : totals.manifestPlaceholderRows > 0
-            ? `Hay ${totals.manifestPlaceholderRows} fila(s) pendientes en source-drop manifests; rellena URLs, source, proof y sube los videos.`
+      : status === "needs_rights"
+        ? "Hay assets fuente, pero faltan permisos/evidencia suficientes para cubrir la meta semanal."
+        : totals.manifestPlaceholderRows > 0
+          ? `Hay ${totals.manifestPlaceholderRows} fila(s) pendientes en source-drop manifests; rellena URLs, source, proof y sube los videos.`
           : `Coloca videos reales en ${SOURCE_DROP_DIR}/sports, ${SOURCE_DROP_DIR}/memes o ${SOURCE_DROP_DIR}/streamers.`,
   };
 }
@@ -37929,6 +42517,17 @@ function renderSourceDropRepairWorksheetCsv(summary: ClipperSourceDropDiagnostic
     }
   }
   for (const category of summary.categories) {
+    if (category.invalidSourceAssets > 0) {
+      rows.push(withSearch([
+        "invalid_source_asset",
+        category.category,
+        category.sourceFolder,
+        "",
+        `${category.invalidSourceAssets} invalid/stub source asset(s)`,
+        "Source files exist, but they are too small or do not look like usable video files.",
+        "Replace stubs/placeholders with real MP4/MOV/WebM files before production or Metricool approval.",
+      ], category.category, "", category.nextStep));
+    }
     if (category.missingSourceAssets > 0) {
       rows.push(withSearch([
         "category_gap",
@@ -37967,6 +42566,7 @@ function renderSourceDropDiagnosticMarkdown(summary: ClipperSourceDropDiagnostic
     `- Categories ready: ${summary.totals.categoriesReady}/${summary.categories.length}`,
     `- Minimum weekly source assets: ${summary.totals.minimumWeeklySourceAssets}`,
     `- Current source assets: ${summary.totals.currentSourceAssets}`,
+    `- Invalid/stub source assets: ${summary.totals.invalidSourceAssets}`,
     `- Rights-ready assets: ${summary.totals.rightsReadyAssets}`,
     `- Missing source assets: ${summary.totals.missingSourceAssets}`,
     "",
@@ -37990,6 +42590,7 @@ function renderSourceDropDiagnosticMarkdown(summary: ClipperSourceDropDiagnostic
       `- Manifest placeholder rows: ${category.manifestPlaceholderRows}`,
       `- Manifest missing files: ${category.manifestMissingFiles}`,
       `- Source assets: ${category.sourceAssets}`,
+      `- Invalid/stub source assets: ${category.invalidSourceAssets}`,
       `- Rights-ready assets: ${category.rightsReadyAssets}`,
       `- Minimum weekly source assets: ${category.minimumWeeklySourceAssets}`,
       `- Missing source assets: ${category.missingSourceAssets}`,
@@ -38083,6 +42684,23 @@ export async function importClipperSourceDropFiles(userId = getSystemUserId()): 
         rightsEvidencePath: null,
         manifestPath: null,
         reason: "Categoria no soportada; usa sports, memes o streamers.",
+      });
+      continue;
+    }
+    const sourceStat = await stat(sourcePath).catch(() => null);
+    if (!sourceStat || !(await sourceFileLooksUsableVideo(sourcePath, sourceStat))) {
+      const manifestRecord = sourceDropManifestRecordForFile(sourcePath, sourceDropManifests.records);
+      if (manifestRecord) manifestMatched += 1;
+      items.push({
+        sourcePath,
+        targetPath: "",
+        category,
+        fileName: path.basename(sourcePath),
+        status: "skipped",
+        rightsStatus: "review_required",
+        rightsEvidencePath: null,
+        manifestPath: manifestRecord?.manifestPath || null,
+        reason: "Video invalido o stub; reemplaza por un archivo fuente real antes de crear allowlist o importar.",
       });
       continue;
     }
@@ -38195,6 +42813,54 @@ export async function prepareClipperSourceDiscoveryHandoff(userId = getSystemUse
   const sourceHunt = await readLatestSourceHuntSummary() || buildSourceHuntSummary(productionQueue, new Date().toISOString().slice(0, 10));
   const sourceDiscoveryHandoff = await writeSourceDiscoveryHandoffArtifacts(await buildSourceDiscoveryHandoffSummary({ sourceSupplyDropKit, viralDiscovery, sourceHunt }));
   return { sourceDiscoveryHandoff, status: await getClipperStatus(userId) };
+}
+
+export async function prepareClipperSourceScout(userId = getSystemUserId()): Promise<{ sourceScout: ClipperSourceScoutSummary; trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null; metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const sourceScout = await writeSourceScoutArtifacts(await buildSourceScoutSummary({
+    sourceDiscoveryHandoff: statusBefore.sourceDiscoveryHandoff,
+    trendRadar: statusBefore.trendRadar,
+    metricoolSourceReadiness: statusBefore.metricoolExecutionQueue.sourceReadiness,
+  }));
+  let trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null = null;
+  const existingTrendCandidateKeys = new Set(statusBefore.trendRadar.candidates.map((candidate) => trendCandidateDedupeKey(candidate)));
+  const exactSourceScoutCandidates = sourceScout.candidates.filter((candidate) =>
+    candidate.sourceUrlKind === "exact_video_or_post"
+    && !existingTrendCandidateKeys.has(trendCandidateDedupeKey({
+      url: candidate.sourceUrl,
+      title: candidate.title,
+      platform: candidate.platform,
+      category: candidate.category,
+    }))
+  );
+  if (exactSourceScoutCandidates.length) {
+    const batchResult = await recordClipperTrendCandidatesBatch({
+      records: exactSourceScoutCandidates.map((candidate) => ({
+        category: candidate.category,
+        platform: candidate.platform,
+        title: candidate.title,
+        url: candidate.sourceUrl,
+        source: candidate.source,
+        posted_at: candidate.discoveredAt,
+        views: candidate.trendScore,
+        likes: "",
+        comments: "",
+        shares: "",
+        rights: candidate.rightsStatus,
+        angle: candidate.hookAngle,
+      })),
+    }, userId);
+    trendCandidatesBatch = batchResult.trendCandidatesBatch;
+  }
+  const queueResult = await prepareClipperMetricoolExecutionQueue(userId);
+  return {
+    sourceScout,
+    trendCandidatesBatch,
+    metricoolExecutionQueue: queueResult.metricoolExecutionQueue,
+    status: await getClipperStatus(userId),
+  };
 }
 
 export async function prepareClipperSourceHuntSheet(input: unknown = {}, userId = getSystemUserId()): Promise<{ sourceHunt: ClipperSourceHuntSummary; status: ClipperStatus }> {
@@ -38397,6 +43063,16 @@ async function renderClipperDraftSpec(spec: ClipperDraftSpecItem, input: {
   }
 }
 
+async function sortDraftSpecsForRendering(specs: ClipperDraftSpecItem[]): Promise<ClipperDraftSpecItem[]> {
+  const withMtime = await Promise.all(specs.map(async (spec) => ({
+    spec,
+    mtimeMs: await stat(spec.sourcePath).then((file) => file.mtimeMs).catch(() => 0),
+  })));
+  return withMtime
+    .sort((left, right) => right.mtimeMs - left.mtimeMs || left.spec.sourcePath.localeCompare(right.spec.sourcePath))
+    .map((item) => item.spec);
+}
+
 export async function renderClipperDraftVideos(input: unknown = {}, userId = getSystemUserId()): Promise<{ renderedClips: ClipperRenderedClipSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
@@ -38404,7 +43080,7 @@ export async function renderClipperDraftVideos(input: unknown = {}, userId = get
   const maxClips = clipperRenderNumber(input, ["max_clips", "maxClips", "limit"], 10, 1, 100);
   const draftResult = await prepareClipperDraftSpecs(userId);
   const availableDraftSpecs = draftResult.draftSpecs.items.length;
-  const selectedSpecs = draftResult.draftSpecs.items.slice(0, maxClips);
+  const selectedSpecs = (await sortDraftSpecsForRendering(draftResult.draftSpecs.items)).slice(0, maxClips);
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
   const items: ClipperRenderedClipItem[] = [];
 
@@ -38786,8 +43462,15 @@ export const __clipperInternals = {
   encryptTokenPayload,
   buildProductionQueueItems,
   listSourceAssets,
+  sourceAssetLooksTestArtifact,
   renderEnvTemplate,
   renderPlatformReviewDoc,
   hashOAuthCode,
+  exactSourceUrlRejectReason,
+  requireSourceRightsEvidence,
+  validateSourceScoutEvidence,
+  calculateSourceScoutViralScore,
+  weeklyFunnelDailyTargets,
+  weeklyFunnelStatus,
   permissionStatusRecordsPath: PERMISSION_STATUS_RECORDS_PATH,
 };
