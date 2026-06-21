@@ -110,6 +110,27 @@ type QaScan = {
     status: QaStatus;
     notes: string[];
   }>;
+  bugPatrol: {
+    enabled: boolean;
+    scannedFindings: number;
+    candidates: number;
+    created: number;
+    dispatched: number;
+    skipped: number;
+    failed: number;
+    handoffs: Array<{
+      findingId: string;
+      appName: string;
+      severity: QaSeverity;
+      title: string;
+      repoFullName: string | null;
+      status: "created" | "codex_dispatched" | "skipped" | "failed";
+      issueUrl?: string;
+      issueNumber?: number;
+      codexDispatchCommentUrl?: string;
+      reason?: string;
+    }>;
+  };
   findings: QaFinding[];
   improvementIdeas: QaFinding[];
 };
@@ -131,6 +152,13 @@ type QaHistoryRun = {
     githubConnected?: boolean;
     telegramSent?: boolean;
     dailyDigestSent?: boolean;
+    bugPatrol?: {
+      candidates?: number;
+      created?: number;
+      dispatched?: number;
+      skipped?: number;
+      failed?: number;
+    };
   } | null;
 };
 
@@ -257,6 +285,56 @@ export default function AppQaAgentPage() {
               </div>
             </div>
             <Badge className="border-emerald-200/25 bg-emerald-300/10 text-emerald-100">Scheduler cada 30 min</Badge>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-5 border-white/10 bg-[#0a1118]/86">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Radar className="h-5 w-5 text-emerald-200" />
+              Bug Patrol
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-5">
+              {[
+                ["Candidatos", scan?.bugPatrol?.candidates ?? 0],
+                ["Handoffs", (scan?.bugPatrol?.created ?? 0) + (scan?.bugPatrol?.dispatched ?? 0)],
+                ["Codex", scan?.bugPatrol?.dispatched ?? 0],
+                ["Pendientes", scan?.bugPatrol?.skipped ?? 0],
+                ["Fallidos", scan?.bugPatrol?.failed ?? 0],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-white/10 bg-black/24 p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">{label}</p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {(scan?.bugPatrol?.handoffs || []).slice(0, 4).map((handoff) => (
+                <div key={`${handoff.findingId}-${handoff.status}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/22 p-3 text-sm">
+                  <div>
+                    <p className="font-medium text-white">{handoff.appName}: {handoff.title}</p>
+                    <p className="text-xs text-zinc-500">{handoff.repoFullName || handoff.reason || "Sin repo conectado"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={cn("border", handoff.status === "failed" ? statusStyle.fail : handoff.status === "skipped" ? statusStyle.warn : statusStyle.pass)}>
+                      {handoff.status}
+                    </Badge>
+                    {handoff.issueUrl && (
+                      <a href={handoff.issueUrl} target="_blank" rel="noreferrer" className="text-emerald-200 hover:text-white">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {scan?.bugPatrol && scan.bugPatrol.handoffs.length === 0 && (
+                <p className="rounded-lg border border-emerald-300/15 bg-emerald-500/8 p-3 text-sm text-emerald-100">
+                  No hubo bugs nuevos para mandar a Codex en esta patrulla.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 

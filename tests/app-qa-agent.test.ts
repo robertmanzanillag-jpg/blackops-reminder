@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
-import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas } from "../server/app-qa-agent";
+import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runBugPatrolHandoffs } from "../server/app-qa-agent";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -160,6 +160,7 @@ test("telegram report summarizes high priority QA failures first", () => {
     routeMap: [],
     visualScans: [],
     githubApps: [],
+    bugPatrol: __appQaAgentInternals.emptyBugPatrolReport(),
     findings: report.findings,
     improvementIdeas: [],
   };
@@ -221,6 +222,25 @@ test("daily digest summarizes council status and new GitHub app repos", () => {
     routeMap: [],
     visualScans: [],
     githubApps: [githubApp],
+    bugPatrol: {
+      enabled: true,
+      scannedFindings: 2,
+      candidates: 1,
+      created: 1,
+      dispatched: 0,
+      skipped: 0,
+      failed: 0,
+      handoffs: [{
+        findingId: "finding-1",
+        appName: "Kong Nightlife",
+        severity: "high" as const,
+        title: "Health check fallando",
+        repoFullName: "robert/kong-nightlife",
+        status: "created" as const,
+        issueUrl: "https://github.com/robert/kong-nightlife/issues/8",
+        issueNumber: 8,
+      }],
+    },
     findings: [],
     improvementIdeas: [],
   };
@@ -229,7 +249,38 @@ test("daily digest summarizes council status and new GitHub app repos", () => {
 
   assert.match(digest, /App QA Daily Digest/);
   assert.match(digest, /Repos nuevos\/fuera inventario: 1/);
+  assert.match(digest, /Bug Patrol/);
+  assert.match(digest, /Handoffs creados: 1/);
   assert.match(digest, /QA Council/);
+});
+
+test("bug patrol leaves critical findings pending when no repo is connected", async () => {
+  const app = appProject({ githubRepo: null, repoOwner: null, repoName: null });
+  const report = analyzeAppTelemetry([{
+    app,
+    healthChecks: [{
+      id: "check-1",
+      appProjectId: app.id,
+      checkType: "health_endpoint",
+      status: "failed",
+      responseTimeMs: 500,
+      statusCode: 500,
+      checkedUrl: app.healthUrl,
+      errorMessage: "Internal error",
+      metadata: null,
+      checkedAt: new Date("2026-06-18T12:00:00.000Z"),
+    }],
+    incidents: [],
+    errors: [],
+  }]);
+
+  const bugPatrol = await runBugPatrolHandoffs("user-1", [app], report.findings);
+
+  assert.equal(bugPatrol.enabled, true);
+  assert.equal(bugPatrol.candidates, 1);
+  assert.equal(bugPatrol.skipped, 1);
+  assert.equal(bugPatrol.handoffs[0].repoFullName, null);
+  assert.match(bugPatrol.handoffs[0].reason || "", /repo GitHub conectado/);
 });
 
 test("github scout finds new app repos that are not yet in Developer Health", async () => {

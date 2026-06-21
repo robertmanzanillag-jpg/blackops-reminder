@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createIssue,
+  createIssueComment,
   deleteFile,
   updateFile,
   validateGitHubCommitMessage,
   validateGitHubFilePath,
+  validateGitHubIssueNumber,
   validateGitHubIssueBody,
   validateGitHubIssueTitle,
   validateGitHubFileWriteInput,
@@ -55,6 +57,13 @@ test("GitHub issue titles and bodies are bounded before connector access", () =>
   assert.equal(validateGitHubIssueBody("This issue body has enough detail for a safe handoff."), null);
   assert.match(validateGitHubIssueBody("too short") || "", /corto/);
   assert.match(validateGitHubIssueBody("x".repeat(64 * 1024 + 1)) || "", /grande/);
+});
+
+test("GitHub issue and PR numbers are bounded before connector access", () => {
+  assert.equal(validateGitHubIssueNumber(12), null);
+  assert.match(validateGitHubIssueNumber(0) || "", /invalido/);
+  assert.match(validateGitHubIssueNumber(1.5) || "", /invalido/);
+  assert.match(validateGitHubIssueNumber(1_000_001) || "", /invalido/);
 });
 
 test("GitHub write input rejects oversized or unsafe writes before Octokit", () => {
@@ -107,6 +116,15 @@ test("GitHub mutations reject unsafe input with 400 before connector access", as
     (error: any) => {
       assert.equal(error.statusCode, 400);
       assert.match(error.message, /Repo invalido/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => createIssueComment("robert", "asistente", -1, "This comment body has enough detail for validation."),
+    (error: any) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(error.message, /Issue\/PR number invalido/);
       return true;
     },
   );

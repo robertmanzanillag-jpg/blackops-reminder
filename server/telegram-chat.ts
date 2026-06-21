@@ -16,9 +16,12 @@ import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
+import { buildClaudeSkillContext } from "./claude-skill-bridge";
+import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
-import { getGeminiClient } from "./gemini-client";
+import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingActionStatus } from "@shared/schema";
 
 const TELEGRAM_WEBHOOK_PATH = "/api/telegram/webhook";
@@ -280,6 +283,7 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [CREAR_RECORDATORIO: {"message": "...", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday"]}]
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
@@ -297,6 +301,12 @@ INFORMACIÓN SOBRE RADIO:
 - Si el usuario dice el DJ o aparece claro en el contexto, incluye djName. Si no, el sistema intenta leerlo abajo a la izquierda del video y pregunta si no lo encuentra.
 - Si pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente. Si manda un segundo link, usa ese audio externo.
 - Si el usuario pide crear carpetas o subcarpetas en Google Drive, usa GOOGLE_DRIVE_CREATE_FOLDER. Si no dice la ruta/nombre exacto, pregunta antes.
+
+METRICOOL / SOCIAL PUBLISHING:
+- Si el usuario pide postear, publicar, programar, correr campanas, preparar cola o automatizar clips/redes con Metricool, usa METRICOOL_AUTOMATION.
+- Usa publishMode:"approval_required" por defecto.
+- Usa publishMode:"auto_after_connection" solo si pide automatico/live explicitamente. Aun asi quedara pendiente de aprobacion.
+- Nunca digas que ya publicaste en redes. Di que queda cola preparada o pendiente de aprobacion.
 
 TIPOS DE INVERSIÓN: stock, etf, crypto, bond, fund`;
 }
@@ -431,6 +441,30 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
       return formatGoogleDriveFolderCreateResult(result);
     } catch (error) {
       return `No pude crear esa carpeta en Google Drive: ${error instanceof Error ? error.message : "error desconocido"}`;
+    }
+  }
+
+  const directMetricoolCommand = buildDirectMetricoolCommand(message);
+  if (directMetricoolCommand) {
+    try {
+      const match = directMetricoolCommand.command.match(/\[METRICOOL_AUTOMATION:\s*(\{[^}]+\})\]/);
+      const metricoolData = sanitizeMetricoolAutomationInput(JSON.parse(match ? match[1] : "{}"));
+      const pendingAction = await createPendingActionForApproval({
+        userId,
+        actorType: "assistant",
+        actorId: "telegram-assistant",
+        origin: "telegram",
+        executionMode: "user_requested",
+        actionType: "marketing.metricool_automation",
+        resourceType: "metricool_execution_queue",
+        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        description: buildMetricoolPendingDescription(metricoolData),
+        input: metricoolData,
+        proposedChanges: metricoolData,
+      });
+      return `${directMetricoolCommand.content}\n\nPendiente de aprobacion: ${pendingAction.id}\nEscribe "aprobar ${pendingAction.id}" para ejecutarlo.`;
+    } catch (error) {
+      return `No pude preparar Metricool: ${error instanceof Error ? error.message : "error desconocido"}`;
     }
   }
 
@@ -944,6 +978,30 @@ async function processAssistantResponse(userId: string, response: string): Promi
     }
   }
 
+  const metricoolAutomationRegex = /\[METRICOOL_AUTOMATION:\s*(\{[^}]+\})\]/g;
+  let metricoolAutomationMatch;
+  while ((metricoolAutomationMatch = metricoolAutomationRegex.exec(response)) !== null) {
+    try {
+      const metricoolData = sanitizeMetricoolAutomationInput(JSON.parse(metricoolAutomationMatch[1]));
+      const pendingAction = await createPendingActionForApproval({
+        userId,
+        actorType: "assistant",
+        actorId: "telegram-assistant",
+        origin: "telegram",
+        executionMode: "user_requested",
+        actionType: "marketing.metricool_automation",
+        resourceType: "metricool_execution_queue",
+        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        description: buildMetricoolPendingDescription(metricoolData),
+        input: metricoolData,
+        proposedChanges: metricoolData,
+      });
+      actions.push(`Metricool pendiente de aprobacion: ${pendingAction.id}`);
+    } catch (e) {
+      actions.push(`No pude preparar Metricool: ${e instanceof Error ? e.message : "error desconocido"}`);
+    }
+  }
+
   const radioYoutubeRegex = /\[RADIO_YOUTUBE_CLIPS:\s*(\{[^}]+\})\]/g;
   let radioYoutubeMatch;
   while ((radioYoutubeMatch = radioYoutubeRegex.exec(response)) !== null) {
@@ -1145,6 +1203,7 @@ function cleanResponseForTelegram(response: string): string {
     .replace(/\[GUARDAR_PERSONA:[^\]]+\]/g, "")
     .replace(/\[GUARDAR_COMPROMISO:[^\]]+\]/g, "")
     .replace(/\[CREAR_BORRADOR_COMUNICACION:[^\]]+\]/g, "")
+    .replace(/\[METRICOOL_AUTOMATION:[^\]]+\]/g, "")
     .replace(/\[GUARDAR_INFO:[^\]]+\]/g, "")
     .replace(/\[CREAR_RECORDATORIO:[^\]]+\]/g, "")
     .replace(/\[MODIFICAR_RADIO:[^\]]+\]/g, "")
@@ -1234,13 +1293,16 @@ export async function handleTelegramMessageWithDeps(
       imageData = await downloadTelegramPhoto(botToken, largestPhoto.file_id);
     }
 
-    const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory] = await Promise.all([
+    const historyLimit = getAiConversationHistoryLimit();
+    const aiCostPolicyContext = buildAiCostPolicyContext("telegram");
+    const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory, claudeSkillContext] = await Promise.all([
       getCalendarContext(),
       getUserProfileContext(userId),
       getPortfolioContext(userId),
       getTasksContext(userId),
       generateTelegramAssistantContext(userId),
-      getCeoConversationHistory(userId, 12, userMessage || (hasPhoto ? "[Imagen enviada por Telegram]" : undefined)),
+      getCeoConversationHistory(userId, historyLimit, userMessage || (hasPhoto ? "[Imagen enviada por Telegram]" : undefined)),
+      buildClaudeSkillContext(userMessage),
     ]);
 
     console.log("[Telegram Chat] Calendar context length:", calendarContext.length);
@@ -1255,6 +1317,10 @@ export async function handleTelegramMessageWithDeps(
 ${calendarContext}
 
 ${ceoContext}
+
+${aiCostPolicyContext}
+
+${claudeSkillContext}
 
 ${tasksContext}
 
@@ -1287,7 +1353,7 @@ ${conversationHistory}
     }
 
     const result = await getGeminiClient().models.generateContent({
-      model: "gemini-2.5-flash",
+      model: getGeminiChatModel({ hasImage: !!imageData }),
       contents: [{ role: "user", parts }],
     });
     const responseText = result.text || "";

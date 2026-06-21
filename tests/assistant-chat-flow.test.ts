@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   buildDirectBlackRoomCommand,
   buildDirectGoogleCalendarCommand,
+  buildDirectMetricoolCommand,
   buildDirectPromoVideoCommand,
   userAlreadyApprovedExecution,
 } from "../server/assistant";
+import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -45,6 +47,152 @@ test("web assistant routes natural promo video requests to the local video agent
   assert.match(direct.command, /PROMO_VIDEO_GENERATE/);
   assert.match(direct.command, /"count":5/);
   assert.match(direct.command, /"platform":"tiktok"/);
+});
+
+test("web assistant routes Metricool posting requests into approval-gated automation", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const executor = readFileSync("server/trust-executor.ts", "utf8");
+  const direct = buildDirectMetricoolCommand("prepara Metricool para postear 6 clips en TikTok automatico");
+
+  assert.ok(direct);
+  assert.match(direct.command, /METRICOOL_AUTOMATION/);
+  assert.match(direct.command, /"clipsPerAccount":6/);
+  assert.match(direct.command, /"publishMode":"auto_after_connection"/);
+  assert.match(source, /marketing\.metricool_automation/);
+  assert.match(executor, /executeMetricoolAutomationAction/);
+});
+
+test("BlackOps chat loads local Claude skills into web and Telegram prompts", () => {
+  const bridge = readFileSync("server/claude-skill-bridge.ts", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+  const telegramAssistant = readFileSync("server/telegram-chat.ts", "utf8");
+  const marketingSkill = readFileSync(".claude/skills/marketing-autopilot/SKILL.md", "utf8");
+  const designSkill = readFileSync(".claude/skills/design-creative/SKILL.md", "utf8");
+
+  assert.match(bridge, /buildClaudeSkillContext/);
+  assert.match(bridge, /\.claude/);
+  assert.match(bridge, /BLACKOPS_SKILLS_MAX_ACTIVE/);
+  assert.match(bridge, /BLACKOPS_SKILLS_MAX_BODY_CHARS/);
+  assert.match(bridge, /DEFAULT_MAX_SKILLS = 1/);
+  assert.match(bridge, /DEFAULT_MAX_CONTEXT_CHARS = 2500/);
+  assert.match(bridge, /if \(scored\.length === 0\) return ""/);
+  assert.match(bridge, /Skill truncated for token budget/);
+  assert.match(webAssistant, /buildClaudeSkillContext\(message\)/);
+  assert.match(telegramAssistant, /buildClaudeSkillContext\(userMessage\)/);
+  assert.match(marketingSkill, /Metricool/);
+  assert.match(marketingSkill, /campaigns/);
+  assert.match(designSkill, /UI, UX/);
+  assert.match(designSkill, /Canva/);
+});
+
+test("BlackOps chat enforces cheap-first AI cost policy", () => {
+  const policy = readFileSync("server/ai-cost-policy.ts", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+  const telegramAssistant = readFileSync("server/telegram-chat.ts", "utf8");
+  const geminiClient = readFileSync("server/gemini-client.ts", "utf8");
+  const router = readFileSync("server/ai-router.ts", "utf8");
+  const agentRules = readFileSync("AGENTS.md", "utf8");
+
+  assert.match(policy, /BLACKOPS_AI_MONTHLY_BUDGET_USD/);
+  assert.match(policy, /500/);
+  assert.match(policy, /cheap-first/);
+  assert.match(policy, /paid generative video at scale/);
+  assert.match(policy, /ChatGPT\/Codex Pro subscription handoff/);
+  assert.match(policy, /BLACKOPS_STRICT_COST_MODE/);
+  assert.match(policy, /Strict cost mode/);
+  assert.match(policy, /compact, intent-selected context/);
+  assert.match(router, /BLACKOPS_WEB_CHEAP_SCOUT_ENABLED/);
+  assert.match(router, /cheap_scout/);
+  assert.match(router, /subscription_handoff/);
+  assert.match(router, /strong_supervisor/);
+  assert.match(webAssistant, /shouldUseCheapScoutForWebChat/);
+  assert.match(webAssistant, /modelRoute\.tier === "subscription_handoff"/);
+  assert.match(webAssistant, /getCachedCheapScoutResponse/);
+  assert.match(webAssistant, /buildCompactCheapScoutPrompt/);
+  assert.match(webAssistant, /setCachedCheapScoutResponse/);
+  assert.match(webAssistant, /getGeminiClient\(\)\.models\.generateContent/);
+  assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
+  assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
+  assert.match(webAssistant, /getAiConversationHistoryLimit\(\)/);
+  assert.match(telegramAssistant, /buildAiCostPolicyContext\("telegram"\)/);
+  assert.match(telegramAssistant, /getGeminiChatModel\(\{ hasImage: !!imageData \}\)/);
+  assert.match(geminiClient, /gemini-2\.5-flash-lite/);
+  assert.match(agentRules, /Target AI\/API spend below \$500\/month/);
+});
+
+test("AI router sends low-risk work to cheap scout and risky work to strong supervisor", () => {
+  const previousKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  process.env.AI_INTEGRATIONS_GEMINI_API_KEY = "test-gemini-key";
+
+  try {
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "haz captions simples para 5 clips de tiktok" }).tier,
+      "cheap_scout",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "prepara metricool y organiza calendario" }).provider,
+      "gemini",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "decide presupuesto y estrategia completa de ads" }).tier,
+      "subscription_handoff",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "prepara una campana completa para clippers con multiples cuentas" }).provider,
+      "membership",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "arregla bug de produccion en github repo" }).provider,
+      "openai",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "necesito que me pienses una respuesta ".repeat(80) }).tier,
+      "subscription_handoff",
+    );
+    assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "resume esta captura", hasImages: true }).tier,
+      "strong_supervisor",
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+    else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+  }
+});
+
+test("AI router blocks automatic OpenAI fallback when cheap scout key is missing in strict mode", () => {
+  const previousKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const previousStrict = process.env.BLACKOPS_STRICT_COST_MODE;
+  delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  process.env.BLACKOPS_STRICT_COST_MODE = "true";
+
+  try {
+    const route = shouldUseCheapScoutForWebChat({ message: "haz captions simples para 5 clips" });
+    assert.equal(route.tier, "subscription_handoff");
+    assert.equal(route.provider, "membership");
+    assert.match(route.reason, /blocks automatic OpenAI fallback/);
+  } finally {
+    if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+    else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+    if (previousStrict === undefined) delete process.env.BLACKOPS_STRICT_COST_MODE;
+    else process.env.BLACKOPS_STRICT_COST_MODE = previousStrict;
+  }
+});
+
+test("dashboard exposes monthly AI spend tracking", () => {
+  const policy = readFileSync("server/ai-cost-policy.ts", "utf8");
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const dashboard = readFileSync("client/src/pages/dashboard.tsx", "utf8");
+  const panel = readFileSync("client/src/components/monthly-spend-panel.tsx", "utf8");
+
+  assert.match(policy, /buildMonthlyAiSpendReport/);
+  assert.match(policy, /BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD/);
+  assert.match(policy, /BLACKOPS_METRICOOL_MONTHLY_USD/);
+  assert.match(routes, /\/api\/ai-spend\/monthly/);
+  assert.match(routes, /buildMonthlyAiSpendReport\(runs\)/);
+  assert.match(dashboard, /MonthlySpendPanel/);
+  assert.match(panel, /monthly-spend-panel/);
+  assert.match(panel, /\/api\/ai-spend\/monthly/);
+  assert.match(panel, /Gasto mensual/);
 });
 
 test("web assistant prepares clear Google Calendar requests without model routing", () => {

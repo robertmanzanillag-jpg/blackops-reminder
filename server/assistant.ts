@@ -11,13 +11,114 @@ import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./b
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
+import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
+import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
+import { shouldUseCheapScoutForWebChat } from "./ai-router";
+import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
 import { toFile } from "openai";
 import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 const ASSISTANT_TIMEZONE = "America/New_York";
+const CHEAP_SCOUT_CACHE_TTL_MS = 10 * 60 * 1000;
+const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
+const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
+
+export { buildDirectMetricoolCommand };
+
+function normalizeAssistantCacheText(message = ""): string {
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesAnyAssistantTerm(text: string, terms: string[]): boolean {
+  return terms.some((term) => text.includes(term));
+}
+
+function isCacheableCheapScoutRequest(message?: string): boolean {
+  const text = normalizeAssistantCacheText(message);
+  if (!text) return false;
+  const cacheableTerms = ["caption", "captions", "hook", "hooks", "hashtags", "ideas", "borrador", "draft", "clasifica", "duplicados"];
+  const volatileTerms = ["hoy", "manana", "mañana", "ahora", "agenda", "calendario", "precio", "portfolio", "portafolio", "metricas", "analytics"];
+  return includesAnyAssistantTerm(text, cacheableTerms) && !includesAnyAssistantTerm(text, volatileTerms);
+}
+
+function getCheapScoutCacheKey(userId: string, message?: string): string {
+  return `${userId}:${normalizeAssistantCacheText(message).slice(0, 1200)}`;
+}
+
+function getCachedCheapScoutResponse(userId: string, message?: string): string | null {
+  if (!isCacheableCheapScoutRequest(message)) return null;
+  const key = getCheapScoutCacheKey(userId, message);
+  const cached = cheapScoutResponseCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    cheapScoutResponseCache.delete(key);
+    return null;
+  }
+  return cached.response;
+}
+
+function setCachedCheapScoutResponse(userId: string, message: string | undefined, response: string): void {
+  if (!isCacheableCheapScoutRequest(message) || !response.trim()) return;
+  const now = Date.now();
+  for (const [key, cached] of cheapScoutResponseCache) {
+    if (cached.expiresAt <= now) cheapScoutResponseCache.delete(key);
+  }
+  while (cheapScoutResponseCache.size >= CHEAP_SCOUT_CACHE_MAX_ENTRIES) {
+    const oldestKey = cheapScoutResponseCache.keys().next().value;
+    if (!oldestKey) break;
+    cheapScoutResponseCache.delete(oldestKey);
+  }
+  cheapScoutResponseCache.set(getCheapScoutCacheKey(userId, message), {
+    response,
+    expiresAt: now + CHEAP_SCOUT_CACHE_TTL_MS,
+  });
+}
+
+function buildCompactCheapScoutPrompt(input: {
+  message?: string;
+  aiCostPolicyContext: string;
+  claudeSkillContext: string;
+  userProfileContext: string;
+  calendarContext: string;
+  portfolioContext: string;
+  ceoContext: string;
+  sharedConversationHistory: string;
+  modelRoute: { tier: string; provider: string; reason: string };
+}): string {
+  const text = normalizeAssistantCacheText(input.message);
+  const wantsCalendar = includesAnyAssistantTerm(text, ["agenda", "calendario", "hoy", "mañana", "manana", "tarea", "recordatorio"]);
+  const wantsPortfolio = includesAnyAssistantTerm(text, ["portfolio", "portafolio", "inversion", "acciones", "crypto", "precio"]);
+  const wantsAppHelp = includesAnyAssistantTerm(text, ["como hago", "donde esta", "app", "pantalla", "boton"]);
+  const wantsProfile = includesAnyAssistantTerm(text, ["recuerdas", "sabes de mi", "mi estilo", "mi nombre"]);
+
+  return [
+    "Eres BlackOps Assistant en modo scout barato.",
+    "Resuelve tareas simples con precision y texto compacto. Si detectas riesgo, dinero, produccion, seguridad, codigo o decision final, recomienda escalar a membership handoff/aprobacion.",
+    input.aiCostPolicyContext,
+    input.claudeSkillContext,
+    wantsProfile ? input.userProfileContext : "",
+    wantsCalendar ? input.calendarContext : "",
+    wantsPortfolio ? input.portfolioContext : "",
+    wantsCalendar || wantsPortfolio ? input.ceoContext : "",
+    wantsAppHelp ? APP_HELP_CONTEXT : "",
+    `## Historial reciente compartido web/Telegram:\n${input.sharedConversationHistory.slice(0, 1800)}`,
+    "",
+    "## Modelo actual",
+    `Route: ${input.modelRoute.tier}. Provider: ${input.modelRoute.provider}. Reason: ${input.modelRoute.reason}.`,
+    "",
+    "## Usuario",
+    input.message || "[Sin texto]",
+  ].filter(Boolean).join("\n\n");
+}
 
 function normalizeApprovalText(message: string): string {
   return message
@@ -775,6 +876,7 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
 - [BLACKROOM_TIMER_ADD: {"title": "...", "date": "YYYY-MM-DDTHH:mm", "url": "https://...", "partyTitle": "..."}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -827,6 +929,14 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 - El sistema escoge templates automáticamente según el contenido/carpeta: party, dinner, pool, yacht, guestlist, nightlife.
 - No uses screenshots, screen recordings o capturas; el editor solo debe tomar videos reales de promo.
 - No inventes que publicaste en redes; por ahora quedan listos para descargar/subir manualmente.
+
+## METRICOOL / SOCIAL PUBLISHING:
+Puedes preparar campanas, clips y colas de publicacion con Metricool usando METRICOOL_AUTOMATION.
+- Usa este comando cuando el usuario pida postear, publicar, programar, correr campanas, preparar cola, o automatizar clips/redes con Metricool.
+- publishMode por defecto debe ser "approval_required".
+- Usa "auto_after_connection" solo si el usuario pide explicitamente automatico/live; aun asi el sistema lo pondra como accion pendiente y el backend mantiene las banderas de seguridad.
+- Nunca digas que ya publicaste en redes. Di que preparaste la cola o que quedo pendiente de aprobacion.
+- Si el usuario pide publicar inmediatamente, crea la accion Metricool y explica que necesita aprobacion y que real publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true y METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=false.
 
 ## RADIO YOUTUBE CLIPS:
 Si el usuario manda un link de YouTube y pide clips/videos/edits de radio, usa RADIO_YOUTUBE_CLIPS con youtubeUrl y driveFolderPath.
@@ -1198,15 +1308,20 @@ export function registerAssistantRoutes(app: Express): void {
         return;
       }
 
-      const calendarContext = await getCalendarContext(userId);
-      const userProfileContext = await getUserProfileContext(userId);
-      const portfolioContext = await getPortfolioContext(userId);
-      const ceoContext = await generateTelegramAssistantContext(userId);
-      const sharedConversationHistory = await getCeoConversationHistory(
-        userId,
-        12,
-        message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
-      );
+      const historyLimit = getAiConversationHistoryLimit();
+      const aiCostPolicyContext = buildAiCostPolicyContext("web");
+      const [calendarContext, userProfileContext, portfolioContext, ceoContext, sharedConversationHistory, claudeSkillContext] = await Promise.all([
+        getCalendarContext(userId),
+        getUserProfileContext(userId),
+        getPortfolioContext(userId),
+        generateTelegramAssistantContext(userId),
+        getCeoConversationHistory(
+          userId,
+          historyLimit,
+          message || (images?.length ? "[Imagen enviada desde el app]" : undefined),
+        ),
+        buildClaudeSkillContext(message),
+      ]);
 
       if (message) {
         await saveCeoConversationMessage(userId, "user", message);
@@ -1265,7 +1380,7 @@ export function registerAssistantRoutes(app: Express): void {
       const openAiMessages: ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
+          content: `${SYSTEM_PROMPT}\n\n${APP_HELP_CONTEXT}\n\n${aiCostPolicyContext}\n\n${claudeSkillContext}\n\n${userProfileContext}\n\n${calendarContext}\n\n${portfolioContext}\n\n${ceoContext}\n\n## Historial reciente compartido web/Telegram:\n${sharedConversationHistory}`,
         },
         {
           role: "assistant",
@@ -1273,7 +1388,7 @@ export function registerAssistantRoutes(app: Express): void {
         },
         ...conversationHistory
           .filter((msg: { role: string; content: string }) => msg?.content && (msg.role === "assistant" || msg.role === "user"))
-          .slice(-12)
+          .slice(-historyLimit)
           .map((msg: { role: string; content: string }) => ({
             role: msg.role === "assistant" ? "assistant" as const : "user" as const,
             content: msg.content,
@@ -1290,16 +1405,61 @@ export function registerAssistantRoutes(app: Express): void {
 
       let fullResponse = "";
       const directBlackRoomCommand = buildDirectBlackRoomCommand(message);
+      const directMetricoolCommand = buildDirectMetricoolCommand(message);
+      const modelRoute = shouldUseCheapScoutForWebChat({
+        message,
+        hasImages: userMessageParts.some((part) => part.type === "image_url"),
+      });
 
       if (directBlackRoomCommand) {
         fullResponse = `${directBlackRoomCommand.content}\n${directBlackRoomCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directBlackRoomCommand.content })}\n\n`);
+      } else if (directMetricoolCommand) {
+        fullResponse = `${directMetricoolCommand.content}\n${directMetricoolCommand.command}`;
+        res.write(`data: ${JSON.stringify({ content: directMetricoolCommand.content })}\n\n`);
+      } else if (modelRoute.tier === "subscription_handoff") {
+        const handoff = await createDeveloperAutopilotHandoff(userId, message || "trabajo pesado para membresia", "web_chat");
+        fullResponse = handoff.status === "subscription_brief"
+          ? handoff.message
+          : [
+              "Para ahorrar API, este trabajo debe ir por tu membresia ChatGPT/Codex Pro en vez de resolverse con modelo fuerte dentro del app.",
+              "",
+              "Mandame el objetivo con un poco mas de detalle y lo convierto en un brief listo para pegar en Codex/ChatGPT Pro.",
+              "",
+              `Ruta: ${modelRoute.reason}`,
+            ].join("\n");
+        res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute })}\n\n`);
+      } else if (modelRoute.tier === "cheap_scout") {
+        const cachedResponse = getCachedCheapScoutResponse(userId, message);
+        if (cachedResponse) {
+          fullResponse = cachedResponse;
+          res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute, cacheHit: true })}\n\n`);
+        } else {
+          const cheapPrompt = buildCompactCheapScoutPrompt({
+            message,
+            aiCostPolicyContext,
+            claudeSkillContext,
+            userProfileContext,
+            calendarContext,
+            portfolioContext,
+            ceoContext,
+            sharedConversationHistory,
+            modelRoute,
+          });
+          const result = await getGeminiClient().models.generateContent({
+            model: getGeminiChatModel({ hasImage: false }),
+            contents: [{ role: "user", parts: [{ text: cheapPrompt }] }],
+          });
+          fullResponse = result.text || "No pude generar una respuesta util esta vez.";
+          setCachedCheapScoutResponse(userId, message, fullResponse);
+          res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute, compactContext: true })}\n\n`);
+        }
       } else {
         const stream = await getOpenAIClient().chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,
           messages: openAiMessages,
           stream: true,
-          max_completion_tokens: 1200,
+          max_completion_tokens: getOpenAiMaxCompletionTokens(),
         });
 
         for await (const chunk of stream) {
@@ -1688,6 +1848,46 @@ export function registerAssistantRoutes(app: Express): void {
           res.write(`data: ${JSON.stringify({ communicationDraftCreated: true, pendingActionId: pendingAction.id })}\n\n`);
         } catch (e) {
           console.error("Error creating communication draft from assistant:", e);
+        }
+      }
+
+      const metricoolAutomationRegex = /\[METRICOOL_AUTOMATION:\s*(\{[^}]+\})\]/g;
+      let metricoolAutomationMatch;
+      while ((metricoolAutomationMatch = metricoolAutomationRegex.exec(fullResponse)) !== null) {
+        try {
+          const metricoolData = sanitizeMetricoolAutomationInput(JSON.parse(metricoolAutomationMatch[1]));
+          const pendingAction = await createPendingActionForApproval({
+            userId,
+            actorType: "assistant",
+            actorId: "web-assistant",
+            origin: "web",
+            executionMode: "user_requested",
+            actionType: "marketing.metricool_automation",
+            resourceType: "metricool_execution_queue",
+            title: metricoolData.publishMode === "auto_after_connection"
+              ? "Preparar Metricool auto publish"
+              : "Preparar cola Metricool",
+            description: buildMetricoolPendingDescription(metricoolData),
+            input: metricoolData,
+            proposedChanges: {
+              publishMode: metricoolData.publishMode,
+              clipsPerAccount: metricoolData.clipsPerAccount,
+              riskTolerance: metricoolData.riskTolerance,
+              platforms: metricoolData.platforms,
+              campaign: metricoolData.campaign,
+            },
+          });
+          const execution = await executeIfAlreadyApproved(pendingAction, userId, message);
+          if (execution.executed) {
+            res.write(`data: ${JSON.stringify({ actionExecuted: true, title: pendingAction.title, metricoolAutomationQueued: true })}\n\n`);
+          } else if (execution.error) {
+            res.write(`data: ${JSON.stringify({ metricoolAutomationError: execution.error })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ approvalRequired: true, pendingAction, metricoolAutomationPending: true })}\n\n`);
+          }
+        } catch (e: any) {
+          console.error("Error creating Metricool automation pending action:", e);
+          res.write(`data: ${JSON.stringify({ metricoolAutomationError: e.message || "No pude preparar Metricool" })}\n\n`);
         }
       }
 

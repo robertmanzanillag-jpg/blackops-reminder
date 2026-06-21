@@ -21,6 +21,7 @@ import { MonthlyGoalsPanel } from "@/components/monthly-goals-panel";
 import { YearlyGoalsPanel } from "@/components/yearly-goals-panel";
 import { WeeklyTasksPanel } from "@/components/weekly-tasks-panel";
 import { DashboardAssistantChat } from "@/components/dashboard-assistant-chat";
+import { MonthlySpendPanel } from "@/components/monthly-spend-panel";
 import { PendingActionsPanel } from "@/components/pending-actions-panel";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -320,6 +321,7 @@ export default function Dashboard() {
           {/* View based on button selection */}
           {view === "week" ? (
               <div className="space-y-8">
+                <MonthlySpendPanel />
                 <DashboardAssistantChat />
                 <PendingActionsPanel />
 

@@ -13,6 +13,7 @@ const PROMPTS = [
   "Agenda una reunion manana a las 10am",
   "Que tengo hoy?",
   "Recuerdame revisar mi cartera el viernes",
+  "Prepara un brief para usar mi membresia Pro en una campana fuerte",
 ];
 
 export function DashboardAssistantChat() {
@@ -143,8 +144,8 @@ export function DashboardAssistantChat() {
                 return next;
               });
             }
-            if (data.googleEventError || data.radioError || data.blackRoomLinkError) {
-              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError}`;
+            if (data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.blackRoomLinkError || data.metricoolAutomationError}`;
               setMessages((prev) => {
                 const next = [...prev];
                 next[next.length - 1] = {

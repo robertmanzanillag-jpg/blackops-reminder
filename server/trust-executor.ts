@@ -4,6 +4,7 @@ import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescriptio
 import { writeAuditLog } from "./trust-policy";
 import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
+import { executeMetricoolAutomationAction } from "./metricool-chat-actions";
 import { processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
 
 type JsonRecord = Record<string, any>;
@@ -153,6 +154,11 @@ export async function executeApprovedPendingAction(
 
       case "marketing.blackroom_timer_add": {
         result = await addBlackRoomCountdown(input as any);
+        break;
+      }
+
+      case "marketing.metricool_automation": {
+        result = await executeMetricoolAutomationAction(input, action.userId);
         break;
       }
 

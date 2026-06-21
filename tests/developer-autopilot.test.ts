@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEVELOPER_AUTOPILOT_POLICY,
+  buildCodexDispatchComment,
   buildCodexGitHubIssueTitle,
   buildCodexPrFirstBrief,
   buildCodexGitHubIssueBody,
   buildReadyForApprovalMessage,
+  buildSubscriptionHandoffBrief,
   createDeveloperAutopilotHandoff,
   evaluateDeveloperReleaseGate,
   parseDeveloperAutopilotRequest,
+  parseSubscriptionHandoffRequest,
 } from "../server/developer-autopilot";
 
 test("developer autopilot policy is PR-first and subscription-based", () => {
@@ -18,6 +21,7 @@ test("developer autopilot policy is PR-first and subscription-based", () => {
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.changeStrategy, "pull_request_first");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.secondReview, "claude_independent_review_before_app_qa");
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.replitDeployment, "explicit_human_approval_required");
+  assert.equal(DEVELOPER_AUTOPILOT_POLICY.subscriptionHandoff, "prefer_chatgpt_codex_pro_for_heavy_manual_work");
 });
 
 test("Codex brief blocks direct main commits, API spend, and Replit deploy while requiring Claude review", () => {
@@ -128,6 +132,75 @@ test("developer autopilot detects developer bugs but ignores generic work reques
   assert.equal(request?.replitRequested, false);
 });
 
+test("subscription handoff routes heavy manual work to ChatGPT/Codex Pro instead of API spend", async () => {
+  const request = parseSubscriptionHandoffRequest(
+    "usa mi membresia Pro para una campana completa de marketing de clippers sin gastar API",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "marketing");
+  const brief = buildSubscriptionHandoffBrief(request!);
+  assert.match(brief, /signed-in ChatGPT\/Codex Pro membership/);
+  assert.match(brief, /Do not spend OpenAI API tokens/);
+  assert.match(brief, /Metricool schedule/);
+
+  const handoff = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "usa mi membresia Pro para una campana completa de marketing de clippers sin gastar API",
+    "web_chat",
+    {
+      getAppProjects: async () => {
+        throw new Error("subscription handoff should not need projects");
+      },
+      listRepositories: async () => {
+        throw new Error("subscription handoff should not need GitHub");
+      },
+      createIssue: async () => {
+        throw new Error("subscription handoff should not create issues");
+      },
+      createIssueComment: async () => {
+        throw new Error("subscription handoff should not create comments");
+      },
+    },
+  );
+
+  assert.equal(handoff.status, "subscription_brief");
+  assert.equal(handoff.handoffType, "subscription_work");
+  assert.match(handoff.message, /membresia ChatGPT\/Codex Pro/);
+  assert.match(handoff.subscriptionBrief || "", /BlackOps subscription handoff/);
+});
+
+test("strict cost mode routes heavy manual work to subscription handoff without magic words", async () => {
+  const handoff = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "prepara una campana completa para clippers con multiples cuentas y retorno de inversion",
+    "web_chat",
+    {
+      getAppProjects: async () => {
+        throw new Error("heavy manual handoff should not need projects");
+      },
+      listRepositories: async () => {
+        throw new Error("heavy manual handoff should not need GitHub");
+      },
+      createIssue: async () => {
+        throw new Error("heavy manual handoff should not create issues");
+      },
+      createIssueComment: async () => {
+        throw new Error("heavy manual handoff should not create comments");
+      },
+    },
+  );
+
+  assert.equal(handoff.status, "subscription_brief");
+  assert.equal(handoff.handoffType, "subscription_work");
+  assert.match(handoff.message, /membresia ChatGPT\/Codex Pro/);
+  assert.match(handoff.subscriptionBrief || "", /Do not spend OpenAI API tokens/);
+});
+
+test("subscription handoff ignores normal lightweight chat", () => {
+  assert.equal(parseSubscriptionHandoffRequest("que tengo hoy en el calendario", "telegram"), null);
+});
+
 test("developer autopilot does not treat affected URLs as explicit GitHub repos", async () => {
   const request = parseDeveloperAutopilotRequest("arregla bug en https://kong.example.com/api/login para Kong app", "telegram");
   assert.equal(request?.repoFullName, null);
@@ -153,6 +226,9 @@ test("developer autopilot does not treat affected URLs as explicit GitHub repos"
         assert.equal(owner, "robert");
         assert.equal(repo, "kong-app");
         return { number: 8, html_url: "https://github.com/robert/kong-app/issues/8" };
+      },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
       },
     },
   );
@@ -189,6 +265,9 @@ test("developer autopilot creates a GitHub handoff issue for the selected repo",
         assert.match(body, /Claude independent review/);
         return { number: 7, html_url: "https://github.com/robert/asistente/issues/7" };
       },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
+      },
     },
   );
 
@@ -197,6 +276,61 @@ test("developer autopilot creates a GitHub handoff issue for the selected repo",
   assert.equal(created.issueNumber, 7);
   assert.match(created.message, /PR-first/);
   assert.match(created.message, /No voy a montar en Replit/);
+});
+
+test("developer autopilot dispatches @codex fix when a PR is provided", async () => {
+  const created = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "arregla este error en robert/asistente PR #12, el login falla",
+    "web_chat",
+    {
+      getAppProjects: async () => [{
+        name: "ASITENTE",
+        description: "CEO assistant",
+        githubRepo: "robert/asistente",
+        publicUrl: "https://example.com",
+        healthUrl: "https://example.com/health",
+      }],
+      listRepositories: async () => [{
+        full_name: "robert/asistente",
+        name: "asistente",
+        private: true,
+        html_url: "https://github.com/robert/asistente",
+      }],
+      createIssue: async () => ({ number: 7, html_url: "https://github.com/robert/asistente/issues/7" }),
+      createIssueComment: async (owner, repo, issueNumber, body) => {
+        assert.equal(owner, "robert");
+        assert.equal(repo, "asistente");
+        assert.equal(issueNumber, 12);
+        assert.match(body, /@codex fix this issue PR-first/);
+        assert.match(body, /Do not use BlackOps OpenAI API spend/);
+        assert.match(body, /Do not merge or deploy/);
+        return { html_url: "https://github.com/robert/asistente/pull/12#issuecomment-1" };
+      },
+    },
+  );
+
+  assert.equal(created.status, "codex_dispatched");
+  assert.equal(created.codexDispatchPrNumber, 12);
+  assert.equal(created.codexDispatchCommentUrl, "https://github.com/robert/asistente/pull/12#issuecomment-1");
+  assert.match(created.message, /mande el fix directo a Codex/);
+});
+
+test("Codex dispatch comment keeps approval and no-API rules", () => {
+  const comment = buildCodexDispatchComment({
+    source: "web_chat",
+    repoFullName: "robert/asistente",
+    pullRequestNumber: 12,
+    kind: "bug",
+    title: "Login bug",
+    description: "Login fails after the latest deploy.",
+    severity: "medium",
+  });
+
+  assert.match(comment, /@codex fix this issue PR-first/);
+  assert.match(comment, /Do not use BlackOps OpenAI API spend/);
+  assert.match(comment, /Work only on this PR branch/);
+  assert.match(comment, /Robert must approve merge\/deploy after QA/);
 });
 
 test("public security handoff redacts sensitive issue details", () => {

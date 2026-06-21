@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AutomationDefinition } from "@shared/schema";
-import { buildScheduledAutomationRunInput } from "../server/automation-registry";
+import { DEFAULT_AUTOMATIONS, buildScheduledAutomationRunInput } from "../server/automation-registry";
 
 function automation(overrides: Partial<AutomationDefinition> = {}): AutomationDefinition {
   return {
@@ -67,4 +67,14 @@ test("builds a failed scheduled automation run insert with error details", () =>
   assert.equal(run.errorMessage, "AI key missing.");
   assert.equal(run.costEstimate, "low");
   assert.deepEqual(run.metadata, { error: "AI key missing." });
+});
+
+test("default automations expose Bug Patrol and daily QA report", () => {
+  const automation = DEFAULT_AUTOMATIONS.find((item) => item.key === "app-qa-council");
+
+  assert.ok(automation);
+  assert.match(automation.name, /Bug Patrol/);
+  assert.match(automation.description || "", /Codex PR-first handoffs/);
+  assert.equal((automation.metadata as any).bugPatrol, true);
+  assert.equal((automation.metadata as any).digest, "daily");
 });

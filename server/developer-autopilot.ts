@@ -1,14 +1,16 @@
 import type { AppQaScanResult, AppQaStatus } from "./app-qa-agent";
-import { createIssue, listRepositories } from "./github-client";
+import { createIssue, createIssueComment, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
 
 export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa";
+export type SubscriptionHandoffKind = "marketing" | "design" | "strategy" | "analysis" | "business_ops";
 export type DeveloperAutopilotSource = "web_chat" | "telegram" | "app_qa" | "cybersecurity" | "health_monitor" | "manual";
 
 export type DeveloperAutopilotRequest = {
   source: DeveloperAutopilotSource;
   repoFullName?: string | null;
+  pullRequestNumber?: number | null;
   appName?: string | null;
   kind: DeveloperFixKind;
   title: string;
@@ -19,15 +21,29 @@ export type DeveloperAutopilotRequest = {
   replitRequested?: boolean;
 };
 
-export type DeveloperAutopilotHandoffStatus = "created" | "needs_repo" | "github_unavailable" | "invalid_request";
+export type DeveloperAutopilotHandoffStatus = "created" | "codex_dispatched" | "subscription_brief" | "needs_repo" | "github_unavailable" | "invalid_request";
+
+export type SubscriptionHandoffRequest = {
+  source: DeveloperAutopilotSource;
+  kind: SubscriptionHandoffKind;
+  title: string;
+  description: string;
+  reason: string;
+};
 
 export type DeveloperAutopilotHandoff = {
   status: DeveloperAutopilotHandoffStatus;
   request: DeveloperAutopilotRequest | null;
+  subscriptionRequest?: SubscriptionHandoffRequest;
   repoFullName?: string;
   issueUrl?: string;
   issueNumber?: number;
+  codexDispatchCommentUrl?: string;
+  codexDispatchPrNumber?: number;
+  codexDispatchError?: string;
   codexBrief?: string;
+  subscriptionBrief?: string;
+  handoffType?: "developer_pr" | "subscription_work";
   message: string;
 };
 
@@ -52,6 +68,7 @@ export const DEVELOPER_AUTOPILOT_POLICY = {
   qaGate: "app_qa_all_subagents_pass",
   replitDeployment: "explicit_human_approval_required",
   securityDisclosure: "private_or_sanitized",
+  subscriptionHandoff: "prefer_chatgpt_codex_pro_for_heavy_manual_work",
 } as const;
 
 type MinimalRepo = {
@@ -66,12 +83,14 @@ type DeveloperAutopilotDeps = {
   getAppProjects(userId: string): Promise<Array<Pick<AppProject, "name" | "description" | "githubRepo" | "publicUrl" | "healthUrl">>>;
   listRepositories(): Promise<MinimalRepo[]>;
   createIssue(owner: string, repo: string, title: string, body: string): Promise<{ number: number; html_url: string }>;
+  createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<{ html_url: string }>;
 };
 
 const defaultDeveloperAutopilotDeps: DeveloperAutopilotDeps = {
   getAppProjects: (userId) => storage.getAppProjects(userId),
   listRepositories,
   createIssue,
+  createIssueComment,
 };
 
 const SENSITIVE_TEXT_PATTERNS = [
@@ -119,6 +138,22 @@ function inferFixKind(message: string): DeveloperFixKind | null {
   return "bug";
 }
 
+function inferSubscriptionHandoffKind(message: string): SubscriptionHandoffKind | null {
+  const text = normalizeText(message);
+  const explicitSubscriptionIntent = /\b(membresia|membership|chatgpt pro|codex pro|codex|pro subscription|mi plan|plan de 200|200)\b/.test(text)
+    && /\b(usa|usar|usalo|mandalo|envia|pasalo|prepara|handoff|brief|trabajo pesado|fuerte|sin api|no gastar api)\b/.test(text);
+  const heavyManualWork = /\b(campana completa|estrategia completa|plan completo|analisis profundo|reporte profundo|disena.*flyers?|flyers?.*completo|marketing completo|dropshipping.*estrategia|clippers.*campana)\b/.test(text)
+    && /\b(fuerte|pro|membresia|sin api|no gastar api|codex|chatgpt)\b/.test(text);
+  const strictCostHeavyWork = /\b(campana completa|campanas completas|estrategia completa|plan completo|analisis profundo|reporte profundo|decision final|retorno de inversion|presupuesto de ads|budget de ads|marketing completo|dropshipping.*estrategia|clippers.*campana|multiples cuentas|muchos videos|10 cuentas|pack de flyers|flyers finales|flyer final|disena.*flyers?)\b/.test(text);
+
+  if (!explicitSubscriptionIntent && !heavyManualWork && !strictCostHeavyWork) return null;
+  if (/\b(diseno|disena|diseña|flyer|flyers|visual|brand|branding|canva|landing|ui|ux)\b/.test(text)) return "design";
+  if (/\b(marketing|campana|campanas|ads|anuncios|metricool|caption|hooks|creativos|clippers)\b/.test(text)) return "marketing";
+  if (/\b(analisis|analiza|reporte|metricas|retorno|roas|cac|data)\b/.test(text)) return "analysis";
+  if (/\b(dropshipping|supplier|producto|productos|shopify|ventas|operacion)\b/.test(text)) return "business_ops";
+  return "strategy";
+}
+
 function extractExplicitRepo(message: string): string | null {
   const withoutUrls = removeUrls(message);
   const matches = withoutUrls.matchAll(/\b([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+)\b/g);
@@ -127,6 +162,19 @@ function extractExplicitRepo(message: string): string | null {
     const repo = match[2];
     if (owner.includes(".") || owner.toLowerCase() === "http" || owner.toLowerCase() === "https") continue;
     return `${owner}/${repo}`;
+  }
+  return null;
+}
+
+function extractExplicitPullRequestNumber(message: string): number | null {
+  const patterns = [
+    /\bhttps?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/(\d{1,7})\b/i,
+    /\b(?:pr|pull request)\s*#?\s*(\d{1,7})\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    const number = match ? Number(match[1]) : NaN;
+    if (Number.isInteger(number) && number > 0) return number;
   }
   return null;
 }
@@ -190,12 +238,32 @@ export function parseDeveloperAutopilotRequest(message: string, source: Develope
   return {
     source,
     repoFullName: extractExplicitRepo(message),
+    pullRequestNumber: extractExplicitPullRequestNumber(message),
     kind,
     title: titleFromMessage(message, kind),
     description: redactedMessage,
     severity: kind === "security" || kind === "threat" ? "high" : kind === "incident" ? "critical" : "medium",
     evidence: [],
     replitRequested: /\b(replit|deploy|monta|montarlo|deployment)\b/i.test(message),
+  };
+}
+
+export function parseSubscriptionHandoffRequest(message: string, source: DeveloperAutopilotSource): SubscriptionHandoffRequest | null {
+  const kind = inferSubscriptionHandoffKind(message);
+  if (!kind) return null;
+  const description = redactSensitiveText(message).trim();
+  const title = description
+    .replace(/\s+/g, " ")
+    .replace(/^.*?\b(?:usa|usar|usalo|prepara|mandalo|envia|pasalo)\b[:\s-]*/i, "")
+    .trim()
+    .slice(0, 120) || "Trabajo pesado para ChatGPT/Codex Pro";
+
+  return {
+    source,
+    kind,
+    title,
+    description,
+    reason: "Conviene usar la membresia ChatGPT/Codex Pro para trabajo pesado manual y reservar API para automatizaciones.",
   };
 }
 
@@ -246,6 +314,66 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
     "",
     "Completion report must include PR URL, files changed, tests run, App QA status, residual risk, rollback plan, and whether Replit deploy is still waiting for approval.",
     "Double-check order: Codex PR -> Claude independent review -> App QA release gate -> Robert approval.",
+  ].join("\n");
+}
+
+export function buildCodexDispatchComment(request: DeveloperAutopilotRequest): string {
+  return [
+    "@codex fix this issue PR-first.",
+    "",
+    "Use the signed-in Codex/GitHub integration. Do not use BlackOps OpenAI API spend.",
+    "",
+    "Task:",
+    request.description,
+    "",
+    "Rules:",
+    "- Work only on this PR branch/context.",
+    "- Keep the change focused and small.",
+    "- Follow AGENTS.md and repo-local instructions.",
+    "- Do not edit secrets, .env, credentials, tokens, .git, node_modules, credentials/, or secrets/.",
+    "- Run the relevant tests/checks and report what passed or failed.",
+    "- Do not merge or deploy. Robert must approve merge/deploy after QA.",
+    "",
+    "When done, comment with files changed, tests run, risk, rollback note, and anything still blocked.",
+  ].join("\n");
+}
+
+export function buildSubscriptionHandoffBrief(request: SubscriptionHandoffRequest): string {
+  const skillHint = request.kind === "design"
+    ? "Use design/creative guidance: visual hierarchy, brand fit, Canva/flyer variants, clear production checklist, and final assets list."
+    : request.kind === "marketing"
+      ? "Use marketing guidance: goal, audience, offer, hooks, creatives, channels, Metricool schedule, tracking, budget/risk, and next actions."
+      : request.kind === "analysis"
+        ? "Use analysis guidance: assumptions, data needed, findings, confidence, risks, recommended decisions, and follow-up measurements."
+        : "Use business strategy guidance: objective, constraints, options, cost/risk, execution plan, and approval gates.";
+
+  return [
+    "BlackOps subscription handoff",
+    "",
+    "Use this in the signed-in ChatGPT/Codex Pro membership workflow. Do not spend OpenAI API tokens for this heavy manual work unless Robert explicitly asks.",
+    "",
+    `Source: ${request.source}`,
+    `Type: ${request.kind}`,
+    `Title: ${request.title}`,
+    "",
+    "Robert asked:",
+    request.description,
+    "",
+    "Cost rule:",
+    "- Keep BlackOps API usage cheap-first.",
+    "- Use Gemini/Gemma or app automations for bulk drafts and repetitive work.",
+    "- Use ChatGPT/Codex Pro membership for deep reasoning, campaign strategy, design review, code/PR work, and final judgment.",
+    "- Do not approve paid ads, paid generative video at scale, external posting, supplier/customer outreach, or production changes without Robert approval.",
+    "",
+    "Work guidance:",
+    skillHint,
+    "",
+    "Expected output:",
+    "- Short executive answer first.",
+    "- Practical plan with next 3-7 actions.",
+    "- Any copy, hooks, briefs, prompts, or QA checklist needed to execute.",
+    "- Cost/risk note and what requires Robert approval.",
+    "- If this becomes code work, create a PR-first Codex brief instead of editing main.",
   ].join("\n");
 }
 
@@ -314,10 +442,31 @@ export async function createDeveloperAutopilotHandoff(
 ): Promise<DeveloperAutopilotHandoff> {
   const request = parseDeveloperAutopilotRequest(message, source);
   if (!request) {
+    const subscriptionRequest = parseSubscriptionHandoffRequest(message, source);
+    if (!subscriptionRequest) {
+      return {
+        status: "invalid_request",
+        request: null,
+        message: "No detecte un bug, amenaza, solicitud de fix o trabajo pesado para handoff de membresia.",
+      };
+    }
+
+    const subscriptionBrief = buildSubscriptionHandoffBrief(subscriptionRequest);
     return {
-      status: "invalid_request",
+      status: "subscription_brief",
       request: null,
-      message: "No detecte un bug, amenaza o solicitud de fix para Developer Autopilot.",
+      subscriptionRequest,
+      subscriptionBrief,
+      handoffType: "subscription_work",
+      message: [
+        "Listo. Prepare un brief para trabajarlo con tu membresia ChatGPT/Codex Pro, sin quemar API del app.",
+        "",
+        "Pegalo en Codex/ChatGPT Pro cuando quieras usar el cerebro fuerte:",
+        "",
+        "```text",
+        subscriptionBrief,
+        "```",
+      ].join("\n"),
     };
   }
 
@@ -348,19 +497,44 @@ export async function createDeveloperAutopilotHandoff(
     const requestWithRepo = { ...request, repoFullName: repo.full_name };
     const body = buildCodexGitHubIssueBody(requestWithRepo, repo);
     const issue = await deps.createIssue(owner, repoName, buildCodexGitHubIssueTitle(requestWithRepo, repo), body);
+    let codexDispatchCommentUrl: string | undefined;
+    let codexDispatchError: string | undefined;
+    if (requestWithRepo.pullRequestNumber) {
+      try {
+        const comment = await deps.createIssueComment(
+          owner,
+          repoName,
+          requestWithRepo.pullRequestNumber,
+          buildCodexDispatchComment(requestWithRepo),
+        );
+        codexDispatchCommentUrl = comment.html_url;
+      } catch (commentError: any) {
+        codexDispatchError = commentError?.message || "No pude comentar en el PR";
+      }
+    }
 
     return {
-      status: "created",
+      status: codexDispatchCommentUrl ? "codex_dispatched" : "created",
       request: requestWithRepo,
+      handoffType: "developer_pr",
       repoFullName: repo.full_name,
       issueUrl: issue.html_url,
       issueNumber: issue.number,
+      codexDispatchCommentUrl,
+      codexDispatchPrNumber: requestWithRepo.pullRequestNumber || undefined,
+      codexDispatchError,
       codexBrief: buildCodexPrFirstBrief(requestWithRepo),
       message: [
-        "Listo. Cree el handoff PR-first para Codex.",
+        codexDispatchCommentUrl
+          ? "Listo. Cree el handoff PR-first y le mande el fix directo a Codex en el PR."
+          : "Listo. Cree el handoff PR-first para Codex.",
         `Repo: ${repo.full_name}`,
         `Issue: ${issue.html_url}`,
-        "Siguiente paso: Codex debe trabajar en branch y abrir PR. Cuando exista el PR, corre App QA multiagente.",
+        codexDispatchCommentUrl
+          ? `Codex dispatch: ${codexDispatchCommentUrl}`
+          : codexDispatchError
+            ? `Codex dispatch pendiente: ${codexDispatchError}. Verifica el numero/link del PR y vuelve a pedir el dispatch.`
+          : "Siguiente paso: cuando exista un PR, BlackOps puede comentar @codex fix para activar Codex Cloud sin API.",
         "No voy a montar en Replit hasta que apruebes explicitamente el deploy.",
       ].join("\n"),
     };
@@ -439,7 +613,9 @@ export function buildReadyForApprovalMessage(input: {
 export const __developerAutopilotInternals = {
   safetyLines,
   extractExplicitRepo,
+  extractExplicitPullRequestNumber,
   inferFixKind,
+  inferSubscriptionHandoffKind,
   redactSensitiveText,
   selectRepoForRequest,
 };

@@ -26,10 +26,19 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
   const source = readFileSync("server/routes.ts", "utf8");
 
   assert.match(source, /\/api\/developer-autopilot\/handoff/);
+  assert.match(source, /result\.status === "codex_dispatched"/);
+  assert.match(source, /result\.status === "subscription_brief"/);
   assert.match(source, /\/api\/developer-autopilot\/qa-gate/);
   assert.match(source, /runAppQaScan\(getCurrentUserId\(req\), Boolean\(req\.body\?\.notify\), true, false\)/);
   assert.match(source, /const prUrl = typeof req\.body\?\.prUrl === "string"/);
   assert.match(source, /evaluateDeveloperReleaseGate\(scan, \{ prUrl \}\)/);
+});
+
+test("Dashboard chat exposes a subscription handoff prompt", () => {
+  const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+
+  assert.match(source, /membresia Pro/);
+  assert.match(source, /campana fuerte/);
 });
 
 test("Agents Office shows Claude as an independent PR reviewer", () => {
