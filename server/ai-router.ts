@@ -41,7 +41,9 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout disabled by env" };
   }
   if (!hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY)) {
-    return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout key not configured" };
+    return isStrictCostMode()
+      ? { tier: "subscription_handoff", provider: "membership", reason: "cheap scout key not configured and strict cost mode blocks automatic OpenAI fallback" }
+      : { tier: "strong_supervisor", provider: "openai", reason: "cheap scout key not configured" };
   }
   if (input.hasImages) {
     return { tier: "strong_supervisor", provider: "openai", reason: "image analysis uses strong supervisor in web chat" };
@@ -78,5 +80,7 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     return { tier: "cheap_scout", provider: "gemini", reason: "short low-risk chat fallback" };
   }
 
-  return { tier: "strong_supervisor", provider: "openai", reason: "long or ambiguous request" };
+  return isStrictCostMode()
+    ? { tier: "subscription_handoff", provider: "membership", reason: "long or ambiguous request routed to subscription handoff in strict cost mode" }
+    : { tier: "strong_supervisor", provider: "openai", reason: "long or ambiguous request" };
 }

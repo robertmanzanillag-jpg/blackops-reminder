@@ -54,6 +54,7 @@ BlackOps is configured to stay cheap-first by default so Robert can keep AI/API 
 - Use cheap scout work for summaries, captions, clustering, clip planning, first drafts, and low-risk web chat fallback. Use the strong model for final strategy, spend, production, security, code, or high-risk judgment.
 - Strict cost mode is on by default. For heavy manual work, use the subscription handoff flow so Robert can run the deep work in signed-in ChatGPT/Codex Pro instead of BlackOps API spend.
 - Subscription handoff is not a downgrade. It is the preferred strong-work path when the work can be done through Robert's memberships instead of app API calls.
+- Keep cheap scout prompts compact and intent-routed. Use short-lived cache only for repeated low-risk creative drafts, not calendar, market, portfolio, safety, code, or money decisions.
 - Do not trigger paid generative video at scale, paid ad spend, external posting, supplier/customer outreach, or production changes without Robert approval and a cost estimate.
 
 Do not add new agents, hooks, MCP servers, dependencies, or automations unless they remove repeated work or enforce an existing safety rule.

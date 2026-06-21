@@ -51,6 +51,7 @@
 - Strict cost mode is on by default. For heavy manual work that does not need to run autonomously in BlackOps, prepare a ChatGPT/Codex Pro subscription handoff so Robert can use his membership instead of API spend.
 - Do not treat subscription handoff as lower intelligence. It is the preferred strong-work path for campaigns, deep analysis, design review, strategy, and code when Robert can run the work in Codex/ChatGPT/Claude memberships.
 - Bulk clippers should use campaign-level planning, reusable templates, and batch captions instead of one strong-model pass per clip.
+- Cheap scout prompts should send only intent-relevant context and may use short-lived cache for repeated low-risk creative drafts. Do not attach full calendar, portfolio, profile, app help, and skills to every cheap request by default.
 - Paid generative video, paid ads, external posting, production deployment, or spend increases need Robert approval and a cost estimate first.
 
 ## PR Review Standard

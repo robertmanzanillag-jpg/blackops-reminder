@@ -100,12 +100,16 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(policy, /ChatGPT\/Codex Pro subscription handoff/);
   assert.match(policy, /BLACKOPS_STRICT_COST_MODE/);
   assert.match(policy, /Strict cost mode/);
+  assert.match(policy, /compact, intent-selected context/);
   assert.match(router, /BLACKOPS_WEB_CHEAP_SCOUT_ENABLED/);
   assert.match(router, /cheap_scout/);
   assert.match(router, /subscription_handoff/);
   assert.match(router, /strong_supervisor/);
   assert.match(webAssistant, /shouldUseCheapScoutForWebChat/);
   assert.match(webAssistant, /modelRoute\.tier === "subscription_handoff"/);
+  assert.match(webAssistant, /getCachedCheapScoutResponse/);
+  assert.match(webAssistant, /buildCompactCheapScoutPrompt/);
+  assert.match(webAssistant, /setCachedCheapScoutResponse/);
   assert.match(webAssistant, /getGeminiClient\(\)\.models\.generateContent/);
   assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
   assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
@@ -142,12 +146,35 @@ test("AI router sends low-risk work to cheap scout and risky work to strong supe
       "openai",
     );
     assert.equal(
+      shouldUseCheapScoutForWebChat({ message: "necesito que me pienses una respuesta ".repeat(80) }).tier,
+      "subscription_handoff",
+    );
+    assert.equal(
       shouldUseCheapScoutForWebChat({ message: "resume esta captura", hasImages: true }).tier,
       "strong_supervisor",
     );
   } finally {
     if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
     else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+  }
+});
+
+test("AI router blocks automatic OpenAI fallback when cheap scout key is missing in strict mode", () => {
+  const previousKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const previousStrict = process.env.BLACKOPS_STRICT_COST_MODE;
+  delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  process.env.BLACKOPS_STRICT_COST_MODE = "true";
+
+  try {
+    const route = shouldUseCheapScoutForWebChat({ message: "haz captions simples para 5 clips" });
+    assert.equal(route.tier, "subscription_handoff");
+    assert.equal(route.provider, "membership");
+    assert.match(route.reason, /blocks automatic OpenAI fallback/);
+  } finally {
+    if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+    else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+    if (previousStrict === undefined) delete process.env.BLACKOPS_STRICT_COST_MODE;
+    else process.env.BLACKOPS_STRICT_COST_MODE = previousStrict;
   }
 });
 

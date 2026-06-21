@@ -138,6 +138,7 @@ export function buildAiCostPolicyContext(origin: CostPolicyOrigin): string {
     "- Use OpenAI/strong reasoning only when the work must happen autonomously inside the app and cannot be handled by rules, Gemma/Gemini scout work, or a subscription handoff.",
     "- In strict cost mode, heavy manual work routes to a ChatGPT/Codex Pro subscription handoff by default instead of spending API tokens.",
     "- For code, bugs, PR fixes, and reviews, prefer Codex/Claude signed-in membership workflows over app API calls.",
+    "- Cheap scout prompts should use compact, intent-selected context and short-lived cache for repeated low-risk creative drafts.",
     "- Claude skills are local instruction text. They improve marketing/design behavior but do not spend Claude API tokens unless a Claude API model is explicitly called.",
     "- Keep responses compact. Do not dump long context, large skill bodies, or repeated history unless it directly changes the answer.",
     "- For clippers, prefer batch planning and reusable templates. Do not analyze every clip with a strong model when one campaign-level plan is enough.",
