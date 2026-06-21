@@ -933,6 +933,20 @@ interface ClipperSourceScoutDailySprintCategoryRow {
   nextStep: string;
 }
 
+interface ClipperSourceScoutDailySprintSearchMission {
+  id: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  priority: "critical" | "high" | "watch";
+  query: string;
+  searchUrl: string;
+  targetCandidates: number;
+  minimumViews: number;
+  trendCandidateBatchRows: string[];
+  validationChecklist: string[];
+  nextStep: string;
+}
+
 interface ClipperSourceScoutDailySprintSummary {
   status: ClipperSourceScoutDailySprintStatus;
   generatedAt: string | null;
@@ -960,6 +974,7 @@ interface ClipperSourceScoutDailySprintSummary {
     searchMinutes: number;
   };
   categoryRows: ClipperSourceScoutDailySprintCategoryRow[];
+  searchMissions: ClipperSourceScoutDailySprintSearchMission[];
   guardrails: string[];
   nextStep: string;
 }
@@ -20373,6 +20388,33 @@ export default function ClippersPage() {
                         </div>
                       ))}
                     </div>
+                    {status.sourceScoutDailySprint.searchMissions.length > 0 && (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {status.sourceScoutDailySprint.searchMissions.map((mission) => (
+                          <div key={mission.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{mission.category} · {mission.platform}</p>
+                              <Badge className={cn("border text-[10px]", mission.priority === "critical" ? "border-red-300/30 bg-red-300/10 text-red-200" : mission.priority === "high" ? "border-amber-300/30 bg-amber-300/10 text-amber-200" : "border-zinc-600 bg-zinc-900 text-zinc-300")}>{mission.priority}</Badge>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-xs leading-5 text-rose-100/80">{mission.query}</p>
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                              <p>Target {mission.targetCandidates}</p>
+                              <p>Min views {formatNumber(mission.minimumViews)}</p>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <a href={mission.searchUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-rose-300/20 px-2 py-1 text-xs text-rose-100 hover:bg-rose-300/10">
+                                Search
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              <Button type="button" size="sm" variant="outline" className="h-7 border-rose-300/20 bg-transparent px-2 text-xs text-rose-100 hover:bg-rose-300/10" onClick={() => appendTrendCandidateBatchRows(mission.trendCandidateBatchRows)}>
+                                <Plus className="mr-1 h-3 w-3" />
+                                Trend rows
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -6681,6 +6681,11 @@ test("prepareClipperSourceScoutDailySprint writes daily lead and exact URL gaps 
     assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "sports" && row.leadTarget > 0 && row.exactUrlTarget > 0));
     assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "memes" && row.leadTarget > 0 && row.exactUrlTarget > 0));
     assert.ok(sourceScoutDailySprint.categoryRows.every((row) => row.intakeTemplateRows.every((templateRow) => templateRow.includes("<paste exact video/post URL only>"))));
+    assert.ok(sourceScoutDailySprint.searchMissions.length > 0);
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.searchUrl.startsWith("https://")));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.trendCandidateBatchRows.length > 0));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.trendCandidateBatchRows.every((row) => row.includes("<paste exact video/post URL only>"))));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.validationChecklist.some((check) => check.includes("Reject search"))));
     const sportsTemplate = sourceScoutDailySprint.categoryRows.find((row) => row.category === "sports")?.intakeTemplateRows[0];
     if (sportsTemplate) {
       const cells = sportsTemplate.split(",");
@@ -6700,7 +6705,10 @@ test("prepareClipperSourceScoutDailySprint writes daily lead and exact URL gaps 
     const rawCsv = await readFile(sourceScoutDailySprint.csvPath, "utf8");
     assert.ok(rawMarkdown.includes("without fake readiness"));
     assert.ok(rawMarkdown.includes("Discovery/search/explore/hashtag URLs never count"));
+    assert.ok(rawMarkdown.includes("Search Missions"));
+    assert.ok(rawMarkdown.includes("Trend Candidates Batch rows"));
     assert.ok(rawCsv.includes("lead_gap"));
+    assert.ok(rawCsv.includes("trend_candidate_batch_rows"));
     assert.equal(rawMarkdown.includes("access_token"), false);
     assert.equal(rawCsv.includes("client_secret"), false);
   } finally {

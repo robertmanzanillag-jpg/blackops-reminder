@@ -983,6 +983,20 @@ export interface ClipperSourceScoutDailySprintCategoryRow {
   nextStep: string;
 }
 
+export interface ClipperSourceScoutDailySprintSearchMission {
+  id: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  priority: "critical" | "high" | "watch";
+  query: string;
+  searchUrl: string;
+  targetCandidates: number;
+  minimumViews: number;
+  trendCandidateBatchRows: string[];
+  validationChecklist: string[];
+  nextStep: string;
+}
+
 export interface ClipperSourceScoutDailySprintSummary {
   status: ClipperSourceScoutDailySprintStatus;
   generatedAt: string | null;
@@ -1010,6 +1024,7 @@ export interface ClipperSourceScoutDailySprintSummary {
     searchMinutes: number;
   };
   categoryRows: ClipperSourceScoutDailySprintCategoryRow[];
+  searchMissions: ClipperSourceScoutDailySprintSearchMission[];
   guardrails: string[];
   nextStep: string;
 }
@@ -11787,6 +11802,77 @@ function sourceScoutDailyIntakeTemplateRows(category: ClipperAccountCategory, co
   ].map(csvCell).join(","));
 }
 
+function sourceScoutDailyPlatformForCategory(category: ClipperAccountCategory): ClipperPlatform {
+  if (category === "memes") return "tiktok";
+  if (category === "streamers") return "youtube";
+  return "tiktok";
+}
+
+function sourceScoutDailyMissionSearchUrl(platform: ClipperPlatform, query: string): string {
+  const nativeQuery = query
+    .replace(/\bsite:[^\s]+/g, "")
+    .replace(/\bOR\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return sourceSupplySearchUrl(platform, nativeQuery || query);
+}
+
+function sourceScoutDailyTrendCandidateTemplateRows(input: {
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  missionIndex: number;
+  count: number;
+}): string[] {
+  return Array.from({ length: Math.min(5, Math.max(0, input.count)) }, (_, index) => [
+    input.category,
+    input.platform,
+    `<paste viral ${input.category} lead ${input.missionIndex + 1}.${index + 1}>`,
+    "<paste exact video/post URL only>",
+    "<paste creator/source>",
+    "",
+    "<views>",
+    "<likes>",
+    "<comments>",
+    "<shares>",
+    "review_required",
+    "Daily Source Scout lead candidate; exact URL and rights proof required before production.",
+  ].map(csvCell).join(","));
+}
+
+function buildSourceScoutDailySearchMissions(rows: ClipperSourceScoutDailySprintCategoryRow[]): ClipperSourceScoutDailySprintSearchMission[] {
+  return rows.flatMap((row) => {
+    const missionCount = Math.min(3, Math.ceil(Math.max(row.leadGap, row.exactUrlGap) / 8));
+    if (missionCount <= 0) return [];
+    const platform = sourceScoutDailyPlatformForCategory(row.category);
+    return sourceSupplyViralQueries(row.category, 1).slice(0, missionCount).map((query, index) => {
+      const targetCandidates = Math.max(3, Math.ceil(Math.max(row.leadGap, row.exactUrlGap) / missionCount));
+      return {
+        id: `source-scout-daily-${row.category}-${index + 1}`,
+        category: row.category,
+        platform,
+        priority: row.priority,
+        query,
+        searchUrl: sourceScoutDailyMissionSearchUrl(platform, query),
+        targetCandidates,
+        minimumViews: viralDiscoveryMinimumViews(platform, row.priority === "critical" ? "must_scan" : "watch"),
+        trendCandidateBatchRows: sourceScoutDailyTrendCandidateTemplateRows({
+          category: row.category,
+          platform,
+          missionIndex: index,
+          count: targetCandidates,
+        }),
+        validationChecklist: [
+          "Paste only exact TikTok video, YouTube short/watch, Instagram reel/post, or Twitch clip URLs.",
+          "Reject search, explore, results, hashtag, channel/profile-only, or Metricool planner URLs.",
+          "Keep rights as review_required until permission/owned/recreate evidence is recorded.",
+          "Do not use broadcast, watermarked repost, unlicensed music, or raw streamer footage without proof.",
+        ],
+        nextStep: `Scan this query and paste up to ${targetCandidates} exact ${row.label} candidate row(s) into Trend Candidates Batch.`,
+      };
+    });
+  });
+}
+
 function buildSourceScoutDailySprintCategoryRow(input: {
   category: ClipperAccountCategory;
   sourceScout: ClipperSourceScoutSummary;
@@ -11841,6 +11927,7 @@ async function buildSourceScoutDailySprintSummary(input: {
     sourceScoutIntake: input.sourceScoutIntake,
     exactUrlKit: input.exactUrlKit,
   }));
+  const searchMissions = buildSourceScoutDailySearchMissions(categoryRows);
   const totals = categoryRows.reduce<ClipperSourceScoutDailySprintSummary["totals"]>((sum, row) => {
     sum.currentScoutLeads += row.currentScoutLeads;
     sum.currentExactUrls += row.currentExactUrls;
@@ -11883,6 +11970,7 @@ async function buildSourceScoutDailySprintSummary(input: {
     },
     totals,
     categoryRows,
+    searchMissions,
     guardrails: [
       "Discovery/search/explore/hashtag URLs never count as exact URLs.",
       "Do not mark rights approved without proof URL/path and concrete notes.",
@@ -11899,7 +11987,7 @@ async function buildSourceScoutDailySprintSummary(input: {
 }
 
 function renderSourceScoutDailySprintCsv(summary: ClipperSourceScoutDailySprintSummary): string {
-  const headers = ["category", "label", "priority", "lead_target", "current_scout_leads", "lead_gap", "exact_url_target", "current_exact_urls", "exact_url_gap", "search_minutes", "search_brief", "intake_template_rows", "next_step"];
+  const headers = ["category", "label", "priority", "lead_target", "current_scout_leads", "lead_gap", "exact_url_target", "current_exact_urls", "exact_url_gap", "search_minutes", "search_brief", "intake_template_rows", "search_mission_urls", "trend_candidate_batch_rows", "next_step"];
   const rows = summary.categoryRows.map((row) => [
     row.category,
     row.label,
@@ -11913,6 +12001,8 @@ function renderSourceScoutDailySprintCsv(summary: ClipperSourceScoutDailySprintS
     row.searchMinutes,
     row.searchBrief.join(" | "),
     row.intakeTemplateRows.join("\n"),
+    summary.searchMissions.filter((mission) => mission.category === row.category).map((mission) => mission.searchUrl).join(" | "),
+    summary.searchMissions.filter((mission) => mission.category === row.category).flatMap((mission) => mission.trendCandidateBatchRows).join("\n"),
     row.nextStep,
   ]);
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
@@ -11954,6 +12044,28 @@ function renderSourceScoutDailySprintMarkdown(summary: ClipperSourceScoutDailySp
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Search Missions",
+    "",
+    ...(summary.searchMissions.length ? summary.searchMissions.flatMap((mission) => [
+      `### ${mission.priority.toUpperCase()} · ${mission.category} · ${mission.platform}`,
+      "",
+      `- Query: ${mission.query}`,
+      `- Search URL: ${mission.searchUrl}`,
+      `- Target candidates: ${mission.targetCandidates}`,
+      `- Minimum views signal: ${mission.minimumViews}`,
+      `- Next step: ${mission.nextStep}`,
+      "",
+      "Validation checklist:",
+      ...mission.validationChecklist.map((check) => `- [ ] ${check}`),
+      "",
+      "Trend Candidates Batch rows:",
+      "",
+      "```csv",
+      ...mission.trendCandidateBatchRows,
+      "```",
+      "",
+    ]) : ["No search missions queued."]),
     "",
     "## Categories",
     "",
