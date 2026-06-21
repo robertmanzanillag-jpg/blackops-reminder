@@ -1509,6 +1509,7 @@ export function registerAssistantRoutes(app: Express): void {
             youtubeUrl: radioYoutubeData.youtubeUrl,
             driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
             createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
+            driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
             djName: radioYoutubeData.djName,
             musicUrl: radioYoutubeData.musicUrl,
             content: "Voy a procesar ese YouTube para radio.",
