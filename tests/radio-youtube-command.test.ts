@@ -32,6 +32,20 @@ test("builds direct radio YouTube command only for radio clip requests", () => {
   assert.equal(buildDirectRadioYoutubeCommand("mira este link https://youtu.be/abc123"), null);
 });
 
+test("builds direct YouTube clip command when Drive destination is requested without saying radio", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU quiero que me saques los clips de este video y me lo agregues en la carpeta Robert A/Videos de Lucia Reina del Drive");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.deepEqual(command?.driveFolderPath, ["Robert A", "Videos de Lucia Reina"]);
+  assert.match(command?.command || "", /RADIO_YOUTUBE_CLIPS/);
+});
+
+test("asks for Drive folder on generic YouTube clip request when folder name is incomplete", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU quiero que me saques los clips de este video y me lo agregues en la carpeta de drive con el titulo");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.equal(command?.driveFolderPath.length, 0);
+  assert.match(command?.content || "", /nombre o ruta de la carpeta de Google Drive/i);
+});
+
 test("extracts music URL for drop-based radio edits", () => {
   const command = buildDirectRadioYoutubeCommand("haz clips de radio de https://youtu.be/video123 con drop de esta cancion https://youtu.be/song456 y guardalos en carpeta Radio Junio del Drive");
   assert.equal(command?.youtubeUrl, "https://youtu.be/video123");
