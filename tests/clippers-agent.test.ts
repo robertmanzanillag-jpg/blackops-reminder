@@ -3692,6 +3692,8 @@ test("prepareClipperGoLiveExecutionPack surfaces Metricool MVP without marking d
 test("getClipperStatus normalizes stale Metricool cache to approval-only", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
 
   try {
     await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
@@ -3734,14 +3736,29 @@ test("getClipperStatus normalizes stale Metricool cache to approval-only", async
     const status = await getClipperStatus();
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(status.metricoolExecutionQueue.status, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
     assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
     assert.ok(status.metricoolExecutionQueue.items.every((item) =>
       item.status !== "ready_to_send" && item.approvalRequired === true && item.canSendNow === false
     ));
+
+    const normalizedManifest = await readFile(status.metricoolExecutionQueue.manifestPath, "utf8");
+    const normalizedMarkdown = await readFile(status.metricoolExecutionQueue.markdownPath, "utf8");
+    const normalizedCsv = await readFile(status.metricoolExecutionQueue.csvPath, "utf8");
+    assert.doesNotMatch(normalizedManifest, /ready_to_send|"realPublishEnabled": true|auto_after_connection/);
+    assert.doesNotMatch(normalizedMarkdown, /ready_to_send|Real publish enabled: yes|Publish mode: auto_after_connection/);
+    assert.doesNotMatch(normalizedCsv, /ready_to_send/);
+    assert.match(normalizedManifest, /"realPublishEnabled": false/);
+    assert.match(normalizedMarkdown, /Real publish enabled: no/);
+    assert.match(normalizedCsv, /queued_for_approval/);
   } finally {
     if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
   }
 });
 
@@ -3749,6 +3766,8 @@ test("go-live completion audit receives normalized Metricool approval-only queue
   const beforeStatus = await getClipperStatus();
   const previousPublishingManifest = await readFile(beforeStatus.metricoolPublishing.manifestPath, "utf8").catch(() => null);
   const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
   const previousToken = process.env.METRICOOL_USER_TOKEN;
   const previousUserId = process.env.METRICOOL_USER_ID;
   process.env.METRICOOL_USER_TOKEN = "token_live";
@@ -3803,6 +3822,7 @@ test("go-live completion audit receives normalized Metricool approval-only queue
     const bridgeRequirement = status.goLiveCompletionAudit.requirements.find((item) => item.id === "publishing-bridge-connected");
     const publisherRequirement = status.goLiveCompletionAudit.requirements.find((item) => item.id === "publisher-connectors-ready");
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
     assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
     assert.ok(status.metricoolExecutionQueue.items.every((item) =>
@@ -3822,6 +3842,76 @@ test("go-live completion audit receives normalized Metricool approval-only queue
     else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousPublishingManifest);
     if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+  }
+});
+
+test("getClipperStatus rewrites Metricool publishMode-only stale artifacts", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "publish-mode-only-stale-cache",
+      publishMode: "auto_after_connection",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "ready",
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "safe except publish mode",
+      },
+      items: [{
+        id: "publish-mode-only-item",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "safe",
+        captionSeed: "safe",
+        requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "review first",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 1, readyToSend: 0, approvalRequired: 1 },
+      nextStep: "safe except publish mode",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricoolExecutionQueue.status, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+
+    const normalizedManifest = await readFile(status.metricoolExecutionQueue.manifestPath, "utf8");
+    const normalizedMarkdown = await readFile(status.metricoolExecutionQueue.markdownPath, "utf8");
+    assert.doesNotMatch(normalizedManifest, /auto_after_connection/);
+    assert.doesNotMatch(normalizedMarkdown, /Publish mode: auto_after_connection/);
+    assert.match(normalizedMarkdown, /Publish mode: approval_required/);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
   }
 });
 

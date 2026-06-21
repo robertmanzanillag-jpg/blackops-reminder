@@ -27633,7 +27633,8 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as ClipperMetricoolExecutionQueueSummary;
-      const items = (Array.isArray(parsed.items) ? parsed.items : []).map((item) => ({
+      const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
+      const items = parsedItems.map((item) => ({
         ...item,
         status: item.status === "ready_to_send" ? "queued_for_approval" : item.status,
         approvalRequired: true,
@@ -27646,14 +27647,23 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
         if (item.approvalRequired) sum.approvalRequired += 1;
         return sum;
       }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
-      return {
+      const needsArtifactNormalization = parsed.status === "ready"
+        || parsed.realPublishEnabled !== false
+        || parsed.publishMode !== "approval_required"
+        || (parsed.totals?.readyToSend || 0) > 0
+        || parsedItems.some((item) =>
+          item.status === "ready_to_send"
+          || item.approvalRequired !== true
+          || item.canSendNow !== false
+        );
+      const summary: ClipperMetricoolExecutionQueueSummary = {
         status: parsed.status === "ready" ? "approval_required" : parsed.status || "not_prepared",
         generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
         manifestPath: METRICOOL_EXECUTION_QUEUE_PATH,
         markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
         csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
         sourceAutomationRunId: parsed.sourceAutomationRunId || null,
-        publishMode: parsed.publishMode || "approval_required",
+        publishMode: needsArtifactNormalization ? "approval_required" : parsed.publishMode || "approval_required",
         realPublishEnabled: false,
         sourceReadiness: parsed.sourceReadiness || {
           status: "blocked",
@@ -27663,8 +27673,16 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
         },
         items,
         totals,
-        nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "Preparar cola Metricool.",
+        nextStep: needsArtifactNormalization
+          ? "Cola Metricool normalizada a approval_required; revisar en Metricool antes de publicar."
+          : typeof parsed.nextStep === "string" ? parsed.nextStep : "Preparar cola Metricool.",
       };
+      if (needsArtifactNormalization) {
+        await writeFile(METRICOOL_EXECUTION_QUEUE_PATH, JSON.stringify(summary, null, 2));
+        await writeFile(METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH, renderMetricoolExecutionQueueMarkdown(summary));
+        await writeFile(METRICOOL_EXECUTION_QUEUE_CSV_PATH, renderMetricoolExecutionQueueCsv(summary));
+      }
+      return summary;
     } catch {
       // Fall through.
     }
