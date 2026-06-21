@@ -22,6 +22,11 @@ test("extracts Drive folder path from radio YouTube request", () => {
     extractDriveFolderPathFromMessage("saca clips de radio de https://youtu.be/abc y en la carpeta de radio crea una carpeta con los videos que creaste"),
     ["radio", "Videos creados"],
   );
+
+  assert.deepEqual(
+    extractDriveFolderPathFromMessage("https://youtu.be/abc123 sacame un clip y guardalo en Drive en una carpeta llamada Codex QA Replit 2026-06-21."),
+    ["Codex QA Replit 2026-06-21"],
+  );
 });
 
 test("builds direct radio YouTube command only for radio clip requests", () => {

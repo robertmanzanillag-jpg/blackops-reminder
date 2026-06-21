@@ -9,6 +9,7 @@ import {
   userAlreadyApprovedExecution,
 } from "../server/assistant";
 import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
+import { buildDirectRadioYoutubeCommand } from "../server/radio-youtube-command";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -47,6 +48,22 @@ test("web assistant routes natural promo video requests to the local video agent
   assert.match(direct.command, /PROMO_VIDEO_GENERATE/);
   assert.match(direct.command, /"count":5/);
   assert.match(direct.command, /"platform":"tiktok"/);
+});
+
+test("web assistant prioritizes YouTube clip requests before Developer Autopilot", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const directRadioIndex = source.indexOf("const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message)");
+  const developerIndex = source.indexOf("const developerAutopilotHandoff = message");
+  const direct = buildDirectRadioYoutubeCommand(
+    "Prueba QA Codex: https://youtu.be/jNQXAC9IVRw sacame un clip corto de prueba y guardalo en Drive en una carpeta llamada Codex QA Replit 2026-06-21. Dime si empezo la descarga o si fallo el procesador."
+  );
+
+  assert.ok(direct);
+  assert.ok(directRadioIndex > -1);
+  assert.ok(developerIndex > -1);
+  assert.ok(directRadioIndex < developerIndex);
+  assert.match(direct.content, /Voy a descargar ese YouTube/);
+  assert.doesNotMatch(direct.content, /repo de GitHub/);
 });
 
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {
