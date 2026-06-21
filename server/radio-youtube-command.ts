@@ -56,6 +56,7 @@ function cleanFolderHint(value?: string): string | null {
     .replace(/\s+(?:y|para|con)\s+(?:que|cuando|si)\b.*$/i, "")
     .replace(/\s+con\s+(?:el\s+)?t[ií]tulo\b.*$/i, "")
     .replace(/^(?:de|del)\s+(?:google\s+)?drive\b.*$/i, "")
+    .replace(/^(?:llamada?|nombrada?|named|called)\s+/i, "")
     .replace(/[."'“”‘’]+$/g, "")
     .replace(/^["'“”‘’]+/g, "")
     .replace(/\s+/g, " ")
