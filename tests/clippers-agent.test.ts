@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -7101,6 +7101,135 @@ test("source scout evidence validation rejects weak proof and accepts concrete c
     evidenceType: "creator_permission",
     sourceFileExists: false,
   }));
+});
+
+test("rights evidence ledger does not report ready when prepared with zero items", () => {
+  const summary = __clipperInternals.buildRightsEvidenceLedgerSummary({
+    sourceScoutIntake: { items: [] },
+    productionQueue: { sourceAssets: [] },
+    preparedAt: "2026-06-22T00:00:00.000Z",
+  } as any);
+
+  assert.equal(summary.status, "not_prepared");
+  assert.equal(summary.totals.items, 0);
+  assert.equal(summary.totals.ready, 0);
+  assert.match(summary.nextStep, /Record Source Scout intake|source-drop assets/i);
+});
+
+test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers without fake readiness", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifactPaths = [
+    path.join(beforeStatus.rootDir, "source-scout-intake.json"),
+    path.join(beforeStatus.rootDir, "source-scout-intake.md"),
+    path.join(beforeStatus.rootDir, "source-scout-intake.csv"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.json"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.md"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "sports", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "memes", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "streamers", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "trends", "trend-radar-summary.json"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.json"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.md"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.csv"),
+  ];
+  const trendsDir = path.join(beforeStatus.rootDir, "trends");
+  const previousTrendCandidateFiles = new Set(
+    (await readdir(trendsDir).catch(() => []))
+      .filter((fileName) => /^trend-candidates-\d{4}-\d{2}-\d{2}t/i.test(fileName)),
+  );
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    await recordClipperSourceScoutIntake({
+      records: [
+        {
+          title: "Ledger missing source file",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/4234567890123456789",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          proof: "Drive proof access_token=ledger-secret-token client_secret: ledger-secret-client",
+          notes: "Creator permission confirmed in writing for edited short-form reposting on our account.",
+          target_file_name: "ledger-missing-source.mp4",
+          source_drop_path: path.join(beforeStatus.rootDir, "source-drop", "memes", "ledger-missing-source.mp4"),
+        },
+        {
+          title: "Ledger review required",
+          category: "sports",
+          platform: "youtube",
+          url: "https://www.youtube.com/shorts/ledgerreviewrequired",
+          source: "Official-looking channel",
+          status: "review_required",
+          views: "240000",
+        },
+        {
+          title: "Ledger missing proof",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/5234567890123456789",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          notes: "Creator permission is claimed here but proof URL is missing and must stay blocked.",
+        },
+      ],
+    });
+
+    const { rightsEvidenceLedger, status } = await prepareClipperRightsEvidenceLedger();
+    const missingSource = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing source file");
+    const reviewRequired = rightsEvidenceLedger.items.find((item) => item.title === "Ledger review required");
+    const missingProof = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing proof");
+
+    assert.ok(rightsEvidenceLedger.manifestPath.endsWith("rights-evidence-ledger.json"));
+    assert.ok(rightsEvidenceLedger.markdownPath.endsWith("rights-evidence-ledger.md"));
+    assert.ok(rightsEvidenceLedger.csvPath.endsWith("rights-evidence-ledger.csv"));
+    assert.equal(status.rightsEvidenceLedger.manifestPath, rightsEvidenceLedger.manifestPath);
+    assert.equal(rightsEvidenceLedger.status, "blocked");
+    assert.ok(rightsEvidenceLedger.totals.blocked >= 2);
+    assert.ok(rightsEvidenceLedger.totals.missingSourceFile >= 1);
+    assert.ok(rightsEvidenceLedger.totals.reviewRequired >= 1);
+    assert.ok(rightsEvidenceLedger.totals.missingProof >= 1);
+    assert.equal(missingSource?.issue, "missing_source_file");
+    assert.equal(missingSource?.evidenceAccepted, true);
+    assert.equal(missingSource?.sourceFileExists, false);
+    assert.equal(missingSource?.evidencePath?.includes("ledger-secret-token"), false);
+    assert.equal(reviewRequired?.issue, "review_required");
+    assert.equal(reviewRequired?.severity, "blocked");
+    assert.equal(missingProof?.issue, "missing_proof");
+    assert.equal(missingProof?.severity, "blocked");
+    assert.equal(missingProof?.evidencePath, null);
+    assert.ok(rightsEvidenceLedger.items.every((item) => item.severity !== "ready" || (item.evidenceAccepted && item.sourceFileExists)));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(rightsEvidenceLedger.markdownPath, "utf8");
+    const rawCsv = await readFile(rightsEvidenceLedger.csvPath, "utf8");
+    const rawManifest = await readFile(rightsEvidenceLedger.manifestPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not publish"));
+    assert.ok(rawCsv.includes("repair_csv_row"));
+    assert.equal([rawManifest, rawMarkdown, rawCsv].join("\n").includes("ledger-secret-token"), false);
+    assert.equal([rawManifest, rawMarkdown, rawCsv].join("\n").includes("ledger-secret-client"), false);
+    assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("access_token=[redacted]"));
+    assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("client_secret: [redacted]"));
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+    const nextTrendCandidateFiles = (await readdir(trendsDir).catch(() => []))
+      .filter((fileName) => /^trend-candidates-\d{4}-\d{2}-\d{2}t/i.test(fileName));
+    for (const fileName of nextTrendCandidateFiles) {
+      if (!previousTrendCandidateFiles.has(fileName)) {
+        await unlink(path.join(trendsDir, fileName)).catch(() => undefined);
+      }
+    }
+  }
 });
 
 test("recordClipperSourceScoutIntake enforces gates before Metricool approval", async () => {

@@ -1045,6 +1045,51 @@ interface ClipperSourceScoutSourceFileKitSummary {
   nextStep: string;
 }
 
+type ClipperRightsEvidenceLedgerStatus = "not_prepared" | "blocked" | "needs_repair" | "ready";
+
+interface ClipperRightsEvidenceLedgerItem {
+  id: string;
+  origin: "source_scout_intake" | "source_asset";
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform | "unknown";
+  title: string;
+  sourceUrl: string | null;
+  sourcePath: string | null;
+  fileName: string | null;
+  rightsStatus: ClipperAssetRightsStatus;
+  evidenceType: string | null;
+  evidencePath: string | null;
+  evidenceAccepted: boolean;
+  sourceFileExists: boolean;
+  sourceUrlKind: ClipperSourceScoutUrlKind | "local_file";
+  issue: "none" | "missing_proof" | "weak_evidence" | "missing_source_file" | "review_required" | "blocked" | "not_usable";
+  severity: "ready" | "watch" | "blocked";
+  repairCsvRow: string;
+  nextStep: string;
+}
+
+interface ClipperRightsEvidenceLedgerSummary {
+  status: ClipperRightsEvidenceLedgerStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperRightsEvidenceLedgerItem[];
+  totals: {
+    items: number;
+    ready: number;
+    blocked: number;
+    needsRepair: number;
+    missingProof: number;
+    weakEvidence: number;
+    missingSourceFile: number;
+    reviewRequired: number;
+    sourceScoutIntake: number;
+    sourceAssets: number;
+  };
+  nextStep: string;
+}
+
 interface ClipperSourceDiscoveryHandoffItem {
   id: string;
   rank: number;
@@ -6179,6 +6224,7 @@ interface ClipperStatus {
   sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
   sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary;
   sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
+  rightsEvidenceLedger: ClipperRightsEvidenceLedgerSummary;
   weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
   sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
   sourceIngestionSprint: ClipperSourceIngestionSprintSummary;
@@ -9298,6 +9344,25 @@ export default function ClippersPage() {
     },
   });
 
+  const rightsEvidenceLedgerMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-rights-evidence-ledger", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Rights Evidence Ledger");
+      return data as { rightsEvidenceLedger: ClipperRightsEvidenceLedgerSummary; status: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Rights Evidence Ledger listo",
+        description: `${data.rightsEvidenceLedger.totals.ready} ready; ${data.rightsEvidenceLedger.totals.blocked} bloqueados; ${data.rightsEvidenceLedger.totals.missingProof} sin proof.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Rights Ledger", description: error.message, variant: "destructive" });
+    },
+  });
+
   const sourceScoutIntakeMutation = useMutation({
     mutationFn: async (mode: "single" | "batch" = "single") => {
       const payload = mode === "batch" ? {
@@ -10814,6 +10879,15 @@ export default function ClippersPage() {
             >
               {sourceScoutSourceFileKitMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
               Source file kit
+            </Button>
+            <Button
+              onClick={() => rightsEvidenceLedgerMutation.mutate()}
+              disabled={rightsEvidenceLedgerMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-rights-evidence-ledger-button"
+            >
+              {rightsEvidenceLedgerMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              Rights ledger
             </Button>
             <Button
               onClick={() => trendRightsOutreachMutation.mutate()}
@@ -20368,6 +20442,37 @@ export default function ClippersPage() {
                         <p>Blocked rights: {status.sourceScoutIntake.totals.blockedRights}</p>
                         <p>Blocked source: {status.sourceScoutIntake.totals.blockedSourceFile}</p>
                       </div>
+                    </div>
+                  )}
+                  {status.rightsEvidenceLedger && (
+                    <div className="mt-3 rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3" data-testid="clippers-rights-evidence-ledger-panel">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-white">Rights Evidence Ledger · {status.rightsEvidenceLedger.markdownPath}</p>
+                          <p className="mt-1 text-xs leading-5 text-emerald-100/75">{status.rightsEvidenceLedger.nextStep}</p>
+                        </div>
+                        <Badge className={cn("w-fit border text-[10px]", status.rightsEvidenceLedger.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.rightsEvidenceLedger.status === "not_prepared" ? "border-zinc-600 bg-zinc-900 text-zinc-300" : "border-red-300/30 bg-red-300/10 text-red-200")}>{status.rightsEvidenceLedger.status}</Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-emerald-100/70 md:grid-cols-5">
+                        <p>Items: {status.rightsEvidenceLedger.totals.items}</p>
+                        <p>Ready: {status.rightsEvidenceLedger.totals.ready}</p>
+                        <p>Blocked: {status.rightsEvidenceLedger.totals.blocked}</p>
+                        <p>Missing proof: {status.rightsEvidenceLedger.totals.missingProof}</p>
+                        <p>Missing source: {status.rightsEvidenceLedger.totals.missingSourceFile}</p>
+                      </div>
+                      {status.rightsEvidenceLedger.items.length > 0 && (
+                        <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/25">
+                          {status.rightsEvidenceLedger.items.slice(0, 6).map((item) => (
+                            <div key={`${item.origin}-${item.id}`} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[minmax(0,1fr)_90px_110px_110px_minmax(0,1.4fr)] md:items-center">
+                              <p className="truncate font-medium text-white">{item.title}</p>
+                              <p className="truncate text-zinc-500">{item.category}</p>
+                              <Badge className={cn("w-fit border text-[10px]", item.severity === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>{item.issue}</Badge>
+                              <p className="text-emerald-100/80">{item.evidenceAccepted ? "proof accepted" : "needs proof"}</p>
+                              <p className="line-clamp-2 text-[11px] leading-4 text-emerald-100/70">{item.nextStep}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

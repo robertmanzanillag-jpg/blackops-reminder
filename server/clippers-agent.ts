@@ -223,6 +223,7 @@ export interface ClipperStatus {
   sourceScoutExactUrlKit: ClipperSourceScoutExactUrlKitSummary;
   sourceScoutDailySprint: ClipperSourceScoutDailySprintSummary;
   sourceScoutSourceFileKit: ClipperSourceScoutSourceFileKitSummary;
+  rightsEvidenceLedger: ClipperRightsEvidenceLedgerSummary;
   weeklyProductionFunnel: ClipperWeeklyProductionFunnelSummary;
   sourceDiscoveryHandoff: ClipperSourceDiscoveryHandoffSummary;
   sourceIngestionSprint: ClipperSourceIngestionSprintSummary;
@@ -816,6 +817,49 @@ export interface ClipperSourceScoutIntakeSummary {
     exactUrls: number;
     discoveryRejected: number;
     metricoolFit: number;
+  };
+  nextStep: string;
+}
+
+export interface ClipperRightsEvidenceLedgerItem {
+  id: string;
+  origin: "source_scout_intake" | "source_asset";
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform | "unknown";
+  title: string;
+  sourceUrl: string | null;
+  sourcePath: string | null;
+  fileName: string | null;
+  rightsStatus: ClipperAssetRightsStatus;
+  evidenceType: string | null;
+  evidencePath: string | null;
+  evidenceAccepted: boolean;
+  sourceFileExists: boolean;
+  sourceUrlKind: ClipperSourceScoutUrlKind | "local_file";
+  issue: "none" | "missing_proof" | "weak_evidence" | "missing_source_file" | "review_required" | "blocked" | "not_usable";
+  severity: "ready" | "watch" | "blocked";
+  repairCsvRow: string;
+  nextStep: string;
+}
+
+export interface ClipperRightsEvidenceLedgerSummary {
+  status: "not_prepared" | "blocked" | "needs_repair" | "ready";
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  items: ClipperRightsEvidenceLedgerItem[];
+  totals: {
+    items: number;
+    ready: number;
+    blocked: number;
+    needsRepair: number;
+    missingProof: number;
+    weakEvidence: number;
+    missingSourceFile: number;
+    reviewRequired: number;
+    sourceScoutIntake: number;
+    sourceAssets: number;
   };
   nextStep: string;
 }
@@ -6445,6 +6489,9 @@ const SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH = path.join(ROOT_DIR, "source-scout-dai
 const SOURCE_SCOUT_SOURCE_FILE_KIT_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.json");
 const SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.md");
 const SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH = path.join(ROOT_DIR, "source-scout-source-file-kit.csv");
+const RIGHTS_EVIDENCE_LEDGER_PATH = path.join(ROOT_DIR, "rights-evidence-ledger.json");
+const RIGHTS_EVIDENCE_LEDGER_MARKDOWN_PATH = path.join(ROOT_DIR, "rights-evidence-ledger.md");
+const RIGHTS_EVIDENCE_LEDGER_CSV_PATH = path.join(ROOT_DIR, "rights-evidence-ledger.csv");
 const WEEKLY_PRODUCTION_FUNNEL_PATH = path.join(ROOT_DIR, "weekly-production-funnel.json");
 const WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH = path.join(ROOT_DIR, "weekly-production-funnel.md");
 const WEEKLY_PRODUCTION_FUNNEL_CSV_PATH = path.join(ROOT_DIR, "weekly-production-funnel.csv");
@@ -12373,6 +12420,298 @@ export async function prepareClipperSourceScoutSourceFileKit(userId = getSystemU
   return { sourceScoutSourceFileKit, status: await getClipperStatus(userId) };
 }
 
+function rightsEvidenceLedgerRepairRow(item: {
+  origin: string;
+  id: string;
+  category: ClipperAccountCategory;
+  title: string;
+  sourceUrl: string | null;
+  sourcePath: string | null;
+  rightsStatus: ClipperAssetRightsStatus;
+  evidencePath: string | null;
+  issue: string;
+  nextStep: string;
+}): string {
+  return [
+    item.origin,
+    item.id,
+    item.category,
+    item.title,
+    item.sourceUrl || "",
+    item.sourcePath || "",
+    item.rightsStatus,
+    item.evidencePath || "",
+    item.issue,
+    item.nextStep,
+  ].map(csvCell).join(",");
+}
+
+function redactRightsEvidenceLedgerValue(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .replace(/\b(access_token|refresh_token|client_secret|client_secret_key|api_key|password|passwd|token|secret|code)(\s*[:=]\s*)([^&#\s]+)/gi, "$1$2[redacted]")
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]")
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "sk-[redacted]");
+}
+
+function rightsEvidenceIssueForIntake(item: ClipperSourceScoutIntakeItem): Pick<ClipperRightsEvidenceLedgerItem, "issue" | "severity" | "nextStep"> {
+  const hasSourceFile = item.sourceFileExists || item.targetSourceExists;
+  if (item.requestedStatus === "owned_or_permissioned" && !item.evidencePath) {
+    return { issue: "missing_proof", severity: "blocked", nextStep: "Add a real proof URL/path and descriptive notes; approved/ok/yes alone is not accepted." };
+  }
+  if (item.requestedStatus === "owned_or_permissioned" && item.evidencePath && !item.evidenceAccepted) {
+    return { issue: "weak_evidence", severity: "blocked", nextStep: "Replace weak evidence with allowed proof type, concrete proof URL/path, and notes over 20 characters." };
+  }
+  if (item.decision === "rejected") {
+    return { issue: "blocked", severity: "blocked", nextStep: item.rejectReason || item.nextStep };
+  }
+  if (item.sourceUrlKind === "discovery_search") {
+    return { issue: "review_required", severity: "blocked", nextStep: "Convert discovery/search URL into an exact video/post URL or approved recreate plan before using it." };
+  }
+  if (item.rightsStatus === "review_required") {
+    return { issue: "review_required", severity: "blocked", nextStep: "Record creator permission, owned-source proof, license, official allowlist, or approved recreate plan." };
+  }
+  if (!item.evidencePath) {
+    return { issue: "missing_proof", severity: "blocked", nextStep: "Add a real proof URL/path and descriptive notes; approved/ok/yes alone is not accepted." };
+  }
+  if (!item.evidenceAccepted) {
+    return { issue: "weak_evidence", severity: "blocked", nextStep: "Replace weak evidence with allowed proof type, concrete proof URL/path, and notes over 20 characters." };
+  }
+  if (!hasSourceFile) {
+    return { issue: "missing_source_file", severity: "blocked", nextStep: `Upload or generate the source file at ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.` };
+  }
+  return { issue: "none", severity: "ready", nextStep: "Evidence and source file are ready for guarded intake/Metricool approval queue." };
+}
+
+function rightsEvidenceIssueForAsset(asset: ClipperSourceAsset): Pick<ClipperRightsEvidenceLedgerItem, "issue" | "severity" | "nextStep"> {
+  if (!asset.usable) {
+    return { issue: "not_usable", severity: "blocked", nextStep: asset.invalidReason || "Replace placeholder/tiny/invalid media with a real usable source file." };
+  }
+  if (asset.rightsStatus === "owned_or_permissioned" && asset.evidencePath) {
+    return { issue: "none", severity: "ready", nextStep: "Asset has rights evidence and is usable for production queue/draft specs." };
+  }
+  if (asset.rightsStatus === "owned_or_permissioned" && !asset.evidencePath) {
+    return { issue: "missing_proof", severity: "blocked", nextStep: "Record source rights evidence before this asset can be used." };
+  }
+  return { issue: "review_required", severity: "blocked", nextStep: "Record owned/license/permission evidence or keep this asset out of production." };
+}
+
+function buildRightsEvidenceLedgerSummary(input: {
+  sourceScoutIntake: ClipperSourceScoutIntakeSummary;
+  productionQueue: ClipperProductionQueueSummary;
+  preparedAt?: string | null;
+}): ClipperRightsEvidenceLedgerSummary {
+  const intakeItems = input.sourceScoutIntake.items.map<ClipperRightsEvidenceLedgerItem>((item) => {
+    const issue = rightsEvidenceIssueForIntake(item);
+    const sourcePath = item.sourceDropPath || item.targetSourcePath;
+    const redactedSourcePath = redactRightsEvidenceLedgerValue(sourcePath);
+    const redactedSourceUrl = redactRightsEvidenceLedgerValue(item.sourceUrl);
+    const redactedEvidencePath = redactRightsEvidenceLedgerValue(item.evidencePath);
+    const ledgerItem: Omit<ClipperRightsEvidenceLedgerItem, "repairCsvRow"> = {
+      id: item.id,
+      origin: "source_scout_intake",
+      category: item.category,
+      platform: item.platform,
+      title: item.title,
+      sourceUrl: redactedSourceUrl,
+      sourcePath: redactedSourcePath,
+      fileName: item.targetFileName || (sourcePath ? path.basename(sourcePath) : null),
+      rightsStatus: item.rightsStatus,
+      evidenceType: item.evidenceType,
+      evidencePath: redactedEvidencePath,
+      evidenceAccepted: item.evidenceAccepted,
+      sourceFileExists: item.sourceFileExists || item.targetSourceExists,
+      sourceUrlKind: item.sourceUrlKind,
+      ...issue,
+    };
+    return {
+      ...ledgerItem,
+      repairCsvRow: rightsEvidenceLedgerRepairRow(ledgerItem),
+    };
+  });
+
+  const intakePaths = new Set(intakeItems.map((item) => item.sourcePath).filter((value): value is string => Boolean(value)));
+  const assetItems = input.productionQueue.sourceAssets
+    .filter((asset) => !intakePaths.has(asset.path))
+    .map<ClipperRightsEvidenceLedgerItem>((asset) => {
+      const issue = rightsEvidenceIssueForAsset(asset);
+      const redactedSourcePath = redactRightsEvidenceLedgerValue(asset.path);
+      const redactedEvidencePath = redactRightsEvidenceLedgerValue(asset.evidencePath);
+      const ledgerItem: Omit<ClipperRightsEvidenceLedgerItem, "repairCsvRow"> = {
+        id: asset.id,
+        origin: "source_asset",
+        category: asset.category,
+        platform: "unknown",
+        title: asset.fileName,
+        sourceUrl: null,
+        sourcePath: redactedSourcePath,
+        fileName: asset.fileName,
+        rightsStatus: asset.rightsStatus,
+        evidenceType: null,
+        evidencePath: redactedEvidencePath,
+        evidenceAccepted: Boolean(asset.evidencePath && asset.rightsStatus === "owned_or_permissioned"),
+        sourceFileExists: asset.usable,
+        sourceUrlKind: "local_file",
+        ...issue,
+      };
+      return {
+        ...ledgerItem,
+        repairCsvRow: rightsEvidenceLedgerRepairRow(ledgerItem),
+      };
+    });
+
+  const items = [...intakeItems, ...assetItems].sort((left, right) => {
+    const severityOrder = { blocked: 0, watch: 1, ready: 2 } as const;
+    return severityOrder[left.severity] - severityOrder[right.severity] || left.category.localeCompare(right.category) || left.title.localeCompare(right.title);
+  });
+  const totals = items.reduce<ClipperRightsEvidenceLedgerSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.severity === "ready") sum.ready += 1;
+    if (item.severity === "blocked") sum.blocked += 1;
+    if (item.severity !== "ready") sum.needsRepair += 1;
+    if (item.issue === "missing_proof") sum.missingProof += 1;
+    if (item.issue === "weak_evidence") sum.weakEvidence += 1;
+    if (item.issue === "missing_source_file") sum.missingSourceFile += 1;
+    if (item.issue === "review_required") sum.reviewRequired += 1;
+    if (item.origin === "source_scout_intake") sum.sourceScoutIntake += 1;
+    if (item.origin === "source_asset") sum.sourceAssets += 1;
+    return sum;
+  }, { items: 0, ready: 0, blocked: 0, needsRepair: 0, missingProof: 0, weakEvidence: 0, missingSourceFile: 0, reviewRequired: 0, sourceScoutIntake: 0, sourceAssets: 0 });
+  const status: ClipperRightsEvidenceLedgerSummary["status"] = !input.preparedAt || totals.items === 0
+    ? "not_prepared"
+    : totals.blocked > 0
+      ? "blocked"
+      : totals.needsRepair > 0
+        ? "needs_repair"
+        : "ready";
+  const nextStep = !input.preparedAt
+    ? "Prepare Rights Evidence Ledger to write the guarded proof/source audit artifacts."
+    : totals.items === 0
+      ? "Record Source Scout intake or source-drop assets before preparing the ledger."
+      : totals.blocked > 0
+        ? `Fix ${totals.blocked} rights/source blocker(s) before counting these clips as ready.`
+        : "Rights evidence ledger is clean; keep Metricool approval_required and refresh production queue.";
+  return {
+    status,
+    generatedAt: input.preparedAt || null,
+    manifestPath: RIGHTS_EVIDENCE_LEDGER_PATH,
+    markdownPath: RIGHTS_EVIDENCE_LEDGER_MARKDOWN_PATH,
+    csvPath: RIGHTS_EVIDENCE_LEDGER_CSV_PATH,
+    items,
+    totals,
+    nextStep,
+  };
+}
+
+function renderRightsEvidenceLedgerCsv(summary: ClipperRightsEvidenceLedgerSummary): string {
+  const header = ["origin", "id", "category", "platform", "title", "source_url", "source_path", "file_name", "rights_status", "evidence_type", "evidence_path", "evidence_accepted", "source_file_exists", "source_url_kind", "issue", "severity", "next_step", "repair_csv_row"];
+  return [
+    header.map(csvCell).join(","),
+    ...summary.items.map((item) => [
+      item.origin,
+      item.id,
+      item.category,
+      item.platform,
+      item.title,
+      item.sourceUrl || "",
+      item.sourcePath || "",
+      item.fileName || "",
+      item.rightsStatus,
+      item.evidenceType || "",
+      item.evidencePath || "",
+      item.evidenceAccepted ? "yes" : "no",
+      item.sourceFileExists ? "yes" : "no",
+      item.sourceUrlKind,
+      item.issue,
+      item.severity,
+      item.nextStep,
+      item.repairCsvRow,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
+function renderRightsEvidenceLedgerMarkdown(summary: ClipperRightsEvidenceLedgerSummary): string {
+  return [
+    "# Clippers Rights Evidence Ledger",
+    "",
+    "Rights/source audit for Source Scout intake and local source assets. This does not publish, import analytics, or mark blocked rows as ready.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `CSV: ${summary.csvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Ready: ${summary.totals.ready}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Needs repair: ${summary.totals.needsRepair}`,
+    `- Missing proof: ${summary.totals.missingProof}`,
+    `- Weak evidence: ${summary.totals.weakEvidence}`,
+    `- Missing source file: ${summary.totals.missingSourceFile}`,
+    `- Review required: ${summary.totals.reviewRequired}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Items",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.severity.toUpperCase()} · ${item.title}`,
+      "",
+      `- Origin: ${item.origin}`,
+      `- Category/platform: ${item.category} / ${item.platform}`,
+      `- Rights: ${item.rightsStatus}`,
+      `- Issue: ${item.issue}`,
+      `- Evidence accepted: ${item.evidenceAccepted ? "yes" : "no"}`,
+      `- Evidence: ${item.evidencePath || "missing"}`,
+      `- Source file exists: ${item.sourceFileExists ? "yes" : "no"}`,
+      `- Source path: ${item.sourcePath || "missing"}`,
+      `- URL kind: ${item.sourceUrlKind}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Repair row:",
+      "```csv",
+      item.repairCsvRow,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeRightsEvidenceLedgerArtifacts(summary: ClipperRightsEvidenceLedgerSummary): Promise<ClipperRightsEvidenceLedgerSummary> {
+  const withGeneratedAt: ClipperRightsEvidenceLedgerSummary = { ...summary, generatedAt: summary.generatedAt || new Date().toISOString() };
+  await writeFile(RIGHTS_EVIDENCE_LEDGER_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeFile(RIGHTS_EVIDENCE_LEDGER_MARKDOWN_PATH, renderRightsEvidenceLedgerMarkdown(withGeneratedAt));
+  await writeFile(RIGHTS_EVIDENCE_LEDGER_CSV_PATH, renderRightsEvidenceLedgerCsv(withGeneratedAt));
+  return withGeneratedAt;
+}
+
+async function readRightsEvidenceLedgerPreparedAt(): Promise<string | null> {
+  const raw = await readFile(RIGHTS_EVIDENCE_LEDGER_PATH, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { generatedAt?: unknown };
+    return typeof parsed.generatedAt === "string" && parsed.generatedAt.trim() ? parsed.generatedAt : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function prepareClipperRightsEvidenceLedger(userId = getSystemUserId()): Promise<{ rightsEvidenceLedger: ClipperRightsEvidenceLedgerSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const rightsEvidenceLedger = await writeRightsEvidenceLedgerArtifacts(buildRightsEvidenceLedgerSummary({
+    sourceScoutIntake: statusBefore.sourceScoutIntake,
+    productionQueue: statusBefore.productionQueue,
+    preparedAt: new Date().toISOString(),
+  }));
+  return { rightsEvidenceLedger, status: await getClipperStatus(userId) };
+}
+
 function weeklyFunnelDailyTargets(): Record<string, number> {
   return {
     monday: 14,
@@ -12813,7 +13152,7 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
     const rejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
     const sourceUrlKind: ClipperSourceScoutUrlKind = rejectReason ? "discovery_search" : "exact_video_or_post";
     const requestedStatus = sourceScoutIntakeRequestedStatus(record);
-    const proofRaw = firstString(record, ["permission_url", "proof_path", "proof", "evidence_path", "evidence_link", "license", "rights_notes", "notes"]);
+    const proofRaw = firstString(record, ["permission_url", "proof_url", "proof_path", "proof", "evidence_path", "evidence_link", "license"]);
     const evidenceTypeRaw = firstString(record, ["evidence_type", "evidenceType", "proof_type", "proofType"]);
     const notesRaw = firstString(record, ["notes", "rights_notes", "permission_note", "evidence_notes"]);
     const recreatePlan = firstString(record, ["recreate_plan", "recreatePlan", "remake_plan", "owned_asset_plan"]);
@@ -42719,6 +43058,12 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const sourceScoutSourceFileKit = await buildSourceScoutSourceFileKitSummary({
     sourceScoutWorkQueue,
   });
+  const rightsEvidenceLedgerPreparedAt = await readRightsEvidenceLedgerPreparedAt();
+  const rightsEvidenceLedger = buildRightsEvidenceLedgerSummary({
+    sourceScoutIntake,
+    productionQueue,
+    preparedAt: rightsEvidenceLedgerPreparedAt,
+  });
   const publisherConnectors = await buildPublisherConnectorSummary({ tokenRecords, permissionTracker, platformReadiness, productionQueue });
   const publisherExecutionQueue = await readPublisherExecutionQueueSummary();
   const productionUrlSetup = await buildProductionUrlSetupSummary();
@@ -42926,6 +43271,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     sourceScoutExactUrlKit,
     sourceScoutDailySprint,
     sourceScoutSourceFileKit,
+    rightsEvidenceLedger,
     weeklyProductionFunnel,
     sourceDiscoveryHandoff,
     sourceIngestionSprint,
@@ -44696,6 +45042,7 @@ export const __clipperInternals = {
   exactSourceUrlRejectReason,
   requireSourceRightsEvidence,
   validateSourceScoutEvidence,
+  buildRightsEvidenceLedgerSummary,
   calculateSourceScoutViralScore,
   sourceScoutOfficialSourcePolicy,
   sourceScoutUniqueExactUrlCount,
