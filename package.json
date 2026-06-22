@@ -64,6 +64,7 @@
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
     "radio:ensure-tiktok-drive-folder": "tsx script/ensure-radio-tiktok-drive-folder.ts",
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
+    "clippers:record-owned-source-rights": "tsx script/clippers-record-owned-source-rights.ts",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
