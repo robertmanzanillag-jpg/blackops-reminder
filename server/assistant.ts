@@ -1078,30 +1078,6 @@ export function registerAssistantRoutes(app: Express): void {
         return;
       }
 
-      const developerAutopilotHandoff = message
-        ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
-        : null;
-      if (developerAutopilotHandoff && developerAutopilotHandoff.status !== "invalid_request") {
-        res.setHeader("Content-Type", "text/event-stream");
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
-
-        await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
-          console.error("Error saving Developer Autopilot user message:", historyError);
-        });
-
-        res.write(`data: ${JSON.stringify({
-          content: developerAutopilotHandoff.message,
-          developerAutopilot: developerAutopilotHandoff,
-        })}\n\n`);
-        await saveCeoConversationMessage(userId, "assistant", developerAutopilotHandoff.message).catch((historyError) => {
-          console.error("Error saving Developer Autopilot assistant response:", historyError);
-        });
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-        res.end();
-        return;
-      }
-
       const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
       if (directRadioYoutubeCommand) {
         res.setHeader("Content-Type", "text/event-stream");
@@ -1148,6 +1124,30 @@ export function registerAssistantRoutes(app: Express): void {
           });
         }
 
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const developerAutopilotHandoff = message
+        ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
+        : null;
+      if (developerAutopilotHandoff && developerAutopilotHandoff.status !== "invalid_request") {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+          console.error("Error saving Developer Autopilot user message:", historyError);
+        });
+
+        res.write(`data: ${JSON.stringify({
+          content: developerAutopilotHandoff.message,
+          developerAutopilot: developerAutopilotHandoff,
+        })}\n\n`);
+        await saveCeoConversationMessage(userId, "assistant", developerAutopilotHandoff.message).catch((historyError) => {
+          console.error("Error saving Developer Autopilot assistant response:", historyError);
+        });
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
         return;
@@ -1508,6 +1508,7 @@ export function registerAssistantRoutes(app: Express): void {
           const result = await executeDirectRadioYoutubeCommand({
             youtubeUrl: radioYoutubeData.youtubeUrl,
             driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
+            driveParentFolderId: typeof radioYoutubeData.driveParentFolderId === "string" ? radioYoutubeData.driveParentFolderId : undefined,
             createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
             driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
             djName: radioYoutubeData.djName,

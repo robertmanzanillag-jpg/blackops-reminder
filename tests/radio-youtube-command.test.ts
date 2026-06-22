@@ -22,6 +22,11 @@ test("extracts Drive folder path from radio YouTube request", () => {
     extractDriveFolderPathFromMessage("saca clips de radio de https://youtu.be/abc y en la carpeta de radio crea una carpeta con los videos que creaste"),
     ["radio", "Videos creados"],
   );
+
+  assert.deepEqual(
+    extractDriveFolderPathFromMessage("https://youtu.be/abc123 sacame un clip y guardalo en Drive en una carpeta llamada Codex QA Replit 2026-06-21."),
+    ["Codex QA Replit 2026-06-21"],
+  );
 });
 
 test("builds direct radio YouTube command only for radio clip requests", () => {
@@ -37,6 +42,21 @@ test("builds direct YouTube clip command when Drive destination is requested wit
   assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
   assert.deepEqual(command?.driveFolderPath, ["Robert A", "Videos de Lucia Reina"]);
   assert.match(command?.command || "", /RADIO_YOUTUBE_CLIPS/);
+});
+
+test("uses a Google Drive folder URL as the parent destination", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW?usp=drive_link");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, []);
+  assert.equal(command ? directRadioYoutubeCommandNeedsDriveFolder(command) : true, false);
+});
+
+test("extracts a child folder inside a Google Drive folder URL", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW dentro de esta carpeta crea una subcarpeta llamada Codex Clips");
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, ["Codex Clips"]);
+  assert.match(command?.command || "", /driveParentFolderId/);
 });
 
 test("uses YouTube title as Drive folder when requested", () => {

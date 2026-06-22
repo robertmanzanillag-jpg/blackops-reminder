@@ -135,6 +135,8 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 # GOOGLE_DRIVE_SCOPES=https://www.googleapis.com/auth/drive.file
 # Optional: set this instead of connecting through /api/google-drive/auth
 # GOOGLE_REFRESH_TOKEN=
+# Optional: root folder where Clippers creates YouTube/Drive subfolders
+# GOOGLE_DRIVE_CLIPPERS_ROOT_FOLDER_ID=
 
 # Canva radio templates
 # CANVA_CLIENT_ID=
@@ -152,6 +154,8 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 # Optional: set this instead of connecting through /api/google-drive/auth
 # GOOGLE_REFRESH_TOKEN=
 # GOOGLE_DRIVE_RADIO_FOLDER_ID=
+# Optional: root folder where Clippers creates YouTube/Drive subfolders
+# GOOGLE_DRIVE_CLIPPERS_ROOT_FOLDER_ID=
 
 # Black Room admin links
 # BLACKROOM_ADMIN_BASE_URL=https://blackroomus.com

@@ -48,6 +48,13 @@ function readOptionalRealDriveFolderId(envName: string): string | null {
   throw new Error(`${envName} must be a real Google Drive folder id, not a placeholder.`);
 }
 
+export function getConfiguredClippersDriveRootFolderId(): string | null {
+  return (
+    readOptionalRealDriveFolderId("GOOGLE_DRIVE_CLIPPERS_ROOT_FOLDER_ID") ||
+    readOptionalRealDriveFolderId("CLIPPERS_DRIVE_ROOT_FOLDER_ID")
+  );
+}
+
 async function getDriveClient(userId: string) {
   const google = await getGoogleApis();
   if (
@@ -84,9 +91,13 @@ async function findFolder(drive: any, name: string, parentId: string): Promise<s
 }
 
 export async function findDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string | null> {
+  return findDriveFolderPathUnderParent(folderNames, "root", userId);
+}
+
+export async function findDriveFolderPathUnderParent(folderNames: string[], parentFolderId: string, userId = getSystemUserId()): Promise<string | null> {
   try {
     const drive = await getDriveClient(userId);
-    let parentId = "root";
+    let parentId = parentFolderId.trim() || "root";
     for (const folderName of folderNames) {
       const cleanName = folderName.trim();
       if (!cleanName) continue;
@@ -158,9 +169,13 @@ async function findOrCreateFolder(drive: any, name: string, parentId: string): P
 }
 
 export async function ensureDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string> {
+  return ensureDriveFolderPathUnderParent(folderNames, "root", userId);
+}
+
+export async function ensureDriveFolderPathUnderParent(folderNames: string[], parentFolderId: string, userId = getSystemUserId()): Promise<string> {
   try {
     const drive = await getDriveClient(userId);
-    let parentId = "root";
+    let parentId = parentFolderId.trim() || "root";
     for (const folderName of folderNames) {
       const cleanName = folderName.trim();
       if (!cleanName) continue;
