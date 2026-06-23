@@ -111,6 +111,60 @@ export function enrichClipperExternalCloseoutOperatorRows(rows: unknown): any[] 
   }));
 }
 
+function clipperCsvCell(value: unknown): string {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function publicBaseUrlFromRedirectUri(redirectUri: unknown): string {
+  try {
+    const parsed = new URL(String(redirectUri || ""));
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const isPrivateHost = host === "localhost"
+      || host.endsWith(".localhost")
+      || host === "0.0.0.0"
+      || /^127\./.test(host)
+      || host === "::1"
+      || /^10\./.test(host)
+      || /^169\.254\./.test(host)
+      || /^192\.168\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      || /^f[cd][0-9a-f]{2}:/i.test(host)
+      || /^fe80:/i.test(host);
+    if (parsed.protocol !== "https:" || isPrivateHost) return "";
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+export function buildClipperExternalCloseoutEvidenceCsvTemplate(rows: unknown): string {
+  const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
+  if (!enrichedRows.length) return "";
+  const header = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
+  const body = enrichedRows.map((row: any) => {
+    const lane = String(row.lane || "");
+    const isDeveloperApp = lane === "developer_app";
+    const isPermission = lane === "permission";
+    const appIdentifier = isDeveloperApp ? `<public ${row.platform || "platform"} app id>` : "";
+    const notes = `<replace with 20+ char real operator note for ${row.id || "closeout item"}>`;
+    return [
+      lane === "account" ? "account" : isDeveloperApp ? "developer_app" : "permission",
+      lane === "account" ? row.accountId || "" : "",
+      row.platform || "",
+      row.requiredCsvStatus || "",
+      isPermission ? row.scope || "" : "",
+      appIdentifier,
+      isDeveloperApp ? publicBaseUrlFromRedirectUri(row.redirectUri) : "",
+      row.redirectUri || "",
+      row.portalUrl || "",
+      row.docsUrl || "",
+      row.proofPath || "",
+      notes,
+    ].map(clipperCsvCell).join(",");
+  });
+  return `${header}\n${body.join("\n")}\n`;
+}
+
 export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): string {
   const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
   if (!enrichedRows.length) return "";
@@ -124,6 +178,7 @@ export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): stri
     "- Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes, signed URLs or private screenshots.",
     "- Do not mark any item done until the matching proof file has real non-placeholder evidence.",
     "- Metricool stays approval_required; this packet does not enable automatic publishing.",
+    "- Evidence CSV template rows include placeholders; replace them before preview/apply.",
     "",
     ...enrichedRows.flatMap((row: any, index: number) => [
       `--- Action ${index + 1}: ${row.id} ---`,
@@ -215,6 +270,7 @@ export async function registerRoutes(
       ...parsed,
       operatorQueue,
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
+      evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(operatorQueue),
     };
   };
   const readClipperExternalCloseoutProofTodo = async () => {
@@ -225,6 +281,7 @@ export async function registerRoutes(
       ...parsed,
       operatorQueue,
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
+      evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(operatorQueue),
     };
   };
   const readClipperExternalCloseoutOperatorQueue = async () => {
@@ -235,6 +292,7 @@ export async function registerRoutes(
       ...parsed,
       rows,
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(rows),
+      evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(rows),
     };
   };
   const readClipperExternalCloseoutNextAction = async () => {

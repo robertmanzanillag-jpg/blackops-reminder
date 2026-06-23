@@ -634,6 +634,7 @@ interface ClipperExternalCloseoutPackSummary {
   proofTodo?: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
   batchCopyPacket?: string;
+  evidenceCsvTemplate?: string;
   goLiveAudit?: ClipperExternalGoLiveAuditSummary;
   actionSheet?: {
     status: "needs_operator" | "complete";
@@ -736,6 +737,7 @@ interface ClipperExternalCloseoutProofTodoSummary {
   rows: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
   batchCopyPacket?: string;
+  evidenceCsvTemplate?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
 }
 
@@ -750,6 +752,7 @@ interface ClipperExternalCloseoutOperatorQueueSummary {
   };
   rows: ClipperExternalCloseoutOperatorQueueRow[];
   batchCopyPacket?: string;
+  evidenceCsvTemplate?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
   nextStep: string;
 }
@@ -7567,6 +7570,11 @@ export default function ClippersPage() {
     : externalCloseoutProofTodo
       ? externalCloseoutProofTodo.batchCopyPacket || ""
       : externalCloseoutPack?.batchCopyPacket || "";
+  const visibleExternalCloseoutEvidenceCsvTemplate = externalCloseoutOperatorQueue
+    ? externalCloseoutOperatorQueue.evidenceCsvTemplate || ""
+    : externalCloseoutProofTodo
+      ? externalCloseoutProofTodo.evidenceCsvTemplate || ""
+      : externalCloseoutPack?.evidenceCsvTemplate || "";
   const credentialEnvVarOptions = useMemo(() => {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
@@ -10712,6 +10720,23 @@ export default function ClippersPage() {
       toast({
         title: "Packet listo para copiar",
         description: "No pude escribir al clipboard; copia el bloque visible manualmente.",
+      });
+    }
+  };
+
+  const copyExternalCloseoutEvidenceCsvTemplate = async (template: string) => {
+    const cleanTemplate = template.trim();
+    if (!cleanTemplate) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanTemplate}\n`);
+      toast({
+        title: "Closeout CSV template copiado",
+        description: "Reemplaza placeholders con app IDs, proofs y notas reales antes de preview/apply.",
+      });
+    } catch {
+      toast({
+        title: "CSV template listo para copiar",
+        description: "No pude escribir al clipboard; usa el JSON/API report para copiarlo manualmente.",
       });
     }
   };
@@ -16314,6 +16339,18 @@ export default function ClippersPage() {
                           >
                             <Copy className="mr-1 h-3 w-3" />
                             Copy all
+                          </Button>
+                        )}
+                        {visibleExternalCloseoutEvidenceCsvTemplate && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-cyan-300/20 bg-transparent px-2 text-xs text-cyan-100 hover:bg-cyan-300/10"
+                            onClick={() => void copyExternalCloseoutEvidenceCsvTemplate(visibleExternalCloseoutEvidenceCsvTemplate)}
+                          >
+                            <Copy className="mr-1 h-3 w-3" />
+                            Copy CSV
                           </Button>
                         )}
                         <Badge className="w-fit border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">

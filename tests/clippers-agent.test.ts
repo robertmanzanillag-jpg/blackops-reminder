@@ -6,7 +6,7 @@ import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
 import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
-import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutNextActionCopyPacket, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
+import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutEvidenceCsvTemplate, buildClipperExternalCloseoutNextActionCopyPacket, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -177,6 +177,109 @@ test("external closeout batch copy packet combines safe regenerated operator pac
   assert.match(packet, /Metricool stays approval_required/);
   assert.doesNotMatch(packet, /READY TO PUBLISH/i);
   assert.doesNotMatch(packet, /client_secret=abc/i);
+});
+
+test("external closeout evidence CSV template keeps placeholders explicit and safe", () => {
+  const csv = buildClipperExternalCloseoutEvidenceCsvTemplate([
+    {
+      id: "developer_app:instagram",
+      lane: "developer_app",
+      platform: "instagram",
+      accountId: "",
+      scope: "",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-instagram.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/instagram/callback",
+      operatorAction: "Create Instagram developer app and capture proof.",
+      csvEditHint: "Fill submitted evidence only after real portal action.",
+    },
+    {
+      id: "account:sports-daily:youtube",
+      lane: "account",
+      platform: "youtube",
+      accountId: "sports-daily",
+      proofPath: "/tmp/external-closeout-proofs/account-sports-daily-youtube.md",
+      requiredCsvStatus: "verified",
+      missingCsvFields: ["proof"],
+      portalUrl: "https://www.youtube.com/create_channel?name=Sports, \"Daily\"",
+      operatorAction: "Verify YouTube account ownership and capture proof.",
+      csvEditHint: "Fill verified evidence only after real portal action.",
+    },
+    {
+      id: "developer_app:localhost-https",
+      lane: "developer_app",
+      platform: "instagram",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-localhost.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/apps/123",
+      redirectUri: "https://localhost:5010/api/clippers/oauth/instagram/callback",
+      operatorAction: "Localhost redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:private-ip",
+      lane: "developer_app",
+      platform: "tiktok",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-private.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.tiktok.com/",
+      redirectUri: "https://10.0.0.2/callback",
+      operatorAction: "Private redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:loopback-range",
+      lane: "developer_app",
+      platform: "instagram",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-loopback-range.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/",
+      redirectUri: "https://127.0.0.2/callback",
+      operatorAction: "Loopback redirect range should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:loopback-ipv6",
+      lane: "developer_app",
+      platform: "youtube",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-ipv6.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      redirectUri: "https://[::1]/callback",
+      operatorAction: "IPv6 loopback redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:link-local",
+      lane: "developer_app",
+      platform: "youtube",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-link-local.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      redirectUri: "https://169.254.1.1/callback",
+      operatorAction: "Link-local redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+  ]);
+
+  assert.ok(csv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes\n"));
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","https:\/\/app\.clipprreview\.com","https:\/\/app\.clipprreview\.com\/api\/clippers\/oauth\/instagram\/callback"/);
+  assert.match(csv, /"account","sports-daily","youtube","verified","","","","","https:\/\/www\.youtube\.com\/create_channel\?name=Sports, ""Daily"""/);
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","","https:\/\/localhost:5010\/api\/clippers\/oauth\/instagram\/callback"/);
+  assert.match(csv, /"developer_app","","tiktok","submitted","","<public tiktok app id>","","https:\/\/10\.0\.0\.2\/callback"/);
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","","https:\/\/127\.0\.0\.2\/callback"/);
+  assert.match(csv, /"developer_app","","youtube","submitted","","<public youtube app id>","","https:\/\/\[::1\]\/callback"/);
+  assert.match(csv, /"developer_app","","youtube","submitted","","<public youtube app id>","","https:\/\/169\.254\.1\.1\/callback"/);
+  assert.match(csv, /"<replace with 20\+ char real operator note for developer_app:instagram>"/);
+  assert.doesNotMatch(csv, /client_secret=/i);
+  assert.doesNotMatch(csv, /oauth_token=/i);
 });
 
 test("runClipperDailyPlan creates drafts for each configured account", async () => {
