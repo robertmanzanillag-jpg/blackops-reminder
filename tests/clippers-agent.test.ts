@@ -6,6 +6,7 @@ import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
 import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutEvidenceCsvTemplate, buildClipperExternalCloseoutNextActionCopyPacket, buildClipperExternalCloseoutSprintSummary, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -83,6 +84,311 @@ test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   assert.equal(result.clipsPerAccount, 50);
   assert.equal(result.publishMode, "approval_required");
   assert.equal(result.riskTolerance, "growth");
+});
+
+test("external closeout next action copy packet guides proof without requesting secrets", () => {
+  const packet = buildClipperExternalCloseoutNextActionCopyPacket({
+    id: "developer_app:instagram",
+    lane: "developer_app",
+    priority: "critical",
+    platform: "instagram",
+    accountId: "",
+    scope: "",
+    proofPath: "/tmp/external-closeout-proofs/developer_app-instagram.md",
+    requiredCsvStatus: "submitted",
+    missingCsvFields: ["app_identifier", "proof"],
+    portalUrl: "https://developers.facebook.com/",
+    redirectUri: "https://app.clipprreview.com/api/clippers/oauth/instagram/callback",
+    operatorAction: "Open instagram developer portal and submit the app.",
+    csvEditHint: "Set status to submitted and fill app_identifier and proof.",
+    blockers: ["fill app_identifier from the developer portal"],
+  });
+
+  assert.match(packet, /Next external action: developer_app:instagram/);
+  assert.match(packet, /Redirect URI \/ callback to register: https:\/\/app\.clipprreview\.com\/api\/clippers\/oauth\/instagram\/callback/);
+  assert.match(packet, /Public app\/account identifier: <paste public id only, never client secret>/);
+  assert.match(packet, /app_identifier=<public app id if this is a developer app>/);
+  assert.match(packet, /proof=<proof URL, ticket ID or local proof file path>/);
+  assert.match(packet, /Metricool stays approval_required/);
+  assert.doesNotMatch(packet, /client_secret=/i);
+  assert.doesNotMatch(packet, /oauth_token=/i);
+});
+
+test("external closeout operator rows regenerate copy packets instead of trusting persisted text", () => {
+  const [row] = enrichClipperExternalCloseoutOperatorRows([{
+    id: "developer_app:tiktok",
+    lane: "developer_app",
+    platform: "tiktok",
+    accountId: "",
+    scope: "",
+    proofPath: "/tmp/external-closeout-proofs/developer_app-tiktok.md",
+    requiredCsvStatus: "submitted",
+    missingCsvFields: ["app_identifier", "proof"],
+    portalUrl: "https://developers.tiktok.com/",
+    redirectUri: "https://app.clipprreview.com/api/clippers/oauth/tiktok/callback",
+    operatorAction: "Create TikTok developer app and capture proof.",
+    csvEditHint: "Fill submitted evidence only after real portal action.",
+    copyPacket: "READY TO PUBLISH WITH SECRET client_secret=abc",
+  }]);
+
+  assert.match(row.copyPacket, /Next external action: developer_app:tiktok/);
+  assert.match(row.copyPacket, /Metricool stays approval_required/);
+  assert.doesNotMatch(row.copyPacket, /READY TO PUBLISH/i);
+  assert.doesNotMatch(row.copyPacket, /client_secret=abc/i);
+});
+
+test("external closeout batch copy packet combines safe regenerated operator packets", () => {
+  const packet = buildClipperExternalCloseoutBatchCopyPacket([
+    {
+      id: "developer_app:instagram",
+      lane: "developer_app",
+      platform: "instagram",
+      accountId: "",
+      scope: "",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-instagram.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/instagram/callback",
+      operatorAction: "Create Instagram developer app and capture proof.",
+      csvEditHint: "Fill submitted evidence only after real portal action.",
+    },
+    {
+      id: "permission:tiktok:video.upload",
+      lane: "permission",
+      platform: "tiktok",
+      accountId: "sports-daily",
+      scope: "video.upload",
+      proofPath: "/tmp/external-closeout-proofs/permission-tiktok-video.upload.md",
+      requiredCsvStatus: "requested",
+      missingCsvFields: ["proof"],
+      portalUrl: "https://developers.tiktok.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/tiktok/callback",
+      operatorAction: "Request TikTok video.upload permission and capture proof.",
+      csvEditHint: "Fill requested evidence only after real portal action.",
+      copyPacket: "READY TO PUBLISH client_secret=abc",
+    },
+  ]);
+
+  assert.match(packet, /Clippers External Closeout Batch Packet/);
+  assert.match(packet, /Actions: 2/);
+  assert.match(packet, /--- Action 1: developer_app:instagram ---/);
+  assert.match(packet, /--- Action 2: permission:tiktok:video.upload ---/);
+  assert.match(packet, /Metricool stays approval_required/);
+  assert.doesNotMatch(packet, /READY TO PUBLISH/i);
+  assert.doesNotMatch(packet, /client_secret=abc/i);
+});
+
+test("external closeout evidence CSV template keeps placeholders explicit and safe", () => {
+  const csv = buildClipperExternalCloseoutEvidenceCsvTemplate([
+    {
+      id: "developer_app:instagram",
+      lane: "developer_app",
+      platform: "instagram",
+      accountId: "",
+      scope: "",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-instagram.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/instagram/callback",
+      operatorAction: "Create Instagram developer app and capture proof.",
+      csvEditHint: "Fill submitted evidence only after real portal action.",
+    },
+    {
+      id: "account:sports-daily:youtube",
+      lane: "account",
+      platform: "youtube",
+      accountId: "sports-daily",
+      proofPath: "/tmp/external-closeout-proofs/account-sports-daily-youtube.md",
+      requiredCsvStatus: "verified",
+      missingCsvFields: ["proof"],
+      portalUrl: "https://www.youtube.com/create_channel?name=Sports, \"Daily\"",
+      operatorAction: "Verify YouTube account ownership and capture proof.",
+      csvEditHint: "Fill verified evidence only after real portal action.",
+    },
+    {
+      id: "developer_app:localhost-https",
+      lane: "developer_app",
+      platform: "instagram",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-localhost.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/apps/123",
+      redirectUri: "https://localhost:5010/api/clippers/oauth/instagram/callback",
+      operatorAction: "Localhost redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:private-ip",
+      lane: "developer_app",
+      platform: "tiktok",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-private.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.tiktok.com/",
+      redirectUri: "https://10.0.0.2/callback",
+      operatorAction: "Private redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:loopback-range",
+      lane: "developer_app",
+      platform: "instagram",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-loopback-range.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.facebook.com/",
+      redirectUri: "https://127.0.0.2/callback",
+      operatorAction: "Loopback redirect range should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:loopback-ipv6",
+      lane: "developer_app",
+      platform: "youtube",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-ipv6.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      redirectUri: "https://[::1]/callback",
+      operatorAction: "IPv6 loopback redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+    {
+      id: "developer_app:link-local",
+      lane: "developer_app",
+      platform: "youtube",
+      proofPath: "/tmp/external-closeout-proofs/developer_app-link-local.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      redirectUri: "https://169.254.1.1/callback",
+      operatorAction: "Link-local redirect should not prefill public base URL.",
+      csvEditHint: "Replace with production HTTPS redirect before import.",
+    },
+  ]);
+
+  assert.ok(csv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes\n"));
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","https:\/\/app\.clipprreview\.com","https:\/\/app\.clipprreview\.com\/api\/clippers\/oauth\/instagram\/callback"/);
+  assert.match(csv, /"account","sports-daily","youtube","verified","","","","","https:\/\/www\.youtube\.com\/create_channel\?name=Sports, ""Daily"""/);
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","","https:\/\/localhost:5010\/api\/clippers\/oauth\/instagram\/callback"/);
+  assert.match(csv, /"developer_app","","tiktok","submitted","","<public tiktok app id>","","https:\/\/10\.0\.0\.2\/callback"/);
+  assert.match(csv, /"developer_app","","instagram","submitted","","<public instagram app id>","","https:\/\/127\.0\.0\.2\/callback"/);
+  assert.match(csv, /"developer_app","","youtube","submitted","","<public youtube app id>","","https:\/\/\[::1\]\/callback"/);
+  assert.match(csv, /"developer_app","","youtube","submitted","","<public youtube app id>","","https:\/\/169\.254\.1\.1\/callback"/);
+  assert.match(csv, /"<replace with 20\+ char real operator note for developer_app:instagram>"/);
+  assert.doesNotMatch(csv, /client_secret=/i);
+  assert.doesNotMatch(csv, /oauth_token=/i);
+});
+
+test("external closeout sprint summary prioritizes real critical portal actions", () => {
+  const summary = buildClipperExternalCloseoutSprintSummary([
+    {
+      id: "account:sports-daily:youtube",
+      lane: "account",
+      priority: "high",
+      platform: "youtube",
+      operatorAction: "Verify YouTube ownership.",
+    },
+    {
+      id: "developer_app:instagram",
+      lane: "developer_app",
+      priority: "critical",
+      platform: "instagram",
+      operatorAction: "Create Instagram developer app and capture proof.",
+    },
+    {
+      id: "permission:instagram:instagram_content_publish",
+      lane: "permission",
+      priority: "critical",
+      platform: "instagram",
+      scope: "instagram_content_publish",
+      operatorAction: "Request Instagram publish permission.",
+    },
+  ]);
+
+  assert.equal(summary.totalActions, 3);
+  assert.equal(summary.criticalActions, 2);
+  assert.equal(summary.highActions, 1);
+  assert.equal(summary.developerApps, 1);
+  assert.equal(summary.permissions, 1);
+  assert.equal(summary.accountProofs, 1);
+  assert.equal(summary.criticalDeveloperApps, 1);
+  assert.equal(summary.criticalPermissions, 1);
+  assert.equal(summary.firstActionId, "developer_app:instagram");
+  assert.equal(summary.platformRows.length, 2);
+  assert.equal(summary.platformRows[0].platform, "instagram");
+  assert.equal(summary.platformRows[0].totalActions, 2);
+  assert.equal(summary.platformRows[0].criticalActions, 2);
+  assert.equal(summary.platformRows[0].developerApps, 1);
+  assert.equal(summary.platformRows[0].permissions, 1);
+  assert.equal(summary.platformRows[0].firstActionId, "developer_app:instagram");
+  assert.match(summary.platformRows[0].nextStep, /Instagram developer app/);
+  assert.equal(summary.platformRows[1].platform, "youtube");
+  assert.equal(summary.platformRows[1].accountProofs, 1);
+  assert.match(summary.nextStep, /developer_app:instagram/);
+  assert.ok(summary.safety.some((item) => item.includes("Metricool remains approval_required")));
+});
+
+test("external closeout evidence importer blocks copied CSV template before apply", async () => {
+  const evidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "external-closeout-evidence-import.csv");
+  const reportJsonPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.json");
+  const reportMarkdownPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.md");
+  const reportCsvPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.csv");
+  const previousEvidenceCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousReportJson = await readFile(reportJsonPath, "utf8").catch(() => null);
+  const previousReportMarkdown = await readFile(reportMarkdownPath, "utf8").catch(() => null);
+  const previousReportCsv = await readFile(reportCsvPath, "utf8").catch(() => null);
+  const template = buildClipperExternalCloseoutEvidenceCsvTemplate([
+    {
+      id: "developer_app:tiktok",
+      lane: "developer_app",
+      platform: "tiktok",
+      proofPath: "clippers_workspace/evidence-drop/external-closeout-proofs/developer_app-tiktok.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.tiktok.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/tiktok/callback",
+      operatorAction: "Create TikTok developer app and capture proof.",
+      csvEditHint: "Fill submitted evidence only after real portal action.",
+    },
+  ]);
+
+  try {
+    await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
+    await writeFile(evidenceCsvPath, template);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(await readFile(reportJsonPath, "utf8"));
+    assert.equal(report.status, "blocked_invalid_evidence");
+    assert.equal(report.totals.accepted, 0);
+    assert.equal(report.totals.applied, 0);
+    assert.ok(report.totals.rejected > 0);
+    assert.match(JSON.stringify(report.rejected), /app_identifier|placeholder|proof/i);
+    assert.ok(report.repairQueue.length > 0);
+    assert.equal(report.repairQueue[0].closeoutId, "developer_app:tiktok");
+    assert.match(report.repairQueue[0].proofPath, /developer_app-tiktok\.md$/);
+    assert.match(report.repairQueue[0].nextStep, /preview again/i);
+    assert.match(report.repairQueue[0].safeProofStarter, /never client secret/i);
+    assert.doesNotMatch(JSON.stringify(report.repairQueue), /access_token=|refresh_token=|client_secret=|password=|cookie=|sk-[A-Za-z0-9_-]{12,}/i);
+    const rawMarkdown = await readFile(reportMarkdownPath, "utf8");
+    const rawCsv = await readFile(reportCsvPath, "utf8");
+    assert.match(rawMarkdown, /## Repair Queue/);
+    assert.match(rawCsv, /repair/);
+  } finally {
+    if (previousEvidenceCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousEvidenceCsv);
+    if (previousReportJson === null) await unlink(reportJsonPath).catch(() => undefined);
+    else await writeFile(reportJsonPath, previousReportJson);
+    if (previousReportMarkdown === null) await unlink(reportMarkdownPath).catch(() => undefined);
+    else await writeFile(reportMarkdownPath, previousReportMarkdown);
+    if (previousReportCsv === null) await unlink(reportCsvPath).catch(() => undefined);
+    else await writeFile(reportCsvPath, previousReportCsv);
+  }
 });
 
 test("runClipperDailyPlan creates drafts for each configured account", async () => {
@@ -2415,6 +2721,7 @@ test("importClipperLaunchEvidenceDropFiles ignores Metricool approval evidence t
   const noisyDropPaths = [
     path.join(dropDir, "owner-connect-evidence.fixpack.csv"),
     path.join(dropDir, "owner-connect-evidence.workbook.csv"),
+    path.join(dropDir, "external-closeout-evidence-import.csv"),
   ];
   const accountPath = `${statusBefore.accountEvidence.evidenceDir}/streamer-pulse-youtube.json`;
   const previousMetricoolEvidence = await readFile(metricoolEvidencePath, "utf8").catch(() => null);
@@ -2437,11 +2744,16 @@ test("importClipperLaunchEvidenceDropFiles ignores Metricool approval evidence t
     "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
     "metricool-test-001,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/source.mp4,Caption,<Metricool approval/scheduled URL after Robert approves>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
   ].join("\n"));
+  await writeFile(path.join(dropDir, "external-closeout-evidence-import.csv"), [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,,<proof>,External closeout CSV should be ignored by generic launch evidence import",
+  ].join("\n"));
 
   try {
     const { launchEvidenceDropImport } = await importClipperLaunchEvidenceDropFiles();
     assert.ok(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("launch-evidence-drop-metricool-ignore-control.test.csv")));
     assert.equal(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("metricool-approval-evidence-import.csv")), false);
+    assert.equal(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("external-closeout-evidence-import.csv")), false);
     assert.equal(launchEvidenceDropImport.rejected.some((row) => row.identifier?.includes("metricool-test-001")), false);
   } finally {
     if (previousControlDrop === null) await unlink(controlDropPath).catch(() => undefined);
@@ -2657,6 +2969,19 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(externalExecutionSession.focusRun.items.every((item) => item.checklist.length >= 3));
     assert.ok(externalExecutionSession.focusRun.items.every((item) => item.doneCriteria.length >= 3));
     assert.ok(externalExecutionSession.focusRun.evidenceRows.length > 0 || externalExecutionSession.focusRun.credentialTemplates.length > 0);
+    assert.ok(["not_prepared", "needs_operator", "complete"].includes(externalExecutionSession.closeoutRun.status));
+    assert.ok(externalExecutionSession.closeoutRun.packPath.endsWith("clippers-external-closeout-pack.json"));
+    assert.ok(externalExecutionSession.closeoutRun.evidenceCsvPath.endsWith("external-closeout-evidence-import.csv"));
+    assert.equal(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend, 0);
+    assert.equal(externalExecutionSession.closeoutRun.metricoolPublishMode, "approval_required");
+    if (externalExecutionSession.closeoutRun.status !== "not_prepared") {
+      assert.equal(externalExecutionSession.closeoutRun.totals.rows, 16);
+      assert.equal(externalExecutionSession.closeoutRun.nextItems.length, 8);
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.proofPath.includes("external-closeout-proofs")));
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.startsWith("\"")));
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.split(",").length === 12));
+      assert.equal(externalExecutionSession.closeoutRun.nextItems.some((item) => item.evidenceCsvRow.includes("<")), false);
+    }
     assert.equal(status.externalExecutionSession.manifestPath, externalExecutionSession.manifestPath);
     assert.equal(status.platformWarRoom.items.length, 3);
     assert.equal(status.platformWarRoom.totals.platforms, 3);
@@ -2706,6 +3031,8 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawWarRoomMarkdown.includes("Safety rules"));
     assert.ok(rawMarkdown.includes("Clippers External Execution Session"));
     assert.ok(rawMarkdown.includes("Launch Evidence Import"));
+    assert.ok(rawMarkdown.includes("External Closeout Run"));
+    assert.ok(rawMarkdown.includes("Metricool: approval_required; ready_to_send 0"));
     assert.ok(rawMarkdown.includes("Focus Run"));
     assert.ok(rawMarkdown.includes("Unlock Board"));
     assert.ok(rawMarkdown.includes("Portal Batches"));
@@ -2727,6 +3054,10 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawManifest.includes("credentialTemplate"));
     assert.ok(rawManifest.includes("evidenceRecipeRow"));
     assert.ok(rawManifest.includes("requiredInputs"));
+    assert.ok(rawManifest.includes("closeoutRun"));
+    const rawUi = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+    assert.ok(rawUi.includes('data-testid="clippers-external-closeout-run"'));
+    assert.ok(rawUi.includes("Closeout evidence run"));
     assert.ok(rawManifest.includes("evidenceImportTemplate"));
     assert.ok(rawManifest.includes("unlockBoard"));
     assert.ok(rawManifest.includes("portalBatches"));
@@ -3062,7 +3393,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.ownerAction.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.requestMode === "human_login_recheck" && scope.humanBlocker?.includes("Meta Developers login"))));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.requestMode === "request_now" && scope.humanBlocker === null)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-21" && scope.verificationNote.length > 20)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-23" && scope.verificationNote.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.verificationStatus === "official_login_required")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verificationChecklist.length >= 3)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.some((scope) => scope.verificationChecklist.some((step) => step.includes("Log in to Meta Developers")))));
@@ -3072,7 +3403,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.postApprovalChecklist && scope.postApprovalChecklist.length >= 4)));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.complianceRisk && scope.complianceRisk.includes(scope.scope))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.fallbackPlan && scope.fallbackPlan.length > 20)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-21")));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-23")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit?.canonicalUrl === scope.officialReferenceUrl)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "login_required" && scope.sourceAudit.needsHumanRecheck)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "public")));
@@ -3172,6 +3503,8 @@ test("prepareClipperPermissionSubmissionDossier writes unified platform submissi
     assert.equal(permissionSubmissionDossier.items.length, status.permissionRequestPack.platformBatches.length);
     assert.equal(permissionSubmissionDossier.totals.platforms, permissionSubmissionDossier.items.length);
     assert.equal(permissionSubmissionDossier.totals.scopes, status.permissionRequestPack.totals.permissions);
+    assert.ok(status.officialPermissionMatrix.generatedAt && status.officialPermissionMatrix.generatedAt >= permissionSubmissionDossier.generatedAt.slice(0, 10));
+    assert.ok(status.developerApplicationDrafts.generatedAt && status.developerApplicationDrafts.generatedAt >= permissionSubmissionDossier.generatedAt.slice(0, 10));
     assert.ok(permissionSubmissionDossier.totals.requestedRows >= status.permissionRequestPack.totals.platformBatches);
     assert.ok(permissionSubmissionDossier.totals.approvedRows >= status.permissionRequestPack.totals.platformBatches);
     assert.ok(permissionSubmissionDossier.items.some((item) => item.platform === "tiktok" && item.submitDecision === "request_now"));
@@ -5541,10 +5874,31 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
 
   try {
     const { robertNextActions, status } = await prepareClipperRobertNextActions();
+    const generatedDay = robertNextActions.generatedAt.slice(0, 10);
     assert.ok(robertNextActions.manifestPath.endsWith("ROBERT_NEXT_ACTIONS.json"));
     assert.ok(robertNextActions.markdownPath.endsWith("ROBERT_NEXT_ACTIONS.md"));
     assert.ok(robertNextActions.csvPath.endsWith("ROBERT_NEXT_ACTIONS.csv"));
     assert.ok(robertNextActions.connectNow.markdownPath.endsWith("ROBERT_CONNECT_NOW.md"));
+    assert.equal(robertNextActions.externalCloseout.status, status.externalExecutionSession.closeoutRun.status);
+    assert.equal(robertNextActions.externalCloseout.proofFilesNeedRealEvidence, status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence);
+    assert.equal(robertNextActions.externalCloseout.operatorQueueItems, status.externalExecutionSession.closeoutRun.items.length);
+    assert.equal(robertNextActions.externalCloseout.metricoolReadyToSend, 0);
+    assert.ok(robertNextActions.externalCloseout.proofTodoPath.endsWith("clippers-external-closeout-proof-todo.md"));
+    assert.ok(robertNextActions.externalCloseout.operatorQueuePath.endsWith("clippers-external-closeout-operator-queue.md"));
+    assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.id, "developer_app:instagram");
+    assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.requiredStatus, "submitted");
+    assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
+    assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
+    assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.equal(robertNextActions.status, "blocked");
+    assert.doesNotMatch(robertNextActions.nextStep, /Open Metricool/i);
+    assert.notEqual(robertNextActions.items[0]?.id, "metricool-approval-session");
+    assert.ok(robertNextActions.items[0]?.id.startsWith("external-closeout-"));
+    assert.equal(robertNextActions.items[0]?.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.equal(robertNextActions.items[0]?.priority, "critical");
+    assert.equal(robertNextActions.items[0]?.lane, "external_portal");
+    assert.match(robertNextActions.items[0]?.artifactPath || "", /clippers-external-closeout-operator-queue\.md|clippers-external-closeout-proof-todo\.md/);
+    assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("\"developer_app\",\"\",\"instagram\",\"submitted\"")));
     assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
     assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
     assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
@@ -5642,6 +5996,18 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.htmlPath.endsWith("external-portal-launcher.html"));
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.url, "/clippers/external-portal-launcher");
+    assert.ok(status.accountCreationPack.generatedAt && status.accountCreationPack.generatedAt >= generatedDay);
+    assert.ok(status.accountSetupSession.generatedAt && status.accountSetupSession.generatedAt >= generatedDay);
+    assert.ok(status.permissionSubmissionDossier.generatedAt && status.permissionSubmissionDossier.generatedAt >= generatedDay);
+    assert.ok(status.externalExecutionSession.generatedAt && status.externalExecutionSession.generatedAt >= generatedDay);
+    const clippersAgentSource = await readFile(path.join(process.cwd(), "server", "clippers-agent.ts"), "utf8");
+    assert.ok(clippersAgentSource.includes("detached: true"));
+    assert.ok(clippersAgentSource.includes("process.kill(-child.pid"));
+    const externalCloseoutPack = JSON.parse(await readFile(path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-pack.json"), "utf8"));
+    const externalCloseoutProofTodo = JSON.parse(await readFile(path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-proof-todo.json"), "utf8"));
+    assert.ok(externalCloseoutPack.generatedAt && externalCloseoutPack.generatedAt >= generatedDay);
+    assert.ok(externalCloseoutProofTodo.generatedAt && externalCloseoutProofTodo.generatedAt >= generatedDay);
+    assert.equal(externalCloseoutPack.metricool.readyToSend, 0);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.totalPortals >= 3);
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.doNow, status.externalExecutionSession.totals.doNow);
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.blocked, status.externalExecutionSession.totals.blocked);
@@ -5649,6 +6015,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.developerAppTasks > 0);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.permissionTasks > 0);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.credentialTasks > 0);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutRows, status.externalExecutionSession.closeoutRun.totals.rows);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutProofsNeeded, status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutMetricoolReadyToSend, 0);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutArtifactSafety, status.externalExecutionSession.closeoutRun.artifactSafetyStatus);
     assert.equal(robertNextActions.connectNow.intakeConsole.status, status.dropzoneReadyPack.status);
     assert.equal(robertNextActions.connectNow.intakeConsole.totals.lanes, status.dropzoneReadyPack.items.length);
     assert.ok(robertNextActions.connectNow.intakeConsole.totals.blockers >= 0);
@@ -5747,16 +6117,24 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
       const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-approval-session");
       assert.ok(metricoolAction);
-      assert.equal(metricoolAction.rank, 1);
+      const externalCloseoutPending = robertNextActions.externalCloseout.operatorQueueItems > 0
+        || robertNextActions.externalCloseout.proofFilesNeedRealEvidence > 0;
+      if (externalCloseoutPending) {
+        assert.ok(metricoolAction.rank > 1);
+        assert.equal(metricoolAction.priority, "high");
+        assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
+      } else {
+        assert.equal(metricoolAction.rank, 1);
+        assert.equal(metricoolAction.priority, "critical");
+        assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+      }
       assert.equal(metricoolAction.status, "ready_to_execute");
-      assert.equal(metricoolAction.priority, "critical");
       assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-approval-session");
       assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
       assert.ok(metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
       assert.ok(metricoolAction.evidenceRows.length > 0);
       assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
       assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
-      assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
     }
     assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
     const hasLaunchEvidenceAction = robertNextActions.items.some((item) =>
@@ -5775,6 +6153,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     const rawConnectNow = await readFile(robertNextActions.connectNow.markdownPath, "utf8");
     const rawPortalLauncher = await readFile(robertNextActions.connectNow.externalPortalLauncher.htmlPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers - Robert Next Actions"));
+    assert.doesNotMatch(rawMarkdown, /^Status: ready$/m);
     assert.ok(rawMarkdown.includes("Connect Now Handoff"));
     assert.ok(rawMarkdown.includes("Credential closeout"));
     assert.ok(rawMarkdown.includes("Account closeout"));
@@ -5815,6 +6194,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("Refresh sequence"));
     assert.ok(rawConnectNow.includes("Post-Connect Activation Bridge"));
     assert.ok(rawConnectNow.includes("Focus Run"));
+    assert.ok(rawConnectNow.includes("External closeout rows"));
+    assert.ok(rawConnectNow.includes("External closeout Metricool ready_to_send"));
     assert.ok(rawConnectNow.includes("Evidence Closeout"));
     assert.ok(rawConnectNow.includes("Evidence import bridge"));
     assert.ok(rawConnectNow.includes("Source Closeout"));
@@ -5837,6 +6218,18 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.sourceIntakeTemplate.includes("refresh_token"), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("access_token"), false);
     assert.ok(rawPortalLauncher.includes("Clippers External Portal Launcher"));
+    assert.ok(rawPortalLauncher.includes("Closeout Evidence Run"));
+    assert.ok(rawPortalLauncher.includes("Copy next closeout starter rows"));
+    assert.ok(rawPortalLauncher.includes("External Closeout Evidence Import Gate"));
+    assert.ok(rawPortalLauncher.includes("External Closeout Proof Todo"));
+    assert.ok(rawPortalLauncher.includes("clippers_workspace/reports/clippers-external-closeout-proof-todo.md"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/external-closeout-proof-todo"));
+    assert.ok(rawPortalLauncher.includes("loadExternalCloseoutProofTodo"));
+    assert.ok(rawPortalLauncher.includes("clippers_workspace/evidence-drop/external-closeout-evidence-import.csv"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/preview-external-closeout-evidence-import"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/apply-external-closeout-evidence-import"));
+    assert.ok(rawPortalLauncher.includes("x-clippers-operator-confirm"));
+    assert.ok(rawPortalLauncher.includes("Apply clean import"));
     assert.ok(rawPortalLauncher.includes("Account Creation Launcher"));
     assert.ok(rawPortalLauncher.includes("Credential Collection Launcher"));
     assert.ok(rawPortalLauncher.includes("Permission Request Launcher"));
@@ -7142,8 +7535,20 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
   for (const filePath of artifactPaths) {
     previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
   }
+  const fixtureSourcePath = path.join(beforeStatus.rootDir, "sources", "sports", "ledger-fixture-test.mp4");
+  const fixtureEvidencePath = path.join(beforeStatus.rootDir, "allowlist", "ledger-fixture-test.md");
+  const previousFixtureSource = await readFile(fixtureSourcePath).catch(() => null);
+  const previousFixtureEvidence = await readFile(fixtureEvidencePath, "utf8").catch(() => null);
 
   try {
+    writeTinyTestVideo(fixtureSourcePath);
+    await writeFile(fixtureEvidencePath, [
+      "# Fixture source rights evidence",
+      "",
+      "status: owned_or_permissioned",
+      "notes: Test fixture evidence should never count as production readiness or block the operational ledger.",
+      "",
+    ].join("\n"));
     await recordClipperSourceScoutIntake({
       records: [
         {
@@ -7169,6 +7574,15 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
           views: "240000",
         },
         {
+          title: "Ledger recreate from discovery search",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=caption%20meme%20trend",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the caption pattern with original script, generated visuals and owned narration.",
+        },
+        {
           title: "Ledger missing proof",
           category: "memes",
           platform: "tiktok",
@@ -7184,7 +7598,9 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     const { rightsEvidenceLedger, status } = await prepareClipperRightsEvidenceLedger();
     const missingSource = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing source file");
     const reviewRequired = rightsEvidenceLedger.items.find((item) => item.title === "Ledger review required");
+    const recreateFromDiscovery = rightsEvidenceLedger.items.find((item) => item.title === "Ledger recreate from discovery search");
     const missingProof = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing proof");
+    const fixture = rightsEvidenceLedger.items.find((item) => item.title === "ledger-fixture-test.mp4");
 
     assert.ok(rightsEvidenceLedger.manifestPath.endsWith("rights-evidence-ledger.json"));
     assert.ok(rightsEvidenceLedger.markdownPath.endsWith("rights-evidence-ledger.md"));
@@ -7201,9 +7617,14 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     assert.equal(missingSource?.evidencePath?.includes("ledger-secret-token"), false);
     assert.equal(reviewRequired?.issue, "review_required");
     assert.equal(reviewRequired?.severity, "blocked");
+    assert.equal(recreateFromDiscovery?.sourceUrlKind, "discovery_search");
+    assert.equal(recreateFromDiscovery?.issue, "missing_source_file");
+    assert.equal(recreateFromDiscovery?.evidenceAccepted, true);
+    assert.equal(recreateFromDiscovery?.severity, "blocked");
     assert.equal(missingProof?.issue, "missing_proof");
     assert.equal(missingProof?.severity, "blocked");
     assert.equal(missingProof?.evidencePath, null);
+    assert.equal(fixture, undefined);
     assert.ok(rightsEvidenceLedger.items.every((item) => item.severity !== "ready" || (item.evidenceAccepted && item.sourceFileExists)));
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
@@ -7218,6 +7639,10 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("access_token=[redacted]"));
     assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("client_secret: [redacted]"));
   } finally {
+    if (previousFixtureSource === null) await unlink(fixtureSourcePath).catch(() => undefined);
+    else await writeFile(fixtureSourcePath, previousFixtureSource);
+    if (previousFixtureEvidence === null) await unlink(fixtureEvidencePath).catch(() => undefined);
+    else await writeFile(fixtureEvidencePath, previousFixtureEvidence);
     for (const [filePath, previous] of previousArtifacts) {
       if (previous === null) await unlink(filePath).catch(() => undefined);
       else await writeFile(filePath, previous);
@@ -7239,8 +7664,12 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
   const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), "utf8").catch(() => null);
   const dropDir = path.join(beforeStatus.rootDir, "source-drop", "memes");
   const dropPath = path.join(dropDir, "source-scout-ready-test-intake.mp4");
+  const weakRecreateDropPath = path.join(dropDir, "source-scout-weak-recreate-intake.mp4");
+  const strongRecreateDropPath = path.join(dropDir, "source-scout-strong-recreate-intake.mp4");
   const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
   const previousDrop = await readFile(dropPath, "utf8").catch(() => null);
+  const previousWeakRecreateDrop = await readFile(weakRecreateDropPath, "utf8").catch(() => null);
+  const previousStrongRecreateDrop = await readFile(strongRecreateDropPath, "utf8").catch(() => null);
   const previousDropManifest = await readFile(manifestPath, "utf8").catch(() => null);
   const importCleanupDirs = beforeStatus.sourceFolders
     .filter((folder) => ["sports", "memes", "streamers", "allowlist"].includes(folder.category))
@@ -7252,6 +7681,8 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
 
   await mkdir(dropDir, { recursive: true });
   writeTinyTestVideo(dropPath);
+  writeTinyTestVideo(weakRecreateDropPath);
+  writeTinyTestVideo(strongRecreateDropPath);
 
   try {
     const { sourceScoutIntake, metricoolExecutionQueue, status } = await recordClipperSourceScoutIntake({
@@ -7277,13 +7708,44 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
           views: "100000",
         },
         {
+          title: "Recreate from search URL",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=viral%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the joke structure with original captions, generated background visuals, owned voiceover narration and no raw source footage.",
+        },
+        {
+          title: "Weak recreate with source file",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=weak%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Make our own version.",
+          target_file_name: "source-scout-weak-recreate-intake.mp4",
+          source_drop_path: weakRecreateDropPath,
+        },
+        {
+          title: "Ready recreate from search",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=caption%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the caption pattern with original script, generated visual background, owned voiceover narration and no raw source video reuse.",
+          target_file_name: "source-scout-strong-recreate-intake.mp4",
+          source_drop_path: strongRecreateDropPath,
+        },
+        {
           title: "Recreate plan",
           category: "memes",
           platform: "tiktok",
           url: "https://www.tiktok.com/@creator/video/2234567890123456789",
           source: "@creator",
           status: "recreate_only",
-          recreate_plan: "Recreate the POV format with original captions, generated background and owned voiceover.",
+          recreate_plan: "Recreate the POV format with original captions, generated background visuals, owned voiceover narration and no raw source footage.",
         },
         {
           title: "Ready permissioned exact",
@@ -7305,9 +7767,28 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
       ],
     });
 
-    assert.equal(sourceScoutIntake.totals.items, 4);
+    assert.equal(sourceScoutIntake.totals.items, 7);
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Bad search URL")?.decision, "rejected");
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Needs permission exact")?.publishGate, "blocked_rights");
+    const recreateFromSearch = sourceScoutIntake.items.find((item) => item.title === "Recreate from search URL");
+    assert.equal(recreateFromSearch?.sourceUrlKind, "discovery_search");
+    assert.equal(recreateFromSearch?.decision, "blocked_source_file");
+    assert.equal(recreateFromSearch?.publishGate, "blocked_source_file");
+    assert.equal(recreateFromSearch?.rejectReason, null);
+    assert.equal(recreateFromSearch?.evidenceType, "recreate_plan_approved");
+    assert.ok(recreateFromSearch?.evidencePath?.includes("ownership note: approved recreate plan"));
+    const weakRecreate = sourceScoutIntake.items.find((item) => item.title === "Weak recreate with source file");
+    assert.equal(weakRecreate?.decision, "rejected");
+    assert.equal(weakRecreate?.publishGate, "blocked_rights");
+    assert.ok(weakRecreate?.rejectReason?.includes("plan mas especifico"));
+    const readyRecreate = sourceScoutIntake.items.find((item) => item.title === "Ready recreate from search");
+    assert.equal(readyRecreate?.sourceUrlKind, "discovery_search");
+    assert.equal(readyRecreate?.decision, "ready_for_intake");
+    assert.equal(readyRecreate?.publishGate, "ready_for_intake");
+    assert.equal(readyRecreate?.evidenceType, "recreate_plan_approved");
+    assert.equal(readyRecreate?.sourceFileExists, true);
+    assert.ok(readyRecreate?.sourceDropManifestPath?.endsWith("source-drop-manifest.csv"));
+    assert.ok(readyRecreate?.nextStep.includes("archivo propio"));
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Recreate plan")?.publishGate, "blocked_source_file");
     const ready = sourceScoutIntake.items.find((item) => item.title === "Ready permissioned exact");
     assert.equal(ready?.publishGate, "ready_for_intake");
@@ -7339,6 +7820,10 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
     else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), previousCsv);
     if (previousDrop === null) await unlink(dropPath).catch(() => undefined);
     else await writeFile(dropPath, previousDrop);
+    if (previousWeakRecreateDrop === null) await unlink(weakRecreateDropPath).catch(() => undefined);
+    else await writeFile(weakRecreateDropPath, previousWeakRecreateDrop);
+    if (previousStrongRecreateDrop === null) await unlink(strongRecreateDropPath).catch(() => undefined);
+    else await writeFile(strongRecreateDropPath, previousStrongRecreateDrop);
     if (previousDropManifest === null) await unlink(manifestPath).catch(() => undefined);
     else await writeFile(manifestPath, previousDropManifest);
     for (const [dir, previousFiles] of previousImportFiles) {
@@ -7846,6 +8331,10 @@ test("renderClipperDraftVideos renders mp4 clips from rights-cleared draft specs
     const rawManifest = await readFile(renderedClips.manifestPath, "utf8");
     assert.ok(rawManifest.includes("render-ready-highlight.mp4"));
     assert.equal(rawManifest.includes("access_token"), false);
+    const clippersAgentSource = await readFile(path.join(process.cwd(), "server", "clippers-agent.ts"), "utf8");
+    assert.ok(clippersAgentSource.includes("CLIPPER_FFMPEG_TIMEOUT_MS"));
+    assert.ok(clippersAgentSource.includes("killClipperFfmpegProcess"));
+    assert.ok(clippersAgentSource.includes("ffmpeg timed out after"));
 
     const { publishingPackage } = await prepareClipperPublishingPackage();
     assert.ok(publishingPackage.items.length >= 1);
