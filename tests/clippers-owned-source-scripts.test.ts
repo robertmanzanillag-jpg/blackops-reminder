@@ -1125,6 +1125,8 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("more external actions in"));
   assert.ok(page.includes("External closeout"));
+  assert.ok(page.includes("Evidence CSV rows"));
+  assert.ok(page.includes("Uses external evidence import schema"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.proofFilesNeedRealEvidence"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.operatorQueueItems"));
   assert.ok(page.includes("Full Direct API"));

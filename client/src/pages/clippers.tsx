@@ -391,6 +391,7 @@ interface ClipperAccountPermissionReadinessSummary {
     proofFilesNeedRealEvidence: number;
     evidenceRepairRows: number;
     operatorActions: number;
+    nextEvidenceRows?: number;
     nextActionId: string | null;
     nextStep: string;
   };
@@ -16791,11 +16792,13 @@ export default function ClippersPage() {
                         <p>Proofs needed: {accountPermissionReadiness.externalCloseout.proofFilesNeedRealEvidence}</p>
                         <p>Repair rows: {accountPermissionReadiness.externalCloseout.evidenceRepairRows}</p>
                         <p>Actions: {accountPermissionReadiness.externalCloseout.operatorActions}</p>
+                        <p>Evidence CSV rows: {accountPermissionReadiness.externalCloseout.nextEvidenceRows || 0}</p>
                       </div>
                       <p className="mt-2 text-xs leading-5 text-amber-100">{accountPermissionReadiness.externalCloseout.nextStep}</p>
                     </div>
                   )}
                   <p className="mt-2 break-all text-xs text-zinc-600">Next evidence CSV: {accountPermissionReadiness.nextEvidenceDropPath}</p>
+                  <p className="mt-1 text-xs text-zinc-600">Uses external evidence import schema: proof, redirect URI, portal URL, docs URL and notes.</p>
                 </>
               ) : (
                 <p className="mt-3 text-sm text-zinc-500">Todavia no hay readiness pack cargado en la app.</p>
