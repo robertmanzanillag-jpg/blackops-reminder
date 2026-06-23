@@ -683,6 +683,7 @@ interface ClipperExternalCloseoutPackSummary {
   batchCopyPacket?: string;
   evidenceCsvTemplate?: string;
   goLiveAudit?: ClipperExternalGoLiveAuditSummary;
+  nextWorkRun?: ClipperExternalNextWorkRunSummary;
   actionSheet?: {
     status: "needs_operator" | "complete";
     paths: { markdown: string; csv: string; json: string };
@@ -764,32 +765,7 @@ interface ClipperExternalCloseoutPackSummary {
       nextAction: string;
       checklist: string[];
     }>;
-    workSession?: {
-      status: "needs_operator" | "complete";
-      label: string;
-      targetMinutes: number;
-      actions: number;
-      evidenceCsvPath: string;
-      validateCommand: string;
-      applyReadyCommand: string;
-      steps: string[];
-      guardrails: string[];
-      rows: Array<{
-        order: number;
-        id: string;
-        lane: string;
-        platform: string;
-        requiredStatus: string;
-        portalUrl: string;
-        docsUrl?: string;
-        redirectUri?: string;
-        proofPath: string;
-        missingCsvFields: string[];
-        operatorAction: string;
-        nextStep: string;
-        copyPacket: string;
-      }>;
-    };
+    workSession?: ClipperExternalNextWorkRunSummary;
     nextAction: {
       id: string;
       lane: string;
@@ -800,6 +776,39 @@ interface ClipperExternalCloseoutPackSummary {
     } | null;
   };
   nextStep: string;
+}
+
+interface ClipperExternalNextWorkRunSummary {
+  generatedAt?: string;
+  status: "needs_operator" | "complete";
+  label: string;
+  targetMinutes: number;
+  actions: number;
+  evidenceCsvPath: string;
+  validateCommand: string;
+  applyReadyCommand: string;
+  steps: string[];
+  guardrails: string[];
+  paths?: {
+    json: string;
+    markdown: string;
+    csv: string;
+  };
+  rows: Array<{
+    order: number;
+    id: string;
+    lane: string;
+    platform: string;
+    requiredStatus: string;
+    portalUrl: string;
+    docsUrl?: string;
+    redirectUri?: string;
+    proofPath: string;
+    missingCsvFields: string[];
+    operatorAction: string;
+    nextStep: string;
+    copyPacket: string;
+  }>;
 }
 
 interface ClipperExternalCloseoutProofTodoSummary {
@@ -7653,6 +7662,16 @@ export default function ClippersPage() {
       return data.externalCloseoutNextAction as ClipperExternalCloseoutNextActionSummary;
     },
   });
+  const { data: externalCloseoutNextWorkRun } = useQuery<ClipperExternalNextWorkRunSummary | null>({
+    queryKey: ["/api/clippers/external-next-work-run"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-next-work-run");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external next work run");
+      return data.externalCloseoutNextWorkRun as ClipperExternalNextWorkRunSummary;
+    },
+  });
   const visibleExternalCloseoutOperatorRows = externalCloseoutOperatorQueue
     ? externalCloseoutOperatorQueue.rows
     : externalCloseoutProofTodo
@@ -7668,6 +7687,10 @@ export default function ClippersPage() {
     : externalCloseoutProofTodo
       ? externalCloseoutProofTodo.evidenceCsvTemplate || ""
       : externalCloseoutPack?.evidenceCsvTemplate || "";
+  const visibleExternalNextWorkRun = externalCloseoutNextWorkRun
+    || externalCloseoutPack?.nextWorkRun
+    || externalCloseoutPack?.actionSheet?.workSession
+    || null;
   const visibleExternalCloseoutSprintSummary = externalCloseoutOperatorQueue
     ? externalCloseoutOperatorQueue.sprintSummary
     : externalCloseoutProofTodo
@@ -8051,6 +8074,7 @@ export default function ClippersPage() {
         externalCloseoutProofTodo?: ClipperExternalCloseoutProofTodoSummary;
         externalCloseoutOperatorQueue?: ClipperExternalCloseoutOperatorQueueSummary;
         externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
+        externalCloseoutNextWorkRun?: ClipperExternalNextWorkRunSummary;
       };
     },
     onSuccess: (data) => {
@@ -8063,6 +8087,9 @@ export default function ClippersPage() {
       }
       if (data.externalCloseoutNextAction) {
         queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
+      }
+      if (data.externalCloseoutNextWorkRun) {
+        queryClient.setQueryData(["/api/clippers/external-next-work-run"], data.externalCloseoutNextWorkRun);
       }
       toast({
         title: "External closeout listo",
@@ -16219,13 +16246,13 @@ export default function ClippersPage() {
                           Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
                         </p>
                       )}
-                      {externalCloseoutPack.actionSheet.workSession && (
+                      {visibleExternalNextWorkRun && (
                         <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-external-work-run">
                           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
-                              <p className="text-xs font-medium text-amber-100">{externalCloseoutPack.actionSheet.workSession.label}</p>
+                              <p className="text-xs font-medium text-amber-100">{visibleExternalNextWorkRun.label}</p>
                               <p className="mt-1 text-xs leading-5 text-zinc-500">
-                                {externalCloseoutPack.actionSheet.workSession.actions} actions · {externalCloseoutPack.actionSheet.workSession.targetMinutes} minutes · {externalCloseoutPack.actionSheet.workSession.status}
+                                {visibleExternalNextWorkRun.actions} actions · {visibleExternalNextWorkRun.targetMinutes} minutes · {visibleExternalNextWorkRun.status}
                               </p>
                             </div>
                             <Badge className="w-fit border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
@@ -16233,14 +16260,14 @@ export default function ClippersPage() {
                             </Badge>
                           </div>
                           <div className="mt-3 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-2">
-                            <p className="break-all">Evidence CSV: {externalCloseoutPack.actionSheet.workSession.evidenceCsvPath}</p>
-                            <p className="break-all">Work run: {externalCloseoutPack.paths.nextWorkRunMarkdown || "clippers_workspace/reports/clippers-external-next-work-run.md"}</p>
-                            <p className="break-all">Validate: {externalCloseoutPack.actionSheet.workSession.validateCommand}</p>
-                            <p className="break-all">Apply ready: {externalCloseoutPack.actionSheet.workSession.applyReadyCommand}</p>
-                            <p>{externalCloseoutPack.actionSheet.workSession.guardrails[1] || "Portal action must be real before import."}</p>
+                            <p className="break-all">Evidence CSV: {visibleExternalNextWorkRun.evidenceCsvPath}</p>
+                            <p className="break-all">Work run: {visibleExternalNextWorkRun.paths?.markdown || externalCloseoutPack.paths.nextWorkRunMarkdown || "clippers_workspace/reports/clippers-external-next-work-run.md"}</p>
+                            <p className="break-all">Validate: {visibleExternalNextWorkRun.validateCommand}</p>
+                            <p className="break-all">Apply ready: {visibleExternalNextWorkRun.applyReadyCommand}</p>
+                            <p>{visibleExternalNextWorkRun.guardrails[1] || "Portal action must be real before import."}</p>
                           </div>
                           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                            {externalCloseoutPack.actionSheet.workSession.rows.map((row) => (
+                            {visibleExternalNextWorkRun.rows.map((row) => (
                               <div key={row.id} className="rounded-md border border-white/10 bg-black/30 p-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="truncate text-xs font-medium text-white">{row.order}. {row.id}</p>

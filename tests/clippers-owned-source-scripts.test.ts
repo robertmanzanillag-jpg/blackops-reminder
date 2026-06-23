@@ -378,8 +378,10 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(routes, /\/api\/clippers\/external-closeout-proof-todo/);
   assert.match(routes, /\/api\/clippers\/external-closeout-operator-queue/);
   assert.match(routes, /\/api\/clippers\/external-closeout-next-action/);
+  assert.match(routes, /\/api\/clippers\/external-next-work-run/);
   assert.match(routes, /externalCloseoutOperatorQueue/);
   assert.match(routes, /externalCloseoutNextAction/);
+  assert.match(routes, /externalCloseoutNextWorkRun/);
   assert.match(routes, /copyPacket/);
   assert.match(routes, /Do not paste passwords/);
   assert.match(routes, /External Closeout Proof Todo/);
@@ -401,17 +403,20 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(routes, /Operator confirmation header required/);
   assert.match(routes, /await runClipperExternalCloseoutPack\(\)/);
   assert.match(routes, /externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue\(\)/);
+  assert.match(routes, /externalCloseoutNextWorkRun: await readClipperExternalCloseoutNextWorkRun\(\)/);
 
   const ui = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
   assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-proof-todo"\]/);
   assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-operator-queue"\]/);
   assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-next-action"\]/);
+  assert.match(ui, /queryKey: \["\/api\/clippers\/external-next-work-run"\]/);
   assert.match(ui, /data-testid="clippers-external-closeout-proof-todo"/);
   assert.match(ui, /data-testid="clippers-external-closeout-operator-queue"/);
   assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
   assert.match(ui, /data-testid="clippers-external-action-sheet"/);
   assert.match(ui, /External Operator Action Sheet/);
   assert.match(ui, /data-testid="clippers-external-work-run"/);
+  assert.match(ui, /visibleExternalNextWorkRun/);
   assert.match(ui, /workSession/);
   assert.match(ui, /nextWorkRunMarkdown/);
   assert.match(ui, /targetMinutes/);

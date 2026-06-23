@@ -404,6 +404,10 @@ export async function registerRoutes(
       nextStep: nextAction?.operatorAction || operatorQueue.nextStep || "No external closeout operator actions remain.",
     };
   };
+  const readClipperExternalCloseoutNextWorkRun = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-next-work-run.json", "utf8");
+    return JSON.parse(raw);
+  };
   const readClipperExternalCloseoutEvidenceImport = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-evidence-import-report.json", "utf8");
     return JSON.parse(raw);
@@ -2311,6 +2315,7 @@ export async function registerRoutes(
         externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
         externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
         externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+        externalCloseoutNextWorkRun: await readClipperExternalCloseoutNextWorkRun(),
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external closeout pack" });
@@ -2341,6 +2346,15 @@ export async function registerRoutes(
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 500;
       res.status(status).json({ error: error.message || (status === 404 ? "External closeout next action has not been prepared" : "External closeout next action could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/external-next-work-run", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutNextWorkRun: await readClipperExternalCloseoutNextWorkRun() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External next work run has not been prepared" : "External next work run could not be read") });
     }
   });
 
