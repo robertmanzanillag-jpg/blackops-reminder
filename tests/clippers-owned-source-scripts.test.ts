@@ -1111,3 +1111,21 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   );
   assert.ok(activationRouteBlock.includes("status: result.status"));
 });
+
+test("owned source generator commands have timeout and process group cleanup", async () => {
+  const generatorScripts = [
+    "script/clippers-generate-owned-gap-sources.mjs",
+    "script/clippers-generate-owned-meme-sources.ts",
+    "script/clippers-generate-owned-sports-streamer-sources.ts",
+    "script/clippers-generate-owned-weekly-backlog-sources.ts",
+  ];
+
+  for (const scriptPath of generatorScripts) {
+    const source = await readFile(path.join(process.cwd(), scriptPath), "utf8");
+    assert.ok(source.includes("commandTimeoutMs"), `${scriptPath} should define a command timeout`);
+    assert.ok(source.includes("detached: true"), `${scriptPath} should run child processes in a process group`);
+    assert.ok(source.includes("process.kill(-child.pid"), `${scriptPath} should kill the process group on timeout`);
+    assert.ok(source.includes('child.kill("SIGKILL")'), `${scriptPath} should fall back to direct child kill`);
+    assert.ok(source.includes("timed out after"), `${scriptPath} should report timeout failures`);
+  }
+});

@@ -6,6 +6,7 @@ const rootDir = path.join(process.cwd(), "clippers_workspace");
 const sourceDropDir = path.join(rootDir, "source-drop");
 const renderedDir = path.join(rootDir, "rendered", "owned-gap-frames");
 const forceRender = process.argv.includes("--force-render");
+const commandTimeoutMs = 5 * 60_000;
 
 const specs = [
   ...[
@@ -44,20 +45,47 @@ function csvCell(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+function killCommandProcess(child) {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killCommandProcess(child);
+      reject(new Error(`${command} timed out after ${commandTimeoutMs}ms`));
+    }, commandTimeoutMs);
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
       stderr = `${stderr}${chunk}`.slice(-4000);
     });
     child.on("error", (error) => {
-      reject(error);
+      finish(() => reject(error));
     });
     child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+      finish(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`${command} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+      });
     });
   });
 }
