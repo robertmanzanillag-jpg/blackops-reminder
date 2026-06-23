@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { access } from "node:fs/promises";
-import { mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
 
@@ -11,6 +11,7 @@ const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-q
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const safePublicBaseUrl = "https://app.clipprreview.com";
+let workspaceBackupPath: string | null = null;
 
 const sliceRequired = (content: string, startNeedle: string, endNeedle: string) => {
   const start = content.indexOf(startNeedle);
@@ -32,6 +33,19 @@ const writeFileIfMissing = async (filePath: string, content: string) => {
 
 const writeJsonIfMissing = async (filePath: string, value: unknown) => {
   await writeFileIfMissing(filePath, `${JSON.stringify(value, null, 2)}\n`);
+};
+
+const isolateClipperWorkspace = async () => {
+  if (!(await pathExists(rootDir))) return;
+  workspaceBackupPath = path.join(process.cwd(), `.clippers_workspace.test-backup-${process.pid}-${Date.now()}`);
+  await rename(rootDir, workspaceBackupPath);
+};
+
+const restoreClipperWorkspace = async () => {
+  await rm(rootDir, { recursive: true, force: true });
+  if (workspaceBackupPath && await pathExists(workspaceBackupPath)) {
+    await rename(workspaceBackupPath, rootDir);
+  }
 };
 
 const developerConnectionItem = (
@@ -74,9 +88,57 @@ const officialSourceItem = (
   nextStep: "Official source is identified; attach real non-secret proof before approval.",
 });
 
+const writeOwnedSourceFixture = async (category: "sports" | "memes", fileName: string) => {
+  const categoryDir = path.join(rootDir, "source-drop", category);
+  const sourcePath = path.join(categoryDir, fileName);
+  const evidencePath = path.join(categoryDir, `owned-${category}-production-notes.md`);
+  const allowlistPath = path.join(rootDir, "allowlist", `${path.parse(fileName).name}.md`);
+  await mkdir(categoryDir, { recursive: true });
+  await mkdir(path.dirname(allowlistPath), { recursive: true });
+  await writeFile(sourcePath, `fixture video bytes for ${fileName}\n`);
+  await writeFile(evidencePath, [
+    "status: owned_source",
+    `asset: ${fileName}`,
+    `The source video ${fileName} is owned source generated locally for Clippers test coverage.`,
+    `This evidence explicitly covers ${fileName} and confirms original generated material only.`,
+    "Restrictions: no third-party footage, no league footage, no raw streamer clips, no copyrighted music, no broadcast footage, no scraped footage.",
+    "Created_by: local clippers test fixture; no external creator material is included.",
+    "",
+  ].join("\n"));
+  await writeFile(path.join(categoryDir, "source-drop-manifest.csv"), [
+    "target_file_name,rights_status,evidence_link",
+    `${fileName},owned_or_permissioned,owner note path: ${evidencePath}`,
+    "",
+  ].join("\n"));
+  await writeFile(allowlistPath, [
+    `# Source Rights Evidence: ${fileName}`,
+    "",
+    "status: owned_or_permissioned",
+    `category: ${category}`,
+    `asset_id: owned-source:${category}:${fileName}`,
+    `source_path: ${sourcePath}`,
+    "source: test-source-drop-manifest",
+    `manifest_evidence_path: ${evidencePath}`,
+    `resolved_evidence_path: ${evidencePath}`,
+    "",
+    "Notes:",
+    [
+      `Owned source generated locally for ${category};`,
+      `owner note path ${evidencePath};`,
+      "no third-party footage, no league footage, no raw streamer clips, no copyrighted music, no broadcast footage, no scraped footage;",
+      `asset ${fileName};`,
+      "approved only for draft creation and Metricool approval_required queue review.",
+    ].join(" "),
+    "",
+  ].join("\n"));
+};
+
 const ensureClipperScriptFixtures = async () => {
+  await isolateClipperWorkspace();
   await mkdir(path.join(rootDir, "reports"), { recursive: true });
   await mkdir(path.join(rootDir, "evidence-drop", "external-closeout-proofs"), { recursive: true });
+  await writeOwnedSourceFixture("sports", "sports-owned-01.mp4");
+  await writeOwnedSourceFixture("memes", "memes-owned-01.mp4");
 
   await writeJsonIfMissing(path.join(rootDir, "production-public-url.json"), {
     publicBaseUrl: safePublicBaseUrl,
@@ -231,24 +293,35 @@ const ensureClipperScriptFixtures = async () => {
           accountName: "Sports Daily Clips",
           category: "sports",
           connectedNetworks: ["tiktok"],
-          rightsReadyAssets: 42,
+          dailyClipTarget: 10,
+          weeklyTargetClips: 70,
+          minimumWeeklySourceAssets: 1,
+          rightsReadyAssets: 0,
+          missingSourceAssets: 1,
         },
         {
           accountId: "meme-radar",
           accountName: "Meme Radar",
           category: "memes",
           connectedNetworks: ["tiktok"],
-          rightsReadyAssets: 71,
+          dailyClipTarget: 12,
+          weeklyTargetClips: 84,
+          minimumWeeklySourceAssets: 1,
+          rightsReadyAssets: 0,
+          missingSourceAssets: 1,
         },
       ],
       totals: {
         accounts: 2,
         connectedNetworks: 2,
-        rightsReadyAssets: 113,
-        missingSourceAssets: 0,
+        dailyClipTarget: 22,
+        weeklyTargetClips: 154,
+        minimumWeeklySourceAssets: 2,
+        rightsReadyAssets: 0,
+        missingSourceAssets: 2,
       },
-      localOwnedSourceTotals: { total: 113 },
-      nextStep: "Source readiness ready for Metricool approval queue.",
+      localOwnedSourceTotals: { sports: 0, memes: 0, streamers: 0, total: 0 },
+      nextStep: "Run source readiness sync to derive real fixture-owned assets.",
     },
     totals: {
       queuedForApproval: 2,
@@ -385,10 +458,20 @@ const ensureClipperScriptFixtures = async () => {
     });
     assert.equal(closeoutPack.status, 0, closeoutPack.stderr || closeoutPack.stdout);
   }
+
+  const sourceReadinessSync = spawnSync(process.execPath, ["script/clippers-sync-metricool-source-readiness.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(sourceReadinessSync.status, 0, sourceReadinessSync.stderr || sourceReadinessSync.stdout);
 };
 
 test.before(async () => {
   await ensureClipperScriptFixtures();
+});
+
+test.after(async () => {
+  await restoreClipperWorkspace();
 });
 
 test("owned source rights dry-run feeds Metricool source readiness sync without fake readiness", async () => {

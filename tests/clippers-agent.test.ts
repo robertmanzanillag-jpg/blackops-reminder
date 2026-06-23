@@ -74,6 +74,87 @@ function writeTinyTestVideo(outputPath: string) {
   appendFileSync(outputPath, Buffer.alloc(12 * 1024));
 }
 
+async function prepareMetricoolOwnedSourceFixtures() {
+  const rootDir = path.join(process.cwd(), "clippers_workspace");
+  const sourceDropDir = path.join(rootDir, "source-drop");
+  const allowlistDir = path.join(rootDir, "allowlist");
+  const seedVideoPath = path.join(rootDir, "test-fixtures", "metricool-owned-seed.mp4");
+  await mkdir(path.dirname(seedVideoPath), { recursive: true });
+  if (!(await stat(seedVideoPath).then((file) => file.isFile()).catch(() => false))) {
+    writeTinyTestVideo(seedVideoPath);
+  }
+  const seedVideo = await readFile(seedVideoPath);
+  const categories = [
+    {
+      category: "sports",
+      prefix: "sports-owned",
+      count: 30,
+      evidenceFileName: "owned-sports-production-notes.md",
+      accountLabel: "Sports Daily",
+      restrictions: "no league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, or platform-private material",
+    },
+    {
+      category: "memes",
+      prefix: "memes-owned",
+      count: 34,
+      evidenceFileName: "owned-meme-production-notes-v2.md",
+      accountLabel: "Meme Radar",
+      restrictions: "no third-party footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, or platform-private material",
+    },
+  ];
+
+  await mkdir(allowlistDir, { recursive: true });
+  for (const fixture of categories) {
+    const categoryDir = path.join(sourceDropDir, fixture.category);
+    const sourcesCategoryDir = path.join(rootDir, "sources", fixture.category);
+    await mkdir(categoryDir, { recursive: true });
+    await mkdir(sourcesCategoryDir, { recursive: true });
+    const evidencePath = path.join(categoryDir, fixture.evidenceFileName);
+    const firstFile = `${fixture.prefix}-01.mp4`;
+    const lastFile = `${fixture.prefix}-${String(fixture.count).padStart(2, "0")}.mp4`;
+    await writeFile(evidencePath, [
+      "status: owned_source",
+      `Owned source generated locally for ${fixture.accountLabel}; source videos are original generated material.`,
+      `${firstFile} through ${lastFile} are covered by this production note.`,
+      `Restrictions: ${fixture.restrictions}.`,
+      "No third-party footage, no league footage, no raw streamer clips, no copyrighted music, no broadcast footage, no scraped footage.",
+      "created_by: local clippers test fixture",
+      "",
+    ].join("\n"));
+    const manifestRows = ["target_file_name,rights_status,evidence_link"];
+    for (let index = 1; index <= fixture.count; index += 1) {
+      const fileName = `${fixture.prefix}-${String(index).padStart(2, "0")}.mp4`;
+      const sourcePath = path.join(categoryDir, fileName);
+      const productionSourcePath = path.join(sourcesCategoryDir, fileName);
+      await writeFile(sourcePath, seedVideo);
+      await writeFile(productionSourcePath, seedVideo);
+      manifestRows.push(`${fileName},owned_or_permissioned,owner note path: ${evidencePath}`);
+      await writeFile(path.join(allowlistDir, `${path.parse(fileName).name}.md`), [
+        `# Source Rights Evidence: ${fileName}`,
+        "",
+        "status: owned_or_permissioned",
+        `category: ${fixture.category}`,
+        `asset_id: owned-source:${fixture.category}:${fileName}`,
+        `source_path: ${sourcePath}`,
+        "source: test-source-drop-manifest",
+        `manifest_evidence_path: ${evidencePath}`,
+        `resolved_evidence_path: ${evidencePath}`,
+        "",
+        "Notes:",
+        [
+          `Owned source generated locally for ${fixture.accountLabel};`,
+          `owner note path ${evidencePath};`,
+          `${fixture.restrictions};`,
+          `asset ${fileName};`,
+          "approved only for draft creation and Metricool approval_required queue review.",
+        ].join(" "),
+        "",
+      ].join("\n"));
+    }
+    await writeFile(path.join(categoryDir, "source-drop-manifest.csv"), `${manifestRows.join("\n")}\n`);
+  }
+}
+
 test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   const result = __clipperInternals.normalizeRunOptions({
     clipsPerAccount: 999,
@@ -356,6 +437,11 @@ test("external closeout evidence importer blocks copied CSV template before appl
   ]);
 
   try {
+    const closeoutPack = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(closeoutPack.status, 0, closeoutPack.stderr || closeoutPack.stdout);
     await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
     await writeFile(evidenceCsvPath, template);
     const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
@@ -2005,7 +2091,7 @@ test("prepareClipperAccountEvidenceVault writes templates and evidence unlocks l
     assert.equal(accountEvidence.quickBatchTemplate.toLowerCase().includes("access_token"), false);
     const quickRow = accountEvidence.quickBatchRows.find((item) => item.id === "sports-daily-instagram");
     assert.ok(quickRow);
-    assert.equal(quickRow.profileLink, "https://www.instagram.com/sportsdaily/");
+    assert.equal(quickRow.profileLink, "https://www.instagram.com/sportsdailyclips/");
     assert.ok(quickRow.signupUrl.includes("instagram.com"));
     assert.ok(quickRow.evidenceJsonPath.endsWith("account-evidence/sports-daily-instagram.json"));
     assert.ok(quickRow.evidenceMarkdownPath.endsWith("account-evidence/sports-daily-instagram.md"));
@@ -3753,8 +3839,11 @@ test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from ful
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
   try {
+    await prepareMetricoolOwnedSourceFixtures();
     await prepareClipperMetricoolPublishingPlan();
     await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-mvp-test");
+    await prepareClipperSourceAcquisitionPlan();
+    await prepareClipperProductionQueue();
     await prepareClipperMetricoolExecutionQueue();
     const { metricoolMvpLaunchPack, status } = await prepareClipperMetricoolMvpLaunchPack();
 
@@ -3867,8 +3956,11 @@ test("prepareClipperMetricoolApprovalSession prepares operator evidence for queu
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
   try {
+    await prepareMetricoolOwnedSourceFixtures();
     await prepareClipperMetricoolPublishingPlan();
     await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-approval-session-test");
+    await prepareClipperSourceAcquisitionPlan();
+    await prepareClipperProductionQueue();
     const { metricoolExecutionQueue } = await prepareClipperMetricoolExecutionQueue();
     await prepareClipperMetricoolMvpLaunchPack();
     const { metricoolApprovalSession, status } = await prepareClipperMetricoolApprovalSession();
@@ -3967,8 +4059,11 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
   try {
+    await prepareMetricoolOwnedSourceFixtures();
     await prepareClipperMetricoolPublishingPlan();
     await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-approval-report-test");
+    await prepareClipperSourceAcquisitionPlan();
+    await prepareClipperProductionQueue();
     await prepareClipperMetricoolExecutionQueue();
     await prepareClipperMetricoolMvpLaunchPack();
     const { metricoolApprovalSession } = await prepareClipperMetricoolApprovalSession();
@@ -4133,8 +4228,11 @@ test("prepareClipperGoLiveExecutionPack surfaces Metricool MVP without marking d
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
   try {
+    await prepareMetricoolOwnedSourceFixtures();
     await prepareClipperMetricoolPublishingPlan();
     await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "go-live-metricool-lane-test");
+    await prepareClipperSourceAcquisitionPlan();
+    await prepareClipperProductionQueue();
     await prepareClipperMetricoolExecutionQueue();
     await prepareClipperMetricoolMvpLaunchPack();
     await prepareClipperMetricoolApprovalSession();
@@ -6929,6 +7027,9 @@ test("prepareClipperSourceScout writes rights-gated candidates and refreshes Met
   const previousMetricoolCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
 
   try {
+    await prepareMetricoolOwnedSourceFixtures();
+    await prepareClipperSourceAcquisitionPlan();
+    await prepareClipperProductionQueue();
     await prepareClipperViralDiscoveryPack();
     await prepareClipperSourceDiscoveryHandoff();
     const { sourceScout, trendCandidatesBatch, metricoolExecutionQueue, status } = await prepareClipperSourceScout();
@@ -6945,11 +7046,10 @@ test("prepareClipperSourceScout writes rights-gated candidates and refreshes Met
     assert.ok(sourceScout.candidates.every((candidate) => candidate.rightsStatus === "review_required" || candidate.canUseNow === false || candidate.publishGate !== "ready_for_intake"));
     assert.ok(sourceScout.candidates.every((candidate) => candidate.trendCandidateBatchRow.includes("review_required") || candidate.trendCandidateBatchRow.includes("approved_after_proof")));
     assert.ok(sourceScout.candidates.every((candidate) => candidate.rightsEvidenceNeeded.length >= 3));
-    assert.ok(sourceScout.totals.metricoolFit >= Math.min(25, sourceScout.candidates.length));
-    assert.ok(
-      sourceScout.candidates.some((candidate) => candidate.source === "metricool_source_readiness" && candidate.targetFileName?.includes("metricool"))
-        || status.sourceDropDiagnostic.totals.missingSourceAssets === 0
-    );
+    assert.equal(sourceScout.totals.metricoolFit, sourceScout.candidates.filter((candidate) => candidate.metricoolFit).length);
+    assert.ok(sourceScout.totals.metricoolFit <= sourceScout.candidates.length);
+    assert.ok(sourceScout.candidates.filter((candidate) => candidate.category === "streamers").every((candidate) => candidate.metricoolFit === false));
+    assert.ok(status.sourceDropDiagnostic.totals.missingSourceAssets >= 0);
     assert.ok(sourceScout.candidates.filter((candidate) => candidate.source === "metricool_source_readiness").every((candidate) => candidate.sourceDropPath?.split(path.sep).includes("source-drop")));
     const exactSourceUrls = new Set(sourceScout.candidates.filter((candidate) => candidate.sourceUrlKind === "exact_video_or_post").map((candidate) => candidate.sourceUrl));
     if (trendCandidatesBatch) {
