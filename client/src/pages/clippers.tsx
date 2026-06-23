@@ -10927,6 +10927,9 @@ export default function ClippersPage() {
   const sourceScoutPermissionPack = status?.sourceScoutPermissionPack;
   const sourceScoutExactUrlKit = status?.sourceScoutExactUrlKit;
   const sourceScoutSourceFileKit = status?.sourceScoutSourceFileKit;
+  const sourceScoutDailySprint = status?.sourceScoutDailySprint;
+  const sourceScoutDailyIntakeRows = (sourceScoutDailySprint?.categoryRows || []).flatMap((row) => row.intakeTemplateRows || []);
+  const sourceScoutDailyTrendRows = (sourceScoutDailySprint?.searchMissions || []).flatMap((mission) => mission.trendCandidateBatchRows || []);
   const metricoolPublishing = status?.metricoolPublishing;
   const metricoolExecutionQueue = status?.metricoolExecutionQueue;
   const metricoolMvpLaunchPack = status?.metricoolMvpLaunchPack;
@@ -22295,9 +22298,35 @@ export default function ClippersPage() {
                         <p className="truncate font-medium text-white">Source Scout Daily Sprint · {status.sourceScoutDailySprint.markdownPath}</p>
                         <p className="mt-1 text-xs leading-5 text-zinc-500">{status.sourceScoutDailySprint.nextStep}</p>
                       </div>
-                      <Badge className={cn("w-fit border", status.sourceScoutDailySprint.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.sourceScoutDailySprint.status === "behind" ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                        {status.sourceScoutDailySprint.status}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {sourceScoutDailyIntakeRows.length > 0 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-rose-300/20 bg-transparent px-2 text-xs text-rose-100 hover:bg-rose-300/10"
+                            onClick={() => appendSourceScoutIntakeBatchRows(sourceScoutDailyIntakeRows)}
+                          >
+                            <Plus className="mr-1 h-3 w-3" />
+                            All intake rows
+                          </Button>
+                        )}
+                        {sourceScoutDailyTrendRows.length > 0 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-orange-300/20 bg-transparent px-2 text-xs text-orange-100 hover:bg-orange-300/10"
+                            onClick={() => appendTrendCandidateBatchRows(sourceScoutDailyTrendRows)}
+                          >
+                            <Plus className="mr-1 h-3 w-3" />
+                            All trend rows
+                          </Button>
+                        )}
+                        <Badge className={cn("w-fit border", status.sourceScoutDailySprint.status === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : status.sourceScoutDailySprint.status === "behind" ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                          {status.sourceScoutDailySprint.status}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
                       <p>Scout: {status.sourceScoutDailySprint.totals.currentScoutLeads}/{status.sourceScoutDailySprint.targets.dailyScoutLeads}</p>
