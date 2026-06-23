@@ -66,6 +66,18 @@ test("web assistant prioritizes YouTube clip requests before Developer Autopilot
   assert.doesNotMatch(direct.content, /repo de GitHub/);
 });
 
+test("web assistant treats typoed Drive YouTube clip requests as local radio clip jobs", () => {
+  const direct = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU , quiero que saques los clips de instagram y de TikTok y los guardes en la carte de drives"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.content, /Voy a descargar ese YouTube/);
+  assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
+  assert.deepEqual(direct.driveFolderPath, ["Videos creados"]);
+  assert.equal(direct.createFolderIfMissing, true);
+});
+
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
   const executor = readFileSync("server/trust-executor.ts", "utf8");

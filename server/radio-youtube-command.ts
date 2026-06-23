@@ -16,6 +16,7 @@ export type DirectRadioYoutubeCommand = {
 };
 
 const ESTIMATED_COST_PER_EDITED_VIDEO_USD = 0;
+const DEFAULT_DRIVE_CLIP_FOLDER_PATH = ["Videos creados"];
 
 export function directRadioYoutubeCommandNeedsDriveFolder(command: DirectRadioYoutubeCommand): boolean {
   return !command.driveFolderPath.length && !command.driveFolderPathFromYoutubeTitle && !command.driveParentFolderId;
@@ -59,6 +60,7 @@ function cleanFolderHint(value?: string): string | null {
   const cleaned = value
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\b(?:por favor|please|hazlo|hacerlo|sacalos|sácalos|youtube|link)\b/gi, " ")
+    .replace(/\b(?:drive|drives|google\s+drive|google\s+drives|carpeta|carpte|carte|caroeta|folder)\b/gi, " ")
     .replace(/\s+(?:y|para|con)\s+(?:que|cuando|si)\b.*$/i, "")
     .replace(/\s+con\s+(?:el\s+)?t[ií]tulo\b.*$/i, "")
     .replace(/^(?:de|del)\s+(?:google\s+)?drive\b.*$/i, "")
@@ -68,6 +70,7 @@ function cleanFolderHint(value?: string): string | null {
     .replace(/\s+/g, " ")
     .trim();
 
+  if (/^(?:de|del|la|el|los|las|en|a)$/i.test(cleaned)) return null;
   return cleaned.length >= 2 ? cleaned : null;
 }
 
@@ -80,7 +83,7 @@ function splitDriveFolderPath(value: string): string[] {
 
 function cleanCreateFolderHint(value?: string): string | null {
   const cleaned = cleanFolderHint(value)
-    ?.replace(/\b(?:crea|crear|creame|créame|carpeta|subcarpeta|folder|drive|google drive)\b/gi, " ")
+    ?.replace(/\b(?:crea|crear|creame|créame|carpeta|carpte|carte|caroeta|subcarpeta|folder|drive|drives|google drive|google drives)\b/gi, " ")
     .replace(/^(?:de|del|la|el|los|las|con)\s+/i, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -172,10 +175,10 @@ export function extractDriveFolderPathFromMessage(message: string): string[] | n
   if (quotedCleaned) return splitDriveFolderPath(quotedCleaned);
 
   const patterns = [
-    /(?:gu[aá]rd(?:a|alo|alos|ame)?|sube|pon(?:lo|los)?|save|upload).*?\b(?:en|a)\s+(?:la\s+)?carpeta\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drive\b|[.,;]|$)/i,
-    /(?:gu[aá]rd(?:a|alo|alos|ame)?|sube|pon(?:lo|los)?|save|upload).*?\b(?:en|a)\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drive\b)/i,
-    /(?:google\s+drive|drive)\s+(?:carpeta|folder)\s+(.+?)(?:[.,;]|$)/i,
-    /(?:carpeta|folder)\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drive\b|[.,;]|$)/i,
+    /(?:gu[aá]rd(?:a|alo|alos|ame|es)?|sube|pon(?:lo|los)?|save|upload).*?\b(?:en|a)\s+(?:la\s+)?(?:carpeta|carpte|carte|caroeta|folder)\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drives?\b|[.,;]|$)/i,
+    /(?:gu[aá]rd(?:a|alo|alos|ame|es)?|sube|pon(?:lo|los)?|save|upload).*?\b(?:en|a)\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drives?\b)/i,
+    /(?:google\s+drives?|drives?)\s+(?:carpeta|carpte|carte|caroeta|folder)\s+(.+?)(?:[.,;]|$)/i,
+    /(?:carpeta|carpte|carte|caroeta|folder)\s+(.+?)(?:\s+(?:de|del)\s+(?:google\s+)?drives?\b|[.,;]|$)/i,
   ];
 
   for (const pattern of patterns) {
@@ -196,7 +199,7 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
   const mentionsRadio = /\b(radio|black room|dj|djs)\b/.test(text);
   const mentionsClips = /\b(clips?|videos?|edits?|reels?|tiktok|instagram|ig|shorts?)\b/.test(text);
   const wantsCreate = /\b(haz\w*|saca\w*|genera\w*|edita\w*|prepara\w*|quiero|necesito|guard\w*|sube\w*)\b/.test(text);
-  const mentionsDriveDestination = /\b(?:google\s+drive|drive|carpeta|folder|subcarpeta|guard\w*|sube\w*|agrega\w*)\b/.test(text);
+  const mentionsDriveDestination = /\b(?:google\s+drives?|drives?|gdrive|carpeta|carpte|carte|caroeta|folder|subcarpeta|guard\w*|sube\w*|agrega\w*)\b/.test(text);
   if (!(mentionsRadio || mentionsDriveDestination) || !mentionsClips || !wantsCreate) return null;
 
   const musicUrl = urls.find((url) => url !== youtubeUrl && isYouTubeUrl(url));
@@ -206,6 +209,20 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
   const driveFolderPathFromYoutubeTitle = /\b(?:con|usa(?:r|ndo)?|segun|según)\s+(?:el\s+)?t[ií]tulo\b|\bt[ií]tulo\s+del\s+video\b/.test(text);
   const createFolderIfMissing = driveFolderPathFromYoutubeTitle || /\b(crea\w*|crear|nueva|nuevo|subcarpeta|folder nuevo|new folder)\b/.test(text);
   const djName = extractDjNameFromMessage(message) || undefined;
+  if (!driveFolderPath?.length && !driveFolderPathFromYoutubeTitle && mentionsDriveDestination) {
+    return {
+      youtubeUrl,
+      driveFolderPath: DEFAULT_DRIVE_CLIP_FOLDER_PATH,
+      driveParentFolderId,
+      createFolderIfMissing: true,
+      driveFolderPathFromYoutubeTitle,
+      djName,
+      musicUrl,
+      content: `Dale. Voy a descargar ese YouTube, sacar los clips de radio para Instagram y TikTok, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y crear/usar Google Drive: ${DEFAULT_DRIVE_CLIP_FOLDER_PATH.join("/")}.`,
+      command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: DEFAULT_DRIVE_CLIP_FOLDER_PATH, driveParentFolderId, createFolderIfMissing: true, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop })}]`,
+    };
+  }
+
   if (!driveFolderPath?.length && !driveFolderPathFromYoutubeTitle) {
     if (driveParentFolderId) {
       return {
