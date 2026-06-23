@@ -6732,6 +6732,7 @@ const EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH = path.join(REPORTS_DIR, "clippers-ext
 const EXTERNAL_CLOSEOUT_PROOF_TODO_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-proof-todo.md");
 const EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-operator-queue.md");
 const EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH = path.join(ROOT_DIR, "evidence-drop", "external-closeout-evidence-import.csv");
+const EXTERNAL_CLOSEOUT_PROOF_DROP_DIR = path.join(ROOT_DIR, "evidence-drop", "external-closeout-proofs");
 const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
 const LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.md");
 const LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.csv");
@@ -39469,6 +39470,72 @@ async function buildRobertNextActionsSummary(input: {
 
   const externalCloseout = input.externalExecutionSession.closeoutRun;
   const externalCloseoutPending = externalCloseout.items.length > 0 || externalCloseout.totals.proofFilesNeedRealEvidence > 0;
+  const externalCloseoutNextItem = externalCloseout.items[0] || externalCloseout.nextItems[0] || null;
+  const externalCloseoutPriorityItems: ClipperRobertNextActionItem[] = externalCloseoutPending
+    ? externalCloseoutNextItem ? [{
+      id: `external-closeout-${externalCloseoutNextItem.id}`,
+      rank: 0,
+      lane: "external_portal",
+      label: `External closeout: ${externalCloseoutNextItem.platform || "platform"} ${externalCloseoutNextItem.lane || "evidence"}`,
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: externalCloseoutNextItem.lane === "account" ? 12 : externalCloseoutNextItem.lane === "permission" ? 20 : 18,
+      platform: ["tiktok", "instagram", "youtube"].includes(externalCloseoutNextItem.platform)
+        ? externalCloseoutNextItem.platform as ClipperPlatform
+        : "mixed",
+      actionUrl: "/api/clippers/run-external-closeout-pack",
+      artifactPath: externalCloseout.operatorQueuePath || externalCloseout.proofTodoPath,
+      portalUrl: externalCloseoutNextItem.portalUrl || null,
+      dropDirs: externalCloseoutNextItem.proofPath ? [path.dirname(externalCloseoutNextItem.proofPath)] : [],
+      evidenceRows: externalCloseoutNextItem.evidenceCsvRow ? [externalCloseoutNextItem.evidenceCsvRow] : [],
+      operatorSteps: externalCloseoutNextItem.checklist.length ? externalCloseoutNextItem.checklist : [
+        externalCloseoutNextItem.portalUrl ? `Open ${externalCloseoutNextItem.portalUrl}.` : "Open the external portal listed in the closeout queue.",
+        "Complete the account, developer app, permission or proof step shown in the queue.",
+        externalCloseoutNextItem.proofPath ? `Fill the real proof file: ${externalCloseoutNextItem.proofPath}.` : "Save a real proof URL, ticket ID or approval note.",
+        `Import the completed closeout row into: ${externalCloseout.evidenceCsvPath}.`,
+      ],
+      blockers: [
+        ...(externalCloseoutNextItem.blockers.length ? externalCloseoutNextItem.blockers : ["External portal proof is still missing real evidence."]),
+        ...(externalCloseout.totals.proofFilesNeedRealEvidence > 0 ? [`${externalCloseout.totals.proofFilesNeedRealEvidence} closeout proof file(s) still need real evidence.`] : []),
+      ],
+      doneCriteria: [
+        "The closeout proof file contains real non-placeholder evidence.",
+        "The closeout evidence CSV row is imported and accepted.",
+        "The item no longer appears in the External Closeout operator queue after refresh.",
+      ],
+      nextStep: externalCloseout.nextStep,
+    }] : [{
+      id: "external-closeout-proof-evidence",
+      rank: 0,
+      lane: "evidence",
+      label: "External closeout proof evidence",
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: 20,
+      platform: "mixed",
+      actionUrl: "/api/clippers/run-external-closeout-pack",
+      artifactPath: externalCloseout.proofTodoPath || externalCloseout.operatorQueuePath,
+      portalUrl: null,
+      dropDirs: [EXTERNAL_CLOSEOUT_PROOF_DROP_DIR],
+      evidenceRows: [],
+      operatorSteps: [
+        `Open the proof todo: ${externalCloseout.proofTodoPath}.`,
+        `Fill missing real proof files in: ${EXTERNAL_CLOSEOUT_PROOF_DROP_DIR}.`,
+        `Import completed evidence rows into: ${externalCloseout.evidenceCsvPath}.`,
+        "Refresh Robert Next Actions and External Closeout after import.",
+      ],
+      blockers: [
+        `${externalCloseout.totals.proofFilesNeedRealEvidence} closeout proof file(s) still need real evidence.`,
+        "No operator queue row is currently available, so proof todo files must be completed first.",
+      ],
+      doneCriteria: [
+        "Every closeout proof file contains real non-placeholder evidence.",
+        "Completed closeout evidence rows are imported and accepted.",
+        "External Closeout returns complete after refresh.",
+      ],
+      nextStep: externalCloseout.nextStep,
+    }]
+    : [];
   const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
     && input.metricoolApprovalSession.totals.readyForReview > 0
     ? [{
@@ -39506,7 +39573,7 @@ async function buildRobertNextActionsSummary(input: {
     : [];
 
   const deduped = new Map<string, ClipperRobertNextActionItem>();
-  [...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
+  [...externalCloseoutPriorityItems, ...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
     const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
     if (!deduped.has(key)) deduped.set(key, item);
   });
@@ -39534,10 +39601,10 @@ async function buildRobertNextActionsSummary(input: {
 
   const status: ClipperRobertNextActionsStatus = !generatedAt
     ? "not_prepared"
-    : input.goLiveCompletionAudit.readyToPublish
-      ? "ready"
-      : totals.critical > 0
-        ? "blocked"
+    : externalCloseoutPending || totals.critical > 0
+      ? "blocked"
+      : input.goLiveCompletionAudit.readyToPublish
+        ? "ready"
         : "needs_action";
   const connectNow = await buildRobertConnectNowHandoff(input);
   const nextStep = externalCloseoutPending
@@ -41647,13 +41714,15 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     productionQueue: statusBefore.productionQueue,
     metricoolApprovalSession: statusBefore.metricoolApprovalSession,
   });
+  const externalCloseoutPending = statusBefore.externalExecutionSession.closeoutRun.items.length > 0
+    || statusBefore.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence > 0;
   const robertNextActions: ClipperRobertNextActionsSummary = {
     ...draftSummary,
     generatedAt: new Date().toISOString(),
-    status: statusBefore.goLiveCompletionAudit.readyToPublish
-      ? "ready"
-      : draftSummary.totals.critical > 0
-        ? "blocked"
+    status: externalCloseoutPending || draftSummary.totals.critical > 0
+      ? "blocked"
+      : statusBefore.goLiveCompletionAudit.readyToPublish
+        ? "ready"
         : "needs_action",
   };
   await writeFile(ROBERT_NEXT_ACTIONS_PATH, JSON.stringify(robertNextActions, null, 2));

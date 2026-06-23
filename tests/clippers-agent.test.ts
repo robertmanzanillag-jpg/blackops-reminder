@@ -5584,8 +5584,15 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
     assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
     assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.equal(robertNextActions.status, "blocked");
     assert.doesNotMatch(robertNextActions.nextStep, /Open Metricool/i);
     assert.notEqual(robertNextActions.items[0]?.id, "metricool-approval-session");
+    assert.ok(robertNextActions.items[0]?.id.startsWith("external-closeout-"));
+    assert.equal(robertNextActions.items[0]?.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.equal(robertNextActions.items[0]?.priority, "critical");
+    assert.equal(robertNextActions.items[0]?.lane, "external_portal");
+    assert.match(robertNextActions.items[0]?.artifactPath || "", /clippers-external-closeout-operator-queue\.md|clippers-external-closeout-proof-todo\.md/);
+    assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("\"developer_app\",\"\",\"instagram\",\"submitted\"")));
     assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
     assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
     assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
@@ -5840,6 +5847,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     const rawConnectNow = await readFile(robertNextActions.connectNow.markdownPath, "utf8");
     const rawPortalLauncher = await readFile(robertNextActions.connectNow.externalPortalLauncher.htmlPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers - Robert Next Actions"));
+    assert.doesNotMatch(rawMarkdown, /^Status: ready$/m);
     assert.ok(rawMarkdown.includes("Connect Now Handoff"));
     assert.ok(rawMarkdown.includes("Credential closeout"));
     assert.ok(rawMarkdown.includes("Account closeout"));
