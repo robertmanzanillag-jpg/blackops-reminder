@@ -13232,14 +13232,28 @@ function renderWeeklyProductionFunnelCsv(summary: ClipperWeeklyProductionFunnelS
 
 async function writeWeeklyProductionFunnelArtifacts(summary: ClipperWeeklyProductionFunnelSummary): Promise<ClipperWeeklyProductionFunnelSummary> {
   const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH, renderWeeklyProductionFunnelMarkdown(withGeneratedAt));
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_CSV_PATH, renderWeeklyProductionFunnelCsv(withGeneratedAt));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH, renderWeeklyProductionFunnelMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_CSV_PATH, renderWeeklyProductionFunnelCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
+function readTextFileWithTimeout(filePath: string, timeoutMs = 1_500): Promise<string | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeout = setTimeout(() => resolve(null), timeoutMs);
+    timeout.unref?.();
+  });
+  return Promise.race([
+    readFile(filePath, "utf8").catch(() => null),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
 async function readCachedWeeklyProductionFunnelSummary(): Promise<ClipperWeeklyProductionFunnelSummary> {
-  const raw = await readFile(WEEKLY_PRODUCTION_FUNNEL_PATH, "utf8").catch(() => null);
+  const raw = await readTextFileWithTimeout(WEEKLY_PRODUCTION_FUNNEL_PATH);
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as ClipperWeeklyProductionFunnelSummary;
@@ -13285,7 +13299,7 @@ export async function prepareClipperWeeklyProductionFunnel(userId = getSystemUse
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
     metrics: statusBefore.metrics,
   }));
-  return { weeklyProductionFunnel, status: await getClipperStatus(userId) };
+  return { weeklyProductionFunnel, status: { ...statusBefore, weeklyProductionFunnel } };
 }
 
 export async function recordClipperSourceScoutIntake(input: unknown, userId = getSystemUserId()): Promise<{ sourceScoutIntake: ClipperSourceScoutIntakeSummary; trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null; sourceDropImport: ClipperSourceDropImportSummary | null; metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
