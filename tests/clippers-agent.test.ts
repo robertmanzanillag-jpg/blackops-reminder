@@ -6,7 +6,7 @@ import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
 import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
-import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutEvidenceCsvTemplate, buildClipperExternalCloseoutNextActionCopyPacket, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
+import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutEvidenceCsvTemplate, buildClipperExternalCloseoutNextActionCopyPacket, buildClipperExternalCloseoutSprintSummary, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -280,6 +280,45 @@ test("external closeout evidence CSV template keeps placeholders explicit and sa
   assert.match(csv, /"<replace with 20\+ char real operator note for developer_app:instagram>"/);
   assert.doesNotMatch(csv, /client_secret=/i);
   assert.doesNotMatch(csv, /oauth_token=/i);
+});
+
+test("external closeout sprint summary prioritizes real critical portal actions", () => {
+  const summary = buildClipperExternalCloseoutSprintSummary([
+    {
+      id: "account:sports-daily:youtube",
+      lane: "account",
+      priority: "high",
+      platform: "youtube",
+      operatorAction: "Verify YouTube ownership.",
+    },
+    {
+      id: "developer_app:instagram",
+      lane: "developer_app",
+      priority: "critical",
+      platform: "instagram",
+      operatorAction: "Create Instagram developer app and capture proof.",
+    },
+    {
+      id: "permission:instagram:instagram_content_publish",
+      lane: "permission",
+      priority: "critical",
+      platform: "instagram",
+      scope: "instagram_content_publish",
+      operatorAction: "Request Instagram publish permission.",
+    },
+  ]);
+
+  assert.equal(summary.totalActions, 3);
+  assert.equal(summary.criticalActions, 2);
+  assert.equal(summary.highActions, 1);
+  assert.equal(summary.developerApps, 1);
+  assert.equal(summary.permissions, 1);
+  assert.equal(summary.accountProofs, 1);
+  assert.equal(summary.criticalDeveloperApps, 1);
+  assert.equal(summary.criticalPermissions, 1);
+  assert.equal(summary.firstActionId, "developer_app:instagram");
+  assert.match(summary.nextStep, /developer_app:instagram/);
+  assert.ok(summary.safety.some((item) => item.includes("Metricool remains approval_required")));
 });
 
 test("external closeout evidence importer blocks copied CSV template before apply", async () => {

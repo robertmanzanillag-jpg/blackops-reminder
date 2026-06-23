@@ -165,6 +165,46 @@ export function buildClipperExternalCloseoutEvidenceCsvTemplate(rows: unknown): 
   return `${header}\n${body.join("\n")}\n`;
 }
 
+export function buildClipperExternalCloseoutSprintSummary(rows: unknown) {
+  const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
+  const byLane = enrichedRows.reduce<Record<string, number>>((sum, row: any) => {
+    const lane = String(row.lane || "unknown");
+    sum[lane] = (sum[lane] || 0) + 1;
+    return sum;
+  }, {});
+  const byPriority = enrichedRows.reduce<Record<string, number>>((sum, row: any) => {
+    const priority = String(row.priority || "unknown");
+    sum[priority] = (sum[priority] || 0) + 1;
+    return sum;
+  }, {});
+  const firstCritical = enrichedRows.find((row: any) => row.priority === "critical") || enrichedRows[0] || null;
+  const criticalDeveloperApps = enrichedRows.filter((row: any) => row.priority === "critical" && row.lane === "developer_app").length;
+  const criticalPermissions = enrichedRows.filter((row: any) => row.priority === "critical" && row.lane === "permission").length;
+  const accountProofs = enrichedRows.filter((row: any) => row.lane === "account").length;
+  const nextStep = firstCritical
+    ? `Start with ${firstCritical.id}: ${firstCritical.operatorAction || "complete the first real portal action and capture proof."}`
+    : "No external closeout actions remain.";
+  return {
+    totalActions: enrichedRows.length,
+    criticalActions: byPriority.critical || 0,
+    highActions: byPriority.high || 0,
+    accountProofs,
+    developerApps: byLane.developer_app || 0,
+    permissions: byLane.permission || 0,
+    criticalDeveloperApps,
+    criticalPermissions,
+    firstActionId: firstCritical?.id || null,
+    firstActionLane: firstCritical?.lane || null,
+    firstActionPlatform: firstCritical?.platform || null,
+    nextStep,
+    safety: [
+      "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or signed/private screenshots.",
+      "Only import rows after proof files contain real non-placeholder evidence.",
+      "Metricool remains approval_required; this sprint summary does not enable automatic publishing.",
+    ],
+  };
+}
+
 export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): string {
   const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
   if (!enrichedRows.length) return "";
@@ -269,6 +309,7 @@ export async function registerRoutes(
     return {
       ...parsed,
       operatorQueue,
+      sprintSummary: buildClipperExternalCloseoutSprintSummary(operatorQueue),
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
       evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(operatorQueue),
     };
@@ -280,6 +321,7 @@ export async function registerRoutes(
     return {
       ...parsed,
       operatorQueue,
+      sprintSummary: buildClipperExternalCloseoutSprintSummary(operatorQueue),
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
       evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(operatorQueue),
     };
@@ -291,6 +333,7 @@ export async function registerRoutes(
     return {
       ...parsed,
       rows,
+      sprintSummary: buildClipperExternalCloseoutSprintSummary(rows),
       batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(rows),
       evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(rows),
     };

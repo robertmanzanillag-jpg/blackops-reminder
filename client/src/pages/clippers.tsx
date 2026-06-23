@@ -521,6 +521,22 @@ interface ClipperExternalCloseoutArtifactSafety {
   findings: Array<{ path: string; reason: string }>;
 }
 
+interface ClipperExternalCloseoutSprintSummary {
+  totalActions: number;
+  criticalActions: number;
+  highActions: number;
+  accountProofs: number;
+  developerApps: number;
+  permissions: number;
+  criticalDeveloperApps: number;
+  criticalPermissions: number;
+  firstActionId: string | null;
+  firstActionLane: string | null;
+  firstActionPlatform: string | null;
+  nextStep: string;
+  safety: string[];
+}
+
 interface ClipperExternalGoLiveAuditSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -633,6 +649,7 @@ interface ClipperExternalCloseoutPackSummary {
   tasks: ClipperExternalCloseoutTask[];
   proofTodo?: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  sprintSummary?: ClipperExternalCloseoutSprintSummary;
   batchCopyPacket?: string;
   evidenceCsvTemplate?: string;
   goLiveAudit?: ClipperExternalGoLiveAuditSummary;
@@ -736,6 +753,7 @@ interface ClipperExternalCloseoutProofTodoSummary {
   totals: ClipperExternalCloseoutPackSummary["totals"];
   rows: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  sprintSummary?: ClipperExternalCloseoutSprintSummary;
   batchCopyPacket?: string;
   evidenceCsvTemplate?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
@@ -751,6 +769,7 @@ interface ClipperExternalCloseoutOperatorQueueSummary {
     high: number;
   };
   rows: ClipperExternalCloseoutOperatorQueueRow[];
+  sprintSummary?: ClipperExternalCloseoutSprintSummary;
   batchCopyPacket?: string;
   evidenceCsvTemplate?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
@@ -7575,6 +7594,11 @@ export default function ClippersPage() {
     : externalCloseoutProofTodo
       ? externalCloseoutProofTodo.evidenceCsvTemplate || ""
       : externalCloseoutPack?.evidenceCsvTemplate || "";
+  const visibleExternalCloseoutSprintSummary = externalCloseoutOperatorQueue
+    ? externalCloseoutOperatorQueue.sprintSummary
+    : externalCloseoutProofTodo
+      ? externalCloseoutProofTodo.sprintSummary
+      : externalCloseoutPack?.sprintSummary;
   const credentialEnvVarOptions = useMemo(() => {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
@@ -16361,6 +16385,27 @@ export default function ClippersPage() {
                         </Badge>
                       </div>
                     </div>
+                    {visibleExternalCloseoutSprintSummary && (
+                      <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-cyan-100">External sprint order</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">{visibleExternalCloseoutSprintSummary.nextStep}</p>
+                          </div>
+                          <Badge className="w-fit border border-rose-300/30 bg-rose-300/10 text-[10px] text-rose-100">
+                            {visibleExternalCloseoutSprintSummary.criticalActions} critical
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
+                          <p>Total {visibleExternalCloseoutSprintSummary.totalActions}</p>
+                          <p>Apps {visibleExternalCloseoutSprintSummary.developerApps}</p>
+                          <p>Perms {visibleExternalCloseoutSprintSummary.permissions}</p>
+                          <p>Accounts {visibleExternalCloseoutSprintSummary.accountProofs}</p>
+                          <p>Critical apps {visibleExternalCloseoutSprintSummary.criticalDeveloperApps}</p>
+                          <p>Critical perms {visibleExternalCloseoutSprintSummary.criticalPermissions}</p>
+                        </div>
+                      </div>
+                    )}
                     {visibleExternalCloseoutOperatorRows.length > 0 ? (
                       <div className="mt-3 grid gap-2 xl:grid-cols-2">
                         {visibleExternalCloseoutOperatorRows.slice(0, 4).map((row) => (
