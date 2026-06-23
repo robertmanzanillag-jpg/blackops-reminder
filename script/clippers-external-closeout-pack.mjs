@@ -21,6 +21,9 @@ const goLiveAuditCsvPath = path.join(reportsDir, "clippers-external-go-live-audi
 const actionSheetJsonPath = path.join(reportsDir, "clippers-external-operator-action-sheet.json");
 const actionSheetMarkdownPath = path.join(reportsDir, "clippers-external-operator-action-sheet.md");
 const actionSheetCsvPath = path.join(reportsDir, "clippers-external-operator-action-sheet.csv");
+const nextWorkRunJsonPath = path.join(reportsDir, "clippers-external-next-work-run.json");
+const nextWorkRunMarkdownPath = path.join(reportsDir, "clippers-external-next-work-run.md");
+const nextWorkRunCsvPath = path.join(reportsDir, "clippers-external-next-work-run.csv");
 const evidenceImportReportPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
 const officialPermissionSourceAuditPath = path.join(rootDir, "official-permission-source-audit.json");
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
@@ -1709,6 +1712,71 @@ function renderActionSheetCsv(sheet) {
   return `${header.join(",")}\n${rows.join("\n")}\n`;
 }
 
+function renderWorkRunMarkdown(workRun) {
+  const rowLines = workRun.rows.map((row) => [
+    `### ${row.order}. ${row.id}`,
+    "",
+    `- Lane: ${row.lane}`,
+    `- Platform: ${row.platform || "n/a"}`,
+    `- Required status: ${row.requiredStatus || "n/a"}`,
+    `- Portal: ${row.portalUrl || "n/a"}`,
+    row.docsUrl ? `- Docs: ${row.docsUrl}` : null,
+    row.redirectUri ? `- Redirect URI: ${row.redirectUri}` : null,
+    `- Proof file: ${row.proofPath || "n/a"}`,
+    `- Missing CSV fields: ${row.missingCsvFields.join(", ") || "none"}`,
+    `- Operator action: ${row.operatorAction}`,
+    `- Next step: ${row.nextStep}`,
+    "",
+  ].filter(Boolean).join("\n"));
+  return [
+    "# Clippers External Next Work Run",
+    "",
+    `Generated: ${workRun.generatedAt}`,
+    `Status: ${workRun.status}`,
+    `Label: ${workRun.label}`,
+    `Target minutes: ${workRun.targetMinutes}`,
+    `Actions: ${workRun.actions}`,
+    "",
+    "## Commands",
+    "",
+    `- Validate: ${workRun.validateCommand}`,
+    `- Apply ready: ${workRun.applyReadyCommand}`,
+    `- Evidence CSV: ${workRun.evidenceCsvPath}`,
+    "",
+    "## Steps",
+    "",
+    ...workRun.steps.map((item) => `- [ ] ${item}`),
+    "",
+    "## Guardrails",
+    "",
+    ...workRun.guardrails.map((item) => `- ${item}`),
+    "",
+    "## Rows",
+    "",
+    ...(rowLines.length ? rowLines : ["- No operator actions remain."]),
+    "",
+  ].join("\n");
+}
+
+function renderWorkRunCsv(workRun) {
+  const header = ["order", "id", "lane", "platform", "required_status", "portal_url", "docs_url", "redirect_uri", "proof_path", "missing_csv_fields", "operator_action", "next_step"];
+  const rows = workRun.rows.map((row) => [
+    row.order,
+    row.id,
+    row.lane,
+    row.platform,
+    row.requiredStatus,
+    row.portalUrl,
+    row.docsUrl || "",
+    row.redirectUri || "",
+    row.proofPath,
+    row.missingCsvFields.join("|"),
+    row.operatorAction,
+    row.nextStep,
+  ].map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
@@ -1745,6 +1813,9 @@ async function main() {
       actionSheetJson: actionSheetJsonPath,
       actionSheetMarkdown: actionSheetMarkdownPath,
       actionSheetCsv: actionSheetCsvPath,
+      nextWorkRunJson: nextWorkRunJsonPath,
+      nextWorkRunMarkdown: nextWorkRunMarkdownPath,
+      nextWorkRunCsv: nextWorkRunCsvPath,
       evidenceCsv: evidenceCsvPath,
       proofDir,
     },
@@ -1806,9 +1877,13 @@ async function main() {
   const preliminaryActionSheetJson = JSON.stringify(preliminaryActionSheet, null, 2);
   const preliminaryActionSheetMarkdown = renderActionSheetMarkdown(preliminaryActionSheet);
   const preliminaryActionSheetCsv = renderActionSheetCsv(preliminaryActionSheet);
+  const preliminaryWorkRun = { ...preliminaryActionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const preliminaryWorkRunJson = JSON.stringify(preliminaryWorkRun, null, 2);
+  const preliminaryWorkRunMarkdown = renderWorkRunMarkdown(preliminaryWorkRun);
+  const preliminaryWorkRunCsv = renderWorkRunCsv(preliminaryWorkRun);
   const artifactSafety = {
     status: "clean",
-    scanned: 15,
+    scanned: 18,
     findings: artifactSafetyFindings([
       { path: outMarkdownPath, content: closeoutMarkdown },
       { path: outCsvPath, content: closeoutCsv },
@@ -1824,6 +1899,9 @@ async function main() {
       { path: actionSheetJsonPath, content: preliminaryActionSheetJson },
       { path: actionSheetMarkdownPath, content: preliminaryActionSheetMarkdown },
       { path: actionSheetCsvPath, content: preliminaryActionSheetCsv },
+      { path: nextWorkRunJsonPath, content: preliminaryWorkRunJson },
+      { path: nextWorkRunMarkdownPath, content: preliminaryWorkRunMarkdown },
+      { path: nextWorkRunCsvPath, content: preliminaryWorkRunCsv },
       { path: evidenceCsvPath, content: evidenceCsv },
     ]),
   };
@@ -1833,11 +1911,12 @@ async function main() {
     ...artifactSafety.findings,
     ...artifactSafetyFindings([{ path: outJsonPath, content: preliminarySummaryJson }]),
   ];
-  artifactSafety.scanned = 16;
+  artifactSafety.scanned = 19;
   artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
   const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
   const actionSheet = buildOperatorActionSheet(summary, goLiveAudit, officialPermissionSourceAudit);
-  const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet };
+  const nextWorkRun = { ...actionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet, nextWorkRun };
   await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
   await writeFile(outMarkdownPath, closeoutMarkdown);
   await writeFile(outCsvPath, closeoutCsv);
@@ -1859,6 +1938,9 @@ async function main() {
   await writeFile(actionSheetJsonPath, JSON.stringify(actionSheet, null, 2));
   await writeFile(actionSheetMarkdownPath, renderActionSheetMarkdown(actionSheet));
   await writeFile(actionSheetCsvPath, renderActionSheetCsv(actionSheet));
+  await writeFile(nextWorkRunJsonPath, JSON.stringify(nextWorkRun, null, 2));
+  await writeFile(nextWorkRunMarkdownPath, renderWorkRunMarkdown(nextWorkRun));
+  await writeFile(nextWorkRunCsvPath, renderWorkRunCsv(nextWorkRun));
   await writeFile(evidenceCsvPath, evidenceCsv);
   console.log(JSON.stringify({
     status: summary.status,
@@ -1876,6 +1958,7 @@ async function main() {
     operatorQueuePath: operatorQueueMarkdownPath,
     goLiveAuditPath: goLiveAuditMarkdownPath,
     actionSheetPath: actionSheetMarkdownPath,
+    nextWorkRunPath: nextWorkRunMarkdownPath,
     evidenceCsvPath,
   }, null, 2));
 }

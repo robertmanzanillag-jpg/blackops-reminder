@@ -653,6 +653,9 @@ interface ClipperExternalCloseoutPackSummary {
     actionSheetJson?: string;
     actionSheetMarkdown?: string;
     actionSheetCsv?: string;
+    nextWorkRunJson?: string;
+    nextWorkRunMarkdown?: string;
+    nextWorkRunCsv?: string;
     evidenceCsv: string;
     proofDir?: string;
   };
@@ -16231,6 +16234,7 @@ export default function ClippersPage() {
                           </div>
                           <div className="mt-3 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-2">
                             <p className="break-all">Evidence CSV: {externalCloseoutPack.actionSheet.workSession.evidenceCsvPath}</p>
+                            <p className="break-all">Work run: {externalCloseoutPack.paths.nextWorkRunMarkdown || "clippers_workspace/reports/clippers-external-next-work-run.md"}</p>
                             <p className="break-all">Validate: {externalCloseoutPack.actionSheet.workSession.validateCommand}</p>
                             <p className="break-all">Apply ready: {externalCloseoutPack.actionSheet.workSession.applyReadyCommand}</p>
                             <p>{externalCloseoutPack.actionSheet.workSession.guardrails[1] || "Portal action must be real before import."}</p>

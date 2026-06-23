@@ -159,6 +159,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(output.operatorQueuePath, /clippers-external-closeout-operator-queue\.md$/);
   assert.match(output.goLiveAuditPath, /clippers-external-go-live-audit\.md$/);
   assert.match(output.actionSheetPath, /clippers-external-operator-action-sheet\.md$/);
+  assert.match(output.nextWorkRunPath, /clippers-external-next-work-run\.md$/);
 
   const pack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-pack.json"), "utf8"));
   assert.equal(pack.metricool.readyToSend, 0);
@@ -171,9 +172,11 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.ok(pack.tasks.every((task) => task.proofPath && task.proofPath.includes("external-closeout-proofs")));
   assert.equal(pack.totals.proofFilesNeedRealEvidence, 16);
   assert.equal(pack.artifactSafety.status, "clean");
-  assert.equal(pack.artifactSafety.scanned, 16);
+  assert.equal(pack.artifactSafety.scanned, 19);
   assert.equal(pack.artifactSafety.findings.length, 0);
   assert.equal(pack.paths.actionSheetMarkdown.endsWith("clippers-external-operator-action-sheet.md"), true);
+  assert.equal(pack.paths.nextWorkRunMarkdown.endsWith("clippers-external-next-work-run.md"), true);
+  assert.equal(pack.paths.nextWorkRunCsv.endsWith("clippers-external-next-work-run.csv"), true);
   assert.equal(pack.actionSheet.status, "needs_operator");
   assert.equal(pack.actionSheet.totals.rows, 16);
   assert.equal(pack.actionSheet.totals.developerApps, 3);
@@ -192,6 +195,10 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(pack.actionSheet.workSession.label, "Next 45-minute closeout work run");
   assert.equal(pack.actionSheet.workSession.rows[0].id, "developer_app:instagram");
   assert.equal(pack.actionSheet.workSession.rows.length, 5);
+  assert.equal(pack.nextWorkRun.status, "needs_operator");
+  assert.equal(pack.nextWorkRun.paths.markdown.endsWith("clippers-external-next-work-run.md"), true);
+  assert.equal(pack.nextWorkRun.rows[0].id, "developer_app:instagram");
+  assert.equal(pack.nextWorkRun.rows.length, 5);
   assert.ok(pack.actionSheet.workSession.validateCommand.includes("clippers:import-external-closeout-evidence"));
   assert.ok(pack.actionSheet.workSession.applyReadyCommand.includes("--apply-ready"));
   assert.ok(pack.actionSheet.workSession.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
@@ -335,6 +342,16 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(actionSheetMarkdown, /Recheck steps:/);
   assert.match(actionSheetMarkdown, /Copy packet:/);
   assert.doesNotMatch(actionSheetMarkdown, /Auto-send/);
+  const nextWorkRun = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.json"), "utf8"));
+  assert.equal(nextWorkRun.status, "needs_operator");
+  assert.equal(nextWorkRun.rows.length, 5);
+  assert.equal(nextWorkRun.rows[0].id, "developer_app:instagram");
+  const nextWorkRunMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.md"), "utf8");
+  assert.match(nextWorkRunMarkdown, /Clippers External Next Work Run/);
+  assert.match(nextWorkRunMarkdown, /Apply ready/);
+  const nextWorkRunCsv = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.csv"), "utf8");
+  assert.match(nextWorkRunCsv, /order,id,lane,platform,required_status/);
+  assert.match(nextWorkRunCsv, /developer_app:instagram/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
   const developerProof = await readFile(path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md"), "utf8");
@@ -394,6 +411,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /External Operator Action Sheet/);
   assert.match(ui, /data-testid="clippers-external-work-run"/);
   assert.match(ui, /workSession/);
+  assert.match(ui, /nextWorkRunMarkdown/);
   assert.match(ui, /targetMinutes/);
   assert.match(ui, /Apply ready/);
   assert.match(ui, /data-testid="clippers-external-portal-closeout-board"/);
