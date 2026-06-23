@@ -1229,6 +1229,46 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
       copyPacket: row.copyPacket,
     };
   });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const sessionRows = summary.operatorQueue
+    .slice(0, 5)
+    .map((queueRow) => rowById.get(queueRow.id) || null)
+    .filter(Boolean);
+  const workSession = {
+    status: sessionRows.length ? "needs_operator" : "complete",
+    label: "Next 45-minute closeout work run",
+    targetMinutes: 45,
+    actions: sessionRows.length,
+    evidenceCsvPath: summary.paths.evidenceCsv,
+    validateCommand: "npm run clippers:import-external-closeout-evidence",
+    applyReadyCommand: "npm run clippers:import-external-closeout-evidence -- --apply-ready",
+    steps: [
+      "Open each official portal and complete only the real external action.",
+      "Fill the matching proof markdown with non-secret proof references.",
+      "Update external-closeout-evidence-import.csv for only rows with real proof.",
+      "Run Validate, then Apply ready rows if at least one row is accepted.",
+    ],
+    rows: sessionRows.map((row, index) => ({
+      order: index + 1,
+      id: row.id,
+      lane: row.lane,
+      platform: row.platform,
+      requiredStatus: row.requiredStatus,
+      portalUrl: row.portalUrl,
+      docsUrl: row.docsUrl,
+      redirectUri: row.redirectUri,
+      proofPath: row.proofPath,
+      missingCsvFields: row.missingCsvFields,
+      operatorAction: row.operatorAction,
+      nextStep: row.nextStep,
+      copyPacket: row.copyPacket,
+    })),
+    guardrails: [
+      "Keep platform private values, browser state data, login details, and private screenshots outside this repo.",
+      "Do not mark approved/requested/verified until the portal action is actually done.",
+      "Apply ready rows may import valid rows while rejected rows remain blocked.",
+    ],
+  };
   const permissionRequestCards = rows
     .filter((row) => row.lane === "permission")
     .map((row) => ({
@@ -1399,6 +1439,7 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
     permissionRequestCards,
     officialSourceCards,
     portalCloseoutBoard,
+    workSession,
     rows,
     guardrails: [
       "Do the portal action first; only then paste proof into the proof file and evidence CSV.",
@@ -1409,6 +1450,45 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
 }
 
 function renderActionSheetMarkdown(sheet) {
+  const workSessionLines = sheet.workSession && sheet.workSession.rows ? [
+    "## Next Work Run",
+    "",
+    `- Status: ${sheet.workSession.status}`,
+    `- Label: ${sheet.workSession.label}`,
+    `- Target minutes: ${sheet.workSession.targetMinutes}`,
+    `- Actions: ${sheet.workSession.actions}`,
+    `- Evidence CSV: ${sheet.workSession.evidenceCsvPath}`,
+    `- Validate: ${sheet.workSession.validateCommand}`,
+    `- Apply ready: ${sheet.workSession.applyReadyCommand}`,
+    "",
+    "Steps:",
+    ...sheet.workSession.steps.map((item) => `- [ ] ${item}`),
+    "",
+    "Guardrails:",
+    ...sheet.workSession.guardrails.map((item) => `- ${item}`),
+    "",
+    "Rows:",
+    ...sheet.workSession.rows.flatMap((row) => [
+      `### ${row.order}. ${row.id}`,
+      "",
+      `- Lane: ${row.lane}`,
+      `- Platform: ${row.platform || "n/a"}`,
+      `- Required status: ${row.requiredStatus || "n/a"}`,
+      `- Portal: ${row.portalUrl || "n/a"}`,
+      row.docsUrl ? `- Docs: ${row.docsUrl}` : null,
+      row.redirectUri ? `- Redirect URI: ${row.redirectUri}` : null,
+      `- Proof file: ${row.proofPath || "n/a"}`,
+      `- Missing CSV fields: ${row.missingCsvFields.join(", ") || "none"}`,
+      `- Operator action: ${row.operatorAction}`,
+      "",
+      "Copy packet:",
+      "```text",
+      row.copyPacket || "n/a",
+      "```",
+      "",
+    ].filter(Boolean)),
+    "",
+  ] : [];
   const blockLines = sheet.blocks.map((block) => [
     `### ${block.label}`,
     "",
@@ -1577,6 +1657,7 @@ function renderActionSheetMarkdown(sheet) {
     "",
     ...sheet.guardrails.map((item) => `- ${item}`),
     "",
+    ...workSessionLines,
     "## Blocks",
     "",
     ...(blockLines.length ? blockLines : ["- No operator blocks remain."]),

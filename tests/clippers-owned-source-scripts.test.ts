@@ -188,6 +188,14 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.ok(pack.actionSheet.developerAppCards.every((card) => card.copyNote.includes("approval_required")));
   assert.equal(pack.actionSheet.permissionRequestCards.length, 6);
   assert.ok(pack.actionSheet.permissionRequestCards.some((card) => card.scope === "video.publish" && card.copyNote.includes("approval_required")));
+  assert.equal(pack.actionSheet.workSession.status, "needs_operator");
+  assert.equal(pack.actionSheet.workSession.label, "Next 45-minute closeout work run");
+  assert.equal(pack.actionSheet.workSession.rows[0].id, "developer_app:instagram");
+  assert.equal(pack.actionSheet.workSession.rows.length, 5);
+  assert.ok(pack.actionSheet.workSession.validateCommand.includes("clippers:import-external-closeout-evidence"));
+  assert.ok(pack.actionSheet.workSession.applyReadyCommand.includes("--apply-ready"));
+  assert.ok(pack.actionSheet.workSession.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
+  assert.equal(JSON.stringify(pack.actionSheet.workSession).includes("client_secret"), false);
   assert.equal(pack.actionSheet.officialSourceCards.length, 6);
   assert.ok(pack.actionSheet.officialSourceCards.some((card) => card.scope === "video.publish" && card.sourceStatus === "official_verified"));
   assert.ok(pack.actionSheet.officialSourceCards.some((card) => card.scope === "instagram_content_publish" && card.accessMode === "login_required"));
@@ -313,6 +321,8 @@ test("external closeout pack lists remaining account developer and permission ac
   const actionSheetMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.md"), "utf8");
   assert.match(actionSheetMarkdown, /Clippers External Operator Action Sheet/);
   assert.match(actionSheetMarkdown, /This is the working sheet/);
+  assert.match(actionSheetMarkdown, /Next Work Run/);
+  assert.match(actionSheetMarkdown, /Apply ready/);
   assert.match(actionSheetMarkdown, /Account Setup Cards/);
   assert.match(actionSheetMarkdown, /Setup note:/);
   assert.match(actionSheetMarkdown, /Developer App Cards/);
