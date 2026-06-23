@@ -854,6 +854,20 @@ interface ClipperExternalNextWorkRunSummary {
     markdown: string;
     csv: string;
   };
+  portalSessions?: Array<{
+    rank: number;
+    id: string;
+    platform: string;
+    portalUrl: string;
+    docsUrl: string;
+    actions: number;
+    rowIds: string[];
+    proofPaths: string[];
+    missingCsvFields: string[];
+    evidenceStarterRows: string[];
+    copyPacket: string;
+    nextStep: string;
+  }>;
   rows: Array<{
     order: number;
     id: string;
@@ -16384,6 +16398,41 @@ export default function ClippersPage() {
                                 <p key={`${index}-${step.slice(0, 24)}`} className="rounded border border-amber-300/10 bg-black/25 p-2 text-[11px] leading-4 text-amber-100/80">
                                   {index + 1}. {step}
                                 </p>
+                              ))}
+                            </div>
+                          )}
+                          {(visibleExternalNextWorkRun.portalSessions || []).length > 0 && (
+                            <div className="mt-3 grid gap-2 lg:grid-cols-3" data-testid="clippers-external-work-run-portal-sessions">
+                              {(visibleExternalNextWorkRun.portalSessions || []).map((session) => (
+                                <div key={session.id} className="rounded-md border border-orange-300/15 bg-black/25 p-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-medium capitalize text-orange-100">{session.rank}. {session.platform}</p>
+                                      <p className="mt-1 text-[11px] leading-4 text-zinc-500">{session.nextStep}</p>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                      {session.copyPacket && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-6 border-orange-300/20 bg-transparent px-1.5 text-[10px] text-orange-100 hover:bg-orange-300/10"
+                                          onClick={() => void copyExternalCloseoutPacket(session.copyPacket)}
+                                        >
+                                          <Copy className="mr-1 h-3 w-3" />
+                                          Copy
+                                        </Button>
+                                      )}
+                                      <Badge className="border border-orange-300/20 bg-orange-950/40 text-[10px] text-orange-100">{session.actions}</Badge>
+                                    </div>
+                                  </div>
+                                  <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Portal: {session.portalUrl || "n/a"}</p>
+                                  <p className="mt-1 text-[10px] leading-4 text-amber-100">Missing: {session.missingCsvFields.join(", ") || "none"}</p>
+                                  <p className="mt-1 break-all text-[10px] leading-4 text-zinc-600">Proof: {session.proofPaths[0] || "pending"}</p>
+                                  {session.evidenceStarterRows[0] && (
+                                    <p className="mt-2 break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{session.evidenceStarterRows[0]}</p>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           )}

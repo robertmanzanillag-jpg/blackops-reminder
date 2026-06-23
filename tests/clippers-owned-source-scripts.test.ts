@@ -220,6 +220,10 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(pack.nextWorkRun.paths.markdown.endsWith("clippers-external-next-work-run.md"), true);
   assert.equal(pack.nextWorkRun.rows[0].id, "developer_app:instagram");
   assert.equal(pack.nextWorkRun.rows.length, 5);
+  assert.ok(pack.nextWorkRun.portalSessions.length >= 3);
+  assert.ok(pack.nextWorkRun.portalSessions.some((session) => session.platform === "instagram" && session.actions >= 1));
+  assert.ok(pack.nextWorkRun.portalSessions.every((session) => session.copyPacket.includes("Evidence CSV fields to fill:")));
+  assert.ok(pack.nextWorkRun.portalSessions.every((session) => session.evidenceStarterRows.length > 0));
   assert.ok(pack.actionSheet.workSession.validateCommand.includes("clippers:import-external-closeout-evidence"));
   assert.ok(pack.actionSheet.workSession.applyReadyCommand.includes("--apply-ready"));
   assert.ok(pack.actionSheet.workSession.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
@@ -370,6 +374,7 @@ test("external closeout pack lists remaining account developer and permission ac
   const nextWorkRunMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.md"), "utf8");
   assert.match(nextWorkRunMarkdown, /Clippers External Next Work Run/);
   assert.match(nextWorkRunMarkdown, /Apply ready/);
+  assert.match(nextWorkRunMarkdown, /Portal Sessions/);
   assert.match(nextWorkRunMarkdown, /Copy packet:/);
   assert.match(nextWorkRunMarkdown, /Evidence CSV fields to fill:/);
   const nextWorkRunCsv = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.csv"), "utf8");
@@ -1249,6 +1254,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-external-closeout-next-action"'));
   assert.ok(page.includes('data-testid="clippers-external-work-run"'));
   assert.ok(page.includes('data-testid="clippers-external-work-run-steps"'));
+  assert.ok(page.includes('data-testid="clippers-external-work-run-portal-sessions"'));
   assert.ok(page.includes('data-testid="copy-clippers-external-work-run-button"'));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));

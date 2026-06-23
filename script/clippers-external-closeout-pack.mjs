@@ -1713,6 +1713,28 @@ function renderActionSheetCsv(sheet) {
 }
 
 function renderWorkRunMarkdown(workRun) {
+  const portalSessionLines = (workRun.portalSessions || []).map((session) => [
+    `### ${session.platform}`,
+    "",
+    `- Actions: ${session.actions}`,
+    `- Portal: ${session.portalUrl || "n/a"}`,
+    session.docsUrl ? `- Docs: ${session.docsUrl}` : null,
+    `- Missing CSV fields: ${session.missingCsvFields.join(", ") || "none"}`,
+    "",
+    "Proof files:",
+    ...(session.proofPaths.length ? session.proofPaths.map((item) => `- ${item}`) : ["- n/a"]),
+    "",
+    "Evidence starter rows:",
+    "```csv",
+    ...session.evidenceStarterRows,
+    "```",
+    "",
+    "Copy packet:",
+    "```text",
+    session.copyPacket || "n/a",
+    "```",
+    "",
+  ].filter(Boolean).join("\n"));
   const rowLines = workRun.rows.map((row) => [
     `### ${row.order}. ${row.id}`,
     "",
@@ -1756,6 +1778,10 @@ function renderWorkRunMarkdown(workRun) {
     "",
     ...workRun.guardrails.map((item) => `- ${item}`),
     "",
+    "## Portal Sessions",
+    "",
+    ...(portalSessionLines.length ? portalSessionLines : ["- No portal sessions remain."]),
+    "",
     "## Rows",
     "",
     ...(rowLines.length ? rowLines : ["- No operator actions remain."]),
@@ -1781,6 +1807,44 @@ function renderWorkRunCsv(workRun) {
     row.copyPacket || "",
   ].map(csvCell).join(","));
   return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
+function buildWorkRunPortalSessions(workRun, tasks) {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const groups = new Map();
+  for (const row of workRun.rows || []) {
+    const platform = row.platform || "all";
+    const key = `${platform}:${row.portalUrl || ""}`;
+    const group = groups.get(key) || {
+      platform,
+      portalUrl: row.portalUrl || "",
+      docsUrl: row.docsUrl || "",
+      rows: [],
+      proofPaths: [],
+      missingCsvFields: new Set(),
+      evidenceStarterRows: [],
+    };
+    const task = taskById.get(row.id);
+    group.rows.push(row);
+    if (row.proofPath) group.proofPaths.push(row.proofPath);
+    for (const field of row.missingCsvFields || []) group.missingCsvFields.add(field);
+    if (task) group.evidenceStarterRows.push(evidenceRow(task));
+    groups.set(key, group);
+  }
+  return Array.from(groups.values()).map((group, index) => ({
+    rank: index + 1,
+    id: `portal:${group.platform}:${index + 1}`,
+    platform: group.platform,
+    portalUrl: group.portalUrl,
+    docsUrl: group.docsUrl,
+    actions: group.rows.length,
+    rowIds: group.rows.map((row) => row.id),
+    proofPaths: Array.from(new Set(group.proofPaths)),
+    missingCsvFields: Array.from(group.missingCsvFields),
+    evidenceStarterRows: group.evidenceStarterRows,
+    copyPacket: group.rows.map((row) => row.copyPacket).filter(Boolean).join("\n\n---\n\n"),
+    nextStep: group.rows[0]?.operatorAction || "No portal actions remain for this session.",
+  }));
 }
 
 async function main() {
@@ -1883,7 +1947,8 @@ async function main() {
   const preliminaryActionSheetJson = JSON.stringify(preliminaryActionSheet, null, 2);
   const preliminaryActionSheetMarkdown = renderActionSheetMarkdown(preliminaryActionSheet);
   const preliminaryActionSheetCsv = renderActionSheetCsv(preliminaryActionSheet);
-  const preliminaryWorkRun = { ...preliminaryActionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const preliminaryWorkRunBase = { ...preliminaryActionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const preliminaryWorkRun = { ...preliminaryWorkRunBase, portalSessions: buildWorkRunPortalSessions(preliminaryWorkRunBase, summary.tasks) };
   const preliminaryWorkRunJson = JSON.stringify(preliminaryWorkRun, null, 2);
   const preliminaryWorkRunMarkdown = renderWorkRunMarkdown(preliminaryWorkRun);
   const preliminaryWorkRunCsv = renderWorkRunCsv(preliminaryWorkRun);
@@ -1921,7 +1986,8 @@ async function main() {
   artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
   const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
   const actionSheet = buildOperatorActionSheet(summary, goLiveAudit, officialPermissionSourceAudit);
-  const nextWorkRun = { ...actionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const nextWorkRunBase = { ...actionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
+  const nextWorkRun = { ...nextWorkRunBase, portalSessions: buildWorkRunPortalSessions(nextWorkRunBase, summary.tasks) };
   const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet, nextWorkRun };
   await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
   await writeFile(outMarkdownPath, closeoutMarkdown);
