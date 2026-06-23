@@ -1,3 +1,8 @@
+import { createHash } from "node:crypto";
+import { chmodSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 type YtDlpDownloadMode = "video" | "audio";
 
 export type YtDlpCommandSpec = {
@@ -11,9 +16,54 @@ function hasConfiguredValue(value?: string | null): value is string {
   return Boolean(normalized) && !/^(changeme|change-me|todo|replace|replace-with|your-|<.*>)$/i.test(normalized);
 }
 
+function normalizeCookieFileContent(rawValue: string): string {
+  const normalized = rawValue.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
+}
+
+function decodeBase64CookieSecret(rawValue: string): string | null {
+  const trimmed = rawValue.trim();
+  const encoded = trimmed.startsWith("data:")
+    ? trimmed.slice(trimmed.indexOf(",") + 1)
+    : trimmed;
+  const decoded = Buffer.from(encoded.replace(/\s+/g, ""), "base64").toString("utf8");
+  return hasConfiguredValue(decoded) ? normalizeCookieFileContent(decoded) : null;
+}
+
+function writeCookieSecretToTempFile(rawCookieFile: string): string {
+  const cookieFile = normalizeCookieFileContent(rawCookieFile);
+  const digest = createHash("sha256").update(cookieFile).digest("hex").slice(0, 16);
+  const cookiePath = join(tmpdir(), `yt-dlp-youtube-cookies-${digest}.txt`);
+  writeFileSync(cookiePath, cookieFile, { encoding: "utf8", mode: 0o600 });
+  try {
+    chmodSync(cookiePath, 0o600);
+  } catch {
+    // Best effort only. The file is still written outside the repo and never logged.
+  }
+  return cookiePath;
+}
+
+function configuredYoutubeCookieFileFromSecret(): string | null {
+  const cookiesBase64 = process.env.YT_DLP_COOKIES_B64 || process.env.YT_DLP_COOKIES_BASE64;
+  if (hasConfiguredValue(cookiesBase64)) {
+    const decoded = decodeBase64CookieSecret(cookiesBase64);
+    if (decoded) return writeCookieSecretToTempFile(decoded);
+  }
+
+  const cookiesRaw = process.env.YT_DLP_COOKIES;
+  if (hasConfiguredValue(cookiesRaw)) {
+    return writeCookieSecretToTempFile(cookiesRaw);
+  }
+
+  return null;
+}
+
 function configuredYoutubeCookieArgs(): string[] {
   const cookiesPath = process.env.YT_DLP_COOKIES_PATH?.trim();
   if (hasConfiguredValue(cookiesPath)) return ["--cookies", cookiesPath];
+
+  const cookiesSecretPath = configuredYoutubeCookieFileFromSecret();
+  if (cookiesSecretPath) return ["--cookies", cookiesSecretPath];
 
   const cookiesFromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim();
   if (hasConfiguredValue(cookiesFromBrowser)) return ["--cookies-from-browser", cookiesFromBrowser];
@@ -81,7 +131,7 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque YouTube bloqueó la descarga desde Replit con verificación de bot/login.`,
       "Google Drive puede estar conectado bien; el bloqueo ocurre antes, al bajar el YouTube.",
-      "Para automatizarlo de forma estable, configura cookies de YouTube en YT_DLP_COOKIES_PATH o sube el MP4 fuente a Google Drive y pásame ese archivo como entrada.",
+      "Para automatizarlo de forma estable, configura cookies de YouTube en un Replit Secret YT_DLP_COOKIES_B64 o YT_DLP_COOKIES_PATH; no pegues cookies en el chat. Alternativa: sube el MP4 fuente a Google Drive y pásame ese archivo como entrada.",
     ].join(" ");
   }
 

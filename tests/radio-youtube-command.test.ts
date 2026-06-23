@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { test } from "node:test";
 import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "../server/radio-youtube-command";
 import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage } from "../server/youtube-downloader";
@@ -153,6 +154,52 @@ test("yt-dlp command specs try 1080p video with and without JS runtime flags", (
   assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
 });
 
+test("yt-dlp command specs materialize YouTube cookies from base64 secret", () => {
+  const previous = {
+    YT_DLP_COOKIES_PATH: process.env.YT_DLP_COOKIES_PATH,
+    YT_DLP_COOKIES_B64: process.env.YT_DLP_COOKIES_B64,
+    YT_DLP_COOKIES_BASE64: process.env.YT_DLP_COOKIES_BASE64,
+    YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
+    YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
+  };
+  const cookieFile = [
+    "# Netscape HTTP Cookie File",
+    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tVISITOR_INFO1_LIVE\tfake-test-value",
+  ].join("\n");
+  let materializedPath = "";
+
+  try {
+    delete process.env.YT_DLP_COOKIES_PATH;
+    delete process.env.YT_DLP_COOKIES_BASE64;
+    delete process.env.YT_DLP_COOKIES;
+    delete process.env.YT_DLP_COOKIES_FROM_BROWSER;
+    process.env.YT_DLP_COOKIES_B64 = Buffer.from(cookieFile, "utf8").toString("base64");
+
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+    });
+
+    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
+    assert.notEqual(firstCookiesIndex, -1);
+    materializedPath = specs[0].args[firstCookiesIndex + 1];
+    assert.match(materializedPath, /yt-dlp-youtube-cookies-[a-f0-9]+\.txt$/);
+    assert.ok(existsSync(materializedPath));
+    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
+    assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes(materializedPath)));
+  } finally {
+    if (materializedPath) rmSync(materializedPath, { force: true });
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
 test("yt-dlp failure message explains YouTube bot blocks without routing to GitHub", () => {
   const message = formatYtDlpFailureMessage(
     "ERROR: [youtube] GcVZvXkz2jU: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
@@ -160,6 +207,6 @@ test("yt-dlp failure message explains YouTube bot blocks without routing to GitH
   );
 
   assert.match(message, /YouTube bloqueó la descarga desde Replit/);
-  assert.match(message, /YT_DLP_COOKIES_PATH|MP4 fuente/);
+  assert.match(message, /YT_DLP_COOKIES_B64|YT_DLP_COOKIES_PATH|MP4 fuente/);
   assert.doesNotMatch(message, /GitHub|handoff|PR/i);
 });
