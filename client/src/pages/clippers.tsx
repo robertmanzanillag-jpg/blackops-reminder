@@ -444,6 +444,7 @@ interface ClipperAccountPermissionReadinessSummary {
       proofPath: string;
       missingFields: string[];
       nextStep: string;
+      copyText: string;
     }>;
     previewCards?: Array<{
       id: string;
@@ -460,6 +461,7 @@ interface ClipperAccountPermissionReadinessSummary {
       proofPath: string;
       missingFields: string[];
       nextStep: string;
+      copyText: string;
     }>;
     source: string;
     nextStep: string;
@@ -17145,6 +17147,7 @@ export default function ClippersPage() {
                               </div>
                               <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-lime-100/75">{card.nextStep}</p>
                               <p className="mt-2 break-all text-[10px] leading-4 text-zinc-600">{card.proofPath || card.portalUrl || "Proof path pending"}</p>
+                              <p className="mt-2 line-clamp-3 whitespace-pre-line rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-500">{card.copyText}</p>
                             </div>
                           ))}
                         </div>

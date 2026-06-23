@@ -113,6 +113,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(readiness.nextEvidenceDrop.previewCards[0].platform, "instagram");
   assert.match(readiness.nextEvidenceDrop.previewCards[0].proofPath, /external-closeout-proofs\/developer_app-instagram\.md$/);
   assert.match(readiness.nextEvidenceDrop.previewCards[0].nextStep, /real non-secret evidence/i);
+  assert.match(readiness.nextEvidenceDrop.previewCards[0].copyText, /Missing fields: app_identifier, proof/);
+  assert.match(readiness.nextEvidenceDrop.previewCards[0].copyText, /Proof file:/);
   const readinessMarkdown = await readFile(path.join(rootDir, "account-permission-readiness.md"), "utf8");
   assert.match(readinessMarkdown, /Full Readiness Gap/);
   assert.match(readinessMarkdown, /Preview rows:/);
@@ -1251,6 +1253,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));
   assert.ok(page.includes("fullReadinessGap"));
   assert.ok(page.includes("previewCards"));
+  assert.ok(page.includes("copyText"));
   assert.ok(page.includes("nextEvidenceDrop"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));

@@ -222,22 +222,41 @@ function closeoutCardsForEvidenceDrop(externalCloseout) {
     : Array.isArray(externalCloseout?.rows)
       ? externalCloseout.rows
       : [];
-  return rows.map((row, index) => ({
-    id: row.id || `${row.lane || "evidence"}-${row.platform || "all"}-${index + 1}`,
-    index: index + 1,
-    kind: row.lane || "",
-    accountId: row.accountId || "",
-    platform: row.platform || "",
-    status: row.requiredCsvStatus || "",
-    scope: row.scope || "",
-    publicBaseUrl: publicBaseUrlFromRedirect(row.redirectUri),
-    redirectUri: row.redirectUri || "",
-    portalUrl: row.portalUrl || "",
-    docsUrl: row.docsUrl || "",
-    proofPath: row.proofPath || "",
-    missingFields: row.missingCsvFields || [],
-    nextStep: row.csvEditHint || row.operatorAction || row.nextStep || "Add real non-secret evidence before importing.",
-  }));
+  return rows.map((row, index) => {
+    const card = {
+      id: row.id || `${row.lane || "evidence"}-${row.platform || "all"}-${index + 1}`,
+      index: index + 1,
+      kind: row.lane || "",
+      accountId: row.accountId || "",
+      platform: row.platform || "",
+      status: row.requiredCsvStatus || "",
+      scope: row.scope || "",
+      publicBaseUrl: publicBaseUrlFromRedirect(row.redirectUri),
+      redirectUri: row.redirectUri || "",
+      portalUrl: row.portalUrl || "",
+      docsUrl: row.docsUrl || "",
+      proofPath: row.proofPath || "",
+      missingFields: row.missingCsvFields || [],
+      nextStep: row.csvEditHint || row.operatorAction || row.nextStep || "Add real non-secret evidence before importing.",
+    };
+    return {
+      ...card,
+      copyText: [
+        `Evidence task: ${card.id}`,
+        `Kind: ${card.kind || "evidence"}`,
+        `Platform: ${card.platform || "all"}`,
+        card.accountId ? `Account: ${card.accountId}` : null,
+        card.scope ? `Scope: ${card.scope}` : null,
+        `Target status: ${card.status || "pending"}`,
+        card.portalUrl ? `Portal: ${card.portalUrl}` : null,
+        card.docsUrl ? `Docs: ${card.docsUrl}` : null,
+        card.redirectUri ? `Redirect URI: ${card.redirectUri}` : null,
+        `Proof file: ${card.proofPath || "missing"}`,
+        card.missingFields.length ? `Missing fields: ${card.missingFields.join(", ")}` : null,
+        `Next step: ${card.nextStep}`,
+      ].filter(Boolean).join("\n"),
+    };
+  });
 }
 
 function nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout = {}) {
