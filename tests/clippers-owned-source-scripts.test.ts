@@ -1247,6 +1247,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-external-closeout-proof-todo"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-operator-queue"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-next-action"'));
+  assert.ok(page.includes('data-testid="clippers-external-work-run"'));
+  assert.ok(page.includes('data-testid="clippers-external-work-run-steps"'));
+  assert.ok(page.includes('data-testid="copy-clippers-external-work-run-button"'));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
@@ -1257,6 +1260,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("nextEvidenceDrop"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
+  assert.ok(page.includes("Copy run"));
   assert.ok(page.includes("more external actions in"));
   assert.ok(page.includes("External closeout"));
   assert.ok(page.includes("Evidence CSV rows"));

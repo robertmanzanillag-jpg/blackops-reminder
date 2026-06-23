@@ -16341,6 +16341,19 @@ export default function ClippersPage() {
                               </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
+                              {visibleExternalNextWorkRun.rows.some((row) => row.copyPacket) && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void copyExternalCloseoutPacket(visibleExternalNextWorkRun.rows.map((row) => row.copyPacket).filter(Boolean).join("\n\n---\n\n"))}
+                                  className="h-8 border-amber-300/20 bg-transparent text-xs text-amber-100 hover:bg-amber-300/10"
+                                  data-testid="copy-clippers-external-work-run-button"
+                                >
+                                  <Copy className="mr-2 h-3 w-3" />
+                                  Copy run
+                                </Button>
+                              )}
                               <Badge className="w-fit border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
                                 operator first
                               </Badge>
@@ -16365,12 +16378,35 @@ export default function ClippersPage() {
                             <p className="break-all">Apply ready: {visibleExternalNextWorkRun.applyReadyCommand}</p>
                             <p>{visibleExternalNextWorkRun.guardrails[1] || "Portal action must be real before import."}</p>
                           </div>
+                          {visibleExternalNextWorkRun.steps.length > 0 && (
+                            <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="clippers-external-work-run-steps">
+                              {visibleExternalNextWorkRun.steps.map((step, index) => (
+                                <p key={`${index}-${step.slice(0, 24)}`} className="rounded border border-amber-300/10 bg-black/25 p-2 text-[11px] leading-4 text-amber-100/80">
+                                  {index + 1}. {step}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                             {visibleExternalNextWorkRun.rows.map((row) => (
                               <div key={row.id} className="rounded-md border border-white/10 bg-black/30 p-2">
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-start justify-between gap-2">
                                   <p className="truncate text-xs font-medium text-white">{row.order}. {row.id}</p>
-                                  <Badge className="shrink-0 border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{row.requiredStatus || "pending"}</Badge>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    {row.copyPacket && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 border-amber-300/20 bg-transparent px-1.5 text-[10px] text-amber-100 hover:bg-amber-300/10"
+                                        onClick={() => void copyExternalCloseoutPacket(row.copyPacket)}
+                                      >
+                                        <Copy className="mr-1 h-3 w-3" />
+                                        Copy
+                                      </Button>
+                                    )}
+                                    <Badge className="border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{row.requiredStatus || "pending"}</Badge>
+                                  </div>
                                 </div>
                                 <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-amber-100/80">{row.operatorAction}</p>
                                 <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Proof: {row.proofPath}</p>
