@@ -1727,6 +1727,11 @@ function renderWorkRunMarkdown(workRun) {
     `- Operator action: ${row.operatorAction}`,
     `- Next step: ${row.nextStep}`,
     "",
+    "Copy packet:",
+    "```text",
+    row.copyPacket || "n/a",
+    "```",
+    "",
   ].filter(Boolean).join("\n"));
   return [
     "# Clippers External Next Work Run",
@@ -1759,7 +1764,7 @@ function renderWorkRunMarkdown(workRun) {
 }
 
 function renderWorkRunCsv(workRun) {
-  const header = ["order", "id", "lane", "platform", "required_status", "portal_url", "docs_url", "redirect_uri", "proof_path", "missing_csv_fields", "operator_action", "next_step"];
+  const header = ["order", "id", "lane", "platform", "required_status", "portal_url", "docs_url", "redirect_uri", "proof_path", "missing_csv_fields", "operator_action", "next_step", "copy_packet"];
   const rows = workRun.rows.map((row) => [
     row.order,
     row.id,
@@ -1773,6 +1778,7 @@ function renderWorkRunCsv(workRun) {
     row.missingCsvFields.join("|"),
     row.operatorAction,
     row.nextStep,
+    row.copyPacket || "",
   ].map(csvCell).join(","));
   return `${header.join(",")}\n${rows.join("\n")}\n`;
 }

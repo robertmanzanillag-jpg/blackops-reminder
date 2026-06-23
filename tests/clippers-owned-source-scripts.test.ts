@@ -349,8 +349,10 @@ test("external closeout pack lists remaining account developer and permission ac
   const nextWorkRunMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.md"), "utf8");
   assert.match(nextWorkRunMarkdown, /Clippers External Next Work Run/);
   assert.match(nextWorkRunMarkdown, /Apply ready/);
+  assert.match(nextWorkRunMarkdown, /Copy packet:/);
+  assert.match(nextWorkRunMarkdown, /Evidence CSV fields to fill:/);
   const nextWorkRunCsv = await readFile(path.join(rootDir, "reports/clippers-external-next-work-run.csv"), "utf8");
-  assert.match(nextWorkRunCsv, /order,id,lane,platform,required_status/);
+  assert.match(nextWorkRunCsv, /order,id,lane,platform,required_status.*copy_packet/);
   assert.match(nextWorkRunCsv, /developer_app:instagram/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
