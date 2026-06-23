@@ -7042,7 +7042,7 @@ const PLATFORM_SCOPES: Record<ClipperPlatform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
 };
 
-const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-21";
+const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-23";
 
 const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
   {
@@ -41456,6 +41456,7 @@ async function writeLaunchLaneMatrixManifest(summary: ClipperLaunchLaneMatrixSum
 export async function prepareClipperRobertNextActions(userId = getSystemUserId()): Promise<{ robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await prepareClipperExternalExecutionSession(userId);
   const statusBefore = await getClipperStatus(userId);
   const draftSummary = await buildRobertNextActionsSummary({
     commandCenter: statusBefore.commandCenter,

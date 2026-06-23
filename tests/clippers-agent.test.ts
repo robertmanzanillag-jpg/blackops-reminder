@@ -3087,7 +3087,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.ownerAction.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.requestMode === "human_login_recheck" && scope.humanBlocker?.includes("Meta Developers login"))));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.requestMode === "request_now" && scope.humanBlocker === null)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-21" && scope.verificationNote.length > 20)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-23" && scope.verificationNote.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.verificationStatus === "official_login_required")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verificationChecklist.length >= 3)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.some((scope) => scope.verificationChecklist.some((step) => step.includes("Log in to Meta Developers")))));
@@ -3097,7 +3097,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.postApprovalChecklist && scope.postApprovalChecklist.length >= 4)));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.complianceRisk && scope.complianceRisk.includes(scope.scope))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.fallbackPlan && scope.fallbackPlan.length > 20)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-21")));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-23")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit?.canonicalUrl === scope.officialReferenceUrl)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "login_required" && scope.sourceAudit.needsHumanRecheck)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "public")));
