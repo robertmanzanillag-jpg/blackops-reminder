@@ -163,6 +163,22 @@ function metricoolQueueGuard(queue) {
   };
 }
 
+function progressRow(id, label, ready, total, nextStep) {
+  const normalizedTotal = Math.max(0, Number(total) || 0);
+  const normalizedReady = Math.max(0, Math.min(Number(ready) || 0, normalizedTotal));
+  const missing = Math.max(0, normalizedTotal - normalizedReady);
+  return {
+    id,
+    label,
+    ready: normalizedReady,
+    total: normalizedTotal,
+    missing,
+    percent: normalizedTotal > 0 ? Math.round((normalizedReady / normalizedTotal) * 100) : 100,
+    status: missing === 0 ? "ready" : normalizedReady > 0 ? "partial" : "blocked",
+    nextStep,
+  };
+}
+
 const externalEvidenceHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
 
 function publicBaseUrlFromRedirect(redirectUri) {
@@ -283,6 +299,15 @@ function renderMarkdown(summary) {
     `- Next step: ${row.nextStep}`,
     "",
   ].join("\n"));
+  const gapLines = summary.fullReadinessGap.rows.map((row) => [
+    `### ${row.label}`,
+    "",
+    `- Status: ${row.status}`,
+    `- Ready/missing/total: ${row.ready}/${row.missing}/${row.total}`,
+    `- Percent: ${row.percent}%`,
+    `- Next step: ${row.nextStep}`,
+    "",
+  ].join("\n"));
   return [
     "# Clippers Account + Permission Readiness",
     "",
@@ -303,6 +328,14 @@ function renderMarkdown(summary) {
     `- Local owned source assets: ${summary.sourceReadiness.localOwnedSourceAssets}`,
     `- Connected Metricool rights-ready assets: ${summary.sourceReadiness.connectedMetricoolRightsReadyAssets}`,
     "",
+    "## Full Readiness Gap",
+    "",
+    `- Status: ${summary.fullReadinessGap.status}`,
+    `- Ready/missing/total: ${summary.fullReadinessGap.ready}/${summary.fullReadinessGap.missing}/${summary.fullReadinessGap.total}`,
+    `- Percent: ${summary.fullReadinessGap.percent}%`,
+    `- Next step: ${summary.fullReadinessGap.nextStep}`,
+    "",
+    ...gapLines,
     "## Accounts",
     "",
     ...accountLines,
@@ -443,6 +476,16 @@ async function main() {
   const externalOperatorActions = externalCloseout?.totals?.tasks || externalCloseout?.rows?.length || 0;
   const externalEvidenceRepairRows = externalProofsNeedEvidence;
   const metricoolMvpReady = totals.metricoolReadyLanes >= 2 && connectedMetricoolRightsReadyAssets > 0;
+  const fullReadinessGapRows = [
+    progressRow("accounts", "Account profiles", totals.verifiedAccounts, totals.accountProfiles, accountRows.find((row) => row.accountStatus !== "verified")?.nextStep || "All account profiles verified."),
+    progressRow("metricool", "Metricool approval lanes", totals.metricoolReadyLanes, Math.min(2, totals.accountProfiles), "Keep SPORT and memes connected in Metricool approval_required mode."),
+    progressRow("developer_apps", "Developer apps", totals.developerAppsApproved, totals.developerApps, developerRows.find((row) => row.status !== "approved")?.nextStep || "All developer apps approved."),
+    progressRow("permissions", "Platform permission groups", totals.permissionGroupsApproved, totals.permissionGroups, permissionRows.find((row) => row.status !== "approved")?.nextStep || "All platform permissions approved."),
+    progressRow("external_proofs", "External proof files", Math.max(0, externalOperatorActions - externalProofsNeedEvidence), externalOperatorActions, externalCloseout?.operatorQueue?.[0]?.operatorAction || "All external proof files are complete."),
+    progressRow("direct_api", "Direct API lanes", totals.directApiReadyLanes, totals.accountProfiles, "Keep Direct API blocked until accounts, developer apps, permissions and proof imports are all verified."),
+  ];
+  const fullReadinessMissing = fullReadinessGapRows.reduce((sum, row) => sum + row.missing, 0);
+  const fullReadinessTotal = fullReadinessGapRows.reduce((sum, row) => sum + row.total, 0);
   const status = metricoolMvpReady
     ? externalProofsNeedEvidence > 0 || totals.directApiReadyLanes < totals.accountProfiles
       ? "metricool_mvp_ready_with_external_blockers"
@@ -468,6 +511,15 @@ async function main() {
       readyToSend: queue?.totals?.readyToSend || 0,
       guardSafe: metricoolGuard.safe,
       blockers: metricoolGuard.blockers,
+    },
+    fullReadinessGap: {
+      status: fullReadinessMissing === 0 ? "ready" : metricoolMvpReady ? "metricool_mvp_ready_with_external_blockers" : "blocked",
+      ready: fullReadinessTotal - fullReadinessMissing,
+      total: fullReadinessTotal,
+      missing: fullReadinessMissing,
+      percent: fullReadinessTotal > 0 ? Math.round(((fullReadinessTotal - fullReadinessMissing) / fullReadinessTotal) * 100) : 100,
+      rows: fullReadinessGapRows,
+      nextStep: fullReadinessGapRows.find((row) => row.missing > 0)?.nextStep || "All account, permission and external proof gates are ready.",
     },
     externalCloseout: {
       status: externalCloseout?.status || "not_prepared",
@@ -506,6 +558,8 @@ async function main() {
     directApiReadyLanes: totals.directApiReadyLanes,
     externalProofsNeedEvidence,
     externalEvidenceRepairRows,
+    fullReadinessPercent: summary.fullReadinessGap.percent,
+    fullReadinessMissing: summary.fullReadinessGap.missing,
     connectedMetricoolRightsReadyAssets,
     localOwnedSourceAssets,
     nextEvidenceDropPath: evidenceDropPath,

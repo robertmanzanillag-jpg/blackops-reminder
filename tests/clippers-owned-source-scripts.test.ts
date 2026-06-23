@@ -88,6 +88,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(output.directApiReadyLanes, 0);
   assert.ok(output.externalProofsNeedEvidence > 0);
   assert.ok(output.externalEvidenceRepairRows > 0);
+  assert.ok(output.fullReadinessPercent < 100);
+  assert.ok(output.fullReadinessMissing > 0);
   assert.ok(output.connectedMetricoolRightsReadyAssets > 0);
   assert.ok(output.localOwnedSourceAssets >= 0);
 
@@ -98,6 +100,12 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(readiness.externalCloseout.evidenceImportCsvPath, /external-closeout-evidence-import\.csv$/);
   assert.equal(readiness.sourceReadiness.connectedMetricoolRightsReadyAssets, output.connectedMetricoolRightsReadyAssets);
   assert.equal(readiness.sourceReadiness.localOwnedSourceAssets, output.localOwnedSourceAssets);
+  assert.equal(readiness.fullReadinessGap.status, "metricool_mvp_ready_with_external_blockers");
+  assert.equal(readiness.fullReadinessGap.percent, output.fullReadinessPercent);
+  assert.ok(readiness.fullReadinessGap.missing > 0);
+  assert.ok(readiness.fullReadinessGap.rows.some((row) => row.id === "external_proofs" && row.missing > 0));
+  const readinessMarkdown = await readFile(path.join(rootDir, "account-permission-readiness.md"), "utf8");
+  assert.match(readinessMarkdown, /Full Readiness Gap/);
   assert.equal(readiness.totals.developerAppsApproved, 0);
   assert.equal(readiness.totals.permissionGroupsApproved, 0);
   assert.ok(readiness.accountRows.some((row) =>
@@ -1226,7 +1234,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-external-closeout-proof-todo"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-operator-queue"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-next-action"'));
+  assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));
+  assert.ok(page.includes("fullReadinessGap"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("more external actions in"));

@@ -386,6 +386,24 @@ interface ClipperAccountPermissionReadinessSummary {
     realPublishEnabled: boolean;
     publishMode: string;
   };
+  fullReadinessGap?: {
+    status: string;
+    ready: number;
+    total: number;
+    missing: number;
+    percent: number;
+    nextStep: string;
+    rows: Array<{
+      id: string;
+      label: string;
+      ready: number;
+      total: number;
+      missing: number;
+      percent: number;
+      status: string;
+      nextStep: string;
+    }>;
+  };
   externalCloseout?: {
     status: string;
     proofFilesNeedRealEvidence: number;
@@ -17027,6 +17045,35 @@ export default function ClippersPage() {
                     <p>Connected assets: {accountPermissionReadiness.sourceReadiness.connectedMetricoolRightsReadyAssets}</p>
                     <p>Publish: {accountPermissionReadiness.sourceReadiness.publishMode}</p>
                   </div>
+                  {accountPermissionReadiness.fullReadinessGap && (
+                    <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3" data-testid="clippers-full-readiness-gap">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-xs font-medium text-sky-100">Full readiness gap</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">
+                            {accountPermissionReadiness.fullReadinessGap.ready}/{accountPermissionReadiness.fullReadinessGap.total} ready · {accountPermissionReadiness.fullReadinessGap.missing} missing · {accountPermissionReadiness.fullReadinessGap.percent}%
+                          </p>
+                        </div>
+                        <Badge className="w-fit border border-sky-300/20 bg-sky-950/40 text-[10px] text-sky-100">
+                          {accountPermissionReadiness.fullReadinessGap.status}
+                        </Badge>
+                      </div>
+                      <Progress value={accountPermissionReadiness.fullReadinessGap.percent} className="mt-3 h-2 bg-zinc-900" />
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {accountPermissionReadiness.fullReadinessGap.rows.map((row) => (
+                          <div key={row.id} className="rounded-md border border-white/10 bg-black/25 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-xs font-medium text-white">{row.label}</p>
+                              <span className="text-[10px] text-zinc-500">{row.percent}%</span>
+                            </div>
+                            <Progress value={row.percent} className="mt-2 h-1.5 bg-zinc-900" />
+                            <p className="mt-2 text-[11px] text-zinc-500">{row.ready}/{row.total} ready · {row.missing} missing</p>
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-sky-100/75">{row.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {accountPermissionReadiness.externalCloseout && (
                     <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-2">
                       <div className="grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
