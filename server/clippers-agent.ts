@@ -6751,10 +6751,23 @@ const CREDENTIAL_TRANSFER_KIT_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential
 
 const CLIPPER_JSON_SCRIPT_TIMEOUT_MS = 120_000;
 
+function killClipperScriptProcess(child: ReturnType<typeof spawn>): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
 function runClipperJsonScript(scriptPath: string, label: string, timeoutMs = CLIPPER_JSON_SCRIPT_TIMEOUT_MS): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath], {
       cwd: process.cwd(),
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -6769,7 +6782,7 @@ function runClipperJsonScript(scriptPath: string, label: string, timeoutMs = CLI
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill("SIGKILL");
+      killClipperScriptProcess(child);
       reject(new Error(`${label} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     child.stdout.setEncoding("utf8");

@@ -5674,6 +5674,9 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(status.accountSetupSession.generatedAt && status.accountSetupSession.generatedAt >= generatedDay);
     assert.ok(status.permissionSubmissionDossier.generatedAt && status.permissionSubmissionDossier.generatedAt >= generatedDay);
     assert.ok(status.externalExecutionSession.generatedAt && status.externalExecutionSession.generatedAt >= generatedDay);
+    const clippersAgentSource = await readFile(path.join(process.cwd(), "server", "clippers-agent.ts"), "utf8");
+    assert.ok(clippersAgentSource.includes("detached: true"));
+    assert.ok(clippersAgentSource.includes("process.kill(-child.pid"));
     const externalCloseoutPack = JSON.parse(await readFile(path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-pack.json"), "utf8"));
     const externalCloseoutProofTodo = JSON.parse(await readFile(path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-proof-todo.json"), "utf8"));
     assert.ok(externalCloseoutPack.generatedAt && externalCloseoutPack.generatedAt >= generatedDay);

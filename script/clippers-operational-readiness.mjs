@@ -13,6 +13,18 @@ const outMarkdownPath = path.join(reportsDir, "clippers-operational-readiness.md
 const outCsvPath = path.join(reportsDir, "clippers-operational-readiness.csv");
 const jsonScriptTimeoutMs = 120_000;
 
+function killScriptProcess(child) {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
 async function readJson(filePath) {
   const raw = await readFile(filePath, "utf8").catch((error) => {
     if (error?.code === "ENOENT") return null;
@@ -26,6 +38,7 @@ function runJsonScript(scriptPath, label, timeoutMs = jsonScriptTimeoutMs) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath], {
       cwd: process.cwd(),
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -40,7 +53,7 @@ function runJsonScript(scriptPath, label, timeoutMs = jsonScriptTimeoutMs) {
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill("SIGKILL");
+      killScriptProcess(child);
       reject(new Error(`${label} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     child.stdout.setEncoding("utf8");

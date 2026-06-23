@@ -61,9 +61,21 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
+  const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
+    if (child.pid) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+        return;
+      } catch {
+        // Fall back to killing only the direct child when process groups are unavailable.
+      }
+    }
+    child.kill("SIGKILL");
+  };
   const runClipperNodeJson = (args: string[], label: string, timeoutMs = CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS) => new Promise<any>((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -78,7 +90,7 @@ export async function registerRoutes(
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill("SIGKILL");
+      killClipperRouteScriptProcess(child);
       reject(new Error(`${label} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     child.stdout.setEncoding("utf8");
