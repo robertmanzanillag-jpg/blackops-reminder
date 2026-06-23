@@ -58,6 +58,12 @@ test("owned source rights dry-run feeds Metricool source readiness sync without 
     assert.ok(queue.items.every((item) =>
       item.approvalRequired === true && item.canSendNow === false && item.status !== "ready_to_send"
     ));
+
+    const syncScript = await readFile(path.join(process.cwd(), "script/clippers-sync-metricool-source-readiness.mjs"), "utf8");
+    assert.ok(syncScript.includes("rightsAuditTimeoutMs"));
+    assert.ok(syncScript.includes("detached: true"));
+    assert.ok(syncScript.includes("process.kill(-child.pid"));
+    assert.ok(syncScript.includes('child.kill("SIGKILL")'));
   } finally {
     if (originalQueue !== null) await writeFile(queuePath, originalQueue);
     else await unlink(queuePath).catch(() => undefined);

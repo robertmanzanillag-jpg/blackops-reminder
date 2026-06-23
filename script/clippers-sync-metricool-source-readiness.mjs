@@ -8,32 +8,61 @@ const allowlistDir = path.join(rootDir, "allowlist");
 const queuePath = path.join(rootDir, "scheduled", "metricool-execution-queue.json");
 const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-queue.md");
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
+const rightsAuditTimeoutMs = 120_000;
 
 const categories = ["sports", "memes", "streamers"];
+
+function killScriptProcess(child) {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
 
 function runRightsAudit() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["script/clippers-record-owned-source-rights.mjs", "--dry-run"], {
       cwd: process.cwd(),
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killScriptProcess(child);
+      reject(new Error(`Rights audit dry-run timed out after ${rightsAuditTimeoutMs}ms`));
+    }, rightsAuditTimeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`Rights audit failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error) {
-        reject(new Error(`Rights audit returned invalid JSON: ${error.message}\n${stdout.slice(-1000)}`));
-      }
+      finish(() => {
+        if (code !== 0) {
+          reject(new Error(`Rights audit failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (error) {
+          reject(new Error(`Rights audit returned invalid JSON: ${error.message}\n${stdout.slice(-1000)}`));
+        }
+      });
     });
   });
 }
