@@ -7210,8 +7210,20 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
   for (const filePath of artifactPaths) {
     previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
   }
+  const fixtureSourcePath = path.join(beforeStatus.rootDir, "sources", "sports", "ledger-fixture-test.mp4");
+  const fixtureEvidencePath = path.join(beforeStatus.rootDir, "allowlist", "ledger-fixture-test.md");
+  const previousFixtureSource = await readFile(fixtureSourcePath).catch(() => null);
+  const previousFixtureEvidence = await readFile(fixtureEvidencePath, "utf8").catch(() => null);
 
   try {
+    writeTinyTestVideo(fixtureSourcePath);
+    await writeFile(fixtureEvidencePath, [
+      "# Fixture source rights evidence",
+      "",
+      "status: owned_or_permissioned",
+      "notes: Test fixture evidence should never count as production readiness or block the operational ledger.",
+      "",
+    ].join("\n"));
     await recordClipperSourceScoutIntake({
       records: [
         {
@@ -7263,6 +7275,7 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     const reviewRequired = rightsEvidenceLedger.items.find((item) => item.title === "Ledger review required");
     const recreateFromDiscovery = rightsEvidenceLedger.items.find((item) => item.title === "Ledger recreate from discovery search");
     const missingProof = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing proof");
+    const fixture = rightsEvidenceLedger.items.find((item) => item.title === "ledger-fixture-test.mp4");
 
     assert.ok(rightsEvidenceLedger.manifestPath.endsWith("rights-evidence-ledger.json"));
     assert.ok(rightsEvidenceLedger.markdownPath.endsWith("rights-evidence-ledger.md"));
@@ -7286,6 +7299,7 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     assert.equal(missingProof?.issue, "missing_proof");
     assert.equal(missingProof?.severity, "blocked");
     assert.equal(missingProof?.evidencePath, null);
+    assert.equal(fixture, undefined);
     assert.ok(rightsEvidenceLedger.items.every((item) => item.severity !== "ready" || (item.evidenceAccepted && item.sourceFileExists)));
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
@@ -7300,6 +7314,10 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("access_token=[redacted]"));
     assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("client_secret: [redacted]"));
   } finally {
+    if (previousFixtureSource === null) await unlink(fixtureSourcePath).catch(() => undefined);
+    else await writeFile(fixtureSourcePath, previousFixtureSource);
+    if (previousFixtureEvidence === null) await unlink(fixtureEvidencePath).catch(() => undefined);
+    else await writeFile(fixtureEvidencePath, previousFixtureEvidence);
     for (const [filePath, previous] of previousArtifacts) {
       if (previous === null) await unlink(filePath).catch(() => undefined);
       else await writeFile(filePath, previous);

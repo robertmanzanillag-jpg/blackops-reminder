@@ -12687,7 +12687,7 @@ function buildRightsEvidenceLedgerSummary(input: {
 
   const intakePaths = new Set(intakeItems.map((item) => item.sourcePath).filter((value): value is string => Boolean(value)));
   const assetItems = input.productionQueue.sourceAssets
-    .filter((asset) => !intakePaths.has(asset.path))
+    .filter((asset) => !intakePaths.has(asset.path) && !sourceAssetLooksTestArtifact(asset.fileName))
     .map<ClipperRightsEvidenceLedgerItem>((asset) => {
       const issue = rightsEvidenceIssueForAsset(asset);
       const redactedSourcePath = redactRightsEvidenceLedgerValue(asset.path);
