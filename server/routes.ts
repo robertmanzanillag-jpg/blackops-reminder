@@ -60,58 +60,54 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const runClipperJsonScript = (scriptPath: string, label: string) => new Promise<any>((resolve, reject) => {
-    const child = spawn(process.execPath, [scriptPath], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error: any) {
-        reject(new Error(`${label} returned invalid JSON: ${error.message}`));
-      }
-    });
-  });
-  const runClipperAccountPermissionReadiness = () => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
-  const runClipperOperationalReadiness = () => runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
-  const runClipperExternalCloseoutEvidenceImport = (apply: boolean) => new Promise<any>((resolve, reject) => {
-    const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
-    if (apply) args.push("--apply");
+  const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
+  const runClipperNodeJson = (args: string[], label: string, timeoutMs = CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS) => new Promise<any>((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`External closeout evidence import failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error: any) {
-        reject(new Error(`External closeout evidence import returned invalid JSON: ${error.message}`));
-      }
+      finish(() => {
+        if (code !== 0) {
+          reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (error: any) {
+          reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+        }
+      });
     });
   });
+  const runClipperJsonScript = (scriptPath: string, label: string) => runClipperNodeJson([scriptPath], label);
+  const runClipperAccountPermissionReadiness = () => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+  const runClipperOperationalReadiness = () => runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
+  const runClipperExternalCloseoutEvidenceImport = (apply: boolean) => {
+    const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
+    if (apply) args.push("--apply");
+    return runClipperNodeJson(args, "External closeout evidence import");
+  };
   const readClipperAccountPermissionReadiness = async () => {
     const raw = await readNodeFile("clippers_workspace/account-permission-readiness.json", "utf8");
     return JSON.parse(raw);
