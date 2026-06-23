@@ -40642,7 +40642,7 @@ function renderExternalPortalLauncherHtml(
       <div class="gate-head">
         <div>
           <h2>External Closeout Evidence Import Gate</h2>
-          <p>Fill the closeout CSV with real proof, validate it, then apply only when the gate reports <code>ready_to_apply</code>. Apply refreshes account/permission and operational readiness while keeping Metricool in approval mode.</p>
+          <p>Fill the closeout CSV with real proof, validate it, then apply clean imports only when the gate reports <code>ready_to_apply</code>. If only some rows are valid, use <code>Apply ready rows</code> to import just those rows while the rest stay blocked.</p>
           <p><strong>CSV:</strong> <code>clippers_workspace/evidence-drop/external-closeout-evidence-import.csv</code></p>
           <p><strong>Report:</strong> <code>clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md</code></p>
         </div>
@@ -40651,6 +40651,7 @@ function renderExternalPortalLauncherHtml(
       <div class="toolbar">
         <button type="button" class="gate-btn secondary" data-closeout-action="validate">Validate CSV</button>
         <button type="button" class="gate-btn" data-closeout-action="apply" disabled>Apply clean import</button>
+        <button type="button" class="gate-btn secondary" data-closeout-action="apply-ready" disabled>Apply ready rows</button>
         <a href="/api/clippers/external-closeout-evidence-import" target="_blank" rel="noreferrer">Open JSON report</a>
       </div>
       <pre id="external-closeout-import-result" class="gate-result">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
@@ -40823,21 +40824,29 @@ function renderExternalPortalLauncherHtml(
       const result = document.getElementById("external-closeout-import-result");
       const badge = document.getElementById("external-closeout-import-badge");
       const applyButton = document.querySelector("[data-closeout-action='apply']");
+      const applyReadyButton = document.querySelector("[data-closeout-action='apply-ready']");
       const endpoint = mode === "apply"
         ? "/api/clippers/apply-external-closeout-evidence-import"
-        : "/api/clippers/preview-external-closeout-evidence-import";
-      result.textContent = mode === "apply" ? "Applying clean import..." : "Validating CSV...";
+        : mode === "apply-ready"
+          ? "/api/clippers/apply-ready-external-closeout-evidence-import"
+          : "/api/clippers/preview-external-closeout-evidence-import";
+      result.textContent = mode === "apply" ? "Applying clean import..." : mode === "apply-ready" ? "Applying ready rows..." : "Validating CSV...";
       try {
         const response = await fetch(endpoint, {
           method: "POST",
-          headers: mode === "apply" ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" } : undefined
+          headers: mode === "apply"
+            ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" }
+            : mode === "apply-ready"
+              ? { "x-clippers-operator-confirm": "apply-ready-external-closeout-evidence" }
+              : undefined
         });
         const payload = await response.json();
         const report = payload.externalCloseoutEvidenceImport || {};
         const totals = report.totals || {};
         badge.textContent = report.status || (response.ok ? "ok" : "blocked");
-        badge.className = "badge " + (report.status === "import_applied" ? "do_now" : report.status === "ready_to_apply" ? "do_now" : "blocked");
+        badge.className = "badge " + (report.status === "import_applied" || report.status === "partial_import_applied" || report.status === "ready_to_apply" || report.status === "partial_ready_to_apply" ? "do_now" : "blocked");
         if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
+        if (applyReadyButton) applyReadyButton.disabled = (totals.accepted || 0) <= 0;
         result.textContent = [
           "HTTP: " + response.status,
           "Status: " + (report.status || payload.error || "unknown"),
@@ -40855,6 +40864,7 @@ function renderExternalPortalLauncherHtml(
         badge.textContent = "error";
         badge.className = "badge blocked";
         if (applyButton) applyButton.disabled = true;
+        if (applyReadyButton) applyReadyButton.disabled = true;
         result.textContent = error && error.message ? error.message : String(error);
       }
     }

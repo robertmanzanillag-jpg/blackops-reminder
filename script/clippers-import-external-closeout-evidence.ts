@@ -442,6 +442,7 @@ function renderMarkdown(summary: Record<string, any>): string {
 
 async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
+  const applyReady = process.argv.includes("--apply-ready");
   const raw = await readFile(evidenceCsvPath, "utf8");
   const rows = parseCsv(raw);
   const closeoutIndex = await buildCloseoutValidationIndex();
@@ -455,7 +456,8 @@ async function main(): Promise<void> {
   }
 
   let batchResult: Awaited<ReturnType<typeof recordClipperLaunchEvidenceBatch>> | null = null;
-  if (apply && accepted.length && rejected.length === 0) {
+  const shouldApplyAcceptedRows = (apply || applyReady) && accepted.length && (applyReady || rejected.length === 0);
+  if (shouldApplyAcceptedRows) {
     batchResult = await recordClipperLaunchEvidenceBatch({
       strict: true,
       batchText: launchEvidenceCsv(accepted),
@@ -465,15 +467,33 @@ async function main(): Promise<void> {
   const strictBlocked = Boolean(batchResult?.launchEvidenceBatch.strictBlocked);
   const batchRejected = batchResult?.launchEvidenceBatch.rejected.length || 0;
   const applied = Boolean(batchResult && !strictBlocked && batchRejected === 0);
+  let status = "empty";
+  if (applied && rejected.length) {
+    status = "partial_import_applied";
+  } else if (applied) {
+    status = "import_applied";
+  } else if (accepted.length && rejected.length) {
+    status = "partial_ready_to_apply";
+  } else if (rejected.length || strictBlocked || batchRejected) {
+    status = "blocked_invalid_evidence";
+  } else if (accepted.length) {
+    status = "ready_to_apply";
+  }
+  let nextStep = "Preview limpio. Ejecuta npm run clippers:import-external-closeout-evidence -- --apply para aplicar en modo estricto.";
+  if (applied && rejected.length) {
+    nextStep = "Se aplicaron solo las filas validas. Corrige las filas rechazadas restantes y vuelve a validar/aplicar.";
+  } else if (accepted.length && rejected.length) {
+    nextStep = "Hay filas validas y filas rechazadas. Puedes corregir las rechazadas o aplicar solo las filas validas con --apply-ready.";
+  } else if (rejected.length) {
+    nextStep = "Corrige las filas rechazadas en external-closeout-evidence-import.csv. No se aplico evidencia.";
+  } else if (apply || applyReady) {
+    nextStep = applied
+      ? "Evidencia importada. Regenera account/operational readiness y revisa que Metricool siga approval_required."
+      : "No habia filas aplicables.";
+  }
   const summary = {
-    status: rejected.length || strictBlocked || batchRejected
-      ? "blocked_invalid_evidence"
-      : applied
-        ? "import_applied"
-        : accepted.length
-          ? "ready_to_apply"
-          : "empty",
-    mode: apply ? "apply" : "preview",
+    status,
+    mode: applyReady ? "apply_ready" : apply ? "apply" : "preview",
     generatedAt: new Date().toISOString(),
     paths: {
       sourceCsv: evidenceCsvPath,
@@ -498,13 +518,7 @@ async function main(): Promise<void> {
     rejected: [...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])],
     repairQueue: buildRepairQueue([...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])], rows, closeoutIndex),
     launchEvidenceBatch: batchResult?.launchEvidenceBatch || null,
-    nextStep: rejected.length
-      ? "Corrige las filas rechazadas en external-closeout-evidence-import.csv. No se aplico evidencia."
-      : apply
-        ? applied
-          ? "Evidencia importada. Regenera account/operational readiness y revisa que Metricool siga approval_required."
-          : "No habia filas aplicables."
-        : "Preview limpio. Ejecuta npm run clippers:import-external-closeout-evidence -- --apply para aplicar en modo estricto.",
+    nextStep,
   };
 
   await mkdir(reportsDir, { recursive: true });

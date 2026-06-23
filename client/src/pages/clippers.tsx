@@ -8108,6 +8108,50 @@ export default function ClippersPage() {
     },
   });
 
+  const applyReadyExternalCloseoutEvidenceImportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/apply-ready-external-closeout-evidence-import", {
+        method: "POST",
+        headers: { "x-clippers-operator-confirm": "apply-ready-external-closeout-evidence" },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar filas listas de external evidence import");
+      return data as {
+        externalCloseoutEvidenceImport: ClipperExternalCloseoutEvidenceImportSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+        operationalReadiness: ClipperOperationalReadinessSummary;
+        externalCloseoutPack?: ClipperExternalCloseoutPackSummary;
+        externalCloseoutProofTodo?: ClipperExternalCloseoutProofTodoSummary;
+        externalCloseoutOperatorQueue?: ClipperExternalCloseoutOperatorQueueSummary;
+        externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-closeout-evidence-import"], data.externalCloseoutEvidenceImport);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      if (data.externalCloseoutPack) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-pack"], data.externalCloseoutPack);
+      }
+      if (data.externalCloseoutProofTodo) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-proof-todo"], data.externalCloseoutProofTodo);
+      }
+      if (data.externalCloseoutOperatorQueue) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-operator-queue"], data.externalCloseoutOperatorQueue);
+      }
+      if (data.externalCloseoutNextAction) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
+      }
+      toast({
+        title: "Filas listas aplicadas",
+        description: `${data.externalCloseoutEvidenceImport.totals.applied} filas aplicadas; ${data.externalCloseoutEvidenceImport.totals.rejected} siguen bloqueadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude aplicar filas listas", description: error.message, variant: "destructive" });
+    },
+  });
+
   const developerAppEvidenceMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-developer-app-evidence-vault", { method: "POST" });
@@ -16596,8 +16640,10 @@ export default function ClippersPage() {
                           <Badge className={cn(
                             "w-fit border",
                             externalCloseoutEvidenceImport.status === "import_applied"
+                              || externalCloseoutEvidenceImport.status === "partial_import_applied"
                               ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
                               : externalCloseoutEvidenceImport.status === "ready_to_apply"
+                                || externalCloseoutEvidenceImport.status === "partial_ready_to_apply"
                                 ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
                                 : "border-amber-300/30 bg-amber-300/10 text-amber-100"
                           )}>
@@ -16630,6 +16676,22 @@ export default function ClippersPage() {
                         >
                           {applyExternalCloseoutEvidenceImportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                           Apply
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => applyReadyExternalCloseoutEvidenceImportMutation.mutate()}
+                          disabled={
+                            applyReadyExternalCloseoutEvidenceImportMutation.isPending
+                            || !externalCloseoutEvidenceImport
+                            || externalCloseoutEvidenceImport.totals.accepted <= 0
+                          }
+                          className="border-cyan-300/25 bg-transparent text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40"
+                          data-testid="apply-ready-clippers-external-closeout-evidence-import-button"
+                        >
+                          {applyReadyExternalCloseoutEvidenceImportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                          Apply ready
                         </Button>
                       </div>
                     </div>

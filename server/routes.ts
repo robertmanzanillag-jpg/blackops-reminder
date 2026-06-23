@@ -340,9 +340,10 @@ export async function registerRoutes(
   const runClipperJsonScript = (scriptPath: string, label: string) => runClipperNodeJson([scriptPath], label);
   const runClipperAccountPermissionReadiness = () => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
   const runClipperOperationalReadiness = () => runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
-  const runClipperExternalCloseoutEvidenceImport = (apply: boolean) => {
+  const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
+    if (applyReady) args.push("--apply-ready");
     return runClipperNodeJson(args, "External closeout evidence import");
   };
   const readClipperAccountPermissionReadiness = async () => {
@@ -462,7 +463,7 @@ export async function registerRoutes(
       <div class="gate-head">
         <div>
           <h2>External Closeout Evidence Import Gate</h2>
-          <p>Fill the closeout CSV with real proof, validate it, then apply only when the gate reports <code>ready_to_apply</code>. Apply refreshes account/permission and operational readiness while keeping Metricool in approval mode.</p>
+          <p>Fill the closeout CSV with real proof, validate it, then apply clean imports only when the gate reports <code>ready_to_apply</code>. If only some rows are valid, use <code>Apply ready rows</code> to import just those rows while the rest stay blocked.</p>
           <p><strong>CSV:</strong> <code>clippers_workspace/evidence-drop/external-closeout-evidence-import.csv</code></p>
           <p><strong>Report:</strong> <code>clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md</code></p>
         </div>
@@ -471,6 +472,7 @@ export async function registerRoutes(
       <div class="toolbar">
         <button type="button" class="copy-btn" data-closeout-action="validate">Validate CSV</button>
         <button type="button" class="copy-btn" data-closeout-action="apply" disabled>Apply clean import</button>
+        <button type="button" class="copy-btn" data-closeout-action="apply-ready" disabled>Apply ready rows</button>
         <a href="/api/clippers/external-closeout-evidence-import" target="_blank" rel="noreferrer">Open JSON report</a>
       </div>
       <pre id="external-closeout-import-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:76px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
@@ -541,20 +543,30 @@ export async function registerRoutes(
       const result = document.getElementById("external-closeout-import-result");
       const badge = document.getElementById("external-closeout-import-badge");
       const applyButton = document.querySelector("[data-closeout-action='apply']");
-      const endpoint = mode === "apply" ? "/api/clippers/apply-external-closeout-evidence-import" : "/api/clippers/preview-external-closeout-evidence-import";
-      result.textContent = mode === "apply" ? "Applying clean import..." : "Validating CSV...";
+      const applyReadyButton = document.querySelector("[data-closeout-action='apply-ready']");
+      const endpoint = mode === "apply"
+        ? "/api/clippers/apply-external-closeout-evidence-import"
+        : mode === "apply-ready"
+          ? "/api/clippers/apply-ready-external-closeout-evidence-import"
+          : "/api/clippers/preview-external-closeout-evidence-import";
+      result.textContent = mode === "apply" ? "Applying clean import..." : mode === "apply-ready" ? "Applying ready rows..." : "Validating CSV...";
       try {
         const response = await fetch(endpoint, {
           method: "POST",
-          headers: mode === "apply" ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" } : undefined
+          headers: mode === "apply"
+            ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" }
+            : mode === "apply-ready"
+              ? { "x-clippers-operator-confirm": "apply-ready-external-closeout-evidence" }
+              : undefined
         });
         const payload = await response.json();
         const report = payload.externalCloseoutEvidenceImport || {};
         const totals = report.totals || {};
         const repairQueue = report.repairQueue || [];
         badge.textContent = report.status || (response.ok ? "ok" : "blocked");
-        badge.className = "badge " + (report.status === "import_applied" || report.status === "ready_to_apply" ? "do_now" : "blocked");
+        badge.className = "badge " + (report.status === "import_applied" || report.status === "partial_import_applied" || report.status === "ready_to_apply" || report.status === "partial_ready_to_apply" ? "do_now" : "blocked");
         if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
+        if (applyReadyButton) applyReadyButton.disabled = (totals.accepted || 0) <= 0;
         result.textContent = [
           "HTTP: " + response.status,
           "Status: " + (report.status || payload.error || "unknown"),
@@ -581,6 +593,7 @@ export async function registerRoutes(
         badge.textContent = "error";
         badge.className = "badge blocked";
         if (applyButton) applyButton.disabled = true;
+        if (applyReadyButton) applyReadyButton.disabled = true;
         result.textContent = error && error.message ? error.message : String(error);
       }
     }
@@ -2390,6 +2403,43 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply clippers external closeout evidence import" });
+    }
+  });
+
+  app.post("/api/clippers/apply-ready-external-closeout-evidence-import", async (_req, res) => {
+    try {
+      if (_req.get("x-clippers-operator-confirm") !== "apply-ready-external-closeout-evidence") {
+        res.status(403).json({ error: "Operator confirmation header required for partial external closeout evidence apply." });
+        return;
+      }
+      await runClipperExternalCloseoutEvidenceImport(false, true);
+      const externalCloseoutEvidenceImport = await readClipperExternalCloseoutEvidenceImport();
+      if (externalCloseoutEvidenceImport.status !== "partial_import_applied" && externalCloseoutEvidenceImport.status !== "import_applied") {
+        await runClipperExternalCloseoutPack();
+        res.status(400).json({
+          error: "No validated external closeout evidence rows were ready to apply.",
+          externalCloseoutEvidenceImport,
+          externalCloseoutPack: await readClipperExternalCloseoutPack(),
+          externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+          externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+          externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+        });
+        return;
+      }
+      await runClipperAccountPermissionReadiness();
+      await runClipperOperationalReadiness();
+      await runClipperExternalCloseoutPack();
+      res.json({
+        externalCloseoutEvidenceImport,
+        accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+        operationalReadiness: await readClipperOperationalReadiness(),
+        externalCloseoutPack: await readClipperExternalCloseoutPack(),
+        externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+        externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+        externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to apply ready clippers external closeout evidence rows" });
     }
   });
 

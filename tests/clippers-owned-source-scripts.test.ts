@@ -337,6 +337,9 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(importer, /const batchRejected = batchResult\?\.launchEvidenceBatch\.rejected\.length \|\| 0/);
   assert.match(importer, /batchRejected === 0/);
   assert.match(importer, /rejected\.length \|\| strictBlocked \|\| batchRejected/);
+  assert.match(importer, /--apply-ready/);
+  assert.match(importer, /partial_ready_to_apply/);
+  assert.match(importer, /partial_import_applied/);
 
   const source = await readFile(path.join(process.cwd(), "script/clippers-external-closeout-pack.mjs"), "utf8");
   assert.match(source, /const blocked = tasks\.length > 0 \|\| safeOperationalBlockers\.length > 0/);
@@ -361,7 +364,11 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(routes, /First repair copy packet/);
   assert.match(routes, /\/api\/clippers\/preview-external-closeout-evidence-import/);
   assert.match(routes, /\/api\/clippers\/apply-external-closeout-evidence-import/);
+  assert.match(routes, /\/api\/clippers\/apply-ready-external-closeout-evidence-import/);
   assert.match(routes, /x-clippers-operator-confirm/);
+  assert.match(routes, /apply-ready-external-closeout-evidence/);
+  assert.match(routes, /Apply ready rows/);
+  assert.match(routes, /data-closeout-action="apply-ready"/);
   assert.match(routes, /Operator confirmation header required/);
   assert.match(routes, /await runClipperExternalCloseoutPack\(\)/);
   assert.match(routes, /externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue\(\)/);
@@ -396,6 +403,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-closeout-evidence-import"/);
   assert.match(ui, /data-testid="preview-clippers-external-closeout-evidence-import-button"/);
   assert.match(ui, /data-testid="apply-clippers-external-closeout-evidence-import-button"/);
+  assert.match(ui, /data-testid="apply-ready-clippers-external-closeout-evidence-import-button"/);
+  assert.match(ui, /Apply ready/);
   assert.match(ui, /x-clippers-operator-confirm/);
   assert.match(ui, /setQueryData\(\["\/api\/clippers\/external-closeout-operator-queue"\]/);
 });
@@ -688,6 +697,55 @@ test("external closeout evidence importer previews clean rows for strict apply",
   }
 });
 
+test("external closeout evidence importer can apply accepted rows while leaving rejected rows blocked", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const accountEvidencePath = path.join(rootDir, "account-evidence/meme-radar-youtube.json");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousAccountEvidence = await readFile(accountEvidencePath, "utf8").catch(() => null);
+  const partialCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/meme-radar-youtube-proof/view,YouTube account verified by Robert with manager access and non-secret proof reference",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,ok",
+  ].join("\n") + "\n";
+
+  try {
+    await writeFile(evidenceCsvPath, partialCsv);
+    const preview = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const previewOutput = JSON.parse(preview.stdout);
+    assert.equal(previewOutput.status, "partial_ready_to_apply");
+    assert.equal(previewOutput.accepted, 1);
+    assert.equal(previewOutput.rejected, 1);
+    assert.equal(previewOutput.applied, 0);
+
+    const applyReady = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts", "--apply-ready"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(applyReady.status, 0, applyReady.stderr || applyReady.stdout);
+    const applyReadyOutput = JSON.parse(applyReady.stdout);
+    assert.equal(applyReadyOutput.status, "partial_import_applied");
+    assert.equal(applyReadyOutput.accepted, 1);
+    assert.equal(applyReadyOutput.rejected, 1);
+    assert.equal(applyReadyOutput.applied, 1);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.equal(report.mode, "apply_ready");
+    assert.ok(report.nextStep.includes("filas rechazadas restantes"));
+    const accountEvidence = JSON.parse(await readFile(accountEvidencePath, "utf8"));
+    assert.equal(accountEvidence.status, "verified");
+    assert.match(accountEvidence.notes, /meme-radar-youtube-proof/);
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+    if (previousAccountEvidence === null) await unlink(accountEvidencePath).catch(() => undefined);
+    else await writeFile(accountEvidencePath, previousAccountEvidence);
+  }
+});
+
 test("external closeout evidence importer rejects secrets in persisted fields", async () => {
   const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
   const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
@@ -944,7 +1002,7 @@ test("external closeout evidence importer validates local proof files without sy
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.status, "partial_ready_to_apply");
     assert.equal(output.accepted, 1);
     assert.equal(output.rejected, 6);
 
