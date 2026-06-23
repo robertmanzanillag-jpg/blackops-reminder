@@ -656,6 +656,18 @@ interface ClipperExternalCloseoutPackSummary {
       proofPath: string;
       nextStep: string;
     }>;
+    developerAppCards?: Array<{
+      id: string;
+      platform: string;
+      portalUrl: string;
+      redirectUri: string;
+      publicBaseUrl: string;
+      appIdentifierField: string;
+      missingEnvVars: string[];
+      copyNote: string;
+      proofPath: string;
+      nextStep: string;
+    }>;
     permissionRequestCards?: Array<{
       id: string;
       platform: string;
@@ -15837,6 +15849,16 @@ export default function ClippersPage() {
                           {externalCloseoutPack.actionSheet.accountSetupCards?.[0] && (
                             <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
                               First: {externalCloseoutPack.actionSheet.accountSetupCards[0].accountId} · {externalCloseoutPack.actionSheet.accountSetupCards[0].platform} · {externalCloseoutPack.actionSheet.accountSetupCards[0].portalUrl}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {(externalCloseoutPack.actionSheet.developerAppCards || []).length > 0 && (
+                        <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
+                          <p className="text-xs font-medium text-emerald-100">Developer app cards: {externalCloseoutPack.actionSheet.developerAppCards?.length || 0}</p>
+                          {externalCloseoutPack.actionSheet.developerAppCards?.[0] && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
+                              First: {externalCloseoutPack.actionSheet.developerAppCards[0].platform} · {externalCloseoutPack.actionSheet.developerAppCards[0].redirectUri}
                             </p>
                           )}
                         </div>

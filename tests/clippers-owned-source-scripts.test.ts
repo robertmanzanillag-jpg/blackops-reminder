@@ -163,6 +163,9 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(pack.actionSheet.accountSetupCards.length, 7);
   assert.ok(pack.actionSheet.accountSetupCards.some((card) => card.id === "account:sports-daily:instagram" && card.metricoolBridgeNeeded === true));
   assert.ok(pack.actionSheet.accountSetupCards.every((card) => card.copyNote.includes("Do not store login credentials")));
+  assert.equal(pack.actionSheet.developerAppCards.length, 3);
+  assert.ok(pack.actionSheet.developerAppCards.some((card) => card.platform === "tiktok" && card.redirectUri.includes("/api/clippers/oauth/tiktok/callback")));
+  assert.ok(pack.actionSheet.developerAppCards.every((card) => card.copyNote.includes("approval_required")));
   assert.equal(pack.actionSheet.permissionRequestCards.length, 6);
   assert.ok(pack.actionSheet.permissionRequestCards.some((card) => card.scope === "video.publish" && card.copyNote.includes("approval_required")));
   assert.ok(pack.actionSheet.guardrails.some((item) => item.includes("Metricool remains approval_required")));
@@ -267,6 +270,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(actionSheet.rows.length, 16);
   assert.equal(actionSheet.blocks.length, 3);
   assert.equal(actionSheet.accountSetupCards.length, 7);
+  assert.equal(actionSheet.developerAppCards.length, 3);
   assert.equal(actionSheet.permissionRequestCards.length, 6);
   assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
   assert.ok(actionSheet.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
@@ -278,6 +282,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(actionSheetMarkdown, /This is the working sheet/);
   assert.match(actionSheetMarkdown, /Account Setup Cards/);
   assert.match(actionSheetMarkdown, /Setup note:/);
+  assert.match(actionSheetMarkdown, /Developer App Cards/);
+  assert.match(actionSheetMarkdown, /App review use case:/);
   assert.match(actionSheetMarkdown, /Permission Request Cards/);
   assert.match(actionSheetMarkdown, /Review note:/);
   assert.match(actionSheetMarkdown, /Copy packet:/);
@@ -332,6 +338,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-action-sheet"/);
   assert.match(ui, /External Operator Action Sheet/);
   assert.match(ui, /Account setup cards/);
+  assert.match(ui, /Developer app cards/);
   assert.match(ui, /Permission request cards/);
   assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
   assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);

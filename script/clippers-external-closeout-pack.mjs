@@ -1177,6 +1177,36 @@ function buildOperatorActionSheet(summary, audit) {
         nextStep: row.operatorAction,
       };
     });
+  const developerAppCards = rows
+    .filter((row) => row.lane === "developer_app")
+    .map((row) => {
+      const task = summary.tasks.find((item) => item.id === row.id) || {};
+      return {
+        id: row.id,
+        platform: row.platform,
+        requiredStatus: row.requiredStatus,
+        portalUrl: row.portalUrl,
+        redirectUri: row.redirectUri,
+        publicBaseUrl: row.redirectUri ? safeOriginFromRedirect(row.redirectUri) : "",
+        missingEnvVars: task.missingEnvVars || [],
+        appIdentifierField: row.platform === "youtube" ? "GOOGLE_CLIENT_ID / OAuth client id" : row.platform === "instagram" ? "META_APP_ID" : "TIKTOK_CLIENT_KEY / app id",
+        appReviewUseCase: "Short-form clipping workspace for owned, licensed, or permissioned content. Publishing remains approval_required through Metricool until Robert explicitly enables any real posting.",
+        evidenceNeeded: [
+          "Developer app id/client key/project id.",
+          "Public redirect URI registered in the platform portal.",
+          "Portal app review/request URL or ticket.",
+          "Proof path without private screenshots, app private values, or credentials.",
+        ],
+        copyNote: [
+          `Create ${row.platform} developer app.`,
+          row.redirectUri ? `Register redirect URI ${row.redirectUri}.` : "",
+          "Use case: owned/permissioned short-form clips with approval_required publishing.",
+          "Record only public identifiers and proof paths; keep app private values out of artifacts.",
+        ].filter(Boolean).join(" "),
+        proofPath: row.proofPath,
+        nextStep: row.operatorAction,
+      };
+    });
   const blocks = audit.workBlocks.map((block) => ({
     id: block.id,
     label: block.label,
@@ -1212,6 +1242,7 @@ function buildOperatorActionSheet(summary, audit) {
     nextAction: rows[0] || null,
     blocks,
     accountSetupCards,
+    developerAppCards,
     permissionRequestCards,
     rows,
     guardrails: [
@@ -1293,6 +1324,32 @@ function renderActionSheetMarkdown(sheet) {
     ...card.evidenceNeeded.map((item) => `- ${item}`),
     "",
   ].join("\n"));
+  const developerAppLines = sheet.developerAppCards.map((card) => [
+    `### ${card.platform}`,
+    "",
+    `- Required status: ${card.requiredStatus}`,
+    `- Portal: ${card.portalUrl || "n/a"}`,
+    `- Public base URL: ${card.publicBaseUrl || "n/a"}`,
+    `- Redirect URI: ${card.redirectUri || "n/a"}`,
+    `- App identifier field: ${card.appIdentifierField}`,
+    `- Missing env vars: ${card.missingEnvVars.join(", ") || "none"}`,
+    `- Proof file: ${card.proofPath}`,
+    `- Next step: ${card.nextStep}`,
+    "",
+    "App review use case:",
+    "```text",
+    card.appReviewUseCase,
+    "```",
+    "",
+    "Setup note:",
+    "```text",
+    card.copyNote,
+    "```",
+    "",
+    "Evidence needed:",
+    ...card.evidenceNeeded.map((item) => `- ${item}`),
+    "",
+  ].join("\n"));
   return [
     "# Clippers External Operator Action Sheet",
     "",
@@ -1321,6 +1378,10 @@ function renderActionSheetMarkdown(sheet) {
     "## Account Setup Cards",
     "",
     ...(accountLines.length ? accountLines : ["- No account setup actions remain."]),
+    "",
+    "## Developer App Cards",
+    "",
+    ...(developerAppLines.length ? developerAppLines : ["- No developer app actions remain."]),
     "",
     "## Permission Request Cards",
     "",
