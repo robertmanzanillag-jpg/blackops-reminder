@@ -831,6 +831,24 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
     status?: string;
     scope?: string;
   }>;
+  repairQueue?: Array<{
+    csvRow: number | null;
+    closeoutId: string | null;
+    lane: string;
+    platform: string;
+    accountId: string;
+    scope: string;
+    requiredStatus: string;
+    reason: string;
+    proofPath: string;
+    portalUrl: string;
+    docsUrl: string;
+    missingCsvFields: string[];
+    operatorAction: string;
+    csvEditHint: string;
+    safeProofStarter: string;
+    nextStep: string;
+  }>;
   nextStep: string;
 }
 
@@ -16614,6 +16632,36 @@ export default function ClippersPage() {
                           <p>Applied: {externalCloseoutEvidenceImport.totals.applied}</p>
                         </div>
                         <p className="mt-2 text-xs leading-5 text-zinc-500">{externalCloseoutEvidenceImport.nextStep}</p>
+                        {(externalCloseoutEvidenceImport.repairQueue || []).length > 0 && (
+                          <div className="mt-3 rounded-md border border-amber-300/15 bg-black/20 p-2">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-xs font-medium text-amber-100">Repair queue</p>
+                              <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                                {externalCloseoutEvidenceImport.repairQueue?.length || 0} fixes
+                              </Badge>
+                            </div>
+                            <div className="mt-2 grid gap-2 xl:grid-cols-2">
+                              {externalCloseoutEvidenceImport.repairQueue?.slice(0, 4).map((row, index) => (
+                                <div key={`${row.csvRow || index}-${row.closeoutId || row.lane}`} className="rounded-md border border-amber-300/10 bg-amber-300/5 p-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="min-w-0 text-xs font-medium text-amber-100">
+                                      CSV row {row.csvRow || "?"}: {row.closeoutId || row.lane}
+                                    </p>
+                                    <Badge className="shrink-0 border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
+                                      {row.requiredStatus || "fix"}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 text-[11px] leading-4 text-amber-50/80">{row.reason}</p>
+                                  <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">Proof: {row.proofPath || "missing"}</p>
+                                  {row.missingCsvFields.length > 0 && (
+                                    <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
+                                  )}
+                                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">{row.nextStep}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {externalCloseoutEvidenceImport.rejected.length > 0 && (
                           <div className="mt-3 space-y-2">
                             {externalCloseoutEvidenceImport.rejected.slice(0, 4).map((row, index) => (
