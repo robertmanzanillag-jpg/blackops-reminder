@@ -433,6 +433,10 @@ export async function registerRoutes(
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .copy-btn { border: 1px solid rgba(103, 232, 249, 0.28); border-radius: 6px; background: rgba(103, 232, 249, 0.08); color: #cffafe; cursor: pointer; font-weight: 700; padding: 7px 10px; }
     .copy-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+    .platform-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+    .portal-card { border: 1px solid rgba(103, 232, 249, 0.16); border-radius: 8px; background: rgba(0, 0, 0, 0.18); padding: 10px; }
+    .portal-card h3 { margin: 0; font-size: 14px; text-transform: capitalize; }
+    .portal-card p { margin: 6px 0 0; font-size: 12px; }
     .badge { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .badge.do_now { border-color: rgba(134, 239, 172, 0.35); color: var(--green); background: rgba(134, 239, 172, 0.08); }
     .badge.blocked { border-color: rgba(253, 164, 175, 0.35); color: #fda4af; background: rgba(253, 164, 175, 0.08); }
@@ -471,6 +475,23 @@ export async function registerRoutes(
       </div>
       <pre id="external-closeout-import-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:76px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
     </section>`;
+    const platformSprintHtml = `
+    <section class="gate" aria-label="External platform sprint order">
+      <div class="gate-head">
+        <div>
+          <h2>External Platform Sprint Order</h2>
+          <p>Load the platform order before opening external portals. It groups developer apps, permissions and account proofs by Instagram, TikTok and YouTube, then shows the first safe copy packet for each platform.</p>
+        </div>
+        <span id="external-platform-sprint-badge" class="badge waiting">not loaded</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="copy-btn" data-platform-sprint-action="load">Load platform order</button>
+        <button type="button" class="copy-btn" data-platform-sprint-action="copy" disabled>Copy first packet</button>
+        <a href="/api/clippers/external-closeout-operator-queue" target="_blank" rel="noreferrer">Open operator queue</a>
+      </div>
+      <div id="external-platform-sprint-cards" class="platform-grid"></div>
+      <pre id="external-platform-sprint-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:96px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Load the platform order before portal work. Do not paste secrets into proof files or CSV rows.</pre>
+    </section>`;
     const proofTodoHtml = `
     <section class="gate" aria-label="External closeout proof todo">
       <div class="gate-head">
@@ -508,6 +529,14 @@ export async function registerRoutes(
       <pre id="external-go-live-audit-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:96px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Load the audit to see work blocks and repair queue.</pre>
     </section>`;
     const gateScript = `
+    function escapeExternalLauncherHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
     async function runCloseoutImportGate(mode) {
       const result = document.getElementById("external-closeout-import-result");
       const badge = document.getElementById("external-closeout-import-badge");
@@ -579,6 +608,76 @@ export async function registerRoutes(
         result.textContent = error && error.message ? error.message : String(error);
       }
     }
+    async function loadExternalPlatformSprint() {
+      const result = document.getElementById("external-platform-sprint-result");
+      const badge = document.getElementById("external-platform-sprint-badge");
+      const cards = document.getElementById("external-platform-sprint-cards");
+      const copyButton = document.querySelector("[data-platform-sprint-action='copy']");
+      result.textContent = "Loading platform order...";
+      if (cards) cards.innerHTML = "";
+      if (copyButton) {
+        copyButton.disabled = true;
+        copyButton.removeAttribute("data-copy-packet");
+      }
+      try {
+        const response = await fetch("/api/clippers/external-closeout-operator-queue");
+        const payload = await response.json();
+        const queue = payload.externalCloseoutOperatorQueue || {};
+        const rows = queue.rows || [];
+        const sprint = queue.sprintSummary || {};
+        const platformRows = sprint.platformRows || [];
+        badge.textContent = platformRows.length + " platforms";
+        badge.className = "badge " + (platformRows.length ? "waiting" : "blocked");
+        const rowById = new Map(rows.map((row) => [row.id, row]));
+        if (cards) {
+          cards.innerHTML = platformRows.map((platform) => {
+            const nextRow = rowById.get(platform.firstActionId) || {};
+            const portalUrl = (platform.portalUrls || [])[0] || nextRow.portalUrl || "#";
+            const safePortalUrl = /^https:\\/\\//.test(String(portalUrl || "")) ? String(portalUrl) : "";
+            const proofPath = (platform.proofPaths || [])[0] || nextRow.proofPath || "pending";
+            return [
+              '<article class="portal-card">',
+              '<h3>' + escapeExternalLauncherHtml(String(platform.platform || "unknown")) + '</h3>',
+              '<p><strong>' + Number(platform.totalActions || 0) + '</strong> actions · ' + Number(platform.criticalActions || 0) + ' critical</p>',
+              '<p>Apps ' + Number(platform.developerApps || 0) + ' · Perms ' + Number(platform.permissions || 0) + ' · Accounts ' + Number(platform.accountProofs || 0) + '</p>',
+              '<p>First: <code>' + escapeExternalLauncherHtml(String(platform.firstActionId || "none")) + '</code></p>',
+              '<p>Proof: <code>' + escapeExternalLauncherHtml(String(proofPath)) + '</code></p>',
+              safePortalUrl ? '<p><a href="' + escapeExternalLauncherHtml(safePortalUrl) + '" target="_blank" rel="noreferrer">Open portal</a></p>' : '',
+              '</article>'
+            ].join("");
+          }).join("");
+        }
+        const firstPlatform = platformRows[0] || null;
+        const firstRow = firstPlatform ? rowById.get(firstPlatform.firstActionId) : null;
+        if (copyButton && firstRow && firstRow.copyPacket) {
+          copyButton.disabled = false;
+          copyButton.setAttribute("data-copy-packet", firstRow.copyPacket);
+        }
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Sprint: " + (sprint.nextStep || "No platform sprint is available."),
+          "Metricool: approval_required; automatic publishing remains off.",
+          "",
+          platformRows.map((platform) => [
+            String(platform.platform || "unknown").toUpperCase(),
+            "actions=" + (platform.totalActions || 0),
+            "critical=" + (platform.criticalActions || 0),
+            "apps=" + (platform.developerApps || 0),
+            "permissions=" + (platform.permissions || 0),
+            "accounts=" + (platform.accountProofs || 0),
+            "first=" + (platform.firstActionId || "none"),
+            "proof=" + (((platform.proofPaths || [])[0]) || "pending"),
+            "missing=" + (((platform.missingCsvFields || []).join(", ")) || "none")
+          ].join("\\n  ")).join("\\n\\n"),
+          "",
+          firstRow && firstRow.copyPacket ? "First copy packet:\\n" + firstRow.copyPacket : "First copy packet: none"
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
     async function loadExternalGoLiveAudit() {
       const result = document.getElementById("external-go-live-audit-result");
       const badge = document.getElementById("external-go-live-audit-badge");
@@ -632,6 +731,22 @@ export async function registerRoutes(
       loadExternalCloseoutProofTodo();
     });
     document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-platform-sprint-action]");
+      if (!button) return;
+      const action = button.getAttribute("data-platform-sprint-action");
+      if (action === "load") {
+        loadExternalPlatformSprint();
+        return;
+      }
+      if (action === "copy") {
+        const packet = button.getAttribute("data-copy-packet") || "";
+        if (!packet) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(packet).catch(() => undefined);
+        }
+      }
+    });
+    document.addEventListener("click", (event) => {
       const button = event.target.closest("[data-go-live-audit-action='load']");
       if (!button) return;
       loadExternalGoLiveAudit();
@@ -640,13 +755,16 @@ export async function registerRoutes(
     if (!withSections.includes("External Closeout Evidence Import Gate")) {
       withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${gateHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
     }
+    if (!withSections.includes("External Platform Sprint Order")) {
+      withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${platformSprintHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
+    }
     if (!withSections.includes("External Closeout Proof Todo")) {
       withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${proofTodoHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
     }
     if (!withSections.includes("External Go-Live Audit + Repair Queue")) {
       withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${goLiveAuditHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
     }
-    return withSections.includes("loadExternalCloseoutProofTodo") && withSections.includes("loadExternalGoLiveAudit")
+    return withSections.includes("loadExternalCloseoutProofTodo") && withSections.includes("loadExternalGoLiveAudit") && withSections.includes("loadExternalPlatformSprint")
       ? withSections
       : withSections.replace("</script>", `${gateScript}\n  </script>`);
   };
