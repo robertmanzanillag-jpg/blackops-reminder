@@ -39467,6 +39467,8 @@ async function buildRobertNextActionsSummary(input: {
     nextStep: input.launchEvidenceFixPack.nextStep,
   }] : [];
 
+  const externalCloseout = input.externalExecutionSession.closeoutRun;
+  const externalCloseoutPending = externalCloseout.items.length > 0 || externalCloseout.totals.proofFilesNeedRealEvidence > 0;
   const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
     && input.metricoolApprovalSession.totals.readyForReview > 0
     ? [{
@@ -39475,7 +39477,7 @@ async function buildRobertNextActionsSummary(input: {
       lane: "external_portal",
       label: "Review Metricool approval session",
       status: "ready_to_execute",
-      priority: "critical",
+      priority: externalCloseoutPending ? "high" : "critical",
       estimatedMinutes: Math.max(15, Math.min(90, input.metricoolApprovalSession.totals.readyForReview * 4)),
       platform: "mixed",
       actionUrl: "/api/clippers/prepare-metricool-approval-session",
@@ -39538,7 +39540,9 @@ async function buildRobertNextActionsSummary(input: {
         ? "blocked"
         : "needs_action";
   const connectNow = await buildRobertConnectNowHandoff(input);
-  const externalCloseout = input.externalExecutionSession.closeoutRun;
+  const nextStep = externalCloseoutPending
+    ? externalCloseout.nextStep
+    : items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.";
 
   return {
     status,
@@ -39573,7 +39577,7 @@ async function buildRobertNextActionsSummary(input: {
       sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
     },
     totals,
-    nextStep: items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.",
+    nextStep,
   };
 }
 

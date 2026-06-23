@@ -5583,6 +5583,9 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.requiredStatus, "submitted");
     assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
     assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
+    assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.doesNotMatch(robertNextActions.nextStep, /Open Metricool/i);
+    assert.notEqual(robertNextActions.items[0]?.id, "metricool-approval-session");
     assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
     assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
     assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
@@ -5801,16 +5804,24 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
       const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-approval-session");
       assert.ok(metricoolAction);
-      assert.equal(metricoolAction.rank, 1);
+      const externalCloseoutPending = robertNextActions.externalCloseout.operatorQueueItems > 0
+        || robertNextActions.externalCloseout.proofFilesNeedRealEvidence > 0;
+      if (externalCloseoutPending) {
+        assert.ok(metricoolAction.rank > 1);
+        assert.equal(metricoolAction.priority, "high");
+        assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
+      } else {
+        assert.equal(metricoolAction.rank, 1);
+        assert.equal(metricoolAction.priority, "critical");
+        assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+      }
       assert.equal(metricoolAction.status, "ready_to_execute");
-      assert.equal(metricoolAction.priority, "critical");
       assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-approval-session");
       assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
       assert.ok(metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
       assert.ok(metricoolAction.evidenceRows.length > 0);
       assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
       assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
-      assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
     }
     assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
     const hasLaunchEvidenceAction = robertNextActions.items.some((item) =>
