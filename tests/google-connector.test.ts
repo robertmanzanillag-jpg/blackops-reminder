@@ -40,3 +40,25 @@ test("Google connector access token skips connector rows without tokens", async 
     restoreEnv(snapshot);
   }
 });
+
+test("Google connector access token accepts nested OAuth token shapes and prefers Drive", async () => {
+  const snapshot = snapshotEnv(REPLIT_CONNECTOR_ENV_VARS);
+  process.env.REPLIT_CONNECTORS_HOSTNAME = "connectors-nested.example.test";
+  process.env.REPL_IDENTITY = "test-repl-identity";
+  delete process.env.WEB_REPL_RENEWAL;
+
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    items: [
+      { name: "google-calendar", settings: { oauth: { tokens: { accessToken: "calendar-access-token" } } } },
+      { name: "google-drive", settings: { connection: { credentials: { accessToken: "drive-access-token" } } } },
+    ],
+  })));
+
+  try {
+    assert.equal(await getGoogleAccessToken(), "drive-access-token");
+    assert.equal(fetchMock.mock.calls.length, 1);
+  } finally {
+    fetchMock.mock.restore();
+    restoreEnv(snapshot);
+  }
+});

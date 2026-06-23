@@ -1,5 +1,6 @@
 // Google Calendar Integration - using Replit connector
 let connectionSettings: any;
+let connectionSettingsCacheKey: string | null = null;
 
 async function getGoogleApis() {
   return (await import("googleapis")).google;
@@ -12,8 +13,25 @@ export function hasReplitGoogleConnectorEnv() {
   );
 }
 
+function findAccessToken(value: any, depth = 0): string | null {
+  if (!value || depth > 5) return null;
+  if (typeof value !== "object") return null;
+
+  for (const key of ["access_token", "accessToken"]) {
+    const token = value[key];
+    if (typeof token === "string" && token.trim()) return token;
+  }
+
+  for (const child of Object.values(value)) {
+    const token = findAccessToken(child, depth + 1);
+    if (token) return token;
+  }
+
+  return null;
+}
+
 function readConnectorAccessToken(connection: any): string | null {
-  return connection?.settings?.access_token || connection?.settings?.oauth?.credentials?.access_token || null;
+  return findAccessToken(connection?.settings);
 }
 
 function isConnectorTokenFresh(connection: any): boolean {
@@ -24,21 +42,28 @@ function isConnectorTokenFresh(connection: any): boolean {
 }
 
 function selectGoogleConnector(items: any[] = []) {
-  return items.find((item) => readConnectorAccessToken(item)) || null;
+  const connected = items.filter((item) => readConnectorAccessToken(item));
+  return (
+    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google-drive")) ||
+    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google")) ||
+    connected[0] ||
+    null
+  );
 }
 
 export async function getGoogleAccessToken() {
-  if (connectionSettings && isConnectorTokenFresh(connectionSettings)) {
-    const cachedToken = readConnectorAccessToken(connectionSettings);
-    if (cachedToken) return cachedToken;
-  }
-  
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
     : process.env.WEB_REPL_RENEWAL 
     ? 'depl ' + process.env.WEB_REPL_RENEWAL 
     : null;
+
+  const cacheKey = `${hostname || ""}:${xReplitToken || ""}`;
+  if (connectionSettings && connectionSettingsCacheKey === cacheKey && isConnectorTokenFresh(connectionSettings)) {
+    const cachedToken = readConnectorAccessToken(connectionSettings);
+    if (cachedToken) return cachedToken;
+  }
 
   if (!xReplitToken) {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
@@ -53,6 +78,7 @@ export async function getGoogleAccessToken() {
       }
     }
   ).then(res => res.json()).then(data => selectGoogleConnector(data.items || []));
+  connectionSettingsCacheKey = cacheKey;
 
   const accessToken = readConnectorAccessToken(connectionSettings);
 
