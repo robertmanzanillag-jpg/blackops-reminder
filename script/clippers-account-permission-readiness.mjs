@@ -358,7 +358,15 @@ function renderMarkdown(summary) {
     "## Next Evidence Drop",
     "",
     `Use: ${summary.nextEvidenceDropPath}`,
+    `Rows: ${summary.nextEvidenceDrop.rows}`,
+    `Source: ${summary.nextEvidenceDrop.source}`,
+    `Next step: ${summary.nextEvidenceDrop.nextStep}`,
     `Schema: ${externalEvidenceHeader}`,
+    "",
+    "Preview rows:",
+    "```csv",
+    ...summary.nextEvidenceDrop.previewRows,
+    "```",
     "",
     "## Next Step",
     "",
@@ -486,6 +494,9 @@ async function main() {
   ];
   const fullReadinessMissing = fullReadinessGapRows.reduce((sum, row) => sum + row.missing, 0);
   const fullReadinessTotal = fullReadinessGapRows.reduce((sum, row) => sum + row.total, 0);
+  const nextEvidenceCsv = nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout);
+  const nextEvidenceCsvLines = nextEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
+  const nextEvidenceDataRows = nextEvidenceCsvLines.slice(1);
   const status = metricoolMvpReady
     ? externalProofsNeedEvidence > 0 || totals.directApiReadyLanes < totals.accountProfiles
       ? "metricool_mvp_ready_with_external_blockers"
@@ -538,6 +549,16 @@ async function main() {
       notes: platform.officialResearch,
     })),
     totals,
+    nextEvidenceDrop: {
+      path: evidenceDropPath,
+      rows: nextEvidenceDataRows.length,
+      header: nextEvidenceCsvLines[0] || externalEvidenceHeader,
+      previewRows: nextEvidenceDataRows.slice(0, 5),
+      source: nextEvidenceDataRows.length > 0 && externalOperatorActions > 0 ? "external_closeout" : "account_permission_readiness",
+      nextStep: nextEvidenceDataRows.length > 0
+        ? "Fill only rows backed by real non-secret proof, then run the external closeout evidence import preview."
+        : "No next evidence rows remain.",
+    },
     nextEvidenceDropPath: evidenceDropPath,
     nextStep: status === "metricool_mvp_ready"
       ? "Open Metricool and manually review approved queued clips; all external blockers are clear."
@@ -549,7 +570,7 @@ async function main() {
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCsvPath, renderCsv(summary));
-  await writeFile(evidenceDropPath, nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout));
+  await writeFile(evidenceDropPath, nextEvidenceCsv);
   console.log(JSON.stringify({
     status: summary.status,
     verifiedAccounts: totals.verifiedAccounts,
@@ -560,6 +581,7 @@ async function main() {
     externalEvidenceRepairRows,
     fullReadinessPercent: summary.fullReadinessGap.percent,
     fullReadinessMissing: summary.fullReadinessGap.missing,
+    nextEvidenceRows: summary.nextEvidenceDrop.rows,
     connectedMetricoolRightsReadyAssets,
     localOwnedSourceAssets,
     nextEvidenceDropPath: evidenceDropPath,

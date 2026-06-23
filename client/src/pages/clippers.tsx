@@ -424,6 +424,14 @@ interface ClipperAccountPermissionReadinessSummary {
     permissionGroups: number;
     permissionGroupsApproved: number;
   };
+  nextEvidenceDrop?: {
+    path: string;
+    rows: number;
+    header: string;
+    previewRows: string[];
+    source: string;
+    nextStep: string;
+  };
   nextEvidenceDropPath: string;
   nextStep: string;
 }
@@ -17070,6 +17078,26 @@ export default function ClippersPage() {
                             <p className="mt-2 text-[11px] text-zinc-500">{row.ready}/{row.total} ready · {row.missing} missing</p>
                             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-sky-100/75">{row.nextStep}</p>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {accountPermissionReadiness.nextEvidenceDrop && (
+                    <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-3" data-testid="clippers-next-evidence-drop">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-lime-100">Next evidence drop</p>
+                          <p className="mt-1 break-all text-xs leading-5 text-zinc-500">{accountPermissionReadiness.nextEvidenceDrop.path}</p>
+                          <p className="mt-1 text-xs leading-5 text-lime-100/75">{accountPermissionReadiness.nextEvidenceDrop.nextStep}</p>
+                        </div>
+                        <Badge className="w-fit border border-lime-300/20 bg-lime-950/40 text-[10px] text-lime-100">
+                          {accountPermissionReadiness.nextEvidenceDrop.rows} rows
+                        </Badge>
+                      </div>
+                      <p className="mt-3 break-all text-[11px] leading-4 text-zinc-500">Header: {accountPermissionReadiness.nextEvidenceDrop.header}</p>
+                      <div className="mt-2 space-y-2">
+                        {accountPermissionReadiness.nextEvidenceDrop.previewRows.slice(0, 3).map((row, index) => (
+                          <p key={`${index}-${row.slice(0, 24)}`} className="break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{row}</p>
                         ))}
                       </div>
                     </div>

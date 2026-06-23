@@ -90,6 +90,7 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.ok(output.externalEvidenceRepairRows > 0);
   assert.ok(output.fullReadinessPercent < 100);
   assert.ok(output.fullReadinessMissing > 0);
+  assert.ok(output.nextEvidenceRows > 0);
   assert.ok(output.connectedMetricoolRightsReadyAssets > 0);
   assert.ok(output.localOwnedSourceAssets >= 0);
 
@@ -104,8 +105,12 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(readiness.fullReadinessGap.percent, output.fullReadinessPercent);
   assert.ok(readiness.fullReadinessGap.missing > 0);
   assert.ok(readiness.fullReadinessGap.rows.some((row) => row.id === "external_proofs" && row.missing > 0));
+  assert.ok(readiness.nextEvidenceDrop.rows > 0);
+  assert.equal(readiness.nextEvidenceDrop.source, "external_closeout");
+  assert.ok(readiness.nextEvidenceDrop.previewRows[0].includes("developer_app"));
   const readinessMarkdown = await readFile(path.join(rootDir, "account-permission-readiness.md"), "utf8");
   assert.match(readinessMarkdown, /Full Readiness Gap/);
+  assert.match(readinessMarkdown, /Preview rows:/);
   assert.equal(readiness.totals.developerAppsApproved, 0);
   assert.equal(readiness.totals.permissionGroupsApproved, 0);
   assert.ok(readiness.accountRows.some((row) =>
@@ -1235,8 +1240,10 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-external-closeout-operator-queue"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-next-action"'));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
+  assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));
   assert.ok(page.includes("fullReadinessGap"));
+  assert.ok(page.includes("nextEvidenceDrop"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("more external actions in"));
