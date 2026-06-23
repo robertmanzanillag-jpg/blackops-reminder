@@ -317,6 +317,16 @@ test("external closeout sprint summary prioritizes real critical portal actions"
   assert.equal(summary.criticalDeveloperApps, 1);
   assert.equal(summary.criticalPermissions, 1);
   assert.equal(summary.firstActionId, "developer_app:instagram");
+  assert.equal(summary.platformRows.length, 2);
+  assert.equal(summary.platformRows[0].platform, "instagram");
+  assert.equal(summary.platformRows[0].totalActions, 2);
+  assert.equal(summary.platformRows[0].criticalActions, 2);
+  assert.equal(summary.platformRows[0].developerApps, 1);
+  assert.equal(summary.platformRows[0].permissions, 1);
+  assert.equal(summary.platformRows[0].firstActionId, "developer_app:instagram");
+  assert.match(summary.platformRows[0].nextStep, /Instagram developer app/);
+  assert.equal(summary.platformRows[1].platform, "youtube");
+  assert.equal(summary.platformRows[1].accountProofs, 1);
   assert.match(summary.nextStep, /developer_app:instagram/);
   assert.ok(summary.safety.some((item) => item.includes("Metricool remains approval_required")));
 });

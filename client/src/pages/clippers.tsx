@@ -533,6 +533,23 @@ interface ClipperExternalCloseoutSprintSummary {
   firstActionId: string | null;
   firstActionLane: string | null;
   firstActionPlatform: string | null;
+  platformRows?: Array<{
+    platform: string;
+    totalActions: number;
+    criticalActions: number;
+    highActions: number;
+    accountProofs: number;
+    developerApps: number;
+    permissions: number;
+    firstActionId: string | null;
+    firstActionLane: string | null;
+    firstActionPriority: string | null;
+    portalUrls: string[];
+    docsUrls: string[];
+    proofPaths: string[];
+    missingCsvFields: string[];
+    nextStep: string;
+  }>;
   nextStep: string;
   safety: string[];
 }
@@ -16404,6 +16421,41 @@ export default function ClippersPage() {
                           <p>Critical apps {visibleExternalCloseoutSprintSummary.criticalDeveloperApps}</p>
                           <p>Critical perms {visibleExternalCloseoutSprintSummary.criticalPermissions}</p>
                         </div>
+                        {(visibleExternalCloseoutSprintSummary.platformRows || []).length > 0 && (
+                          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                            {visibleExternalCloseoutSprintSummary.platformRows?.map((platformRow) => (
+                              <div key={platformRow.platform} className="rounded-md border border-cyan-300/10 bg-black/20 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-xs font-medium capitalize text-cyan-100">{platformRow.platform}</p>
+                                    <p className="mt-1 text-[11px] leading-4 text-zinc-500">{platformRow.nextStep}</p>
+                                  </div>
+                                  <Badge className={cn(
+                                    "shrink-0 border text-[10px]",
+                                    platformRow.criticalActions > 0
+                                      ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                                      : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100"
+                                  )}>
+                                    {platformRow.totalActions}
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] text-zinc-500">
+                                  <p>Apps {platformRow.developerApps}</p>
+                                  <p>Perms {platformRow.permissions}</p>
+                                  <p>Accounts {platformRow.accountProofs}</p>
+                                </div>
+                                <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">
+                                  Proof: {platformRow.proofPaths[0] || "pending"}
+                                </p>
+                                {platformRow.missingCsvFields.length > 0 && (
+                                  <p className="mt-1 text-[10px] leading-4 text-amber-100">
+                                    Missing: {platformRow.missingCsvFields.join(", ")}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {visibleExternalCloseoutOperatorRows.length > 0 ? (

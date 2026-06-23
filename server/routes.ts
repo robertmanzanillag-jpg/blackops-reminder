@@ -137,6 +137,10 @@ function publicBaseUrlFromRedirectUri(redirectUri: unknown): string {
   }
 }
 
+function clipperUniqueStrings(values: unknown[]): string[] {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
 export function buildClipperExternalCloseoutEvidenceCsvTemplate(rows: unknown): string {
   const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
   if (!enrichedRows.length) return "";
@@ -181,6 +185,52 @@ export function buildClipperExternalCloseoutSprintSummary(rows: unknown) {
   const criticalDeveloperApps = enrichedRows.filter((row: any) => row.priority === "critical" && row.lane === "developer_app").length;
   const criticalPermissions = enrichedRows.filter((row: any) => row.priority === "critical" && row.lane === "permission").length;
   const accountProofs = enrichedRows.filter((row: any) => row.lane === "account").length;
+  const platformRows = Object.values(enrichedRows.reduce<Record<string, any>>((groups, row: any) => {
+    const platform = String(row.platform || "unknown");
+    const group = groups[platform] || {
+      platform,
+      totalActions: 0,
+      criticalActions: 0,
+      highActions: 0,
+      accountProofs: 0,
+      developerApps: 0,
+      permissions: 0,
+      firstActionId: null,
+      firstActionLane: null,
+      firstActionPriority: null,
+      portalUrls: [] as string[],
+      docsUrls: [] as string[],
+      proofPaths: [] as string[],
+      missingCsvFields: [] as string[],
+      nextStep: "",
+    };
+    group.totalActions += 1;
+    if (row.priority === "critical") group.criticalActions += 1;
+    if (row.priority === "high") group.highActions += 1;
+    if (row.lane === "account") group.accountProofs += 1;
+    if (row.lane === "developer_app") group.developerApps += 1;
+    if (row.lane === "permission") group.permissions += 1;
+    if (!group.firstActionId) {
+      group.firstActionId = row.id || null;
+      group.firstActionLane = row.lane || null;
+      group.firstActionPriority = row.priority || null;
+      group.nextStep = row.operatorAction
+        ? `Open ${platform} portal and complete ${row.id}: ${row.operatorAction}`
+        : `Open ${platform} portal and complete ${row.id || "the first external action"}.`;
+    }
+    group.portalUrls = clipperUniqueStrings([...group.portalUrls, row.portalUrl]);
+    group.docsUrls = clipperUniqueStrings([...group.docsUrls, row.docsUrl]);
+    group.proofPaths = clipperUniqueStrings([...group.proofPaths, row.proofPath]);
+    group.missingCsvFields = clipperUniqueStrings([...group.missingCsvFields, ...(Array.isArray(row.missingCsvFields) ? row.missingCsvFields : [])]);
+    groups[platform] = group;
+    return groups;
+  }, {})).sort((left: any, right: any) =>
+    right.criticalActions - left.criticalActions
+    || right.developerApps - left.developerApps
+    || right.permissions - left.permissions
+    || right.totalActions - left.totalActions
+    || String(left.platform).localeCompare(String(right.platform))
+  );
   const nextStep = firstCritical
     ? `Start with ${firstCritical.id}: ${firstCritical.operatorAction || "complete the first real portal action and capture proof."}`
     : "No external closeout actions remain.";
@@ -196,6 +246,7 @@ export function buildClipperExternalCloseoutSprintSummary(rows: unknown) {
     firstActionId: firstCritical?.id || null,
     firstActionLane: firstCritical?.lane || null,
     firstActionPlatform: firstCritical?.platform || null,
+    platformRows,
     nextStep,
     safety: [
       "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or signed/private screenshots.",
