@@ -392,6 +392,10 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
   assert.match(ui, /data-testid="clippers-external-action-sheet"/);
   assert.match(ui, /External Operator Action Sheet/);
+  assert.match(ui, /data-testid="clippers-external-work-run"/);
+  assert.match(ui, /workSession/);
+  assert.match(ui, /targetMinutes/);
+  assert.match(ui, /Apply ready/);
   assert.match(ui, /data-testid="clippers-external-portal-closeout-board"/);
   assert.match(ui, /portalCloseoutBoard/);
   assert.match(ui, /Account setup cards/);

@@ -761,6 +761,32 @@ interface ClipperExternalCloseoutPackSummary {
       nextAction: string;
       checklist: string[];
     }>;
+    workSession?: {
+      status: "needs_operator" | "complete";
+      label: string;
+      targetMinutes: number;
+      actions: number;
+      evidenceCsvPath: string;
+      validateCommand: string;
+      applyReadyCommand: string;
+      steps: string[];
+      guardrails: string[];
+      rows: Array<{
+        order: number;
+        id: string;
+        lane: string;
+        platform: string;
+        requiredStatus: string;
+        portalUrl: string;
+        docsUrl?: string;
+        redirectUri?: string;
+        proofPath: string;
+        missingCsvFields: string[];
+        operatorAction: string;
+        nextStep: string;
+        copyPacket: string;
+      }>;
+    };
     nextAction: {
       id: string;
       lane: string;
@@ -16189,6 +16215,46 @@ export default function ClippersPage() {
                         <p className="mt-2 text-xs leading-5 text-emerald-100">
                           Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
                         </p>
+                      )}
+                      {externalCloseoutPack.actionSheet.workSession && (
+                        <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-external-work-run">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-xs font-medium text-amber-100">{externalCloseoutPack.actionSheet.workSession.label}</p>
+                              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                                {externalCloseoutPack.actionSheet.workSession.actions} actions · {externalCloseoutPack.actionSheet.workSession.targetMinutes} minutes · {externalCloseoutPack.actionSheet.workSession.status}
+                              </p>
+                            </div>
+                            <Badge className="w-fit border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
+                              operator first
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-2">
+                            <p className="break-all">Evidence CSV: {externalCloseoutPack.actionSheet.workSession.evidenceCsvPath}</p>
+                            <p className="break-all">Validate: {externalCloseoutPack.actionSheet.workSession.validateCommand}</p>
+                            <p className="break-all">Apply ready: {externalCloseoutPack.actionSheet.workSession.applyReadyCommand}</p>
+                            <p>{externalCloseoutPack.actionSheet.workSession.guardrails[1] || "Portal action must be real before import."}</p>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                            {externalCloseoutPack.actionSheet.workSession.rows.map((row) => (
+                              <div key={row.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-medium text-white">{row.order}. {row.id}</p>
+                                  <Badge className="shrink-0 border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">{row.requiredStatus || "pending"}</Badge>
+                                </div>
+                                <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-amber-100/80">{row.operatorAction}</p>
+                                <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Proof: {row.proofPath}</p>
+                                <p className="mt-1 break-all text-[10px] leading-4 text-zinc-500">Missing: {row.missingCsvFields.join(", ") || "none"}</p>
+                                {row.portalUrl && (
+                                  <a href={row.portalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-300/20 px-2 py-1 text-xs text-amber-100 hover:bg-amber-300/10">
+                                    Portal
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                       {(externalCloseoutPack.actionSheet.portalCloseoutBoard || []).length > 0 && (
                         <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-external-portal-closeout-board">
