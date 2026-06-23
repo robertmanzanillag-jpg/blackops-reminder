@@ -645,6 +645,17 @@ interface ClipperExternalCloseoutPackSummary {
       accounts: number;
       estimatedMinutes: number;
     };
+    permissionRequestCards?: Array<{
+      id: string;
+      platform: string;
+      scope: string;
+      portalUrl: string;
+      docsUrl: string;
+      prerequisite: string;
+      copyNote: string;
+      proofPath: string;
+      nextStep: string;
+    }>;
     nextAction: {
       id: string;
       lane: string;
@@ -15808,6 +15819,16 @@ export default function ClippersPage() {
                         <p className="mt-2 text-xs leading-5 text-emerald-100">
                           Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
                         </p>
+                      )}
+                      {(externalCloseoutPack.actionSheet.permissionRequestCards || []).length > 0 && (
+                        <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
+                          <p className="text-xs font-medium text-emerald-100">Permission request cards: {externalCloseoutPack.actionSheet.permissionRequestCards?.length || 0}</p>
+                          {externalCloseoutPack.actionSheet.permissionRequestCards?.[0] && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
+                              First: {externalCloseoutPack.actionSheet.permissionRequestCards[0].platform} · {externalCloseoutPack.actionSheet.permissionRequestCards[0].scope} · {externalCloseoutPack.actionSheet.permissionRequestCards[0].portalUrl}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

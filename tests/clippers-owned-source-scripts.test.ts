@@ -160,6 +160,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(pack.actionSheet.totals.permissions, 6);
   assert.equal(pack.actionSheet.totals.accounts, 7);
   assert.equal(pack.actionSheet.nextAction.id, "account:sports-daily:instagram");
+  assert.equal(pack.actionSheet.permissionRequestCards.length, 6);
+  assert.ok(pack.actionSheet.permissionRequestCards.some((card) => card.scope === "video.publish" && card.copyNote.includes("approval_required")));
   assert.ok(pack.actionSheet.guardrails.some((item) => item.includes("Metricool remains approval_required")));
   assert.equal(pack.goLiveAudit.status, "blocked_external_actions");
   assert.equal(pack.goLiveAudit.totals.operatorActions, 16);
@@ -261,6 +263,7 @@ test("external closeout pack lists remaining account developer and permission ac
   const actionSheet = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.json"), "utf8"));
   assert.equal(actionSheet.rows.length, 16);
   assert.equal(actionSheet.blocks.length, 3);
+  assert.equal(actionSheet.permissionRequestCards.length, 6);
   assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
   assert.ok(actionSheet.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
   const actionSheetCsv = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.csv"), "utf8");
@@ -269,6 +272,8 @@ test("external closeout pack lists remaining account developer and permission ac
   const actionSheetMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.md"), "utf8");
   assert.match(actionSheetMarkdown, /Clippers External Operator Action Sheet/);
   assert.match(actionSheetMarkdown, /This is the working sheet/);
+  assert.match(actionSheetMarkdown, /Permission Request Cards/);
+  assert.match(actionSheetMarkdown, /Review note:/);
   assert.match(actionSheetMarkdown, /Copy packet:/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
@@ -320,6 +325,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
   assert.match(ui, /data-testid="clippers-external-action-sheet"/);
   assert.match(ui, /External Operator Action Sheet/);
+  assert.match(ui, /Permission request cards/);
   assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
   assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);
   assert.match(ui, /data-testid="clippers-external-go-live-repair-queue"/);

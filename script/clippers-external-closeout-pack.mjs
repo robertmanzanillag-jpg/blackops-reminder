@@ -1115,6 +1115,36 @@ function buildOperatorActionSheet(summary, audit) {
       copyPacket: row.copyPacket,
     };
   });
+  const permissionRequestCards = rows
+    .filter((row) => row.lane === "permission")
+    .map((row) => ({
+      id: row.id,
+      platform: row.platform,
+      scope: row.requiredStatus ? summary.tasks.find((task) => task.id === row.id)?.scope || "" : "",
+      requiredStatus: row.requiredStatus,
+      portalUrl: row.portalUrl,
+      docsUrl: row.docsUrl,
+      prerequisite: row.platform === "youtube"
+        ? "Google Cloud OAuth app and YouTube Data API enabled."
+        : row.platform === "instagram"
+          ? "Meta app plus Instagram/Facebook asset connected in Business settings."
+          : row.platform === "tiktok"
+            ? "TikTok developer app with public redirect URI and content posting product access."
+            : "Developer app and platform account connected.",
+      useCase: "Publish owned, licensed, or permissioned short-form clips through an approval_required workflow. No automatic publishing is enabled until Robert explicitly approves.",
+      evidenceNeeded: [
+        "Portal request or approval URL/ticket.",
+        "Screenshot/proof path without private screenshots or credentials.",
+        "Reviewer note confirming owned/permissioned content and approval_required publishing.",
+      ],
+      copyNote: [
+        `Request ${row.platform} permission ${summary.tasks.find((task) => task.id === row.id)?.scope || row.id}.`,
+        "Use case: owned or permissioned short-form clips, scheduled through Metricool approval_required.",
+        "Evidence: save request/approval ticket and proof path, without credentials or private values.",
+      ].join(" "),
+      proofPath: row.proofPath,
+      nextStep: row.operatorAction,
+    }));
   const blocks = audit.workBlocks.map((block) => ({
     id: block.id,
     label: block.label,
@@ -1149,6 +1179,7 @@ function buildOperatorActionSheet(summary, audit) {
     },
     nextAction: rows[0] || null,
     blocks,
+    permissionRequestCards,
     rows,
     guardrails: [
       "Do the portal action first; only then paste proof into the proof file and evidence CSV.",
@@ -1191,6 +1222,25 @@ function renderActionSheetMarkdown(sheet) {
     "```",
     "",
   ].filter(Boolean).join("\n"));
+  const permissionLines = sheet.permissionRequestCards.map((card) => [
+    `### ${card.platform}: ${card.scope}`,
+    "",
+    `- Required status: ${card.requiredStatus}`,
+    `- Portal: ${card.portalUrl || "n/a"}`,
+    `- Docs: ${card.docsUrl || "n/a"}`,
+    `- Prerequisite: ${card.prerequisite}`,
+    `- Proof file: ${card.proofPath}`,
+    `- Next step: ${card.nextStep}`,
+    "",
+    "Review note:",
+    "```text",
+    card.copyNote,
+    "```",
+    "",
+    "Evidence needed:",
+    ...card.evidenceNeeded.map((item) => `- ${item}`),
+    "",
+  ].join("\n"));
   return [
     "# Clippers External Operator Action Sheet",
     "",
@@ -1215,6 +1265,10 @@ function renderActionSheetMarkdown(sheet) {
     "## Blocks",
     "",
     ...(blockLines.length ? blockLines : ["- No operator blocks remain."]),
+    "",
+    "## Permission Request Cards",
+    "",
+    ...(permissionLines.length ? permissionLines : ["- No permission requests remain."]),
     "",
     "## Rows",
     "",
