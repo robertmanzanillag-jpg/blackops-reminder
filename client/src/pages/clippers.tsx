@@ -679,6 +679,19 @@ interface ClipperExternalCloseoutPackSummary {
       proofPath: string;
       nextStep: string;
     }>;
+    officialSourceCards?: Array<{
+      id: string;
+      platform: string;
+      scope: string;
+      sourceStatus: string;
+      accessMode: string;
+      submitDecision: string;
+      primaryOfficialUrl: string;
+      requestPortalUrl: string;
+      permissionProofPath: string;
+      sourceAuditPath: string;
+      nextStep: string;
+    }>;
     nextAction: {
       id: string;
       lane: string;
@@ -15869,6 +15882,16 @@ export default function ClippersPage() {
                           {externalCloseoutPack.actionSheet.permissionRequestCards?.[0] && (
                             <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
                               First: {externalCloseoutPack.actionSheet.permissionRequestCards[0].platform} · {externalCloseoutPack.actionSheet.permissionRequestCards[0].scope} · {externalCloseoutPack.actionSheet.permissionRequestCards[0].portalUrl}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {(externalCloseoutPack.actionSheet.officialSourceCards || []).length > 0 && (
+                        <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
+                          <p className="text-xs font-medium text-emerald-100">Official source cards: {externalCloseoutPack.actionSheet.officialSourceCards?.length || 0}</p>
+                          {externalCloseoutPack.actionSheet.officialSourceCards?.[0] && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
+                              First: {externalCloseoutPack.actionSheet.officialSourceCards[0].platform} · {externalCloseoutPack.actionSheet.officialSourceCards[0].scope} · {externalCloseoutPack.actionSheet.officialSourceCards[0].sourceStatus} · {externalCloseoutPack.actionSheet.officialSourceCards[0].primaryOfficialUrl}
                             </p>
                           )}
                         </div>

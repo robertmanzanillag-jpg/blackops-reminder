@@ -22,6 +22,7 @@ const actionSheetJsonPath = path.join(reportsDir, "clippers-external-operator-ac
 const actionSheetMarkdownPath = path.join(reportsDir, "clippers-external-operator-action-sheet.md");
 const actionSheetCsvPath = path.join(reportsDir, "clippers-external-operator-action-sheet.csv");
 const evidenceImportReportPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
+const officialPermissionSourceAuditPath = path.join(rootDir, "official-permission-source-audit.json");
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
 const proofDir = path.join(rootDir, "evidence-drop", "external-closeout-proofs");
 const productionPublicUrlPath = path.join(rootDir, "production-public-url.json");
@@ -265,6 +266,12 @@ function safeArtifactText(value) {
     .replace(/\bclient secrets?\b/gi, "developer app private values")
     .replace(/\bOAuth tokens?\b/gi, "OAuth private values")
     .replace(/\brecovery codes?\b/gi, "recovery private values");
+}
+
+function safeSourceCardText(value) {
+  return safeArtifactText(value)
+    .replace(/\bbearer\b/gi, "authorized")
+    .replace(/\btokens?\b/gi, "OAuth private values");
 }
 
 function renderProofStub(task) {
@@ -1091,7 +1098,12 @@ function renderGoLiveAuditCsv(audit) {
   return `${header.join(",")}\n${rows.join("\n")}\n`;
 }
 
-function buildOperatorActionSheet(summary, audit) {
+function sourceAuditForPermission(officialPermissionSourceAudit, row, scope) {
+  const items = officialPermissionSourceAudit?.items || [];
+  return items.find((item) => item.platform === row.platform && (item.scopes || []).includes(scope)) || null;
+}
+
+function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit = null) {
   const rows = audit.evidenceRepairQueue.map((row) => {
     const task = summary.tasks.find((item) => item.id === row.id) || {};
     const block = audit.workBlocks.find((item) => item.lane === row.lane) || null;
@@ -1145,6 +1157,43 @@ function buildOperatorActionSheet(summary, audit) {
       proofPath: row.proofPath,
       nextStep: row.operatorAction,
     }));
+  const officialSourceCards = permissionRequestCards.map((card) => {
+    const sourceAudit = sourceAuditForPermission(officialPermissionSourceAudit, card, card.scope);
+    const primaryOfficialUrl = sourceAudit?.officialUrls?.[0] || card.docsUrl || "";
+    const sourceStatus = sourceAudit?.sourceStatus || (card.docsUrl ? "source_url_available" : "needs_source_check");
+    const accessMode = sourceAudit?.accessMode || (card.platform === "instagram" ? "login_required" : "public");
+    const submitDecision = sourceAudit?.submitDecision || "recheck_before_request";
+    const claims = (sourceAudit?.verifiedClaims || []).map(safeSourceCardText);
+    const reviewerEvidence = (sourceAudit?.reviewerEvidence || [
+      "Open the official platform source and capture a non-private proof reference.",
+      "Confirm the requested scope exists for this app/account before submitting.",
+      "Attach approval_required demo evidence and rights-gate evidence.",
+    ]).map(safeSourceCardText);
+    const recheckSteps = (sourceAudit?.recheckSteps || [
+      "Open the official docs or developer portal.",
+      "Confirm the scope name and product requirement.",
+      "Save the non-private proof reference in the closeout proof file.",
+    ]).map(safeSourceCardText);
+    return {
+      id: `official_source:${card.platform}:${card.scope}`,
+      platform: card.platform,
+      scope: card.scope,
+      sourceStatus,
+      accessMode,
+      submitDecision,
+      officialUrls: sourceAudit?.officialUrls || [primaryOfficialUrl].filter(Boolean),
+      primaryOfficialUrl,
+      requestPortalUrl: card.portalUrl,
+      permissionProofPath: card.proofPath,
+      sourceAuditPath: officialPermissionSourceAudit?.markdownPath || "",
+      verifiedClaims: claims,
+      reviewerEvidence,
+      recheckSteps,
+      nextStep: accessMode === "login_required"
+        ? "Human login recheck required in the official developer portal before importing requested evidence."
+        : "Open the official docs, attach the source proof pack, then import requested evidence after the portal action.",
+    };
+  });
   const accountSetupCards = rows
     .filter((row) => row.lane === "account")
     .map((row) => {
@@ -1244,6 +1293,7 @@ function buildOperatorActionSheet(summary, audit) {
     accountSetupCards,
     developerAppCards,
     permissionRequestCards,
+    officialSourceCards,
     rows,
     guardrails: [
       "Do the portal action first; only then paste proof into the proof file and evidence CSV.",
@@ -1305,6 +1355,31 @@ function renderActionSheetMarkdown(sheet) {
     ...card.evidenceNeeded.map((item) => `- ${item}`),
     "",
   ].join("\n"));
+  const officialSourceLines = sheet.officialSourceCards.map((card) => [
+    `### ${card.platform}: ${card.scope}`,
+    "",
+    `- Source status: ${card.sourceStatus}`,
+    `- Access mode: ${card.accessMode}`,
+    `- Submit decision: ${card.submitDecision}`,
+    `- Primary official URL: ${card.primaryOfficialUrl || "n/a"}`,
+    `- Request portal: ${card.requestPortalUrl || "n/a"}`,
+    `- Permission proof file: ${card.permissionProofPath}`,
+    card.sourceAuditPath ? `- Source audit: ${card.sourceAuditPath}` : null,
+    `- Next step: ${card.nextStep}`,
+    "",
+    "Official URLs:",
+    ...(card.officialUrls.length ? card.officialUrls.map((item) => `- ${item}`) : ["- n/a"]),
+    "",
+    "Verified claims:",
+    ...(card.verifiedClaims.length ? card.verifiedClaims.map((item) => `- ${item}`) : ["- Recheck required in official portal."]),
+    "",
+    "Reviewer evidence:",
+    ...card.reviewerEvidence.map((item) => `- ${item}`),
+    "",
+    "Recheck steps:",
+    ...card.recheckSteps.map((item) => `- ${item}`),
+    "",
+  ].filter(Boolean).join("\n"));
   const accountLines = sheet.accountSetupCards.map((card) => [
     `### ${card.accountId}: ${card.platform}`,
     "",
@@ -1387,6 +1462,10 @@ function renderActionSheetMarkdown(sheet) {
     "",
     ...(permissionLines.length ? permissionLines : ["- No permission requests remain."]),
     "",
+    "## Official Permission Source Cards",
+    "",
+    ...(officialSourceLines.length ? officialSourceLines : ["- No official permission source checks remain."]),
+    "",
     "## Rows",
     "",
     ...(rowLines.length ? rowLines : ["- No operator actions remain."]),
@@ -1421,6 +1500,7 @@ async function main() {
   const accountReadiness = await readJson(accountReadinessPath);
   const operationalReadiness = await readJson(operationalReadinessPath);
   const evidenceImport = await readJsonOptional(evidenceImportReportPath);
+  const officialPermissionSourceAudit = await readJsonOptional(officialPermissionSourceAuditPath);
   const publicBaseUrl = await readStoredPublicBaseUrl();
   const accountTasks = accountReadiness.accountRows.filter((row) => row.accountStatus !== "verified").map(accountTask);
   const developerTasks = accountReadiness.developerRows.filter((row) => row.status !== "approved").map((row) => developerTask(row, publicBaseUrl));
@@ -1506,7 +1586,7 @@ async function main() {
   const preliminaryAuditMarkdown = renderGoLiveAuditMarkdown(preliminaryAudit);
   const preliminaryAuditCsv = renderGoLiveAuditCsv(preliminaryAudit);
   const preliminaryAuditJson = JSON.stringify(preliminaryAudit, null, 2);
-  const preliminaryActionSheet = buildOperatorActionSheet(summary, preliminaryAudit);
+  const preliminaryActionSheet = buildOperatorActionSheet(summary, preliminaryAudit, officialPermissionSourceAudit);
   const preliminaryActionSheetJson = JSON.stringify(preliminaryActionSheet, null, 2);
   const preliminaryActionSheetMarkdown = renderActionSheetMarkdown(preliminaryActionSheet);
   const preliminaryActionSheetCsv = renderActionSheetCsv(preliminaryActionSheet);
@@ -1540,7 +1620,7 @@ async function main() {
   artifactSafety.scanned = 16;
   artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
   const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
-  const actionSheet = buildOperatorActionSheet(summary, goLiveAudit);
+  const actionSheet = buildOperatorActionSheet(summary, goLiveAudit, officialPermissionSourceAudit);
   const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet };
   await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
   await writeFile(outMarkdownPath, closeoutMarkdown);

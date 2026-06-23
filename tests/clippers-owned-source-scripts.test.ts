@@ -168,6 +168,10 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.ok(pack.actionSheet.developerAppCards.every((card) => card.copyNote.includes("approval_required")));
   assert.equal(pack.actionSheet.permissionRequestCards.length, 6);
   assert.ok(pack.actionSheet.permissionRequestCards.some((card) => card.scope === "video.publish" && card.copyNote.includes("approval_required")));
+  assert.equal(pack.actionSheet.officialSourceCards.length, 6);
+  assert.ok(pack.actionSheet.officialSourceCards.some((card) => card.scope === "video.publish" && card.sourceStatus === "official_verified"));
+  assert.ok(pack.actionSheet.officialSourceCards.some((card) => card.scope === "instagram_content_publish" && card.accessMode === "login_required"));
+  assert.ok(pack.actionSheet.officialSourceCards.some((card) => card.scope === "https://www.googleapis.com/auth/youtube.upload" && card.primaryOfficialUrl.includes("developers.google.com/youtube")));
   assert.ok(pack.actionSheet.guardrails.some((item) => item.includes("Metricool remains approval_required")));
   assert.equal(pack.goLiveAudit.status, "blocked_external_actions");
   assert.equal(pack.goLiveAudit.totals.operatorActions, 16);
@@ -272,6 +276,9 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(actionSheet.accountSetupCards.length, 7);
   assert.equal(actionSheet.developerAppCards.length, 3);
   assert.equal(actionSheet.permissionRequestCards.length, 6);
+  assert.equal(actionSheet.officialSourceCards.length, 6);
+  assert.ok(actionSheet.officialSourceCards.every((card) => card.permissionProofPath.includes("external-closeout-proofs")));
+  assert.ok(actionSheet.officialSourceCards.some((card) => card.scope === "video.upload" && card.submitDecision === "request_now"));
   assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
   assert.ok(actionSheet.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
   const actionSheetCsv = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.csv"), "utf8");
@@ -286,6 +293,9 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(actionSheetMarkdown, /App review use case:/);
   assert.match(actionSheetMarkdown, /Permission Request Cards/);
   assert.match(actionSheetMarkdown, /Review note:/);
+  assert.match(actionSheetMarkdown, /Official Permission Source Cards/);
+  assert.match(actionSheetMarkdown, /Verified claims:/);
+  assert.match(actionSheetMarkdown, /Recheck steps:/);
   assert.match(actionSheetMarkdown, /Copy packet:/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
@@ -340,6 +350,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /Account setup cards/);
   assert.match(ui, /Developer app cards/);
   assert.match(ui, /Permission request cards/);
+  assert.match(ui, /Official source cards/);
+  assert.match(ui, /officialSourceCards/);
   assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
   assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);
   assert.match(ui, /data-testid="clippers-external-go-live-repair-queue"/);
