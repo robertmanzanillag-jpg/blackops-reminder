@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
@@ -41,6 +41,26 @@ const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "YOUTUBE_OAUTH_REFRESH_TOKEN",
   "YOUTUBE_OAUTH2_REFRESH_TOKEN",
 ];
+
+const testClipperWorkspaceRoot = path.join(process.cwd(), "clippers_workspace");
+let testClipperWorkspaceBackupPath: string | null = null;
+
+async function pathExists(filePath: string) {
+  return access(filePath).then(() => true, () => false);
+}
+
+test.before(async () => {
+  if (!(await pathExists(testClipperWorkspaceRoot))) return;
+  testClipperWorkspaceBackupPath = path.join(process.cwd(), `.clippers_workspace.agent-test-backup-${process.pid}-${Date.now()}`);
+  await rename(testClipperWorkspaceRoot, testClipperWorkspaceBackupPath);
+});
+
+test.after(async () => {
+  await rm(testClipperWorkspaceRoot, { recursive: true, force: true });
+  if (testClipperWorkspaceBackupPath && await pathExists(testClipperWorkspaceBackupPath)) {
+    await rename(testClipperWorkspaceBackupPath, testClipperWorkspaceRoot);
+  }
+});
 
 function snapshotEnv(names: string[]): Record<string, string | undefined> {
   return Object.fromEntries(names.map((name) => [name, process.env[name]]));

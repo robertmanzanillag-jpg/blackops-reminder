@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
@@ -33,6 +34,23 @@ const writeFileIfMissing = async (filePath: string, content: string) => {
 
 const writeJsonIfMissing = async (filePath: string, value: unknown) => {
   await writeFileIfMissing(filePath, `${JSON.stringify(value, null, 2)}\n`);
+};
+
+const writeTinyTestVideo = (outputPath: string) => {
+  const result = spawnSync("ffmpeg", [
+    "-y",
+    "-f", "lavfi",
+    "-i", "color=c=blue:s=720x1280:d=1",
+    "-f", "lavfi",
+    "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-shortest",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    outputPath,
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  appendFileSync(outputPath, Buffer.alloc(12 * 1024));
 };
 
 const isolateClipperWorkspace = async () => {
@@ -95,7 +113,7 @@ const writeOwnedSourceFixture = async (category: "sports" | "memes", fileName: s
   const allowlistPath = path.join(rootDir, "allowlist", `${path.parse(fileName).name}.md`);
   await mkdir(categoryDir, { recursive: true });
   await mkdir(path.dirname(allowlistPath), { recursive: true });
-  await writeFile(sourcePath, `fixture video bytes for ${fileName}\n`);
+  writeTinyTestVideo(sourcePath);
   await writeFile(evidencePath, [
     "status: owned_source",
     `asset: ${fileName}`,

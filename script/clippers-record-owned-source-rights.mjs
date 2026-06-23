@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
@@ -11,6 +11,7 @@ const dryRun = process.argv.includes("--dry-run");
 const evidenceReadTimeoutMs = Number(process.env.CLIPPERS_EVIDENCE_READ_TIMEOUT_MS || "5000");
 const evidenceContentCache = new Map();
 const manifestCache = new Map();
+const minUsableSourceVideoBytes = 8 * 1024;
 
 const rules = [
   {
@@ -248,6 +249,27 @@ async function validateEvidenceFile(audit) {
   return null;
 }
 
+async function validateSourceMediaFile(audit) {
+  const sourcePath = path.join(sourceDropDir, audit.category, audit.fileName);
+  const fileStat = await stat(sourcePath).catch(() => null);
+  if (!fileStat?.isFile()) return `${sourcePath} is missing or is not a file`;
+  if (fileStat.size < minUsableSourceVideoBytes) return `${sourcePath} is too small to be a usable source video`;
+  const ext = path.extname(sourcePath).toLowerCase();
+  if (![".mp4", ".mov", ".m4v"].includes(ext)) return `${sourcePath} has unsupported source extension ${ext || "none"}`;
+  const handle = await open(sourcePath, "r").catch(() => null);
+  if (!handle) return `${sourcePath} could not be opened for media validation`;
+  const head = Buffer.alloc(64);
+  const bytesRead = await handle.read(head, 0, head.length, 0)
+    .then((result) => result.bytesRead)
+    .catch(() => 0)
+    .finally(() => handle.close().catch(() => undefined));
+  if (bytesRead <= 0) return `${sourcePath} could not be read for media validation`;
+  if (!head.subarray(0, bytesRead).includes(Buffer.from("ftyp"))) {
+    return `${sourcePath} does not look like a usable MP4/MOV source video`;
+  }
+  return null;
+}
+
 async function readEvidenceFile(evidencePath) {
   if (evidenceContentCache.has(evidencePath)) return evidenceContentCache.get(evidencePath);
   const contentPromise = readTextFileWithTimeout(evidencePath);
@@ -313,6 +335,7 @@ async function scanOwnedSourceDropFiles() {
       audits.push({
         ...audit,
         evidenceProblem: await validateEvidenceFile(audit),
+        mediaProblem: await validateSourceMediaFile(audit),
       });
     }
   }
@@ -340,13 +363,13 @@ async function runDryRun() {
       if (allowlistProblem) {
         row.pending += 1;
         allowlistProblems.push({ fileName: audit.fileName, allowlistProblem });
-      } else if (!audit.evidenceProblem) {
+      } else if (!audit.evidenceProblem && !audit.mediaProblem) {
         row.rightsReady += 1;
       }
     }
-    if (audit.evidenceProblem) row.evidenceProblems += 1;
+    if (audit.evidenceProblem || audit.mediaProblem) row.evidenceProblems += 1;
   }
-  const evidenceProblems = audits.filter((audit) => audit.evidenceProblem);
+  const evidenceProblems = audits.filter((audit) => audit.evidenceProblem || audit.mediaProblem);
   console.log(JSON.stringify({
     dryRun,
     mode: "filesystem_evidence_audit",
@@ -356,7 +379,10 @@ async function runDryRun() {
     registrationPending: Array.from(byCategory.values()).reduce((sum, row) => sum + row.pending, 0),
     rightsReady: Array.from(byCategory.values()).reduce((sum, row) => sum + row.rightsReady, 0),
     byCategory: Object.fromEntries(byCategory),
-    sampleProblems: evidenceProblems.slice(0, 10),
+    sampleProblems: evidenceProblems.slice(0, 10).map((audit) => ({
+      ...audit,
+      evidenceProblem: audit.evidenceProblem || audit.mediaProblem,
+    })),
     sampleAllowlistProblems: allowlistProblems.slice(0, 10),
     realPublishEnabled: metricoolGuard.realPublishEnabled,
     publishMode: metricoolGuard.publishMode,
@@ -389,7 +415,7 @@ async function runRegistration() {
 
   const missingEvidence = [];
   for (const audit of pendingAudits) {
-    if (audit.evidenceProblem) missingEvidence.push(`${audit.fileName} -> ${audit.evidenceProblem}`);
+    if (audit.evidenceProblem || audit.mediaProblem) missingEvidence.push(`${audit.fileName} -> ${audit.evidenceProblem || audit.mediaProblem}`);
   }
   if (missingEvidence.length) {
     throw new Error(`Owned source evidence file(s) missing:\n${missingEvidence.join("\n")}`);
@@ -403,7 +429,7 @@ async function runRegistration() {
 
   let rightsReady = 0;
   for (const audit of audits) {
-    if (await allowlistExists(audit.fileName) && !await validateAllowlistFile(audit.fileName, audit)) rightsReady += 1;
+    if (await allowlistExists(audit.fileName) && !audit.mediaProblem && !await validateAllowlistFile(audit.fileName, audit)) rightsReady += 1;
   }
 
   console.log(JSON.stringify({
