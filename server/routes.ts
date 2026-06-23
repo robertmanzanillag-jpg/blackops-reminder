@@ -412,6 +412,10 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-evidence-import-report.json", "utf8");
     return JSON.parse(raw);
   };
+  const readClipperExternalCloseoutRepairWorkPacket = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-repair-work-packet.json", "utf8");
+    return JSON.parse(raw);
+  };
   const readTextWithTimeout = async (filePath: string, timeoutMs: number) => Promise.race([
     readNodeFile(filePath, "utf8"),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
@@ -2376,6 +2380,15 @@ export async function registerRoutes(
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 500;
       res.status(status).json({ error: error.message || (status === 404 ? "External closeout evidence import has not been previewed" : "External closeout evidence import could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-repair-work-packet", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutRepairWorkPacket: await readClipperExternalCloseoutRepairWorkPacket() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout repair work packet has not been prepared" : "External closeout repair work packet could not be read") });
     }
   });
 
@@ -5638,8 +5651,11 @@ export async function registerRoutes(
   app.get("/api/ai-spend/monthly", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const runs = await storage.getAutomationRuns(userId, undefined, 500);
-      res.json(buildMonthlyAiSpendReport(runs));
+      const [runs, automations] = await Promise.all([
+        storage.getAutomationRuns(userId, undefined, 500),
+        storage.getAutomationDefinitions(userId),
+      ]);
+      res.json(buildMonthlyAiSpendReport(runs, undefined, automations));
     } catch (error) {
       res.status(500).json({ error: "Failed to build AI spend report" });
     }

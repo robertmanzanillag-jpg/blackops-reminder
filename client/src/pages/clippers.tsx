@@ -929,7 +929,15 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
   status: ClipperExternalCloseoutEvidenceImportStatus;
   mode: "preview" | "apply" | "apply_ready";
   generatedAt: string;
-  paths: { sourceCsv: string; json: string; markdown: string; csv: string };
+  paths: {
+    sourceCsv: string;
+    json: string;
+    markdown: string;
+    csv: string;
+    repairTemplatesCsv?: string;
+    repairWorkPacketJson?: string;
+    repairWorkPacketMarkdown?: string;
+  };
   totals: {
     rowsScanned: number;
     accepted: number;
@@ -969,6 +977,7 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
       nextStep: string;
     } | null;
     nextRepairPacket: string;
+    nextRepairCsvRowTemplate: string;
     nextStep: string;
   };
   repairQueue?: Array<{
@@ -987,6 +996,7 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
     operatorAction: string;
     csvEditHint: string;
     safeProofStarter: string;
+    csvRowTemplate: string;
     nextStep: string;
   }>;
   nextStep: string;
@@ -17059,6 +17069,19 @@ export default function ClippersPage() {
                                         Copy next
                                       </Button>
                                     )}
+                                    {externalCloseoutEvidenceImport.repairSummary.nextRepairCsvRowTemplate && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 border-amber-300/20 bg-transparent px-2 text-xs text-amber-100 hover:bg-amber-300/10"
+                                        onClick={() => void copyExternalCloseoutPacket(externalCloseoutEvidenceImport.repairSummary?.nextRepairCsvRowTemplate || "")}
+                                        data-testid="copy-clippers-external-next-repair-csv-button"
+                                      >
+                                        <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                        Copy CSV row
+                                      </Button>
+                                    )}
                                     <Badge className="w-fit border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
                                       {externalCloseoutEvidenceImport.repairSummary.totalRejected} rejected
                                     </Badge>
@@ -17069,6 +17092,20 @@ export default function ClippersPage() {
                                   <p>Missing: {externalCloseoutEvidenceImport.repairSummary.missingFields.map((item) => `${item.field} ${item.count}`).join(" · ") || "none"}</p>
                                   <p className="break-all">Next proof: {externalCloseoutEvidenceImport.repairSummary.nextRepair?.proofPath || "none"}</p>
                                 </div>
+                                {externalCloseoutEvidenceImport.paths.repairTemplatesCsv && (
+                                  <p className="mt-2 break-all rounded border border-amber-300/10 bg-black/20 px-2 py-1 text-[10px] leading-4 text-amber-100/80">
+                                    Repair templates CSV: {externalCloseoutEvidenceImport.paths.repairTemplatesCsv}
+                                  </p>
+                                )}
+                                {externalCloseoutEvidenceImport.paths.repairWorkPacketMarkdown && (
+                                  <p className="mt-2 break-all rounded border border-amber-300/10 bg-black/20 px-2 py-1 text-[10px] leading-4 text-amber-100/80">
+                                    Repair work packet: {externalCloseoutEvidenceImport.paths.repairWorkPacketMarkdown}
+                                    {" "}
+                                    <a className="text-cyan-200 underline-offset-2 hover:underline" href="/api/clippers/external-closeout-repair-work-packet" target="_blank" rel="noreferrer">
+                                      Open JSON
+                                    </a>
+                                  </p>
+                                )}
                                 {externalCloseoutEvidenceImport.repairSummary.topReasons.length > 0 && (
                                   <div className="mt-2 space-y-1">
                                     {externalCloseoutEvidenceImport.repairSummary.topReasons.slice(0, 3).map((item) => (
@@ -17081,6 +17118,11 @@ export default function ClippersPage() {
                                 {externalCloseoutEvidenceImport.repairSummary.nextRepairPacket && (
                                   <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/20 p-2 text-[10px] leading-4 text-zinc-400">
                                     {externalCloseoutEvidenceImport.repairSummary.nextRepairPacket}
+                                  </pre>
+                                )}
+                                {externalCloseoutEvidenceImport.repairSummary.nextRepairCsvRowTemplate && (
+                                  <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded border border-amber-300/10 bg-black/20 p-2 text-[10px] leading-4 text-amber-100/80">
+                                    {externalCloseoutEvidenceImport.repairSummary.nextRepairCsvRowTemplate}
                                   </pre>
                                 )}
                               </div>
@@ -17102,6 +17144,23 @@ export default function ClippersPage() {
                                     <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
                                   )}
                                   <p className="mt-1 text-[11px] leading-4 text-zinc-400">{row.nextStep}</p>
+                                  {row.csvRowTemplate && (
+                                    <details className="mt-2 rounded border border-amber-300/10 bg-black/20 p-2">
+                                      <summary className="cursor-pointer text-[11px] font-medium text-amber-100">CSV row template</summary>
+                                      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-4 text-amber-100/80">{row.csvRowTemplate}</pre>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="mt-2 h-7 border-amber-300/20 bg-transparent px-2 text-xs text-amber-100 hover:bg-amber-300/10"
+                                        onClick={() => void copyExternalCloseoutPacket(row.csvRowTemplate)}
+                                        data-testid="copy-clippers-external-repair-row-csv-button"
+                                      >
+                                        <Copy className="mr-2 h-3.5 w-3.5" />
+                                        Copy CSV row
+                                      </Button>
+                                    </details>
+                                  )}
                                   {row.safeProofStarter && (
                                     <details className="mt-2 rounded border border-amber-300/10 bg-black/20 p-2">
                                       <summary className="cursor-pointer text-[11px] font-medium text-amber-100">Proof starter</summary>

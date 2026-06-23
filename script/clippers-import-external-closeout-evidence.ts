@@ -11,6 +11,9 @@ const reportsDir = path.join(rootDir, "reports");
 const reportJsonPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
 const reportMarkdownPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.md");
 const reportCsvPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.csv");
+const repairTemplatesCsvPath = path.join(reportsDir, "clippers-external-closeout-repair-row-templates.csv");
+const repairWorkPacketJsonPath = path.join(reportsDir, "clippers-external-closeout-repair-work-packet.json");
+const repairWorkPacketMarkdownPath = path.join(reportsDir, "clippers-external-closeout-repair-work-packet.md");
 const proofTodoJsonPath = path.join(reportsDir, "clippers-external-closeout-proof-todo.json");
 
 const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}/i;
@@ -169,6 +172,8 @@ function buildRepairQueue(
     const scope = repairSafeText(row.scope || matched?.scope);
     const requiredStatus = repairSafeText(matched?.requiredCsvStatus || row.status);
     const proofPath = String(matched?.proofPath || "");
+    const safeRedirectUri = repairSafeText(matched?.redirectUri);
+    const safePublicBaseUrl = safeRedirectUri ? safeOriginFromRedirect(safeRedirectUri) : "";
     const missingCsvFields = Array.isArray(matched?.missingCsvFields) ? matched.missingCsvFields : [];
     const safeProofStarter = [
       `# External closeout proof - ${matched?.id || `${lane}:${platform}`}`,
@@ -183,7 +188,7 @@ function buildRepairQueue(
       "",
       "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or private screenshots.",
     ].join("\n");
-    return {
+    const repairItem = {
       csvRow: csvIndex || null,
       closeoutId: matched?.id || null,
       lane,
@@ -193,6 +198,8 @@ function buildRepairQueue(
       requiredStatus,
       reason: item.reason || "Rejected evidence row.",
       proofPath,
+      publicBaseUrl: isProductionPublicBaseUrl(safePublicBaseUrl) ? safePublicBaseUrl : "",
+      redirectUri: isProductionPublicBaseUrl(safePublicBaseUrl) ? safeRedirectUri : "",
       portalUrl: matched?.portalUrl || "",
       docsUrl: matched?.docsUrl || "",
       missingCsvFields,
@@ -203,7 +210,44 @@ function buildRepairQueue(
         ? `Fill ${proofPath} with real non-secret evidence, then update CSV row ${csvIndex || "?"} and preview again.`
         : `Match CSV row ${csvIndex || "?"} to an external closeout queue item, then preview again.`,
     };
+    return {
+      ...repairItem,
+      csvRowTemplate: buildNextRepairCsvRowTemplate(repairItem),
+    };
   });
+}
+
+function buildNextRepairCsvRowTemplate(firstRepair: Record<string, unknown> | null): string {
+  if (!firstRepair) return "";
+  const lane = String(firstRepair.lane || "").trim();
+  const accountId = String(firstRepair.accountId || "").trim();
+  const platform = String(firstRepair.platform || "").trim();
+  const requiredStatus = String(firstRepair.requiredStatus || "").trim();
+  const scope = String(firstRepair.scope || "").trim();
+  const proofPath = String(firstRepair.proofPath || "").trim();
+  const portalUrl = String(firstRepair.portalUrl || "").trim();
+  const docsUrl = String(firstRepair.docsUrl || "").trim();
+  const publicBaseUrl = String(firstRepair.publicBaseUrl || "").trim();
+  const redirectUri = String(firstRepair.redirectUri || "").trim();
+  const developerAppId = lane === "developer_app" ? "<paste public app id/client key/project id>" : "";
+  const notes = [
+    "Replace this with 20+ chars confirming the real external action, date,",
+    "and non-secret proof location.",
+  ].join(" ");
+  return [
+    lane,
+    lane === "account" ? accountId : "",
+    platform,
+    requiredStatus,
+    lane === "permission" ? scope : "",
+    developerAppId,
+    lane === "developer_app" ? publicBaseUrl || "<paste public https base url>" : "",
+    lane === "developer_app" ? redirectUri : "",
+    portalUrl,
+    docsUrl,
+    proofPath || "<paste real proof URL or local proof path>",
+    notes,
+  ].map(csvCell).join(",");
 }
 
 function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Record<string, unknown>[]): Record<string, unknown> {
@@ -230,6 +274,7 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
     .map(([field, count]) => ({ field, count }))
     .sort((left, right) => right.count - left.count || left.field.localeCompare(right.field));
   const firstRepair = repairQueue[0] || null;
+  const nextRepairCsvRowTemplate = buildNextRepairCsvRowTemplate(firstRepair);
   const nextRepairPacket = firstRepair ? [
     `Next evidence repair: ${firstRepair.closeoutId || firstRepair.lane || "external evidence"}`,
     `CSV row: ${firstRepair.csvRow || "?"}`,
@@ -245,6 +290,7 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
     Array.isArray(firstRepair.missingCsvFields) && firstRepair.missingCsvFields.length
       ? `Missing CSV fields: ${firstRepair.missingCsvFields.join(", ")}`
       : null,
+    nextRepairCsvRowTemplate ? `CSV row template: ${nextRepairCsvRowTemplate}` : null,
     `CSV edit hint: ${firstRepair.csvEditHint || "Fill only real non-secret evidence after the portal action is done."}`,
     `Next step: ${firstRepair.nextStep || "Fix this row, then rerun Validate."}`,
   ].filter(Boolean).join("\n") : "";
@@ -264,10 +310,108 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
       nextStep: firstRepair.nextStep || "",
     } : null,
     nextRepairPacket,
+    nextRepairCsvRowTemplate,
     nextStep: firstRepair
       ? `Fix CSV row ${firstRepair.csvRow || "?"} (${firstRepair.closeoutId || firstRepair.lane || "external evidence"}) first, then rerun Validate.`
       : "No rejected evidence rows remain.",
   };
+}
+
+function buildRepairWorkPacket(summary: Record<string, any>): Record<string, unknown> {
+  const groups = new Map<string, any>();
+  for (const row of summary.repairQueue || []) {
+    const portalUrl = String(row.portalUrl || "no_portal");
+    const key = [row.lane || "unknown", row.platform || "unknown", portalUrl].join(":");
+    const existing = groups.get(key) || {
+      id: key.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "external-repair",
+      lane: row.lane || "unknown",
+      platform: row.platform || "",
+      portalUrl,
+      docsUrl: row.docsUrl || "",
+      items: [],
+    };
+    existing.items.push({
+      csvRow: row.csvRow || null,
+      closeoutId: row.closeoutId || null,
+      accountId: row.accountId || "",
+      scope: row.scope || "",
+      requiredStatus: row.requiredStatus || "",
+      proofPath: row.proofPath || "",
+      missingCsvFields: Array.isArray(row.missingCsvFields) ? row.missingCsvFields : [],
+      reason: row.reason || "",
+      nextStep: row.nextStep || "",
+      replacementCsvRow: row.csvRowTemplate || "",
+    });
+    groups.set(key, existing);
+  }
+  return {
+    generatedAt: summary.generatedAt,
+    status: summary.repairSummary?.status || "clean",
+    totalItems: summary.repairQueue?.length || 0,
+    paths: {
+      evidenceCsv: evidenceCsvPath,
+      repairTemplatesCsv: repairTemplatesCsvPath,
+      json: repairWorkPacketJsonPath,
+      markdown: repairWorkPacketMarkdownPath,
+    },
+    guardrails: [
+      "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or private screenshots.",
+      "Only replace a row after the matching proof file contains real non-secret evidence.",
+      "Run npm run clippers:import-external-closeout-evidence before applying anything.",
+      "Metricool remains approval_required; this packet does not publish content.",
+    ],
+    groups: Array.from(groups.values()).sort((left, right) =>
+      String(left.lane).localeCompare(String(right.lane)) ||
+      String(left.platform).localeCompare(String(right.platform)) ||
+      String(left.portalUrl).localeCompare(String(right.portalUrl))),
+    nextStep: summary.repairSummary?.nextStep || summary.nextStep,
+  };
+}
+
+function renderRepairWorkPacketMarkdown(packet: Record<string, any>): string {
+  return [
+    "# Clippers External Closeout Repair Work Packet",
+    "",
+    `Generated: ${packet.generatedAt}`,
+    `Status: ${packet.status}`,
+    `Total items: ${packet.totalItems}`,
+    "",
+    "## Guardrails",
+    "",
+    ...(packet.guardrails || []).map((item: string) => `- ${item}`),
+    "",
+    "## Files",
+    "",
+    `- Evidence CSV: ${packet.paths.evidenceCsv}`,
+    `- Repair templates CSV: ${packet.paths.repairTemplatesCsv}`,
+    "",
+    "## Work Groups",
+    "",
+    ...(packet.groups?.length ? packet.groups.map((group: any) => [
+      `### ${group.lane} / ${group.platform}`,
+      "",
+      `- Portal: ${group.portalUrl}`,
+      group.docsUrl ? `- Docs: ${group.docsUrl}` : null,
+      `- Items: ${group.items.length}`,
+      "",
+      ...group.items.map((item: any) => [
+        `- CSV row ${item.csvRow || "?"}: ${item.closeoutId || group.id}`,
+        `  - Required status: ${item.requiredStatus || "n/a"}`,
+        item.accountId ? `  - Account: ${item.accountId}` : null,
+        item.scope ? `  - Scope: ${item.scope}` : null,
+        `  - Proof: ${item.proofPath || "missing"}`,
+        item.missingCsvFields?.length ? `  - Missing CSV fields: ${item.missingCsvFields.join(", ")}` : null,
+        `  - Reason: ${item.reason}`,
+        `  - Replacement CSV row: ${item.replacementCsvRow}`,
+        `  - Next: ${item.nextStep}`,
+      ].filter(Boolean).join("\n")),
+    ].filter(Boolean).join("\n")) : ["- None"]),
+    "",
+    "## Next Step",
+    "",
+    packet.nextStep,
+    "",
+  ].join("\n");
 }
 
 function safeOriginFromRedirect(redirectUri: string): string {
@@ -506,8 +650,13 @@ function renderMarkdown(summary: Record<string, any>): string {
       `- CSV row ${item.csvRow || "?"}: ${item.closeoutId || item.lane}`,
       `  - Reason: ${item.reason}`,
       `  - Proof: ${item.proofPath || "missing"}`,
+      `  - CSV template: ${item.csvRowTemplate || "missing"}`,
       `  - Next: ${item.nextStep}`,
     ].join("\n")) : ["- None"]),
+    "",
+    "## Repair Templates CSV",
+    "",
+    summary.paths.repairTemplatesCsv,
     "",
     "## Next Step",
     "",
@@ -579,6 +728,9 @@ async function main(): Promise<void> {
       json: reportJsonPath,
       markdown: reportMarkdownPath,
       csv: reportCsvPath,
+      repairTemplatesCsv: repairTemplatesCsvPath,
+      repairWorkPacketJson: repairWorkPacketJsonPath,
+      repairWorkPacketMarkdown: repairWorkPacketMarkdownPath,
     },
     totals: {
       rowsScanned: rows.length,
@@ -600,6 +752,7 @@ async function main(): Promise<void> {
     launchEvidenceBatch: batchResult?.launchEvidenceBatch || null,
     nextStep,
   };
+  const repairWorkPacket = buildRepairWorkPacket(summary);
 
   await mkdir(reportsDir, { recursive: true });
   await writeFile(reportJsonPath, JSON.stringify(summary, null, 2));
@@ -610,6 +763,22 @@ async function main(): Promise<void> {
     ...summary.rejected.map((row: any) => [row.index || "", row.kind || "", row.accountId || row.account_id || "", row.platform || "", row.status || "", row.scope || "", "rejected", row.reason || ""].map(csvCell).join(",")),
     ...summary.repairQueue.map((row: any) => [row.csvRow || "", row.lane || "", row.accountId || "", row.platform || "", row.requiredStatus || "", row.scope || "", "repair", row.nextStep || ""].map(csvCell).join(",")),
   ].join("\n") + "\n");
+  await writeFile(repairTemplatesCsvPath, [
+    "source_csv_row,closeout_id,lane,platform,account_id,scope,required_status,proof_path,replacement_csv_row",
+    ...summary.repairQueue.map((row: any) => [
+      row.csvRow || "",
+      row.closeoutId || "",
+      row.lane || "",
+      row.platform || "",
+      row.accountId || "",
+      row.scope || "",
+      row.requiredStatus || "",
+      row.proofPath || "",
+      row.csvRowTemplate || "",
+    ].map(csvCell).join(",")),
+  ].join("\n") + "\n");
+  await writeFile(repairWorkPacketJsonPath, JSON.stringify(repairWorkPacket, null, 2));
+  await writeFile(repairWorkPacketMarkdownPath, renderRepairWorkPacketMarkdown(repairWorkPacket));
 
   console.log(JSON.stringify({
     status: summary.status,

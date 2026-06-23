@@ -818,6 +818,22 @@ test("external closeout evidence importer can apply accepted rows while leaving 
     assert.ok(report.repairSummary.nextStep.includes("Fix CSV row"));
     assert.match(report.repairSummary.nextRepairPacket, /Next evidence repair:/);
     assert.match(report.repairSummary.nextRepairPacket, /Proof file:/);
+    assert.match(report.repairSummary.nextRepairPacket, /CSV row template:/);
+    assert.match(report.repairSummary.nextRepairCsvRowTemplate, /permission/);
+    assert.match(report.repairSummary.nextRepairCsvRowTemplate, /video\.publish/);
+    assert.match(report.repairQueue[0].csvRowTemplate, /permission/);
+    assert.match(report.repairQueue[0].csvRowTemplate, /video\.publish/);
+    assert.equal(report.paths.repairTemplatesCsv.endsWith("clippers-external-closeout-repair-row-templates.csv"), true);
+    const repairTemplatesCsv = await readFile(report.paths.repairTemplatesCsv, "utf8");
+    assert.match(repairTemplatesCsv, /source_csv_row,closeout_id,lane,platform,account_id,scope,required_status,proof_path,replacement_csv_row/);
+    assert.match(repairTemplatesCsv, /video\.publish/);
+    assert.equal(report.paths.repairWorkPacketJson.endsWith("clippers-external-closeout-repair-work-packet.json"), true);
+    assert.equal(report.paths.repairWorkPacketMarkdown.endsWith("clippers-external-closeout-repair-work-packet.md"), true);
+    const repairWorkPacket = JSON.parse(await readFile(report.paths.repairWorkPacketJson, "utf8"));
+    assert.equal(repairWorkPacket.totalItems, report.repairQueue.length);
+    assert.ok(repairWorkPacket.groups.length > 0);
+    assert.match(JSON.stringify(repairWorkPacket), /video\.publish/);
+    assert.equal(/token=|client_secret=|api_key=|session=|bearer\s+[a-z0-9._-]+/i.test(JSON.stringify(repairWorkPacket)), false);
     const accountEvidence = JSON.parse(await readFile(accountEvidencePath, "utf8"));
     assert.equal(accountEvidence.status, "verified");
     assert.match(accountEvidence.notes, /meme-radar-youtube-proof/);
@@ -1004,6 +1020,53 @@ test("external closeout evidence importer mirrors strict developer app apply val
   } finally {
     if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
     else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer redacts unsafe proof-todo redirect metadata from repair template", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const proofTodoPath = path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousProofTodo = await readFile(proofTodoPath, "utf8").catch(() => null);
+  const unsafeCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "developer_app,,tiktok,submitted,,tiktok-prod-001,https://localhost:5010,https://localhost:5010/api/clippers/oauth/tiktok/callback?token=unsafe,https://developers.tiktok.com/,,https://developers.tiktok.com/apps/tiktok-prod-001,Submitted app with localhost public base URL must not be ready",
+  ].join("\n") + "\n";
+
+  try {
+    const proofTodo = JSON.parse(previousProofTodo || "{}");
+    proofTodo.rows = (Array.isArray(proofTodo.rows) ? proofTodo.rows : []).map((row) => {
+      if (row.id !== "developer_app:tiktok") return row;
+      return {
+        ...row,
+        redirectUri: "https://localhost:5010/api/clippers/oauth/tiktok/callback?token=unsafe",
+      };
+    });
+    await writeFile(proofTodoPath, JSON.stringify(proofTodo, null, 2));
+    await writeFile(evidenceCsvPath, unsafeCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 1);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.match(report.repairSummary.nextRepairCsvRowTemplate, /developer_app/);
+    assert.match(report.repairQueue[0].csvRowTemplate, /developer_app/);
+    assert.match(report.repairSummary.nextRepairCsvRowTemplate, /<paste public https base url>/);
+    assert.match(report.repairQueue[0].csvRowTemplate, /<paste public https base url>/);
+    assert.doesNotMatch(report.repairSummary.nextRepairCsvRowTemplate, /https:\/\/localhost|token=unsafe/);
+    assert.doesNotMatch(report.repairSummary.nextRepairPacket, /https:\/\/localhost|token=unsafe/);
+    assert.doesNotMatch(report.repairQueue[0].csvRowTemplate, /https:\/\/localhost|token=unsafe/);
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+    if (previousProofTodo === null) await unlink(proofTodoPath).catch(() => undefined);
+    else await writeFile(proofTodoPath, previousProofTodo);
   }
 });
 
@@ -1268,6 +1331,8 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="copy-clippers-external-work-run-button"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-repair-summary"'));
   assert.ok(page.includes('data-testid="copy-clippers-external-next-repair-button"'));
+  assert.ok(page.includes('data-testid="copy-clippers-external-next-repair-csv-button"'));
+  assert.ok(page.includes('data-testid="copy-clippers-external-repair-row-csv-button"'));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
@@ -1276,6 +1341,13 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("previewCards"));
   assert.ok(page.includes("copyText"));
   assert.ok(page.includes("nextEvidenceDrop"));
+  assert.ok(page.includes("nextRepairCsvRowTemplate"));
+  assert.ok(page.includes("csvRowTemplate"));
+  assert.ok(page.includes("repairTemplatesCsv"));
+  assert.ok(page.includes("repairWorkPacketMarkdown"));
+  assert.ok(page.includes("Repair templates CSV"));
+  assert.ok(page.includes("Repair work packet"));
+  assert.ok(page.includes("/api/clippers/external-closeout-repair-work-packet"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("Copy run"));
@@ -1341,6 +1413,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-proof-todo"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-operator-queue"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-next-action"'));
+  assert.ok(routes.includes('app.get("/api/clippers/external-closeout-repair-work-packet"'));
   assert.ok(routes.includes("CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS"));
   assert.ok(routes.includes('child.kill("SIGKILL")'));
   assert.ok(routes.includes("detached: true"));
