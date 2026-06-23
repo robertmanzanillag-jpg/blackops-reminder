@@ -16,6 +16,33 @@ import {
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
+import fsSync from "node:fs";
+
+// Resolve binary paths at startup — Replit autoscale production containers do
+// not activate the Nix PATH, so we look for npm-bundled static binaries first.
+function findBin(...candidates: string[]): string {
+  for (const c of candidates) {
+    if (!c) continue;
+    try { fsSync.accessSync(c, fsSync.constants.X_OK); return c; } catch { /* next */ }
+  }
+  return candidates[candidates.length - 1] ?? "unknown";
+}
+
+const FFMPEG_BIN = findBin(
+  process.env.FFMPEG_PATH?.trim() ?? "",
+  path.join(process.cwd(), "node_modules", "@ffmpeg-installer", "linux-x64", "ffmpeg"),
+  "ffmpeg",
+);
+const FFPROBE_BIN = findBin(
+  process.env.FFPROBE_PATH?.trim() ?? "",
+  path.join(process.cwd(), "node_modules", "ffprobe-static", "bin", "linux", "x64", "ffprobe"),
+  "ffprobe",
+);
+const LOCAL_YTDLP_BIN = findBin(
+  process.env.YT_DLP_PATH?.trim() ?? "",
+  path.join(process.cwd(), "bin", "yt-dlp"),
+  "yt-dlp",
+);
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXTENSIONS = new Set([".aac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"]);
@@ -228,10 +255,8 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
     url,
   ];
 
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
   const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
+    { command: LOCAL_YTDLP_BIN, args: commonArgs },
     { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
     { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
   ];
@@ -279,10 +304,8 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
     url,
   ];
 
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
   const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
+    { command: LOCAL_YTDLP_BIN, args: commonArgs },
     { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
     { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
   ];
@@ -329,7 +352,7 @@ async function resolveExistingDriveFolderId(folderPath: string[], userId: string
 }
 
 async function getVideoDuration(videoPath: string): Promise<number> {
-  const { stdout } = await runCommand("ffprobe", [
+  const { stdout } = await runCommand(FFPROBE_BIN, [
     "-v",
     "error",
     "-show_entries",
@@ -346,7 +369,7 @@ async function getVideoDuration(videoPath: string): Promise<number> {
 }
 
 async function getVideoResolution(videoPath: string): Promise<{ width: number; height: number }> {
-  const { stdout } = await runCommand("ffprobe", [
+  const { stdout } = await runCommand(FFPROBE_BIN, [
     "-v",
     "error",
     "-select_streams",
@@ -365,7 +388,7 @@ async function getVideoResolution(videoPath: string): Promise<{ width: number; h
 }
 
 async function hasAudio(videoPath: string): Promise<boolean> {
-  const { stdout } = await runCommand("ffprobe", [
+  const { stdout } = await runCommand(FFPROBE_BIN, [
     "-v",
     "error",
     "-select_streams",
@@ -386,7 +409,7 @@ function clipStartAroundDrop(duration: number, targetSeconds: number, dropSecond
 }
 
 async function measureAudioMeanVolume(videoPath: string, start: number, seconds: number): Promise<number> {
-  const { stderr } = await runCommand("ffmpeg", [
+  const { stderr } = await runCommand(FFMPEG_BIN, [
     "-hide_banner",
     "-nostats",
     "-ss",
@@ -442,7 +465,7 @@ async function detectDjNameByOcr(videoPath: string): Promise<string | null> {
 
     for (const [index, sampleAt] of sampleTimes.entries()) {
       const framePath = path.join(tempDir, `frame-${index}.png`);
-      await runCommand("ffmpeg", [
+      await runCommand(FFMPEG_BIN, [
         "-y",
         "-ss",
         sampleAt.toFixed(3),
@@ -617,7 +640,7 @@ async function renderClip(params: {
     params.outputPath,
   );
 
-  await runCommand("ffmpeg", args, { timeoutMs: 30 * 60 * 1000 });
+  await runCommand(FFMPEG_BIN, args, { timeoutMs: 30 * 60 * 1000 });
 }
 
 function resolveDriveOutputDir(folderName: string): string | null {
