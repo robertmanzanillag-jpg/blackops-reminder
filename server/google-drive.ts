@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "stream";
-import { google } from "googleapis";
 import { getGoogleAccessToken, getGoogleOAuthClient, hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
@@ -28,6 +27,10 @@ export interface DriveFolderSetupResult {
   }>;
 }
 
+async function getGoogleApis() {
+  return (await import("googleapis")).google;
+}
+
 function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
@@ -45,7 +48,15 @@ function readOptionalRealDriveFolderId(envName: string): string | null {
   throw new Error(`${envName} must be a real Google Drive folder id, not a placeholder.`);
 }
 
+export function getConfiguredClippersDriveRootFolderId(): string | null {
+  return (
+    readOptionalRealDriveFolderId("GOOGLE_DRIVE_CLIPPERS_ROOT_FOLDER_ID") ||
+    readOptionalRealDriveFolderId("CLIPPERS_DRIVE_ROOT_FOLDER_ID")
+  );
+}
+
 async function getDriveClient(userId: string) {
+  const google = await getGoogleApis();
   if (
     getGoogleDriveRefreshTokenFromEnv() ||
     hasGoogleDriveOAuthClientConfig()
@@ -58,7 +69,7 @@ async function getDriveClient(userId: string) {
   }
 
   const accessToken = await getGoogleAccessToken();
-  return google.drive({ version: "v3", auth: getGoogleOAuthClient(accessToken) });
+  return google.drive({ version: "v3", auth: await getGoogleOAuthClient(accessToken) });
 }
 
 async function findFolder(drive: any, name: string, parentId: string): Promise<string | null> {
@@ -80,9 +91,13 @@ async function findFolder(drive: any, name: string, parentId: string): Promise<s
 }
 
 export async function findDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string | null> {
+  return findDriveFolderPathUnderParent(folderNames, "root", userId);
+}
+
+export async function findDriveFolderPathUnderParent(folderNames: string[], parentFolderId: string, userId = getSystemUserId()): Promise<string | null> {
   try {
     const drive = await getDriveClient(userId);
-    let parentId = "root";
+    let parentId = parentFolderId.trim() || "root";
     for (const folderName of folderNames) {
       const cleanName = folderName.trim();
       if (!cleanName) continue;
@@ -154,9 +169,13 @@ async function findOrCreateFolder(drive: any, name: string, parentId: string): P
 }
 
 export async function ensureDriveFolderPath(folderNames: string[], userId = getSystemUserId()): Promise<string> {
+  return ensureDriveFolderPathUnderParent(folderNames, "root", userId);
+}
+
+export async function ensureDriveFolderPathUnderParent(folderNames: string[], parentFolderId: string, userId = getSystemUserId()): Promise<string> {
   try {
     const drive = await getDriveClient(userId);
-    let parentId = "root";
+    let parentId = parentFolderId.trim() || "root";
     for (const folderName of folderNames) {
       const cleanName = folderName.trim();
       if (!cleanName) continue;

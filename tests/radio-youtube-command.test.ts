@@ -44,6 +44,21 @@ test("builds direct YouTube clip command when Drive destination is requested wit
   assert.match(command?.command || "", /RADIO_YOUTUBE_CLIPS/);
 });
 
+test("uses a Google Drive folder URL as the parent destination", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW?usp=drive_link");
+  assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, []);
+  assert.equal(command ? directRadioYoutubeCommandNeedsDriveFolder(command) : true, false);
+});
+
+test("extracts a child folder inside a Google Drive folder URL", () => {
+  const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW dentro de esta carpeta crea una subcarpeta llamada Codex Clips");
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, ["Codex Clips"]);
+  assert.match(command?.command || "", /driveParentFolderId/);
+});
+
 test("uses YouTube title as Drive folder when requested", () => {
   const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU quiero que me saques los clips de este video y me lo agregues en la carpeta de drive con el titulo");
   assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");

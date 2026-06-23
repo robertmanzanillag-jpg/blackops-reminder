@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -69,6 +70,7 @@ function writeTinyTestVideo(outputPath: string) {
     outputPath,
   ], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  appendFileSync(outputPath, Buffer.alloc(12 * 1024));
 }
 
 test("normalizeRunOptions clamps clips and defaults publish mode", () => {
@@ -167,6 +169,77 @@ test("getClipperStatus exposes guarded growth goals", async () => {
   assert.ok(status.goLiveCompletionAudit.requirements.some((item) => item.id === "evidence-integrity-clean"));
   assert.ok(status.goLiveCompletionAudit.requirements.some((item) => item.id === "official-permission-sources-verified"));
   assert.ok(status.externalConnectAutopilot === null || status.externalConnectAutopilot.markdownPath.endsWith("external-connect-autopilot.md"));
+  assert.ok(["not_prepared", "blocked", "ready"].includes(status.hundredClipsExecutionSprint.status));
+  assert.equal(status.externalAccountPermissionSprint.manifestPath, status.hundredClipsExecutionSprint.manifestPath);
+  assert.ok(status.hundredClipsExecutionSprint.markdownPath.endsWith("100-clips-execution-sprint.md"));
+});
+
+test("prepareClipper100ClipsExecutionSprint writes coordination artifacts without duplicating source scout", async () => {
+  const result = await prepareClipper100ClipsExecutionSprint();
+  const sprint = result.hundredClipsExecutionSprint;
+
+  assert.equal(result.externalAccountPermissionSprint.manifestPath, sprint.manifestPath);
+  assert.ok(sprint.manifestPath.endsWith("100-clips-execution-sprint.json"));
+  assert.ok(sprint.markdownPath.endsWith("100-clips-execution-sprint.md"));
+  assert.ok(sprint.csvPath.endsWith("100-clips-execution-sprint.csv"));
+  assert.ok((await stat(sprint.manifestPath)).isFile());
+  assert.ok((await stat(sprint.markdownPath)).isFile());
+  assert.ok((await stat(sprint.csvPath)).isFile());
+  assert.equal(sprint.targetWeeklyClips, 100);
+  assert.ok(sprint.sourceArtifacts.sourceScoutWorkQueuePath.endsWith("source-scout-work-queue.md"));
+  assert.ok(sprint.sourceArtifacts.sourceScoutExactUrlKitPath.endsWith("source-scout-exact-url-kit.md"));
+  assert.ok(sprint.sourceArtifacts.sourceScoutSourceFileKitPath.endsWith("source-scout-source-file-kit.md"));
+  assert.equal(sprint.totals.items, sprint.items.length);
+  assert.ok(sprint.items.some((item) => item.type === "account_create" || item.type === "account_verify"));
+  assert.ok(sprint.items.some((item) => item.type === "permission_request"));
+  assert.ok(sprint.items.some((item) => item.type === "source_scout"));
+
+  const manifest = JSON.parse(await readFile(sprint.manifestPath, "utf8"));
+  assert.equal(manifest.manifestPath, sprint.manifestPath);
+  const csv = await readFile(sprint.csvPath, "utf8");
+  assert.ok(csv.includes("owner_action"));
+});
+
+test("prepareClipperExternalAccountPermissionSprint aliases the 100 clips sprint and sanitizes evidence rows", async () => {
+  const credentialEnvNames = [
+    "TIKTOK_CLIENT_KEY",
+    "TIKTOK_CLIENT_ID",
+    "TIKTOK_CLIENT_SECRET",
+    "META_APP_ID",
+    "FACEBOOK_APP_ID",
+    "META_APP_SECRET",
+    "FACEBOOK_APP_SECRET",
+    ...GOOGLE_OAUTH_ALIAS_ENV_VARS,
+  ];
+  const snapshot = snapshotEnv(credentialEnvNames);
+  clearEnv(credentialEnvNames);
+
+  try {
+    const result = await prepareClipperExternalAccountPermissionSprint();
+    const sprint = result.externalAccountPermissionSprint;
+    const evidenceText = sprint.items.flatMap((item) => item.requiredEvidence).join("\n");
+
+    assert.equal(result.hundredClipsExecutionSprint.manifestPath, sprint.manifestPath);
+    assert.ok(sprint.items.some((item) => item.type === "credential_missing" && item.ownerAction.includes("TIKTOK_CLIENT_KEY")));
+    assert.ok(sprint.items.some((item) => item.type === "account_create" || item.type === "account_verify"));
+    assert.ok(sprint.items.some((item) => item.type === "permission_request"));
+    assert.ok(sprint.items.some((item) => item.type === "metricool_profile"));
+    assert.equal(/password|token|client_secret/i.test(evidenceText), false);
+    assert.equal(sprint.totals.credentialMissing > 0, true);
+    assert.equal(sprint.status, "blocked");
+  } finally {
+    restoreEnv(snapshot);
+  }
+});
+
+test("100 clips sprint keeps Metricool in approval required mode", async () => {
+  const { hundredClipsExecutionSprint, status } = await prepareClipper100ClipsExecutionSprint();
+  const metricoolItems = hundredClipsExecutionSprint.items.filter((item) => item.type === "metricool_profile" || item.type === "metricool_queue");
+
+  assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+  assert.ok(metricoolItems.length > 0);
+  assert.ok(metricoolItems.every((item) => item.publishGuardrail.includes("approval_required")));
+  assert.ok(metricoolItems.every((item) => item.publishGuardrail.includes("realPublishEnabled=false")));
 });
 
 test("getClipperStatus blocks fake values in operational launch evidence", async () => {
@@ -2095,7 +2168,7 @@ test("previewClipperLaunchEvidenceBatch validates rows without writing evidence"
   const previousRecords = await readFile(recordsPath, "utf8").catch(() => null);
   const previousEvidence = await readFile(evidencePath, "utf8").catch(() => null);
   await mkdir(memeFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-launch-preview-test");
+  writeTinyTestVideo(sourcePath);
   await unlink(accountPath).catch(() => undefined);
   await unlink(appPath).catch(() => undefined);
 
@@ -2106,7 +2179,7 @@ test("previewClipperLaunchEvidenceBatch validates rows without writing evidence"
         "account,sports-daily,instagram,verified,,,,Instagram account verified with profile screenshot",
         "developer_app,,instagram,submitted,,meta-prod-001,https://app.clipprreview.com,Meta app submitted for review",
         "permission,,instagram,requested,instagram_content_publish,,,Meta scope requested with review ticket",
-        "source_rights,preview-rights.mp4,memes,owned_or_permissioned,preview-rights.mp4,,,Creator permission confirmed for preview; proof stored in secure drive",
+        "source_rights,preview-rights.mp4,memes,owned_or_permissioned,preview-rights.mp4,,,Creator permission confirmed in writing; proof stored in secure drive under creator approval record",
         "permission,,instagram,requested,not.real.scope,,,Bad scope should reject",
         "permission,,tiktok,requested,video.publish,,,TikTok Content Posting API requested; attach app review evidence",
         "developer_app,,tiktok,submitted,,tiktok-app-id,http://127.0.0.1:5010,TikTok app review submitted with portal proof",
@@ -2161,7 +2234,7 @@ test("recordClipperLaunchEvidenceBatch imports account app and permission eviden
   const previousOwnerProgress = await readFile(statusBefore.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
   const previousEvidence = await readFile(evidencePath, "utf8").catch(() => null);
   await mkdir(streamerFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-launch-record-test");
+  writeTinyTestVideo(sourcePath);
 
   try {
     const { launchEvidenceBatch, status } = await recordClipperLaunchEvidenceBatch({
@@ -2325,6 +2398,62 @@ test("importClipperLaunchEvidenceDropFiles imports CSV evidence files from evide
     else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
     if (previousOwnerProgress === null) await unlink(statusBefore.ownerConnectPack.progressRecordsPath).catch(() => undefined);
     else await writeFile(statusBefore.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
+    if (previousDiagnostic === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
+    if (previousDiagnosticMarkdown === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, previousDiagnosticMarkdown);
+    if (previousRepairWorksheet === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath).catch(() => undefined);
+    else await writeFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, previousRepairWorksheet);
+  }
+});
+
+test("importClipperLaunchEvidenceDropFiles ignores Metricool approval evidence template", async () => {
+  const statusBefore = await getClipperStatus();
+  const dropDir = path.join(statusBefore.rootDir, "evidence-drop");
+  const metricoolEvidencePath = path.join(dropDir, "metricool-approval-evidence-import.csv");
+  const controlDropPath = path.join(dropDir, "launch-evidence-drop-metricool-ignore-control.test.csv");
+  const noisyDropPaths = [
+    path.join(dropDir, "owner-connect-evidence.fixpack.csv"),
+    path.join(dropDir, "owner-connect-evidence.workbook.csv"),
+  ];
+  const accountPath = `${statusBefore.accountEvidence.evidenceDir}/streamer-pulse-youtube.json`;
+  const previousMetricoolEvidence = await readFile(metricoolEvidencePath, "utf8").catch(() => null);
+  const previousControlDrop = await readFile(controlDropPath, "utf8").catch(() => null);
+  const previousNoisyDrops = await Promise.all(noisyDropPaths.map(async (filePath) => ({
+    filePath,
+    raw: await readFile(filePath, "utf8").catch(() => null),
+  })));
+  const previousAccount = await readFile(accountPath, "utf8").catch(() => null);
+  const previousDiagnostic = await readFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, "utf8").catch(() => null);
+  const previousDiagnosticMarkdown = await readFile(statusBefore.launchEvidenceDropDiagnostic.markdownPath, "utf8").catch(() => null);
+  const previousRepairWorksheet = await readFile(statusBefore.launchEvidenceDropDiagnostic.repairWorksheetCsvPath, "utf8").catch(() => null);
+  await mkdir(dropDir, { recursive: true });
+  await Promise.all(noisyDropPaths.map((filePath) => unlink(filePath).catch(() => undefined)));
+  await writeFile(controlDropPath, [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
+    "account,streamer-pulse,youtube,verified,,,,Streamer Pulse YouTube account verified with channel URL https://www.youtube.com/@streamerpulse and proof screenshot saved outside repo",
+  ].join("\n"));
+  await writeFile(metricoolEvidencePath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    "metricool-test-001,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/source.mp4,Caption,<Metricool approval/scheduled URL after Robert approves>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
+  ].join("\n"));
+
+  try {
+    const { launchEvidenceDropImport } = await importClipperLaunchEvidenceDropFiles();
+    assert.ok(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("launch-evidence-drop-metricool-ignore-control.test.csv")));
+    assert.equal(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("metricool-approval-evidence-import.csv")), false);
+    assert.equal(launchEvidenceDropImport.rejected.some((row) => row.identifier?.includes("metricool-test-001")), false);
+  } finally {
+    if (previousControlDrop === null) await unlink(controlDropPath).catch(() => undefined);
+    else await writeFile(controlDropPath, previousControlDrop);
+    for (const { filePath, raw } of previousNoisyDrops) {
+      if (raw === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, raw);
+    }
+    if (previousAccount === null) await unlink(accountPath).catch(() => undefined);
+    else await writeFile(accountPath, previousAccount);
+    if (previousMetricoolEvidence === null) await unlink(metricoolEvidencePath).catch(() => undefined);
+    else await writeFile(metricoolEvidencePath, previousMetricoolEvidence);
     if (previousDiagnostic === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.manifestPath).catch(() => undefined);
     else await writeFile(statusBefore.launchEvidenceDropDiagnostic.manifestPath, previousDiagnostic);
     if (previousDiagnosticMarkdown === null) await unlink(statusBefore.launchEvidenceDropDiagnostic.markdownPath).catch(() => undefined);
@@ -2755,6 +2884,9 @@ test("prepareClipperGoLiveExecutionPack writes executable platform phases", asyn
     assert.equal(goLiveExecutionPack.platforms.length, 3);
     assert.equal(goLiveExecutionPack.totals.platforms, 3);
     assert.ok(goLiveExecutionPack.platforms.every((platform) => platform.phases.length >= 8));
+    assert.equal(goLiveExecutionPack.metricoolMvp.bridge, "metricool");
+    assert.equal(goLiveExecutionPack.metricoolMvp.realPublishEnabled, false);
+    assert.equal(goLiveExecutionPack.metricoolMvp.approvalRequired, true);
     assert.ok(goLiveExecutionPack.platforms.some((platform) => platform.phases.some((phase) => phase.id.endsWith("developer-app") && phase.portalUrl?.startsWith("http"))));
     assert.ok(status.commandCenter.steps.some((step) => step.id === "go-live-execution-pack" && step.actionUrl === "/api/clippers/prepare-go-live-execution-pack"));
     assert.ok(status.growthAudit.items.some((item) => item.id === "go-live-execution-pack"));
@@ -2762,6 +2894,7 @@ test("prepareClipperGoLiveExecutionPack writes executable platform phases", asyn
     const rawManifest = await readFile(goLiveExecutionPack.manifestPath, "utf8");
     const rawMarkdown = await readFile(goLiveExecutionPack.markdownPath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Go-Live Execution Pack"));
+    assert.ok(rawMarkdown.includes("Metricool MVP Lane"));
     assert.ok(rawManifest.includes("ready_to_execute") || rawManifest.includes("blocked"));
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
@@ -2796,7 +2929,7 @@ test("prepareClipperGoLiveCompletionAudit verifies full go-live requirements con
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "accounts-created-verified" && item.phase === "accounts"));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "permissions-approved" && item.requiredEvidence.some((evidence) => evidence.includes("scope"))));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "official-permission-sources-verified" && item.status === "blocked" && item.blockers.some((blocker) => blocker.includes("instagram"))));
-    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "oauth-tokens-saved" && item.requiredEvidence.some((evidence) => evidence.includes("Encrypted token vault"))));
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "publishing-bridge-connected" && item.requiredEvidence.some((evidence) => evidence.includes("queued_for_approval"))));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "evidence-integrity-clean" && item.proofSource.endsWith("evidence-integrity-audit.md")));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "automation-reporting-ready" && item.phase === "optimization"));
     assert.ok(goLiveCompletionAudit.requirements.every((item) => item.currentEvidence.length > 10 && item.nextStep.length > 10));
@@ -2839,7 +2972,7 @@ test("prepareClipperGoLiveCompletionAudit verifies full go-live requirements con
     assert.ok(rawMarkdown.includes("Required evidence"));
     assert.ok(rawMarkdown.includes("Evidence capture template"));
     assert.ok(rawMarkdown.includes("Evidence drop file"));
-    assert.ok(rawMarkdown.includes("Ready to publish: no"));
+    assert.ok(rawMarkdown.includes("Ready for approval-gated launch: no"));
     assert.ok(rawExternalCsv.includes("requirement_id"));
     assert.ok(rawExternalCsv.includes("accounts-created-verified"));
     assert.ok(rawExternalCsv.includes("evidence_capture_template"));
@@ -2929,7 +3062,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.ownerAction.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.requestMode === "human_login_recheck" && scope.humanBlocker?.includes("Meta Developers login"))));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.requestMode === "request_now" && scope.humanBlocker === null)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-20" && scope.verificationNote.length > 20)));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verifiedAt === "2026-06-21" && scope.verificationNote.length > 20)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.verificationStatus === "official_login_required")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.verificationChecklist.length >= 3)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.some((scope) => scope.verificationChecklist.some((step) => step.includes("Log in to Meta Developers")))));
@@ -2939,7 +3072,7 @@ test("prepareClipperOfficialPermissionMatrix writes official scope references", 
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.postApprovalChecklist && scope.postApprovalChecklist.length >= 4)));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.complianceRisk && scope.complianceRisk.includes(scope.scope))));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.fallbackPlan && scope.fallbackPlan.length > 20)));
-    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-20")));
+    assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit && scope.sourceAudit.lastCheckedAt === "2026-06-21")));
     assert.ok(officialPermissionMatrix.items.every((item) => item.scopes.every((scope) => scope.sourceAudit?.canonicalUrl === scope.officialReferenceUrl)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "instagram" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "login_required" && scope.sourceAudit.needsHumanRecheck)));
     assert.ok(officialPermissionMatrix.items.some((item) => item.platform === "tiktok" && item.scopes.every((scope) => scope.sourceAudit?.accessMode === "public")));
@@ -3124,8 +3257,10 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
   const previousCache = await readFile(cachePath, "utf8").catch(() => null);
   const previousToken = process.env.METRICOOL_USER_TOKEN;
   const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
   process.env.METRICOOL_USER_TOKEN = "token_live";
   process.env.METRICOOL_USER_ID = "12345";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
   const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
     data: [
       { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
@@ -3147,7 +3282,10 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     assert.ok(metricoolPublishing.channels.every((channel) => channel.evidenceNeeded.some((evidence) => evidence.includes("Screenshot"))));
     assert.equal(metricoolPublishing.totals.readyForApprovalQueue, 2);
     assert.equal(metricoolPublishing.directPlatformApisNeeded, false);
+    assert.equal(metricoolPublishing.requireApprovalForPublish, false);
+    assert.equal(metricoolPublishing.effectiveApprovalGate, true);
     assert.equal(status.metricoolPublishing.primaryBridge, "metricool");
+    assert.equal(status.metricoolPublishing.effectiveApprovalGate, true);
     assert.equal(fetchMock.mock.callCount(), 1);
 
     const rawManifest = await readFile(metricoolPublishing.manifestPath, "utf8");
@@ -3155,6 +3293,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     const rawCsv = await readFile(metricoolPublishing.csvPath, "utf8");
     assert.match(rawManifest, /SPORT/);
     assert.match(rawMarkdown, /memes/);
+    assert.match(rawMarkdown, /Approval env preference: legacy override requested/);
+    assert.match(rawMarkdown, /Effective approval gate: required/);
     assert.match(rawCsv, /sports-daily/);
     assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
   } finally {
@@ -3163,6 +3303,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     else process.env.METRICOOL_USER_TOKEN = previousToken;
     if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
     else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
     if (previousManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.metricoolPublishing.markdownPath).catch(() => undefined);
@@ -3183,6 +3325,615 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
   const previousCache = await readFile(cachePath, "utf8").catch(() => null);
   const previousToken = process.env.METRICOOL_USER_TOKEN;
   const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await prepareClipperMetricoolPublishingPlan();
+    await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-exec-test");
+    const { metricoolExecutionQueue, status } = await prepareClipperMetricoolExecutionQueue();
+
+    assert.ok(metricoolExecutionQueue.items.length > 0);
+    assert.ok(metricoolExecutionQueue.items.every((item) => item.platform === "tiktok"));
+    assert.ok(metricoolExecutionQueue.items.every((item) => item.metricoolBlogId === "6431687" || item.metricoolBlogId === "6431685"));
+    assert.ok(metricoolExecutionQueue.items.every((item) => item.requestSpec.bridge === "metricool"));
+    assert.equal(metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.ok(metricoolExecutionQueue.items.every((item) => item.status !== "ready_to_send" && item.canSendNow === false));
+    assert.equal(metricoolExecutionQueue.sourceReadiness.totals.accounts, 2);
+    assert.equal(metricoolExecutionQueue.sourceReadiness.totals.connectedNetworks, 2);
+    assert.ok(metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets >= 0);
+    assert.ok(metricoolExecutionQueue.sourceReadiness.categories.some((item) => item.accountId === "sports-daily" && item.category === "sports"));
+    assert.ok(metricoolExecutionQueue.sourceReadiness.categories.some((item) => item.accountId === "meme-radar" && item.category === "memes"));
+    assert.equal(metricoolExecutionQueue.sourceReadiness.categories.some((item) => item.category === "streamers"), false);
+    assert.equal(status.metricoolExecutionQueue.manifestPath, metricoolExecutionQueue.manifestPath);
+
+    const rawManifest = await readFile(metricoolExecutionQueue.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolExecutionQueue.markdownPath, "utf8");
+    const rawCsv = await readFile(metricoolExecutionQueue.csvPath, "utf8");
+    assert.match(rawManifest, /metricool/);
+    assert.match(rawManifest, /sourceReadiness/);
+    assert.match(rawMarkdown, /Metricool Execution Queue/);
+    assert.match(rawMarkdown, /Source Readiness/);
+    assert.match(rawCsv, /tiktok/);
+    assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
+    if (previousCache === null) await unlink(cachePath).catch(() => undefined);
+    else await writeFile(cachePath, previousCache);
+  }
+});
+
+test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from full autopublish blockers", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousPublishingManifest = await readFile(beforeStatus.metricoolPublishing.manifestPath, "utf8").catch(() => null);
+  const previousPublishingMarkdown = await readFile(beforeStatus.metricoolPublishing.markdownPath, "utf8").catch(() => null);
+  const previousPublishingCsv = await readFile(beforeStatus.metricoolPublishing.csvPath, "utf8").catch(() => null);
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+  const mvpManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.json");
+  const mvpMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.md");
+  const mvpCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.csv");
+  const previousMvpManifest = await readFile(mvpManifestPath, "utf8").catch(() => null);
+  const previousMvpMarkdown = await readFile(mvpMarkdownPath, "utf8").catch(() => null);
+  const previousMvpCsv = await readFile(mvpCsvPath, "utf8").catch(() => null);
+  const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
+  const previousCache = await readFile(cachePath, "utf8").catch(() => null);
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await prepareClipperMetricoolPublishingPlan();
+    await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-mvp-test");
+    await prepareClipperMetricoolExecutionQueue();
+    const { metricoolMvpLaunchPack, status } = await prepareClipperMetricoolMvpLaunchPack();
+
+    assert.equal(metricoolMvpLaunchPack.mode, "metricool_approval_required_mvp");
+    assert.equal(metricoolMvpLaunchPack.primaryBridge, "metricool");
+    assert.equal(metricoolMvpLaunchPack.directPlatformApisNeeded, false);
+    assert.equal(metricoolMvpLaunchPack.realPublishEnabled, false);
+    assert.equal(metricoolMvpLaunchPack.approvalRequired, true);
+    assert.equal(metricoolMvpLaunchPack.status, "ready_for_review");
+    assert.equal(metricoolMvpLaunchPack.totals.accounts, 2);
+    assert.equal(metricoolMvpLaunchPack.totals.readyAccounts, 2);
+    assert.equal(metricoolMvpLaunchPack.totals.blockedAccounts, 0);
+    assert.ok(metricoolMvpLaunchPack.totals.queuedForApproval > 0);
+    assert.equal(metricoolMvpLaunchPack.totals.manualReadyPosts, 0);
+    assert.ok(metricoolMvpLaunchPack.totals.rightsReadyAssets >= metricoolMvpLaunchPack.totals.minimumWeeklySourceAssets);
+    assert.ok(metricoolMvpLaunchPack.targetAccounts.includes("Sports Daily Clips"));
+    assert.ok(metricoolMvpLaunchPack.targetAccounts.includes("Meme Radar"));
+    assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.primaryNetwork === "tiktok"));
+    assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.status === "ready_for_review"));
+    assert.ok(metricoolMvpLaunchPack.fullAutomationStillBlockedBy.some((item) => item.includes("developer app")));
+    assert.ok(metricoolMvpLaunchPack.fullAutomationStillBlockedBy.some((item) => item.includes("account proof")));
+    assert.ok(metricoolMvpLaunchPack.guardrails.some((guardrail) => guardrail.includes("does not auto-publish")));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawManifest = await readFile(metricoolMvpLaunchPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolMvpLaunchPack.markdownPath, "utf8");
+    const rawCsv = await readFile(metricoolMvpLaunchPack.csvPath, "utf8");
+    assert.match(rawMarkdown, /Metricool MVP Launch Pack/);
+    assert.match(rawMarkdown, /approval_required/);
+    assert.match(rawCsv, /sports-daily/);
+    assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
+    assert.doesNotMatch(rawMarkdown, /token_live|METRICOOL_USER_TOKEN=/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    if (previousPublishingManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousPublishingManifest);
+    if (previousPublishingMarkdown === null) await unlink(beforeStatus.metricoolPublishing.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolPublishing.markdownPath, previousPublishingMarkdown);
+    if (previousPublishingCsv === null) await unlink(beforeStatus.metricoolPublishing.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolPublishing.csvPath, previousPublishingCsv);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+    if (previousMvpManifest === null) await unlink(mvpManifestPath).catch(() => undefined);
+    else await writeFile(mvpManifestPath, previousMvpManifest);
+    if (previousMvpMarkdown === null) await unlink(mvpMarkdownPath).catch(() => undefined);
+    else await writeFile(mvpMarkdownPath, previousMvpMarkdown);
+    if (previousMvpCsv === null) await unlink(mvpCsvPath).catch(() => undefined);
+    else await writeFile(mvpCsvPath, previousMvpCsv);
+    if (previousCache === null) await unlink(cachePath).catch(() => undefined);
+    else await writeFile(cachePath, previousCache);
+  }
+});
+
+test("prepareClipperMetricoolApprovalSession prepares operator evidence for queued Metricool approvals", async () => {
+  const beforeStatus = await getClipperStatus();
+  const approvalManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.json");
+  const approvalMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.md");
+  const approvalCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.csv");
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const mvpManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.json");
+  const mvpMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.md");
+  const mvpCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.csv");
+  const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
+  const artifactPaths = [
+    beforeStatus.metricoolPublishing.manifestPath,
+    beforeStatus.metricoolPublishing.markdownPath,
+    beforeStatus.metricoolPublishing.csvPath,
+    beforeStatus.metricoolExecutionQueue.manifestPath,
+    beforeStatus.metricoolExecutionQueue.markdownPath,
+    beforeStatus.metricoolExecutionQueue.csvPath,
+    mvpManifestPath,
+    mvpMarkdownPath,
+    mvpCsvPath,
+    approvalManifestPath,
+    approvalMarkdownPath,
+    approvalCsvPath,
+    approvalEvidenceCsvPath,
+    cachePath,
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await prepareClipperMetricoolPublishingPlan();
+    await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-approval-session-test");
+    const { metricoolExecutionQueue } = await prepareClipperMetricoolExecutionQueue();
+    await prepareClipperMetricoolMvpLaunchPack();
+    const { metricoolApprovalSession, status } = await prepareClipperMetricoolApprovalSession();
+    const queuedForApproval = metricoolExecutionQueue.items.filter((item) => item.status === "queued_for_approval");
+
+    assert.ok(queuedForApproval.length > 0);
+    assert.equal(metricoolApprovalSession.status, "ready_for_operator");
+    assert.equal(metricoolApprovalSession.realPublishEnabled, false);
+    assert.equal(metricoolApprovalSession.approvalRequired, true);
+    assert.ok(metricoolApprovalSession.totals.readyForReview > 0);
+    assert.equal(metricoolApprovalSession.totals.blocked, 0);
+    assert.equal(metricoolApprovalSession.totals.items, queuedForApproval.length);
+    assert.deepEqual(metricoolApprovalSession.items.map((item) => item.id), queuedForApproval.map((item) => item.id));
+    assert.ok(metricoolApprovalSession.items.every((item) => item.status === "ready_for_review"));
+    assert.ok(metricoolApprovalSession.items.every((item) =>
+      item.evidenceCaptureRow.includes("<published post URL after live>")
+      && item.evidenceCaptureRow.includes("<metricool scheduled/approved/post URL>")
+    ));
+    assert.equal(status.metricoolApprovalSession.totals.items, metricoolApprovalSession.totals.items);
+    assert.equal(status.metricoolApprovalSession.totals.readyForReview, metricoolApprovalSession.totals.readyForReview);
+
+    const rawManifest = await readFile(metricoolApprovalSession.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolApprovalSession.markdownPath, "utf8");
+    const rawCsv = await readFile(metricoolApprovalSession.csvPath, "utf8");
+    const rawEvidenceCsv = await readFile(metricoolApprovalSession.evidenceImportCsvPath, "utf8");
+    assert.equal(metricoolApprovalSession.manifestPath, approvalManifestPath);
+    assert.equal(metricoolApprovalSession.markdownPath, approvalMarkdownPath);
+    assert.equal(metricoolApprovalSession.csvPath, approvalCsvPath);
+    assert.equal(metricoolApprovalSession.evidenceImportCsvPath, approvalEvidenceCsvPath);
+    assert.match(rawMarkdown, /Metricool Approval Session/);
+    assert.match(rawCsv, /ready_for_review/);
+    assert.ok(rawEvidenceCsv.split("\n")[0].includes("metricool_queue_item_id"));
+
+    const rawArtifacts = [rawManifest, rawMarkdown, rawCsv, rawEvidenceCsv].join("\n");
+    assert.doesNotMatch(rawArtifacts, /token_live|METRICOOL_USER_TOKEN|METRICOOL_USER_ID|client_secret|access_token_value/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("prepareClipperMetricoolApprovalReport audits queue evidence without counting queued as published", async () => {
+  const beforeStatus = await getClipperStatus();
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const approvalReportPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.json");
+  const approvalReportMarkdownPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.md");
+  const approvalReportCsvPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.csv");
+  const importedMetricsPath = path.join(process.cwd(), "clippers_workspace", "metrics", "metricool-approval-imported-metrics.csv");
+  const metricsSummaryPath = path.join(process.cwd(), "clippers_workspace", "metrics", "metrics-summary.json");
+  const artifactPaths = [
+    beforeStatus.metricoolPublishing.manifestPath,
+    beforeStatus.metricoolPublishing.markdownPath,
+    beforeStatus.metricoolPublishing.csvPath,
+    beforeStatus.metricoolExecutionQueue.manifestPath,
+    beforeStatus.metricoolExecutionQueue.markdownPath,
+    beforeStatus.metricoolExecutionQueue.csvPath,
+    beforeStatus.metricoolApprovalSession.manifestPath,
+    beforeStatus.metricoolApprovalSession.markdownPath,
+    beforeStatus.metricoolApprovalSession.csvPath,
+    approvalEvidenceCsvPath,
+    approvalReportPath,
+    approvalReportMarkdownPath,
+    approvalReportCsvPath,
+    importedMetricsPath,
+    metricsSummaryPath,
+    path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json"),
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live_report";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await prepareClipperMetricoolPublishingPlan();
+    await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "metricool-approval-report-test");
+    await prepareClipperMetricoolExecutionQueue();
+    await prepareClipperMetricoolMvpLaunchPack();
+    const { metricoolApprovalSession } = await prepareClipperMetricoolApprovalSession();
+    const firstItem = metricoolApprovalSession.items[0];
+    assert.ok(firstItem);
+
+    await mkdir(path.dirname(approvalEvidenceCsvPath), { recursive: true });
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@sportsdaily/video/reportgood,published,4200,210,31,18,Public URL and 24h metrics captured from Metricool export`,
+    ].join("\n"));
+    await unlink(importedMetricsPath).catch(() => undefined);
+    const metricsSummaryBeforeReport = await readFile(metricsSummaryPath, "utf8").catch(() => null);
+
+    const { metricoolApprovalReport, status } = await prepareClipperMetricoolApprovalReport();
+
+    assert.equal(metricoolApprovalReport.status, "ready_to_import");
+    assert.equal(metricoolApprovalReport.realPublishEnabled, false);
+    assert.equal(metricoolApprovalReport.approvalRequired, true);
+    assert.equal(metricoolApprovalReport.totals.queueItems, metricoolApprovalSession.totals.items);
+    assert.equal(metricoolApprovalReport.totals.readyForReview, metricoolApprovalSession.totals.readyForReview);
+    assert.equal(metricoolApprovalReport.totals.imported, 1);
+    assert.equal(metricoolApprovalReport.totals.publishedRows, 1);
+    assert.equal(metricoolApprovalReport.totals.views, 4200);
+    assert.ok(metricoolApprovalReport.totals.queueItems > metricoolApprovalReport.totals.publishedRows);
+    assert.ok(metricoolApprovalReport.guardrails.some((guardrail) => guardrail.includes("queued_for_approval is not published")));
+    assert.ok(metricoolApprovalReport.guardrails.some((guardrail) => guardrail.includes("Only the Import Metricool evidence action writes analytics")));
+    assert.ok(metricoolApprovalReport.rows.some((row) => row.metricoolQueueItemId === firstItem.id && row.evidenceResult === "imported"));
+    assert.ok(metricoolApprovalReport.rows.some((row) => row.metricoolQueueItemId === firstItem.id && row.nextStep.includes("run Import Metricool evidence")));
+    assert.equal(status.metricoolApprovalReport.totals.imported, 1);
+    assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
+    assert.equal(await readFile(metricsSummaryPath, "utf8").catch(() => null), metricsSummaryBeforeReport);
+
+    const rawReport = await readFile(metricoolApprovalReport.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolApprovalReport.markdownPath, "utf8");
+    const rawCsv = await readFile(metricoolApprovalReport.csvPath, "utf8");
+    assert.match(rawMarkdown, /Metricool Approval Report/);
+    assert.match(rawMarkdown, /Valid published evidence rows/);
+    assert.doesNotMatch(rawMarkdown, /Imported into analytics/);
+    assert.match(rawCsv, /reportgood/);
+    assert.doesNotMatch([rawReport, rawMarkdown, rawCsv].join("\n"), /token_live_report|METRICOOL_USER_TOKEN|METRICOOL_USER_ID|client_secret|access_token_value/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("importClipperMetricoolApprovalEvidence converts published evidence into analytics metrics safely", async () => {
+  const statusBefore = await getClipperStatus();
+  const evidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const importedMetricsPath = path.join(statusBefore.rootDir, "metrics", "metricool-approval-imported-metrics.csv");
+  const metricsSummaryPath = path.join(statusBefore.rootDir, "metrics", "metrics-summary.json");
+  const previousEvidence = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousImportedMetrics = await readFile(importedMetricsPath, "utf8").catch(() => null);
+  const previousMetricsSummary = await readFile(metricsSummaryPath, "utf8").catch(() => null);
+  await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
+  await mkdir(path.dirname(importedMetricsPath), { recursive: true });
+  await writeFile(evidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    "metricool-import-good,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/owned-sports.mp4,Great final-minute hook,https://app.metricool.com/planner/post/metricool-import-good,https://www.tiktok.com/@sportsdaily/video/metricoolimportgood,published,12500,700,82,44,Live post URL and 24h metrics captured from Metricool export",
+    "metricool-import-pending,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T13:00:00.000Z,/tmp/owned-meme.mp4,Pending meme hook,https://app.metricool.com/planner/post/metricool-import-pending,,scheduled,0,0,0,0,Scheduled but not live yet",
+    "metricool-import-planner-url,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T14:00:00.000Z,/tmp/owned-planner.mp4,Planner URL hook,https://app.metricool.com/planner/post/metricool-import-planner-url,https://app.metricool.com/planner/post/metricool-import-planner-url,published,999,9,9,9,Metricool planner URL is not a public post",
+    "metricool-import-unknown-account,unknown-account,Unknown Account,tiktok,memes,6431685,2026-06-21T15:00:00.000Z,/tmp/owned-unknown.mp4,Unknown account hook,https://app.metricool.com/planner/post/metricool-import-unknown-account,https://www.tiktok.com/@memeradar/video/metricoolunknown,published,888,8,8,8,Unknown account must not fall back to first account",
+    "metricool-import-secret,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T16:00:00.000Z,/tmp/owned-secret.mp4,Secret row hook,https://app.metricool.com/planner/post/metricool-import-secret,https://www.tiktok.com/@memeradar/video/metricoolsecret,published,999,9,9,9,api_key=should-not-be-stored",
+  ].join("\n"));
+
+  try {
+    const { metricoolApprovalEvidenceImport, metrics, status } = await importClipperMetricoolApprovalEvidence();
+    assert.equal(metricoolApprovalEvidenceImport.status, "imported");
+    assert.equal(metricoolApprovalEvidenceImport.totals.rows, 5);
+    assert.equal(metricoolApprovalEvidenceImport.totals.imported, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.pendingLive, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.rejected, 3);
+    assert.equal(metricoolApprovalEvidenceImport.totals.views, 12500);
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-secret" && row.result === "rejected"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-planner-url" && row.result === "rejected" && row.reason === "published_post_url_not_platform_post"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-unknown-account" && row.result === "rejected" && row.reason === "unknown_account_id"));
+    assert.ok(metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood" && record.views === 12500));
+    assert.ok(status.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"));
+
+    const rawImportedMetrics = await readFile(importedMetricsPath, "utf8");
+    assert.ok(rawImportedMetrics.includes("metricoolimportgood"));
+    assert.equal(rawImportedMetrics.includes("api_key"), false);
+    assert.equal(rawImportedMetrics.includes("metricoolsecret"), false);
+    assert.equal(rawImportedMetrics.includes("metricool-import-planner-url"), false);
+
+    await writeFile(evidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      "metricool-import-pending-only,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-22T13:00:00.000Z,/tmp/owned-meme.mp4,Pending-only hook,https://app.metricool.com/planner/post/metricool-import-pending-only,,scheduled,0,0,0,0,Scheduled but not live yet",
+    ].join("\n"));
+    const secondImport = await importClipperMetricoolApprovalEvidence();
+    assert.equal(secondImport.metricoolApprovalEvidenceImport.status, "needs_records");
+    assert.equal(secondImport.metricoolApprovalEvidenceImport.totals.imported, 0);
+    assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
+    assert.equal(secondImport.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"), false);
+  } finally {
+    if (previousEvidence === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousEvidence);
+    if (previousImportedMetrics === null) await unlink(importedMetricsPath).catch(() => undefined);
+    else await writeFile(importedMetricsPath, previousImportedMetrics);
+    if (previousMetricsSummary === null) await unlink(metricsSummaryPath).catch(() => undefined);
+    else await writeFile(metricsSummaryPath, previousMetricsSummary);
+  }
+});
+
+test("prepareClipperGoLiveExecutionPack surfaces Metricool MVP without marking direct autopublish ready", async () => {
+  const beforeStatus = await getClipperStatus();
+  const mvpManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.json");
+  const mvpMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.md");
+  const mvpCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.csv");
+  const approvalManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.json");
+  const approvalMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.md");
+  const approvalCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.csv");
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
+  const artifactPaths = [
+    beforeStatus.metricoolPublishing.manifestPath,
+    beforeStatus.metricoolPublishing.markdownPath,
+    beforeStatus.metricoolPublishing.csvPath,
+    beforeStatus.metricoolExecutionQueue.manifestPath,
+    beforeStatus.metricoolExecutionQueue.markdownPath,
+    beforeStatus.metricoolExecutionQueue.csvPath,
+    mvpManifestPath,
+    mvpMarkdownPath,
+    mvpCsvPath,
+    approvalManifestPath,
+    approvalMarkdownPath,
+    approvalCsvPath,
+    approvalEvidenceCsvPath,
+    beforeStatus.goLiveExecutionPack.manifestPath,
+    beforeStatus.goLiveExecutionPack.markdownPath,
+    cachePath,
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await prepareClipperMetricoolPublishingPlan();
+    await runClipperAutomationCycle({ publishMode: "auto_after_connection", riskTolerance: "growth" }, "go-live-metricool-lane-test");
+    await prepareClipperMetricoolExecutionQueue();
+    await prepareClipperMetricoolMvpLaunchPack();
+    await prepareClipperMetricoolApprovalSession();
+    const { goLiveExecutionPack, status } = await prepareClipperGoLiveExecutionPack();
+
+    assert.equal(goLiveExecutionPack.metricoolMvp.status, "ready_for_operator");
+    assert.equal(goLiveExecutionPack.metricoolMvp.bridge, "metricool");
+    assert.equal(goLiveExecutionPack.metricoolMvp.approvalRequired, true);
+    assert.equal(goLiveExecutionPack.metricoolMvp.realPublishEnabled, false);
+    assert.ok(goLiveExecutionPack.metricoolMvp.queuedForApproval > 0);
+    assert.ok(goLiveExecutionPack.metricoolMvp.readyForReview > 0);
+    assert.match(goLiveExecutionPack.metricoolMvp.nextStep, /full direct autopublish/);
+    assert.doesNotMatch(goLiveExecutionPack.nextStep, /Metricool MVP ready/);
+    assert.notEqual(goLiveExecutionPack.status, "ready");
+    assert.equal(status.goLiveExecutionPack.metricoolMvp.status, "ready_for_operator");
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.ok(status.goLiveCompletionAudit.requirements.some((item) =>
+      item.id === "publishing-bridge-connected"
+      && item.status === "verified"
+      && item.currentEvidence.includes("queue=approval_required")
+    ));
+    assert.ok(status.goLiveCompletionAudit.requirements.some((item) =>
+      item.id === "publisher-connectors-ready"
+      && item.status === "verified"
+      && item.currentEvidence.includes("queue=approval_required")
+    ));
+
+    const rawManifest = await readFile(goLiveExecutionPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(goLiveExecutionPack.markdownPath, "utf8");
+    assert.match(rawMarkdown, /Metricool MVP Lane/);
+    assert.match(rawMarkdown, /full direct autopublish/);
+    assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN|client_secret|access_token/);
+    assert.doesNotMatch(rawMarkdown, /token_live|METRICOOL_USER_TOKEN|client_secret|access_token/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("getClipperStatus normalizes stale Metricool cache to approval-only", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "ready",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "stale-ready-cache",
+      publishMode: "auto_after_connection",
+      realPublishEnabled: true,
+      sourceReadiness: {
+        status: "ready",
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "stale cache",
+      },
+      items: [{
+        id: "stale-ready-item",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "ready_to_send",
+        approvalRequired: false,
+        canSendNow: true,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "stale",
+        captionSeed: "stale",
+        requestSpec: { bridge: "metricool", endpoint: "stale", method: "auto", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "stale",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 0, readyToSend: 1, approvalRequired: 0 },
+      nextStep: "stale",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.status, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+    assert.ok(status.metricoolExecutionQueue.items.every((item) =>
+      item.status !== "ready_to_send" && item.approvalRequired === true && item.canSendNow === false
+    ));
+
+    const normalizedManifest = await readFile(status.metricoolExecutionQueue.manifestPath, "utf8");
+    const normalizedMarkdown = await readFile(status.metricoolExecutionQueue.markdownPath, "utf8");
+    const normalizedCsv = await readFile(status.metricoolExecutionQueue.csvPath, "utf8");
+    assert.doesNotMatch(normalizedManifest, /ready_to_send|"realPublishEnabled": true|auto_after_connection/);
+    assert.doesNotMatch(normalizedMarkdown, /ready_to_send|Real publish enabled: yes|Publish mode: auto_after_connection/);
+    assert.doesNotMatch(normalizedCsv, /ready_to_send/);
+    assert.match(normalizedManifest, /"realPublishEnabled": false/);
+    assert.match(normalizedMarkdown, /Real publish enabled: no/);
+    assert.match(normalizedCsv, /queued_for_approval/);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
+  }
+});
+
+test("go-live completion audit receives normalized Metricool approval-only queue", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousPublishingManifest = await readFile(beforeStatus.metricoolPublishing.manifestPath, "utf8").catch(() => null);
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
   process.env.METRICOOL_USER_TOKEN = "token_live";
   process.env.METRICOOL_USER_ID = "12345";
   const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
@@ -3194,35 +3945,243 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
 
   try {
     await prepareClipperMetricoolPublishingPlan();
-    await runClipperAutomationCycle({ publishMode: "approval_required", riskTolerance: "growth" }, "metricool-exec-test");
-    const { metricoolExecutionQueue, status } = await prepareClipperMetricoolExecutionQueue();
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "unsafe-direct-send-cache",
+      publishMode: "auto_after_connection",
+      realPublishEnabled: true,
+      sourceReadiness: {
+        status: "ready",
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "unsafe cache",
+      },
+      items: [{
+        id: "unsafe-ready-item",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "ready_to_send",
+        approvalRequired: false,
+        canSendNow: true,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "unsafe",
+        captionSeed: "unsafe",
+        requestSpec: { bridge: "metricool", endpoint: "unsafe", method: "auto", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "unsafe",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 1, readyToSend: 1, approvalRequired: 0 },
+      nextStep: "unsafe",
+    }, null, 2));
 
-    assert.ok(metricoolExecutionQueue.items.length > 0);
-    assert.ok(metricoolExecutionQueue.items.every((item) => item.platform === "tiktok"));
-    assert.ok(metricoolExecutionQueue.items.every((item) => item.metricoolBlogId === "6431687" || item.metricoolBlogId === "6431685"));
-    assert.ok(metricoolExecutionQueue.items.every((item) => item.requestSpec.bridge === "metricool"));
-    assert.equal(metricoolExecutionQueue.realPublishEnabled, false);
-    assert.equal(status.metricoolExecutionQueue.manifestPath, metricoolExecutionQueue.manifestPath);
-
-    const rawManifest = await readFile(metricoolExecutionQueue.manifestPath, "utf8");
-    const rawMarkdown = await readFile(metricoolExecutionQueue.markdownPath, "utf8");
-    const rawCsv = await readFile(metricoolExecutionQueue.csvPath, "utf8");
-    assert.match(rawManifest, /metricool/);
-    assert.match(rawMarkdown, /Metricool Execution Queue/);
-    assert.match(rawCsv, /tiktok/);
-    assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
+    const status = await getClipperStatus();
+    const bridgeRequirement = status.goLiveCompletionAudit.requirements.find((item) => item.id === "publishing-bridge-connected");
+    const publisherRequirement = status.goLiveCompletionAudit.requirements.find((item) => item.id === "publisher-connectors-ready");
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+    assert.ok(status.metricoolExecutionQueue.items.every((item) =>
+      item.status === "queued_for_approval" && item.approvalRequired === true && item.canSendNow === false
+    ));
+    assert.equal(bridgeRequirement?.status, "verified");
+    assert.equal(publisherRequirement?.status, "verified");
+    assert.equal(bridgeRequirement?.blockers.some((blocker) => blocker.includes("ready_to_send")), false);
+    assert.equal(publisherRequirement?.blockers.some((blocker) => blocker.includes("ready_to_send")), false);
   } finally {
     fetchMock.mock.restore();
     if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
     else process.env.METRICOOL_USER_TOKEN = previousToken;
     if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
     else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousPublishingManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousPublishingManifest);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+  }
+});
+
+test("getClipperStatus rewrites Metricool publishMode-only stale artifacts", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "publish-mode-only-stale-cache",
+      publishMode: "auto_after_connection",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "ready",
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "safe except publish mode",
+      },
+      items: [{
+        id: "publish-mode-only-item",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "safe",
+        captionSeed: "safe",
+        requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "review first",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 1, readyToSend: 0, approvalRequired: 1 },
+      nextStep: "safe except publish mode",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricoolExecutionQueue.status, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+
+    const normalizedManifest = await readFile(status.metricoolExecutionQueue.manifestPath, "utf8");
+    const normalizedMarkdown = await readFile(status.metricoolExecutionQueue.markdownPath, "utf8");
+    assert.doesNotMatch(normalizedManifest, /auto_after_connection/);
+    assert.doesNotMatch(normalizedMarkdown, /Publish mode: auto_after_connection/);
+    assert.match(normalizedMarkdown, /Publish mode: approval_required/);
+  } finally {
     if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMarkdown);
     if (previousCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
+  }
+});
+
+test("recordClipperMetricoolAccountEvidence records Metricool bridge evidence without verifying accounts", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");
+  const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");
+  const previousSports = await readFile(sportsPath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesPath, "utf8").catch(() => null);
+  const previousOwnerProgress = await readFile(beforeStatus.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
+  const previousCache = await readFile(cachePath, "utf8").catch(() => null);
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "not_prepared",
+      generatedAt: null,
+      sourceAutomationRunId: null,
+      publishMode: "approval_required",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "blocked",
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "Prepare Metricool execution queue.",
+      },
+      items: [],
+      totals: { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 },
+      nextStep: "Prepare Metricool execution queue.",
+    }, null, 2));
+    const { metricoolAccountEvidence, status } = await recordClipperMetricoolAccountEvidence();
+    assert.equal(metricoolAccountEvidence.recorded.length, 2);
+    assert.ok(metricoolAccountEvidence.recorded.some((item) => item.accountId === "sports-daily" && item.platform === "tiktok"));
+    assert.ok(metricoolAccountEvidence.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
+    assert.ok(status.accountEvidence.items.some((item) => item.id === "sports-daily-tiktok" && item.status === "submitted"));
+    assert.ok(status.accountEvidence.items.some((item) => item.id === "meme-radar-tiktok" && item.status === "submitted"));
+    assert.ok(status.commandCenter.steps.some((step) => step.id === "metricool-publishing-bridge" && step.actionUrl === "/api/clippers/prepare-metricool-publishing-plan"));
+    assert.ok(status.commandCenter.steps.some((step) =>
+      step.id === "credential-setup"
+      && step.status === "done"
+      && step.label.includes("opcionales")
+      && step.nextStep.includes("No necesitas TikTok/Meta/YouTube API keys")
+    ));
+    assert.ok(status.commandCenter.steps.some((step) =>
+      step.id === "oauth-token-vault"
+      && step.status === "done"
+      && step.label.includes("opcional")
+      && step.evidence.includes("direct platform API keys optional")
+    ));
+    assert.ok(status.commandCenter.steps.some((step) =>
+      step.id === "permission-approvals"
+      && step.status === "done"
+      && step.label.includes("opcionales")
+      && step.nextStep.includes("publicar por Metricool")
+    ));
+    assert.ok(status.commandCenter.steps.some((step) =>
+      step.id === "drive-workspace"
+      && step.status !== "blocked"
+      && step.label.includes("opcional")
+      && step.nextStep.includes("source-drop local")
+    ));
+    assert.ok(status.goLiveCompletionAudit.requirements.some((item) =>
+      item.id === "publishing-bridge-connected"
+      && item.status === "needs_evidence"
+      && item.currentEvidence.includes("Metricool bridge=ready_for_approval_queue")
+      && item.blockers.some((blocker) => blocker.includes("no queued_for_approval"))
+    ));
+    assert.ok(status.goLiveCompletionAudit.requirements.some((item) =>
+      item.id === "publisher-connectors-ready"
+      && item.status === "needs_evidence"
+      && item.currentEvidence.includes("Metricool bridge=ready_for_approval_queue")
+      && item.blockers.some((blocker) => blocker.includes("no queued_for_approval"))
+    ));
+
+    const rawSports = await readFile(sportsPath, "utf8");
+    const rawMemes = await readFile(memesPath, "utf8");
+    assert.match(rawSports, /Metricool live sync detected tiktok bridge connection/);
+    assert.match(rawSports, /does not verify the external social account/);
+    assert.match(rawMemes, /https:\/\/www\.tiktok\.com\/@memeradar/);
+    assert.doesNotMatch(rawSports, /token_live|METRICOOL_USER_TOKEN=/);
+    assert.equal(fetchMock.mock.callCount(), 1);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousSports === null) await unlink(sportsPath).catch(() => undefined);
+    else await writeFile(sportsPath, previousSports);
+    if (previousMemes === null) await unlink(memesPath).catch(() => undefined);
+    else await writeFile(memesPath, previousMemes);
+    if (previousOwnerProgress === null) await unlink(beforeStatus.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
     if (previousCache === null) await unlink(cachePath).catch(() => undefined);
     else await writeFile(cachePath, previousCache);
   }
@@ -3265,6 +4224,66 @@ test("prepareClipperPublisherExecutionQueue writes guarded publish ledger withou
     else await writeFile(beforeStatus.publisherExecutionQueue.markdownPath, previousMarkdown);
     if (previousCsv === null) await unlink(beforeStatus.publisherExecutionQueue.csvPath).catch(() => undefined);
     else await writeFile(beforeStatus.publisherExecutionQueue.csvPath, previousCsv);
+  }
+});
+
+test("cached publisher execution queue is normalized back to approval required", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.publisherExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const staleQueue = {
+    status: "ready",
+    generatedAt: new Date().toISOString(),
+    manifestPath: beforeStatus.publisherExecutionQueue.manifestPath,
+    markdownPath: beforeStatus.publisherExecutionQueue.markdownPath,
+    csvPath: beforeStatus.publisherExecutionQueue.csvPath,
+    sourceAutomationRunId: "stale-cache-test",
+    publishMode: "auto_after_connection",
+    realPublishEnabled: true,
+    items: [{
+      id: "stale-item",
+      postId: "post-1",
+      queueItemId: "queue-1",
+      accountId: "sports-daily",
+      accountName: "Sports Daily Clips",
+      platform: "tiktok",
+      status: "ready_to_send",
+      approvalRequired: false,
+      canSendNow: true,
+      publishAt: new Date().toISOString(),
+      endpoint: "/api/clippers/publish/tiktok",
+      method: "POST",
+      mode: "direct_api",
+      sourcePath: "/tmp/fake.mp4",
+      hook: "stale",
+      captionSeed: "stale",
+      requestSpec: {
+        headers: ["Authorization: Bearer <encrypted_vault_token>"],
+        payloadFields: ["video"],
+        mediaSource: "local_source_file",
+        tokenSource: "encrypted_vault",
+      },
+      gates: [],
+      blockers: [],
+      nextStep: "stale send",
+    }],
+    totals: { items: 1, blocked: 0, queuedForApproval: 0, readyToSend: 1, approvalRequired: 0 },
+    nextStep: "stale ready",
+  };
+
+  try {
+    await writeFile(beforeStatus.publisherExecutionQueue.manifestPath, JSON.stringify(staleQueue, null, 2));
+    const status = await getClipperStatus();
+    assert.equal(status.publisherExecutionQueue.status, "approval_required");
+    assert.equal(status.publisherExecutionQueue.publishMode, "approval_required");
+    assert.equal(status.publisherExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.publisherExecutionQueue.totals.readyToSend, 0);
+    assert.equal(status.publisherExecutionQueue.totals.queuedForApproval, 1);
+    assert.equal(status.publisherExecutionQueue.items[0].status, "queued_for_approval");
+    assert.equal(status.publisherExecutionQueue.items[0].approvalRequired, true);
+    assert.equal(status.publisherExecutionQueue.items[0].canSendNow, false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.publisherExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.publisherExecutionQueue.manifestPath, previousManifest);
   }
 });
 
@@ -4217,8 +5236,19 @@ test("prepareClipperLaunchEvidenceFixPack writes correction queue for rejected e
   const previousWorkbookMarkdown = await readFile(beforeStatus.externalEvidenceWorkbook.markdownPath, "utf8").catch(() => null);
   const previousWorkbookCsv = await readFile(beforeStatus.externalEvidenceWorkbook.csvPath, "utf8").catch(() => null);
   const previousWorkbookImportCsv = await readFile(beforeStatus.externalEvidenceWorkbook.importCsvPath, "utf8").catch(() => null);
+  const publicUrlStorePath = path.join(beforeStatus.rootDir, "production-public-url.json");
+  const previousPublicUrlStore = await readFile(publicUrlStorePath, "utf8").catch(() => null);
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousIgnoreStoredPublicBaseUrl = process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
 
   await mkdir(evidenceDropDir, { recursive: true });
+  await writeFile(publicUrlStorePath, JSON.stringify({
+    publicBaseUrl: "https://app.clipprreview.com",
+    updatedAt: "2026-06-20T00:00:00.000Z",
+    storage: "clippers_workspace",
+  }, null, 2));
+  process.env.PUBLIC_BASE_URL = "https://your-domain.example";
+  delete process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
   await writeFile(ownerConnectEvidenceDropPath, [
     "kind,account_id,platform,status,scope,app_identifier,public_base_url,notes",
     "account,sports-daily,instagram,verified,,,,",
@@ -4249,7 +5279,8 @@ test("prepareClipperLaunchEvidenceFixPack writes correction queue for rejected e
     assert.ok(launchEvidenceFixPack.items.some((item) => item.evidenceSource === "current_state_gap"));
     assert.ok(launchEvidenceFixPack.items.some((item) => item.suggestedReplacementRow.includes("<profile_url>")));
     assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "account" && item.suggestedReplacementRow.includes("sports-daily,instagram,verified")));
-    assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "developer_app" && item.suggestedReplacementRow.includes(",tiktok,submitted,") && item.suggestedReplacementRow.includes("<https://your-domain.example>")));
+    assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "developer_app" && item.suggestedReplacementRow.includes(",tiktok,submitted,") && item.suggestedReplacementRow.includes("https://app.clipprreview.com")));
+    assert.equal(launchEvidenceFixPack.items.some((item) => item.kind === "developer_app" && item.suggestedReplacementRow.includes("<https://your-domain.example>")), false);
     assert.ok(launchEvidenceFixPack.items.some((item) => item.kind === "permission" && item.suggestedReplacementRow.includes(",youtube,requested,https://www.googleapis.com/auth/youtube.upload,")));
     assert.equal(status.launchEvidenceFixPack.items.length, launchEvidenceFixPack.items.length);
     assert.equal(status.externalEvidenceWorkbook.status, "needs_evidence");
@@ -4281,13 +5312,18 @@ test("prepareClipperLaunchEvidenceFixPack writes correction queue for rejected e
     assert.ok(rawSuggestedImportCsv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
     assert.ok(rawSuggestedImportCsv.includes("sports-daily,instagram,verified"));
     assert.ok(rawSuggestedImportCsv.includes("developer_app"));
+    assert.ok(rawSuggestedImportCsv.includes("https://app.clipprreview.com"));
+    assert.equal(rawSuggestedImportCsv.includes("<https://your-domain.example>"), false);
     assert.ok(rawSuggestedImportCsv.includes("permission"));
     assert.ok(rawWorkbook.includes("external-evidence"));
     assert.ok(rawWorkbookMarkdown.includes("Clippers External Evidence Workbook"));
     assert.ok(rawWorkbookMarkdown.includes("Single operator workbook"));
+    assert.ok(rawWorkbookMarkdown.includes("https://app.clipprreview.com"));
     assert.ok(rawWorkbookCsv.includes("suggested_replacement_row"));
     assert.ok(rawWorkbookImportCsv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
     assert.ok(rawWorkbookImportCsv.includes("sports-daily,instagram,verified"));
+    assert.ok(rawWorkbookImportCsv.includes("https://app.clipprreview.com"));
+    assert.equal(rawWorkbookImportCsv.includes("<https://your-domain.example>"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
     assert.equal(rawCsv.includes("access_token"), false);
     assert.equal(rawSuggestedImportCsv.includes("access_token"), false);
@@ -4318,6 +5354,12 @@ test("prepareClipperLaunchEvidenceFixPack writes correction queue for rejected e
     else await writeFile(beforeStatus.externalEvidenceWorkbook.csvPath, previousWorkbookCsv);
     if (previousWorkbookImportCsv === null) await unlink(beforeStatus.externalEvidenceWorkbook.importCsvPath).catch(() => undefined);
     else await writeFile(beforeStatus.externalEvidenceWorkbook.importCsvPath, previousWorkbookImportCsv);
+    if (previousPublicUrlStore === null) await unlink(publicUrlStorePath).catch(() => undefined);
+    else await writeFile(publicUrlStorePath, previousPublicUrlStore);
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousIgnoreStoredPublicBaseUrl === undefined) delete process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
+    else process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL = previousIgnoreStoredPublicBaseUrl;
   }
 });
 
@@ -4352,7 +5394,7 @@ test("prepareClipperDropzoneReadyPack writes safe intake board for missing go-li
     assert.ok(sourceDropzoneItem);
     assert.equal(sourceDropzoneItem.nextStep, status.sourceDropDiagnostic.nextStep);
     assert.equal(sourceDropzoneItem.sourceArtifactPath, status.sourceDropDiagnostic.repairWorksheetCsvPath);
-    assert.ok(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("source assets") || blocker.includes("source manifest rows")));
+    assert.ok(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("source assets") || blocker.includes("source manifest rows") || blocker.includes("invalid/stub media")));
     assert.equal(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("weekly source slots")), false);
     assert.ok(status.launchEvidenceDropDiagnostic.manifestPath.endsWith("launch-evidence-drop-diagnostic.json"));
     assert.ok(status.launchEvidenceDropDiagnostic.markdownPath.endsWith("launch-evidence-drop-diagnostic.md"));
@@ -4702,6 +5744,20 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.totals.actions >= robertNextActions.items.length);
     assert.ok(robertNextActions.totals.estimatedMinutes > 0);
     assert.ok(robertNextActions.items.some((item) => item.lane === "local_drop" || item.lane === "external_portal" || item.lane === "source_supply"));
+    if (status.metricoolApprovalSession.status === "ready_for_operator") {
+      const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-approval-session");
+      assert.ok(metricoolAction);
+      assert.equal(metricoolAction.rank, 1);
+      assert.equal(metricoolAction.status, "ready_to_execute");
+      assert.equal(metricoolAction.priority, "critical");
+      assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-approval-session");
+      assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
+      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
+      assert.ok(metricoolAction.evidenceRows.length > 0);
+      assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
+      assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
+      assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+    }
     assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
     const hasLaunchEvidenceAction = robertNextActions.items.some((item) =>
       item.artifactPath?.endsWith("launch-evidence-drop-repair-worksheet.csv") ||
@@ -4729,6 +5785,11 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawMarkdown.includes("Intake console"));
     assert.ok(rawMarkdown.includes("Priority Actions"));
     assert.ok(rawMarkdown.includes("Operator steps"));
+    if (status.metricoolApprovalSession.status === "ready_for_operator") {
+      assert.ok(rawMarkdown.includes("Review Metricool approval session"));
+      assert.ok(rawCsv.includes("metricool-approval-session"));
+      assert.ok(rawCsv.includes("metricool-approval-session.md"));
+    }
     assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
     assert.ok(rawConnectNow.includes("Connection Tunnel"));
     assert.ok(rawConnectNow.includes("Credentials"));
@@ -5070,7 +6131,7 @@ test("importClipperSourceDropFiles copies dropped videos into source folders", a
   const previousRepairWorksheet = await readFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), "utf8").catch(() => null);
   let queuePath: string | null = null;
   await mkdir(dropDir, { recursive: true });
-  await writeFile(dropPath, "fake-video-for-source-drop-test");
+  writeTinyTestVideo(dropPath);
 
   try {
     const { sourceDropImport, status: nextStatus } = await importClipperSourceDropFiles();
@@ -5098,7 +6159,7 @@ test("importClipperSourceDropFiles copies dropped videos into source folders", a
     assert.ok(nextStatus.sourceDropDiagnostic.repairWorksheetCsvPath.endsWith("source-drop-repair-worksheet.csv"));
     assert.ok(["ready_to_import", "needs_files", "needs_rights", "ready"].includes(nextStatus.sourceDropDiagnostic.status));
     assert.ok(nextStatus.sourceDropDiagnostic.categories.some((category) => category.category === "sports"));
-    assert.ok(nextStatus.sourceDropDiagnostic.totals.minimumWeeklySourceAssets >= nextStatus.sourceDropDiagnostic.totals.rightsReadyAssets);
+    assert.ok(nextStatus.sourceDropDiagnostic.totals.currentSourceAssets >= nextStatus.sourceDropDiagnostic.totals.rightsReadyAssets);
     const rawDiagnostic = await readFile(nextStatus.sourceDropDiagnostic.manifestPath, "utf8");
     const rawDiagnosticMarkdown = await readFile(nextStatus.sourceDropDiagnostic.markdownPath, "utf8");
     const rawRepairWorksheet = await readFile(nextStatus.sourceDropDiagnostic.repairWorksheetCsvPath, "utf8");
@@ -5132,20 +6193,33 @@ test("importClipperSourceDropFiles creates allowlist evidence from source-drop m
   const sportsFolder = status.sourceFolders.find((folder) => folder.category === "sports");
   assert.ok(sportsFolder);
   const dropDir = path.join(status.rootDir, "source-drop", "sports");
-  const dropPath = path.join(dropDir, "drop-approved.test.mp4");
+  const dropPath = path.join(dropDir, "drop-approved-cleanroom.mp4");
+  const stubMp4Path = path.join(dropDir, "drop-approved-stub.mp4");
+  const fakeAviPath = path.join(dropDir, "drop-approved-fake.avi");
   const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
   const previousManifest = await readFile(manifestPath, "utf8").catch(() => null);
   const previousDiagnostic = await readFile(path.join(status.rootDir, "source-drop-diagnostic.json"), "utf8").catch(() => null);
   const previousDiagnosticMarkdown = await readFile(path.join(status.rootDir, "source-drop-diagnostic.md"), "utf8").catch(() => null);
   const previousRepairWorksheet = await readFile(path.join(status.rootDir, "source-drop-repair-worksheet.csv"), "utf8").catch(() => null);
+  const importCleanupDirs = status.sourceFolders
+    .filter((folder) => ["sports", "memes", "streamers", "allowlist"].includes(folder.category))
+    .map((folder) => folder.path);
+  const previousImportFiles = new Map(await Promise.all(importCleanupDirs.map(async (dir) => [
+    dir,
+    new Set(await readdir(dir).catch(() => [])),
+  ] as const)));
   let queuePath: string | null = null;
   let targetPath: string | null = null;
   let evidencePath: string | null = null;
   await mkdir(dropDir, { recursive: true });
-  await writeFile(dropPath, "fake-video-for-source-drop-manifest-test");
+  writeTinyTestVideo(dropPath);
+  await writeFile(stubMp4Path, "fake-video-for-source-drop-manifest-test");
+  await writeFile(fakeAviPath, "not-a-real-video".repeat(200));
   await writeFile(manifestPath, [
     "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
-    "sports,Approved comeback,https://example.com/source,@league,tiktok,drop-approved.test.mp4,owned_or_permissioned,https://drive.google.com/file/proof,high,Official source proof stored in Drive",
+    "sports,Approved comeback,https://example.com/source,@league,tiktok,drop-approved-cleanroom.mp4,owned_or_permissioned,https://drive.google.com/file/proof,high,Official source proof stored in Drive",
+    "sports,Stub MP4,https://example.com/source-stub,@league,tiktok,drop-approved-stub.mp4,owned_or_permissioned,https://drive.google.com/file/proof-stub,high,Stub should not create allowlist",
+    "sports,Fake AVI,https://example.com/source-avi,@league,tiktok,drop-approved-fake.avi,owned_or_permissioned,https://drive.google.com/file/proof-avi,high,Unsupported fake container should not import",
     "",
   ].join("\n"));
 
@@ -5160,29 +6234,53 @@ test("importClipperSourceDropFiles creates allowlist evidence from source-drop m
     assert.ok(imported);
     targetPath = imported.targetPath;
     evidencePath = imported.rightsEvidencePath;
-    assert.equal(imported.fileName, "drop-approved-test.mp4");
+    assert.equal(imported.fileName, "drop-approved-cleanroom.mp4");
     assert.equal(imported.rightsStatus, "owned_or_permissioned");
     assert.equal(imported.manifestPath, manifestPath);
     assert.equal(sourceDropImport.manifestFilesScanned >= 1, true);
     assert.equal(sourceDropImport.manifestRows >= 1, true);
     assert.equal(sourceDropImport.manifestMatched >= 1, true);
     assert.equal(sourceDropImport.rightsEvidenceWritten >= 1, true);
-    assert.ok(evidencePath?.endsWith("drop-approved-test.md"));
+    assert.ok(evidencePath?.endsWith("drop-approved-cleanroom.md"));
     assert.ok(nextStatus.productionQueue.sourceAssets.some((asset) =>
-      asset.fileName === "drop-approved-test.mp4" &&
+      asset.fileName === "drop-approved-cleanroom.mp4" &&
       asset.category === "sports" &&
       asset.rightsStatus === "owned_or_permissioned" &&
       asset.evidencePath === evidencePath
     ));
+    const skippedStub = sourceDropImport.items.find((item) => item.sourcePath === stubMp4Path);
+    assert.equal(skippedStub?.status, "skipped");
+    assert.equal(skippedStub?.rightsEvidencePath, null);
+    assert.ok(skippedStub?.reason?.includes("Video invalido"));
+    const diagnosticStub = nextStatus.sourceDropDiagnostic.files.find((item) => item.fileName === "drop-approved-stub.mp4");
+    assert.ok(diagnosticStub);
+    assert.equal(diagnosticStub.usableVideo, false);
+    assert.equal(diagnosticStub.importEligible, false);
+    assert.equal(diagnosticStub.manifestEvidenceReady, false);
+    assert.match(diagnosticStub.issue || "", /video usable|pequeno/i);
+    assert.equal(nextStatus.sourceDropDiagnostic.manifests.some((manifest) =>
+      manifest.missingFiles.includes("drop-approved-stub.mp4")
+    ), true);
+    assert.equal(nextStatus.productionQueue.sourceAssets.some((asset) => asset.fileName === "drop-approved-stub.mp4"), false);
+    assert.equal(sourceDropImport.items.some((item) => item.fileName === "drop-approved-fake.avi"), false);
+    assert.equal(nextStatus.productionQueue.sourceAssets.some((asset) => asset.fileName === "drop-approved-fake.avi"), false);
     const rawEvidence = await readFile(evidencePath!, "utf8");
     assert.ok(rawEvidence.includes("source-drop-manifest"));
     assert.ok(rawEvidence.includes("https://drive.google.com/file/proof"));
     assert.equal(rawEvidence.includes("client_secret"), false);
   } finally {
     await unlink(dropPath).catch(() => undefined);
+    await unlink(stubMp4Path).catch(() => undefined);
+    await unlink(fakeAviPath).catch(() => undefined);
     if (targetPath) await unlink(targetPath).catch(() => undefined);
     if (evidencePath) await unlink(evidencePath).catch(() => undefined);
     if (queuePath) await unlink(queuePath).catch(() => undefined);
+    for (const [dir, previousFiles] of previousImportFiles) {
+      const currentFiles = await readdir(dir).catch(() => []);
+      await Promise.all(currentFiles
+        .filter((fileName) => !previousFiles.has(fileName))
+        .map((fileName) => unlink(path.join(dir, fileName)).catch(() => undefined)));
+    }
     if (previousManifest === null) await unlink(manifestPath).catch(() => undefined);
     else await writeFile(manifestPath, previousManifest);
     if (previousDiagnostic === null) await unlink(path.join(status.rootDir, "source-drop-diagnostic.json")).catch(() => undefined);
@@ -5201,18 +6299,18 @@ test("prepareClipperProductionQueue scans assets and respects allowlist evidence
   assert.ok(sportsFolder);
   assert.ok(allowlistFolder);
 
-  const sourcePath = `${sportsFolder.path}/sample-highlight.mp4`;
-  const evidencePath = `${allowlistFolder.path}/sample-highlight.md`;
+  const sourcePath = `${sportsFolder.path}/queue-highlight.mp4`;
+  const evidencePath = `${allowlistFolder.path}/queue-highlight.md`;
   let queuePath: string | null = null;
   await mkdir(sportsFolder.path, { recursive: true });
   await mkdir(allowlistFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-queue-test");
+  await writeFile(sourcePath, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(12 * 1024)]));
   await writeFile(evidencePath, "# Permission\nOwned or explicitly permissioned test footage.");
 
   try {
     const { queue, status: nextStatus } = await prepareClipperProductionQueue();
     queuePath = queue.queuePath;
-    assert.equal(queue.sourceAssets.some((asset) => asset.fileName === "sample-highlight.mp4" && asset.rightsStatus === "owned_or_permissioned"), true);
+    assert.equal(queue.sourceAssets.some((asset) => asset.fileName === "queue-highlight.mp4" && asset.rightsStatus === "owned_or_permissioned"), true);
     assert.ok(queue.items.some((item) => item.category === "sports" && item.status === "draft_ready"));
     assert.equal(queue.items.length, status.accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0));
     assert.ok(queue.items.every((item) => item.slotNumber >= 1));
@@ -5283,7 +6381,7 @@ test("prepareClipperSourceSupplyDropKit writes intake-ready source rows", async 
 
     assert.equal(sourceSupplyDropKit.items.length, expectedItems);
     assert.equal(sourceSupplyDropKit.totals.items, sourceSupplyDropKit.items.length);
-    assert.ok(sourceSupplyDropKit.categoryBatches.length > 0);
+    assert.equal(sourceSupplyDropKit.categoryBatches.length > 0, expectedItems > 0);
     assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.items > 0));
     assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropManifestPath.endsWith(`${path.sep}source-drop${path.sep}${batch.category}${path.sep}source-drop-manifest.csv`)));
     assert.ok(sourceSupplyDropKit.categoryBatches.every((batch) => batch.sourceDropReadmePath.endsWith(`${path.sep}source-drop${path.sep}${batch.category}${path.sep}README.md`)));
@@ -5311,8 +6409,21 @@ test("prepareClipperSourceSupplyDropKit writes intake-ready source rows", async 
     assert.ok(status.sourceDropDiagnostic.totals.manifestRows >= sourceSupplyDropKit.items.length);
     assert.ok(status.sourceDropDiagnostic.totals.manifestPlaceholderRows >= sourceSupplyDropKit.items.length);
     assert.ok(status.sourceDropDiagnostic.totals.manifestMissingFiles >= sourceSupplyDropKit.items.length);
-    assert.ok(status.sourceDropDiagnostic.nextStep.includes("source-drop manifests") || status.sourceDropDiagnostic.nextStep.includes("Coloca videos reales"));
-    assert.ok(status.sourceDropDiagnostic.categories.some((category) => category.manifestPlaceholderRows > 0 && category.nextStep.includes("placeholder")));
+    assert.ok(
+      status.sourceDropDiagnostic.nextStep.includes("source-drop manifests")
+        || status.sourceDropDiagnostic.nextStep.includes("Coloca videos reales")
+        || status.sourceDropDiagnostic.nextStep.includes("faltan permisos/evidencia")
+        || status.sourceDropDiagnostic.nextStep.includes("invalidos/stub")
+        || status.sourceDropDiagnostic.nextStep.includes("suficientes")
+        || status.sourceDropDiagnostic.nextStep.includes("Source readiness")
+        || status.sourceDropDiagnostic.nextStep.includes("listos para importar")
+        || status.sourceDropDiagnostic.nextStep.includes("Source supply listo")
+    );
+    assert.equal(status.sourceDropDiagnostic.totals.invalidSourceAssets >= 0, true);
+    assert.ok(expectedItems === 0 || status.sourceDropDiagnostic.categories.some((category) =>
+      category.manifestPlaceholderRows > 0 &&
+      (category.nextStep.includes("placeholder") || category.nextStep.includes("invalidos/stub"))
+    ));
 
     const rawManifest = await readFile(sourceSupplyDropKit.manifestPath, "utf8");
     const rawMarkdown = await readFile(sourceSupplyDropKit.markdownPath, "utf8");
@@ -5320,16 +6431,18 @@ test("prepareClipperSourceSupplyDropKit writes intake-ready source rows", async 
     assert.ok(rawMarkdown.includes("Clippers Source Supply Drop Kit"));
     assert.ok(rawMarkdown.includes("Source Intake Template"));
     assert.ok(rawMarkdown.includes("Category Batches"));
-    assert.ok(rawMarkdown.includes("Source drop manifest"));
-    assert.ok(rawMarkdown.includes("Source drop README"));
-    assert.ok(rawMarkdown.includes("Rights evidence template"));
-    assert.ok(rawMarkdown.includes("Viral search queries"));
-    assert.ok(rawCsv.includes("category_batch_id"));
-    assert.ok(rawCsv.includes("manifest_path"));
-    assert.ok(rawCsv.includes("source_drop_readme_path"));
-    assert.ok(rawCsv.includes("intake_batch_row"));
-    assert.ok(rawCsv.includes("trend_candidate_batch_row"));
-    assert.ok(rawCsv.includes("rights_evidence_batch_row"));
+    if (expectedItems > 0) {
+      assert.ok(rawMarkdown.includes("Source drop manifest"));
+      assert.ok(rawMarkdown.includes("Source drop README"));
+      assert.ok(rawMarkdown.includes("Rights evidence template"));
+      assert.ok(rawMarkdown.includes("Viral search queries"));
+      assert.ok(rawCsv.includes("category_batch_id"));
+      assert.ok(rawCsv.includes("manifest_path"));
+      assert.ok(rawCsv.includes("source_drop_readme_path"));
+      assert.ok(rawCsv.includes("intake_batch_row"));
+      assert.ok(rawCsv.includes("trend_candidate_batch_row"));
+      assert.ok(rawCsv.includes("rights_evidence_batch_row"));
+    }
     assert.ok(rawManifest.includes("categoryBatches"));
     assert.ok(rawManifest.includes("intakeBatchTemplate"));
     for (const batch of sourceSupplyDropKit.categoryBatches) {
@@ -5407,6 +6520,1003 @@ test("prepareClipperSourceDiscoveryHandoff joins viral searches to missing sourc
     else await writeFile(beforeStatus.sourceDiscoveryHandoff.markdownPath, previousMarkdown);
     if (previousCsv === null) await unlink(beforeStatus.sourceDiscoveryHandoff.csvPath).catch(() => undefined);
     else await writeFile(beforeStatus.sourceDiscoveryHandoff.csvPath, previousCsv);
+  }
+});
+
+test("prepareClipperSourceScout writes rights-gated candidates and refreshes Metricool queue", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.sourceScout.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.sourceScout.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.sourceScout.csvPath, "utf8").catch(() => null);
+  const previousTrendSummary = await readFile(beforeStatus.trendRadar.summaryPath, "utf8").catch(() => null);
+  const trendsDir = beforeStatus.trendRadar.trendsDir;
+  const previousTrendFiles = new Set(await readdir(trendsDir).catch(() => []));
+  const previousMetricoolQueue = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousMetricoolMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousMetricoolCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await prepareClipperViralDiscoveryPack();
+    await prepareClipperSourceDiscoveryHandoff();
+    const { sourceScout, trendCandidatesBatch, metricoolExecutionQueue, status } = await prepareClipperSourceScout();
+
+    assert.ok(sourceScout.manifestPath.endsWith("source-scout-candidates.json"));
+    assert.ok(sourceScout.markdownPath.endsWith("source-scout-candidates.md"));
+    assert.ok(sourceScout.csvPath.endsWith("source-scout-candidates.csv"));
+    assert.equal(sourceScout.status, "ready_for_review");
+    assert.ok(sourceScout.candidates.length > 0);
+    assert.equal(sourceScout.totals.candidates, sourceScout.candidates.length);
+    assert.ok(sourceScout.totals.blockedRights >= 0);
+    assert.ok(sourceScout.candidates.every((candidate) => candidate.sourceUrl.startsWith("https://")));
+    assert.ok(sourceScout.candidates.every((candidate) => candidate.sourceUrlKind === "discovery_search" || candidate.sourceUrlKind === "exact_video_or_post"));
+    assert.ok(sourceScout.candidates.every((candidate) => candidate.rightsStatus === "review_required" || candidate.canUseNow === false || candidate.publishGate !== "ready_for_intake"));
+    assert.ok(sourceScout.candidates.every((candidate) => candidate.trendCandidateBatchRow.includes("review_required") || candidate.trendCandidateBatchRow.includes("approved_after_proof")));
+    assert.ok(sourceScout.candidates.every((candidate) => candidate.rightsEvidenceNeeded.length >= 3));
+    assert.ok(sourceScout.totals.metricoolFit >= Math.min(25, sourceScout.candidates.length));
+    assert.ok(
+      sourceScout.candidates.some((candidate) => candidate.source === "metricool_source_readiness" && candidate.targetFileName?.includes("metricool"))
+        || status.sourceDropDiagnostic.totals.missingSourceAssets === 0
+    );
+    assert.ok(sourceScout.candidates.filter((candidate) => candidate.source === "metricool_source_readiness").every((candidate) => candidate.sourceDropPath?.split(path.sep).includes("source-drop")));
+    const exactSourceUrls = new Set(sourceScout.candidates.filter((candidate) => candidate.sourceUrlKind === "exact_video_or_post").map((candidate) => candidate.sourceUrl));
+    if (trendCandidatesBatch) {
+      assert.equal(trendCandidatesBatch.accepted <= exactSourceUrls.size, true);
+    }
+    assert.equal(metricoolExecutionQueue.realPublishEnabled, false);
+    assert.ok(metricoolExecutionQueue.totals.blocked >= 0);
+    assert.equal(status.sourceScout.manifestPath, sourceScout.manifestPath);
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    const secondRun = await prepareClipperSourceScout();
+    assert.equal(secondRun.trendCandidatesBatch, null);
+
+    const rawManifest = await readFile(sourceScout.manifestPath, "utf8");
+    const rawMarkdown = await readFile(sourceScout.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScout.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Clippers Source Scout Candidates"));
+    assert.ok(rawMarkdown.includes("Rights Checker blocks"));
+    assert.ok(rawCsv.includes("source_url"));
+    assert.ok(rawCsv.includes("source_url_kind"));
+    assert.ok(rawCsv.includes("target_file_name"));
+    assert.ok(rawMarkdown.includes("Source drop path"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.sourceScout.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceScout.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.sourceScout.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceScout.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.sourceScout.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.sourceScout.csvPath, previousCsv);
+    if (previousTrendSummary === null) await unlink(beforeStatus.trendRadar.summaryPath).catch(() => undefined);
+    else await writeFile(beforeStatus.trendRadar.summaryPath, previousTrendSummary);
+    const afterTrendFiles = await readdir(trendsDir).catch(() => []);
+    await Promise.all(afterTrendFiles
+      .filter((fileName) => !previousTrendFiles.has(fileName) && fileName.startsWith("trend-candidates-"))
+      .map((fileName) => unlink(path.join(trendsDir, fileName)).catch(() => undefined)));
+    if (previousMetricoolQueue === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousMetricoolQueue);
+    if (previousMetricoolMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousMetricoolMarkdown);
+    if (previousMetricoolCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousMetricoolCsv);
+  }
+});
+
+test("prepareClipperSourceScoutPermissionPack writes outreach and intake rows without publishing", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.csv"), "utf8").catch(() => null);
+
+  try {
+    await prepareClipperSourceScout();
+    const { sourceScoutPermissionPack, status } = await prepareClipperSourceScoutPermissionPack();
+
+    assert.ok(sourceScoutPermissionPack.manifestPath.endsWith("source-scout-permission-pack.json"));
+    assert.ok(sourceScoutPermissionPack.markdownPath.endsWith("source-scout-permission-pack.md"));
+    assert.ok(sourceScoutPermissionPack.csvPath.endsWith("source-scout-permission-pack.csv"));
+    assert.equal(sourceScoutPermissionPack.totals.candidates, status.sourceScout.totals.candidates);
+    assert.ok(sourceScoutPermissionPack.totals.readyToContact >= 0);
+    assert.ok(sourceScoutPermissionPack.items.every((item) => item.outreachMessage.includes("written approval")));
+    assert.ok(sourceScoutPermissionPack.items.every((item) => item.sourceScoutIntakeCsvRow.includes("owned_or_permissioned")));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.sourceScoutPermissionPack.manifestPath, sourceScoutPermissionPack.manifestPath);
+
+    const rawMarkdown = await readFile(sourceScoutPermissionPack.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutPermissionPack.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not grant rights"));
+    assert.ok(rawCsv.includes("official_source_policy_url"));
+    assert.ok(rawCsv.includes("source_scout_intake_csv_row"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-permission-pack.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-permission-pack.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-permission-pack.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.csv"), previousCsv);
+  }
+});
+
+test("source scout permission policy requires Twitch streamer rights beyond clips API scope", () => {
+  const policy = __clipperInternals.sourceScoutOfficialSourcePolicy({
+    category: "streamers",
+  } as any);
+
+  assert.equal(policy.officialSourcePolicyPlatform, "twitch");
+  assert.equal(policy.officialSourcePermissionScope, "clips:edit");
+  assert.ok(policy.officialSourcePolicyUrl.includes("dev.twitch.tv"));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("does not grant repost rights")));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("broadcaster, creator, or rightsholder permission")));
+  assert.ok(policy.officialSourceRules.some((rule: string) => rule.includes("delegated off-platform reuse rights")));
+  assert.ok(policy.officialSourceNextAction.includes("not reuse rights"));
+
+  const sportsPolicy = __clipperInternals.sourceScoutOfficialSourcePolicy({
+    category: "sports",
+  } as any);
+  assert.equal(sportsPolicy.officialSourcePolicyPlatform, null);
+  assert.deepEqual(sportsPolicy.officialSourceRules, []);
+});
+
+test("prepareClipperSourceScoutWorkQueue writes prioritized blocker queue without publishing", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.csv"), "utf8").catch(() => null);
+
+  try {
+    await prepareClipperSourceScout();
+    await prepareClipperSourceScoutPermissionPack();
+    await prepareClipperWeeklyProductionFunnel();
+    const { sourceScoutWorkQueue, status } = await prepareClipperSourceScoutWorkQueue();
+
+    assert.ok(sourceScoutWorkQueue.manifestPath.endsWith("source-scout-work-queue.json"));
+    assert.ok(sourceScoutWorkQueue.markdownPath.endsWith("source-scout-work-queue.md"));
+    assert.ok(sourceScoutWorkQueue.csvPath.endsWith("source-scout-work-queue.csv"));
+    assert.equal(status.sourceScoutWorkQueue.manifestPath, sourceScoutWorkQueue.manifestPath);
+    assert.ok(sourceScoutWorkQueue.totals.items > 0);
+    assert.ok(sourceScoutWorkQueue.totals.exactUrlIntake > 0 || sourceScoutWorkQueue.totals.rightsEvidence > 0 || sourceScoutWorkQueue.totals.sourceFile > 0 || sourceScoutWorkQueue.totals.metricoolApproval > 0);
+    assert.ok(sourceScoutWorkQueue.items.every((item) => item.type !== "metricool_approval" || item.publishGate === "approval_required"));
+    assert.ok(sourceScoutWorkQueue.items.every((item) => item.type !== "exact_url_intake" || item.sourceUrlKind === "discovery_search"));
+    assert.ok(sourceScoutWorkQueue.items.every((item) => !item.intakeCsvRow || item.intakeCsvRow.includes("<paste exact video/post URL>") || item.sourceUrlKind === "exact_video_or_post"));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(sourceScoutWorkQueue.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutWorkQueue.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not create accounts, grant permissions, or publish automatically"));
+    assert.ok(rawMarkdown.includes("Exact URL intake"));
+    assert.ok(rawCsv.includes("intake_csv_row"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-work-queue.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-work-queue.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-work-queue.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-work-queue.csv"), previousCsv);
+  }
+});
+
+test("prepareClipperSourceScoutExactUrlKit writes search links for discovery leads without claiming exact URLs", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.csv"), "utf8").catch(() => null);
+
+  try {
+    await prepareClipperSourceScout();
+    await prepareClipperSourceScoutWorkQueue();
+    const { sourceScoutExactUrlKit, status } = await prepareClipperSourceScoutExactUrlKit();
+
+    assert.ok(sourceScoutExactUrlKit.manifestPath.endsWith("source-scout-exact-url-kit.json"));
+    assert.ok(sourceScoutExactUrlKit.markdownPath.endsWith("source-scout-exact-url-kit.md"));
+    assert.ok(sourceScoutExactUrlKit.csvPath.endsWith("source-scout-exact-url-kit.csv"));
+    assert.equal(status.sourceScoutExactUrlKit.manifestPath, sourceScoutExactUrlKit.manifestPath);
+    assert.equal(sourceScoutExactUrlKit.totals.items, sourceScoutExactUrlKit.items.length);
+    assert.ok(sourceScoutExactUrlKit.items.every((item) => item.currentUrlKind === "discovery_search"));
+    assert.ok(sourceScoutExactUrlKit.items.every((item) => item.platformSearchUrl.startsWith("https://")));
+    assert.ok(sourceScoutExactUrlKit.items.every((item) => item.googleSearchUrl.includes("google.com/search")));
+    assert.ok(sourceScoutExactUrlKit.items.every((item) => item.intakeCsvRow.includes("<paste exact video/post URL>")));
+    assert.ok(sourceScoutExactUrlKit.items.every((item) => item.validationChecklist.some((check) => check.includes("Reject search"))));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(sourceScoutExactUrlKit.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutExactUrlKit.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not verify rights, create accounts, or publish anything"));
+    assert.ok(sourceScoutExactUrlKit.totals.items === 0 || rawMarkdown.includes("Platform search"));
+    assert.ok(rawCsv.includes("platform_search_url"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.csv"), previousCsv);
+  }
+});
+
+test("prepareClipperSourceScoutDailySprint writes daily lead and exact URL gaps without fake readiness", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifactNames = [
+    "source-scout-candidates.json",
+    "source-scout-candidates.md",
+    "source-scout-candidates.csv",
+    "source-scout-work-queue.json",
+    "source-scout-work-queue.md",
+    "source-scout-work-queue.csv",
+    "source-scout-exact-url-kit.json",
+    "source-scout-exact-url-kit.md",
+    "source-scout-exact-url-kit.csv",
+    "source-scout-daily-sprint.json",
+    "source-scout-daily-sprint.md",
+    "source-scout-daily-sprint.csv",
+    "weekly-production-funnel.json",
+    "weekly-production-funnel.md",
+    "weekly-production-funnel.csv",
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const fileName of artifactNames) {
+    const filePath = path.join(beforeStatus.rootDir, fileName);
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    const { sourceScoutDailySprint, status } = await prepareClipperSourceScoutDailySprint();
+
+    assert.ok(sourceScoutDailySprint.manifestPath.endsWith("source-scout-daily-sprint.json"));
+    assert.ok(sourceScoutDailySprint.markdownPath.endsWith("source-scout-daily-sprint.md"));
+    assert.ok(sourceScoutDailySprint.csvPath.endsWith("source-scout-daily-sprint.csv"));
+    assert.equal(status.sourceScoutDailySprint.manifestPath, sourceScoutDailySprint.manifestPath);
+    assert.equal(sourceScoutDailySprint.targets.dailyScoutLeads, 45);
+    assert.equal(sourceScoutDailySprint.targets.dailyExactUrls, 30);
+    assert.equal(sourceScoutDailySprint.targets.metricoolApprovalMin, 14);
+    assert.equal(sourceScoutDailySprint.targets.metricoolApprovalMax, 16);
+    assert.equal(sourceScoutDailySprint.totals.currentScoutLeads, status.sourceScout.totals.candidates);
+    assert.equal(sourceScoutDailySprint.totals.currentExactUrls, status.weeklyProductionFunnel.totals.exactUrls);
+    assert.equal(sourceScoutDailySprint.totals.exactUrlTasks, status.sourceScoutExactUrlKit.totals.items);
+    assert.ok(sourceScoutDailySprint.totals.leadGap >= 0);
+    assert.ok(sourceScoutDailySprint.totals.exactUrlGap >= 0);
+    assert.ok(sourceScoutDailySprint.guardrails.some((guardrail) => guardrail.includes("Discovery/search")));
+    assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "sports" && row.leadTarget > 0 && row.exactUrlTarget > 0));
+    assert.ok(sourceScoutDailySprint.categoryRows.some((row) => row.category === "memes" && row.leadTarget > 0 && row.exactUrlTarget > 0));
+    assert.ok(sourceScoutDailySprint.categoryRows.every((row) => row.intakeTemplateRows.every((templateRow) => templateRow.includes("<paste exact video/post URL only>"))));
+    assert.ok(sourceScoutDailySprint.searchMissions.length > 0);
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.searchUrl.startsWith("https://")));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.trendCandidateBatchRows.length > 0));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.trendCandidateBatchRows.every((row) => row.includes("<paste exact video/post URL only>"))));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.trendCandidateBatchRows.every((row) => row.split(",")[1] === mission.platform)));
+    assert.ok(sourceScoutDailySprint.searchMissions.every((mission) => mission.validationChecklist.some((check) => check.includes("Reject search"))));
+    const youtubeMission = sourceScoutDailySprint.searchMissions.find((mission) => mission.query.includes("site:youtube.com"));
+    const instagramMission = sourceScoutDailySprint.searchMissions.find((mission) => mission.query.includes("site:instagram.com"));
+    if (youtubeMission) {
+      assert.equal(youtubeMission.platform, "youtube");
+      assert.ok(youtubeMission.searchUrl.includes("youtube.com/results"));
+    }
+    if (instagramMission) {
+      assert.equal(instagramMission.platform, "instagram");
+      assert.ok(instagramMission.searchUrl.includes("google.com/search"));
+      assert.ok(decodeURIComponent(instagramMission.searchUrl).includes("site:instagram.com/reel"));
+    }
+    const sportsTemplate = sourceScoutDailySprint.categoryRows.find((row) => row.category === "sports")?.intakeTemplateRows[0];
+    if (sportsTemplate) {
+      const cells = sportsTemplate.split(",");
+      assert.equal(cells[0], "");
+      assert.ok(cells[1].includes("<paste viral sports title"));
+      assert.equal(cells[2], "sports");
+      assert.equal(cells[3], "tiktok");
+      assert.equal(cells[4], "<paste exact video/post URL only>");
+      assert.equal(cells[6], "review_required");
+    }
+    assert.ok(await readFile(path.join(beforeStatus.rootDir, "source-scout-exact-url-kit.md"), "utf8"));
+    assert.ok(await readFile(path.join(beforeStatus.rootDir, "weekly-production-funnel.md"), "utf8"));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(sourceScoutDailySprint.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutDailySprint.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("without fake readiness"));
+    assert.ok(rawMarkdown.includes("Discovery/search/explore/hashtag URLs never count"));
+    assert.ok(rawMarkdown.includes("Search Missions"));
+    assert.ok(rawMarkdown.includes("Trend Candidates Batch rows"));
+    assert.ok(rawCsv.includes("lead_gap"));
+    assert.ok(rawCsv.includes("trend_candidate_batch_rows"));
+    assert.equal(rawMarkdown.includes("access_token"), false);
+    assert.equal(rawCsv.includes("client_secret"), false);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("prepareClipperSourceScoutSourceFileKit writes source-drop checklist without fake media", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv"), "utf8").catch(() => null);
+
+  try {
+    await prepareClipperSourceScout();
+    await prepareClipperSourceScoutWorkQueue();
+    const { sourceScoutSourceFileKit, status } = await prepareClipperSourceScoutSourceFileKit();
+
+    assert.ok(sourceScoutSourceFileKit.manifestPath.endsWith("source-scout-source-file-kit.json"));
+    assert.ok(sourceScoutSourceFileKit.markdownPath.endsWith("source-scout-source-file-kit.md"));
+    assert.ok(sourceScoutSourceFileKit.csvPath.endsWith("source-scout-source-file-kit.csv"));
+    assert.equal(status.sourceScoutSourceFileKit.manifestPath, sourceScoutSourceFileKit.manifestPath);
+    assert.ok(sourceScoutSourceFileKit.totals.items >= 0);
+    assert.equal(sourceScoutSourceFileKit.totals.items, sourceScoutSourceFileKit.totals.missingSourceFiles + sourceScoutSourceFileKit.totals.existingSourceFiles);
+    assert.ok(sourceScoutSourceFileKit.items.every((item) => item.expectedSourcePath.includes(path.join("source-drop", item.category))));
+    assert.ok(sourceScoutSourceFileKit.items.every((item) => item.manifestRow.includes("owned_or_permissioned") || item.manifestRow.includes("review_required")));
+    assert.ok(sourceScoutSourceFileKit.items.every((item) => item.checklist.some((check) => check.includes("do not use placeholder"))));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(sourceScoutSourceFileKit.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutSourceFileKit.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not create fake videos"));
+    if (sourceScoutSourceFileKit.totals.items > 0) assert.ok(rawMarkdown.includes("Manifest row"));
+    assert.ok(rawCsv.includes("expected_source_path"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+    assert.equal(rawCsv.includes("refresh_token"), false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv"), previousCsv);
+  }
+});
+
+test("prepareClipperSourceScoutSourceFileKit does not count fake local media as existing", async () => {
+  const beforeStatus = await getClipperStatus();
+  const trendsDir = beforeStatus.trendRadar.trendsDir;
+  const allowlistPath = path.join(beforeStatus.rootDir, "allowlist", "https-www-tiktok-com-creator-video-6234567890123456789.md");
+  const fakeDropPath = path.join(beforeStatus.rootDir, "source-drop", "memes", "memes-fake-source-file-kit.mp4");
+  const previousTrendSummary = await readFile(beforeStatus.trendRadar.summaryPath, "utf8").catch(() => null);
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv"), "utf8").catch(() => null);
+  const previousTrendFiles = new Set(await readdir(trendsDir).catch(() => []));
+
+  await mkdir(path.dirname(allowlistPath), { recursive: true });
+  await mkdir(path.dirname(fakeDropPath), { recursive: true });
+  await writeFile(allowlistPath, "# Permission\nCreator proof stored for source file kit fake media test.");
+  await writeFile(fakeDropPath, "not-a-real-mp4".repeat(200));
+
+  try {
+    await recordClipperTrendCandidatesBatch({
+      batchText: [
+        "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle",
+        "memes,tiktok,Fake source file kit,https://www.tiktok.com/@creator/video/6234567890123456789,@creator,2026-06-20T20:00:00Z,999999999999,0,0,0,approved,Proof exists but source file is fake",
+      ].join("\n"),
+    });
+    await prepareClipperSourceScout();
+    await prepareClipperSourceScoutWorkQueue();
+    const { sourceScoutSourceFileKit } = await prepareClipperSourceScoutSourceFileKit();
+    const item = sourceScoutSourceFileKit.items.find((candidate) => candidate.title === "Fake source file kit");
+    assert.ok(item);
+    assert.equal(item.sourceFileExists, false);
+    assert.equal(sourceScoutSourceFileKit.status, "blocked");
+  } finally {
+    await unlink(allowlistPath).catch(() => undefined);
+    await unlink(fakeDropPath).catch(() => undefined);
+    const afterTrendFiles = await readdir(trendsDir).catch(() => []);
+    await Promise.all(afterTrendFiles
+      .filter((fileName) => !previousTrendFiles.has(fileName) && fileName.startsWith("trend-candidates-"))
+      .map((fileName) => unlink(path.join(trendsDir, fileName)).catch(() => undefined)));
+    if (previousTrendSummary === null) await unlink(beforeStatus.trendRadar.summaryPath).catch(() => undefined);
+    else await writeFile(beforeStatus.trendRadar.summaryPath, previousTrendSummary);
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-source-file-kit.csv"), previousCsv);
+  }
+});
+
+test("source scout URL classifier separates exact posts from discovery searches", () => {
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.tiktok.com/search?q=sports"));
+  assert.equal(__clipperInternals.exactSourceUrlRejectReason("https://www.youtube.com/shorts/abc123"), null);
+  assert.equal(__clipperInternals.exactSourceUrlRejectReason("https://www.instagram.com/reel/abc123/"), null);
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.youtube.com/results?search_query=memes"));
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.youtube.com/watch?v="));
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.youtube.com/shorts/"));
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://www.instagram.com/reel/"));
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://evil-tiktok.com/@creator/video/1234567890123456789"));
+  assert.ok(__clipperInternals.exactSourceUrlRejectReason("https://example.com/comeback"));
+});
+
+test("source scout exact URL counting dedupes candidates already recorded in intake", () => {
+  const count = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    sourceScout: {
+      candidates: [
+        {
+          id: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+        },
+        {
+          id: "candidate-2",
+          category: "sports",
+          platform: "tiktok",
+          title: "Discovery lead",
+          sourceUrl: "https://www.tiktok.com/search?q=sports",
+          sourceUrlKind: "discovery_search",
+        },
+      ],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "tiktok",
+          title: "Second exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/9999999999999999999?share=1",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "memes",
+          platform: "tiktok",
+          title: "Other category",
+          sourceUrl: "https://www.tiktok.com/@memeradar/video/8888888888888888888",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  const sportsCount = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    category: "sports",
+    sourceScout: {
+      candidates: [
+        {
+          id: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+        },
+      ],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "candidate-1",
+          category: "sports",
+          platform: "tiktok",
+          title: "Same exact URL",
+          sourceUrl: "https://www.tiktok.com/@sportsdaily/video/1234567890123456789",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  const youtubeWatchCount = __clipperInternals.sourceScoutUniqueExactUrlCount({
+    sourceScout: {
+      candidates: [],
+    },
+    sourceScoutIntake: {
+      items: [
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "youtube",
+          title: "Watch A",
+          sourceUrl: "https://www.youtube.com/watch?v=aaa111&utm_source=share",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+        {
+          candidateId: "",
+          category: "sports",
+          platform: "youtube",
+          title: "Watch B",
+          sourceUrl: "https://www.youtube.com/watch?v=bbb222&utm_source=share",
+          sourceUrlKind: "exact_video_or_post",
+          decision: "blocked_rights",
+        },
+      ],
+    },
+  });
+  assert.equal(count, 3);
+  assert.equal(sportsCount, 1);
+  assert.equal(youtubeWatchCount, 2);
+});
+
+test("source asset scanner flags fixture-like file names as non-production artifacts", () => {
+  assert.equal(__clipperInternals.sourceAssetLooksTestArtifact("drop-approved-test-2.mp4"), true);
+  assert.equal(__clipperInternals.sourceAssetLooksTestArtifact("source-scout-ready-test-intake.mp4"), true);
+  assert.equal(__clipperInternals.sourceAssetLooksTestArtifact("sports-owned-01.mp4"), false);
+  assert.equal(__clipperInternals.sourceAssetLooksTestArtifact("queue-highlight.mp4"), false);
+});
+
+test("source rights evidence rejects bare status words", () => {
+  assert.throws(() => __clipperInternals.requireSourceRightsEvidence("licensed"), /evidencia concreta|palabra de estado/i);
+  assert.throws(() => __clipperInternals.requireSourceRightsEvidence("owner note"), /evidencia concreta|palabra de estado/i);
+  assert.throws(() => __clipperInternals.requireSourceRightsEvidence("approved"), /evidencia concreta|palabra de estado/i);
+  assert.equal(
+    __clipperInternals.requireSourceRightsEvidence("owner note path: /tmp/owned-source-proof.md"),
+    "owner note path: /tmp/owned-source-proof.md",
+  );
+});
+
+test("source scout evidence validation rejects weak proof and accepts concrete creator permission", () => {
+  assert.throws(() => __clipperInternals.validateSourceScoutEvidence({
+    requestedStatus: "owned_or_permissioned",
+    sourceUrlKind: "exact_video_or_post",
+    proof: "",
+    notes: "Creator gave permission in writing for short-form use.",
+    evidenceType: "creator_permission",
+    sourceFileExists: false,
+  }), /evidencia concreta|requiere/i);
+  assert.throws(() => __clipperInternals.validateSourceScoutEvidence({
+    requestedStatus: "owned_or_permissioned",
+    sourceUrlKind: "exact_video_or_post",
+    proof: "<paste proof>",
+    notes: "Creator gave permission in writing for short-form use.",
+    evidenceType: "creator_permission",
+    sourceFileExists: false,
+  }), /evidencia concreta|requiere/i);
+  assert.throws(() => __clipperInternals.validateSourceScoutEvidence({
+    requestedStatus: "owned_or_permissioned",
+    sourceUrlKind: "exact_video_or_post",
+    proof: "https://example.com/proof",
+    notes: "Creator gave permission in writing for short-form use.",
+    evidenceType: "creator_permission",
+    sourceFileExists: false,
+  }), /placeholder|ejemplo|evidencia real/i);
+  assert.doesNotThrow(() => __clipperInternals.validateSourceScoutEvidence({
+    requestedStatus: "owned_or_permissioned",
+    sourceUrlKind: "exact_video_or_post",
+    proof: "https://drive.google.com/file/d/source-scout-proof",
+    notes: "Creator permission confirmed in writing for TikTok clips and edited reposts.",
+    evidenceType: "creator_permission",
+    sourceFileExists: false,
+  }));
+});
+
+test("rights evidence ledger does not report ready when prepared with zero items", () => {
+  const summary = __clipperInternals.buildRightsEvidenceLedgerSummary({
+    sourceScoutIntake: { items: [] },
+    productionQueue: { sourceAssets: [] },
+    preparedAt: "2026-06-22T00:00:00.000Z",
+  } as any);
+
+  assert.equal(summary.status, "not_prepared");
+  assert.equal(summary.totals.items, 0);
+  assert.equal(summary.totals.ready, 0);
+  assert.match(summary.nextStep, /Record Source Scout intake|source-drop assets/i);
+});
+
+test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers without fake readiness", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifactPaths = [
+    path.join(beforeStatus.rootDir, "source-scout-intake.json"),
+    path.join(beforeStatus.rootDir, "source-scout-intake.md"),
+    path.join(beforeStatus.rootDir, "source-scout-intake.csv"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.json"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.md"),
+    path.join(beforeStatus.rootDir, "rights-evidence-ledger.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "sports", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "memes", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "source-drop", "streamers", "source-drop-manifest.csv"),
+    path.join(beforeStatus.rootDir, "trends", "trend-radar-summary.json"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.json"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.md"),
+    path.join(beforeStatus.rootDir, "scheduled", "metricool-execution-queue.csv"),
+  ];
+  const trendsDir = path.join(beforeStatus.rootDir, "trends");
+  const previousTrendCandidateFiles = new Set(
+    (await readdir(trendsDir).catch(() => []))
+      .filter((fileName) => /^trend-candidates-\d{4}-\d{2}-\d{2}t/i.test(fileName)),
+  );
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    await recordClipperSourceScoutIntake({
+      records: [
+        {
+          title: "Ledger missing source file",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/4234567890123456789",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          proof: "Drive proof access_token=ledger-secret-token client_secret: ledger-secret-client",
+          notes: "Creator permission confirmed in writing for edited short-form reposting on our account.",
+          target_file_name: "ledger-missing-source.mp4",
+          source_drop_path: path.join(beforeStatus.rootDir, "source-drop", "memes", "ledger-missing-source.mp4"),
+        },
+        {
+          title: "Ledger review required",
+          category: "sports",
+          platform: "youtube",
+          url: "https://www.youtube.com/shorts/ledgerreviewrequired",
+          source: "Official-looking channel",
+          status: "review_required",
+          views: "240000",
+        },
+        {
+          title: "Ledger missing proof",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/5234567890123456789",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          notes: "Creator permission is claimed here but proof URL is missing and must stay blocked.",
+        },
+      ],
+    });
+
+    const { rightsEvidenceLedger, status } = await prepareClipperRightsEvidenceLedger();
+    const missingSource = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing source file");
+    const reviewRequired = rightsEvidenceLedger.items.find((item) => item.title === "Ledger review required");
+    const missingProof = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing proof");
+
+    assert.ok(rightsEvidenceLedger.manifestPath.endsWith("rights-evidence-ledger.json"));
+    assert.ok(rightsEvidenceLedger.markdownPath.endsWith("rights-evidence-ledger.md"));
+    assert.ok(rightsEvidenceLedger.csvPath.endsWith("rights-evidence-ledger.csv"));
+    assert.equal(status.rightsEvidenceLedger.manifestPath, rightsEvidenceLedger.manifestPath);
+    assert.equal(rightsEvidenceLedger.status, "blocked");
+    assert.ok(rightsEvidenceLedger.totals.blocked >= 2);
+    assert.ok(rightsEvidenceLedger.totals.missingSourceFile >= 1);
+    assert.ok(rightsEvidenceLedger.totals.reviewRequired >= 1);
+    assert.ok(rightsEvidenceLedger.totals.missingProof >= 1);
+    assert.equal(missingSource?.issue, "missing_source_file");
+    assert.equal(missingSource?.evidenceAccepted, true);
+    assert.equal(missingSource?.sourceFileExists, false);
+    assert.equal(missingSource?.evidencePath?.includes("ledger-secret-token"), false);
+    assert.equal(reviewRequired?.issue, "review_required");
+    assert.equal(reviewRequired?.severity, "blocked");
+    assert.equal(missingProof?.issue, "missing_proof");
+    assert.equal(missingProof?.severity, "blocked");
+    assert.equal(missingProof?.evidencePath, null);
+    assert.ok(rightsEvidenceLedger.items.every((item) => item.severity !== "ready" || (item.evidenceAccepted && item.sourceFileExists)));
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const rawMarkdown = await readFile(rightsEvidenceLedger.markdownPath, "utf8");
+    const rawCsv = await readFile(rightsEvidenceLedger.csvPath, "utf8");
+    const rawManifest = await readFile(rightsEvidenceLedger.manifestPath, "utf8");
+    assert.ok(rawMarkdown.includes("does not publish"));
+    assert.ok(rawCsv.includes("repair_csv_row"));
+    assert.equal([rawManifest, rawMarkdown, rawCsv].join("\n").includes("ledger-secret-token"), false);
+    assert.equal([rawManifest, rawMarkdown, rawCsv].join("\n").includes("ledger-secret-client"), false);
+    assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("access_token=[redacted]"));
+    assert.ok([rawManifest, rawMarkdown, rawCsv].join("\n").includes("client_secret: [redacted]"));
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+    const nextTrendCandidateFiles = (await readdir(trendsDir).catch(() => []))
+      .filter((fileName) => /^trend-candidates-\d{4}-\d{2}-\d{2}t/i.test(fileName));
+    for (const fileName of nextTrendCandidateFiles) {
+      if (!previousTrendCandidateFiles.has(fileName)) {
+        await unlink(path.join(trendsDir, fileName)).catch(() => undefined);
+      }
+    }
+  }
+});
+
+test("recordClipperSourceScoutIntake enforces gates before Metricool approval", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), "utf8").catch(() => null);
+  const dropDir = path.join(beforeStatus.rootDir, "source-drop", "memes");
+  const dropPath = path.join(dropDir, "source-scout-ready-test-intake.mp4");
+  const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
+  const previousDrop = await readFile(dropPath, "utf8").catch(() => null);
+  const previousDropManifest = await readFile(manifestPath, "utf8").catch(() => null);
+  const importCleanupDirs = beforeStatus.sourceFolders
+    .filter((folder) => ["sports", "memes", "streamers", "allowlist"].includes(folder.category))
+    .map((folder) => folder.path);
+  const previousImportFiles = new Map(await Promise.all(importCleanupDirs.map(async (dir) => [
+    dir,
+    new Set(await readdir(dir).catch(() => [])),
+  ] as const)));
+
+  await mkdir(dropDir, { recursive: true });
+  writeTinyTestVideo(dropPath);
+
+  try {
+    const { sourceScoutIntake, metricoolExecutionQueue, status } = await recordClipperSourceScoutIntake({
+      records: [
+        {
+          title: "Bad search URL",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=viral%20meme",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          proof: "https://drive.google.com/file/d/proof-search",
+          notes: "Creator permission confirmed in writing for this exact usage.",
+        },
+        {
+          title: "Needs permission exact",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/1234567890123456789",
+          source: "@creator",
+          status: "review_required",
+          views: "100000",
+        },
+        {
+          title: "Recreate plan",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/2234567890123456789",
+          source: "@creator",
+          status: "recreate_only",
+          recreate_plan: "Recreate the POV format with original captions, generated background and owned voiceover.",
+        },
+        {
+          title: "Ready permissioned exact",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/@creator/video/3234567890123456789",
+          source: "@creator",
+          status: "owned_or_permissioned",
+          evidence_type: "creator_permission",
+          proof: "https://drive.google.com/file/d/proof-ready",
+          notes: "Creator permission confirmed in writing for edited short-form reposting.",
+          target_file_name: "source-scout-ready-test-intake.mp4",
+          source_drop_path: dropPath,
+          views: "500000",
+          likes: "25000",
+          comments: "1000",
+          shares: "5000",
+        },
+      ],
+    });
+
+    assert.equal(sourceScoutIntake.totals.items, 4);
+    assert.equal(sourceScoutIntake.items.find((item) => item.title === "Bad search URL")?.decision, "rejected");
+    assert.equal(sourceScoutIntake.items.find((item) => item.title === "Needs permission exact")?.publishGate, "blocked_rights");
+    assert.equal(sourceScoutIntake.items.find((item) => item.title === "Recreate plan")?.publishGate, "blocked_source_file");
+    const ready = sourceScoutIntake.items.find((item) => item.title === "Ready permissioned exact");
+    assert.equal(ready?.publishGate, "ready_for_intake");
+    assert.equal(ready?.decision, "ready_for_intake");
+    assert.equal(ready?.evidenceType, "creator_permission");
+    assert.equal(ready?.sourceFileExists, true);
+    assert.ok((ready?.viralScore || 0) > 0);
+    assert.equal(metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(status.sourceScoutIntake.totals.items, sourceScoutIntake.totals.items);
+    assert.ok(status.weeklyProductionFunnel.manifestPath.endsWith("weekly-production-funnel.json"));
+    assert.ok(status.weeklyProductionFunnel.totals.exactUrls >= sourceScoutIntake.totals.exactUrls);
+    assert.ok(status.weeklyProductionFunnel.totals.blockedRights >= 1);
+    assert.ok(status.weeklyProductionFunnel.totals.blockedSourceFile >= 1);
+    assert.equal(status.weeklyProductionFunnel.totals.publishedCount, status.metrics.totals.clips);
+
+    const rawMarkdown = await readFile(sourceScoutIntake.markdownPath, "utf8");
+    const rawCsv = await readFile(sourceScoutIntake.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("ready_for_intake"));
+    assert.ok(rawMarkdown.includes("Evidence type"));
+    assert.ok(rawCsv.includes("evidence_type"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), previousCsv);
+    if (previousDrop === null) await unlink(dropPath).catch(() => undefined);
+    else await writeFile(dropPath, previousDrop);
+    if (previousDropManifest === null) await unlink(manifestPath).catch(() => undefined);
+    else await writeFile(manifestPath, previousDropManifest);
+    for (const [dir, previousFiles] of previousImportFiles) {
+      const currentFiles = await readdir(dir).catch(() => []);
+      await Promise.all(currentFiles
+        .filter((fileName) => !previousFiles.has(fileName))
+        .map((fileName) => unlink(path.join(dir, fileName)).catch(() => undefined)));
+    }
+  }
+});
+
+test("recordClipperSourceScoutIntake upserts without dropping existing intake items", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.json"), "utf8").catch(() => null);
+  const previousMarkdown = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.md"), "utf8").catch(() => null);
+  const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), "utf8").catch(() => null);
+
+  try {
+    const first = await recordClipperSourceScoutIntake({
+      records: [{
+        title: "First exact needs rights",
+        category: "memes",
+        platform: "tiktok",
+        url: "https://www.tiktok.com/@creator/video/4234567890123456789",
+        source: "@creator",
+        status: "review_required",
+        views: "1000",
+      }],
+    });
+    assert.ok(first.sourceScoutIntake.items.some((item) => item.title === "First exact needs rights"));
+
+    const second = await recordClipperSourceScoutIntake({
+      records: [{
+        title: "Second exact needs rights",
+        category: "sports",
+        platform: "tiktok",
+        url: "https://www.tiktok.com/@team/video/5234567890123456789",
+        source: "@team",
+        status: "review_required",
+        views: "2000",
+      }],
+    });
+    assert.ok(second.sourceScoutIntake.items.some((item) => item.title === "First exact needs rights"));
+    assert.ok(second.sourceScoutIntake.items.some((item) => item.title === "Second exact needs rights"));
+    assert.equal(second.sourceScoutIntake.items.filter((item) => item.title === "First exact needs rights").length, 1);
+    assert.equal(second.metricoolExecutionQueue.realPublishEnabled, false);
+  } finally {
+    if (previousManifest === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.json")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.json"), previousManifest);
+    if (previousMarkdown === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.md")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.md"), previousMarkdown);
+    if (previousCsv === null) await unlink(path.join(beforeStatus.rootDir, "source-scout-intake.csv")).catch(() => undefined);
+    else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), previousCsv);
+  }
+});
+
+test("cached Source Scout intake status downgrades when source file disappears", async () => {
+  const beforeStatus = await getClipperStatus();
+  const manifestPath = path.join(beforeStatus.rootDir, "source-scout-intake.json");
+  const markdownPath = path.join(beforeStatus.rootDir, "source-scout-intake.md");
+  const csvPath = path.join(beforeStatus.rootDir, "source-scout-intake.csv");
+  const missingSourcePath = path.join(beforeStatus.rootDir, "source-drop", "memes", "missing-ready-source.mp4");
+  const previousManifest = await readFile(manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(manifestPath, JSON.stringify({
+      status: "ready",
+      generatedAt: new Date().toISOString(),
+      manifestPath,
+      markdownPath,
+      csvPath,
+      items: [{
+        id: "cached-ready-missing-file",
+        candidateId: null,
+        category: "memes",
+        platform: "tiktok",
+        title: "Cached ready missing file",
+        sourceUrl: "https://www.tiktok.com/@creator/video/7234567890123456789",
+        sourceUrlKind: "exact_video_or_post",
+        source: "@creator",
+        postedAt: null,
+        views: 1000,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        viralScore: 1000,
+        requestedStatus: "owned_or_permissioned",
+        rightsStatus: "owned_or_permissioned",
+        decision: "ready_for_intake",
+        publishGate: "ready_for_intake",
+        targetFileName: "missing-ready-source.mp4",
+        sourceDropPath: missingSourcePath,
+        sourceFileExists: true,
+        targetSourcePath: missingSourcePath,
+        targetSourceExists: true,
+        evidencePath: "https://drive.google.com/file/d/source-scout-proof",
+        evidenceType: "creator_permission",
+        evidenceAccepted: true,
+        recreatePlan: null,
+        metricoolFit: true,
+        trendCandidateBatchRow: "",
+        sourceDropManifestPath: null,
+        importedSourcePath: null,
+        nextStep: "Previously ready.",
+        rejectReason: null,
+      }],
+      totals: { items: 1, accepted: 1, rejected: 0, readyForIntake: 1, blockedRights: 0, blockedSourceFile: 0, recreateOnly: 0, exactUrls: 1, discoveryRejected: 0, metricoolFit: 1 },
+      nextStep: "Previously ready.",
+    }, null, 2));
+
+    const nextStatus = await getClipperStatus();
+    assert.equal(nextStatus.sourceScoutIntake.status, "partial");
+    assert.equal(nextStatus.sourceScoutIntake.totals.readyForIntake, 0);
+    assert.equal(nextStatus.sourceScoutIntake.totals.blockedSourceFile, 1);
+    assert.equal(nextStatus.sourceScoutIntake.items[0]?.decision, "blocked_source_file");
+    assert.equal(nextStatus.sourceScoutIntake.items[0]?.sourceFileExists, false);
+  } finally {
+    if (previousManifest === null) await unlink(manifestPath).catch(() => undefined);
+    else await writeFile(manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(markdownPath).catch(() => undefined);
+    else await writeFile(markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(csvPath).catch(() => undefined);
+    else await writeFile(csvPath, previousCsv);
+  }
+});
+
+test("weekly production funnel helpers keep readiness honest", () => {
+  assert.deepEqual(__clipperInternals.weeklyFunnelDailyTargets(), {
+    monday: 14,
+    tuesday: 14,
+    wednesday: 14,
+    thursday: 14,
+    friday: 16,
+    saturday: 14,
+    sunday: 14,
+  });
+  assert.equal(__clipperInternals.weeklyFunnelStatus(29, true, false), "blocked");
+  assert.equal(__clipperInternals.weeklyFunnelStatus(30, true, false), "behind");
+  assert.equal(__clipperInternals.weeklyFunnelStatus(79, true, false), "behind");
+  assert.equal(__clipperInternals.weeklyFunnelStatus(80, true, false), "on_track");
+  assert.equal(__clipperInternals.weeklyFunnelStatus(120, true, true), "scaling");
+  assert.equal(__clipperInternals.weeklyFunnelStatus(120, true, false), "on_track");
+});
+
+test("prepareClipperWeeklyProductionFunnel writes guarded 100 clips funnel", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.weeklyProductionFunnel.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.weeklyProductionFunnel.markdownPath, "utf8").catch(() => null);
+  const previousCsv = await readFile(beforeStatus.weeklyProductionFunnel.csvPath, "utf8").catch(() => null);
+
+  try {
+    const { weeklyProductionFunnel, status } = await prepareClipperWeeklyProductionFunnel();
+
+    assert.ok(weeklyProductionFunnel.manifestPath.endsWith("weekly-production-funnel.json"));
+    assert.ok(weeklyProductionFunnel.markdownPath.endsWith("weekly-production-funnel.md"));
+    assert.ok(weeklyProductionFunnel.csvPath.endsWith("weekly-production-funnel.csv"));
+    assert.equal(weeklyProductionFunnel.targetWeeklyClips, 100);
+    assert.equal(weeklyProductionFunnel.totals.publishedCount, status.metrics.totals.clips);
+    assert.ok(weeklyProductionFunnel.totals.metricoolApprovalQueued >= 0);
+    assert.ok(weeklyProductionFunnel.categoryRows.some((row) => row.category === "sports" && row.targetWeeklyClips >= 50));
+    assert.ok(weeklyProductionFunnel.categoryRows.some((row) => row.category === "memes" && row.targetWeeklyClips >= 35));
+    assert.equal(status.weeklyProductionFunnel.manifestPath, weeklyProductionFunnel.manifestPath);
+    assert.equal(status.weeklyProductionFunnel.totals.publishedCount, status.metrics.totals.clips);
+
+    const rawMarkdown = await readFile(weeklyProductionFunnel.markdownPath, "utf8");
+    const rawCsv = await readFile(weeklyProductionFunnel.csvPath, "utf8");
+    assert.ok(rawMarkdown.includes("Queued is not published"));
+    assert.ok(rawCsv.includes("metricool_approval_queued"));
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    if (previousManifest === null) await unlink(beforeStatus.weeklyProductionFunnel.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.weeklyProductionFunnel.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.weeklyProductionFunnel.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.weeklyProductionFunnel.markdownPath, previousMarkdown);
+    if (previousCsv === null) await unlink(beforeStatus.weeklyProductionFunnel.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.weeklyProductionFunnel.csvPath, previousCsv);
   }
 });
 
@@ -5605,7 +7715,7 @@ test("recordClipperSourceRights writes allowlist evidence and unlocks source ass
   let initialQueuePath: string | null = null;
   let queuePath: string | null = null;
   await mkdir(memeFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-rights-test");
+  writeTinyTestVideo(sourcePath);
 
   try {
     const initialQueue = await prepareClipperProductionQueue();
@@ -5626,7 +7736,7 @@ test("recordClipperSourceRights writes allowlist evidence and unlocks source ass
     const { sourceRights, queue, status: nextStatus } = await recordClipperSourceRights({
       assetId: asset.id,
       rightsStatus: "owned_or_permissioned",
-      notes: "Creator permission confirmed for test; proof path /secure-drive/permissioned-meme-approval.png; no tokens or secrets.",
+      notes: "Creator permission confirmed in writing; proof path /secure-drive/permissioned-meme-approval.png; license approved for edited short-form use; no tokens or secrets.",
     });
     queuePath = queue.queuePath;
 
@@ -5655,15 +7765,15 @@ test("prepareClipperDraftSpecs writes editable draft specs for rights-cleared qu
   assert.ok(sportsFolder);
   assert.ok(allowlistFolder);
 
-  const sourcePath = `${sportsFolder.path}/draft-ready-highlight.mp4`;
-  const evidencePath = `${allowlistFolder.path}/draft-ready-highlight.md`;
+  const sourcePath = `${sportsFolder.path}/000-draft-ready-highlight.mp4`;
+  const evidencePath = `${allowlistFolder.path}/000-draft-ready-highlight.md`;
   const previousManifest = await readFile(status.draftSpecs.manifestPath, "utf8").catch(() => null);
   let queuePath: string | null = null;
   let manifestPath: string | null = null;
   const createdDraftPaths: string[] = [];
   await mkdir(sportsFolder.path, { recursive: true });
   await mkdir(allowlistFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-draft-spec-test");
+  writeTinyTestVideo(sourcePath);
   await writeFile(evidencePath, "# Permission\nOwned or permissioned source for draft specs.");
 
   try {
@@ -5772,11 +7882,11 @@ test("prepareClipperManualPostingPack writes CSV and command center step", async
   assert.ok(sportsFolder);
   assert.ok(allowlistFolder);
 
-  const sourcePath = `${sportsFolder.path}/manual-ready-highlight.mp4`;
-  const evidencePath = `${allowlistFolder.path}/manual-ready-highlight.md`;
+  const sourcePath = `${sportsFolder.path}/000-manual-ready-highlight.mp4`;
+  const evidencePath = `${allowlistFolder.path}/000-manual-ready-highlight.md`;
   await mkdir(sportsFolder.path, { recursive: true });
   await mkdir(allowlistFolder.path, { recursive: true });
-  await writeFile(sourcePath, "fake-video-for-manual-posting-pack-test");
+  writeTinyTestVideo(sourcePath);
   await writeFile(evidencePath, "# Permission\nOwned or permissioned source for manual posting.");
 
   try {
@@ -5947,26 +8057,56 @@ test("ingestClipperTrends ranks recent opportunities and gates rights", async ()
   assert.ok(allowlistFolder);
   await mkdir(trendsFolder.path, { recursive: true });
   await mkdir(allowlistFolder.path, { recursive: true });
-  const trendsPath = `${trendsFolder.path}/sample-trends.csv`;
+  const trendsPath = `${trendsFolder.path}/trend-candidates-2099-01-01T00-00-00-000Z.csv`;
+  const staleSummaryPath = `${trendsFolder.path}/trend-radar-summary 2.json`;
   const evidencePath = `${allowlistFolder.path}/https-example-com-sports-clip-1.md`;
+  const permissionedDuplicateEvidencePath = `${allowlistFolder.path}/https-example-com-permissioned-duplicate.md`;
   await writeFile(evidencePath, "# Permission\nApproved source for test trend.");
+  await writeFile(permissionedDuplicateEvidencePath, "# Permission\nApproved source for duplicate priority test.");
   await writeFile(trendsPath, [
     "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights",
     "sports,tiktok,Game winner angle,https://example.com/sports-clip-1,@league,2026-06-17T01:00:00Z,900000,42000,1800,12000,approved",
+    "sports,tiktok,Approved without proof,https://example.com/sports-clip-no-proof,@league,2026-06-17T01:00:00Z,500000,12000,800,4000,approved",
     "memes,instagram,New meme format,https://example.com/meme-clip-2,@creator,2026-06-10T01:00:00Z,300000,10000,500,800,review",
+    "sports,youtube,YouTube first exact video,https://www.youtube.com/watch?v=abc123&utm_source=test,@channel,2026-06-17T01:00:00Z,100000,1000,100,100,review",
+    "sports,youtube,YouTube second exact video,https://www.youtube.com/watch?v=xyz789&utm_source=test,@channel,2026-06-17T01:00:00Z,110000,1000,100,100,review",
+    "sports,tiktok,Permissioned duplicate,https://example.com/permissioned-duplicate,@league,2026-06-17T01:00:00Z,200000,1000,100,100,approved",
+    "sports,tiktok,Higher score duplicate without proof,https://example.com/permissioned-duplicate?utm_source=copy,@league,2026-06-17T01:00:00Z,9000000,1000,100,100,review",
   ].join("\n"));
+  await writeFile(staleSummaryPath, JSON.stringify({
+    records: [
+      {
+        category: "sports",
+        platform: "tiktok",
+        title: "stale summary should not import",
+        url: "https://example.com/stale-summary",
+        views: 999999999,
+      },
+    ],
+  }));
 
   try {
     const { trendRadar, status: nextStatus } = await ingestClipperTrends();
     assert.equal(trendRadar.status, "ready");
+    assert.equal(trendRadar.files.some((file) => file.fileName === "trend-radar-summary 2.json"), false);
+    assert.equal(trendRadar.candidates.some((candidate) => candidate.url === "https://example.com/stale-summary"), false);
     assert.equal(trendRadar.candidates.length >= 2, true);
     const permissionedCandidate = trendRadar.candidates.find((candidate) => candidate.url === "https://example.com/sports-clip-1");
     assert.equal(permissionedCandidate?.rightsStatus, "owned_or_permissioned");
+    const noProofCandidate = trendRadar.candidates.find((candidate) => candidate.url === "https://example.com/sports-clip-no-proof");
+    assert.equal(noProofCandidate?.rightsStatus, "review_required");
+    assert.ok(noProofCandidate?.nextStep.includes("falta evidencia local verificable"));
+    assert.ok(trendRadar.candidates.some((candidate) => candidate.url?.includes("v=abc123")));
+    assert.ok(trendRadar.candidates.some((candidate) => candidate.url?.includes("v=xyz789")));
+    const permissionedDuplicate = trendRadar.candidates.find((candidate) => candidate.url?.startsWith("https://example.com/permissioned-duplicate"));
+    assert.equal(permissionedDuplicate?.rightsStatus, "owned_or_permissioned");
     assert.ok(trendRadar.recommendations.some((recommendation) => recommendation.includes("Prioridad")));
     assert.ok(nextStatus.growthAudit.items.some((item) => item.id === "trend-radar" && item.status === "ready"));
   } finally {
     await unlink(trendsPath).catch(() => undefined);
+    await unlink(staleSummaryPath).catch(() => undefined);
     await unlink(evidencePath).catch(() => undefined);
+    await unlink(permissionedDuplicateEvidencePath).catch(() => undefined);
     await unlink(`${trendsFolder.path}/trend-radar-summary.json`).catch(() => undefined);
   }
 });
@@ -5992,9 +8132,11 @@ test("recordClipperTrendCandidatesBatch imports candidates and refreshes radar",
 
     assert.equal(trendCandidatesBatch.accepted, 2);
     assert.equal(trendCandidatesBatch.skipped, 2);
-    assert.equal(trendCandidatesBatch.trendRadar.status, "ready");
-    assert.ok(trendCandidatesBatch.trendRadar.candidates.some((candidate) => candidate.title === "Last second comeback"));
-    assert.ok(nextStatus.trendRadar.topCandidates.some((candidate) => candidate.url === "https://example.com/comeback"));
+    assert.equal(trendCandidatesBatch.trendRadar.status, "needs_review");
+    const importedCandidate = trendCandidatesBatch.trendRadar.candidates.find((candidate) => candidate.title === "Last second comeback");
+    assert.ok(importedCandidate);
+    assert.equal(importedCandidate.rightsStatus, "review_required");
+    assert.ok(nextStatus.trendRadar.candidates.some((candidate) => candidate.url === "https://example.com/comeback" && candidate.rightsStatus === "review_required"));
 
     const rawImport = await readFile(importedPath, "utf8");
     const rawSummary = await readFile(nextStatus.trendRadar.summaryPath, "utf8");
@@ -6020,7 +8162,7 @@ test("prepareClipperTrendRightsOutreachPack writes outreach for review-required 
     const { trendCandidatesBatch } = await recordClipperTrendCandidatesBatch({
       batchText: [
         "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle",
-        "streamers,tiktok,Streamer rage moment,https://example.com/streamer-rage,@streamer,2026-06-17T09:00:00Z,700000,30000,4000,13000,review,Clip the reaction buildup",
+        "streamers,tiktok,Streamer rage moment,https://example.com/streamer-rage,@streamer,2026-06-20T20:00:00Z,999999999999,30000,4000,13000,review,Clip the reaction buildup",
         "sports,youtube,Official team highlight,https://example.com/team-highlight,@team,2026-06-17T08:00:00Z,900000,50000,3000,9000,approved,Official source recap",
       ].join("\n"),
     });

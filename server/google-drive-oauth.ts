@@ -1,9 +1,7 @@
 import { randomBytes } from "crypto";
 import type { Request } from "express";
-import { google } from "googleapis";
 import { hasRealValue } from "./ceo-doctor-cli";
 import { hasReplitGoogleConnectorEnv } from "./google-calendar";
-import { storage } from "./storage";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -51,6 +49,21 @@ interface GoogleTokenResponse {
 }
 
 const pendingAuth = new Map<string, PendingGoogleDriveAuth>();
+
+async function getGoogleApis() {
+  return (await import("googleapis")).google;
+}
+
+async function getStorage() {
+  return (await import("./storage")).storage;
+}
+
+async function getStorageForStatus() {
+  return Promise.race([
+    getStorage(),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Storage status lookup timed out.")), 500)),
+  ]);
+}
 
 function getFirstEnvValue(names: string[]): string {
   for (const name of names) {
@@ -144,6 +157,7 @@ async function saveTokenResponse(userId: string, token: GoogleTokenResponse, exi
   }
 
   const expiresAt = new Date(Date.now() + Math.max(token.expires_in - 60, 60) * 1000);
+  const storage = await getStorage();
   await storage.saveGoogleDriveOAuthToken(userId, {
     userId,
     accessToken: token.access_token,
@@ -178,6 +192,7 @@ export async function exchangeGoogleDriveAuthorizationCode(params: {
 
 export async function getGoogleDriveOAuthClient(userId: string) {
   const { clientId, clientSecret } = getGoogleDriveClientConfig();
+  const google = await getGoogleApis();
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
 
   const envRefreshToken = getGoogleDriveRefreshTokenFromEnv();
@@ -188,6 +203,7 @@ export async function getGoogleDriveOAuthClient(userId: string) {
     return oauth2Client;
   }
 
+  const storage = await getStorage();
   const existing = await storage.getGoogleDriveOAuthToken(userId);
   if (!existing) {
     throw new Error("Google Drive is not connected. Open /api/google-drive/auth to connect Drive.");
@@ -222,11 +238,13 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
   const envConnected = Boolean(getGoogleDriveRefreshTokenFromEnv());
   const replitConnectorAvailable = hasReplitGoogleConnectorEnv();
   const configured = Boolean(envConnected || replitConnectorAvailable || hasGoogleDriveOAuthClientConfig());
-
   let token = null;
   let storageError: string | null = null;
-  if (!envConnected) {
+
+  const localStorageAvailable = hasRealValue(process.env.DATABASE_URL);
+  if (!envConnected && !replitConnectorAvailable && hasGoogleDriveOAuthClientConfig() && localStorageAvailable) {
     try {
+      const storage = await getStorageForStatus();
       token = await storage.getGoogleDriveOAuthToken(userId);
     } catch (error: any) {
       storageError = error.message || "No se pudo leer el token de Google Drive.";
@@ -235,8 +253,8 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
 
   return {
     configured,
-    connected: Boolean(envConnected || token || replitConnectorAvailable),
-    provider: envConnected ? "env_refresh_token" : token ? "local_oauth" : replitConnectorAvailable ? "replit_connector" : null,
+    connected: Boolean(envConnected || replitConnectorAvailable || token),
+    provider: envConnected ? "env_refresh_token" : replitConnectorAvailable ? "replit_connector" : token ? "local_oauth" : null,
     expiresAt: token?.expiresAt || null,
     scope: token?.scope || (hasRealValue(process.env.GOOGLE_DRIVE_SCOPES) ? process.env.GOOGLE_DRIVE_SCOPES : DEFAULT_GOOGLE_DRIVE_SCOPES),
     redirectUri: hasRealValue(process.env.GOOGLE_DRIVE_REDIRECT_URI) ? process.env.GOOGLE_DRIVE_REDIRECT_URI : null,

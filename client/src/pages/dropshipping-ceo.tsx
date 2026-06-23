@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bot,
   CheckCircle2,
+  CircleX,
   ClipboardList,
   DollarSign,
   FileCheck2,
@@ -68,6 +69,7 @@ type DropshippingSnapshot = {
     capitalPlans: number;
     growthSprints: number;
     launchPacks: number;
+    autopilotProductHunterRuns: number;
     localApprovalOutbox: number;
     orderRevenueUsd: number;
     orderProfitUsd: number;
@@ -241,11 +243,13 @@ type DropshippingSnapshot = {
   recentCapitalPlans: DropshippingCapitalPlan[];
   recentGrowthSprints: DropshippingGrowthSprint[];
   recentLaunchPacks: DropshippingLaunchPack[];
+  recentAutopilotProductHunterRuns: DropshippingAutopilotProductHunterRun[];
   recentApprovalOutbox: DropshippingApprovalOutboxItem[];
   latestCampaign?: DropshippingMarketingCampaign;
   latestCapitalPlan?: DropshippingCapitalPlan;
   latestGrowthSprint?: DropshippingGrowthSprint;
   latestLaunchPack?: DropshippingLaunchPack;
+  latestAutopilotProductHunterRun?: DropshippingAutopilotProductHunterRun;
   latestCycle?: DropshippingCeoCycle;
   latestSocialAnalysis?: DropshippingSocialAnalysis;
   growthLoop: {
@@ -411,7 +415,20 @@ type DropshippingProductScoutCandidate = {
   qualityRisk: "low" | "medium" | "high";
   requiresSample: boolean;
   notes: string;
-  status: "shortlisted" | "needs_supplier" | "ready_for_research" | "promoted" | "rejected";
+  status: "seed_candidate" | "needs_tiktok_validation" | "needs_supplier" | "ready_for_research" | "shortlisted" | "promoted" | "rejected";
+  validation: {
+    status: "seed_only" | "needs_external_validation" | "externally_validated";
+    confidence: "low" | "medium" | "high";
+    evidenceScore: number;
+    evidence: Array<{
+      source: "tiktok_creative_center" | "tiktok_search" | "aliexpress_search" | "google_trends" | "shopify_trends" | "manual";
+      label: string;
+      url: string;
+      status: "seed_reference" | "needs_review" | "verified";
+      signal: string;
+    }>;
+    missingProof: string[];
+  };
   scorecard: {
     total: number;
     grade: "A" | "B" | "C" | "D";
@@ -429,6 +446,46 @@ type DropshippingProductScoutCandidate = {
   promotedProductId: string;
   createdAt: string;
   updatedAt: string;
+};
+
+type DropshippingAutopilotProductHunterRun = {
+  id: string;
+  createdAt: string;
+  status: "prepared_for_robert_review" | "blocked_no_candidate";
+  focusNiche: string;
+  maxCandidates: number;
+  requestedBudgetUsd: number;
+  dailyOrganicPosts: number;
+  postsPerPlatform: number;
+  notes: string;
+  winnerCandidateId: string;
+  winnerProductId: string;
+  supplierId: string;
+  launchPackId: string;
+  confidence: "low" | "medium" | "high";
+  summary: string;
+  rankedCandidates: Array<{
+    candidateId: string;
+    candidateName: string;
+    rank: number;
+    score: number;
+    confidence: "low" | "medium" | "high";
+    evidenceScore: number;
+    reason: string;
+  }>;
+  approvalRequired: Array<{
+    actionType: "dropshipping.publish_product" | "dropshipping.create_shopify_draft" | "dropshipping.publish_social" | "dropshipping.spend" | "dropshipping.order_sample";
+    title: string;
+    reason: string;
+    maxSpendUsd: number;
+  }>;
+  nextActions: string[];
+  safety: {
+    spentUsd: number;
+    publishedExternally: boolean;
+    inventoryPurchased: boolean;
+    message: string;
+  };
 };
 
 type DropshippingSupplier = {
@@ -844,13 +901,13 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 function statusTone(status: string) {
-  if (["ready", "ready_for_dry_run", "ready_for_test_order", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "queued_in_trust_center", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go", "validation_ready", "telegram"].includes(status)) {
+  if (["ready", "ready_for_dry_run", "ready_for_test_order", "scale_carefully", "approved_candidate", "pass", "recorded", "ready_after_approval", "launch_ready", "queued", "queued_in_trust_center", "published", "scale_content", "active_now", "scale", "fulfilled", "manual_fulfillment_recorded", "micro_test_ready", "ready_for_research", "promoted", "draft_ready", "scale_ready", "on_track", "active", "go", "validation_ready", "telegram", "prepared_for_robert_review", "externally_validated", "high"].includes(status)) {
     return "border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
   }
-  if (["needs_approval", "review_queue", "sample_recommended", "needs_setup", "needs_backup_supplier", "needs_database", "needs_migration", "needs_accounts", "needs_supplier_validation", "ready_for_sample", "pre_account_ready", "preview_only", "fix", "approval_required", "draft", "iterate_hooks", "needs_data", "locked_until_signal", "locked", "research", "validation", "traction", "pending_payment", "ready_for_fulfillment", "preflight", "needs_product", "scale_locked", "organic_only", "scale_plan_only", "shortlisted", "needs_supplier", "research_board", "validation_board", "approval_locked", "cash_locked", "watch", "hold"].includes(status)) {
+  if (["needs_approval", "review_queue", "sample_recommended", "needs_setup", "needs_backup_supplier", "needs_database", "needs_migration", "needs_accounts", "needs_supplier_validation", "ready_for_sample", "pre_account_ready", "preview_only", "fix", "approval_required", "draft", "iterate_hooks", "needs_data", "locked_until_signal", "locked", "research", "validation", "traction", "pending_payment", "ready_for_fulfillment", "preflight", "needs_product", "scale_locked", "organic_only", "scale_plan_only", "shortlisted", "seed_candidate", "needs_tiktok_validation", "needs_external_validation", "medium", "needs_supplier", "research_board", "validation_board", "approval_locked", "cash_locked", "watch", "hold"].includes(status)) {
     return "border-amber-400/40 bg-amber-400/10 text-amber-100";
   }
-  if (["blocked", "blocked_needs_accounts", "blocked_safety", "pause_spend", "block", "rejected", "pause_and_fix", "critical"].includes(status)) {
+  if (["blocked", "blocked_no_candidate", "blocked_needs_accounts", "blocked_safety", "pause_spend", "block", "rejected", "pause_and_fix", "critical", "seed_only", "low"].includes(status)) {
     return "border-red-400/40 bg-red-400/10 text-red-100";
   }
   return "border-zinc-600 bg-zinc-900 text-zinc-300";
@@ -905,6 +962,16 @@ export default function DropshippingCeoPage() {
     budgetUsd: 100,
     notes: "",
   });
+  const [autopilotHunterForm, setAutopilotHunterForm] = useState({
+    focusNiche: "mixed",
+    maxCandidates: 5,
+    requestedBudgetUsd: 0,
+    dailyOrganicPosts: 3,
+    postsPerPlatform: 1,
+    notes: "",
+  });
+  const [autopilotHunterResult, setAutopilotHunterResult] = useState<string>("");
+  const [autopilotDecisionResult, setAutopilotDecisionResult] = useState<string>("");
   const [supplierForm, setSupplierForm] = useState({
     supplierName: "AliExpress supplier",
     platform: "aliexpress",
@@ -1083,6 +1150,73 @@ export default function DropshippingCeoPage() {
   const scoutPromoteMutation = useMutation({
     mutationFn: (candidateId: string) => postJson("/api/dropshipping-ceo/product-scout-promote", { candidateId, approvalToPromote: true }),
     onSuccess: refresh,
+  });
+  const autopilotHunterMutation = useMutation({
+    mutationFn: () => postJson<{
+      run: DropshippingAutopilotProductHunterRun;
+      product: DropshippingProduct | null;
+      launchPack: DropshippingLaunchPack | null;
+    }>("/api/dropshipping-ceo/autopilot-product-hunter", autopilotHunterForm),
+    onSuccess: (data) => {
+      setAutopilotHunterResult(data.product
+        ? `Autopilot recomienda ${data.product.productName}. Launch pack ${data.launchPack?.status || "preparado"}; nada publicado/gastado.`
+        : data.run.summary);
+      refresh();
+    },
+    onError: (error) => {
+      setAutopilotHunterResult(error instanceof Error ? error.message : "No se pudo correr Autopilot Product Hunter.");
+    },
+  });
+  const autopilotDecisionMutation = useMutation({
+    mutationFn: async (decision: "approved" | "rejected" | "needs_changes") => {
+      const run = snapshot?.latestAutopilotProductHunterRun;
+      const winner = run?.rankedCandidates[0]?.candidateName || "producto ganador";
+      if (!run?.winnerProductId) throw new Error("No hay producto ganador listo para decidir.");
+      const approvalDecision = await postJson<{ decision: DropshippingApprovalDecision }>("/api/dropshipping-ceo/approval-decisions", {
+        targetId: run.winnerProductId,
+        targetType: "product",
+        decision,
+        approvedAction:
+          decision === "approved"
+            ? `Approve Autopilot winner: ${winner}`
+            : decision === "rejected"
+              ? `Reject Autopilot winner: ${winner}`
+              : `Request changes for Autopilot winner: ${winner}`,
+        maxSpendUsd: 0,
+        notes: "Decision tomada desde Autopilot Product Hunter. No publica, no compra y no gasta.",
+      });
+      let launchApprovals: { queuedCount: number; duplicateCount: number; fallback: boolean; skipped: string[] } | null = null;
+      if (decision === "approved" && run.launchPackId) {
+        const queued = await postJson<{
+          pendingActions: unknown[];
+          prepared: { skipped: string[] };
+          fallback?: boolean;
+          localOutbox?: { queued: unknown[]; duplicates: unknown[] };
+        }>("/api/dropshipping-ceo/launch-pack-approvals", {
+          launchPackId: run.launchPackId,
+          includeSpendApproval: false,
+          includeSampleApproval: false,
+        });
+        launchApprovals = {
+          queuedCount: queued.fallback ? queued.localOutbox?.queued.length || 0 : queued.pendingActions.length,
+          duplicateCount: queued.localOutbox?.duplicates.length || 0,
+          fallback: Boolean(queued.fallback),
+          skipped: queued.prepared.skipped,
+        };
+      }
+      return { ...approvalDecision, launchApprovals };
+    },
+    onSuccess: (data) => {
+      setAutopilotDecisionResult(data.decision.decision === "approved"
+        ? `Producto aprobado para launch prep. ${data.launchApprovals ? `${data.launchApprovals.queuedCount} approval(s) de launch en cola${data.launchApprovals.duplicateCount ? `, ${data.launchApprovals.duplicateCount} duplicados` : ""}. ` : ""}Spend y sample siguen bloqueados.`
+        : data.decision.decision === "rejected"
+          ? "Producto rechazado. Queda bloqueado y debes correr Autopilot otra vez para buscar otro ganador."
+          : "Cambios pedidos. El producto queda en approval_required hasta ajustar evidencia/proveedor/oferta.");
+      refresh();
+    },
+    onError: (error) => {
+      setAutopilotDecisionResult(error instanceof Error ? error.message : "No se pudo registrar la decision del ganador.");
+    },
   });
   const supplierMutation = useMutation({
     mutationFn: () => postJson("/api/dropshipping-ceo/supplier-review", supplierForm),
@@ -1704,6 +1838,136 @@ export default function DropshippingCeoPage() {
           </TabsContent>
 
           <TabsContent value="products" className="mt-0">
+            <Card className="mb-4 border-emerald-400/30 bg-emerald-400/10">
+              <CardHeader>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base"><Bot className="h-4 w-4" /> Autopilot Product Hunter</CardTitle>
+                    <p className="mt-2 text-sm leading-5 text-emerald-50/80">
+                      Encuentra el mejor candidato, lo promueve a producto, valida supplier, arma launch pack y deja approvals listos. No publica, no compra y no gasta.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={cn("shrink-0", statusTone(snapshot.latestAutopilotProductHunterRun?.status || "needs_external_validation"))}>
+                    {snapshot.latestAutopilotProductHunterRun?.status || "not_run"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <form className="grid gap-3 md:grid-cols-[1fr_110px_120px_120px_120px] md:items-end" onSubmit={(event) => submit(event, () => autopilotHunterMutation.mutate())}>
+                  <div className="space-y-1">
+                    <FieldLabel>Nicho</FieldLabel>
+                    <select value={autopilotHunterForm.focusNiche} onChange={(event) => setAutopilotHunterForm({ ...autopilotHunterForm, focusNiche: event.target.value })} className="h-10 w-full rounded-md border border-emerald-400/20 bg-black px-3 text-sm">
+                      <option value="mixed">Mixed</option>
+                      <option value="home_problem_solvers">Home problem solvers</option>
+                      <option value="kitchen_organization">Kitchen organization</option>
+                      <option value="car_accessories">Car accessories</option>
+                      <option value="pet_supplies">Pet supplies</option>
+                      <option value="beauty_low_claims">Beauty low-claims</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel>Candidatos</FieldLabel>
+                    <Input type="number" min={3} max={8} value={autopilotHunterForm.maxCandidates} onChange={(event) => setAutopilotHunterForm({ ...autopilotHunterForm, maxCandidates: Number(event.target.value) })} className="border-emerald-400/20 bg-black" />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel>Budget</FieldLabel>
+                    <Input type="number" min={0} max={100} value={autopilotHunterForm.requestedBudgetUsd} onChange={(event) => setAutopilotHunterForm({ ...autopilotHunterForm, requestedBudgetUsd: Number(event.target.value) })} className="border-emerald-400/20 bg-black" />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel>Posts/dia</FieldLabel>
+                    <Input type="number" min={1} max={10} value={autopilotHunterForm.dailyOrganicPosts} onChange={(event) => setAutopilotHunterForm({ ...autopilotHunterForm, dailyOrganicPosts: Number(event.target.value) })} className="border-emerald-400/20 bg-black" />
+                  </div>
+                  <Button type="submit" disabled={autopilotHunterMutation.isPending} className="bg-emerald-600 text-white hover:bg-emerald-500">
+                    {autopilotHunterMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Find best
+                  </Button>
+                </form>
+                {autopilotHunterResult && (
+                  <p className="rounded-md border border-emerald-400/20 bg-black px-3 py-2 text-sm leading-5 text-emerald-50">{autopilotHunterResult}</p>
+                )}
+                {snapshot.latestAutopilotProductHunterRun && (
+                  <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
+                    <div className="rounded-lg border border-emerald-400/20 bg-black p-3">
+                      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-white">Producto recomendado</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-400">{snapshot.latestAutopilotProductHunterRun.summary}</p>
+                        </div>
+                        <Badge variant="outline" className={cn("shrink-0", statusTone(snapshot.latestAutopilotProductHunterRun.confidence))}>
+                          {snapshot.latestAutopilotProductHunterRun.confidence}
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <Metric label="Gasto" value={money.format(snapshot.latestAutopilotProductHunterRun.safety.spentUsd)} />
+                        <Metric label="Budget pedido" value={money.format(snapshot.latestAutopilotProductHunterRun.requestedBudgetUsd)} />
+                        <Metric label="Approvals" value={String(snapshot.latestAutopilotProductHunterRun.approvalRequired.length)} />
+                      </div>
+                      <p className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-400">
+                        {snapshot.latestAutopilotProductHunterRun.safety.message}
+                      </p>
+                      <div className="mt-3 grid gap-2 md:grid-cols-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={autopilotDecisionMutation.isPending || !snapshot.latestAutopilotProductHunterRun.winnerProductId}
+                          onClick={() => autopilotDecisionMutation.mutate("approved")}
+                          className="bg-emerald-600 text-white hover:bg-emerald-500"
+                        >
+                          {autopilotDecisionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                          Aprobar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={autopilotDecisionMutation.isPending || !snapshot.latestAutopilotProductHunterRun.winnerProductId}
+                          onClick={() => autopilotDecisionMutation.mutate("needs_changes")}
+                          variant="outline"
+                          className="border-amber-400/40 bg-amber-400/10 text-amber-100 hover:bg-amber-400/20"
+                        >
+                          <ClipboardList className="mr-2 h-4 w-4" />
+                          Cambios
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={autopilotDecisionMutation.isPending || !snapshot.latestAutopilotProductHunterRun.winnerProductId}
+                          onClick={() => autopilotDecisionMutation.mutate("rejected")}
+                          variant="outline"
+                          className="border-red-400/40 bg-red-400/10 text-red-100 hover:bg-red-400/20"
+                        >
+                          <CircleX className="mr-2 h-4 w-4" />
+                          Rechazar
+                        </Button>
+                      </div>
+                      {autopilotDecisionResult && (
+                        <p className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-300">{autopilotDecisionResult}</p>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-emerald-400/20 bg-black p-3">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Ranking y approvals</p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {snapshot.latestAutopilotProductHunterRun.rankedCandidates.slice(0, 4).map((candidate) => (
+                          <div key={candidate.candidateId} className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-white">#{candidate.rank} {candidate.candidateName}</p>
+                              <Badge variant="outline" className={cn("shrink-0", statusTone(candidate.confidence))}>{candidate.confidence}</Badge>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">{candidate.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {snapshot.latestAutopilotProductHunterRun.approvalRequired.map((approval) => (
+                          <Badge key={`${snapshot.latestAutopilotProductHunterRun?.id}-${approval.actionType}`} variant="outline" className="border-amber-400/40 bg-amber-400/10 text-amber-100">
+                            {approval.actionType.replace("dropshipping.", "")} {approval.maxSpendUsd ? money.format(approval.maxSpendUsd) : ""}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
               <Card className="border-zinc-800 bg-zinc-900/80">
                 <CardHeader>
@@ -1814,6 +2078,23 @@ export default function DropshippingCeoPage() {
                             <Metric label="Margen" value={`${candidate.economics.grossMarginPercent}%`} />
                             <Metric label="Profit/unidad" value={money.format(candidate.economics.grossProfitUsd)} />
                             <Metric label="Demand" value={candidate.demandSignal} />
+                          </div>
+                          <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+                            <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Validacion externa</p>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline" className={cn("shrink-0", statusTone(candidate.validation.status))}>{candidate.validation.status}</Badge>
+                                <Badge variant="outline" className={cn("shrink-0", statusTone(candidate.validation.confidence))}>{candidate.validation.confidence}</Badge>
+                              </div>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              {candidate.validation.evidence.slice(0, 4).map((evidence) => (
+                                <a key={`${candidate.id}-${evidence.source}`} href={evidence.url} target="_blank" rel="noreferrer" className="rounded border border-zinc-800 bg-black p-2 text-xs leading-5 text-zinc-400 hover:border-emerald-400/40 hover:text-emerald-100">
+                                  <span className="block font-medium text-zinc-200">{evidence.label}</span>
+                                  {evidence.signal}
+                                </a>
+                              ))}
+                            </div>
                           </div>
                           <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <p className="text-xs leading-5 text-zinc-500">{candidate.sourceLabel || candidate.sourceUrl || "manual source"}</p>
