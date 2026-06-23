@@ -11,30 +11,15 @@ import {
   DRIVE_BLACK_ROOM_VIDEOS_FOLDER,
   ensureAppDriveFolderPath,
   ensureDriveFolderPath,
+  ensureDriveFolderPathUnderParent,
   findDriveFolderPath,
+  findDriveFolderPathUnderParent,
+  getConfiguredClippersDriveRootFolderId,
   searchDriveFoldersByName,
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
-import fsSync from "node:fs";
-
-// Resolve binary paths at startup — Replit autoscale production containers do
-// not activate the Nix PATH, so we look for npm-bundled static binaries first.
-function findBin(...candidates: string[]): string {
-  for (const c of candidates) {
-    if (!c) continue;
-    try { fsSync.accessSync(c, fsSync.constants.X_OK); return c; } catch { /* next */ }
-  }
-  return candidates[candidates.length - 1] ?? "unknown";
-}
-
-const FFMPEG_BIN = process.env.FFMPEG_PATH?.trim() || "ffmpeg";
-const FFPROBE_BIN = process.env.FFPROBE_PATH?.trim() || "ffprobe";
-const LOCAL_YTDLP_BIN = findBin(
-  process.env.YT_DLP_PATH?.trim() ?? "",
-  path.join(process.cwd(), "bin", "yt-dlp"),
-  "yt-dlp",
-);
+import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage, type YtDlpCommandSpec } from "./youtube-downloader";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXTENSIONS = new Set([".aac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"]);
@@ -209,7 +194,7 @@ function isYouTubeUrl(value: string): boolean {
   }
 }
 
-async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; args: string[] }>, timeoutMs: number): Promise<void> {
+async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeoutMs: number, mediaLabel: "video" | "audio" = "video"): Promise<void> {
   const errors: string[] = [];
   for (const spec of commandSpecs) {
     try {
@@ -220,10 +205,7 @@ async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; 
     }
   }
 
-  throw new Error([
-    "No pude descargar el video de YouTube. Instala yt-dlp o configura YT_DLP_PATH.",
-    ...errors.slice(0, 2),
-  ].join(" "));
+  throw new Error(formatYtDlpFailureMessage(errors.join("\n"), mediaLabel));
 }
 
 async function downloadYoutubeVideo(url: string, outputDir: string): Promise<string> {
@@ -233,28 +215,15 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "bv*+ba/best",
-    "--merge-output-format",
-    "mp4",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const commandSpecs = [
-    { command: LOCAL_YTDLP_BIN, args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "video",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "video");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
@@ -284,26 +253,15 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "ba/bestaudio",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const commandSpecs = [
-    { command: LOCAL_YTDLP_BIN, args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "audio",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "audio");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
@@ -320,10 +278,17 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
   return selected;
 }
 
-async function resolveExistingDriveFolderId(folderPath: string[], userId: string): Promise<{ folderId: string | null; folderName: string; ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }> }> {
+async function resolveExistingDriveFolderId(folderPath: string[], userId: string, parentFolderId?: string | null): Promise<{ folderId: string | null; folderName: string; ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }> }> {
   const cleanPath = folderPath.map((part) => part.trim()).filter(Boolean);
   const folderName = cleanPath.at(-1) || "Drive";
-  if (cleanPath.length === 0) return { folderId: null, folderName };
+  if (cleanPath.length === 0) return { folderId: parentFolderId || null, folderName };
+
+  if (parentFolderId) {
+    return {
+      folderId: await findDriveFolderPathUnderParent(cleanPath, parentFolderId, userId),
+      folderName,
+    };
+  }
 
   if (cleanPath.length > 1) {
     return {
@@ -344,7 +309,7 @@ async function resolveExistingDriveFolderId(folderPath: string[], userId: string
 }
 
 async function getVideoDuration(videoPath: string): Promise<number> {
-  const { stdout } = await runCommand(FFPROBE_BIN, [
+  const { stdout } = await runCommand("ffprobe", [
     "-v",
     "error",
     "-show_entries",
@@ -361,7 +326,7 @@ async function getVideoDuration(videoPath: string): Promise<number> {
 }
 
 async function getVideoResolution(videoPath: string): Promise<{ width: number; height: number }> {
-  const { stdout } = await runCommand(FFPROBE_BIN, [
+  const { stdout } = await runCommand("ffprobe", [
     "-v",
     "error",
     "-select_streams",
@@ -380,7 +345,7 @@ async function getVideoResolution(videoPath: string): Promise<{ width: number; h
 }
 
 async function hasAudio(videoPath: string): Promise<boolean> {
-  const { stdout } = await runCommand(FFPROBE_BIN, [
+  const { stdout } = await runCommand("ffprobe", [
     "-v",
     "error",
     "-select_streams",
@@ -401,7 +366,7 @@ function clipStartAroundDrop(duration: number, targetSeconds: number, dropSecond
 }
 
 async function measureAudioMeanVolume(videoPath: string, start: number, seconds: number): Promise<number> {
-  const { stderr } = await runCommand(FFMPEG_BIN, [
+  const { stderr } = await runCommand("ffmpeg", [
     "-hide_banner",
     "-nostats",
     "-ss",
@@ -457,7 +422,7 @@ async function detectDjNameByOcr(videoPath: string): Promise<string | null> {
 
     for (const [index, sampleAt] of sampleTimes.entries()) {
       const framePath = path.join(tempDir, `frame-${index}.png`);
-      await runCommand(FFMPEG_BIN, [
+      await runCommand("ffmpeg", [
         "-y",
         "-ss",
         sampleAt.toFixed(3),
@@ -632,7 +597,7 @@ async function renderClip(params: {
     params.outputPath,
   );
 
-  await runCommand(FFMPEG_BIN, args, { timeoutMs: 30 * 60 * 1000 });
+  await runCommand("ffmpeg", args, { timeoutMs: 30 * 60 * 1000 });
 }
 
 function resolveDriveOutputDir(folderName: string): string | null {
