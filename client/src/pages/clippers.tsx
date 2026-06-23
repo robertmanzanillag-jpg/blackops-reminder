@@ -429,6 +429,38 @@ interface ClipperAccountPermissionReadinessSummary {
     rows: number;
     header: string;
     previewRows: string[];
+    cards?: Array<{
+      id: string;
+      index: number;
+      kind: string;
+      accountId: string;
+      platform: string;
+      status: string;
+      scope: string;
+      publicBaseUrl: string;
+      redirectUri: string;
+      portalUrl: string;
+      docsUrl: string;
+      proofPath: string;
+      missingFields: string[];
+      nextStep: string;
+    }>;
+    previewCards?: Array<{
+      id: string;
+      index: number;
+      kind: string;
+      accountId: string;
+      platform: string;
+      status: string;
+      scope: string;
+      publicBaseUrl: string;
+      redirectUri: string;
+      portalUrl: string;
+      docsUrl: string;
+      proofPath: string;
+      missingFields: string[];
+      nextStep: string;
+    }>;
     source: string;
     nextStep: string;
   };
@@ -17100,6 +17132,23 @@ export default function ClippersPage() {
                           <p key={`${index}-${row.slice(0, 24)}`} className="break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{row}</p>
                         ))}
                       </div>
+                      {(accountPermissionReadiness.nextEvidenceDrop.previewCards || []).length > 0 && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="clippers-next-evidence-cards">
+                          {(accountPermissionReadiness.nextEvidenceDrop.previewCards || []).slice(0, 3).map((card) => (
+                            <div key={card.id} className="rounded-md border border-lime-300/15 bg-black/30 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-medium text-lime-100">{card.kind || "evidence"} / {card.platform || "all"}</p>
+                                  <p className="mt-1 truncate text-[10px] text-zinc-500">{card.scope || card.accountId || card.status}</p>
+                                </div>
+                                <Badge className="shrink-0 border border-lime-300/20 bg-lime-950/40 text-[10px] text-lime-100">{card.status || "needed"}</Badge>
+                              </div>
+                              <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-lime-100/75">{card.nextStep}</p>
+                              <p className="mt-2 break-all text-[10px] leading-4 text-zinc-600">{card.proofPath || card.portalUrl || "Proof path pending"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   {accountPermissionReadiness.externalCloseout && (

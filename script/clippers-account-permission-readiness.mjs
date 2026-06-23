@@ -216,6 +216,30 @@ function closeoutRowsForEvidenceDrop(externalCloseout) {
   ].map(csvCell).join(","));
 }
 
+function closeoutCardsForEvidenceDrop(externalCloseout) {
+  const rows = Array.isArray(externalCloseout?.operatorQueue) && externalCloseout.operatorQueue.length
+    ? externalCloseout.operatorQueue
+    : Array.isArray(externalCloseout?.rows)
+      ? externalCloseout.rows
+      : [];
+  return rows.map((row, index) => ({
+    id: row.id || `${row.lane || "evidence"}-${row.platform || "all"}-${index + 1}`,
+    index: index + 1,
+    kind: row.lane || "",
+    accountId: row.accountId || "",
+    platform: row.platform || "",
+    status: row.requiredCsvStatus || "",
+    scope: row.scope || "",
+    publicBaseUrl: publicBaseUrlFromRedirect(row.redirectUri),
+    redirectUri: row.redirectUri || "",
+    portalUrl: row.portalUrl || "",
+    docsUrl: row.docsUrl || "",
+    proofPath: row.proofPath || "",
+    missingFields: row.missingCsvFields || [],
+    nextStep: row.csvEditHint || row.operatorAction || row.nextStep || "Add real non-secret evidence before importing.",
+  }));
+}
+
 function nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout = {}) {
   const externalRows = closeoutRowsForEvidenceDrop(externalCloseout);
   if (externalRows.length > 0) {
@@ -368,6 +392,14 @@ function renderMarkdown(summary) {
     ...summary.nextEvidenceDrop.previewRows,
     "```",
     "",
+    "Preview cards:",
+    "",
+    ...summary.nextEvidenceDrop.previewCards.map((card) => [
+      `- ${card.id}: ${card.kind} / ${card.platform || "all"} / ${card.status}`,
+      `  Next step: ${card.nextStep}`,
+      `  Proof: ${card.proofPath || "missing"}`,
+    ].join("\n")),
+    "",
     "## Next Step",
     "",
     summary.nextStep,
@@ -497,6 +529,7 @@ async function main() {
   const nextEvidenceCsv = nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout);
   const nextEvidenceCsvLines = nextEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
   const nextEvidenceDataRows = nextEvidenceCsvLines.slice(1);
+  const nextEvidenceCards = closeoutCardsForEvidenceDrop(externalCloseout);
   const status = metricoolMvpReady
     ? externalProofsNeedEvidence > 0 || totals.directApiReadyLanes < totals.accountProfiles
       ? "metricool_mvp_ready_with_external_blockers"
@@ -554,6 +587,8 @@ async function main() {
       rows: nextEvidenceDataRows.length,
       header: nextEvidenceCsvLines[0] || externalEvidenceHeader,
       previewRows: nextEvidenceDataRows.slice(0, 5),
+      cards: nextEvidenceCards,
+      previewCards: nextEvidenceCards.slice(0, 5),
       source: nextEvidenceDataRows.length > 0 && externalOperatorActions > 0 ? "external_closeout" : "account_permission_readiness",
       nextStep: nextEvidenceDataRows.length > 0
         ? "Fill only rows backed by real non-secret proof, then run the external closeout evidence import preview."
