@@ -29,6 +29,7 @@ const productionPublicUrlPath = path.join(rootDir, "production-public-url.json")
 const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}/i;
 const secretQueryParamPattern = /(^|[?&;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|session)=/i;
 const placeholderPattern = /<[^>]+>|paste .* proof|submitted_or_approved|requested_or_approved|do not store passwords|placeholder|todo|tbd/i;
+const jsonScriptTimeoutMs = 120_000;
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
@@ -42,7 +43,7 @@ async function readJsonOptional(filePath) {
   }
 }
 
-function runJsonScript(scriptPath, label) {
+function runJsonScript(scriptPath, label, timeoutMs = jsonScriptTimeoutMs) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath], {
       cwd: process.cwd(),
@@ -50,21 +51,36 @@ function runJsonScript(scriptPath, label) {
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error) {
-        reject(new Error(`${label} returned invalid JSON: ${error.message}`));
-      }
+      finish(() => {
+        if (code !== 0) {
+          reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (error) {
+          reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+        }
+      });
     });
   });
 }

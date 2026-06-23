@@ -1082,6 +1082,14 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-proof-todo"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-operator-queue"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-next-action"'));
+  assert.ok(routes.includes("CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS"));
+  assert.ok(routes.includes('child.kill("SIGKILL")'));
+  const operationalReadinessScript = await readFile(path.join(process.cwd(), "script/clippers-operational-readiness.mjs"), "utf8");
+  assert.ok(operationalReadinessScript.includes("jsonScriptTimeoutMs"));
+  assert.ok(operationalReadinessScript.includes('child.kill("SIGKILL")'));
+  const externalCloseoutScript = await readFile(path.join(process.cwd(), "script/clippers-external-closeout-pack.mjs"), "utf8");
+  assert.ok(externalCloseoutScript.includes("jsonScriptTimeoutMs"));
+  assert.ok(externalCloseoutScript.includes('child.kill("SIGKILL")'));
   const activationRouteBlock = sliceRequired(
     routes,
     'app.post("/api/clippers/run-post-connect-activation-sweep"',
