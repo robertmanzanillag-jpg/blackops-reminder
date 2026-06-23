@@ -284,6 +284,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(evidenceCsv, /permission","[^"]*","tiktok","requested","video\.publish/);
   const firstProof = await readFile(pack.tasks[0].proofPath, "utf8");
   assert.match(firstProof, /needs_real_proof/);
+  assert.match(firstProof, /Safe proof examples/);
+  assert.match(firstProof, /Completion checklist/);
   assert.match(firstProof, /Evidence CSV fields to fill/);
   assert.match(firstProof, /- status: verified/);
   const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
@@ -383,6 +385,8 @@ test("external closeout pack lists remaining account developer and permission ac
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
   const developerProof = await readFile(path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md"), "utf8");
+  assert.match(developerProof, /App identifier\/client key\/project ID is public-safe/);
+  assert.match(developerProof, /No client private value/);
   assert.match(developerProof, /Evidence CSV fields to fill/);
   assert.match(developerProof, /- app_identifier:/);
   assert.match(developerProof, new RegExp(`- public_base_url: ${productionPublicUrlPattern}`));

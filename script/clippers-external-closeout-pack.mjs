@@ -322,6 +322,64 @@ function safeSourceCardList(values) {
     .filter(Boolean);
 }
 
+function proofCompletionChecklist(task) {
+  const base = [
+    "The external portal action is complete or submitted in the official portal.",
+    "The proof reference is a public/non-secret URL, ticket ID or local proof file inside clippers_workspace.",
+    "Operator notes explain the real action, date and portal location in 20+ characters.",
+  ];
+  if (task.lane === "developer_app") {
+    return [
+      ...base,
+      "App identifier/client key/project ID is public-safe and copied into app_identifier.",
+      "public_base_url and redirect_uri match the production callback configured in the portal.",
+      "No client private value, OAuth private value, browser credential or recovery private value is stored.",
+    ];
+  }
+  if (task.lane === "permission") {
+    return [
+      ...base,
+      "Scope name in the CSV exactly matches the portal permission or app-review scope.",
+      "Use-case note mentions owned/permissioned clips and Metricool approval_required publishing.",
+      "requested means submitted and waiting; approved means the portal already granted the scope.",
+    ];
+  }
+  if (task.lane === "account") {
+    return [
+      ...base,
+      "Profile/channel URL is real and belongs to the expected Clippers account.",
+      "Manager/owner proof is referenced without storing login details or private screenshots.",
+      "Metricool connected-profile proof is included when this platform is part of the launch lane.",
+    ];
+  }
+  return base;
+}
+
+function proofEvidenceExamples(task) {
+  if (task.lane === "developer_app") {
+    return [
+      "Portal app overview URL or ticket URL that shows the app identifier.",
+      "App review/submission reference showing requested or approved posting access.",
+      "Production callback URL confirmation matching the redirect URI below.",
+    ];
+  }
+  if (task.lane === "permission") {
+    return [
+      "Portal review URL, request ID, case ID or approval page for the exact scope.",
+      "Non-secret screenshot reference stored outside this repo, or a safe local proof note.",
+      "Reviewer/use-case note showing why this permission is needed for owned/permissioned clips.",
+    ];
+  }
+  if (task.lane === "account") {
+    return [
+      "Profile/channel URL for the exact account.",
+      "Account manager/owner proof reference without credentials.",
+      "Metricool connected-profile proof reference when applicable.",
+    ];
+  }
+  return ["Real non-secret proof reference from the official portal."];
+}
+
 function renderProofStub(task) {
   return [
     `# ${task.id}`,
@@ -333,7 +391,13 @@ function renderProofStub(task) {
     "Required evidence:",
     ...task.evidenceRequired.map((item) => `- ${item}`),
     "",
-    "Paste real proof below. Do not paste passwords, recovery codes, cookies, tokens, client secrets or private screenshots.",
+    "Safe proof examples:",
+    ...proofEvidenceExamples(task).map((item) => `- ${item}`),
+    "",
+    "Completion checklist:",
+    ...proofCompletionChecklist(task).map((item) => `- [ ] ${item}`),
+    "",
+    "Paste real proof below. Do not paste login details, browser credentials, developer app private values, OAuth private values, recovery private values or private screenshots.",
     "",
     "Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>",
     "Portal/ticket/case/profile reference: <paste real reference>",
