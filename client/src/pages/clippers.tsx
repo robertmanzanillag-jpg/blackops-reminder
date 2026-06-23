@@ -511,6 +511,7 @@ interface ClipperExternalCloseoutOperatorQueueRow {
   redirectUri: string;
   operatorAction: string;
   csvEditHint: string;
+  copyPacket?: string;
   nextStep: string;
 }
 
@@ -16299,14 +16300,28 @@ export default function ClippersPage() {
                           <div key={row.id} className="rounded-md border border-emerald-300/10 bg-black/25 p-2">
                             <div className="flex items-start justify-between gap-2">
                               <p className="min-w-0 truncate text-xs font-medium text-emerald-100">#{row.rank} {row.id}</p>
-                              <Badge className={cn(
-                                "shrink-0 border text-[10px]",
-                                row.priority === "critical"
-                                  ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
-                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
-                              )}>
-                                {row.priority}
-                              </Badge>
+                              <div className="flex shrink-0 items-center gap-1">
+                                {row.copyPacket && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 border-emerald-300/20 bg-transparent px-1.5 text-[10px] text-emerald-100 hover:bg-emerald-300/10"
+                                    onClick={() => void copyExternalCloseoutPacket(row.copyPacket || "")}
+                                  >
+                                    <Copy className="mr-1 h-3 w-3" />
+                                    Copy
+                                  </Button>
+                                )}
+                                <Badge className={cn(
+                                  "border text-[10px]",
+                                  row.priority === "critical"
+                                    ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                )}>
+                                  {row.priority}
+                                </Badge>
+                              </div>
                             </div>
                             <p className="mt-1 text-[11px] leading-4 text-zinc-300">{row.operatorAction}</p>
                             <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{row.proofPath}</p>

@@ -103,6 +103,14 @@ export function buildClipperExternalCloseoutNextActionCopyPacket(nextAction: any
   ].filter((line): line is string => line !== null).join("\n");
 }
 
+export function enrichClipperExternalCloseoutOperatorRows(rows: unknown): any[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row: any) => ({
+    ...row,
+    copyPacket: buildClipperExternalCloseoutNextActionCopyPacket(row),
+  }));
+}
+
 let revenueEngineRouteQueue = Promise.resolve();
 
 export async function registerRoutes(
@@ -179,15 +187,27 @@ export async function registerRoutes(
   };
   const readClipperExternalCloseoutPack = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-pack.json", "utf8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      operatorQueue: enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue),
+    };
   };
   const readClipperExternalCloseoutProofTodo = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-proof-todo.json", "utf8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      operatorQueue: enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue),
+    };
   };
   const readClipperExternalCloseoutOperatorQueue = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-operator-queue.json", "utf8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      rows: enrichClipperExternalCloseoutOperatorRows(parsed.rows),
+    };
   };
   const readClipperExternalCloseoutNextAction = async () => {
     const operatorQueue = await readClipperExternalCloseoutOperatorQueue();
