@@ -370,6 +370,48 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /setQueryData\(\["\/api\/clippers\/external-closeout-operator-queue"\]/);
 });
 
+test("external closeout pack redacts unsafe official source-card fields", async () => {
+  const auditPath = path.join(rootDir, "official-permission-source-audit.json");
+  const originalAudit = await readFile(auditPath, "utf8");
+  const audit = JSON.parse(originalAudit);
+  audit.markdownPath = "https://proof.example/report?access=unsafe-source-audit";
+  audit.items[0].sourceStatus = "client_secret";
+  audit.items[0].accessMode = "cookie";
+  audit.items[0].submitDecision = "api_key";
+  audit.items[0].officialUrls = ["https://developers.tiktok.com/doc/content-posting-api-get-started/?access=unsafe-source"];
+  audit.items[0].verifiedClaims = ["Official claim with https://example.com/proof?signature=unsafe-source"];
+
+  try {
+    await writeFile(auditPath, JSON.stringify(audit, null, 2));
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const actionSheet = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.json"), "utf8"));
+    const tiktokSourceCard = actionSheet.officialSourceCards.find((card) => card.scope === "video.publish");
+    assert.ok(tiktokSourceCard);
+    assert.equal(tiktokSourceCard.sourceStatus, "[redacted unsafe official source reference]");
+    assert.equal(tiktokSourceCard.accessMode, "[redacted unsafe official source reference]");
+    assert.equal(tiktokSourceCard.submitDecision, "[redacted unsafe official source reference]");
+    assert.deepEqual(tiktokSourceCard.officialUrls, ["[redacted unsafe official source reference]"]);
+    assert.equal(tiktokSourceCard.primaryOfficialUrl, "[redacted unsafe official source reference]");
+    assert.equal(tiktokSourceCard.sourceAuditPath, "[redacted unsafe official source reference]");
+    assert.deepEqual(tiktokSourceCard.verifiedClaims, ["[redacted unsafe official source reference]"]);
+
+    const actionSheetMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.md"), "utf8");
+    assert.doesNotMatch(actionSheetMarkdown, /unsafe-source|unsafe-source-audit|client_secret|api_key|signature=/);
+  } finally {
+    await writeFile(auditPath, originalAudit);
+    const restore = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(restore.status, 0, restore.stderr || restore.stdout);
+  }
+});
+
 test("external closeout evidence importer rejects placeholders without applying", async () => {
   const packResult = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
     cwd: process.cwd(),

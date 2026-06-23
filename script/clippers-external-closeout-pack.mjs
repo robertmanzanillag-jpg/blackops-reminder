@@ -274,6 +274,21 @@ function safeSourceCardText(value) {
     .replace(/\btokens?\b/gi, "OAuth private values");
 }
 
+function safeSourceCardField(value, fallback = "") {
+  const raw = String(value || fallback).trim();
+  if (!raw) return "";
+  if (secretPattern.test(raw) || secretQueryParamPattern.test(raw)) {
+    return "[redacted unsafe official source reference]";
+  }
+  return safeSourceCardText(raw);
+}
+
+function safeSourceCardList(values) {
+  return (values || [])
+    .map((value) => safeSourceCardField(value))
+    .filter(Boolean);
+}
+
 function renderProofStub(task) {
   return [
     `# ${task.id}`,
@@ -1159,21 +1174,22 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
     }));
   const officialSourceCards = permissionRequestCards.map((card) => {
     const sourceAudit = sourceAuditForPermission(officialPermissionSourceAudit, card, card.scope);
-    const primaryOfficialUrl = sourceAudit?.officialUrls?.[0] || card.docsUrl || "";
-    const sourceStatus = sourceAudit?.sourceStatus || (card.docsUrl ? "source_url_available" : "needs_source_check");
-    const accessMode = sourceAudit?.accessMode || (card.platform === "instagram" ? "login_required" : "public");
-    const submitDecision = sourceAudit?.submitDecision || "recheck_before_request";
-    const claims = (sourceAudit?.verifiedClaims || []).map(safeSourceCardText);
+    const officialUrls = safeSourceCardList(sourceAudit?.officialUrls || [card.docsUrl].filter(Boolean));
+    const primaryOfficialUrl = officialUrls[0] || "";
+    const sourceStatus = safeSourceCardField(sourceAudit?.sourceStatus, card.docsUrl ? "source_url_available" : "needs_source_check");
+    const accessMode = safeSourceCardField(sourceAudit?.accessMode, card.platform === "instagram" ? "login_required" : "public");
+    const submitDecision = safeSourceCardField(sourceAudit?.submitDecision, "recheck_before_request");
+    const claims = (sourceAudit?.verifiedClaims || []).map((item) => safeSourceCardField(item));
     const reviewerEvidence = (sourceAudit?.reviewerEvidence || [
       "Open the official platform source and capture a non-private proof reference.",
       "Confirm the requested scope exists for this app/account before submitting.",
       "Attach approval_required demo evidence and rights-gate evidence.",
-    ]).map(safeSourceCardText);
+    ]).map((item) => safeSourceCardField(item));
     const recheckSteps = (sourceAudit?.recheckSteps || [
       "Open the official docs or developer portal.",
       "Confirm the scope name and product requirement.",
       "Save the non-private proof reference in the closeout proof file.",
-    ]).map(safeSourceCardText);
+    ]).map((item) => safeSourceCardField(item));
     return {
       id: `official_source:${card.platform}:${card.scope}`,
       platform: card.platform,
@@ -1181,11 +1197,11 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
       sourceStatus,
       accessMode,
       submitDecision,
-      officialUrls: sourceAudit?.officialUrls || [primaryOfficialUrl].filter(Boolean),
+      officialUrls,
       primaryOfficialUrl,
-      requestPortalUrl: card.portalUrl,
+      requestPortalUrl: safeSourceCardField(card.portalUrl),
       permissionProofPath: card.proofPath,
-      sourceAuditPath: officialPermissionSourceAudit?.markdownPath || "",
+      sourceAuditPath: safeSourceCardField(officialPermissionSourceAudit?.markdownPath),
       verifiedClaims: claims,
       reviewerEvidence,
       recheckSteps,
