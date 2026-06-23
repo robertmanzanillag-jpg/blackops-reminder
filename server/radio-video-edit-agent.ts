@@ -19,6 +19,7 @@ import {
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
+import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage, type YtDlpCommandSpec } from "./youtube-downloader";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXTENSIONS = new Set([".aac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"]);
@@ -194,7 +195,7 @@ function isYouTubeUrl(value: string): boolean {
   }
 }
 
-async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; args: string[] }>, timeoutMs: number): Promise<void> {
+async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeoutMs: number, mediaLabel: "video" | "audio" = "video"): Promise<void> {
   const errors: string[] = [];
   for (const spec of commandSpecs) {
     try {
@@ -205,10 +206,7 @@ async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; 
     }
   }
 
-  throw new Error([
-    "No pude descargar el video de YouTube. Instala yt-dlp o configura YT_DLP_PATH.",
-    ...errors.slice(0, 2),
-  ].join(" "));
+  throw new Error(formatYtDlpFailureMessage(errors.join("\n"), mediaLabel));
 }
 
 async function downloadYoutubeVideo(url: string, outputDir: string): Promise<string> {
@@ -218,30 +216,15 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "bv*+ba/best",
-    "--merge-output-format",
-    "mp4",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
-  const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "video",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "video");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
@@ -271,28 +254,15 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "ba/bestaudio",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
-  const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "audio",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "audio");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "../server/radio-youtube-command";
+import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage } from "../server/youtube-downloader";
 
 test("extracts Drive folder path from radio YouTube request", () => {
   assert.deepEqual(
@@ -133,4 +134,32 @@ test("includes estimated cost in completed radio YouTube summary", () => {
   assert.match(summary, /Audio: usé el drop del mismo video fuente/);
   assert.match(summary, /Costo estimado por video editado: \$0\.00 USD/);
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
+});
+
+test("yt-dlp command specs try 1080p video with and without JS runtime flags", () => {
+  const specs = buildYtDlpCommandSpecs({
+    url: "https://youtu.be/GcVZvXkz2jU",
+    outputTemplate: "/tmp/%(id)s.%(ext)s",
+    mode: "video",
+    explicitBinary: "/workspace/bin/yt-dlp",
+    cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+  });
+
+  assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
+  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
+  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
+  assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
+  assert.ok(specs.every((spec) => spec.args.includes("bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best")));
+  assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
+});
+
+test("yt-dlp failure message explains YouTube bot blocks without routing to GitHub", () => {
+  const message = formatYtDlpFailureMessage(
+    "ERROR: [youtube] GcVZvXkz2jU: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
+    "video",
+  );
+
+  assert.match(message, /YouTube bloqueó la descarga desde Replit/);
+  assert.match(message, /YT_DLP_COOKIES_PATH|MP4 fuente/);
+  assert.doesNotMatch(message, /GitHub|handoff|PR/i);
 });
