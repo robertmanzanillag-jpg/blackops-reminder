@@ -1074,7 +1074,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
 
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
   assert.ok(routes.includes('runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness")'));
-  assert.ok(routes.includes('runClipperJsonScript("script/clippers-external-closeout-pack.mjs", "External closeout pack")'));
+  assert.ok(routes.includes("runClipperExternalCloseoutPack"));
   assert.ok(routes.includes('app.get("/api/clippers/operational-readiness"'));
   assert.ok(routes.includes('app.post("/api/clippers/prepare-operational-readiness"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-pack"'));

@@ -6749,7 +6749,9 @@ const CREDENTIAL_SETUP_QUEUE_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "cr
 const CREDENTIAL_SETUP_QUEUE_CSV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-setup-queue.csv");
 const CREDENTIAL_TRANSFER_KIT_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.json");
 
-function runClipperJsonScript(scriptPath: string, label: string): Promise<unknown> {
+const CLIPPER_JSON_SCRIPT_TIMEOUT_MS = 120_000;
+
+function runClipperJsonScript(scriptPath: string, label: string, timeoutMs = CLIPPER_JSON_SCRIPT_TIMEOUT_MS): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath], {
       cwd: process.cwd(),
@@ -6757,21 +6759,36 @@ function runClipperJsonScript(scriptPath: string, label: string): Promise<unknow
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error: any) {
-        reject(new Error(`${label} returned invalid JSON: ${error.message}`));
-      }
+      finish(() => {
+        if (code !== 0) {
+          reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (error: any) {
+          reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+        }
+      });
     });
   });
 }
