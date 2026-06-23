@@ -3902,6 +3902,21 @@ export interface ClipperRobertNextActionsSummary {
   markdownPath: string;
   csvPath: string;
   connectNow: ClipperRobertConnectNowHandoff;
+  externalCloseout: {
+    status: ClipperExternalCloseoutRun["status"];
+    generatedAt: string | null;
+    packPath: string;
+    proofTodoPath: string;
+    operatorQueuePath: string;
+    evidenceCsvPath: string;
+    proofFilesNeedRealEvidence: number;
+    proofFilesFilled: number;
+    operatorQueueItems: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+    artifactSafetyStatus: string;
+    nextStep: string;
+  };
   items: ClipperRobertNextActionItem[];
   sourceArtifacts: {
     commandCenterPath: string;
@@ -39473,6 +39488,7 @@ async function buildRobertNextActionsSummary(input: {
         ? "blocked"
         : "needs_action";
   const connectNow = await buildRobertConnectNowHandoff(input);
+  const externalCloseout = input.externalExecutionSession.closeoutRun;
 
   return {
     status,
@@ -39481,6 +39497,21 @@ async function buildRobertNextActionsSummary(input: {
     markdownPath: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
     csvPath: ROBERT_NEXT_ACTIONS_CSV_PATH,
     connectNow,
+    externalCloseout: {
+      status: externalCloseout.status,
+      generatedAt: externalCloseout.generatedAt,
+      packPath: externalCloseout.packPath,
+      proofTodoPath: externalCloseout.proofTodoPath,
+      operatorQueuePath: externalCloseout.operatorQueuePath,
+      evidenceCsvPath: externalCloseout.evidenceCsvPath,
+      proofFilesNeedRealEvidence: externalCloseout.totals.proofFilesNeedRealEvidence,
+      proofFilesFilled: Math.max(0, externalCloseout.totals.rows - externalCloseout.totals.proofFilesNeedRealEvidence),
+      operatorQueueItems: externalCloseout.items.length,
+      metricoolQueuedForApproval: externalCloseout.totals.metricoolQueuedForApproval,
+      metricoolReadyToSend: externalCloseout.totals.metricoolReadyToSend,
+      artifactSafetyStatus: externalCloseout.artifactSafetyStatus,
+      nextStep: externalCloseout.nextStep,
+    },
     items,
     sourceArtifacts: {
       commandCenterPath: input.commandCenter.markdownPath,
@@ -39549,6 +39580,22 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     `- Intake console: ${summary.connectNow.intakeConsole.status}; ${summary.connectNow.intakeConsole.totals.lanes} lanes; ${summary.connectNow.intakeConsole.totals.blockers} blockers`,
     `- Post-connect activation bridge: ${summary.connectNow.postConnectActivationBridge.length} account/platform lane(s); ${summary.connectNow.postConnectActivationBridge.filter((item) => item.status === "ready" || item.status === "activation_ready").length} activation-ready`,
     `- Handoff file: ${summary.connectNow.markdownPath}`,
+    "",
+    "## External Closeout",
+    "",
+    `- Status: ${summary.externalCloseout.status}`,
+    `- Generated: ${summary.externalCloseout.generatedAt || "pending"}`,
+    `- Proofs needing real evidence: ${summary.externalCloseout.proofFilesNeedRealEvidence}`,
+    `- Proofs filled: ${summary.externalCloseout.proofFilesFilled}`,
+    `- Operator queue: ${summary.externalCloseout.operatorQueueItems}`,
+    `- Metricool queued for approval: ${summary.externalCloseout.metricoolQueuedForApproval}`,
+    `- Metricool ready to send: ${summary.externalCloseout.metricoolReadyToSend}`,
+    `- Artifact safety: ${summary.externalCloseout.artifactSafetyStatus}`,
+    `- Pack: ${summary.externalCloseout.packPath}`,
+    `- Proof todo: ${summary.externalCloseout.proofTodoPath}`,
+    `- Operator queue path: ${summary.externalCloseout.operatorQueuePath}`,
+    `- Evidence CSV: ${summary.externalCloseout.evidenceCsvPath}`,
+    `- Next step: ${summary.externalCloseout.nextStep}`,
     "",
     "## Priority Actions",
     "",

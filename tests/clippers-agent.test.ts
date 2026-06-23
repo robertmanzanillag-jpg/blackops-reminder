@@ -5573,6 +5573,12 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.markdownPath.endsWith("ROBERT_NEXT_ACTIONS.md"));
     assert.ok(robertNextActions.csvPath.endsWith("ROBERT_NEXT_ACTIONS.csv"));
     assert.ok(robertNextActions.connectNow.markdownPath.endsWith("ROBERT_CONNECT_NOW.md"));
+    assert.equal(robertNextActions.externalCloseout.status, status.externalExecutionSession.closeoutRun.status);
+    assert.equal(robertNextActions.externalCloseout.proofFilesNeedRealEvidence, status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence);
+    assert.equal(robertNextActions.externalCloseout.operatorQueueItems, status.externalExecutionSession.closeoutRun.items.length);
+    assert.equal(robertNextActions.externalCloseout.metricoolReadyToSend, 0);
+    assert.ok(robertNextActions.externalCloseout.proofTodoPath.endsWith("clippers-external-closeout-proof-todo.md"));
+    assert.ok(robertNextActions.externalCloseout.operatorQueuePath.endsWith("clippers-external-closeout-operator-queue.md"));
     assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
     assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
     assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);

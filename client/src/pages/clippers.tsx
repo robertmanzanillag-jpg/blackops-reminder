@@ -5195,6 +5195,21 @@ interface ClipperRobertNextActionsSummary {
   markdownPath: string;
   csvPath: string;
   connectNow: ClipperRobertConnectNowHandoff;
+  externalCloseout?: {
+    status: "not_prepared" | "needs_operator" | "complete";
+    generatedAt: string | null;
+    packPath: string;
+    proofTodoPath: string;
+    operatorQueuePath: string;
+    evidenceCsvPath: string;
+    proofFilesNeedRealEvidence: number;
+    proofFilesFilled: number;
+    operatorQueueItems: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+    artifactSafetyStatus: string;
+    nextStep: string;
+  };
   items: ClipperRobertNextActionItem[];
   sourceArtifacts: {
     commandCenterPath: string;
@@ -13389,6 +13404,29 @@ export default function ClippersPage() {
                     <p>Minutes: {status.robertNextActions.totals.estimatedMinutes}</p>
                   </div>
                   <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.robertNextActions.csvPath}</p>
+                  {status.robertNextActions.externalCloseout && (
+                    <div className="mt-3 rounded-md border border-rose-300/15 bg-rose-950/10 p-3 text-xs text-zinc-500">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium text-rose-100">External closeout</p>
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.externalCloseout.nextStep}</p>
+                        </div>
+                        <Badge className={cn("w-fit border text-[10px]", status.robertNextActions.externalCloseout.status === "complete" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-rose-300/20 bg-rose-950/30 text-rose-100")}>
+                          {status.robertNextActions.externalCloseout.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        <p>Proofs pending: {status.robertNextActions.externalCloseout.proofFilesNeedRealEvidence}</p>
+                        <p>Proofs filled: {status.robertNextActions.externalCloseout.proofFilesFilled}</p>
+                        <p>Operator queue: {status.robertNextActions.externalCloseout.operatorQueueItems}</p>
+                        <p>Safety: {status.robertNextActions.externalCloseout.artifactSafetyStatus}</p>
+                        <p>Metricool approval: {status.robertNextActions.externalCloseout.metricoolQueuedForApproval}</p>
+                        <p>Ready to send: {status.robertNextActions.externalCloseout.metricoolReadyToSend}</p>
+                        <p className="break-all md:col-span-2">Proof todo: {status.robertNextActions.externalCloseout.proofTodoPath}</p>
+                        <p className="break-all md:col-span-2">Operator queue path: {status.robertNextActions.externalCloseout.operatorQueuePath}</p>
+                      </div>
+                    </div>
+                  )}
                   {status.robertNextActions.connectNow && (
                     <div className="mt-3 rounded-md border border-amber-300/15 bg-black/30 p-3 text-xs text-zinc-500">
                       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">

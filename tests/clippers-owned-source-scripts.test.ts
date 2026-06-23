@@ -1033,6 +1033,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("more external actions in"));
+  assert.ok(page.includes("External closeout"));
+  assert.ok(page.includes("status.robertNextActions.externalCloseout.proofFilesNeedRealEvidence"));
+  assert.ok(page.includes("status.robertNextActions.externalCloseout.operatorQueueItems"));
   assert.ok(page.includes("Full Direct API"));
   assert.ok(page.includes("Ready queue"));
   assert.ok(page.includes('data-testid="clippers-external-portal-closeout-board"'));
