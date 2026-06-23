@@ -5568,6 +5568,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
 
   try {
     const { robertNextActions, status } = await prepareClipperRobertNextActions();
+    const generatedDay = robertNextActions.generatedAt.slice(0, 10);
     assert.ok(robertNextActions.manifestPath.endsWith("ROBERT_NEXT_ACTIONS.json"));
     assert.ok(robertNextActions.markdownPath.endsWith("ROBERT_NEXT_ACTIONS.md"));
     assert.ok(robertNextActions.csvPath.endsWith("ROBERT_NEXT_ACTIONS.csv"));
@@ -5669,6 +5670,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.htmlPath.endsWith("external-portal-launcher.html"));
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.url, "/clippers/external-portal-launcher");
+    assert.ok(status.accountCreationPack.generatedAt && status.accountCreationPack.generatedAt >= generatedDay);
+    assert.ok(status.accountSetupSession.generatedAt && status.accountSetupSession.generatedAt >= generatedDay);
+    assert.ok(status.permissionSubmissionDossier.generatedAt && status.permissionSubmissionDossier.generatedAt >= generatedDay);
+    assert.ok(status.externalExecutionSession.generatedAt && status.externalExecutionSession.generatedAt >= generatedDay);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.totalPortals >= 3);
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.doNow, status.externalExecutionSession.totals.doNow);
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.blocked, status.externalExecutionSession.totals.blocked);

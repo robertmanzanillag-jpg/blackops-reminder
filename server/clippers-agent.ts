@@ -41460,6 +41460,9 @@ async function writeLaunchLaneMatrixManifest(summary: ClipperLaunchLaneMatrixSum
 export async function prepareClipperRobertNextActions(userId = getSystemUserId()): Promise<{ robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await prepareClipperAccountCreationPack(userId);
+  await prepareClipperAccountSetupSession(userId);
+  await prepareClipperPermissionSubmissionDossier(userId);
   await prepareClipperExternalExecutionSession(userId);
   const statusBefore = await getClipperStatus(userId);
   const draftSummary = await buildRobertNextActionsSummary({
