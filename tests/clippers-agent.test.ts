@@ -7237,6 +7237,15 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
           views: "240000",
         },
         {
+          title: "Ledger recreate from discovery search",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=caption%20meme%20trend",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the caption pattern with original script, generated visuals and owned narration.",
+        },
+        {
           title: "Ledger missing proof",
           category: "memes",
           platform: "tiktok",
@@ -7252,6 +7261,7 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     const { rightsEvidenceLedger, status } = await prepareClipperRightsEvidenceLedger();
     const missingSource = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing source file");
     const reviewRequired = rightsEvidenceLedger.items.find((item) => item.title === "Ledger review required");
+    const recreateFromDiscovery = rightsEvidenceLedger.items.find((item) => item.title === "Ledger recreate from discovery search");
     const missingProof = rightsEvidenceLedger.items.find((item) => item.title === "Ledger missing proof");
 
     assert.ok(rightsEvidenceLedger.manifestPath.endsWith("rights-evidence-ledger.json"));
@@ -7269,6 +7279,10 @@ test("prepareClipperRightsEvidenceLedger audits proof and source-file blockers w
     assert.equal(missingSource?.evidencePath?.includes("ledger-secret-token"), false);
     assert.equal(reviewRequired?.issue, "review_required");
     assert.equal(reviewRequired?.severity, "blocked");
+    assert.equal(recreateFromDiscovery?.sourceUrlKind, "discovery_search");
+    assert.equal(recreateFromDiscovery?.issue, "missing_source_file");
+    assert.equal(recreateFromDiscovery?.evidenceAccepted, true);
+    assert.equal(recreateFromDiscovery?.severity, "blocked");
     assert.equal(missingProof?.issue, "missing_proof");
     assert.equal(missingProof?.severity, "blocked");
     assert.equal(missingProof?.evidencePath, null);
@@ -7307,8 +7321,12 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
   const previousCsv = await readFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), "utf8").catch(() => null);
   const dropDir = path.join(beforeStatus.rootDir, "source-drop", "memes");
   const dropPath = path.join(dropDir, "source-scout-ready-test-intake.mp4");
+  const weakRecreateDropPath = path.join(dropDir, "source-scout-weak-recreate-intake.mp4");
+  const strongRecreateDropPath = path.join(dropDir, "source-scout-strong-recreate-intake.mp4");
   const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
   const previousDrop = await readFile(dropPath, "utf8").catch(() => null);
+  const previousWeakRecreateDrop = await readFile(weakRecreateDropPath, "utf8").catch(() => null);
+  const previousStrongRecreateDrop = await readFile(strongRecreateDropPath, "utf8").catch(() => null);
   const previousDropManifest = await readFile(manifestPath, "utf8").catch(() => null);
   const importCleanupDirs = beforeStatus.sourceFolders
     .filter((folder) => ["sports", "memes", "streamers", "allowlist"].includes(folder.category))
@@ -7320,6 +7338,8 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
 
   await mkdir(dropDir, { recursive: true });
   writeTinyTestVideo(dropPath);
+  writeTinyTestVideo(weakRecreateDropPath);
+  writeTinyTestVideo(strongRecreateDropPath);
 
   try {
     const { sourceScoutIntake, metricoolExecutionQueue, status } = await recordClipperSourceScoutIntake({
@@ -7345,13 +7365,44 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
           views: "100000",
         },
         {
+          title: "Recreate from search URL",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=viral%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the joke structure with original captions, generated background visuals, owned voiceover narration and no raw source footage.",
+        },
+        {
+          title: "Weak recreate with source file",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=weak%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Make our own version.",
+          target_file_name: "source-scout-weak-recreate-intake.mp4",
+          source_drop_path: weakRecreateDropPath,
+        },
+        {
+          title: "Ready recreate from search",
+          category: "memes",
+          platform: "tiktok",
+          url: "https://www.tiktok.com/search?q=caption%20meme%20format",
+          source: "trend search",
+          status: "recreate_only",
+          recreate_plan: "Recreate only the caption pattern with original script, generated visual background, owned voiceover narration and no raw source video reuse.",
+          target_file_name: "source-scout-strong-recreate-intake.mp4",
+          source_drop_path: strongRecreateDropPath,
+        },
+        {
           title: "Recreate plan",
           category: "memes",
           platform: "tiktok",
           url: "https://www.tiktok.com/@creator/video/2234567890123456789",
           source: "@creator",
           status: "recreate_only",
-          recreate_plan: "Recreate the POV format with original captions, generated background and owned voiceover.",
+          recreate_plan: "Recreate the POV format with original captions, generated background visuals, owned voiceover narration and no raw source footage.",
         },
         {
           title: "Ready permissioned exact",
@@ -7373,9 +7424,28 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
       ],
     });
 
-    assert.equal(sourceScoutIntake.totals.items, 4);
+    assert.equal(sourceScoutIntake.totals.items, 7);
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Bad search URL")?.decision, "rejected");
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Needs permission exact")?.publishGate, "blocked_rights");
+    const recreateFromSearch = sourceScoutIntake.items.find((item) => item.title === "Recreate from search URL");
+    assert.equal(recreateFromSearch?.sourceUrlKind, "discovery_search");
+    assert.equal(recreateFromSearch?.decision, "blocked_source_file");
+    assert.equal(recreateFromSearch?.publishGate, "blocked_source_file");
+    assert.equal(recreateFromSearch?.rejectReason, null);
+    assert.equal(recreateFromSearch?.evidenceType, "recreate_plan_approved");
+    assert.ok(recreateFromSearch?.evidencePath?.includes("ownership note: approved recreate plan"));
+    const weakRecreate = sourceScoutIntake.items.find((item) => item.title === "Weak recreate with source file");
+    assert.equal(weakRecreate?.decision, "rejected");
+    assert.equal(weakRecreate?.publishGate, "blocked_rights");
+    assert.ok(weakRecreate?.rejectReason?.includes("plan mas especifico"));
+    const readyRecreate = sourceScoutIntake.items.find((item) => item.title === "Ready recreate from search");
+    assert.equal(readyRecreate?.sourceUrlKind, "discovery_search");
+    assert.equal(readyRecreate?.decision, "ready_for_intake");
+    assert.equal(readyRecreate?.publishGate, "ready_for_intake");
+    assert.equal(readyRecreate?.evidenceType, "recreate_plan_approved");
+    assert.equal(readyRecreate?.sourceFileExists, true);
+    assert.ok(readyRecreate?.sourceDropManifestPath?.endsWith("source-drop-manifest.csv"));
+    assert.ok(readyRecreate?.nextStep.includes("archivo propio"));
     assert.equal(sourceScoutIntake.items.find((item) => item.title === "Recreate plan")?.publishGate, "blocked_source_file");
     const ready = sourceScoutIntake.items.find((item) => item.title === "Ready permissioned exact");
     assert.equal(ready?.publishGate, "ready_for_intake");
@@ -7407,6 +7477,10 @@ test("recordClipperSourceScoutIntake enforces gates before Metricool approval", 
     else await writeFile(path.join(beforeStatus.rootDir, "source-scout-intake.csv"), previousCsv);
     if (previousDrop === null) await unlink(dropPath).catch(() => undefined);
     else await writeFile(dropPath, previousDrop);
+    if (previousWeakRecreateDrop === null) await unlink(weakRecreateDropPath).catch(() => undefined);
+    else await writeFile(weakRecreateDropPath, previousWeakRecreateDrop);
+    if (previousStrongRecreateDrop === null) await unlink(strongRecreateDropPath).catch(() => undefined);
+    else await writeFile(strongRecreateDropPath, previousStrongRecreateDrop);
     if (previousDropManifest === null) await unlink(manifestPath).catch(() => undefined);
     else await writeFile(manifestPath, previousDropManifest);
     for (const [dir, previousFiles] of previousImportFiles) {

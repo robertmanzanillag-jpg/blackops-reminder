@@ -10963,7 +10963,21 @@ function validateSourceScoutEvidence(input: {
   return { evidencePath: proof, evidenceType };
 }
 
+function validateSourceScoutRecreatePlan(plan: string): string | null {
+  const trimmed = plan.trim();
+  if (!trimmed || hasTemplatePlaceholder(trimmed)) return "recreate_only requiere un plan de recreacion con assets propios/licenciados.";
+  if (trimmed.length < 90) return "recreate_only requiere un plan mas especifico: formato, assets propios/licenciados/generados, guion/caption y produccion.";
+  const normalized = trimmed.toLowerCase();
+  const hasOwnedAssetSignal = /(owned|original|generated|licensed|propio|propia|propios|generad|licenciad|voiceover|narration|narracion|script|guion|caption|visual|background|b-roll|recorded|grabado)/i.test(normalized);
+  const hasNoRawReuseSignal = /(recreate only|no raw|sin usar|not reuse|original script|own(ed)? voice|assets? propios?|generated visuals?|solo el formato|joke structure|caption pattern)/i.test(normalized);
+  if (!hasOwnedAssetSignal || !hasNoRawReuseSignal) {
+    return "recreate_only debe explicar que no se reutiliza el video original y que se usaran assets/guion/voz propios o licenciados.";
+  }
+  return null;
+}
+
 function buildSourceScoutIntakeManifestRow(item: ClipperSourceScoutIntakeItem): string {
+  const manifestRightsStatus = item.requestedStatus === "recreate_only" ? "owned_or_permissioned" : item.rightsStatus;
   return [
     item.category,
     item.title,
@@ -10971,15 +10985,18 @@ function buildSourceScoutIntakeManifestRow(item: ClipperSourceScoutIntakeItem): 
     item.source,
     item.platform,
     item.targetFileName || path.basename(item.sourceDropPath || item.sourceUrl),
-    item.rightsStatus,
+    manifestRightsStatus,
     item.evidencePath || "",
-    item.requestedStatus === "owned_or_permissioned" ? "high" : "review",
+    item.requestedStatus === "owned_or_permissioned" || item.requestedStatus === "recreate_only" ? "high" : "review",
     item.recreatePlan || item.nextStep,
   ].map(csvCell).join(",");
 }
 
 async function upsertSourceDropManifestForIntake(item: ClipperSourceScoutIntakeItem): Promise<string | null> {
-  if (!item.sourceDropPath || !item.targetFileName || item.rightsStatus !== "owned_or_permissioned" || !item.evidenceAccepted) return null;
+  const canWriteManifest = item.evidenceAccepted
+    && (item.rightsStatus === "owned_or_permissioned" || item.requestedStatus === "recreate_only")
+    && (item.requestedStatus !== "recreate_only" || item.decision === "ready_for_intake");
+  if (!item.sourceDropPath || !item.targetFileName || !canWriteManifest) return null;
   const categoryDir = path.join(SOURCE_DROP_DIR, item.category);
   await mkdir(categoryDir, { recursive: true });
   const manifestPath = path.join(categoryDir, "source-drop-manifest.csv");
@@ -12594,6 +12611,15 @@ function rightsEvidenceIssueForIntake(item: ClipperSourceScoutIntakeItem): Pick<
   if (item.decision === "rejected") {
     return { issue: "blocked", severity: "blocked", nextStep: item.rejectReason || item.nextStep };
   }
+  if (item.requestedStatus === "recreate_only") {
+    if (!item.recreatePlan || !item.evidenceAccepted) {
+      return { issue: "missing_proof", severity: "blocked", nextStep: "Add an approved recreate plan with owned/licensed production notes before using this trend." };
+    }
+    if (!hasSourceFile) {
+      return { issue: "missing_source_file", severity: "blocked", nextStep: `Upload or generate the recreated owned source file at ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.` };
+    }
+    return { issue: "none", severity: "ready", nextStep: "Recreate plan and owned source file are ready for guarded intake/Metricool approval queue." };
+  }
   if (item.sourceUrlKind === "discovery_search") {
     return { issue: "review_required", severity: "blocked", nextStep: "Convert discovery/search URL into an exact video/post URL or approved recreate plan before using it." };
   }
@@ -13278,8 +13304,9 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
     const category = normalizeTrendCategory(firstString(record, ["category", "vertical", "niche"]) || candidate?.category || "memes");
     const platform = sourceDiscoveryPlatformFromHint(firstString(record, ["platform", "network"]) || candidate?.platform || "tiktok");
     const sourceUrl = firstString(record, ["source_url", "url", "video_url", "post_url", "link"]) || candidate?.sourceUrl || "";
-    const rejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
-    const sourceUrlKind: ClipperSourceScoutUrlKind = rejectReason ? "discovery_search" : "exact_video_or_post";
+    const urlRejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
+    let rejectReason: string | null = urlRejectReason;
+    const sourceUrlKind: ClipperSourceScoutUrlKind = urlRejectReason ? "discovery_search" : "exact_video_or_post";
     const requestedStatus = sourceScoutIntakeRequestedStatus(record);
     const proofRaw = firstString(record, ["permission_url", "proof_url", "proof_path", "proof", "evidence_path", "evidence_link", "license"]);
     const evidenceTypeRaw = firstString(record, ["evidence_type", "evidenceType", "proof_type", "proofType"]);
@@ -13302,7 +13329,7 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
     const sourceFileExists = await sourceIntakeFileLooksReady(sourceDropPath);
     const targetSourceExists = await sourceIntakeFileLooksReady(targetSourcePath);
 
-    if (!rejectReason && requestedStatus === "owned_or_permissioned") {
+    if (!urlRejectReason && requestedStatus === "owned_or_permissioned") {
       try {
         const evidence = validateSourceScoutEvidence({
           requestedStatus,
@@ -13322,29 +13349,45 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
       }
     }
 
-    if (!rejectReason && requestedStatus === "recreate_only") {
-      if (!recreatePlan || hasTemplatePlaceholder(recreatePlan)) {
+    if (requestedStatus === "recreate_only") {
+      const recreatePlanProblem = validateSourceScoutRecreatePlan(recreatePlan);
+      if (recreatePlanProblem) {
         decision = "rejected";
-        nextStep = "recreate_only requiere un plan de recreacion con assets propios/licenciados.";
+        nextStep = recreatePlanProblem;
+        rejectReason = nextStep;
+      } else if (urlRejectReason && !urlRejectReason.startsWith("La URL parece busqueda/explore/results")) {
+        decision = "rejected";
+        publishGate = "blocked_rights";
+        nextStep = urlRejectReason;
       } else {
-        if (evidenceTypeRaw && evidenceTypeRaw !== "recreate_plan_approved") evidenceType = evidenceTypeRaw.toLowerCase();
-        else evidenceType = "recreate_plan_approved";
-        evidencePath = proofRaw && !hasTemplatePlaceholder(proofRaw) && !/^(approved|permissioned|ok|yes|si|sí)$/i.test(proofRaw) ? proofRaw : null;
-        evidenceAccepted = Boolean(evidencePath || recreatePlan);
-        decision = "blocked_source_file";
-        publishGate = "blocked_source_file";
-        nextStep = "Recrear con assets propios/licenciados, subir archivo fuente y guardar proof antes de Metricool.";
+        evidenceType = "recreate_plan_approved";
+        evidencePath = proofRaw && !hasTemplatePlaceholder(proofRaw) && !/^(approved|permissioned|ok|yes|si|sí)$/i.test(proofRaw)
+          ? proofRaw
+          : `ownership note: approved recreate plan - ${recreatePlan}`;
+        evidenceAccepted = true;
+        rejectReason = null;
+        if (sourceFileExists || targetSourceExists) {
+          decision = "ready_for_intake";
+          publishGate = "ready_for_intake";
+          nextStep = "Recreate plan y archivo propio detectados; source-drop puede crear allowlist sin usar el video original.";
+        } else {
+          decision = "blocked_source_file";
+          publishGate = "blocked_source_file";
+          nextStep = "Recrear con assets propios/licenciados, subir archivo fuente y guardar proof antes de Metricool.";
+        }
       }
     }
 
-    if (rejectReason) {
+    if (urlRejectReason && requestedStatus !== "recreate_only") {
       decision = "rejected";
       publishGate = "blocked_rights";
-      nextStep = rejectReason;
+      nextStep = urlRejectReason;
+      rejectReason = urlRejectReason;
     } else if (requestedStatus === "blocked") {
       decision = "rejected";
       publishGate = "blocked_rights";
       nextStep = "Marcado blocked/no usable; no avanza a produccion.";
+      rejectReason = nextStep;
     } else if (requestedStatus === "review_required") {
       decision = "blocked_rights";
       publishGate = "blocked_rights";
