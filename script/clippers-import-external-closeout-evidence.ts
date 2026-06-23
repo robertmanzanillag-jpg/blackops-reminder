@@ -5,15 +5,28 @@ import { recordClipperLaunchEvidenceBatch } from "../server/clippers-agent";
 type CsvRow = Record<string, string>;
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
+const configPath = path.join(rootDir, "config.json");
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
 const reportsDir = path.join(rootDir, "reports");
 const reportJsonPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
 const reportMarkdownPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.md");
 const reportCsvPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.csv");
+const proofTodoJsonPath = path.join(reportsDir, "clippers-external-closeout-proof-todo.json");
 
 const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}/i;
 const secretQueryParamPattern = /(^|[?&;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|session)=/i;
 const placeholderPattern = /<[^>]+>|paste .* proof|submitted_or_approved|requested_or_approved|do not store passwords|placeholder|todo|tbd/i;
+const weakNotesPattern = /^(ok|yes|done|approved|submitted|requested|verified|permissioned|ready|n\/a|na)$/i;
+const genericNotesPattern = /^(the\s+)?(valid\s+)?(proof|evidence)\s+((is|was)\s+)?(attached|stored|exists|provided)\b/i;
+
+interface CloseoutValidationIndex {
+  accounts: Set<string>;
+  developerPlatforms: Set<string>;
+  permissions: Set<string>;
+  queuedAccounts: Set<string>;
+  queuedDeveloperPlatforms: Set<string>;
+  queuedPermissions: Set<string>;
+}
 
 function csvCell(value: unknown): string {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -62,6 +75,60 @@ function parseCsv(raw: string): CsvRow[] {
 
 function looksPlaceholder(value: string): boolean {
   return !value.trim() || placeholderPattern.test(value);
+}
+
+function notesProblem(notes: string): string | null {
+  const trimmed = notes.trim();
+  if (placeholderPattern.test(trimmed)) return "Notes todavia contienen placeholder.";
+  if (weakNotesPattern.test(trimmed)) return "Notes no pueden ser solo ok/yes/done/approved/submitted/requested/verified.";
+  if (trimmed.length < 20) return "Notes deben explicar la accion externa con al menos 20 caracteres.";
+  if (genericNotesPattern.test(trimmed)) return "Notes deben describir la accion externa concreta, no solo decir que proof/evidence existe.";
+  if (secretPattern.test(trimmed) || secretQueryParamPattern.test(trimmed)) return "Notes parecen contener secreto/token/password/cookie.";
+  return null;
+}
+
+async function buildCloseoutValidationIndex(): Promise<CloseoutValidationIndex> {
+  const configRaw = await readFile(configPath, "utf8").catch(() => null);
+  const config = configRaw ? JSON.parse(configRaw) : {};
+  const configAccounts = new Set<string>();
+  const configDeveloperPlatforms = new Set<string>();
+  const configPermissions = new Set<string>();
+  for (const account of Array.isArray(config.accounts) ? config.accounts : []) {
+    const accountId = String(account.id || "").trim().toLowerCase();
+    for (const platformAccount of Array.isArray(account.platformAccounts) ? account.platformAccounts : []) {
+      const platform = String(platformAccount.platform || "").trim().toLowerCase();
+      if (!accountId || !platform) continue;
+      configAccounts.add(`${accountId}:${platform}`);
+      configDeveloperPlatforms.add(platform);
+      for (const scope of Array.isArray(platformAccount.requiredScopes) ? platformAccount.requiredScopes : []) {
+        const normalizedScope = String(scope || "").trim();
+        if (normalizedScope) configPermissions.add(`${platform}:${normalizedScope}`);
+      }
+    }
+  }
+
+  const raw = await readFile(proofTodoJsonPath, "utf8").catch(() => null);
+  const rows = raw ? JSON.parse(raw).rows : [];
+  const queuedAccounts = new Set<string>();
+  const queuedDeveloperPlatforms = new Set<string>();
+  const queuedPermissions = new Set<string>();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const lane = String(row.lane || "");
+    const platform = String(row.platform || "").trim().toLowerCase();
+    const accountId = String(row.accountId || "").trim().toLowerCase();
+    const scope = String(row.scope || "").trim();
+    if (lane === "account" && accountId && platform) queuedAccounts.add(`${accountId}:${platform}`);
+    if (lane === "developer_app" && platform) queuedDeveloperPlatforms.add(platform);
+    if (lane === "permission" && platform && scope) queuedPermissions.add(`${platform}:${scope}`);
+  }
+  return {
+    accounts: configAccounts,
+    developerPlatforms: configDeveloperPlatforms,
+    permissions: configPermissions,
+    queuedAccounts,
+    queuedDeveloperPlatforms,
+    queuedPermissions,
+  };
 }
 
 function safeOriginFromRedirect(redirectUri: string): string {
@@ -179,11 +246,14 @@ async function validateProofReference(proof: string): Promise<string | null> {
   return null;
 }
 
-async function validateRow(row: CsvRow, index: number): Promise<{ accepted?: CsvRow; rejected?: Record<string, unknown> }> {
+async function validateRow(row: CsvRow, index: number, closeoutIndex: CloseoutValidationIndex): Promise<{ accepted?: CsvRow; rejected?: Record<string, unknown> }> {
   const kind = row.kind?.trim();
   const proof = row.proof?.trim() || "";
   const notes = row.notes?.trim() || "";
   const status = row.status?.trim().toLowerCase() || "";
+  const platform = row.platform?.trim().toLowerCase() || "";
+  const accountId = row.account_id?.trim().toLowerCase() || "";
+  const scope = row.scope?.trim() || "";
 
   if (!["account", "developer_app", "permission"].includes(kind)) {
     return { rejected: { index, kind: kind || "unknown", reason: "kind debe ser account, developer_app o permission." } };
@@ -202,6 +272,9 @@ async function validateRow(row: CsvRow, index: number): Promise<{ accepted?: Csv
     if (!row.account_id || !row.platform) {
       return { rejected: { index, kind, reason: "Account requiere account_id y platform." } };
     }
+    if (!closeoutIndex.accounts.has(`${accountId}:${platform}`) || !closeoutIndex.queuedAccounts.has(`${accountId}:${platform}`)) {
+      return { rejected: { index, kind, reason: "Account no existe en la cola external closeout; no se acepta evidencia para cuentas inventadas." } };
+    }
   }
 
   if (kind === "developer_app") {
@@ -210,6 +283,9 @@ async function validateRow(row: CsvRow, index: number): Promise<{ accepted?: Csv
     }
     if (looksPlaceholder(row.app_identifier || "")) {
       return { rejected: { index, kind, reason: "Developer app requiere app_identifier real para preview/apply." } };
+    }
+    if (!closeoutIndex.developerPlatforms.has(platform) || !closeoutIndex.queuedDeveloperPlatforms.has(platform)) {
+      return { rejected: { index, kind, reason: "Developer app platform no existe en la cola external closeout." } };
     }
     const publicBaseUrl = row.public_base_url || safeOriginFromRedirect(row.redirect_uri || "");
     if (!isProductionPublicBaseUrl(publicBaseUrl)) {
@@ -225,10 +301,17 @@ async function validateRow(row: CsvRow, index: number): Promise<{ accepted?: Csv
     if (!row.platform || !row.scope) {
       return { rejected: { index, kind, reason: "Permission requiere platform y scope." } };
     }
+    if (!closeoutIndex.permissions.has(`${platform}:${scope}`) || !closeoutIndex.queuedPermissions.has(`${platform}:${scope}`)) {
+      return { rejected: { index, kind, reason: "Permission scope no existe en la cola external closeout; no se acepta permiso inventado." } };
+    }
   }
 
   if (rowContainsSecret(row)) {
     return { rejected: { index, kind, reason: "La fila parece contener secreto/token/password/cookie en algun campo. No se importa evidencia sensible." } };
+  }
+  const noteProblem = notesProblem(notes);
+  if (noteProblem) {
+    return { rejected: { index, kind, reason: noteProblem } };
   }
   const proofProblem = await validateProofReference(proof);
   if (proofProblem) {
@@ -277,11 +360,12 @@ async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
   const raw = await readFile(evidenceCsvPath, "utf8");
   const rows = parseCsv(raw);
+  const closeoutIndex = await buildCloseoutValidationIndex();
   const accepted: CsvRow[] = [];
   const rejected: Record<string, unknown>[] = [];
 
   for (const [index, row] of rows.entries()) {
-    const result = await validateRow(row, index + 2);
+    const result = await validateRow(row, index + 2, closeoutIndex);
     if (result.accepted) accepted.push(result.accepted);
     if (result.rejected) rejected.push(result.rejected);
   }

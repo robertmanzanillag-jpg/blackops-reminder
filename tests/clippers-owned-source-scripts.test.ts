@@ -647,7 +647,7 @@ test("external closeout evidence importer previews clean rows for strict apply",
   const cleanCsv = [
     "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
     "account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/meme-radar-youtube-proof/view,YouTube channel verified with manager proof and 2FA evidence stored outside repo",
-    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,YouTube app review submitted with ticket YT-123 and no sensitive values stored",
+    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,Evidence from YouTube ticket YT-123 confirms app review submitted without secrets",
     "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,TikTok video.publish scope requested with reviewer note for owned clips approval queue",
   ].join("\n") + "\n";
 
@@ -740,6 +740,84 @@ test("external closeout evidence importer rejects non-closeout statuses with val
   } finally {
     if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
     else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer rejects weak notes with valid proof", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const weakNotesCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/meme-radar-youtube-proof/view,ok",
+    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,approved",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,<paste notes here>",
+    "permission,,youtube,requested,https://www.googleapis.com/auth/youtube.upload,,,,https://console.cloud.google.com/,https://developers.google.com/youtube/v3/guides/uploading_a_video,https://console.cloud.google.com/apis/credentials,too short",
+  ].join("\n") + "\n";
+
+  try {
+    await writeFile(evidenceCsvPath, weakNotesCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 4);
+    assert.equal(output.applied, 0);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("al menos 20 caracteres")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("ok/yes/done/approved")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("placeholder")));
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer rejects fake accounts scopes and generic notes", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const proofTodoPath = path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousProofTodo = await readFile(proofTodoPath, "utf8").catch(() => null);
+  const fakeCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "account,fake-account,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/fake-account-proof/view,Fake account verified in official portal with non-secret proof reference",
+    "permission,,tiktok,requested,fake.scope,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,Fictitious scope requested in official portal with non-secret proof reference",
+    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,The proof is attached in external portal and stored externally",
+  ].join("\n") + "\n";
+
+  try {
+    const proofTodo = JSON.parse(previousProofTodo || "{}");
+    proofTodo.rows = [
+      ...(Array.isArray(proofTodo.rows) ? proofTodo.rows : []),
+      { lane: "account", accountId: "fake-account", platform: "youtube", requiredCsvStatus: "verified" },
+      { lane: "permission", platform: "tiktok", scope: "fake.scope", requiredCsvStatus: "requested" },
+    ];
+    await writeFile(proofTodoPath, JSON.stringify(proofTodo, null, 2));
+    await writeFile(evidenceCsvPath, fakeCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 3);
+    assert.equal(output.applied, 0);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("cuentas inventadas")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("permiso inventado")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("accion externa concreta")));
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+    if (previousProofTodo === null) await unlink(proofTodoPath).catch(() => undefined);
+    else await writeFile(proofTodoPath, previousProofTodo);
   }
 });
 
@@ -838,7 +916,7 @@ test("external closeout evidence importer validates local proof files without sy
       "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
       `account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,${cleanProofPath},Clean local proof should preview as accepted`,
       `account,sports-daily,youtube,verified,,,,,https://www.youtube.com/create_channel,,${shortProofPath},Short local proof should be rejected`,
-      `account,streamer-pulse,youtube,verified,,,,,https://www.youtube.com/create_channel,,${placeholderProofPath},Placeholder local proof should be rejected`,
+      `account,streamer-pulse,youtube,verified,,,,,https://www.youtube.com/create_channel,,${placeholderProofPath},Stub local proof should be rejected by proof content validation`,
       `permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,${secretProofPath},Secret local proof should be rejected`,
       `permission,,instagram,requested,instagram_basic,,,,https://developers.facebook.com/,https://developers.facebook.com/docs/instagram-platform/,${queryTokenProofPath},Query-token local proof should be rejected`,
       `permission,,tiktok,requested,video.upload,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,${missingProofPath},Missing local proof should be rejected`,
