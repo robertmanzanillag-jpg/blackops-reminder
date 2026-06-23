@@ -179,6 +179,10 @@ type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
+type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready" | "ready";
+type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "full_ready";
+type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
+type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -337,6 +341,182 @@ interface ClipperPermissionPack {
   generatedAt: string;
   rootDir: string;
   files: ClipperPermissionPackFile[];
+}
+
+interface ClipperAccountPermissionReadinessRow {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  label: string;
+  handle: string;
+  accountStatus: string;
+  evidencePath: string;
+  metricoolConnected: boolean;
+  metricoolRightsReadyAssets: number;
+  readyForMetricoolApproval: boolean;
+  directApiReady: boolean;
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperAccountPermissionReadinessPermissionRow {
+  platform: ClipperPlatform;
+  label: string;
+  status: string;
+  approved: number;
+  requested: number;
+  blocked: number;
+  scopes: string[];
+  docsUrl: string;
+  developerPortalUrl: string;
+  nextStep: string;
+}
+
+interface ClipperAccountPermissionReadinessSummary {
+  status: ClipperAccountPermissionReadinessStatus;
+  generatedAt: string;
+  paths: { json: string; markdown: string; csv: string };
+  accountRows: ClipperAccountPermissionReadinessRow[];
+  permissionRows: ClipperAccountPermissionReadinessPermissionRow[];
+  sourceReadiness: {
+    localOwnedSourceAssets: number;
+    connectedMetricoolRightsReadyAssets: number;
+    realPublishEnabled: boolean;
+    publishMode: string;
+  };
+  totals: {
+    accountProfiles: number;
+    verifiedAccounts: number;
+    metricoolReadyLanes: number;
+    directApiReadyLanes: number;
+    developerApps: number;
+    developerAppsApproved: number;
+    permissionGroups: number;
+    permissionGroupsApproved: number;
+  };
+  nextEvidenceDropPath: string;
+  nextStep: string;
+}
+
+interface ClipperOperationalReadinessSummary {
+  status: ClipperOperationalReadinessStatus;
+  generatedAt: string;
+  paths: { json: string; markdown: string; csv: string };
+  mvp: {
+    metricoolReady: boolean;
+    approvalQueueReady: boolean;
+  };
+  fullDirectApiReady: boolean;
+  accounts: {
+    total: number;
+    verified: number;
+    metricoolReadyLanes: number;
+    directApiReadyLanes: number;
+    developerAppsApproved: number;
+    developerApps: number;
+    permissionGroupsApproved: number;
+    permissionGroups: number;
+  };
+  sources: {
+    sourceReadinessReady: boolean;
+    localOwnedSourceAssets: number;
+    connectedRightsReadyAssets: number;
+    byCategory: Partial<Record<ClipperAccountCategory, number>> & { total?: number };
+  };
+  metricool: {
+    status: string;
+    publishMode: string;
+    realPublishEnabled: boolean;
+    queuedForApproval: number;
+    readyToSend: number;
+    approvalRequired: number;
+    lanes: Array<{
+      accountId: string;
+      accountName: string;
+      category: ClipperAccountCategory;
+      connectedNetworks: string[];
+      rightsReadyAssets: number;
+    }>;
+  };
+  localApp: {
+    ready: boolean;
+    ports: Array<{ port: number; open: boolean; error: string | null }>;
+  };
+  blockers: string[];
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutTask {
+  id: string;
+  lane: "account" | "developer_app" | "permission";
+  priority: "critical" | "high";
+  platform: string;
+  accountId: string;
+  accountName: string;
+  currentStatus: string;
+  targetStatus: string;
+  scope?: string;
+  portalUrl: string;
+  docsUrl?: string;
+  redirectUri?: string;
+  missingEnvVars?: string[];
+  evidenceRequired: string[];
+  safeNotes: string;
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutPackSummary {
+  status: ClipperExternalCloseoutPackStatus;
+  generatedAt: string;
+  paths: { json: string; markdown: string; csv: string; evidenceCsv: string };
+  blockers: string[];
+  metricool: {
+    queuedForApproval: number;
+    readyToSend: number;
+    publishMode: string;
+  };
+  totals: {
+    tasks: number;
+    critical: number;
+    high: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+  };
+  tasks: ClipperExternalCloseoutTask[];
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutEvidenceImportSummary {
+  status: ClipperExternalCloseoutEvidenceImportStatus;
+  mode: "preview" | "apply";
+  generatedAt: string;
+  paths: { sourceCsv: string; json: string; markdown: string; csv: string };
+  totals: {
+    rowsScanned: number;
+    accepted: number;
+    rejected: number;
+    applied: number;
+  };
+  accepted: Array<{
+    index: number;
+    kind: string;
+    accountId: string;
+    platform: string;
+    status: string;
+    scope: string;
+  }>;
+  rejected: Array<{
+    index?: number;
+    kind?: string;
+    reason?: string;
+    accountId?: string;
+    platform?: string;
+    status?: string;
+    scope?: string;
+  }>;
+  nextStep: string;
 }
 
 interface ClipperSourceAsset {
@@ -6972,6 +7152,46 @@ export default function ClippersPage() {
   const { data: status, isLoading, refetch } = useQuery<ClipperStatus>({
     queryKey: ["/api/clippers/status"],
   });
+  const { data: accountPermissionReadiness } = useQuery<ClipperAccountPermissionReadinessSummary | null>({
+    queryKey: ["/api/clippers/account-permission-readiness"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/account-permission-readiness");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer account permission readiness");
+      return data.accountPermissionReadiness as ClipperAccountPermissionReadinessSummary;
+    },
+  });
+  const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
+    queryKey: ["/api/clippers/operational-readiness"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/operational-readiness");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer operational readiness");
+      return data.operationalReadiness as ClipperOperationalReadinessSummary;
+    },
+  });
+  const { data: externalCloseoutPack } = useQuery<ClipperExternalCloseoutPackSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-pack"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-pack");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout pack");
+      return data.externalCloseoutPack as ClipperExternalCloseoutPackSummary;
+    },
+  });
+  const { data: externalCloseoutEvidenceImport } = useQuery<ClipperExternalCloseoutEvidenceImportSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-evidence-import"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-evidence-import");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout evidence import");
+      return data.externalCloseoutEvidenceImport as ClipperExternalCloseoutEvidenceImportSummary;
+    },
+  });
   const credentialEnvVarOptions = useMemo(() => {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
@@ -6979,6 +7199,14 @@ export default function ClippersPage() {
   const visibleExternalConnectAutopilot = externalConnectAutopilot || status?.externalConnectAutopilot || null;
   const visibleExternalAccountPermissionSprint = status?.externalAccountPermissionSprint || null;
   const visibleSourceIngestionSprint = sourceIngestionSprint || status?.sourceIngestionSprint || null;
+
+  const refreshAccountPermissionReadinessCache = async () => {
+    const readinessResponse = await fetch("/api/clippers/prepare-account-permission-readiness", { method: "POST" });
+    const readinessData = await readinessResponse.json();
+    if (!readinessResponse.ok) throw new Error(readinessData.error || "No pude refrescar Account + Permission Readiness");
+    queryClient.setQueryData(["/api/clippers/account-permission-readiness"], readinessData.accountPermissionReadiness);
+    return readinessData.accountPermissionReadiness as ClipperAccountPermissionReadinessSummary;
+  };
 
   const refreshPostConnectActivationState = async (sourceLabel: string) => {
     try {
@@ -6990,6 +7218,16 @@ export default function ClippersPage() {
         status: ClipperStatus;
       };
       queryClient.setQueryData(["/api/clippers/status"], result.status);
+      try {
+        await refreshAccountPermissionReadinessCache();
+      } catch (error: any) {
+        queryClient.setQueryData(["/api/clippers/account-permission-readiness"], null);
+        toast({
+          title: "Readiness pendiente",
+          description: error?.message || "La evidencia se guardo, pero no pude refrescar Account + Permission Readiness.",
+          variant: "destructive",
+        });
+      }
       toast({
         title: "Activation sweep actualizado",
         description: `${sourceLabel}: ${result.postConnectActivationSweep.readyLanes + result.postConnectActivationSweep.activationReadyLanes}/${result.postConnectActivationSweep.totalLanes} lanes listas; ${result.postConnectActivationSweep.blockedLanes} bloqueadas.`,
@@ -7065,6 +7303,16 @@ export default function ClippersPage() {
       latestStatus = sweepData.status || latestStatus;
       if (!latestStatus) return;
       queryClient.setQueryData(["/api/clippers/status"], latestStatus);
+      try {
+        await refreshAccountPermissionReadinessCache();
+      } catch (error: any) {
+        queryClient.setQueryData(["/api/clippers/account-permission-readiness"], null);
+        toast({
+          title: "Readiness pendiente",
+          description: error?.message || "Credential/OAuth se actualizo, pero no pude refrescar Account + Permission Readiness.",
+          variant: "destructive",
+        });
+      }
       toast({
         title: "Credential/OAuth runway actualizado",
         description: `${sourceLabel}: ${latestStatus.credentialSetup.totals.ready}/${latestStatus.credentialSetup.totals.items} credenciales; ${latestStatus.oauthConnectionPack.totals.tokensSaved}/${latestStatus.oauthConnectionPack.totals.connections} OAuth tokens.`,
@@ -7271,6 +7519,107 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar evidencia", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const accountPermissionReadinessMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-account-permission-readiness", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar account permission readiness");
+      return data as { accountPermissionReadiness: ClipperAccountPermissionReadinessSummary };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      toast({
+        title: "Account readiness listo",
+        description: `${data.accountPermissionReadiness.totals.metricoolReadyLanes} lanes Metricool listas; ${data.accountPermissionReadiness.totals.directApiReadyLanes} direct API.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar readiness", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const operationalReadinessMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-operational-readiness", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar operational readiness");
+      return data as { operationalReadiness: ClipperOperationalReadinessSummary };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      toast({
+        title: "Operational readiness listo",
+        description: `${data.operationalReadiness.metricool.queuedForApproval} en approval queue; ${data.operationalReadiness.metricool.readyToSend} auto-send.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar operational readiness", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const externalCloseoutPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-external-closeout-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar external closeout pack");
+      return data as { externalCloseoutPack: ClipperExternalCloseoutPackSummary };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-closeout-pack"], data.externalCloseoutPack);
+      toast({
+        title: "External closeout listo",
+        description: `${data.externalCloseoutPack.totals.tasks} acciones externas; ${data.externalCloseoutPack.metricool.readyToSend} auto-send.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar external closeout", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const previewExternalCloseoutEvidenceImportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-external-closeout-evidence-import", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude validar external evidence import");
+      return data as { externalCloseoutEvidenceImport: ClipperExternalCloseoutEvidenceImportSummary };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-closeout-evidence-import"], data.externalCloseoutEvidenceImport);
+      toast({
+        title: "Evidence import validado",
+        description: `${data.externalCloseoutEvidenceImport.totals.accepted} aceptadas; ${data.externalCloseoutEvidenceImport.totals.rejected} rechazadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude validar evidence import", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const applyExternalCloseoutEvidenceImportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/apply-external-closeout-evidence-import", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar external evidence import");
+      return data as {
+        externalCloseoutEvidenceImport: ClipperExternalCloseoutEvidenceImportSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+        operationalReadiness: ClipperOperationalReadinessSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-closeout-evidence-import"], data.externalCloseoutEvidenceImport);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      toast({
+        title: "Evidence import aplicado",
+        description: `${data.externalCloseoutEvidenceImport.totals.applied} filas aplicadas; Metricool sigue ${data.operationalReadiness.metricool.publishMode}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude aplicar evidence import", description: error.message, variant: "destructive" });
     },
   });
 
@@ -8549,6 +8898,14 @@ export default function ClippersPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/status"], data.status);
+      void refreshAccountPermissionReadinessCache().catch((error: any) => {
+        queryClient.setQueryData(["/api/clippers/account-permission-readiness"], null);
+        toast({
+          title: "Readiness pendiente",
+          description: error?.message || "Post-connect paso, pero no pude refrescar Account + Permission Readiness.",
+          variant: "destructive",
+        });
+      });
       toast({
         title: "Post-connect sweep listo",
         description: `${data.postConnectActivationSweep.readyLanes + data.postConnectActivationSweep.activationReadyLanes}/${data.postConnectActivationSweep.totalLanes} lanes listas; ${data.postConnectActivationSweep.blockedLanes} bloqueadas.`,
@@ -15003,6 +15360,397 @@ export default function ClippersPage() {
               </>
             ) : (
               <p className="text-sm text-zinc-500">Cargando manual posting pack...</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950/70" data-testid="clippers-operational-readiness">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <Gauge className="h-4 w-4 text-cyan-200" />
+              Operational Readiness
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-white/10 bg-black/35 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-white">{operationalReadiness?.paths.markdown || "clippers_workspace/reports/clippers-operational-readiness.md"}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    {operationalReadiness?.nextStep || "Genera el gate operativo para separar Metricool MVP, Direct API, source readiness, browser QA y blockers reales."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {operationalReadiness && (
+                    <Badge className={cn(
+                      "w-fit border",
+                      operationalReadiness.status === "full_ready"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : operationalReadiness.mvp.metricoolReady
+                          ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {operationalReadiness.status}
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => operationalReadinessMutation.mutate()}
+                    disabled={operationalReadinessMutation.isPending}
+                    className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+                    data-testid="prepare-clippers-operational-readiness-button"
+                  >
+                    {operationalReadinessMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {operationalReadiness ? (
+                <>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Metricool MVP: {operationalReadiness.mvp.metricoolReady ? "yes" : "no"}</p>
+                    <p>Full Direct API: {operationalReadiness.fullDirectApiReady ? "yes" : "no"}</p>
+                    <p>Local app: {operationalReadiness.localApp.ready ? "open" : "closed"}</p>
+                    <p>Queued: {operationalReadiness.metricool.queuedForApproval}</p>
+                    <p>Auto-send: {operationalReadiness.metricool.readyToSend}</p>
+                    <p>Publish: {operationalReadiness.metricool.publishMode}</p>
+                    <p>Sources: {operationalReadiness.sources.connectedRightsReadyAssets}/{operationalReadiness.sources.localOwnedSourceAssets}</p>
+                    <p>Accounts: {operationalReadiness.accounts.verified}/{operationalReadiness.accounts.total}</p>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {operationalReadiness.metricool.lanes.map((lane) => (
+                      <div key={`${lane.accountId}-${lane.category}`} className="rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2">
+                        <p className="truncate text-xs font-medium text-cyan-100">{lane.accountName}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500">{lane.connectedNetworks.join(", ") || "no networks"} · {lane.rightsReadyAssets} rights-ready</p>
+                      </div>
+                    ))}
+                  </div>
+                  {operationalReadiness.blockers.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {operationalReadiness.blockers.slice(0, 5).map((blocker) => (
+                        <p key={blocker} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">{blocker}</p>
+                      ))}
+                      {operationalReadiness.blockers.length > 5 && (
+                        <p className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-400">
+                          +{operationalReadiness.blockers.length - 5} more blockers in {operationalReadiness.paths.markdown}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-500">Todavia no hay operational readiness cargado en la app.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950/70" data-testid="clippers-external-closeout-pack">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <ListChecks className="h-4 w-4 text-amber-200" />
+              External Closeout Pack
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-white/10 bg-black/35 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-white">{externalCloseoutPack?.paths.markdown || "clippers_workspace/reports/clippers-external-closeout-pack.md"}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    {externalCloseoutPack?.nextStep || "Genera la lista exacta de cuentas, developer apps y permisos externos que faltan antes de full go-live."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {externalCloseoutPack && (
+                    <Badge className={cn(
+                      "w-fit border",
+                      externalCloseoutPack.status === "ready_for_final_review"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {externalCloseoutPack.status}
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => externalCloseoutPackMutation.mutate()}
+                    disabled={externalCloseoutPackMutation.isPending}
+                    className="bg-amber-200 text-zinc-950 hover:bg-amber-100"
+                    data-testid="prepare-clippers-external-closeout-pack-button"
+                  >
+                    {externalCloseoutPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {externalCloseoutPack ? (
+                <>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Tasks: {externalCloseoutPack.totals.tasks}</p>
+                    <p>Critical: {externalCloseoutPack.totals.critical}</p>
+                    <p>High: {externalCloseoutPack.totals.high}</p>
+                    <p>Accounts: {externalCloseoutPack.totals.accounts}</p>
+                    <p>Dev apps: {externalCloseoutPack.totals.developerApps}</p>
+                    <p>Permissions: {externalCloseoutPack.totals.permissions}</p>
+                    <p>Queued: {externalCloseoutPack.metricool.queuedForApproval}</p>
+                    <p>Auto-send: {externalCloseoutPack.metricool.readyToSend}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">Evidence CSV: {externalCloseoutPack.paths.evidenceCsv}</p>
+                  <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-external-closeout-evidence-import">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-amber-100">Evidence Import Gate</p>
+                        <p className="mt-1 break-all text-xs text-zinc-500">
+                          {externalCloseoutEvidenceImport?.paths.markdown || "clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {externalCloseoutEvidenceImport && (
+                          <Badge className={cn(
+                            "w-fit border",
+                            externalCloseoutEvidenceImport.status === "import_applied"
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                              : externalCloseoutEvidenceImport.status === "ready_to_apply"
+                                ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                                : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          )}>
+                            {externalCloseoutEvidenceImport.status}
+                          </Badge>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => previewExternalCloseoutEvidenceImportMutation.mutate()}
+                          disabled={previewExternalCloseoutEvidenceImportMutation.isPending}
+                          className="border-amber-300/25 bg-transparent text-amber-100 hover:bg-amber-300/10"
+                          data-testid="preview-clippers-external-closeout-evidence-import-button"
+                        >
+                          {previewExternalCloseoutEvidenceImportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                          Validate
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => applyExternalCloseoutEvidenceImportMutation.mutate()}
+                          disabled={
+                            applyExternalCloseoutEvidenceImportMutation.isPending
+                            || !externalCloseoutEvidenceImport
+                            || externalCloseoutEvidenceImport.status !== "ready_to_apply"
+                          }
+                          className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100 disabled:opacity-40"
+                          data-testid="apply-clippers-external-closeout-evidence-import-button"
+                        >
+                          {applyExternalCloseoutEvidenceImportMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                    {externalCloseoutEvidenceImport ? (
+                      <>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                          <p>Rows: {externalCloseoutEvidenceImport.totals.rowsScanned}</p>
+                          <p>Accepted: {externalCloseoutEvidenceImport.totals.accepted}</p>
+                          <p>Rejected: {externalCloseoutEvidenceImport.totals.rejected}</p>
+                          <p>Applied: {externalCloseoutEvidenceImport.totals.applied}</p>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-zinc-500">{externalCloseoutEvidenceImport.nextStep}</p>
+                        {externalCloseoutEvidenceImport.rejected.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {externalCloseoutEvidenceImport.rejected.slice(0, 4).map((row, index) => (
+                              <p key={`${row.index || index}-${row.kind || "row"}`} className="rounded-md border border-red-300/20 bg-red-300/10 px-3 py-2 text-xs leading-5 text-red-100">
+                                Row {row.index || "?"}: {row.kind || "unknown"} - {row.reason || "rejected"}
+                              </p>
+                            ))}
+                            {externalCloseoutEvidenceImport.rejected.length > 4 && (
+                              <p className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-400">
+                                +{externalCloseoutEvidenceImport.rejected.length - 4} more rejected rows in {externalCloseoutEvidenceImport.paths.markdown}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-3 text-xs text-zinc-500">Llena el CSV y usa Validate antes de aplicar cualquier evidencia.</p>
+                    )}
+                  </div>
+                  {externalCloseoutPack.blockers.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {externalCloseoutPack.blockers.slice(0, 4).map((blocker) => (
+                        <p key={blocker} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">{blocker}</p>
+                      ))}
+                      {externalCloseoutPack.blockers.length > 4 && (
+                        <p className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-400">
+                          +{externalCloseoutPack.blockers.length - 4} more closeout blockers in {externalCloseoutPack.paths.markdown}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {externalCloseoutPack.tasks.slice(0, 9).map((task) => (
+                      <div key={task.id} className="rounded-md border border-white/10 bg-black/35 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-white">{task.id}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{task.lane} · {task.platform || "all"}{task.scope ? ` · ${task.scope}` : ""}</p>
+                          </div>
+                          <Badge className={cn("shrink-0 border text-[10px]", task.priority === "critical" ? "border-red-300/30 bg-red-300/10 text-red-200" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                            {task.priority}
+                          </Badge>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-zinc-400">{task.currentStatus} to {task.targetStatus}</p>
+                        <p className="mt-2 text-xs leading-5 text-amber-100">{task.nextStep}</p>
+                        <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{task.portalUrl}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {externalCloseoutPack.tasks.length > 9 && (
+                    <p className="text-xs text-zinc-500">+{externalCloseoutPack.tasks.length - 9} more external actions in {externalCloseoutPack.paths.markdown}</p>
+                  )}
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-500">Todavia no hay external closeout pack cargado en la app.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-950/70" data-testid="clippers-account-permission-readiness">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-white">
+              <ShieldCheck className="h-4 w-4 text-emerald-200" />
+              Account + Permission Readiness
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-white/10 bg-black/35 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-white">{accountPermissionReadiness?.paths.markdown || "clippers_workspace/account-permission-readiness.md"}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    {accountPermissionReadiness?.nextStep || "Genera el pack para ver cuentas, permisos, Metricool y evidencia pendiente sin inventar readiness."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {accountPermissionReadiness && (
+                    <Badge className={cn(
+                      "w-fit border",
+                      accountPermissionReadiness.status === "metricool_mvp_ready"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {accountPermissionReadiness.status}
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => accountPermissionReadinessMutation.mutate()}
+                    disabled={accountPermissionReadinessMutation.isPending}
+                    className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+                    data-testid="prepare-clippers-account-permission-readiness-button"
+                  >
+                    {accountPermissionReadinessMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+              {accountPermissionReadiness ? (
+                <>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Accounts: {accountPermissionReadiness.totals.verifiedAccounts}/{accountPermissionReadiness.totals.accountProfiles}</p>
+                    <p>Metricool lanes: {accountPermissionReadiness.totals.metricoolReadyLanes}</p>
+                    <p>Direct API: {accountPermissionReadiness.totals.directApiReadyLanes}</p>
+                    <p>Dev apps: {accountPermissionReadiness.totals.developerAppsApproved}/{accountPermissionReadiness.totals.developerApps}</p>
+                    <p>Permissions: {accountPermissionReadiness.totals.permissionGroupsApproved}/{accountPermissionReadiness.totals.permissionGroups}</p>
+                    <p>Local assets: {accountPermissionReadiness.sourceReadiness.localOwnedSourceAssets}</p>
+                    <p>Connected assets: {accountPermissionReadiness.sourceReadiness.connectedMetricoolRightsReadyAssets}</p>
+                    <p>Publish: {accountPermissionReadiness.sourceReadiness.publishMode}</p>
+                  </div>
+                  <p className="mt-2 break-all text-xs text-zinc-600">Next evidence CSV: {accountPermissionReadiness.nextEvidenceDropPath}</p>
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-500">Todavia no hay readiness pack cargado en la app.</p>
+              )}
+            </div>
+
+            {accountPermissionReadiness && (
+              <>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {accountPermissionReadiness.accountRows.map((row) => (
+                    <div key={`${row.accountId}-${row.platform}`} className="rounded-md border border-white/10 bg-black/35 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{row.accountName} / {row.platform}</p>
+                          <p className="mt-1 text-xs text-zinc-500">{row.handle} · {categoryLabels[row.category]}</p>
+                        </div>
+                        <Badge className={cn(
+                          "shrink-0 border text-[10px]",
+                          row.readyForMetricoolApproval
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : row.accountStatus === "verified"
+                              ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                              : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>
+                          {row.readyForMetricoolApproval ? "metricool" : row.accountStatus}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                        <p>Metricool: {row.metricoolConnected ? "yes" : "no"}</p>
+                        <p>Assets: {row.metricoolRightsReadyAssets}</p>
+                        <p>Direct API: {row.directApiReady ? "yes" : "no"}</p>
+                        <p>Approval: {row.readyForMetricoolApproval ? "ready" : "blocked"}</p>
+                      </div>
+                      <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{row.evidencePath}</p>
+                      {row.blockers.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {row.blockers.slice(0, 3).map((blocker) => (
+                            <p key={`${row.accountId}-${row.platform}-${blocker}`} className="rounded border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-xs leading-5 text-amber-100">{blocker}</p>
+                          ))}
+                          {row.blockers.length > 3 && (
+                            <p className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs leading-5 text-zinc-400">
+                              +{row.blockers.length - 3} more account blockers in {accountPermissionReadiness.paths.markdown}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <p className="mt-3 text-xs leading-5 text-emerald-100/80">{row.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-md border border-purple-300/20 bg-purple-950/10 p-3">
+                  <p className="text-sm font-medium text-white">Permission gates</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    {accountPermissionReadiness.permissionRows.map((row) => (
+                      <div key={row.platform} className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-white">{row.label}</p>
+                          <Badge className={cn("border text-[10px]", row.status === "approved" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>{row.status}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-500">Approved/requested/blocked: {row.approved}/{row.requested}/{row.blocked}</p>
+                        <p className="mt-2 text-xs leading-5 text-zinc-400">{row.scopes.join(", ")}</p>
+                        <p className="mt-2 text-xs leading-5 text-amber-100">{row.nextStep}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <a href={row.developerPortalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-purple-300/20 px-2 py-1 text-xs text-purple-100 hover:bg-purple-300/10">
+                            Portal
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <a href={row.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-200 hover:bg-white/5">
+                            Docs
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

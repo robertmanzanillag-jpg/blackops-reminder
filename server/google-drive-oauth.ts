@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import type { Request } from "express";
 import { hasRealValue } from "./ceo-doctor-cli";
-import { hasReplitGoogleConnectorEnv } from "./google-calendar";
+import { hasConnectedReplitGoogleConnector, hasReplitGoogleConnectorEnv } from "./google-calendar";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -237,6 +237,9 @@ export async function getGoogleDriveOAuthClient(userId: string) {
 export async function getGoogleDriveOAuthStatus(userId: string) {
   const envConnected = Boolean(getGoogleDriveRefreshTokenFromEnv());
   const replitConnectorAvailable = hasReplitGoogleConnectorEnv();
+  const replitConnectorConnected = !envConnected && replitConnectorAvailable
+    ? await hasConnectedReplitGoogleConnector()
+    : false;
   const configured = Boolean(envConnected || replitConnectorAvailable || hasGoogleDriveOAuthClientConfig());
   let token = null;
   let storageError: string | null = null;
@@ -253,8 +256,8 @@ export async function getGoogleDriveOAuthStatus(userId: string) {
 
   return {
     configured,
-    connected: Boolean(envConnected || replitConnectorAvailable || token),
-    provider: envConnected ? "env_refresh_token" : replitConnectorAvailable ? "replit_connector" : token ? "local_oauth" : null,
+    connected: Boolean(envConnected || replitConnectorConnected || token),
+    provider: envConnected ? "env_refresh_token" : replitConnectorConnected ? "replit_connector" : token ? "local_oauth" : null,
     expiresAt: token?.expiresAt || null,
     scope: token?.scope || (hasRealValue(process.env.GOOGLE_DRIVE_SCOPES) ? process.env.GOOGLE_DRIVE_SCOPES : DEFAULT_GOOGLE_DRIVE_SCOPES),
     redirectUri: hasRealValue(process.env.GOOGLE_DRIVE_REDIRECT_URI) ? process.env.GOOGLE_DRIVE_REDIRECT_URI : null,

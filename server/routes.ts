@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { readFile as readNodeFile } from "fs/promises";
+import { spawn } from "child_process";
 import { storage } from "./storage";
 import { insertTaskSchema, insertWeeklySummarySchema, insertMonthlyGoalSchema, insertYearlyGoalSchema, insertWeeklyTaskSchema, insertPushSubscriptionSchema } from "@shared/schema";
 import { z } from "zod";
@@ -59,6 +60,76 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const runClipperJsonScript = (scriptPath: string, label: string) => new Promise<any>((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error: any) {
+        reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+  const runClipperAccountPermissionReadiness = () => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+  const runClipperOperationalReadiness = () => runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
+  const runClipperExternalCloseoutPack = () => runClipperJsonScript("script/clippers-external-closeout-pack.mjs", "External closeout pack");
+  const runClipperExternalCloseoutEvidenceImport = (apply: boolean) => new Promise<any>((resolve, reject) => {
+    const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
+    if (apply) args.push("--apply");
+    const child = spawn(process.execPath, args, {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`External closeout evidence import failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error: any) {
+        reject(new Error(`External closeout evidence import returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+  const readClipperAccountPermissionReadiness = async () => {
+    const raw = await readNodeFile("clippers_workspace/account-permission-readiness.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperOperationalReadiness = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-operational-readiness.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperExternalCloseoutPack = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-pack.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperExternalCloseoutEvidenceImport = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-evidence-import-report.json", "utf8");
+    return JSON.parse(raw);
+  };
+
   app.get("/clippers/legal/privacy", (_req, res) => {
     res.type("html").send(renderClipperPrivacyPolicyHtml());
   });
@@ -1521,6 +1592,101 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/clippers/account-permission-readiness", async (_req, res) => {
+    try {
+      res.json({ accountPermissionReadiness: await readClipperAccountPermissionReadiness() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "Account permission readiness has not been prepared" : "Account permission readiness could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-account-permission-readiness", async (_req, res) => {
+    try {
+      await runClipperAccountPermissionReadiness();
+      res.json({ accountPermissionReadiness: await readClipperAccountPermissionReadiness() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers account permission readiness" });
+    }
+  });
+
+  app.get("/api/clippers/operational-readiness", async (_req, res) => {
+    try {
+      res.json({ operationalReadiness: await readClipperOperationalReadiness() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "Operational readiness has not been prepared" : "Operational readiness could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-operational-readiness", async (_req, res) => {
+    try {
+      await runClipperOperationalReadiness();
+      res.json({ operationalReadiness: await readClipperOperationalReadiness() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers operational readiness" });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-pack", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutPack: await readClipperExternalCloseoutPack() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout pack has not been prepared" : "External closeout pack could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-external-closeout-pack", async (_req, res) => {
+    try {
+      await runClipperExternalCloseoutPack();
+      res.json({ externalCloseoutPack: await readClipperExternalCloseoutPack() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external closeout pack" });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-evidence-import", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout evidence import has not been previewed" : "External closeout evidence import could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/preview-external-closeout-evidence-import", async (_req, res) => {
+    try {
+      await runClipperExternalCloseoutEvidenceImport(false);
+      res.json({ externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport() });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview clippers external closeout evidence import" });
+    }
+  });
+
+  app.post("/api/clippers/apply-external-closeout-evidence-import", async (_req, res) => {
+    try {
+      await runClipperExternalCloseoutEvidenceImport(true);
+      const externalCloseoutEvidenceImport = await readClipperExternalCloseoutEvidenceImport();
+      if (externalCloseoutEvidenceImport.status !== "import_applied") {
+        res.status(400).json({
+          error: "External closeout evidence import is not clean enough to apply. Run preview and fix rejected rows first.",
+          externalCloseoutEvidenceImport,
+        });
+        return;
+      }
+      await runClipperAccountPermissionReadiness();
+      await runClipperOperationalReadiness();
+      res.json({
+        externalCloseoutEvidenceImport,
+        accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+        operationalReadiness: await readClipperOperationalReadiness(),
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to apply clippers external closeout evidence import" });
+    }
+  });
+
   app.post("/api/clippers/record-account-evidence", async (req, res) => {
     try {
       const result = await recordClipperAccountEvidence(req.body || {}, getCurrentUserId(req));
@@ -2006,6 +2172,7 @@ export async function registerRoutes(
         goLivePrepSweep: result.goLivePrepSweep,
         localDropSync: result.localDropSync,
         robertNextActions: result.robertNextActions,
+        status: result.status,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to run clippers post-connect activation sweep" });
