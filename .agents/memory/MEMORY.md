@@ -1,0 +1,2 @@
+- [PR15 deploy](pr15-deploy.md) — server-only build avoids Vite hang; YouTube routing before Developer Autopilot confirmed in prod at 9:57AM deploy.
+- [Drive OAuth autoscale](drive-oauth-autoscale.md) — MemoryStore sessions lost between autoscale containers; Drive token not shared; execution fails fast (~1.5s) as blackRoomLinkError (SSE, not server logs).
