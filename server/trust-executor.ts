@@ -168,7 +168,7 @@ export async function executeApprovedPendingAction(
       }
 
       case "radio_edit.youtube_to_drive": {
-        result = await processYoutubeRadioVideoLink({
+        const radioYoutubeResult = await processYoutubeRadioVideoLink({
           userId: action.userId,
           youtubeUrl: input.youtubeUrl,
           driveFolderPath: input.driveFolderPath,
@@ -180,6 +180,10 @@ export async function executeApprovedPendingAction(
           musicUrl: input.musicUrl,
           musicPath: input.musicPath,
         });
+        if (radioYoutubeResult.status === "failed") {
+          throw new Error(radioYoutubeResult.error || "No pude procesar el link de YouTube para radio");
+        }
+        result = radioYoutubeResult;
         break;
       }
 
