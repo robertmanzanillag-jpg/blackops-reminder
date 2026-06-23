@@ -551,6 +551,7 @@ export async function registerRoutes(
         const payload = await response.json();
         const report = payload.externalCloseoutEvidenceImport || {};
         const totals = report.totals || {};
+        const repairQueue = report.repairQueue || [];
         badge.textContent = report.status || (response.ok ? "ok" : "blocked");
         badge.className = "badge " + (report.status === "import_applied" || report.status === "ready_to_apply" ? "do_now" : "blocked");
         if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
@@ -565,7 +566,16 @@ export async function registerRoutes(
           "",
           report.nextStep || payload.error || "",
           "",
-          (report.rejected || []).slice(0, 6).map((row) => "Row " + (row.index || "?") + ": " + (row.kind || "unknown") + " - " + (row.reason || "rejected")).join("\\n")
+          "Repair queue:",
+          repairQueue.slice(0, 8).map((row) => [
+            "- CSV row " + (row.csvRow || "?") + ": " + (row.closeoutId || row.lane || "unknown"),
+            "  reason=" + (row.reason || "rejected"),
+            "  proof=" + (row.proofPath || "missing"),
+            "  next=" + (row.nextStep || "replace placeholders and preview again")
+          ].join("\\n")).join("\\n") || "- none",
+          "",
+          "Rejected:",
+          (report.rejected || []).slice(0, 6).map((row) => "Row " + (row.index || "?") + ": " + (row.kind || "unknown") + " - " + (row.reason || "rejected")).join("\\n") || "- none"
         ].join("\\n");
       } catch (error) {
         badge.textContent = "error";

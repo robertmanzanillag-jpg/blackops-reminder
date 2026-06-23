@@ -369,6 +369,16 @@ test("external closeout evidence importer blocks copied CSV template before appl
     assert.equal(report.totals.applied, 0);
     assert.ok(report.totals.rejected > 0);
     assert.match(JSON.stringify(report.rejected), /app_identifier|placeholder|proof/i);
+    assert.ok(report.repairQueue.length > 0);
+    assert.equal(report.repairQueue[0].closeoutId, "developer_app:tiktok");
+    assert.match(report.repairQueue[0].proofPath, /developer_app-tiktok\.md$/);
+    assert.match(report.repairQueue[0].nextStep, /preview again/i);
+    assert.match(report.repairQueue[0].safeProofStarter, /never client secret/i);
+    assert.doesNotMatch(JSON.stringify(report.repairQueue), /access_token=|refresh_token=|client_secret=|password=|cookie=|sk-[A-Za-z0-9_-]{12,}/i);
+    const rawMarkdown = await readFile(reportMarkdownPath, "utf8");
+    const rawCsv = await readFile(reportCsvPath, "utf8");
+    assert.match(rawMarkdown, /## Repair Queue/);
+    assert.match(rawCsv, /repair/);
   } finally {
     if (previousEvidenceCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
     else await writeFile(evidenceCsvPath, previousEvidenceCsv);

@@ -26,6 +26,7 @@ interface CloseoutValidationIndex {
   queuedAccounts: Set<string>;
   queuedDeveloperPlatforms: Set<string>;
   queuedPermissions: Set<string>;
+  queuedRows: Record<string, any>[];
 }
 
 function csvCell(value: unknown): string {
@@ -128,7 +129,81 @@ async function buildCloseoutValidationIndex(): Promise<CloseoutValidationIndex> 
     queuedAccounts,
     queuedDeveloperPlatforms,
     queuedPermissions,
+    queuedRows: Array.isArray(rows) ? rows : [],
   };
+}
+
+function closeoutRowMatchesCsvRow(closeoutRow: any, csvRow: CsvRow): boolean {
+  const lane = String(closeoutRow.lane || "").trim().toLowerCase();
+  const kind = String(csvRow.kind || "").trim().toLowerCase();
+  const platform = String(closeoutRow.platform || "").trim().toLowerCase();
+  const csvPlatform = String(csvRow.platform || "").trim().toLowerCase();
+  const accountId = String(closeoutRow.accountId || "").trim().toLowerCase();
+  const csvAccountId = String(csvRow.account_id || "").trim().toLowerCase();
+  const scope = String(closeoutRow.scope || "").trim();
+  const csvScope = String(csvRow.scope || "").trim();
+  if (!lane || lane !== kind || !platform || platform !== csvPlatform) return false;
+  if (lane === "account") return Boolean(accountId && accountId === csvAccountId);
+  if (lane === "permission") return Boolean(scope && scope === csvScope);
+  return lane === "developer_app";
+}
+
+function repairSafeText(value: unknown): string {
+  const text = String(value || "").trim();
+  if (!text || secretPattern.test(text) || secretQueryParamPattern.test(text)) return "";
+  return text;
+}
+
+function buildRepairQueue(
+  rejected: Record<string, unknown>[],
+  rows: CsvRow[],
+  closeoutIndex: CloseoutValidationIndex,
+): Record<string, unknown>[] {
+  return rejected.map((item) => {
+    const csvIndex = Number(item.index || 0);
+    const row = rows[Math.max(0, csvIndex - 2)] || {};
+    const matched = closeoutIndex.queuedRows.find((candidate) => closeoutRowMatchesCsvRow(candidate, row)) || null;
+    const lane = repairSafeText(row.kind || item.kind || matched?.lane) || "unknown";
+    const platform = repairSafeText(row.platform || matched?.platform);
+    const accountId = repairSafeText(row.account_id || matched?.accountId);
+    const scope = repairSafeText(row.scope || matched?.scope);
+    const requiredStatus = repairSafeText(matched?.requiredCsvStatus || row.status);
+    const proofPath = String(matched?.proofPath || "");
+    const missingCsvFields = Array.isArray(matched?.missingCsvFields) ? matched.missingCsvFields : [];
+    const safeProofStarter = [
+      `# External closeout proof - ${matched?.id || `${lane}:${platform}`}`,
+      "",
+      `- Platform: ${platform}`,
+      `- Lane: ${lane}`,
+      `- Required status: ${requiredStatus}`,
+      "- Public app/account identifier: <paste public id only, never client secret>",
+      "- Proof URL or ticket ID: <paste non-secret portal URL, review URL, or ticket ID>",
+      `- Local proof path: ${proofPath || "<proof path from operator queue>"}`,
+      "- Notes: <20+ characters explaining the real external action and date>",
+      "",
+      "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or private screenshots.",
+    ].join("\n");
+    return {
+      csvRow: csvIndex || null,
+      closeoutId: matched?.id || null,
+      lane,
+      platform,
+      accountId,
+      scope,
+      requiredStatus,
+      reason: item.reason || "Rejected evidence row.",
+      proofPath,
+      portalUrl: matched?.portalUrl || "",
+      docsUrl: matched?.docsUrl || "",
+      missingCsvFields,
+      operatorAction: matched?.operatorAction || matched?.nextStep || "Complete the real external portal action, then replace placeholders with non-secret proof.",
+      csvEditHint: matched?.csvEditHint || "Fill only real non-secret evidence after the portal action is done.",
+      safeProofStarter,
+      nextStep: proofPath
+        ? `Fill ${proofPath} with real non-secret evidence, then update CSV row ${csvIndex || "?"} and preview again.`
+        : `Match CSV row ${csvIndex || "?"} to an external closeout queue item, then preview again.`,
+    };
+  });
 }
 
 function safeOriginFromRedirect(redirectUri: string): string {
@@ -349,6 +424,15 @@ function renderMarkdown(summary: Record<string, any>): string {
     "",
     ...(summary.rejected.length ? summary.rejected.map((item: any) => `- Row ${item.index}: ${item.kind} - ${item.reason}`) : ["- None"]),
     "",
+    "## Repair Queue",
+    "",
+    ...(summary.repairQueue.length ? summary.repairQueue.map((item: any) => [
+      `- CSV row ${item.csvRow || "?"}: ${item.closeoutId || item.lane}`,
+      `  - Reason: ${item.reason}`,
+      `  - Proof: ${item.proofPath || "missing"}`,
+      `  - Next: ${item.nextStep}`,
+    ].join("\n")) : ["- None"]),
+    "",
     "## Next Step",
     "",
     summary.nextStep,
@@ -412,6 +496,7 @@ async function main(): Promise<void> {
       scope: row.scope || "",
     })),
     rejected: [...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])],
+    repairQueue: buildRepairQueue([...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])], rows, closeoutIndex),
     launchEvidenceBatch: batchResult?.launchEvidenceBatch || null,
     nextStep: rejected.length
       ? "Corrige las filas rechazadas en external-closeout-evidence-import.csv. No se aplico evidencia."
@@ -429,6 +514,7 @@ async function main(): Promise<void> {
     "index,kind,account_id,platform,status,scope,result,reason",
     ...summary.accepted.map((row) => [row.index, row.kind, row.accountId, row.platform, row.status, row.scope, "accepted", ""].map(csvCell).join(",")),
     ...summary.rejected.map((row: any) => [row.index || "", row.kind || "", row.accountId || row.account_id || "", row.platform || "", row.status || "", row.scope || "", "rejected", row.reason || ""].map(csvCell).join(",")),
+    ...summary.repairQueue.map((row: any) => [row.csvRow || "", row.lane || "", row.accountId || "", row.platform || "", row.requiredStatus || "", row.scope || "", "repair", row.nextStep || ""].map(csvCell).join(",")),
   ].join("\n") + "\n");
 
   console.log(JSON.stringify({
