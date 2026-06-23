@@ -15829,7 +15829,7 @@ export default function ClippersPage() {
                             </Badge>
                           </div>
                           <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 4).map((row) => (
+                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 8).map((row) => (
                               <div key={`${row.rank}-${row.id}`} className="rounded-md border border-amber-300/10 bg-black/25 p-2">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="min-w-0 truncate text-xs font-medium text-amber-100">Row {row.csvRow || "?"}: {row.id}</p>
@@ -15842,10 +15842,13 @@ export default function ClippersPage() {
                                 {row.missingCsvFields.length > 0 && (
                                   <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
                                 )}
-                                {row.copyPacket && row.rank === 1 && (
-                                  <pre className="mt-2 max-h-36 overflow-auto rounded border border-amber-300/10 bg-black/30 p-2 text-[10px] leading-4 text-amber-50/80 whitespace-pre-wrap">
-                                    {row.copyPacket}
-                                  </pre>
+                                {row.copyPacket && (
+                                  <details className="mt-2 rounded border border-amber-300/10 bg-black/20">
+                                    <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-amber-100">Copy packet</summary>
+                                    <pre className="max-h-44 overflow-auto border-t border-amber-300/10 p-2 text-[10px] leading-4 text-amber-50/80 whitespace-pre-wrap">
+                                      {row.copyPacket}
+                                    </pre>
+                                  </details>
                                 )}
                               </div>
                             ))}
