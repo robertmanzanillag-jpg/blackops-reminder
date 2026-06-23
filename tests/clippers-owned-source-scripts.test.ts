@@ -95,6 +95,7 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(readiness.status, "metricool_mvp_ready_with_external_blockers");
   assert.ok(readiness.externalCloseout.proofFilesNeedRealEvidence > 0);
   assert.ok(readiness.externalCloseout.nextEvidenceRows > 0);
+  assert.match(readiness.externalCloseout.evidenceImportCsvPath, /external-closeout-evidence-import\.csv$/);
   assert.equal(readiness.sourceReadiness.connectedMetricoolRightsReadyAssets, output.connectedMetricoolRightsReadyAssets);
   assert.equal(readiness.sourceReadiness.localOwnedSourceAssets, output.localOwnedSourceAssets);
   assert.equal(readiness.totals.developerAppsApproved, 0);
@@ -1126,6 +1127,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("more external actions in"));
   assert.ok(page.includes("External closeout"));
   assert.ok(page.includes("Evidence CSV rows"));
+  assert.ok(page.includes("Strict import CSV"));
   assert.ok(page.includes("Uses external evidence import schema"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.proofFilesNeedRealEvidence"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.operatorQueueItems"));

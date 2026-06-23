@@ -392,6 +392,7 @@ interface ClipperAccountPermissionReadinessSummary {
     evidenceRepairRows: number;
     operatorActions: number;
     nextEvidenceRows?: number;
+    evidenceImportCsvPath?: string | null;
     nextActionId: string | null;
     nextStep: string;
   };
@@ -16798,6 +16799,9 @@ export default function ClippersPage() {
                     </div>
                   )}
                   <p className="mt-2 break-all text-xs text-zinc-600">Next evidence CSV: {accountPermissionReadiness.nextEvidenceDropPath}</p>
+                  {accountPermissionReadiness.externalCloseout?.evidenceImportCsvPath && (
+                    <p className="mt-1 break-all text-xs text-zinc-600">Strict import CSV: {accountPermissionReadiness.externalCloseout.evidenceImportCsvPath}</p>
+                  )}
                   <p className="mt-1 text-xs text-zinc-600">Uses external evidence import schema: proof, redirect URI, portal URL, docs URL and notes.</p>
                 </>
               ) : (

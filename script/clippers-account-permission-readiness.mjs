@@ -475,6 +475,7 @@ async function main() {
       evidenceRepairRows: externalEvidenceRepairRows,
       operatorActions: externalOperatorActions,
       nextEvidenceRows: closeoutRowsForEvidenceDrop(externalCloseout).length,
+      evidenceImportCsvPath: externalCloseout?.paths?.evidenceCsv || null,
       nextActionId: externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
       nextStep: externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
     },
