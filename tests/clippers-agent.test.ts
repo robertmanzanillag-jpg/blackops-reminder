@@ -282,6 +282,56 @@ test("external closeout evidence CSV template keeps placeholders explicit and sa
   assert.doesNotMatch(csv, /oauth_token=/i);
 });
 
+test("external closeout evidence importer blocks copied CSV template before apply", async () => {
+  const evidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "external-closeout-evidence-import.csv");
+  const reportJsonPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.json");
+  const reportMarkdownPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.md");
+  const reportCsvPath = path.join(process.cwd(), "clippers_workspace", "reports", "clippers-external-closeout-evidence-import-report.csv");
+  const previousEvidenceCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousReportJson = await readFile(reportJsonPath, "utf8").catch(() => null);
+  const previousReportMarkdown = await readFile(reportMarkdownPath, "utf8").catch(() => null);
+  const previousReportCsv = await readFile(reportCsvPath, "utf8").catch(() => null);
+  const template = buildClipperExternalCloseoutEvidenceCsvTemplate([
+    {
+      id: "developer_app:tiktok",
+      lane: "developer_app",
+      platform: "tiktok",
+      proofPath: "clippers_workspace/evidence-drop/external-closeout-proofs/developer_app-tiktok.md",
+      requiredCsvStatus: "submitted",
+      missingCsvFields: ["app_identifier", "proof"],
+      portalUrl: "https://developers.tiktok.com/",
+      redirectUri: "https://app.clipprreview.com/api/clippers/oauth/tiktok/callback",
+      operatorAction: "Create TikTok developer app and capture proof.",
+      csvEditHint: "Fill submitted evidence only after real portal action.",
+    },
+  ]);
+
+  try {
+    await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
+    await writeFile(evidenceCsvPath, template);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(await readFile(reportJsonPath, "utf8"));
+    assert.equal(report.status, "blocked_invalid_evidence");
+    assert.equal(report.totals.accepted, 0);
+    assert.equal(report.totals.applied, 0);
+    assert.ok(report.totals.rejected > 0);
+    assert.match(JSON.stringify(report.rejected), /app_identifier|placeholder|proof/i);
+  } finally {
+    if (previousEvidenceCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousEvidenceCsv);
+    if (previousReportJson === null) await unlink(reportJsonPath).catch(() => undefined);
+    else await writeFile(reportJsonPath, previousReportJson);
+    if (previousReportMarkdown === null) await unlink(reportMarkdownPath).catch(() => undefined);
+    else await writeFile(reportMarkdownPath, previousReportMarkdown);
+    if (previousReportCsv === null) await unlink(reportCsvPath).catch(() => undefined);
+    else await writeFile(reportCsvPath, previousReportCsv);
+  }
+});
+
 test("runClipperDailyPlan creates drafts for each configured account", async () => {
   const userId = "clipper-owner-a";
   const { report, status } = await runClipperDailyPlan({
