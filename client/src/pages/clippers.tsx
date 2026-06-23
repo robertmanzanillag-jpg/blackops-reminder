@@ -953,6 +953,23 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
     status?: string;
     scope?: string;
   }>;
+  repairSummary?: {
+    status: string;
+    totalRejected: number;
+    byKind: Array<{ kind: string; count: number }>;
+    topReasons: Array<{ reason: string; count: number }>;
+    missingFields: Array<{ field: string; count: number }>;
+    nextRepair: {
+      csvRow: number | null;
+      closeoutId: string | null;
+      lane: string;
+      platform: string;
+      proofPath: string;
+      reason: string;
+      nextStep: string;
+    } | null;
+    nextStep: string;
+  };
   repairQueue?: Array<{
     csvRow: number | null;
     closeoutId: string | null;
@@ -17020,6 +17037,33 @@ export default function ClippersPage() {
                                 {externalCloseoutEvidenceImport.repairQueue?.length || 0} fixes
                               </Badge>
                             </div>
+                            {externalCloseoutEvidenceImport.repairSummary && (
+                              <div className="mt-2 rounded-md border border-amber-300/10 bg-amber-950/10 p-2" data-testid="clippers-external-closeout-repair-summary">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-medium text-amber-100">Repair summary</p>
+                                    <p className="mt-1 text-[11px] leading-4 text-zinc-500">{externalCloseoutEvidenceImport.repairSummary.nextStep}</p>
+                                  </div>
+                                  <Badge className="w-fit border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
+                                    {externalCloseoutEvidenceImport.repairSummary.totalRejected} rejected
+                                  </Badge>
+                                </div>
+                                <div className="mt-2 grid gap-2 text-[10px] text-zinc-500 md:grid-cols-3">
+                                  <p>By kind: {externalCloseoutEvidenceImport.repairSummary.byKind.map((item) => `${item.kind} ${item.count}`).join(" · ") || "none"}</p>
+                                  <p>Missing: {externalCloseoutEvidenceImport.repairSummary.missingFields.map((item) => `${item.field} ${item.count}`).join(" · ") || "none"}</p>
+                                  <p className="break-all">Next proof: {externalCloseoutEvidenceImport.repairSummary.nextRepair?.proofPath || "none"}</p>
+                                </div>
+                                {externalCloseoutEvidenceImport.repairSummary.topReasons.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {externalCloseoutEvidenceImport.repairSummary.topReasons.slice(0, 3).map((item) => (
+                                      <p key={item.reason} className="rounded border border-white/10 bg-black/20 px-2 py-1 text-[10px] leading-4 text-amber-100/80">
+                                        {item.count}x {item.reason}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             <div className="mt-2 grid gap-2 xl:grid-cols-2">
                               {externalCloseoutEvidenceImport.repairQueue?.slice(0, 4).map((row, index) => (
                                 <div key={`${row.csvRow || index}-${row.closeoutId || row.lane}`} className="rounded-md border border-amber-300/10 bg-amber-300/5 p-2">

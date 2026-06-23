@@ -812,6 +812,10 @@ test("external closeout evidence importer can apply accepted rows while leaving 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
     assert.equal(report.mode, "apply_ready");
     assert.ok(report.nextStep.includes("filas rechazadas restantes"));
+    assert.equal(report.repairSummary.status, "needs_repair");
+    assert.equal(report.repairSummary.totalRejected, 1);
+    assert.ok(report.repairSummary.topReasons.length > 0);
+    assert.ok(report.repairSummary.nextStep.includes("Fix CSV row"));
     const accountEvidence = JSON.parse(await readFile(accountEvidencePath, "utf8"));
     assert.equal(accountEvidence.status, "verified");
     assert.match(accountEvidence.notes, /meme-radar-youtube-proof/);
@@ -1260,6 +1264,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-external-work-run-steps"'));
   assert.ok(page.includes('data-testid="clippers-external-work-run-portal-sessions"'));
   assert.ok(page.includes('data-testid="copy-clippers-external-work-run-button"'));
+  assert.ok(page.includes('data-testid="clippers-external-closeout-repair-summary"'));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));

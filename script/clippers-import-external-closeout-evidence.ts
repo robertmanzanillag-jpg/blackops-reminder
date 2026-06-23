@@ -206,6 +206,51 @@ function buildRepairQueue(
   });
 }
 
+function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Record<string, unknown>[]): Record<string, unknown> {
+  const byKind = new Map<string, number>();
+  const byReason = new Map<string, number>();
+  const missingFields = new Map<string, number>();
+  for (const item of rejected) {
+    const kind = String(item.kind || "unknown");
+    const reason = String(item.reason || "Unknown rejection");
+    byKind.set(kind, (byKind.get(kind) || 0) + 1);
+    byReason.set(reason, (byReason.get(reason) || 0) + 1);
+  }
+  for (const row of repairQueue) {
+    for (const field of Array.isArray(row.missingCsvFields) ? row.missingCsvFields : []) {
+      const key = String(field || "").trim();
+      if (key) missingFields.set(key, (missingFields.get(key) || 0) + 1);
+    }
+  }
+  const topReasons = Array.from(byReason.entries())
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason))
+    .slice(0, 5);
+  const missingFieldRows = Array.from(missingFields.entries())
+    .map(([field, count]) => ({ field, count }))
+    .sort((left, right) => right.count - left.count || left.field.localeCompare(right.field));
+  const firstRepair = repairQueue[0] || null;
+  return {
+    status: rejected.length ? "needs_repair" : "clean",
+    totalRejected: rejected.length,
+    byKind: Array.from(byKind.entries()).map(([kind, count]) => ({ kind, count })),
+    topReasons,
+    missingFields: missingFieldRows,
+    nextRepair: firstRepair ? {
+      csvRow: firstRepair.csvRow || null,
+      closeoutId: firstRepair.closeoutId || null,
+      lane: firstRepair.lane || "unknown",
+      platform: firstRepair.platform || "",
+      proofPath: firstRepair.proofPath || "",
+      reason: firstRepair.reason || "",
+      nextStep: firstRepair.nextStep || "",
+    } : null,
+    nextStep: firstRepair
+      ? `Fix CSV row ${firstRepair.csvRow || "?"} (${firstRepair.closeoutId || firstRepair.lane || "external evidence"}) first, then rerun Validate.`
+      : "No rejected evidence rows remain.",
+  };
+}
+
 function safeOriginFromRedirect(redirectUri: string): string {
   try {
     const url = new URL(redirectUri);
@@ -424,6 +469,18 @@ function renderMarkdown(summary: Record<string, any>): string {
     "",
     ...(summary.rejected.length ? summary.rejected.map((item: any) => `- Row ${item.index}: ${item.kind} - ${item.reason}`) : ["- None"]),
     "",
+    "## Repair Summary",
+    "",
+    `- Status: ${summary.repairSummary.status}`,
+    `- Total rejected: ${summary.repairSummary.totalRejected}`,
+    `- Next step: ${summary.repairSummary.nextStep}`,
+    "",
+    "Top reasons:",
+    ...(summary.repairSummary.topReasons.length ? summary.repairSummary.topReasons.map((item: any) => `- ${item.count}x ${item.reason}`) : ["- None"]),
+    "",
+    "Missing fields:",
+    ...(summary.repairSummary.missingFields.length ? summary.repairSummary.missingFields.map((item: any) => `- ${item.field}: ${item.count}`) : ["- None"]),
+    "",
     "## Repair Queue",
     "",
     ...(summary.repairQueue.length ? summary.repairQueue.map((item: any) => [
@@ -491,6 +548,9 @@ async function main(): Promise<void> {
       ? "Evidencia importada. Regenera account/operational readiness y revisa que Metricool siga approval_required."
       : "No habia filas aplicables.";
   }
+  const allRejected = [...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])];
+  const repairQueue = buildRepairQueue(allRejected, rows, closeoutIndex);
+  const repairSummary = buildRepairSummary(allRejected, repairQueue);
   const summary = {
     status,
     mode: applyReady ? "apply_ready" : apply ? "apply" : "preview",
@@ -515,8 +575,9 @@ async function main(): Promise<void> {
       status: row.status || "",
       scope: row.scope || "",
     })),
-    rejected: [...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])],
-    repairQueue: buildRepairQueue([...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])], rows, closeoutIndex),
+    rejected: allRejected,
+    repairSummary,
+    repairQueue,
     launchEvidenceBatch: batchResult?.launchEvidenceBatch || null,
     nextStep,
   };
