@@ -6776,7 +6776,7 @@ function runClipperJsonScript(scriptPath: string, label: string): Promise<unknow
   });
 }
 
-async function refreshClipperExternalCloseoutPack(): Promise<void> {
+export async function runClipperExternalCloseoutPack(): Promise<void> {
   await runClipperJsonScript("script/clippers-external-closeout-pack.mjs", "External closeout pack");
 }
 const CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.md");
@@ -25140,7 +25140,7 @@ export async function prepareClipperExternalExecutionHandoff(userId = getSystemU
 export async function prepareClipperExternalExecutionSession(userId = getSystemUserId()): Promise<{ externalExecutionSession: ClipperExternalExecutionSessionSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
-  await refreshClipperExternalCloseoutPack();
+  await runClipperExternalCloseoutPack();
   const { externalExecutionHandoff } = await prepareClipperExternalExecutionHandoff(userId);
   const draftSummary = await buildExternalExecutionSessionSummary({ externalExecutionHandoff });
   const externalExecutionSession: ClipperExternalExecutionSessionSummary = {
