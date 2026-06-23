@@ -2358,6 +2358,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/prepare-external-next-work-run", async (_req, res) => {
+    try {
+      await runClipperExternalCloseoutPack();
+      res.json({
+        externalCloseoutNextWorkRun: await readClipperExternalCloseoutNextWorkRun(),
+        externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers external next work run" });
+    }
+  });
+
   app.get("/api/clippers/external-closeout-evidence-import", async (_req, res) => {
     try {
       res.json({ externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport() });

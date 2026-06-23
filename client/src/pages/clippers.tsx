@@ -8101,6 +8101,31 @@ export default function ClippersPage() {
     },
   });
 
+  const externalNextWorkRunMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-external-next-work-run", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar external next work run");
+      return data as {
+        externalCloseoutNextWorkRun: ClipperExternalNextWorkRunSummary;
+        externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-next-work-run"], data.externalCloseoutNextWorkRun);
+      if (data.externalCloseoutNextAction) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
+      }
+      toast({
+        title: "Next work run listo",
+        description: `${data.externalCloseoutNextWorkRun.actions} acciones externas; ${data.externalCloseoutNextWorkRun.status}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar next work run", description: error.message, variant: "destructive" });
+    },
+  });
+
   const previewExternalCloseoutEvidenceImportMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/preview-external-closeout-evidence-import", { method: "POST" });
@@ -16255,9 +16280,23 @@ export default function ClippersPage() {
                                 {visibleExternalNextWorkRun.actions} actions · {visibleExternalNextWorkRun.targetMinutes} minutes · {visibleExternalNextWorkRun.status}
                               </p>
                             </div>
-                            <Badge className="w-fit border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
-                              operator first
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="w-fit border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
+                                operator first
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => externalNextWorkRunMutation.mutate()}
+                                disabled={externalNextWorkRunMutation.isPending}
+                                className="h-8 border-amber-300/20 bg-transparent text-xs text-amber-100 hover:bg-amber-300/10"
+                                data-testid="prepare-clippers-external-next-work-run-button"
+                              >
+                                {externalNextWorkRunMutation.isPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-2 h-3 w-3" />}
+                                Refresh work run
+                              </Button>
+                            </div>
                           </div>
                           <div className="mt-3 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-2">
                             <p className="break-all">Evidence CSV: {visibleExternalNextWorkRun.evidenceCsvPath}</p>
