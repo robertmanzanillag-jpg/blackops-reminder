@@ -111,6 +111,28 @@ export function enrichClipperExternalCloseoutOperatorRows(rows: unknown): any[] 
   }));
 }
 
+export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): string {
+  const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
+  if (!enrichedRows.length) return "";
+  return [
+    "Clippers External Closeout Batch Packet",
+    "",
+    `Actions: ${enrichedRows.length}`,
+    "Use this for one portal-work session. Complete only actions that are real in the external portal, then fill proof files and import the evidence CSV.",
+    "",
+    "Safety guardrails:",
+    "- Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes, signed URLs or private screenshots.",
+    "- Do not mark any item done until the matching proof file has real non-placeholder evidence.",
+    "- Metricool stays approval_required; this packet does not enable automatic publishing.",
+    "",
+    ...enrichedRows.flatMap((row: any, index: number) => [
+      `--- Action ${index + 1}: ${row.id} ---`,
+      row.copyPacket,
+      "",
+    ]),
+  ].join("\n");
+}
+
 let revenueEngineRouteQueue = Promise.resolve();
 
 export async function registerRoutes(
@@ -188,25 +210,31 @@ export async function registerRoutes(
   const readClipperExternalCloseoutPack = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-pack.json", "utf8");
     const parsed = JSON.parse(raw);
+    const operatorQueue = enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue);
     return {
       ...parsed,
-      operatorQueue: enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue),
+      operatorQueue,
+      batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
     };
   };
   const readClipperExternalCloseoutProofTodo = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-proof-todo.json", "utf8");
     const parsed = JSON.parse(raw);
+    const operatorQueue = enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue);
     return {
       ...parsed,
-      operatorQueue: enrichClipperExternalCloseoutOperatorRows(parsed.operatorQueue),
+      operatorQueue,
+      batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(operatorQueue),
     };
   };
   const readClipperExternalCloseoutOperatorQueue = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-operator-queue.json", "utf8");
     const parsed = JSON.parse(raw);
+    const rows = enrichClipperExternalCloseoutOperatorRows(parsed.rows);
     return {
       ...parsed,
-      rows: enrichClipperExternalCloseoutOperatorRows(parsed.rows),
+      rows,
+      batchCopyPacket: buildClipperExternalCloseoutBatchCopyPacket(rows),
     };
   };
   const readClipperExternalCloseoutNextAction = async () => {

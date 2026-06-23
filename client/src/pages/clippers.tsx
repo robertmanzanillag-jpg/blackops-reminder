@@ -633,6 +633,7 @@ interface ClipperExternalCloseoutPackSummary {
   tasks: ClipperExternalCloseoutTask[];
   proofTodo?: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  batchCopyPacket?: string;
   goLiveAudit?: ClipperExternalGoLiveAuditSummary;
   actionSheet?: {
     status: "needs_operator" | "complete";
@@ -734,6 +735,7 @@ interface ClipperExternalCloseoutProofTodoSummary {
   totals: ClipperExternalCloseoutPackSummary["totals"];
   rows: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  batchCopyPacket?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
 }
 
@@ -747,6 +749,7 @@ interface ClipperExternalCloseoutOperatorQueueSummary {
     high: number;
   };
   rows: ClipperExternalCloseoutOperatorQueueRow[];
+  batchCopyPacket?: string;
   artifactSafety?: ClipperExternalCloseoutArtifactSafety;
   nextStep: string;
 }
@@ -7554,6 +7557,16 @@ export default function ClippersPage() {
       return data.externalCloseoutNextAction as ClipperExternalCloseoutNextActionSummary;
     },
   });
+  const visibleExternalCloseoutOperatorRows = externalCloseoutOperatorQueue
+    ? externalCloseoutOperatorQueue.rows
+    : externalCloseoutProofTodo
+      ? externalCloseoutProofTodo.operatorQueue || []
+      : externalCloseoutPack?.operatorQueue || [];
+  const visibleExternalCloseoutBatchPacket = externalCloseoutOperatorQueue
+    ? externalCloseoutOperatorQueue.batchCopyPacket || ""
+    : externalCloseoutProofTodo
+      ? externalCloseoutProofTodo.batchCopyPacket || ""
+      : externalCloseoutPack?.batchCopyPacket || "";
   const credentialEnvVarOptions = useMemo(() => {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
@@ -16290,13 +16303,27 @@ export default function ClippersPage() {
                           {externalCloseoutProofTodo?.paths.operatorQueueMarkdown || externalCloseoutPack.paths.operatorQueueMarkdown || "clippers_workspace/reports/clippers-external-closeout-operator-queue.md"}
                         </p>
                       </div>
-                      <Badge className="w-fit border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
-                        {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).length} actions
-                      </Badge>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {visibleExternalCloseoutBatchPacket && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                            onClick={() => void copyExternalCloseoutPacket(visibleExternalCloseoutBatchPacket)}
+                          >
+                            <Copy className="mr-1 h-3 w-3" />
+                            Copy all
+                          </Button>
+                        )}
+                        <Badge className="w-fit border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
+                          {visibleExternalCloseoutOperatorRows.length} actions
+                        </Badge>
+                      </div>
                     </div>
-                    {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).length > 0 ? (
+                    {visibleExternalCloseoutOperatorRows.length > 0 ? (
                       <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                        {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).slice(0, 4).map((row) => (
+                        {visibleExternalCloseoutOperatorRows.slice(0, 4).map((row) => (
                           <div key={row.id} className="rounded-md border border-emerald-300/10 bg-black/25 p-2">
                             <div className="flex items-start justify-between gap-2">
                               <p className="min-w-0 truncate text-xs font-medium text-emerald-100">#{row.rank} {row.id}</p>
