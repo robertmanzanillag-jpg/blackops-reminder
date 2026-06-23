@@ -17568,7 +17568,8 @@ function launchEvidenceDropFileIgnored(fileName: string): boolean {
     || fileName === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH)
     || fileName === path.basename(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH)
     || fileName === path.basename(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH)
-    || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH);
+    || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH)
+    || fileName === "external-closeout-evidence-import.csv";
 }
 
 function parseLaunchEvidenceDropRaw(raw: string): Record<string, unknown>[] {
@@ -40021,9 +40022,16 @@ function renderExternalPortalLauncherHtml(
     .stat strong { display: block; margin-top: 6px; font-size: 22px; }
     .notice { border: 1px solid rgba(252, 211, 77, 0.35); background: rgba(252, 211, 77, 0.08); border-radius: 8px; padding: 12px; color: #fde68a; }
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .gate { border: 1px solid rgba(103, 232, 249, 0.24); background: #0d1724; border-radius: 8px; padding: 12px; margin: 14px 0 18px; }
+    .gate-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .gate-result { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: #05070b; padding: 10px; min-height: 76px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #d4d4d8; overflow-x: auto; }
     .copy-btn { border: 1px solid rgba(103, 232, 249, 0.28); border-radius: 6px; background: rgba(103, 232, 249, 0.08); color: #cffafe; cursor: pointer; font-weight: 700; padding: 7px 10px; }
     .copy-btn:hover { background: rgba(103, 232, 249, 0.14); }
     .copy-btn.copied { border-color: rgba(134, 239, 172, 0.4); color: #bbf7d0; background: rgba(134, 239, 172, 0.12); }
+    .gate-btn { border: 1px solid rgba(134, 239, 172, 0.28); border-radius: 6px; background: rgba(134, 239, 172, 0.09); color: #dcfce7; cursor: pointer; font-weight: 800; padding: 7px 10px; }
+    .gate-btn:hover { background: rgba(134, 239, 172, 0.15); }
+    .gate-btn.secondary { border-color: rgba(103, 232, 249, 0.28); background: rgba(103, 232, 249, 0.08); color: #cffafe; }
+    .gate-btn:disabled { opacity: 0.42; cursor: not-allowed; }
     .focus-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .focus-card { border: 1px solid rgba(103, 232, 249, 0.24); background: #0e1726; border-radius: 8px; padding: 12px; }
     .focus-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
@@ -40111,6 +40119,41 @@ function renderExternalPortalLauncherHtml(
       <div class="stat"><span>OAuth/credentials</span><strong>${escapeHtml(launcher.oauthTasks + launcher.credentialTasks)}</strong></div>
     </section>
     <p class="notice">Launch Evidence Batch rows are templates. Replace placeholders with real profile URLs, app IDs, approval tickets, public URLs, proof paths and notes before importing.</p>
+    <section class="gate" aria-label="External closeout evidence import gate">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Evidence Import Gate</h2>
+          <p>Fill the closeout CSV with real proof, validate it, then apply only when the gate reports <code>ready_to_apply</code>. Apply refreshes account/permission and operational readiness while keeping Metricool in approval mode.</p>
+          <p><strong>CSV:</strong> <code>clippers_workspace/evidence-drop/external-closeout-evidence-import.csv</code></p>
+          <p><strong>Report:</strong> <code>clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md</code></p>
+        </div>
+        <span id="external-closeout-import-badge" class="badge waiting">not checked</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="gate-btn secondary" data-closeout-action="validate">Validate CSV</button>
+        <button type="button" class="gate-btn" data-closeout-action="apply" disabled>Apply clean import</button>
+        <a href="/api/clippers/external-closeout-evidence-import" target="_blank" rel="noreferrer">Open JSON report</a>
+      </div>
+      <pre id="external-closeout-import-result" class="gate-result">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
+    </section>
+    <section class="gate" aria-label="External closeout proof todo">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Proof Todo</h2>
+          <p>Use this checklist while you are inside Metricool, TikTok, Meta and Google portals. It lists the exact proof file to fill and the exact CSV status to use after the external action is real.</p>
+          <p><strong>Proof todo:</strong> <code>clippers_workspace/reports/clippers-external-closeout-proof-todo.md</code></p>
+          <p><strong>Operator queue:</strong> <code>clippers_workspace/reports/clippers-external-closeout-operator-queue.md</code></p>
+          <p><strong>Proof dir:</strong> <code>clippers_workspace/evidence-drop/external-closeout-proofs</code></p>
+        </div>
+        <span id="external-closeout-proof-todo-badge" class="badge waiting">not loaded</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="gate-btn secondary" data-proof-todo-action="load">Load proof todo</button>
+        <a href="/api/clippers/external-closeout-proof-todo" target="_blank" rel="noreferrer">Open JSON todo</a>
+        <a href="/api/clippers/external-closeout-operator-queue" target="_blank" rel="noreferrer">Open operator queue</a>
+      </div>
+      <pre id="external-closeout-proof-todo-result" class="gate-result">Load the proof todo before editing the CSV. Do not paste tokens, passwords, cookies, client secrets, recovery codes or private screenshots.</pre>
+    </section>
     <section class="permission-section" aria-label="Next focus run">
       <h2>Next Focus Run</h2>
       <p>${escapeHtml(externalExecutionSession.focusRun.label)}. Estimated time: ${escapeHtml(externalExecutionSession.focusRun.estimatedMinutes)} minutes. Complete these first, then import evidence and regenerate the command center.</p>
@@ -40255,6 +40298,93 @@ function renderExternalPortalLauncherHtml(
       const target = targetId ? document.getElementById(targetId) : null;
       const text = target ? target.value || target.textContent || "" : button.getAttribute("data-copy-text") || "";
       copyLauncherText(text, button);
+    });
+
+    async function runCloseoutImportGate(mode) {
+      const result = document.getElementById("external-closeout-import-result");
+      const badge = document.getElementById("external-closeout-import-badge");
+      const applyButton = document.querySelector("[data-closeout-action='apply']");
+      const endpoint = mode === "apply"
+        ? "/api/clippers/apply-external-closeout-evidence-import"
+        : "/api/clippers/preview-external-closeout-evidence-import";
+      result.textContent = mode === "apply" ? "Applying clean import..." : "Validating CSV...";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: mode === "apply" ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" } : undefined
+        });
+        const payload = await response.json();
+        const report = payload.externalCloseoutEvidenceImport || {};
+        const totals = report.totals || {};
+        badge.textContent = report.status || (response.ok ? "ok" : "blocked");
+        badge.className = "badge " + (report.status === "import_applied" ? "do_now" : report.status === "ready_to_apply" ? "do_now" : "blocked");
+        if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Status: " + (report.status || payload.error || "unknown"),
+          "Mode: " + (report.mode || mode),
+          "Rows: " + (totals.rowsScanned ?? 0),
+          "Accepted: " + (totals.accepted ?? 0),
+          "Rejected: " + (totals.rejected ?? 0),
+          "Applied: " + (totals.applied ?? 0),
+          "",
+          report.nextStep || payload.error || "",
+          "",
+          (report.rejected || []).slice(0, 6).map((row) => "Row " + (row.index || "?") + ": " + (row.kind || "unknown") + " - " + (row.reason || "rejected")).join("\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        if (applyButton) applyButton.disabled = true;
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-closeout-action]");
+      if (!button) return;
+      runCloseoutImportGate(button.getAttribute("data-closeout-action"));
+    });
+
+    async function loadExternalCloseoutProofTodo() {
+      const result = document.getElementById("external-closeout-proof-todo-result");
+      const badge = document.getElementById("external-closeout-proof-todo-badge");
+      result.textContent = "Loading proof todo...";
+      try {
+        const response = await fetch("/api/clippers/external-closeout-proof-todo");
+        const payload = await response.json();
+        const todo = payload.externalCloseoutProofTodo || {};
+        const totals = todo.totals || {};
+        const rows = todo.rows || [];
+        const operatorQueue = todo.operatorQueue || [];
+        badge.textContent = (operatorQueue.length || totals.proofFilesNeedRealEvidence || rows.length) + " pending";
+        badge.className = "badge " + ((totals.proofFilesNeedRealEvidence || 0) > 0 ? "waiting" : "do_now");
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Rows: " + rows.length,
+          "Operator queue: " + operatorQueue.length,
+          "Proofs needing real evidence: " + (totals.proofFilesNeedRealEvidence ?? 0),
+          "Proofs filled: " + (totals.proofFilesFilled ?? 0),
+          "",
+          (operatorQueue.length ? operatorQueue : rows).slice(0, 8).map((row) => [
+            (row.rank ? "#" + row.rank + " " : "") + (row.id || "unknown"),
+            "status=" + (row.requiredCsvStatus || "unknown"),
+            "missing=" + ((row.missingCsvFields || []).join(", ") || "proof/evidence"),
+            row.operatorAction || row.csvEditHint || "",
+            "proof=" + (row.proofPath || "missing")
+          ].join("\\n  ")).join("\\n\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-proof-todo-action='load']");
+      if (!button) return;
+      loadExternalCloseoutProofTodo();
     });
   </script>
 </body>

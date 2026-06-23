@@ -125,9 +125,283 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-pack.json", "utf8");
     return JSON.parse(raw);
   };
+  const readClipperExternalCloseoutProofTodo = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-proof-todo.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperExternalCloseoutOperatorQueue = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-operator-queue.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperExternalCloseoutNextAction = async () => {
+    const operatorQueue = await readClipperExternalCloseoutOperatorQueue();
+    const nextAction = operatorQueue.rows?.[0] || null;
+    const copyPacket = nextAction ? [
+      `Next external action: ${nextAction.id}`,
+      `Action: ${nextAction.operatorAction}`,
+      `Portal: ${nextAction.portalUrl || "n/a"}`,
+      `Proof file: ${nextAction.proofPath}`,
+      `Required CSV status: ${nextAction.requiredCsvStatus}`,
+      `Missing CSV fields: ${(nextAction.missingCsvFields || []).join(", ") || "none"}`,
+      `CSV hint: ${nextAction.csvEditHint}`,
+      "Do not paste passwords, cookies, client secrets, OAuth tokens, recovery codes, signed URLs or private screenshots.",
+    ].join("\n") : "";
+    return {
+      generatedAt: operatorQueue.generatedAt,
+      status: nextAction ? "needs_operator" : "complete",
+      paths: operatorQueue.paths,
+      totals: operatorQueue.totals,
+      nextAction,
+      copyPacket,
+      nextStep: nextAction?.operatorAction || operatorQueue.nextStep || "No external closeout operator actions remain.",
+    };
+  };
   const readClipperExternalCloseoutEvidenceImport = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-evidence-import-report.json", "utf8");
     return JSON.parse(raw);
+  };
+  const readTextWithTimeout = async (filePath: string, timeoutMs: number) => Promise.race([
+    readNodeFile(filePath, "utf8"),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+  const minimalExternalPortalLauncherHtml = () => ensureExternalCloseoutGateInLauncherHtml(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clippers External Portal Launcher</title>
+  <style>
+    :root { color-scheme: dark; --bg: #080a0f; --panel: #111521; --line: #273044; --text: #f8fafc; --muted: #a1a1aa; --cyan: #67e8f9; --amber: #fcd34d; --green: #86efac; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    main { width: min(1100px, calc(100vw - 32px)); margin: 0 auto; padding: 28px 0 40px; }
+    h1 { margin: 0; font-size: 26px; letter-spacing: 0; }
+    h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: 0; }
+    p { color: var(--muted); line-height: 1.55; }
+    a { color: var(--cyan); font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { border: 1px solid var(--line); border-radius: 4px; background: #05070b; padding: 1px 4px; color: #e5e7eb; }
+    .notice, .gate { border: 1px solid rgba(252, 211, 77, 0.35); background: rgba(252, 211, 77, 0.08); border-radius: 8px; padding: 12px; margin: 14px 0; }
+    .gate { border-color: rgba(103, 232, 249, 0.24); background: #0d1724; }
+    .gate-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .copy-btn { border: 1px solid rgba(103, 232, 249, 0.28); border-radius: 6px; background: rgba(103, 232, 249, 0.08); color: #cffafe; cursor: pointer; font-weight: 700; padding: 7px 10px; }
+    .copy-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+    .badge { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge.do_now { border-color: rgba(134, 239, 172, 0.35); color: var(--green); background: rgba(134, 239, 172, 0.08); }
+    .badge.blocked { border-color: rgba(253, 164, 175, 0.35); color: #fda4af; background: rgba(253, 164, 175, 0.08); }
+    .badge.waiting { border-color: rgba(252, 211, 77, 0.35); color: var(--amber); background: rgba(252, 211, 77, 0.08); }
+    .permission-section { margin: 18px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Clippers External Portal Launcher</h1>
+    <p class="notice">Fast fallback launcher. The full cached launcher was not available quickly, but the external closeout import gate and official portal links are available.</p>
+    <section class="permission-section" aria-label="Next focus run">
+      <h2>Official Portals</h2>
+      <p><a href="https://app.metricool.com/" target="_blank" rel="noreferrer">Metricool</a> · <a href="https://developers.tiktok.com/" target="_blank" rel="noreferrer">TikTok Developers</a> · <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer">Meta Developers</a> · <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noreferrer">Google Cloud YouTube API</a></p>
+    </section>
+  </main>
+  <script></script>
+</body>
+</html>`);
+  const ensureExternalCloseoutGateInLauncherHtml = (html: string) => {
+    const gateHtml = `
+    <section class="gate" aria-label="External closeout evidence import gate">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Evidence Import Gate</h2>
+          <p>Fill the closeout CSV with real proof, validate it, then apply only when the gate reports <code>ready_to_apply</code>. Apply refreshes account/permission and operational readiness while keeping Metricool in approval mode.</p>
+          <p><strong>CSV:</strong> <code>clippers_workspace/evidence-drop/external-closeout-evidence-import.csv</code></p>
+          <p><strong>Report:</strong> <code>clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md</code></p>
+        </div>
+        <span id="external-closeout-import-badge" class="badge waiting">not checked</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="copy-btn" data-closeout-action="validate">Validate CSV</button>
+        <button type="button" class="copy-btn" data-closeout-action="apply" disabled>Apply clean import</button>
+        <a href="/api/clippers/external-closeout-evidence-import" target="_blank" rel="noreferrer">Open JSON report</a>
+      </div>
+      <pre id="external-closeout-import-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:76px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
+    </section>`;
+    const proofTodoHtml = `
+    <section class="gate" aria-label="External closeout proof todo">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Proof Todo</h2>
+          <p>Use this checklist while you are inside Metricool, TikTok, Meta and Google portals. It lists the exact proof file to fill and the exact CSV status to use after the external action is real.</p>
+          <p><strong>Proof todo:</strong> <code>clippers_workspace/reports/clippers-external-closeout-proof-todo.md</code></p>
+          <p><strong>Operator queue:</strong> <code>clippers_workspace/reports/clippers-external-closeout-operator-queue.md</code></p>
+          <p><strong>Proof dir:</strong> <code>clippers_workspace/evidence-drop/external-closeout-proofs</code></p>
+        </div>
+        <span id="external-closeout-proof-todo-badge" class="badge waiting">not loaded</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="copy-btn" data-proof-todo-action="load">Load proof todo</button>
+        <a href="/api/clippers/external-closeout-proof-todo" target="_blank" rel="noreferrer">Open JSON todo</a>
+        <a href="/api/clippers/external-closeout-operator-queue" target="_blank" rel="noreferrer">Open operator queue</a>
+      </div>
+      <pre id="external-closeout-proof-todo-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:76px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Load the proof todo before editing the CSV. Do not paste tokens, passwords, cookies, client secrets, recovery codes or private screenshots.</pre>
+    </section>`;
+    const goLiveAuditHtml = `
+    <section class="gate" aria-label="External go-live audit repair queue">
+      <div class="gate-head">
+        <div>
+          <h2>External Go-Live Audit + Repair Queue</h2>
+          <p>Load this before portal work to see the current work blocks and the rejected evidence rows mapped back to proof files. This never enables automatic publishing.</p>
+          <p><strong>Audit:</strong> <code>clippers_workspace/reports/clippers-external-go-live-audit.md</code></p>
+        </div>
+        <span id="external-go-live-audit-badge" class="badge waiting">not loaded</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="copy-btn" data-go-live-audit-action="load">Load audit</button>
+        <a href="/api/clippers/external-closeout-pack" target="_blank" rel="noreferrer">Open closeout JSON</a>
+        <a href="/api/clippers/external-closeout-next-action" target="_blank" rel="noreferrer">Open next action</a>
+      </div>
+      <pre id="external-go-live-audit-result" style="margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#05070b;padding:10px;min-height:96px;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#d4d4d8;overflow-x:auto;">Load the audit to see work blocks and repair queue.</pre>
+    </section>`;
+    const gateScript = `
+    async function runCloseoutImportGate(mode) {
+      const result = document.getElementById("external-closeout-import-result");
+      const badge = document.getElementById("external-closeout-import-badge");
+      const applyButton = document.querySelector("[data-closeout-action='apply']");
+      const endpoint = mode === "apply" ? "/api/clippers/apply-external-closeout-evidence-import" : "/api/clippers/preview-external-closeout-evidence-import";
+      result.textContent = mode === "apply" ? "Applying clean import..." : "Validating CSV...";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: mode === "apply" ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" } : undefined
+        });
+        const payload = await response.json();
+        const report = payload.externalCloseoutEvidenceImport || {};
+        const totals = report.totals || {};
+        badge.textContent = report.status || (response.ok ? "ok" : "blocked");
+        badge.className = "badge " + (report.status === "import_applied" || report.status === "ready_to_apply" ? "do_now" : "blocked");
+        if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Status: " + (report.status || payload.error || "unknown"),
+          "Mode: " + (report.mode || mode),
+          "Rows: " + (totals.rowsScanned ?? 0),
+          "Accepted: " + (totals.accepted ?? 0),
+          "Rejected: " + (totals.rejected ?? 0),
+          "Applied: " + (totals.applied ?? 0),
+          "",
+          report.nextStep || payload.error || "",
+          "",
+          (report.rejected || []).slice(0, 6).map((row) => "Row " + (row.index || "?") + ": " + (row.kind || "unknown") + " - " + (row.reason || "rejected")).join("\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        if (applyButton) applyButton.disabled = true;
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+    async function loadExternalCloseoutProofTodo() {
+      const result = document.getElementById("external-closeout-proof-todo-result");
+      const badge = document.getElementById("external-closeout-proof-todo-badge");
+      result.textContent = "Loading proof todo...";
+      try {
+        const response = await fetch("/api/clippers/external-closeout-proof-todo");
+        const payload = await response.json();
+        const todo = payload.externalCloseoutProofTodo || {};
+        const totals = todo.totals || {};
+        const rows = todo.rows || [];
+        const operatorQueue = todo.operatorQueue || [];
+        badge.textContent = (operatorQueue.length || totals.proofFilesNeedRealEvidence || rows.length) + " pending";
+        badge.className = "badge " + ((totals.proofFilesNeedRealEvidence || 0) > 0 ? "waiting" : "do_now");
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Rows: " + rows.length,
+          "Operator queue: " + operatorQueue.length,
+          "Proofs needing real evidence: " + (totals.proofFilesNeedRealEvidence ?? 0),
+          "Proofs filled: " + (totals.proofFilesFilled ?? 0),
+          "",
+          (operatorQueue.length ? operatorQueue : rows).slice(0, 8).map((row) => [
+            (row.rank ? "#" + row.rank + " " : "") + (row.id || "unknown"),
+            "status=" + (row.requiredCsvStatus || "unknown"),
+            "missing=" + ((row.missingCsvFields || []).join(", ") || "proof/evidence"),
+            row.operatorAction || row.csvEditHint || "",
+            "proof=" + (row.proofPath || "missing")
+          ].join("\\n  ")).join("\\n\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+    async function loadExternalGoLiveAudit() {
+      const result = document.getElementById("external-go-live-audit-result");
+      const badge = document.getElementById("external-go-live-audit-badge");
+      result.textContent = "Loading go-live audit...";
+      try {
+        const response = await fetch("/api/clippers/external-closeout-pack");
+        const payload = await response.json();
+        const pack = payload.externalCloseoutPack || {};
+        const audit = pack.goLiveAudit || {};
+        const totals = audit.totals || {};
+        const workBlocks = audit.workBlocks || [];
+        const repairs = audit.evidenceRepairQueue || [];
+        badge.textContent = audit.status || pack.status || "unknown";
+        badge.className = "badge " + (audit.status === "ready_for_final_review" ? "do_now" : "waiting");
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Status: " + (audit.status || pack.status || "unknown"),
+          "Next action: " + (audit.nextAction && audit.nextAction.id ? audit.nextAction.id : "none"),
+          "Blocks: " + (totals.workBlocks ?? workBlocks.length),
+          "Repair rows: " + (totals.evidenceRepairRows ?? repairs.length),
+          "Auto-send: " + (totals.metricoolReadyToSend ?? 0),
+          "",
+          "Work blocks:",
+          workBlocks.slice(0, 5).map((block) => "- " + block.label + ": " + block.actions + " actions, " + block.estimatedMinutes + " min, first=" + block.firstActionId).join("\\n") || "- none",
+          "",
+          "Repair queue:",
+          repairs.slice(0, 8).map((row) => [
+            "- CSV row " + (row.csvRow || "?") + ": " + row.id,
+            "  reason=" + row.reason,
+            "  proof=" + (row.proofPath || "missing"),
+            "  missing=" + ((row.missingCsvFields || []).join(", ") || "none")
+          ].join("\\n")).join("\\n") || "- none",
+          "",
+          "First repair copy packet:",
+          repairs[0] && repairs[0].copyPacket ? repairs[0].copyPacket : "none"
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-closeout-action]");
+      if (!button) return;
+      runCloseoutImportGate(button.getAttribute("data-closeout-action"));
+    });
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-proof-todo-action='load']");
+      if (!button) return;
+      loadExternalCloseoutProofTodo();
+    });
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-go-live-audit-action='load']");
+      if (!button) return;
+      loadExternalGoLiveAudit();
+    });`;
+    let withSections = html;
+    if (!withSections.includes("External Closeout Evidence Import Gate")) {
+      withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${gateHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
+    }
+    if (!withSections.includes("External Closeout Proof Todo")) {
+      withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${proofTodoHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
+    }
+    if (!withSections.includes("External Go-Live Audit + Repair Queue")) {
+      withSections = withSections.replace('<section class="permission-section" aria-label="Next focus run">', `${goLiveAuditHtml}\n    <section class="permission-section" aria-label="Next focus run">`);
+    }
+    return withSections.includes("loadExternalCloseoutProofTodo") && withSections.includes("loadExternalGoLiveAudit")
+      ? withSections
+      : withSections.replace("</script>", `${gateScript}\n  </script>`);
   };
 
   app.get("/clippers/legal/privacy", (_req, res) => {
@@ -144,9 +418,13 @@ export async function registerRoutes(
 
   app.get("/clippers/external-portal-launcher", async (req, res) => {
     try {
-      const result = await prepareClipperRobertNextActions(getCurrentUserId(req));
-      const html = await readNodeFile(result.robertNextActions.connectNow.externalPortalLauncher.htmlPath, "utf8");
-      res.type("html").send(html);
+      const cached = await readTextWithTimeout("clippers_workspace/external-portal-launcher.html", 1500).catch(() => null);
+      if (cached) {
+        res.type("html").send(ensureExternalCloseoutGateInLauncherHtml(cached));
+        return;
+      }
+      res.type("html").send(minimalExternalPortalLauncherHtml());
+      void prepareClipperRobertNextActions(getCurrentUserId(req)).catch(() => undefined);
     } catch (error: any) {
       res.status(500).type("text").send(error.message || "Failed to render Clippers external portal launcher");
     }
@@ -1640,9 +1918,41 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-external-closeout-pack", async (_req, res) => {
     try {
       await runClipperExternalCloseoutPack();
-      res.json({ externalCloseoutPack: await readClipperExternalCloseoutPack() });
+      res.json({
+        externalCloseoutPack: await readClipperExternalCloseoutPack(),
+        externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+        externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+        externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers external closeout pack" });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-proof-todo", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout proof todo has not been prepared" : "External closeout proof todo could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-operator-queue", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout operator queue has not been prepared" : "External closeout operator queue could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-next-action", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutNextAction: await readClipperExternalCloseoutNextAction() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout next action has not been prepared" : "External closeout next action could not be read") });
     }
   });
 
@@ -1658,7 +1968,14 @@ export async function registerRoutes(
   app.post("/api/clippers/preview-external-closeout-evidence-import", async (_req, res) => {
     try {
       await runClipperExternalCloseoutEvidenceImport(false);
-      res.json({ externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport() });
+      await runClipperExternalCloseoutPack();
+      res.json({
+        externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport(),
+        externalCloseoutPack: await readClipperExternalCloseoutPack(),
+        externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+        externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+        externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
+      });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview clippers external closeout evidence import" });
     }
@@ -1666,21 +1983,35 @@ export async function registerRoutes(
 
   app.post("/api/clippers/apply-external-closeout-evidence-import", async (_req, res) => {
     try {
+      if (_req.get("x-clippers-operator-confirm") !== "apply-external-closeout-evidence") {
+        res.status(403).json({ error: "Operator confirmation header required for external closeout evidence apply." });
+        return;
+      }
       await runClipperExternalCloseoutEvidenceImport(true);
       const externalCloseoutEvidenceImport = await readClipperExternalCloseoutEvidenceImport();
       if (externalCloseoutEvidenceImport.status !== "import_applied") {
+        await runClipperExternalCloseoutPack();
         res.status(400).json({
           error: "External closeout evidence import is not clean enough to apply. Run preview and fix rejected rows first.",
           externalCloseoutEvidenceImport,
+          externalCloseoutPack: await readClipperExternalCloseoutPack(),
+          externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+          externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+          externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
         });
         return;
       }
       await runClipperAccountPermissionReadiness();
       await runClipperOperationalReadiness();
+      await runClipperExternalCloseoutPack();
       res.json({
         externalCloseoutEvidenceImport,
         accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
         operationalReadiness: await readClipperOperationalReadiness(),
+        externalCloseoutPack: await readClipperExternalCloseoutPack(),
+        externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
+        externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+        externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply clippers external closeout evidence import" });

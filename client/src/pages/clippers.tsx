@@ -183,6 +183,7 @@ type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready"
 type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "full_ready";
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
 type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
+type ClipperExternalGoLiveAuditGateStatus = "blocked" | "verified";
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -463,13 +464,152 @@ interface ClipperExternalCloseoutTask {
   missingEnvVars?: string[];
   evidenceRequired: string[];
   safeNotes: string;
+  proofPath?: string;
+  proofStatus?: "needs_real_proof" | "proof_file_filled";
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutProofTodoRow {
+  id: string;
+  lane: "account" | "developer_app" | "permission";
+  priority: "critical" | "high";
+  platform: string;
+  accountId: string;
+  scope: string;
+  proofStatus: "needs_real_proof" | "proof_file_filled";
+  proofPath: string;
+  requiredCsvStatus: string;
+  requiredCsvFields: string[];
+  allowedCsvStatuses: string[];
+  portalUrl: string;
+  docsUrl: string;
+  redirectUri: string;
+  requiredEvidence: string[];
+  safeNotes: string;
+  blockers: string[];
+  missingCsvFields?: string[];
+  readyToApply: boolean;
+  nextStep: string;
+  csvEditHint: string;
+}
+
+interface ClipperExternalCloseoutOperatorQueueRow {
+  rank: number;
+  id: string;
+  lane: "account" | "developer_app" | "permission";
+  priority: "critical" | "high";
+  platform: string;
+  accountId: string;
+  scope: string;
+  proofPath: string;
+  proofStatus: "needs_real_proof" | "proof_file_filled";
+  requiredCsvStatus: string;
+  missingCsvFields: string[];
+  blockers: string[];
+  portalUrl: string;
+  docsUrl: string;
+  redirectUri: string;
+  operatorAction: string;
+  csvEditHint: string;
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutArtifactSafety {
+  status: "clean" | "blocked_sensitive_artifact";
+  scanned: number;
+  findings: Array<{ path: string; reason: string }>;
+}
+
+interface ClipperExternalGoLiveAuditSummary {
+  status: ClipperExternalCloseoutPackStatus;
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    closeoutPack: string;
+    operatorQueue: string;
+    proofTodo: string;
+    evidenceImport: string;
+  };
+  totals: {
+    gates: number;
+    verified: number;
+    blocked: number;
+    operatorActions: number;
+    proofFilesNeedRealEvidence: number;
+    evidenceAccepted: number;
+    evidenceRejected: number;
+    evidenceApplied: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+    workBlocks?: number;
+    estimatedOperatorMinutes?: number;
+    evidenceRepairRows?: number;
+  };
+  gates: Array<{
+    id: string;
+    label: string;
+    status: ClipperExternalGoLiveAuditGateStatus;
+    blocker: string;
+  }>;
+  workBlocks?: Array<{
+    id: string;
+    label: string;
+    lane: "account" | "developer_app" | "permission";
+    status: "needs_operator" | "complete";
+    estimatedMinutes: number;
+    actions: number;
+    critical: number;
+    high: number;
+    firstActionId: string;
+    firstAction: string;
+    portalUrls: string[];
+    proofPaths: string[];
+    missingCsvFields: string[];
+    csvStatuses: string[];
+    doneCriteria: string[];
+    nextStep: string;
+  }>;
+  evidenceRepairQueue?: Array<{
+    rank: number;
+    csvRow: number | null;
+    id: string;
+    lane: string;
+    platform: string;
+    requiredCsvStatus: string;
+    proofPath: string;
+    reason: string;
+    missingCsvFields: string[];
+    blockers: string[];
+    operatorAction: string;
+    nextStep: string;
+    copyPacket: string;
+  }>;
+  nextAction: ClipperExternalCloseoutOperatorQueueRow | null;
   nextStep: string;
 }
 
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
-  paths: { json: string; markdown: string; csv: string; evidenceCsv: string };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    proofTodoJson?: string;
+    proofTodoMarkdown?: string;
+    proofTodoCsv?: string;
+    operatorQueueJson?: string;
+    operatorQueueMarkdown?: string;
+    operatorQueueCsv?: string;
+    goLiveAuditJson?: string;
+    goLiveAuditMarkdown?: string;
+    goLiveAuditCsv?: string;
+    evidenceCsv: string;
+    proofDir?: string;
+  };
+  artifactSafety?: ClipperExternalCloseoutArtifactSafety;
   blockers: string[];
   metricool: {
     queuedForApproval: number;
@@ -483,8 +623,47 @@ interface ClipperExternalCloseoutPackSummary {
     accounts: number;
     developerApps: number;
     permissions: number;
+    proofFilesNeedRealEvidence?: number;
+    proofFilesFilled?: number;
   };
   tasks: ClipperExternalCloseoutTask[];
+  proofTodo?: ClipperExternalCloseoutProofTodoRow[];
+  operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  goLiveAudit?: ClipperExternalGoLiveAuditSummary;
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutProofTodoSummary {
+  generatedAt: string;
+  status: ClipperExternalCloseoutPackStatus;
+  paths: ClipperExternalCloseoutPackSummary["paths"];
+  totals: ClipperExternalCloseoutPackSummary["totals"];
+  rows: ClipperExternalCloseoutProofTodoRow[];
+  operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
+  artifactSafety?: ClipperExternalCloseoutArtifactSafety;
+}
+
+interface ClipperExternalCloseoutOperatorQueueSummary {
+  generatedAt: string;
+  status: ClipperExternalCloseoutPackStatus;
+  paths: ClipperExternalCloseoutPackSummary["paths"];
+  totals: {
+    rows: number;
+    critical: number;
+    high: number;
+  };
+  rows: ClipperExternalCloseoutOperatorQueueRow[];
+  artifactSafety?: ClipperExternalCloseoutArtifactSafety;
+  nextStep: string;
+}
+
+interface ClipperExternalCloseoutNextActionSummary {
+  generatedAt: string;
+  status: "needs_operator" | "complete";
+  paths: ClipperExternalCloseoutPackSummary["paths"];
+  totals: ClipperExternalCloseoutOperatorQueueSummary["totals"];
+  nextAction: ClipperExternalCloseoutOperatorQueueRow | null;
+  copyPacket: string;
   nextStep: string;
 }
 
@@ -7192,6 +7371,36 @@ export default function ClippersPage() {
       return data.externalCloseoutEvidenceImport as ClipperExternalCloseoutEvidenceImportSummary;
     },
   });
+  const { data: externalCloseoutProofTodo } = useQuery<ClipperExternalCloseoutProofTodoSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-proof-todo"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-proof-todo");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout proof todo");
+      return data.externalCloseoutProofTodo as ClipperExternalCloseoutProofTodoSummary;
+    },
+  });
+  const { data: externalCloseoutOperatorQueue } = useQuery<ClipperExternalCloseoutOperatorQueueSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-operator-queue"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-operator-queue");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout operator queue");
+      return data.externalCloseoutOperatorQueue as ClipperExternalCloseoutOperatorQueueSummary;
+    },
+  });
+  const { data: externalCloseoutNextAction } = useQuery<ClipperExternalCloseoutNextActionSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-next-action"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-next-action");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout next action");
+      return data.externalCloseoutNextAction as ClipperExternalCloseoutNextActionSummary;
+    },
+  });
   const credentialEnvVarOptions = useMemo(() => {
     const fromDoctor = status?.credentialDoctor?.items.flatMap((item) => item.acceptedEnvVarGroups.flat()) || [];
     return Array.from(new Set([...fromDoctor, ...credentialSecretEnvVarOptions])).sort();
@@ -7565,13 +7774,27 @@ export default function ClippersPage() {
       const response = await fetch("/api/clippers/prepare-external-closeout-pack", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar external closeout pack");
-      return data as { externalCloseoutPack: ClipperExternalCloseoutPackSummary };
+      return data as {
+        externalCloseoutPack: ClipperExternalCloseoutPackSummary;
+        externalCloseoutProofTodo?: ClipperExternalCloseoutProofTodoSummary;
+        externalCloseoutOperatorQueue?: ClipperExternalCloseoutOperatorQueueSummary;
+        externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
+      };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/external-closeout-pack"], data.externalCloseoutPack);
+      if (data.externalCloseoutProofTodo) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-proof-todo"], data.externalCloseoutProofTodo);
+      }
+      if (data.externalCloseoutOperatorQueue) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-operator-queue"], data.externalCloseoutOperatorQueue);
+      }
+      if (data.externalCloseoutNextAction) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
+      }
       toast({
         title: "External closeout listo",
-        description: `${data.externalCloseoutPack.totals.tasks} acciones externas; ${data.externalCloseoutPack.metricool.readyToSend} auto-send.`,
+        description: `${data.externalCloseoutPack.totals.tasks} acciones externas; ${data.externalCloseoutPack.totals.proofFilesNeedRealEvidence || 0} proofs pendientes.`,
       });
     },
     onError: (error: Error) => {
@@ -7600,19 +7823,38 @@ export default function ClippersPage() {
 
   const applyExternalCloseoutEvidenceImportMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/clippers/apply-external-closeout-evidence-import", { method: "POST" });
+      const response = await fetch("/api/clippers/apply-external-closeout-evidence-import", {
+        method: "POST",
+        headers: { "x-clippers-operator-confirm": "apply-external-closeout-evidence" },
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude aplicar external evidence import");
       return data as {
         externalCloseoutEvidenceImport: ClipperExternalCloseoutEvidenceImportSummary;
         accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
         operationalReadiness: ClipperOperationalReadinessSummary;
+        externalCloseoutPack?: ClipperExternalCloseoutPackSummary;
+        externalCloseoutProofTodo?: ClipperExternalCloseoutProofTodoSummary;
+        externalCloseoutOperatorQueue?: ClipperExternalCloseoutOperatorQueueSummary;
+        externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/external-closeout-evidence-import"], data.externalCloseoutEvidenceImport);
       queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
       queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      if (data.externalCloseoutPack) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-pack"], data.externalCloseoutPack);
+      }
+      if (data.externalCloseoutProofTodo) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-proof-todo"], data.externalCloseoutProofTodo);
+      }
+      if (data.externalCloseoutOperatorQueue) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-operator-queue"], data.externalCloseoutOperatorQueue);
+      }
+      if (data.externalCloseoutNextAction) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
+      }
       toast({
         title: "Evidence import aplicado",
         description: `${data.externalCloseoutEvidenceImport.totals.applied} filas aplicadas; Metricool sigue ${data.operationalReadiness.metricool.publishMode}.`,
@@ -15497,10 +15739,265 @@ export default function ClippersPage() {
                     <p>Accounts: {externalCloseoutPack.totals.accounts}</p>
                     <p>Dev apps: {externalCloseoutPack.totals.developerApps}</p>
                     <p>Permissions: {externalCloseoutPack.totals.permissions}</p>
-                    <p>Queued: {externalCloseoutPack.metricool.queuedForApproval}</p>
-                    <p>Auto-send: {externalCloseoutPack.metricool.readyToSend}</p>
+                    <p>Proofs needed: {externalCloseoutPack.totals.proofFilesNeedRealEvidence || 0}</p>
+                    <p>Proofs filled: {externalCloseoutPack.totals.proofFilesFilled || 0}</p>
                   </div>
+                  {externalCloseoutPack.artifactSafety && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className={cn(
+                        "border",
+                        externalCloseoutPack.artifactSafety.status === "clean"
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                          : "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                      )}>
+                        Artifact safety: {externalCloseoutPack.artifactSafety.status}
+                      </Badge>
+                      <span className="text-zinc-500">
+                        Scanned {externalCloseoutPack.artifactSafety.scanned}; findings {externalCloseoutPack.artifactSafety.findings.length}
+                      </span>
+                    </div>
+                  )}
                   <p className="mt-2 break-all text-xs text-zinc-600">Evidence CSV: {externalCloseoutPack.paths.evidenceCsv}</p>
+                  {externalCloseoutPack.goLiveAudit && (
+                    <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3" data-testid="clippers-external-go-live-audit">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-sky-100">External Go-Live Audit</p>
+                          <p className="mt-1 break-all text-xs text-zinc-500">
+                            {externalCloseoutPack.goLiveAudit.paths.markdown || externalCloseoutPack.paths.goLiveAuditMarkdown || "clippers_workspace/reports/clippers-external-go-live-audit.md"}
+                          </p>
+                        </div>
+                        <Badge className={cn(
+                          "w-fit border",
+                          externalCloseoutPack.goLiveAudit.status === "ready_for_final_review"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                        )}>
+                          {externalCloseoutPack.goLiveAudit.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                        <p>Gates: {externalCloseoutPack.goLiveAudit.totals.gates}</p>
+                        <p>Verified: {externalCloseoutPack.goLiveAudit.totals.verified}</p>
+                        <p>Blocked: {externalCloseoutPack.goLiveAudit.totals.blocked}</p>
+                        <p>Actions: {externalCloseoutPack.goLiveAudit.totals.operatorActions}</p>
+                        <p>Proofs: {externalCloseoutPack.goLiveAudit.totals.proofFilesNeedRealEvidence}</p>
+                        <p>Rejected: {externalCloseoutPack.goLiveAudit.totals.evidenceRejected}</p>
+                        <p>Queued: {externalCloseoutPack.goLiveAudit.totals.metricoolQueuedForApproval}</p>
+                        <p>Auto-send: {externalCloseoutPack.goLiveAudit.totals.metricoolReadyToSend}</p>
+                        <p>Blocks: {externalCloseoutPack.goLiveAudit.totals.workBlocks || 0}</p>
+                        <p>Minutes: {externalCloseoutPack.goLiveAudit.totals.estimatedOperatorMinutes || 0}</p>
+                        <p>Repairs: {externalCloseoutPack.goLiveAudit.totals.evidenceRepairRows || 0}</p>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">{externalCloseoutPack.goLiveAudit.nextStep}</p>
+                      {(externalCloseoutPack.goLiveAudit.workBlocks || []).length > 0 && (
+                        <div className="mt-3 grid gap-2 xl:grid-cols-3" data-testid="clippers-external-go-live-work-blocks">
+                          {(externalCloseoutPack.goLiveAudit.workBlocks || []).map((block) => (
+                            <div key={block.id} className="rounded-md border border-sky-300/10 bg-black/25 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-medium text-sky-100">{block.label}</p>
+                                  <p className="mt-1 text-[11px] text-zinc-500">{block.actions} actions · {block.estimatedMinutes} min</p>
+                                </div>
+                                <Badge className={cn(
+                                  "shrink-0 border text-[10px]",
+                                  block.status === "complete"
+                                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                                    : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                                )}>
+                                  {block.status}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 text-[11px] leading-4 text-zinc-300">{block.firstAction}</p>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{block.proofPaths[0] || "no proof path"}</p>
+                              {block.missingCsvFields.length > 0 && (
+                                <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {block.missingCsvFields.join(", ")}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).length > 0 && (
+                        <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-external-go-live-repair-queue">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-amber-100">Evidence Repair Queue</p>
+                              <p className="mt-1 text-xs leading-5 text-zinc-500">Rejected CSV rows mapped back to the proof/action to fix.</p>
+                            </div>
+                            <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                              {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.length} repairs
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 4).map((row) => (
+                              <div key={`${row.rank}-${row.id}`} className="rounded-md border border-amber-300/10 bg-black/25 p-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="min-w-0 truncate text-xs font-medium text-amber-100">Row {row.csvRow || "?"}: {row.id}</p>
+                                  <Badge className="shrink-0 border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                                    {row.requiredCsvStatus || "fix"}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-[11px] leading-4 text-zinc-300">{row.reason}</p>
+                                <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{row.proofPath || "no proof path"}</p>
+                                {row.missingCsvFields.length > 0 && (
+                                  <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
+                                )}
+                                {row.copyPacket && row.rank === 1 && (
+                                  <pre className="mt-2 max-h-36 overflow-auto rounded border border-amber-300/10 bg-black/30 p-2 text-[10px] leading-4 text-amber-50/80 whitespace-pre-wrap">
+                                    {row.copyPacket}
+                                  </pre>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                        {externalCloseoutPack.goLiveAudit.gates.slice(0, 6).map((gate) => (
+                          <div key={gate.id} className="rounded-md border border-sky-300/10 bg-black/25 p-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 text-xs font-medium text-sky-100">{gate.label}</p>
+                              <Badge className={cn(
+                                "shrink-0 border text-[10px]",
+                                gate.status === "verified"
+                                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              )}>
+                                {gate.status}
+                              </Badge>
+                            </div>
+                            {gate.blocker && <p className="mt-1 text-[11px] leading-4 text-amber-100">{gate.blocker}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 rounded-md border border-violet-300/15 bg-violet-950/10 p-3" data-testid="clippers-external-closeout-next-action">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-violet-100">Next External Action</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">
+                          {externalCloseoutNextAction?.nextStep || (externalCloseoutOperatorQueue?.rows?.[0]?.operatorAction) || "Refresh External Closeout Pack para calcular la proxima accion."}
+                        </p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border",
+                        externalCloseoutNextAction?.status === "complete"
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                          : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                      )}>
+                        {externalCloseoutNextAction?.status || "needs_operator"}
+                      </Badge>
+                    </div>
+                    {(externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0]) && (
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-2">
+                        <p className="break-all">Proof: {(externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0])?.proofPath}</p>
+                        <p className="break-all">Portal: {(externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0])?.portalUrl || "n/a"}</p>
+                        <p>Missing: {((externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0])?.missingCsvFields || []).join(", ") || "none"}</p>
+                        <p>Status to use: {(externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0])?.requiredCsvStatus}</p>
+                      </div>
+                    )}
+                    {externalCloseoutNextAction?.copyPacket && (
+                      <pre className="mt-3 max-h-44 overflow-auto rounded border border-violet-300/10 bg-black/30 p-2 text-[11px] leading-5 text-violet-50/80 whitespace-pre-wrap">
+                        {externalCloseoutNextAction.copyPacket}
+                      </pre>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="clippers-external-closeout-operator-queue">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-emerald-100">Operator Queue</p>
+                        <p className="mt-1 break-all text-xs text-zinc-500">
+                          {externalCloseoutProofTodo?.paths.operatorQueueMarkdown || externalCloseoutPack.paths.operatorQueueMarkdown || "clippers_workspace/reports/clippers-external-closeout-operator-queue.md"}
+                        </p>
+                      </div>
+                      <Badge className="w-fit border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
+                        {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).length} actions
+                      </Badge>
+                    </div>
+                    {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).length > 0 ? (
+                      <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                        {(externalCloseoutOperatorQueue?.rows || externalCloseoutProofTodo?.operatorQueue || externalCloseoutPack.operatorQueue || []).slice(0, 4).map((row) => (
+                          <div key={row.id} className="rounded-md border border-emerald-300/10 bg-black/25 p-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 truncate text-xs font-medium text-emerald-100">#{row.rank} {row.id}</p>
+                              <Badge className={cn(
+                                "shrink-0 border text-[10px]",
+                                row.priority === "critical"
+                                  ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              )}>
+                                {row.priority}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-4 text-zinc-300">{row.operatorAction}</p>
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{row.proofPath}</p>
+                            {row.missingCsvFields.length > 0 && (
+                              <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-zinc-500">No operator queue rows. Refresh External Closeout Pack after evidence is updated.</p>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-external-closeout-proof-todo">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-cyan-100">Proof Todo</p>
+                        <p className="mt-1 break-all text-xs text-zinc-500">
+                          {externalCloseoutProofTodo?.paths.proofTodoMarkdown || externalCloseoutPack.paths.proofTodoMarkdown || "clippers_workspace/reports/clippers-external-closeout-proof-todo.md"}
+                        </p>
+                      </div>
+                      <Badge className="w-fit border border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
+                        {externalCloseoutProofTodo?.totals.proofFilesNeedRealEvidence ?? externalCloseoutPack.totals.proofFilesNeedRealEvidence ?? 0} pending
+                      </Badge>
+                    </div>
+                    {externalCloseoutProofTodo ? (
+                      <>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-3">
+                          <p>Rows: {externalCloseoutProofTodo.rows.length}</p>
+                          <p>Filled: {externalCloseoutProofTodo.totals.proofFilesFilled || 0}</p>
+                          <p>Need evidence: {externalCloseoutProofTodo.totals.proofFilesNeedRealEvidence || 0}</p>
+                        </div>
+                        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                          {externalCloseoutProofTodo.rows.slice(0, 4).map((row) => (
+                            <div key={row.id} className="rounded-md border border-cyan-300/10 bg-black/25 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="min-w-0 truncate text-xs font-medium text-cyan-100">{row.id}</p>
+                                <Badge className={cn(
+                                  "shrink-0 border text-[10px]",
+                                  row.proofStatus === "proof_file_filled"
+                                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                )}>
+                                  {row.requiredCsvStatus}
+                                </Badge>
+                              </div>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">{row.proofPath}</p>
+                              <p className="mt-1 text-[11px] leading-4 text-zinc-400">{row.csvEditHint}</p>
+                              {row.blockers.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {row.blockers.slice(0, 2).map((blocker) => (
+                                    <p key={blocker} className="rounded border border-amber-300/15 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">{blocker}</p>
+                                  ))}
+                                  {row.blockers.length > 2 && (
+                                    <p className="text-[11px] text-zinc-500">+{row.blockers.length - 2} more blockers</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {externalCloseoutProofTodo.rows.length > 4 && (
+                          <p className="mt-2 text-xs text-zinc-500">+{externalCloseoutProofTodo.rows.length - 4} more proof tasks in {externalCloseoutProofTodo.paths.proofTodoMarkdown}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-xs text-zinc-500">Refresh External Closeout Pack para cargar la checklist exacta de proofs.</p>
+                    )}
+                  </div>
                   <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-external-closeout-evidence-import">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0">

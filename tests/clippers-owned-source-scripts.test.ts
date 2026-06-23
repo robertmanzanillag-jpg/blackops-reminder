@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
 
@@ -8,6 +8,7 @@ const rootDir = path.join(process.cwd(), "clippers_workspace");
 const queuePath = path.join(rootDir, "scheduled", "metricool-execution-queue.json");
 const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-queue.md");
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
+const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const sliceRequired = (content: string, startNeedle: string, endNeedle: string) => {
   const start = content.indexOf(startNeedle);
@@ -131,31 +132,185 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(output.developerApps, 3);
   assert.equal(output.permissions, 6);
   assert.equal(output.tasks, 16);
+  assert.equal(output.goLiveAuditStatus, "blocked_external_actions");
+  assert.ok(output.goLiveAuditBlockedGates > 0);
+  assert.equal(output.proofFilesNeedRealEvidence, 16);
+  assert.match(output.proofTodoPath, /clippers-external-closeout-proof-todo\.md$/);
+  assert.match(output.operatorQueuePath, /clippers-external-closeout-operator-queue\.md$/);
+  assert.match(output.goLiveAuditPath, /clippers-external-go-live-audit\.md$/);
 
   const pack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-pack.json"), "utf8"));
   assert.equal(pack.metricool.readyToSend, 0);
   assert.equal(pack.metricool.publishMode, "approval_required");
+  assert.ok(pack.paths.proofDir.endsWith("external-closeout-proofs"));
   assert.ok(!pack.blockers.some((blocker) => blocker.includes("Local app is not listening")));
   assert.ok(pack.tasks.some((task) => task.id === "account:streamer-pulse:tiktok" && task.priority === "critical"));
   assert.ok(pack.tasks.some((task) => task.id === "developer_app:tiktok" && task.missingEnvVars.includes("TIKTOK_CLIENT_KEY")));
   assert.ok(pack.tasks.some((task) => task.id === "permission:tiktok:video.publish"));
+  assert.ok(pack.tasks.every((task) => task.proofPath && task.proofPath.includes("external-closeout-proofs")));
+  assert.equal(pack.totals.proofFilesNeedRealEvidence, 16);
+  assert.equal(pack.artifactSafety.status, "clean");
+  assert.equal(pack.artifactSafety.scanned, 13);
+  assert.equal(pack.artifactSafety.findings.length, 0);
+  assert.equal(pack.goLiveAudit.status, "blocked_external_actions");
+  assert.equal(pack.goLiveAudit.totals.operatorActions, 16);
+  assert.equal(pack.goLiveAudit.totals.proofFilesNeedRealEvidence, 16);
+  assert.equal(pack.goLiveAudit.totals.metricoolReadyToSend, 0);
+  assert.equal(pack.goLiveAudit.totals.workBlocks, 3);
+  assert.ok(pack.goLiveAudit.totals.estimatedOperatorMinutes > 0);
+  assert.equal(pack.goLiveAudit.totals.evidenceRepairRows, 16);
+  assert.equal(pack.goLiveAudit.evidenceRepairQueue.length, 16);
+  assert.equal(pack.goLiveAudit.evidenceRepairQueue[0].id, pack.tasks[0].id);
+  assert.equal(pack.goLiveAudit.evidenceRepairQueue[0].proofPath, pack.tasks[0].proofPath);
+  assert.ok(pack.goLiveAudit.evidenceRepairQueue.every((row) => row.reason.length > 0));
+  assert.ok(pack.goLiveAudit.evidenceRepairQueue[0].copyPacket.includes("Repair action:"));
+  assert.ok(pack.goLiveAudit.evidenceRepairQueue[0].copyPacket.includes("Evidence CSV fields to fill:"));
+  assert.ok(pack.goLiveAudit.evidenceRepairQueue[0].copyPacket.includes("Do not paste private credentials"));
+  assert.equal(pack.goLiveAudit.evidenceRepairQueue[0].copyPacket.includes("client_secret"), false);
+  assert.equal(pack.goLiveAudit.workBlocks.length, 3);
+  assert.ok(pack.goLiveAudit.workBlocks.some((block) => block.id === "developer_apps" && block.actions === 3));
+  assert.ok(pack.goLiveAudit.workBlocks.some((block) => block.id === "permissions" && block.actions === 6));
+  assert.ok(pack.goLiveAudit.workBlocks.some((block) => block.id === "accounts" && block.actions === 7));
+  assert.ok(pack.goLiveAudit.workBlocks.every((block) => block.doneCriteria.length >= 3));
+  assert.equal(pack.goLiveAudit.gates.some((gate) => gate.id === "metricool_publish_mode" && gate.status === "verified"), true);
+  assert.equal(pack.goLiveAudit.gates.some((gate) => gate.id === "external_actions" && gate.status === "blocked"), true);
+  assert.equal(pack.goLiveAudit.gates.some((gate) => gate.id === "evidence_import" && gate.status === "blocked"), true);
+  assert.equal(pack.goLiveAudit.nextAction.id, "developer_app:instagram");
+  assert.ok(pack.tasks.every((task) => task.proofStatus === "needs_real_proof"));
+  assert.equal(pack.proofTodo.length, 16);
+  assert.ok(pack.proofTodo.every((row) => !row.requiredCsvStatus.includes("_or_")));
+  assert.ok(pack.proofTodo.some((row) => row.id === "developer_app:tiktok" && row.requiredCsvStatus === "submitted"));
+  assert.ok(pack.proofTodo.some((row) => row.id === "developer_app:tiktok" && row.requiredCsvFields.includes("app_identifier")));
+  assert.ok(pack.proofTodo.some((row) => row.id === "developer_app:tiktok" && row.missingCsvFields.includes("app_identifier")));
+  assert.ok(pack.proofTodo.some((row) => row.id === "developer_app:tiktok" && row.requiredCsvFields.includes("public_base_url")));
+  assert.ok(pack.proofTodo.some((row) => row.id === "developer_app:tiktok" && row.blockers.some((blocker) => blocker.includes("app_identifier"))));
+  assert.ok(pack.proofTodo.some((row) => row.id === "permission:tiktok:video.publish" && row.requiredCsvStatus === "requested"));
+  assert.ok(pack.proofTodo.some((row) => row.id === "permission:tiktok:video.publish" && row.requiredCsvFields.includes("scope")));
+  assert.ok(pack.proofTodo.some((row) => row.id === "permission:tiktok:video.publish" && row.blockers.some((blocker) => blocker.includes("proof stub"))));
+  assert.ok(pack.proofTodo.some((row) => row.id === "account:streamer-pulse:tiktok" && row.requiredCsvStatus === "verified"));
+  assert.equal(pack.operatorQueue.length, 16);
+  assert.equal(pack.operatorQueue[0].id, "developer_app:instagram");
+  assert.equal(pack.operatorQueue[0].rank, 1);
+  assert.ok(pack.operatorQueue[0].operatorAction.includes("developer portal"));
+  assert.ok(pack.operatorQueue.some((row) => row.id === "developer_app:tiktok" && row.missingCsvFields.includes("app_identifier")));
 
   const evidenceCsv = await readFile(path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv"), "utf8");
   assert.match(evidenceCsv, /kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes/);
   assert.match(evidenceCsv, /permission.*video\.publish/);
+  assert.match(evidenceCsv, /external-closeout-proofs/);
+  assert.doesNotMatch(evidenceCsv, /submitted_or_approved|requested_or_approved/);
+  assert.match(evidenceCsv, /developer_app","[^"]*","tiktok","submitted/);
+  assert.match(evidenceCsv, /permission","[^"]*","tiktok","requested","video\.publish/);
+  const firstProof = await readFile(pack.tasks[0].proofPath, "utf8");
+  assert.match(firstProof, /needs_real_proof/);
+  assert.match(firstProof, /Evidence CSV fields to fill/);
+  assert.match(firstProof, /- status: verified/);
+  const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+  assert.equal(proofTodo.rows.length, 16);
+  assert.equal(proofTodo.artifactSafety.status, "clean");
+  assert.equal(proofTodo.operatorQueue.length, 16);
+  assert.equal(proofTodo.totals.proofFilesFilled, 0);
+  assert.equal(proofTodo.rows.some((row) => row.readyToApply === true), false);
+  const proofTodoCsv = await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.csv"), "utf8");
+  assert.match(proofTodoCsv, /required_csv_status/);
+  assert.match(proofTodoCsv, /required_csv_fields/);
+  assert.match(proofTodoCsv, /ready_to_apply/);
+  assert.match(proofTodoCsv, /blockers/);
+  assert.match(proofTodoCsv, /app_identifier/);
+  assert.doesNotMatch(proofTodoCsv, /submitted_or_approved|requested_or_approved/);
+  const proofTodoMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.md"), "utf8");
+  assert.match(proofTodoMarkdown, /Clippers External Closeout Proof Todo/);
+  assert.match(proofTodoMarkdown, /Do not paste tokens/);
+  const operatorQueue = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.json"), "utf8"));
+  assert.equal(operatorQueue.rows.length, 16);
+  assert.equal(operatorQueue.artifactSafety.status, "clean");
+  assert.equal(operatorQueue.totals.critical, 10);
+  assert.match(operatorQueue.nextStep, /developer portal|account\/profile/);
+  const operatorQueueCsv = await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.csv"), "utf8");
+  assert.match(operatorQueueCsv, /missing_csv_fields/);
+  assert.match(operatorQueueCsv, /operator_action/);
+  const operatorQueueMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.md"), "utf8");
+  assert.match(operatorQueueMarkdown, /Clippers External Closeout Operator Queue/);
+  assert.match(operatorQueueMarkdown, /shortest safe queue/);
+  const goLiveAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-go-live-audit.json"), "utf8"));
+  assert.equal(goLiveAudit.status, "blocked_external_actions");
+  assert.equal(goLiveAudit.totals.blocked > 0, true);
+  assert.equal(goLiveAudit.nextAction.id, "developer_app:instagram");
+  const goLiveAuditCsv = await readFile(path.join(rootDir, "reports/clippers-external-go-live-audit.csv"), "utf8");
+  assert.match(goLiveAuditCsv, /artifact_safety/);
+  assert.match(goLiveAuditCsv, /metricool_publish_mode/);
+  assert.match(goLiveAuditCsv, /work_block/);
+  assert.match(goLiveAuditCsv, /developer_apps/);
+  assert.match(goLiveAuditCsv, /evidence_repair/);
+  const goLiveAuditMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-go-live-audit.md"), "utf8");
+  assert.match(goLiveAuditMarkdown, /Clippers External Go-Live Audit/);
+  assert.match(goLiveAuditMarkdown, /does not enable automatic publishing/);
+  assert.match(goLiveAuditMarkdown, /Work Blocks/);
+  assert.match(goLiveAuditMarkdown, /Developer apps/);
+  assert.match(goLiveAuditMarkdown, /Evidence Repair Queue/);
+  assert.match(goLiveAuditMarkdown, /Copy packet:/);
+  const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
+  const productionPublicUrlPattern = regexEscape(productionPublicUrl);
+  const developerProof = await readFile(path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md"), "utf8");
+  assert.match(developerProof, /Evidence CSV fields to fill/);
+  assert.match(developerProof, /- app_identifier:/);
+  assert.match(developerProof, new RegExp(`- public_base_url: ${productionPublicUrlPattern}`));
+  assert.match(developerProof, new RegExp(`- redirect_uri: ${productionPublicUrlPattern}/api/clippers/oauth/tiktok/callback`));
+
+  const importer = await readFile(path.join(process.cwd(), "script/clippers-import-external-closeout-evidence.ts"), "utf8");
+  assert.match(importer, /const batchRejected = batchResult\?\.launchEvidenceBatch\.rejected\.length \|\| 0/);
+  assert.match(importer, /batchRejected === 0/);
+  assert.match(importer, /rejected\.length \|\| strictBlocked \|\| batchRejected/);
 
   const source = await readFile(path.join(process.cwd(), "script/clippers-external-closeout-pack.mjs"), "utf8");
   assert.match(source, /const blocked = tasks\.length > 0 \|\| safeOperationalBlockers\.length > 0/);
   assert.match(source, /status: blocked \? "blocked_external_actions" : "ready_for_final_review"/);
 
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  assert.match(routes, /\/api\/clippers\/external-closeout-proof-todo/);
+  assert.match(routes, /\/api\/clippers\/external-closeout-operator-queue/);
+  assert.match(routes, /\/api\/clippers\/external-closeout-next-action/);
+  assert.match(routes, /externalCloseoutOperatorQueue/);
+  assert.match(routes, /externalCloseoutNextAction/);
+  assert.match(routes, /copyPacket/);
+  assert.match(routes, /Do not paste passwords/);
+  assert.match(routes, /External Closeout Proof Todo/);
+  assert.match(routes, /External Go-Live Audit \+ Repair Queue/);
+  assert.match(routes, /data-proof-todo-action="load"/);
+  assert.match(routes, /data-go-live-audit-action="load"/);
+  assert.match(routes, /loadExternalCloseoutProofTodo/);
+  assert.match(routes, /loadExternalGoLiveAudit/);
+  assert.match(routes, /Operator queue/);
+  assert.match(routes, /Repair rows/);
+  assert.match(routes, /First repair copy packet/);
   assert.match(routes, /\/api\/clippers\/preview-external-closeout-evidence-import/);
   assert.match(routes, /\/api\/clippers\/apply-external-closeout-evidence-import/);
+  assert.match(routes, /x-clippers-operator-confirm/);
+  assert.match(routes, /Operator confirmation header required/);
+  assert.match(routes, /await runClipperExternalCloseoutPack\(\)/);
+  assert.match(routes, /externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue\(\)/);
 
   const ui = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+  assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-proof-todo"\]/);
+  assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-operator-queue"\]/);
+  assert.match(ui, /queryKey: \["\/api\/clippers\/external-closeout-next-action"\]/);
+  assert.match(ui, /data-testid="clippers-external-closeout-proof-todo"/);
+  assert.match(ui, /data-testid="clippers-external-closeout-operator-queue"/);
+  assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
+  assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
+  assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);
+  assert.match(ui, /data-testid="clippers-external-go-live-repair-queue"/);
+  assert.match(ui, /row\.copyPacket/);
+  assert.match(ui, /External Go-Live Audit/);
+  assert.match(ui, /externalCloseoutNextAction\.copyPacket/);
+  assert.match(ui, /Operator Queue/);
+  assert.match(ui, /Artifact safety/);
+  assert.match(ui, /row\.blockers\.slice\(0, 2\)/);
   assert.match(ui, /data-testid="clippers-external-closeout-evidence-import"/);
   assert.match(ui, /data-testid="preview-clippers-external-closeout-evidence-import-button"/);
   assert.match(ui, /data-testid="apply-clippers-external-closeout-evidence-import-button"/);
+  assert.match(ui, /x-clippers-operator-confirm/);
+  assert.match(ui, /setQueryData\(\["\/api\/clippers\/external-closeout-operator-queue"\]/);
 });
 
 test("external closeout evidence importer rejects placeholders without applying", async () => {
@@ -177,7 +332,198 @@ test("external closeout evidence importer rejects placeholders without applying"
 
   const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
   assert.equal(report.mode, "preview");
-  assert.ok(report.rejected.some((row) => row.reason.includes("Falta proof real") || row.reason.includes("Status ambiguo")));
+  assert.ok(report.rejected.some((row) => row.reason.includes("Proof file todavia contiene placeholders") || row.reason.includes("Status ambiguo")));
+});
+
+test("external closeout pack maps filled proof fields into evidence CSV", async () => {
+  const proofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md");
+  const previousProof = await readFile(proofPath, "utf8");
+  const filledProof = previousProof
+    .replace("Status: needs_real_proof", "Status: proof_file_filled")
+    .replace("Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>", "Proof URL or secure local evidence path: https://developers.tiktok.com/apps/tiktok-app-123")
+    .replace("Portal/ticket/case/profile reference: <paste real reference>", "Portal/ticket/case/profile reference: TikTok app tiktok-app-123 submitted")
+    .replace("Operator notes: <write at least one sentence confirming the external portal action is real>", "Operator notes: TikTok developer app was submitted in the official portal and proof is stored without secrets.")
+    .replace(/- app_identifier:\s*$/m, "- app_identifier: tiktok-app-123")
+    .replace("- proof: <paste real proof URL or local proof file path>", "- proof: https://developers.tiktok.com/apps/tiktok-app-123")
+    .replace("- notes: <write one sentence confirming the portal action and where proof lives>", "- notes: TikTok developer app was submitted in the official portal and proof is stored without secrets.");
+
+  try {
+    await writeFile(proofPath, filledProof);
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const evidenceCsv = await readFile(path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv"), "utf8");
+    assert.match(evidenceCsv, /developer_app","[^"]*","tiktok","submitted","[^"]*","tiktok-app-123"/);
+    assert.match(evidenceCsv, /https:\/\/developers\.tiktok\.com\/apps\/tiktok-app-123/);
+    const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+    const row = proofTodo.rows.find((item) => item.id === "developer_app:tiktok");
+    assert.equal(row.proofStatus, "proof_file_filled");
+    assert.equal(row.blockers.some((blocker) => blocker.includes("app_identifier")), false);
+  } finally {
+    await writeFile(proofPath, previousProof);
+    spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("external closeout pack blocks proof field secrets before writing reports", async () => {
+  const proofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md");
+  const previousProof = await readFile(proofPath, "utf8");
+  const unsafeProof = previousProof
+    .replace("Status: needs_real_proof", "Status: proof_file_filled")
+    .replace("Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>", "Proof URL or secure local evidence path: https://developers.tiktok.com/apps/tiktok-app-123?token=unsafe")
+    .replace("Portal/ticket/case/profile reference: <paste real reference>", "Portal/ticket/case/profile reference: TikTok app tiktok-app-123 submitted")
+    .replace("Operator notes: <write at least one sentence confirming the external portal action is real>", "Operator notes: TikTok developer app was submitted with client_secret accidentally pasted and must be blocked.")
+    .replace(/- app_identifier:\s*$/m, "- app_identifier: tiktok-app-123")
+    .replace("- proof: <paste real proof URL or local proof file path>", "- proof: https://developers.tiktok.com/apps/tiktok-app-123?token=unsafe")
+    .replace("- notes: <write one sentence confirming the portal action and where proof lives>", "- notes: TikTok developer app was submitted with client_secret accidentally pasted and must be blocked.");
+
+  try {
+    await writeFile(proofPath, unsafeProof);
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const evidenceCsv = await readFile(path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv"), "utf8");
+    const pack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-pack.json"), "utf8"));
+    const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+    assert.equal(JSON.stringify(pack).includes("token=unsafe"), false);
+    assert.equal(JSON.stringify(pack).includes("client_secret"), false);
+    assert.equal(pack.artifactSafety.status, "blocked_sensitive_artifact");
+    assert.ok(pack.artifactSafety.findings.length > 0);
+    assert.equal(evidenceCsv.includes("token=unsafe"), false);
+    assert.equal(evidenceCsv.includes("client_secret"), false);
+    const row = proofTodo.rows.find((item) => item.id === "developer_app:tiktok");
+    assert.equal(row.proofStatus, "needs_real_proof");
+    assert.ok(row.blockers.some((blocker) => blocker.includes("sensitive token")));
+  } finally {
+    await writeFile(proofPath, previousProof);
+    spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("external closeout pack keeps unsafe filled proof rows in operator queue", async () => {
+  const proofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md");
+  const previousProof = await readFile(proofPath, "utf8");
+  const unsafeProof = previousProof
+    .replace("Status: needs_real_proof", "Status: proof_file_filled")
+    .replace("Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>", "Proof URL or secure local evidence path: https://localhost/proof")
+    .replace("Portal/ticket/case/profile reference: <paste real reference>", "Portal/ticket/case/profile reference: TikTok app tiktok-app-123 submitted")
+    .replace("Operator notes: <write at least one sentence confirming the external portal action is real>", "Operator notes: TikTok developer app was submitted in the official portal but the public URL still needs a real production domain.")
+    .replace(/- app_identifier:\s*$/m, "- app_identifier: tiktok-app-123")
+    .replace(/- public_base_url: https:\/\/[^\s]+/, "- public_base_url: https://localhost:5010")
+    .replace("- proof: <paste real proof URL or local proof file path>", "- proof: https://localhost/proof")
+    .replace("- notes: <write one sentence confirming the portal action and where proof lives>", "- notes: TikTok developer app was submitted in the official portal but public proof URL still points to localhost.");
+
+  try {
+    await writeFile(proofPath, unsafeProof);
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+    const row = proofTodo.rows.find((item) => item.id === "developer_app:tiktok");
+    assert.equal(row.proofStatus, "proof_file_filled");
+    assert.equal(row.readyToApply, false);
+    assert.ok(row.blockers.some((blocker) => blocker.includes("public_base_url")));
+    assert.ok(row.blockers.some((blocker) => blocker.includes("proof URL")));
+    const operatorQueue = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.json"), "utf8"));
+    assert.ok(operatorQueue.rows.some((item) => item.id === "developer_app:tiktok"));
+  } finally {
+    await writeFile(proofPath, previousProof);
+    spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("external closeout pack keeps unsafe local proof paths in operator queue", async () => {
+  const proofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md");
+  const shortLocalProofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/short-local-proof.md");
+  const previousProof = await readFile(proofPath, "utf8");
+  const unsafeProof = previousProof
+    .replace("Status: needs_real_proof", "Status: proof_file_filled")
+    .replace("Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>", `Proof URL or secure local evidence path: ${shortLocalProofPath}`)
+    .replace("Portal/ticket/case/profile reference: <paste real reference>", "Portal/ticket/case/profile reference: TikTok app tiktok-app-123 submitted")
+    .replace("Operator notes: <write at least one sentence confirming the external portal action is real>", "Operator notes: TikTok developer app was submitted in the official portal and local proof is referenced.")
+    .replace(/- app_identifier:\s*$/m, "- app_identifier: tiktok-app-123")
+    .replace("- proof: <paste real proof URL or local proof file path>", `- proof: ${shortLocalProofPath}`)
+    .replace("- notes: <write one sentence confirming the portal action and where proof lives>", "- notes: TikTok developer app was submitted in the official portal and local proof is referenced.");
+
+  try {
+    await writeFile(shortLocalProofPath, "too short");
+    await writeFile(proofPath, unsafeProof);
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+    const row = proofTodo.rows.find((item) => item.id === "developer_app:tiktok");
+    assert.equal(row.proofStatus, "proof_file_filled");
+    assert.equal(row.readyToApply, false);
+    assert.ok(row.blockers.some((blocker) => blocker.includes("local proof file is too short")));
+    const operatorQueue = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.json"), "utf8"));
+    assert.ok(operatorQueue.rows.some((item) => item.id === "developer_app:tiktok"));
+  } finally {
+    await writeFile(proofPath, previousProof);
+    await unlink(shortLocalProofPath).catch(() => undefined);
+    spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("external closeout pack keeps non-closeout statuses in operator queue", async () => {
+  const proofPath = path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md");
+  const previousProof = await readFile(proofPath, "utf8");
+  const rejectedProof = previousProof
+    .replace("Status: needs_real_proof", "Status: proof_file_filled")
+    .replace("Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>", "Proof URL or secure local evidence path: https://developers.tiktok.com/apps/tiktok-app-123")
+    .replace("Portal/ticket/case/profile reference: <paste real reference>", "Portal/ticket/case/profile reference: TikTok app tiktok-app-123 rejected")
+    .replace("Operator notes: <write at least one sentence confirming the external portal action is real>", "Operator notes: TikTok developer app was rejected in the official portal and must stay in the operator queue.")
+    .replace(/- app_identifier:\s*$/m, "- app_identifier: tiktok-app-123")
+    .replace("- status: submitted", "- status: rejected")
+    .replace("- proof: <paste real proof URL or local proof file path>", "- proof: https://developers.tiktok.com/apps/tiktok-app-123")
+    .replace("- notes: <write one sentence confirming the portal action and where proof lives>", "- notes: TikTok developer app was rejected in the official portal and must stay in the operator queue.");
+
+  try {
+    await writeFile(proofPath, rejectedProof);
+    const result = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const proofTodo = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-proof-todo.json"), "utf8"));
+    const row = proofTodo.rows.find((item) => item.id === "developer_app:tiktok");
+    assert.equal(row.proofStatus, "proof_file_filled");
+    assert.equal(row.readyToApply, false);
+    assert.ok(row.blockers.some((blocker) => blocker.includes("status must be one of submitted, approved")));
+    const operatorQueue = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-operator-queue.json"), "utf8"));
+    assert.ok(operatorQueue.rows.some((item) => item.id === "developer_app:tiktok"));
+  } finally {
+    await writeFile(proofPath, previousProof);
+    spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
 });
 
 test("external closeout evidence importer previews clean rows for strict apply", async () => {
@@ -185,9 +531,9 @@ test("external closeout evidence importer previews clean rows for strict apply",
   const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
   const cleanCsv = [
     "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
-    "account,meme-radar,youtube,verified,,,,https://www.youtube.com/create_channel,,https://proof.example.com/meme-radar-youtube,YouTube channel verified with manager proof and 2FA evidence stored outside repo",
-    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://proof.example.com/youtube-app-review,YouTube app review submitted with ticket YT-123 and no secrets stored",
-    "permission,,tiktok,requested,video.publish,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://proof.example.com/tiktok-video-publish,TikTok video.publish scope requested with reviewer note for owned clips approval queue",
+    "account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/meme-radar-youtube-proof/view,YouTube channel verified with manager proof and 2FA evidence stored outside repo",
+    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,YouTube app review submitted with ticket YT-123 and no sensitive values stored",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,TikTok video.publish scope requested with reviewer note for owned clips approval queue",
   ].join("\n") + "\n";
 
   try {
@@ -222,7 +568,7 @@ test("external closeout evidence importer rejects secrets in persisted fields", 
       "sk-secret-test-value,https://app.clipprreview.com?api_key=unsafe," +
       "https://app.clipprreview.com/api/clippers/oauth/youtube/callback," +
       "https://console.cloud.google.com/apis/library/youtube.googleapis.com,," +
-      "https://proof.example.com/youtube-app-review," +
+      "https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001," +
       "YouTube app review submitted with normal portal proof",
   ].join("\n") + "\n";
 
@@ -246,6 +592,172 @@ test("external closeout evidence importer rejects secrets in persisted fields", 
   } finally {
     if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
     else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer rejects non-closeout statuses with valid proof", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const wrongStatusCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "account,meme-radar,youtube,submitted,,,,,https://www.youtube.com/create_channel,,https://drive.google.com/file/d/meme-radar-youtube-proof/view,Submitted account proof is not enough for external closeout until account is verified",
+    "developer_app,,youtube,draft,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,Draft app proof is not enough for external closeout until app is submitted or approved",
+    "permission,,tiktok,blocked,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://developers.tiktok.com/apps/tiktok-prod-001/review,Blocked permission proof is not enough for external closeout until permission is requested or approved",
+  ].join("\n") + "\n";
+
+  try {
+    await writeFile(evidenceCsvPath, wrongStatusCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 3);
+    assert.equal(output.applied, 0);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("Account closeout status debe ser verified")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("Developer app closeout status debe ser submitted o approved")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("Permission closeout status debe ser requested o approved")));
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer mirrors strict developer app apply validation", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const unsafeCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "developer_app,,youtube,draft,,,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/cloud-resource-manager?project=youtube-prod-001,Draft app still needs the real project id before preview can be ready",
+    "developer_app,,tiktok,submitted,,tiktok-prod-001,https://localhost:5010,https://localhost:5010/api/clippers/oauth/tiktok/callback,https://developers.tiktok.com/,,https://developers.tiktok.com/apps/tiktok-prod-001,Submitted app with localhost public base URL must not be ready",
+  ].join("\n") + "\n";
+
+  try {
+    await writeFile(evidenceCsvPath, unsafeCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 2);
+    assert.equal(output.applied, 0);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("Developer app closeout status debe ser submitted o approved")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("public_base_url HTTPS publico real")));
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer rejects unsafe remote proof URLs", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const unsafeCsv = [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,http://localhost:5010/proof,Localhost proof should not count as external evidence",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://proof.example.com/tiktok-video-publish,Example domain proof should not count as real evidence",
+    "account,sports-daily,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://localhost/proof,HTTPS localhost proof should not count as external evidence",
+    "account,streamer-pulse,youtube,verified,,,,,https://www.youtube.com/create_channel,,https://127.0.0.1/proof,HTTPS loopback proof should not count as external evidence",
+    "permission,,tiktok,requested,video.upload,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,https://[::1]/proof,IPv6 loopback proof should not count as external evidence",
+    "permission,,instagram,requested,instagram_content_publish,,,,https://developers.facebook.com/,https://developers.facebook.com/docs/instagram-platform/,https://test/proof,Bare test proof should not count as real evidence",
+    "developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,https://console.cloud.google.com/proof?token=unsafe,Proof URL query token should be rejected",
+  ].join("\n") + "\n";
+
+  try {
+    await writeFile(evidenceCsvPath, unsafeCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 0);
+    assert.equal(output.rejected, 7);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("HTTPS")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("dominio publico real")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("secreto/token/password/cookie")));
+    assert.equal(JSON.stringify(report).includes("token=unsafe"), false);
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+  }
+});
+
+test("external closeout evidence importer validates local proof files without symlink escape", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const proofDir = path.join(rootDir, "evidence-drop", "test-proofs");
+  const cleanProofPath = path.join(proofDir, "clean-proof.md");
+  const shortProofPath = path.join(proofDir, "short-proof.md");
+  const placeholderProofPath = path.join(proofDir, "stub-proof.md");
+  const secretProofPath = path.join(proofDir, "secret-proof.md");
+  const queryTokenProofPath = path.join(proofDir, "query-token-proof.md");
+  const missingProofPath = path.join(proofDir, "missing-proof.md");
+  const symlinkPath = path.join(proofDir, "escape-proof.md");
+  const outsideProofPath = path.join("/private/tmp", "clippers-proof-escape.md");
+  const previousCsv = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+
+  try {
+    await mkdir(proofDir, { recursive: true });
+    await writeFile(cleanProofPath, "Robert verified the channel ownership in the official portal on 2026-06-22. Case MC-456 confirms manager access and the approval record matches the external account.");
+    await writeFile(shortProofPath, "too short");
+    await writeFile(placeholderProofPath, "Status: needs_real_proof\nProof URL: <paste real proof URL or secure local evidence path>\nThis stub must not pass validation.");
+    await writeFile(secretProofPath, "Robert verified the channel ownership in the official portal on 2026-06-22. access_token should never be stored here.");
+    await writeFile(queryTokenProofPath, "Robert verified the portal action and stored the official ticket reference. The proof link https://platform.example.com/review?token=unsafe should be rejected because signed/tokenized proof URLs must not be stored.");
+    await writeFile(outsideProofPath, "This outside workspace file is long enough to prove that symlink escapes must be rejected by realpath validation.");
+    await symlink(outsideProofPath, symlinkPath).catch(() => undefined);
+
+    const localCsv = [
+      "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+      `account,meme-radar,youtube,verified,,,,,https://www.youtube.com/create_channel,,${cleanProofPath},Clean local proof should preview as accepted`,
+      `account,sports-daily,youtube,verified,,,,,https://www.youtube.com/create_channel,,${shortProofPath},Short local proof should be rejected`,
+      `account,streamer-pulse,youtube,verified,,,,,https://www.youtube.com/create_channel,,${placeholderProofPath},Placeholder local proof should be rejected`,
+      `permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,${secretProofPath},Secret local proof should be rejected`,
+      `permission,,instagram,requested,instagram_basic,,,,https://developers.facebook.com/,https://developers.facebook.com/docs/instagram-platform/,${queryTokenProofPath},Query-token local proof should be rejected`,
+      `permission,,tiktok,requested,video.upload,,,,https://developers.tiktok.com/,https://developers.tiktok.com/doc/content-posting-api-get-started/,${missingProofPath},Missing local proof should be rejected`,
+      `developer_app,,youtube,submitted,,youtube-prod-001,https://app.clipprreview.com,https://app.clipprreview.com/api/clippers/oauth/youtube/callback,https://console.cloud.google.com/apis/library/youtube.googleapis.com,,${symlinkPath},Symlink escape should be rejected`,
+    ].join("\n") + "\n";
+
+    await writeFile(evidenceCsvPath, localCsv);
+    const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_evidence");
+    assert.equal(output.accepted, 1);
+    assert.equal(output.rejected, 6);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-evidence-import-report.json"), "utf8"));
+    assert.ok(report.rejected.some((row) => row.reason.includes("demasiado corto")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("placeholders")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("secreto/token/password/cookie")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("no existe")));
+    assert.ok(report.rejected.some((row) => row.reason.includes("fuera de clippers_workspace")));
+  } finally {
+    if (previousCsv === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousCsv);
+    await unlink(cleanProofPath).catch(() => undefined);
+    await unlink(shortProofPath).catch(() => undefined);
+    await unlink(placeholderProofPath).catch(() => undefined);
+    await unlink(secretProofPath).catch(() => undefined);
+    await unlink(queryTokenProofPath).catch(() => undefined);
+    await unlink(missingProofPath).catch(() => undefined);
+    await unlink(symlinkPath).catch(() => undefined);
+    await unlink(outsideProofPath).catch(() => undefined);
   }
 });
 
@@ -386,12 +898,22 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
   assert.ok(page.includes("interface ClipperOperationalReadinessSummary"));
   assert.ok(page.includes("interface ClipperExternalCloseoutPackSummary"));
+  assert.ok(page.includes("interface ClipperExternalCloseoutProofTodoSummary"));
+  assert.ok(page.includes("interface ClipperExternalCloseoutOperatorQueueSummary"));
+  assert.ok(page.includes("interface ClipperExternalCloseoutNextActionSummary"));
+  assert.ok(page.includes("interface ClipperExternalCloseoutArtifactSafety"));
   assert.ok(page.includes('queryKey: ["/api/clippers/operational-readiness"]'));
   assert.ok(page.includes('queryKey: ["/api/clippers/external-closeout-pack"]'));
+  assert.ok(page.includes('queryKey: ["/api/clippers/external-closeout-proof-todo"]'));
+  assert.ok(page.includes('queryKey: ["/api/clippers/external-closeout-operator-queue"]'));
+  assert.ok(page.includes('queryKey: ["/api/clippers/external-closeout-next-action"]'));
   assert.ok(page.includes('fetch("/api/clippers/prepare-operational-readiness", { method: "POST" })'));
   assert.ok(page.includes('fetch("/api/clippers/prepare-external-closeout-pack", { method: "POST" })'));
   assert.ok(page.includes('data-testid="clippers-operational-readiness"'));
   assert.ok(page.includes('data-testid="clippers-external-closeout-pack"'));
+  assert.ok(page.includes('data-testid="clippers-external-closeout-proof-todo"'));
+  assert.ok(page.includes('data-testid="clippers-external-closeout-operator-queue"'));
+  assert.ok(page.includes('data-testid="clippers-external-closeout-next-action"'));
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
@@ -447,6 +969,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(routes.includes('app.post("/api/clippers/prepare-operational-readiness"'));
   assert.ok(routes.includes('app.get("/api/clippers/external-closeout-pack"'));
   assert.ok(routes.includes('app.post("/api/clippers/prepare-external-closeout-pack"'));
+  assert.ok(routes.includes('app.get("/api/clippers/external-closeout-proof-todo"'));
+  assert.ok(routes.includes('app.get("/api/clippers/external-closeout-operator-queue"'));
+  assert.ok(routes.includes('app.get("/api/clippers/external-closeout-next-action"'));
   const activationRouteBlock = sliceRequired(
     routes,
     'app.post("/api/clippers/run-post-connect-activation-sweep"',

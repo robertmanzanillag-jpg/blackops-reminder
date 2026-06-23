@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 
@@ -9,10 +9,33 @@ const operationalReadinessPath = path.join(reportsDir, "clippers-operational-rea
 const outJsonPath = path.join(reportsDir, "clippers-external-closeout-pack.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-external-closeout-pack.md");
 const outCsvPath = path.join(reportsDir, "clippers-external-closeout-pack.csv");
+const proofTodoJsonPath = path.join(reportsDir, "clippers-external-closeout-proof-todo.json");
+const proofTodoMarkdownPath = path.join(reportsDir, "clippers-external-closeout-proof-todo.md");
+const proofTodoCsvPath = path.join(reportsDir, "clippers-external-closeout-proof-todo.csv");
+const operatorQueueJsonPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.json");
+const operatorQueueMarkdownPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.md");
+const operatorQueueCsvPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.csv");
+const goLiveAuditJsonPath = path.join(reportsDir, "clippers-external-go-live-audit.json");
+const goLiveAuditMarkdownPath = path.join(reportsDir, "clippers-external-go-live-audit.md");
+const goLiveAuditCsvPath = path.join(reportsDir, "clippers-external-go-live-audit.csv");
+const evidenceImportReportPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
+const proofDir = path.join(rootDir, "evidence-drop", "external-closeout-proofs");
+const productionPublicUrlPath = path.join(rootDir, "production-public-url.json");
+const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}/i;
+const secretQueryParamPattern = /(^|[?&;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|session)=/i;
+const placeholderPattern = /<[^>]+>|paste .* proof|submitted_or_approved|requested_or_approved|do not store passwords|placeholder|todo|tbd/i;
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readJsonOptional(filePath) {
+  try {
+    return await readJson(filePath);
+  } catch {
+    return null;
+  }
 }
 
 function runJsonScript(scriptPath, label) {
@@ -46,6 +69,246 @@ function csvCell(value) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
+function artifactSafetyFindings(artifacts) {
+  return artifacts.flatMap((artifact) => {
+    const findings = [];
+    if (secretPattern.test(artifact.content)) findings.push("secret_keyword_or_key_pattern");
+    if (secretQueryParamPattern.test(artifact.content)) findings.push("tokenized_or_signed_query_param");
+    return findings.map((reason) => ({ path: artifact.path, reason }));
+  });
+}
+
+function proofFileName(task) {
+  return `${task.id.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase()}.md`;
+}
+
+function proofPathFor(task) {
+  return path.join(proofDir, proofFileName(task));
+}
+
+function requiredCsvStatus(task) {
+  if (task.lane === "account") return "verified";
+  if (task.lane === "developer_app") return "submitted";
+  if (task.lane === "permission") return "requested";
+  return "";
+}
+
+function requiredCsvFields(task) {
+  if (task.lane === "account") return ["account_id", "platform", "status", "proof", "notes"];
+  if (task.lane === "developer_app") return ["platform", "status", "app_identifier", "public_base_url", "redirect_uri", "proof", "notes"];
+  return ["platform", "status", "scope", "proof", "notes"];
+}
+
+function renderProofFieldTemplate(task) {
+  const fieldDefaults = {
+    account_id: task.accountId || "",
+    platform: task.platform || "",
+    status: requiredCsvStatus(task),
+    scope: task.scope || "",
+    app_identifier: "",
+    public_base_url: task.redirectUri && task.redirectUri.startsWith("https://") ? new URL(task.redirectUri).origin : "",
+    redirect_uri: task.redirectUri || "",
+    proof: "<paste real proof URL or local proof file path>",
+    notes: "<write one sentence confirming the portal action and where proof lives>",
+  };
+  return [
+    "Evidence CSV fields to fill:",
+    ...requiredCsvFields(task).map((field) => `- ${field}: ${fieldDefaults[field] || ""}`),
+    "",
+  ].join("\n");
+}
+
+function parseProofFields(raw) {
+  const fields = {};
+  let insideFields = false;
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim() === "Evidence CSV fields to fill:") {
+      insideFields = true;
+      continue;
+    }
+    if (insideFields && !line.trim()) break;
+    if (!insideFields) continue;
+    const match = line.match(/^\s*-\s*([a-z_]+):\s*(.*)$/);
+    if (match) {
+      const value = match[2].trim();
+      fields[match[1]] = secretPattern.test(value) || secretQueryParamPattern.test(value) ? "" : value;
+    }
+  }
+  return fields;
+}
+
+function proofFieldValue(task, field, fallback = "") {
+  const value = task.proofFields?.[field];
+  return value && !/^<[^>]+>$/.test(value) ? value : fallback;
+}
+
+function looksPlaceholder(value) {
+  return !String(value || "").trim() || placeholderPattern.test(String(value || ""));
+}
+
+function safeOriginFromRedirect(redirectUri) {
+  try {
+    const url = new URL(redirectUri);
+    return url.protocol === "https:" ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+function isBlockedPublicHost(hostname) {
+  return hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0" ||
+    hostname.startsWith("127.") ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname) ||
+    hostname.endsWith(".localhost") ||
+    hostname === "example" ||
+    hostname === "example.com" ||
+    hostname.endsWith(".example.com") ||
+    hostname === "test" ||
+    hostname.endsWith(".example") ||
+    hostname === "invalid" ||
+    hostname.endsWith(".test") ||
+    hostname.endsWith(".invalid");
+}
+
+function isProductionPublicBaseUrl(value) {
+  if (!/^https:\/\//i.test(value || "")) return false;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return !isBlockedPublicHost(hostname) && hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
+async function readStoredPublicBaseUrl() {
+  const stored = await readJsonOptional(productionPublicUrlPath);
+  const publicBaseUrl = typeof stored?.publicBaseUrl === "string" ? stored.publicBaseUrl.trim() : "";
+  if (isProductionPublicBaseUrl(publicBaseUrl)) return publicBaseUrl.replace(/\/$/, "");
+  const envPublicBaseUrl = typeof process.env.PUBLIC_BASE_URL === "string" ? process.env.PUBLIC_BASE_URL.trim() : "";
+  return isProductionPublicBaseUrl(envPublicBaseUrl) ? envPublicBaseUrl.replace(/\/$/, "") : "";
+}
+
+function closeoutRedirectUri(platform, existingRedirectUri, publicBaseUrl) {
+  const existingOrigin = safeOriginFromRedirect(existingRedirectUri || "");
+  if (existingOrigin && isProductionPublicBaseUrl(existingOrigin)) return existingRedirectUri;
+  return publicBaseUrl && platform ? `${publicBaseUrl}/api/clippers/oauth/${platform}/callback` : (existingRedirectUri || "");
+}
+
+function acceptableCloseoutStatuses(task) {
+  if (task.lane === "account") return ["verified"];
+  if (task.lane === "developer_app") return ["submitted", "approved"];
+  if (task.lane === "permission") return ["requested", "approved"];
+  return [requiredCsvStatus(task)].filter(Boolean);
+}
+
+async function proofReferenceBlocker(task) {
+  const proof = proofFieldValue(task, "proof", "");
+  if (looksPlaceholder(proof)) return "fill proof with a real URL or local evidence path before it can leave the operator queue";
+  if (secretPattern.test(proof) || secretQueryParamPattern.test(proof)) return "proof reference contains sensitive token/secret/cookie/signature text";
+  if (/^https?:\/\//i.test(proof)) {
+    try {
+      const url = new URL(proof);
+      const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      const singleLabelHost = !hostname.includes(".") && hostname !== "drive.google.com";
+      if (url.protocol !== "https:") return "proof URL must use HTTPS";
+      if (isBlockedPublicHost(hostname) || singleLabelHost) return "proof URL must use a real public domain, not localhost/example/test";
+      if (secretQueryParamPattern.test(url.search)) return "proof URL appears to contain token/code/signature query parameters";
+      return "";
+    } catch {
+      return "proof URL is not valid";
+    }
+  }
+  const absolute = path.isAbsolute(proof) ? proof : path.resolve(process.cwd(), proof);
+  const relative = path.relative(rootDir, absolute);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return "local proof path must stay inside clippers_workspace";
+  const [realRoot, realProof] = await Promise.all([
+    realpath(rootDir).catch(() => null),
+    realpath(absolute).catch(() => null),
+  ]);
+  if (!realRoot || !realProof) return "local proof file does not exist or cannot be read";
+  const realRelative = path.relative(realRoot, realProof);
+  if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) return "local proof file resolves outside clippers_workspace";
+  const raw = await readFile(realProof, "utf8").catch(() => null);
+  if (!raw) return "local proof file does not exist or cannot be read";
+  if (raw.length < 80) return "local proof file is too short to prove a real portal action";
+  if (placeholderPattern.test(raw) || /needs_real_proof/i.test(raw)) return "local proof file still contains placeholders or needs_real_proof";
+  if (secretPattern.test(raw) || secretQueryParamPattern.test(raw)) return "local proof file contains sensitive token/secret/cookie/signature text";
+  return "";
+}
+
+function hasProofStubMarkers(raw) {
+  return /Status:\s*needs_real_proof/i.test(raw)
+    || /:\s*<[^>]+>/i.test(raw);
+}
+
+function proofSafetyBlocker(raw) {
+  return secretPattern.test(raw) || secretQueryParamPattern.test(raw)
+    ? "proof file contains sensitive token/secret/cookie/signature text; remove it before generating reports"
+    : "";
+}
+
+function safeArtifactText(value) {
+  return String(value || "")
+    .replace(/secreto\/token\/password\/cookie/gi, "sensitive credential-like text")
+    .replace(/token\/secret\/cookie\/signature/gi, "sensitive credential-like text")
+    .replace(/\bpasswords?\b/gi, "sensitive values")
+    .replace(/\bcookies?\b/gi, "browser credentials")
+    .replace(/\bclient secrets?\b/gi, "developer app private values")
+    .replace(/\bOAuth tokens?\b/gi, "OAuth private values")
+    .replace(/\brecovery codes?\b/gi, "recovery private values");
+}
+
+function renderProofStub(task) {
+  return [
+    `# ${task.id}`,
+    "",
+    "Status: needs_real_proof",
+    "",
+    "Fill this file with real non-secret evidence before running Apply.",
+    "",
+    "Required evidence:",
+    ...task.evidenceRequired.map((item) => `- ${item}`),
+    "",
+    "Paste real proof below. Do not paste passwords, recovery codes, cookies, tokens, client secrets or private screenshots.",
+    "",
+    "Proof URL or secure local evidence path: <paste real proof URL or secure local evidence path>",
+    "Portal/ticket/case/profile reference: <paste real reference>",
+    "Operator notes: <write at least one sentence confirming the external portal action is real>",
+    "",
+    renderProofFieldTemplate(task),
+    `Portal: ${task.portalUrl || "n/a"}`,
+    task.docsUrl ? `Docs: ${task.docsUrl}` : "",
+    task.redirectUri ? `Redirect URI: ${task.redirectUri}` : "",
+    `Next step: ${task.nextStep}`,
+    "",
+  ].filter(Boolean).join("\n");
+}
+
+async function writeProofStubs(tasks) {
+  await mkdir(proofDir, { recursive: true });
+  return Promise.all(tasks.map(async (task) => {
+    const proofPath = proofPathFor(task);
+    const existing = await readFile(proofPath, "utf8").catch(() => null);
+    const existingIsStub = existing && hasProofStubMarkers(existing);
+    const proofRaw = !existing || existingIsStub ? renderProofStub(task) : existing;
+    if (!existing || existingIsStub) await writeFile(proofPath, proofRaw);
+    const proofSafety = proofSafetyBlocker(proofRaw);
+    const proofFields = parseProofFields(proofRaw);
+    const proofStatus = hasProofStubMarkers(proofRaw) || proofSafety
+      ? "needs_real_proof"
+      : "proof_file_filled";
+    const taskWithProof = { ...task, proofPath, proofStatus, proofSafetyBlocker: proofSafety, proofFields };
+    const proofReferenceSafetyBlocker = await proofReferenceBlocker(taskWithProof);
+    return { ...taskWithProof, proofReferenceSafetyBlocker };
+  }));
+}
+
 function accountTask(row) {
   return {
     id: `account:${row.accountId}:${row.platform}`,
@@ -72,7 +335,7 @@ function accountTask(row) {
   };
 }
 
-function developerTask(row) {
+function developerTask(row, publicBaseUrl = "") {
   return {
     id: `developer_app:${row.platform}`,
     lane: "developer_app",
@@ -87,7 +350,7 @@ function developerTask(row) {
       : row.platform === "instagram"
         ? "https://developers.facebook.com/"
         : "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
-    redirectUri: row.redirectUri || "",
+    redirectUri: closeoutRedirectUri(row.platform, row.redirectUri, publicBaseUrl),
     evidenceRequired: [
       "developer app id/client key/project id",
       "public HTTPS callback URL configured in portal",
@@ -124,23 +387,268 @@ function permissionTasks(row) {
 }
 
 function evidenceRow(task) {
-  const publicBaseUrl = task.redirectUri && task.redirectUri.startsWith("https://")
+  const fallbackPublicBaseUrl = task.redirectUri && task.redirectUri.startsWith("https://")
     ? new URL(task.redirectUri).origin
     : "";
+  const publicBaseUrl = proofFieldValue(task, "public_base_url", fallbackPublicBaseUrl);
+  const proof = proofFieldValue(task, "proof", task.proofPath || `<paste ${task.lane} proof URL or local secure evidence path>`);
+  const notes = proofFieldValue(task, "notes", `${task.safeNotes} Fill proof file before applying: ${task.proofPath || "missing"}`);
   return [
     task.lane,
-    task.accountId || "",
-    task.platform || "",
-    task.targetStatus,
-    task.scope || "",
-    "",
+    proofFieldValue(task, "account_id", task.accountId || ""),
+    proofFieldValue(task, "platform", task.platform || ""),
+    proofFieldValue(task, "status", requiredCsvStatus(task)),
+    proofFieldValue(task, "scope", task.scope || ""),
+    proofFieldValue(task, "app_identifier", ""),
     publicBaseUrl,
-    task.redirectUri || "",
+    proofFieldValue(task, "redirect_uri", task.redirectUri || ""),
     task.portalUrl || "",
     task.docsUrl || "",
-    `<paste ${task.lane} proof URL or local secure evidence path>`,
-    task.safeNotes,
+    proof,
+    notes,
   ].map(csvCell).join(",");
+}
+
+function proofTodoBlockers(task, requiredCsvFields) {
+  const blockers = [];
+  if (task.proofStatus === "needs_real_proof") blockers.push("replace proof stub with real non-secret evidence");
+  if (task.proofSafetyBlocker) blockers.push(task.proofSafetyBlocker);
+  if (task.proofReferenceSafetyBlocker) blockers.push(task.proofReferenceSafetyBlocker);
+  const proofStatusValue = proofFieldValue(task, "status", requiredCsvStatus(task)).toLowerCase();
+  if (!acceptableCloseoutStatuses(task).includes(proofStatusValue)) {
+    blockers.push(`status must be one of ${acceptableCloseoutStatuses(task).join(", ")} before this action can leave the operator queue`);
+  }
+  if (task.lane === "developer_app" && !proofFieldValue(task, "app_identifier")) blockers.push("fill app_identifier from the developer portal");
+  if (task.lane === "developer_app" && !isProductionPublicBaseUrl(proofFieldValue(task, "public_base_url", safeOriginFromRedirect(task.redirectUri || "")))) {
+    blockers.push("fill public_base_url with a real public HTTPS production URL, not localhost/private/example/test");
+  }
+  if (task.lane === "developer_app" && !task.redirectUri) blockers.push("confirm public HTTPS redirect_uri");
+  if (task.lane === "permission" && !task.scope) blockers.push("fill permission scope");
+  if (task.lane === "account" && (!task.accountId || !task.platform)) blockers.push("fill account_id and platform");
+  const missingFieldSummary = requiredCsvFields.filter((field) => {
+    if (field === "proof") return task.proofStatus === "needs_real_proof";
+    if (field === "app_identifier") return task.lane === "developer_app" && !proofFieldValue(task, "app_identifier");
+    if (field === "scope") return task.lane === "permission" && !task.scope;
+    return false;
+  });
+  if (missingFieldSummary.length) blockers.push(`CSV fields still need real values: ${missingFieldSummary.join(", ")}`);
+  return Array.from(new Set(blockers));
+}
+
+function missingProofTodoFields(task, requiredCsvFields) {
+  return requiredCsvFields.filter((field) => {
+    if (field === "proof") return task.proofStatus === "needs_real_proof";
+    if (field === "app_identifier") return task.lane === "developer_app" && !proofFieldValue(task, "app_identifier");
+    if (field === "scope") return task.lane === "permission" && !task.scope;
+    if (field === "account_id") return task.lane === "account" && !task.accountId;
+    if (field === "platform") return !task.platform;
+    return false;
+  });
+}
+
+function operatorActionFor(row) {
+  if (row.lane === "developer_app") {
+    return `Open ${row.platform} developer portal, create or submit the app, copy the public app identifier, then fill ${row.proofPath}.`;
+  }
+  if (row.lane === "permission") {
+    return `Open ${row.platform} developer portal, request or confirm ${row.scope}, then fill ${row.proofPath}.`;
+  }
+  return `Open the ${row.platform} account/profile, verify ownership or Metricool connection, then fill ${row.proofPath}.`;
+}
+
+function proofTodoRow(task) {
+  const fields = requiredCsvFields(task);
+  const blockers = proofTodoBlockers(task, fields);
+  const missingCsvFields = missingProofTodoFields(task, fields);
+  return {
+    id: task.id,
+    lane: task.lane,
+    priority: task.priority,
+    platform: task.platform || "",
+    accountId: task.accountId || "",
+    scope: task.scope || "",
+    proofStatus: task.proofStatus,
+    proofPath: task.proofPath,
+    requiredCsvStatus: requiredCsvStatus(task),
+    requiredCsvFields: fields,
+    allowedCsvStatuses: task.lane === "account"
+      ? ["verified", "submitted", "blocked"]
+      : task.lane === "developer_app"
+        ? ["submitted", "approved", "rejected", "draft"]
+        : ["requested", "approved", "blocked"],
+    portalUrl: task.portalUrl || "",
+    docsUrl: task.docsUrl || "",
+    redirectUri: task.redirectUri || "",
+    requiredEvidence: task.evidenceRequired,
+    safeNotes: task.safeNotes,
+    blockers,
+    missingCsvFields,
+    readyToApply: blockers.length === 0,
+    nextStep: task.nextStep,
+    csvEditHint: `Set status to ${requiredCsvStatus(task)} and fill ${fields.join(", ")} only after replacing the proof stub with real non-secret evidence.`,
+  };
+}
+
+function buildOperatorQueue(proofTodo) {
+  const priorityScore = { critical: 0, high: 1 };
+  const laneScore = { developer_app: 0, permission: 1, account: 2 };
+  return proofTodo
+    .filter((row) => !row.readyToApply)
+    .sort((a, b) => (
+      (priorityScore[a.priority] ?? 9) - (priorityScore[b.priority] ?? 9) ||
+      (laneScore[a.lane] ?? 9) - (laneScore[b.lane] ?? 9) ||
+      a.id.localeCompare(b.id)
+    ))
+    .map((row, index) => ({
+      rank: index + 1,
+      id: row.id,
+      lane: row.lane,
+      priority: row.priority,
+      platform: row.platform,
+      accountId: row.accountId,
+      scope: row.scope,
+      proofPath: row.proofPath,
+      proofStatus: row.proofStatus,
+      requiredCsvStatus: row.requiredCsvStatus,
+      missingCsvFields: row.missingCsvFields,
+      blockers: row.blockers,
+      portalUrl: row.portalUrl,
+      docsUrl: row.docsUrl,
+      redirectUri: row.redirectUri,
+      operatorAction: operatorActionFor(row),
+      csvEditHint: row.csvEditHint,
+      nextStep: row.nextStep,
+    }));
+}
+
+function renderProofTodoMarkdown(summary) {
+  const rows = summary.proofTodo.map((row) => [
+    `### ${row.id}`,
+    "",
+    `- Priority: ${row.priority}`,
+    `- Proof status: ${row.proofStatus}`,
+    `- Proof file: ${row.proofPath}`,
+    `- Required CSV status: ${row.requiredCsvStatus}`,
+    `- Required CSV fields: ${row.requiredCsvFields.join(", ")}`,
+    `- Allowed statuses: ${row.allowedCsvStatuses.join(", ")}`,
+    `- Portal: ${row.portalUrl || "n/a"}`,
+    row.docsUrl ? `- Docs: ${row.docsUrl}` : null,
+    row.redirectUri ? `- Redirect URI: ${row.redirectUri}` : null,
+    `- Evidence required: ${row.requiredEvidence.join(" | ")}`,
+    `- Safe notes: ${row.safeNotes}`,
+    `- Ready to apply: ${row.readyToApply ? "yes" : "no"}`,
+    `- Blockers: ${row.blockers.join(" | ") || "none"}`,
+    `- Next step: ${row.nextStep}`,
+    "",
+  ].filter(Boolean).join("\n"));
+  return [
+    "# Clippers External Closeout Proof Todo",
+    "",
+    `Generated: ${summary.generatedAt}`,
+    "",
+    "Use this as the operator checklist for the external portals. Do not paste tokens, passwords, cookies, client secrets, recovery codes, or private screenshots.",
+    "",
+    `Evidence CSV: ${summary.paths.evidenceCsv}`,
+    `Proof dir: ${summary.paths.proofDir}`,
+    "",
+    "## Totals",
+    "",
+    `- Todo rows: ${summary.proofTodo.length}`,
+    `- Proof files needing real evidence: ${summary.totals.proofFilesNeedRealEvidence}`,
+    `- Proof files filled: ${summary.totals.proofFilesFilled}`,
+    "",
+    "## Rows",
+    "",
+    ...rows,
+  ].join("\n");
+}
+
+function renderProofTodoCsv(summary) {
+  const header = ["id", "lane", "priority", "platform", "account_id", "scope", "proof_status", "proof_path", "required_csv_status", "required_csv_fields", "allowed_csv_statuses", "ready_to_apply", "blockers", "portal_url", "docs_url", "redirect_uri", "next_step"];
+  const rows = summary.proofTodo.map((row) => [
+    row.id,
+    row.lane,
+    row.priority,
+    row.platform,
+    row.accountId,
+    row.scope,
+    row.proofStatus,
+    row.proofPath,
+    row.requiredCsvStatus,
+    row.requiredCsvFields.join("|"),
+    row.allowedCsvStatuses.join("|"),
+    row.readyToApply ? "yes" : "no",
+    row.blockers.join(" | "),
+    row.portalUrl,
+    row.docsUrl,
+    row.redirectUri,
+    row.nextStep,
+  ].map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
+function renderOperatorQueueMarkdown(summary) {
+  const rows = summary.operatorQueue.map((row) => [
+    `### ${row.rank}. ${row.id}`,
+    "",
+    `- Priority: ${row.priority}`,
+    `- Lane: ${row.lane}`,
+    `- Platform: ${row.platform || "n/a"}`,
+    row.scope ? `- Scope: ${row.scope}` : null,
+    `- Operator action: ${row.operatorAction}`,
+    `- Proof file: ${row.proofPath}`,
+    `- Missing CSV fields: ${row.missingCsvFields.join(", ") || "none"}`,
+    `- Required CSV status: ${row.requiredCsvStatus}`,
+    `- Portal: ${row.portalUrl || "n/a"}`,
+    row.docsUrl ? `- Docs: ${row.docsUrl}` : null,
+    row.redirectUri ? `- Redirect URI: ${row.redirectUri}` : null,
+    `- Blockers: ${row.blockers.join(" | ") || "none"}`,
+    "",
+  ].filter(Boolean).join("\n"));
+  return [
+    "# Clippers External Closeout Operator Queue",
+    "",
+    `Generated: ${summary.generatedAt}`,
+    "",
+    "This is the shortest safe queue for finishing the real external portal work. Do not paste secrets, tokens, cookies, recovery codes, client secrets or private screenshots.",
+    "",
+    `Evidence CSV: ${summary.paths.evidenceCsv}`,
+    `Proof dir: ${summary.paths.proofDir}`,
+    "",
+    "## Totals",
+    "",
+    `- Queue rows: ${summary.operatorQueue.length}`,
+    `- Critical: ${summary.operatorQueue.filter((row) => row.priority === "critical").length}`,
+    `- High: ${summary.operatorQueue.filter((row) => row.priority === "high").length}`,
+    "",
+    "## Queue",
+    "",
+    ...rows,
+  ].join("\n");
+}
+
+function renderOperatorQueueCsv(summary) {
+  const header = ["rank", "id", "lane", "priority", "platform", "account_id", "scope", "proof_path", "proof_status", "required_csv_status", "missing_csv_fields", "blockers", "portal_url", "docs_url", "redirect_uri", "operator_action", "next_step"];
+  const rows = summary.operatorQueue.map((row) => [
+    row.rank,
+    row.id,
+    row.lane,
+    row.priority,
+    row.platform,
+    row.accountId,
+    row.scope,
+    row.proofPath,
+    row.proofStatus,
+    row.requiredCsvStatus,
+    row.missingCsvFields.join("|"),
+    row.blockers.join(" | "),
+    row.portalUrl,
+    row.docsUrl,
+    row.redirectUri,
+    row.operatorAction,
+    row.nextStep,
+  ].map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
 }
 
 function renderMarkdown(summary) {
@@ -153,6 +661,8 @@ function renderMarkdown(summary) {
     `- Portal: ${task.portalUrl || "n/a"}`,
     task.docsUrl ? `- Docs: ${task.docsUrl}` : null,
     task.redirectUri ? `- Redirect URI: ${task.redirectUri}` : null,
+    `- Proof file: ${task.proofPath}`,
+    `- Proof status: ${task.proofStatus}`,
     task.missingEnvVars?.length ? `- Missing env vars: ${task.missingEnvVars.join(", ")}` : null,
     `- Evidence required: ${task.evidenceRequired.join(" | ")}`,
     `- Next step: ${task.nextStep}`,
@@ -174,6 +684,7 @@ function renderMarkdown(summary) {
     `- Account tasks: ${summary.totals.accounts}`,
     `- Developer app tasks: ${summary.totals.developerApps}`,
     `- Permission tasks: ${summary.totals.permissions}`,
+    `- Proof files needing real evidence: ${summary.totals.proofFilesNeedRealEvidence}`,
     `- Metricool queued for approval: ${summary.metricool.queuedForApproval}`,
     `- Auto-send ready: ${summary.metricool.readyToSend}`,
     "",
@@ -184,6 +695,7 @@ function renderMarkdown(summary) {
     "## Evidence Import",
     "",
     `CSV: ${summary.paths.evidenceCsv}`,
+    `Proof dir: ${summary.paths.proofDir}`,
     "",
     "## Tasks",
     "",
@@ -192,7 +704,7 @@ function renderMarkdown(summary) {
 }
 
 function renderTaskCsv(summary) {
-  const header = ["id", "lane", "priority", "platform", "account_id", "account_name", "current_status", "target_status", "scope", "portal_url", "docs_url", "redirect_uri", "next_step"];
+  const header = ["id", "lane", "priority", "platform", "account_id", "account_name", "current_status", "target_status", "scope", "portal_url", "docs_url", "redirect_uri", "proof_path", "proof_status", "next_step"];
   const rows = summary.tasks.map((task) => [
     task.id,
     task.lane,
@@ -206,6 +718,8 @@ function renderTaskCsv(summary) {
     task.portalUrl || "",
     task.docsUrl || "",
     task.redirectUri || "",
+    task.proofPath || "",
+    task.proofStatus || "",
     task.nextStep,
   ].map(csvCell).join(","));
   return `${header.join(",")}\n${rows.join("\n")}\n`;
@@ -218,16 +732,376 @@ function renderEvidenceCsv(summary) {
   ].join("\n") + "\n";
 }
 
+function buildCloseoutWorkBlocks(operatorQueue) {
+  const definitions = [
+    {
+      id: "developer_apps",
+      label: "Developer apps",
+      lane: "developer_app",
+      estimatedMinutes: 45,
+      doneCriteria: [
+        "App identifier recorded for every developer app row in this block.",
+        "Production public_base_url and redirect_uri match the portal configuration.",
+        "Proof files contain real non-secret portal proof before evidence import.",
+      ],
+    },
+    {
+      id: "permissions",
+      label: "Permission requests",
+      lane: "permission",
+      estimatedMinutes: 60,
+      doneCriteria: [
+        "Permission request or approval proof recorded for every scope in this block.",
+        "Use-case notes mention owned/permissioned content and Metricool approval_required publishing.",
+        "No OAuth tokens, client secrets, signed URLs or private screenshots are stored.",
+      ],
+    },
+    {
+      id: "accounts",
+      label: "Account/profile verification",
+      lane: "account",
+      estimatedMinutes: 75,
+      doneCriteria: [
+        "Account/profile ownership or manager proof recorded for every account row.",
+        "Metricool connected-profile proof recorded when the platform is part of the MVP lane.",
+        "2FA/recovery proof is referenced without storing recovery codes.",
+      ],
+    },
+  ];
+  return definitions
+    .map((definition) => {
+      const rows = operatorQueue.filter((row) => row.lane === definition.lane);
+      const portalUrls = Array.from(new Set(rows.map((row) => row.portalUrl).filter(Boolean)));
+      return {
+        id: definition.id,
+        label: definition.label,
+        lane: definition.lane,
+        status: rows.length ? "needs_operator" : "complete",
+        estimatedMinutes: rows.length ? definition.estimatedMinutes : 0,
+        actions: rows.length,
+        critical: rows.filter((row) => row.priority === "critical").length,
+        high: rows.filter((row) => row.priority === "high").length,
+        firstActionId: rows[0]?.id || "",
+        firstAction: rows[0]?.operatorAction || "No actions remain for this block.",
+        portalUrls,
+        proofPaths: rows.map((row) => row.proofPath),
+        missingCsvFields: Array.from(new Set(rows.flatMap((row) => row.missingCsvFields || []))),
+        csvStatuses: Array.from(new Set(rows.map((row) => row.requiredCsvStatus).filter(Boolean))),
+        doneCriteria: definition.doneCriteria,
+        nextStep: rows[0]?.operatorAction || "Block complete. Refresh External Closeout Pack after evidence import.",
+      };
+    })
+    .filter((block) => block.actions > 0);
+}
+
+function buildEvidenceRepairQueue(summary, evidenceImport) {
+  const rejectedRows = evidenceImport?.rejected || [];
+  const rejectedByTaskId = new Map();
+  const unmappedRejectedRows = [];
+  for (const rejected of rejectedRows) {
+    const sourceTask = Number.isInteger(rejected.index) ? summary.tasks[rejected.index - 2] : null;
+    if (sourceTask) rejectedByTaskId.set(sourceTask.id, rejected);
+    else unmappedRejectedRows.push(rejected);
+  }
+  const repairRows = summary.tasks
+    .filter((sourceTask) => rejectedByTaskId.has(sourceTask.id) || summary.operatorQueue.some((row) => row.id === sourceTask.id))
+    .map((sourceTask) => {
+    const rejected = rejectedByTaskId.get(sourceTask.id);
+    const proofTodo = summary.proofTodo.find((row) => row.id === sourceTask.id) || null;
+    const operatorQueueRow = summary.operatorQueue.find((row) => row.id === sourceTask.id) || null;
+    const requiredStatus = proofTodo?.requiredCsvStatus || (sourceTask ? requiredCsvStatus(sourceTask) : "");
+    const requiredFields = proofTodo?.requiredCsvFields || (sourceTask ? requiredCsvFields(sourceTask) : []);
+    const proofPath = sourceTask?.proofPath || "";
+    const csvRowLabel = rejected?.index || "pending validation";
+    const copyPacket = [
+      `Repair action: ${sourceTask.id}`,
+      `CSV row: ${csvRowLabel}`,
+      `Required status: ${requiredStatus}`,
+      `Proof file: ${proofPath}`,
+      `Portal: ${sourceTask.portalUrl || "n/a"}`,
+      sourceTask.docsUrl ? `Docs: ${sourceTask.docsUrl}` : null,
+      sourceTask.redirectUri ? `Redirect URI: ${sourceTask.redirectUri}` : null,
+      "",
+      "Paste into proof file only after the portal action is real:",
+      "Status: proof_file_filled",
+      "Proof URL or secure local evidence path: <real public proof URL or local proof file inside clippers_workspace>",
+      "Portal/ticket/case/profile reference: <real portal app id, ticket, case, profile or request id>",
+      "Operator notes: <one clear sentence confirming the external portal action and where proof lives>",
+      "",
+      "Evidence CSV fields to fill:",
+      ...requiredFields.map((field) => {
+        if (field === "status") return `- status: ${requiredStatus}`;
+        if (field === "platform") return `- platform: ${sourceTask.platform || ""}`;
+        if (field === "account_id") return `- account_id: ${sourceTask.accountId || ""}`;
+        if (field === "scope") return `- scope: ${sourceTask.scope || ""}`;
+        if (field === "public_base_url") return `- public_base_url: ${sourceTask.redirectUri ? safeOriginFromRedirect(sourceTask.redirectUri) : ""}`;
+        if (field === "redirect_uri") return `- redirect_uri: ${sourceTask.redirectUri || ""}`;
+        return `- ${field}: <real ${field}>`;
+      }),
+      "",
+      "Do not paste private credentials, browser credential values, developer app private values, OAuth private values, recovery private values, signed URLs or private screenshots.",
+    ].filter(Boolean).join("\n");
+    const safeReason = safeArtifactText(rejected?.reason || "Evidence import rejected this row.");
+    const safeBlockers = (proofTodo?.blockers || []).map(safeArtifactText);
+    return {
+      rank: 0,
+      csvRow: rejected?.index || null,
+      id: sourceTask.id,
+      source: rejected ? "evidence_import" : "operator_queue",
+      lane: sourceTask.lane || rejected?.kind || "unknown",
+      platform: sourceTask?.platform || "",
+      requiredCsvStatus: requiredStatus,
+      proofPath,
+      reason: rejected ? safeReason : "Action remains in operator queue and still needs real non-secret evidence.",
+      missingCsvFields: proofTodo?.missingCsvFields || [],
+      blockers: safeBlockers,
+      operatorAction: operatorQueueRow?.operatorAction || (sourceTask ? operatorActionFor(proofTodo || sourceTask) : "Open the evidence CSV and fix this rejected row."),
+      nextStep: proofTodo?.csvEditHint || operatorQueueRow?.csvEditHint || "Fix the rejected evidence row, then run Validate again.",
+      copyPacket,
+    };
+  });
+  const unmappedRows = unmappedRejectedRows.map((rejected, index) => ({
+    rank: 0,
+    csvRow: rejected.index || null,
+    id: `unmapped:${index + 1}`,
+    source: "evidence_import",
+    lane: rejected.kind || "unknown",
+    platform: "",
+    requiredCsvStatus: "",
+    proofPath: "",
+    reason: safeArtifactText(rejected.reason || "Evidence import rejected this row."),
+    missingCsvFields: [],
+    blockers: [],
+    operatorAction: "Open the evidence CSV and fix this rejected row.",
+    nextStep: "Fix the rejected evidence row, then run Validate again.",
+    copyPacket: "",
+  }));
+  return [...repairRows, ...unmappedRows].map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function buildGoLiveAudit(summary, artifactSafety, evidenceImport) {
+  const evidenceStatus = evidenceImport?.status || "empty";
+  const evidenceTotals = evidenceImport?.totals || {
+    rowsScanned: 0,
+    accepted: 0,
+    rejected: 0,
+    applied: 0,
+  };
+  const gates = [
+    {
+      id: "artifact_safety",
+      label: "Generated artifacts have no sensitive token patterns",
+      status: artifactSafety.status === "clean" ? "verified" : "blocked",
+      blocker: artifactSafety.status === "clean" ? "" : `${artifactSafety.findings.length} sensitive artifact finding(s) must be removed.`,
+    },
+    {
+      id: "external_actions",
+      label: "All external accounts, developer apps, and permissions are closed out",
+      status: summary.operatorQueue.length === 0 ? "verified" : "blocked",
+      blocker: summary.operatorQueue.length === 0 ? "" : `${summary.operatorQueue.length} operator action(s) still need real portal work.`,
+    },
+    {
+      id: "proof_files",
+      label: "All proof stubs were replaced with real non-secret evidence",
+      status: summary.totals.proofFilesNeedRealEvidence === 0 ? "verified" : "blocked",
+      blocker: summary.totals.proofFilesNeedRealEvidence === 0 ? "" : `${summary.totals.proofFilesNeedRealEvidence} proof file(s) still need real evidence.`,
+    },
+    {
+      id: "evidence_import",
+      label: "Evidence CSV has been validated and applied",
+      status: evidenceStatus === "import_applied" ? "verified" : "blocked",
+      blocker: evidenceStatus === "import_applied"
+        ? ""
+        : `Evidence import is ${evidenceStatus}; accepted ${evidenceTotals.accepted}, rejected ${evidenceTotals.rejected}, applied ${evidenceTotals.applied}.`,
+    },
+    {
+      id: "metricool_publish_mode",
+      label: "Metricool stays approval_required with no automatic sending",
+      status: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0 ? "verified" : "blocked",
+      blocker: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0
+        ? ""
+        : `Metricool publish mode is ${summary.metricool.publishMode}; readyToSend is ${summary.metricool.readyToSend}.`,
+    },
+    {
+      id: "direct_api_gate",
+      label: "Direct API publishing is not treated as ready until accounts, apps, permissions and evidence are verified",
+      status: summary.status === "ready_for_final_review" ? "verified" : "blocked",
+      blocker: summary.status === "ready_for_final_review" ? "" : "Full Direct API go-live is still blocked by external actions or proof evidence.",
+    },
+  ];
+  const blockedGates = gates.filter((gate) => gate.status !== "verified");
+  const nextAction = summary.operatorQueue[0] || null;
+  const workBlocks = buildCloseoutWorkBlocks(summary.operatorQueue);
+  const evidenceRepairQueue = buildEvidenceRepairQueue(summary, evidenceImport);
+  return {
+    status: blockedGates.length === 0 ? "ready_for_final_review" : "blocked_external_actions",
+    generatedAt: summary.generatedAt,
+    paths: {
+      json: goLiveAuditJsonPath,
+      markdown: goLiveAuditMarkdownPath,
+      csv: goLiveAuditCsvPath,
+      closeoutPack: summary.paths.markdown,
+      operatorQueue: summary.paths.operatorQueueMarkdown,
+      proofTodo: summary.paths.proofTodoMarkdown,
+      evidenceImport: evidenceImport?.paths?.markdown || path.join(reportsDir, "clippers-external-closeout-evidence-import-report.md"),
+    },
+    totals: {
+      gates: gates.length,
+      verified: gates.length - blockedGates.length,
+      blocked: blockedGates.length,
+      operatorActions: summary.operatorQueue.length,
+      proofFilesNeedRealEvidence: summary.totals.proofFilesNeedRealEvidence,
+      evidenceAccepted: evidenceTotals.accepted,
+      evidenceRejected: evidenceTotals.rejected,
+      evidenceApplied: evidenceTotals.applied,
+      metricoolQueuedForApproval: summary.metricool.queuedForApproval,
+      metricoolReadyToSend: summary.metricool.readyToSend,
+      workBlocks: workBlocks.length,
+      estimatedOperatorMinutes: workBlocks.reduce((sum, block) => sum + block.estimatedMinutes, 0),
+      evidenceRepairRows: evidenceRepairQueue.length,
+    },
+    gates,
+    workBlocks,
+    evidenceRepairQueue,
+    nextAction,
+    nextStep: nextAction
+      ? nextAction.operatorAction
+      : blockedGates[0]?.blocker || "All external gates are clean. Run final browser QA before changing any publish mode.",
+  };
+}
+
+function renderGoLiveAuditMarkdown(audit) {
+  const gateLines = audit.gates.map((gate) => [
+    `### ${gate.id}`,
+    "",
+    `- Status: ${gate.status}`,
+    `- Gate: ${gate.label}`,
+    `- Blocker: ${gate.blocker || "none"}`,
+    "",
+  ].join("\n"));
+  const workBlockLines = audit.workBlocks.map((block) => [
+    `### ${block.label}`,
+    "",
+    `- Status: ${block.status}`,
+    `- Actions: ${block.actions}`,
+    `- Estimated minutes: ${block.estimatedMinutes}`,
+    `- First action: ${block.firstAction}`,
+    `- Portal URLs: ${block.portalUrls.join(" | ") || "n/a"}`,
+    `- Missing CSV fields: ${block.missingCsvFields.join(", ") || "none"}`,
+    `- Proof files: ${block.proofPaths.slice(0, 5).join(" | ")}`,
+    block.proofPaths.length > 5 ? `- More proof files: ${block.proofPaths.length - 5}` : null,
+    "- Done criteria:",
+    ...block.doneCriteria.map((item) => `  - ${item}`),
+    "",
+  ].filter(Boolean).join("\n"));
+  const repairLines = audit.evidenceRepairQueue.map((row) => [
+    `### ${row.rank}. ${row.id}`,
+    "",
+    `- CSV row: ${row.csvRow || "unknown"}`,
+    `- Lane: ${row.lane}`,
+    `- Platform: ${row.platform || "n/a"}`,
+    `- Required status: ${row.requiredCsvStatus || "n/a"}`,
+    `- Reason: ${row.reason}`,
+    `- Proof file: ${row.proofPath || "n/a"}`,
+    `- Missing CSV fields: ${row.missingCsvFields.join(", ") || "none"}`,
+    `- Next step: ${row.nextStep}`,
+    "",
+    "Copy packet:",
+    "```text",
+    row.copyPacket || "n/a",
+    "```",
+    "",
+  ].join("\n"));
+  return [
+    "# Clippers External Go-Live Audit",
+    "",
+    `Generated: ${audit.generatedAt}`,
+    `Status: ${audit.status}`,
+    "",
+    "This is the compact final gate before any external publishing change. It does not enable automatic publishing.",
+    "",
+    "## Totals",
+    "",
+    `- Gates: ${audit.totals.gates}`,
+    `- Verified: ${audit.totals.verified}`,
+    `- Blocked: ${audit.totals.blocked}`,
+    `- Operator actions: ${audit.totals.operatorActions}`,
+    `- Proof files needing real evidence: ${audit.totals.proofFilesNeedRealEvidence}`,
+    `- Evidence accepted/rejected/applied: ${audit.totals.evidenceAccepted}/${audit.totals.evidenceRejected}/${audit.totals.evidenceApplied}`,
+    `- Metricool queued for approval: ${audit.totals.metricoolQueuedForApproval}`,
+    `- Metricool ready to send: ${audit.totals.metricoolReadyToSend}`,
+    `- Work blocks: ${audit.totals.workBlocks}`,
+    `- Estimated operator minutes: ${audit.totals.estimatedOperatorMinutes}`,
+    `- Evidence repair rows: ${audit.totals.evidenceRepairRows}`,
+    "",
+    "## Next Action",
+    "",
+    audit.nextAction
+      ? `- ${audit.nextAction.id}: ${audit.nextAction.operatorAction}`
+      : `- ${audit.nextStep}`,
+    "",
+    "## Work Blocks",
+    "",
+    ...(workBlockLines.length ? workBlockLines : ["- No operator work blocks remain."]),
+    "",
+    "## Evidence Repair Queue",
+    "",
+    ...(repairLines.length ? repairLines : ["- No rejected evidence rows."]),
+    "",
+    "## Gates",
+    "",
+    ...gateLines,
+  ].join("\n");
+}
+
+function renderGoLiveAuditCsv(audit) {
+  const header = ["kind", "id", "label", "status", "actions", "estimated_minutes", "blocker_or_next_step"];
+  const rows = [
+    ...audit.gates.map((gate) => [
+      "gate",
+      gate.id,
+      gate.label,
+      gate.status,
+      "",
+      "",
+      gate.blocker,
+    ]),
+    ...audit.workBlocks.map((block) => [
+      "work_block",
+      block.id,
+      block.label,
+      block.status,
+      block.actions,
+      block.estimatedMinutes,
+      block.nextStep,
+    ]),
+    ...audit.evidenceRepairQueue.map((row) => [
+      "evidence_repair",
+      row.id,
+      `CSV row ${row.csvRow || "unknown"}`,
+      "blocked",
+      "",
+      "",
+      row.reason,
+    ]),
+  ].map((row) => row.map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
   await runJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
   const accountReadiness = await readJson(accountReadinessPath);
   const operationalReadiness = await readJson(operationalReadinessPath);
+  const evidenceImport = await readJsonOptional(evidenceImportReportPath);
+  const publicBaseUrl = await readStoredPublicBaseUrl();
   const accountTasks = accountReadiness.accountRows.filter((row) => row.accountStatus !== "verified").map(accountTask);
-  const developerTasks = accountReadiness.developerRows.filter((row) => row.status !== "approved").map(developerTask);
+  const developerTasks = accountReadiness.developerRows.filter((row) => row.status !== "approved").map((row) => developerTask(row, publicBaseUrl));
   const permissionTaskRows = accountReadiness.permissionRows.filter((row) => row.status !== "approved").flatMap(permissionTasks);
-  const tasks = [...accountTasks, ...developerTasks, ...permissionTaskRows];
+  const tasks = await writeProofStubs([...accountTasks, ...developerTasks, ...permissionTaskRows]);
+  const proofTodo = tasks.map(proofTodoRow);
+  const operatorQueue = buildOperatorQueue(proofTodo);
   const safeOperationalBlockers = (operationalReadiness.blockers || []).filter((blocker) => !String(blocker).includes("Local app is not listening"));
   const blocked = tasks.length > 0 || safeOperationalBlockers.length > 0;
   const summary = {
@@ -237,7 +1111,17 @@ async function main() {
       json: outJsonPath,
       markdown: outMarkdownPath,
       csv: outCsvPath,
+      proofTodoJson: proofTodoJsonPath,
+      proofTodoMarkdown: proofTodoMarkdownPath,
+      proofTodoCsv: proofTodoCsvPath,
+      operatorQueueJson: operatorQueueJsonPath,
+      operatorQueueMarkdown: operatorQueueMarkdownPath,
+      operatorQueueCsv: operatorQueueCsvPath,
+      goLiveAuditJson: goLiveAuditJsonPath,
+      goLiveAuditMarkdown: goLiveAuditMarkdownPath,
+      goLiveAuditCsv: goLiveAuditCsvPath,
       evidenceCsv: evidenceCsvPath,
+      proofDir,
     },
     blockers: safeOperationalBlockers,
     metricool: {
@@ -252,25 +1136,109 @@ async function main() {
       accounts: accountTasks.length,
       developerApps: developerTasks.length,
       permissions: permissionTaskRows.length,
+      proofFilesNeedRealEvidence: tasks.filter((task) => task.proofStatus === "needs_real_proof").length,
+      proofFilesFilled: tasks.filter((task) => task.proofStatus === "proof_file_filled").length,
     },
     tasks,
+    proofTodo,
+    operatorQueue,
     nextStep: blocked
-      ? "Complete these external portal actions, paste proof into the evidence import CSV, then rerun account and operational readiness."
+      ? "Complete these external portal actions, replace proof stubs with real non-secret evidence, then validate the evidence import gate."
       : "Run final browser QA and keep Metricool approval_required until Robert explicitly enables real publishing.",
   };
-  await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
-  await writeFile(outMarkdownPath, renderMarkdown(summary));
-  await writeFile(outCsvPath, renderTaskCsv(summary));
-  await writeFile(evidenceCsvPath, renderEvidenceCsv(summary));
+  const closeoutMarkdown = renderMarkdown(summary);
+  const closeoutCsv = renderTaskCsv(summary);
+  const proofTodoJson = JSON.stringify({
+    generatedAt: summary.generatedAt,
+    status: summary.status,
+    paths: summary.paths,
+    totals: summary.totals,
+    rows: summary.proofTodo,
+    operatorQueue: summary.operatorQueue,
+  }, null, 2);
+  const proofTodoMarkdown = renderProofTodoMarkdown(summary);
+  const proofTodoCsv = renderProofTodoCsv(summary);
+  const operatorQueueJson = JSON.stringify({
+    generatedAt: summary.generatedAt,
+    status: summary.status,
+    paths: summary.paths,
+    totals: {
+      rows: summary.operatorQueue.length,
+      critical: summary.operatorQueue.filter((row) => row.priority === "critical").length,
+      high: summary.operatorQueue.filter((row) => row.priority === "high").length,
+    },
+    rows: summary.operatorQueue,
+    nextStep: summary.operatorQueue[0]?.operatorAction || summary.nextStep,
+  }, null, 2);
+  const operatorQueueMarkdown = renderOperatorQueueMarkdown(summary);
+  const operatorQueueCsv = renderOperatorQueueCsv(summary);
+  const evidenceCsv = renderEvidenceCsv(summary);
+  const preliminaryAudit = buildGoLiveAudit(summary, { status: "clean", scanned: 0, findings: [] }, evidenceImport);
+  const preliminaryAuditMarkdown = renderGoLiveAuditMarkdown(preliminaryAudit);
+  const preliminaryAuditCsv = renderGoLiveAuditCsv(preliminaryAudit);
+  const preliminaryAuditJson = JSON.stringify(preliminaryAudit, null, 2);
+  const artifactSafety = {
+    status: "clean",
+    scanned: 12,
+    findings: artifactSafetyFindings([
+      { path: outMarkdownPath, content: closeoutMarkdown },
+      { path: outCsvPath, content: closeoutCsv },
+      { path: proofTodoJsonPath, content: proofTodoJson },
+      { path: proofTodoMarkdownPath, content: proofTodoMarkdown },
+      { path: proofTodoCsvPath, content: proofTodoCsv },
+      { path: operatorQueueJsonPath, content: operatorQueueJson },
+      { path: operatorQueueMarkdownPath, content: operatorQueueMarkdown },
+      { path: operatorQueueCsvPath, content: operatorQueueCsv },
+      { path: goLiveAuditJsonPath, content: preliminaryAuditJson },
+      { path: goLiveAuditMarkdownPath, content: preliminaryAuditMarkdown },
+      { path: goLiveAuditCsvPath, content: preliminaryAuditCsv },
+      { path: evidenceCsvPath, content: evidenceCsv },
+    ]),
+  };
+  artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
+  const preliminarySummaryJson = JSON.stringify({ ...summary, artifactSafety }, null, 2);
+  artifactSafety.findings = [
+    ...artifactSafety.findings,
+    ...artifactSafetyFindings([{ path: outJsonPath, content: preliminarySummaryJson }]),
+  ];
+  artifactSafety.scanned = 13;
+  artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
+  const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
+  const finalSummary = { ...summary, artifactSafety, goLiveAudit };
+  await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
+  await writeFile(outMarkdownPath, closeoutMarkdown);
+  await writeFile(outCsvPath, closeoutCsv);
+  await writeFile(proofTodoJsonPath, JSON.stringify({
+    ...JSON.parse(proofTodoJson),
+    artifactSafety,
+  }, null, 2));
+  await writeFile(proofTodoMarkdownPath, proofTodoMarkdown);
+  await writeFile(proofTodoCsvPath, proofTodoCsv);
+  await writeFile(operatorQueueJsonPath, JSON.stringify({
+    ...JSON.parse(operatorQueueJson),
+    artifactSafety,
+  }, null, 2));
+  await writeFile(operatorQueueMarkdownPath, operatorQueueMarkdown);
+  await writeFile(operatorQueueCsvPath, operatorQueueCsv);
+  await writeFile(goLiveAuditJsonPath, JSON.stringify(goLiveAudit, null, 2));
+  await writeFile(goLiveAuditMarkdownPath, renderGoLiveAuditMarkdown(goLiveAudit));
+  await writeFile(goLiveAuditCsvPath, renderGoLiveAuditCsv(goLiveAudit));
+  await writeFile(evidenceCsvPath, evidenceCsv);
   console.log(JSON.stringify({
     status: summary.status,
+    goLiveAuditStatus: goLiveAudit.status,
+    goLiveAuditBlockedGates: goLiveAudit.totals.blocked,
     tasks: summary.totals.tasks,
     critical: summary.totals.critical,
     high: summary.totals.high,
     accounts: summary.totals.accounts,
     developerApps: summary.totals.developerApps,
     permissions: summary.totals.permissions,
+    proofFilesNeedRealEvidence: summary.totals.proofFilesNeedRealEvidence,
     reportPath: outMarkdownPath,
+    proofTodoPath: proofTodoMarkdownPath,
+    operatorQueuePath: operatorQueueMarkdownPath,
+    goLiveAuditPath: goLiveAuditMarkdownPath,
     evidenceCsvPath,
   }, null, 2));
 }

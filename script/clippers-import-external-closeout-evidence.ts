@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { recordClipperLaunchEvidenceBatch } from "../server/clippers-agent";
 
@@ -12,6 +12,7 @@ const reportMarkdownPath = path.join(reportsDir, "clippers-external-closeout-evi
 const reportCsvPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.csv");
 
 const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}/i;
+const secretQueryParamPattern = /(^|[?&;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|session)=/i;
 const placeholderPattern = /<[^>]+>|paste .* proof|submitted_or_approved|requested_or_approved|do not store passwords|placeholder|todo|tbd/i;
 
 function csvCell(value: unknown): string {
@@ -73,10 +74,112 @@ function safeOriginFromRedirect(redirectUri: string): string {
 }
 
 function rowContainsSecret(row: CsvRow): boolean {
-  return Object.values(row).some((value) => typeof value === "string" && secretPattern.test(value));
+  return Object.values(row).some((value) => (
+    typeof value === "string" &&
+    (secretPattern.test(value) || secretQueryParamPattern.test(value))
+  ));
 }
 
-function validateRow(row: CsvRow, index: number): { accepted?: CsvRow; rejected?: Record<string, unknown> } {
+function proofRemoteProblem(proof: string): string | null {
+  if (!/^https?:\/\//i.test(proof)) return null;
+  try {
+    const url = new URL(proof);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const singleLabelHost = !hostname.includes(".") && hostname !== "drive.google.com";
+    if (url.protocol !== "https:") return "Proof remoto debe usar HTTPS.";
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "0.0.0.0" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname) ||
+      hostname.endsWith(".localhost") ||
+      hostname === "example" ||
+      hostname === "example.com" ||
+      hostname.endsWith(".example.com") ||
+      hostname === "test" ||
+      hostname.endsWith(".example") ||
+      hostname === "invalid" ||
+      hostname.endsWith(".test") ||
+      hostname.endsWith(".invalid") ||
+      singleLabelHost
+    ) {
+      return "Proof remoto debe usar un dominio publico real, no localhost/example/test.";
+    }
+    if (secretQueryParamPattern.test(url.search)) return "Proof remoto parece contener token/code/signature en query string.";
+    return "";
+  } catch {
+    return "Proof remoto no es una URL valida.";
+  }
+}
+
+function isProductionPublicBaseUrl(value: string): boolean {
+  if (!/^https:\/\//i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "0.0.0.0" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname) ||
+      hostname.endsWith(".localhost") ||
+      hostname === "example" ||
+      hostname === "example.com" ||
+      hostname.endsWith(".example.com") ||
+      hostname === "test" ||
+      hostname.endsWith(".example") ||
+      hostname === "invalid" ||
+      hostname.endsWith(".test") ||
+      hostname.endsWith(".invalid") ||
+      !hostname.includes(".")
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveProofPath(proof: string): string | null {
+  if (!proof || /^https?:\/\//i.test(proof)) return null;
+  const absolute = path.isAbsolute(proof) ? proof : path.resolve(process.cwd(), proof);
+  const relative = path.relative(rootDir, absolute);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  return absolute;
+}
+
+async function validateProofReference(proof: string): Promise<string | null> {
+  const remoteProblem = proofRemoteProblem(proof);
+  if (remoteProblem !== null) return remoteProblem || null;
+  const proofPath = resolveProofPath(proof);
+  if (!proofPath) return "Proof local debe vivir dentro de clippers_workspace o ser una URL https.";
+  const [realRoot, realProof] = await Promise.all([
+    realpath(rootDir).catch(() => null),
+    realpath(proofPath).catch(() => null),
+  ]);
+  if (!realRoot || !realProof) return "Proof file no existe o no se puede leer.";
+  const realRelative = path.relative(realRoot, realProof);
+  if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
+    return "Proof local resuelve fuera de clippers_workspace.";
+  }
+  const raw = await readFile(realProof, "utf8").catch(() => null);
+  if (!raw) return "Proof file no existe o no se puede leer.";
+  if (raw.length < 80) return "Proof file es demasiado corto para demostrar evidencia real.";
+  if (placeholderPattern.test(raw) || /needs_real_proof/i.test(raw)) return "Proof file todavia contiene placeholders o needs_real_proof.";
+  if (secretPattern.test(raw) || secretQueryParamPattern.test(raw)) return "Proof file parece contener secreto/token/password/cookie.";
+  return null;
+}
+
+async function validateRow(row: CsvRow, index: number): Promise<{ accepted?: CsvRow; rejected?: Record<string, unknown> }> {
   const kind = row.kind?.trim();
   const proof = row.proof?.trim() || "";
   const notes = row.notes?.trim() || "";
@@ -93,8 +196,8 @@ function validateRow(row: CsvRow, index: number): { accepted?: CsvRow; rejected?
   }
 
   if (kind === "account") {
-    if (status !== "verified" && status !== "submitted" && status !== "blocked") {
-      return { rejected: { index, kind, reason: "Account status debe ser verified, submitted o blocked." } };
+    if (status !== "verified") {
+      return { rejected: { index, kind, reason: "Account closeout status debe ser verified para aplicar evidencia externa." } };
     }
     if (!row.account_id || !row.platform) {
       return { rejected: { index, kind, reason: "Account requiere account_id y platform." } };
@@ -102,22 +205,22 @@ function validateRow(row: CsvRow, index: number): { accepted?: CsvRow; rejected?
   }
 
   if (kind === "developer_app") {
-    if (status !== "submitted" && status !== "approved" && status !== "rejected" && status !== "draft") {
-      return { rejected: { index, kind, reason: "Developer app status debe ser submitted, approved, rejected o draft." } };
+    if (status !== "submitted" && status !== "approved") {
+      return { rejected: { index, kind, reason: "Developer app closeout status debe ser submitted o approved para aplicar evidencia externa." } };
     }
-    if ((status === "submitted" || status === "approved") && looksPlaceholder(row.app_identifier || "")) {
-      return { rejected: { index, kind, reason: "Developer app requiere app_identifier real para submitted/approved." } };
+    if (looksPlaceholder(row.app_identifier || "")) {
+      return { rejected: { index, kind, reason: "Developer app requiere app_identifier real para preview/apply." } };
     }
     const publicBaseUrl = row.public_base_url || safeOriginFromRedirect(row.redirect_uri || "");
-    if ((status === "submitted" || status === "approved") && !/^https:\/\//i.test(publicBaseUrl)) {
-      return { rejected: { index, kind, reason: "Developer app requiere public_base_url HTTPS real." } };
+    if (!isProductionPublicBaseUrl(publicBaseUrl)) {
+      return { rejected: { index, kind, reason: "Developer app requiere public_base_url HTTPS publico real, no localhost/private/example/test." } };
     }
     row.public_base_url = publicBaseUrl;
   }
 
   if (kind === "permission") {
-    if (status !== "requested" && status !== "approved" && status !== "blocked") {
-      return { rejected: { index, kind, reason: "Permission status debe ser requested, approved o blocked." } };
+    if (status !== "requested" && status !== "approved") {
+      return { rejected: { index, kind, reason: "Permission closeout status debe ser requested o approved para aplicar evidencia externa." } };
     }
     if (!row.platform || !row.scope) {
       return { rejected: { index, kind, reason: "Permission requiere platform y scope." } };
@@ -126,6 +229,10 @@ function validateRow(row: CsvRow, index: number): { accepted?: CsvRow; rejected?
 
   if (rowContainsSecret(row)) {
     return { rejected: { index, kind, reason: "La fila parece contener secreto/token/password/cookie en algun campo. No se importa evidencia sensible." } };
+  }
+  const proofProblem = await validateProofReference(proof);
+  if (proofProblem) {
+    return { rejected: { index, kind, reason: proofProblem } };
   }
 
   row.notes = [notes, `Proof: ${proof}`].filter(Boolean).join(" | ");
@@ -173,11 +280,11 @@ async function main(): Promise<void> {
   const accepted: CsvRow[] = [];
   const rejected: Record<string, unknown>[] = [];
 
-  rows.forEach((row, index) => {
-    const result = validateRow(row, index + 2);
+  for (const [index, row] of rows.entries()) {
+    const result = await validateRow(row, index + 2);
     if (result.accepted) accepted.push(result.accepted);
     if (result.rejected) rejected.push(result.rejected);
-  });
+  }
 
   let batchResult: Awaited<ReturnType<typeof recordClipperLaunchEvidenceBatch>> | null = null;
   if (apply && accepted.length && rejected.length === 0) {
@@ -188,9 +295,10 @@ async function main(): Promise<void> {
   }
 
   const strictBlocked = Boolean(batchResult?.launchEvidenceBatch.strictBlocked);
-  const applied = Boolean(batchResult && !strictBlocked);
+  const batchRejected = batchResult?.launchEvidenceBatch.rejected.length || 0;
+  const applied = Boolean(batchResult && !strictBlocked && batchRejected === 0);
   const summary = {
-    status: rejected.length || strictBlocked
+    status: rejected.length || strictBlocked || batchRejected
       ? "blocked_invalid_evidence"
       : applied
         ? "import_applied"
@@ -208,7 +316,7 @@ async function main(): Promise<void> {
     totals: {
       rowsScanned: rows.length,
       accepted: accepted.length,
-      rejected: rejected.length + (batchResult?.launchEvidenceBatch.rejected.length || 0),
+      rejected: rejected.length + batchRejected,
       applied: applied ? accepted.length : 0,
     },
     accepted: accepted.map((row, index) => ({

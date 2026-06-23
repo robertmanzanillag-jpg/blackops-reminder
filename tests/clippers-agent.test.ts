@@ -2415,6 +2415,7 @@ test("importClipperLaunchEvidenceDropFiles ignores Metricool approval evidence t
   const noisyDropPaths = [
     path.join(dropDir, "owner-connect-evidence.fixpack.csv"),
     path.join(dropDir, "owner-connect-evidence.workbook.csv"),
+    path.join(dropDir, "external-closeout-evidence-import.csv"),
   ];
   const accountPath = `${statusBefore.accountEvidence.evidenceDir}/streamer-pulse-youtube.json`;
   const previousMetricoolEvidence = await readFile(metricoolEvidencePath, "utf8").catch(() => null);
@@ -2437,11 +2438,16 @@ test("importClipperLaunchEvidenceDropFiles ignores Metricool approval evidence t
     "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
     "metricool-test-001,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/source.mp4,Caption,<Metricool approval/scheduled URL after Robert approves>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
   ].join("\n"));
+  await writeFile(path.join(dropDir, "external-closeout-evidence-import.csv"), [
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes",
+    "permission,,tiktok,requested,video.publish,,,,https://developers.tiktok.com/,,<proof>,External closeout CSV should be ignored by generic launch evidence import",
+  ].join("\n"));
 
   try {
     const { launchEvidenceDropImport } = await importClipperLaunchEvidenceDropFiles();
     assert.ok(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("launch-evidence-drop-metricool-ignore-control.test.csv")));
     assert.equal(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("metricool-approval-evidence-import.csv")), false);
+    assert.equal(launchEvidenceDropImport.sourceFiles?.some((file) => file.endsWith("external-closeout-evidence-import.csv")), false);
     assert.equal(launchEvidenceDropImport.rejected.some((row) => row.identifier?.includes("metricool-test-001")), false);
   } finally {
     if (previousControlDrop === null) await unlink(controlDropPath).catch(() => undefined);
@@ -5837,6 +5843,16 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.sourceIntakeTemplate.includes("refresh_token"), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("access_token"), false);
     assert.ok(rawPortalLauncher.includes("Clippers External Portal Launcher"));
+    assert.ok(rawPortalLauncher.includes("External Closeout Evidence Import Gate"));
+    assert.ok(rawPortalLauncher.includes("External Closeout Proof Todo"));
+    assert.ok(rawPortalLauncher.includes("clippers_workspace/reports/clippers-external-closeout-proof-todo.md"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/external-closeout-proof-todo"));
+    assert.ok(rawPortalLauncher.includes("loadExternalCloseoutProofTodo"));
+    assert.ok(rawPortalLauncher.includes("clippers_workspace/evidence-drop/external-closeout-evidence-import.csv"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/preview-external-closeout-evidence-import"));
+    assert.ok(rawPortalLauncher.includes("/api/clippers/apply-external-closeout-evidence-import"));
+    assert.ok(rawPortalLauncher.includes("x-clippers-operator-confirm"));
+    assert.ok(rawPortalLauncher.includes("Apply clean import"));
     assert.ok(rawPortalLauncher.includes("Account Creation Launcher"));
     assert.ok(rawPortalLauncher.includes("Credential Collection Launcher"));
     assert.ok(rawPortalLauncher.includes("Permission Request Launcher"));
