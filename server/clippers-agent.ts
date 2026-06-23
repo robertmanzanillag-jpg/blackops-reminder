@@ -10798,9 +10798,9 @@ function renderSourceScoutMarkdown(summary: ClipperSourceScoutSummary): string {
 
 async function writeSourceScoutArtifacts(summary: ClipperSourceScoutSummary): Promise<ClipperSourceScoutSummary> {
   const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_MARKDOWN_PATH, renderSourceScoutMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_CSV_PATH, renderSourceScoutCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_MARKDOWN_PATH, renderSourceScoutMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_CSV_PATH, renderSourceScoutCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11482,9 +11482,9 @@ async function writeSourceScoutPermissionPackArtifacts(summary: ClipperSourceSco
       ? "partial"
       : "ready";
   const withGeneratedAt: ClipperSourceScoutPermissionPackSummary = { ...summary, generatedAt: new Date().toISOString(), status };
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH, renderSourceScoutPermissionPackMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH, renderSourceScoutPermissionPackCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH, renderSourceScoutPermissionPackMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH, renderSourceScoutPermissionPackCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11496,7 +11496,7 @@ export async function prepareClipperSourceScoutPermissionPack(userId = getSystem
     sourceScout: statusBefore.sourceScout,
     sourceScoutIntake: statusBefore.sourceScoutIntake,
   }));
-  return { sourceScoutPermissionPack, status: await getClipperStatus(userId) };
+  return { sourceScoutPermissionPack, status: { ...statusBefore, sourceScoutPermissionPack } };
 }
 
 function sourceScoutWorkQueueIntakeRow(candidate: ClipperSourceScoutCandidate, status: ClipperSourceScoutIntakeStatus): string {
@@ -11791,9 +11791,9 @@ function renderSourceScoutWorkQueueMarkdown(summary: ClipperSourceScoutWorkQueue
 async function writeSourceScoutWorkQueueArtifacts(summary: ClipperSourceScoutWorkQueueSummary): Promise<ClipperSourceScoutWorkQueueSummary> {
   const status: ClipperSourceScoutWorkQueueStatus = summary.totals.items > 0 ? "ready" : "blocked";
   const withGeneratedAt: ClipperSourceScoutWorkQueueSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH, renderSourceScoutWorkQueueMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_CSV_PATH, renderSourceScoutWorkQueueCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH, renderSourceScoutWorkQueueMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_CSV_PATH, renderSourceScoutWorkQueueCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11808,7 +11808,7 @@ export async function prepareClipperSourceScoutWorkQueue(userId = getSystemUserI
     weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
   }));
-  return { sourceScoutWorkQueue, status: await getClipperStatus(userId) };
+  return { sourceScoutWorkQueue, status: { ...statusBefore, sourceScoutWorkQueue } };
 }
 
 function sourceScoutExactUrlSearchQuery(candidate: ClipperSourceScoutCandidate): string {
@@ -11983,9 +11983,9 @@ function renderSourceScoutExactUrlKitMarkdown(summary: ClipperSourceScoutExactUr
 async function writeSourceScoutExactUrlKitArtifacts(summary: ClipperSourceScoutExactUrlKitSummary): Promise<ClipperSourceScoutExactUrlKitSummary> {
   const status: ClipperSourceScoutExactUrlKitStatus = summary.totals.items > 0 ? "blocked" : "ready";
   const withGeneratedAt: ClipperSourceScoutExactUrlKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH, renderSourceScoutExactUrlKitMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH, renderSourceScoutExactUrlKitCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH, renderSourceScoutExactUrlKitMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH, renderSourceScoutExactUrlKitCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11997,7 +11997,7 @@ export async function prepareClipperSourceScoutExactUrlKit(userId = getSystemUse
     sourceScout: statusBefore.sourceScout,
     sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
   }));
-  return { sourceScoutExactUrlKit, status: await getClipperStatus(userId) };
+  return { sourceScoutExactUrlKit, status: { ...statusBefore, sourceScoutExactUrlKit } };
 }
 
 const SOURCE_SCOUT_DAILY_CATEGORY_TARGETS: Record<ClipperAccountCategory, { leadTarget: number; exactUrlTarget: number; searchMinutes: number }> = {
@@ -12346,9 +12346,9 @@ function renderSourceScoutDailySprintMarkdown(summary: ClipperSourceScoutDailySp
 
 async function writeSourceScoutDailySprintArtifacts(summary: ClipperSourceScoutDailySprintSummary): Promise<ClipperSourceScoutDailySprintSummary> {
   const withGeneratedAt: ClipperSourceScoutDailySprintSummary = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH, renderSourceScoutDailySprintMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH, renderSourceScoutDailySprintCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH, renderSourceScoutDailySprintMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH, renderSourceScoutDailySprintCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -12366,7 +12366,7 @@ export async function prepareClipperSourceScoutDailySprint(userId = getSystemUse
     exactUrlKit: statusBefore.sourceScoutExactUrlKit,
     weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
   }));
-  return { sourceScoutDailySprint, status: await getClipperStatus(userId) };
+  return { sourceScoutDailySprint, status: { ...statusBefore, sourceScoutDailySprint } };
 }
 
 function sourceScoutSourceFileName(item: ClipperSourceScoutWorkQueueItem): string {
@@ -12551,9 +12551,9 @@ function renderSourceScoutSourceFileKitMarkdown(summary: ClipperSourceScoutSourc
 async function writeSourceScoutSourceFileKitArtifacts(summary: ClipperSourceScoutSourceFileKitSummary): Promise<ClipperSourceScoutSourceFileKitSummary> {
   const status: ClipperSourceScoutSourceFileKitStatus = summary.totals.missingSourceFiles > 0 ? "blocked" : "ready";
   const withGeneratedAt: ClipperSourceScoutSourceFileKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH, renderSourceScoutSourceFileKitMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH, renderSourceScoutSourceFileKitCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH, renderSourceScoutSourceFileKitMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH, renderSourceScoutSourceFileKitCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -12564,7 +12564,7 @@ export async function prepareClipperSourceScoutSourceFileKit(userId = getSystemU
   const sourceScoutSourceFileKit = await writeSourceScoutSourceFileKitArtifacts(await buildSourceScoutSourceFileKitSummary({
     sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
   }));
-  return { sourceScoutSourceFileKit, status: await getClipperStatus(userId) };
+  return { sourceScoutSourceFileKit, status: { ...statusBefore, sourceScoutSourceFileKit } };
 }
 
 function rightsEvidenceLedgerRepairRow(item: {
@@ -45087,7 +45087,12 @@ export async function prepareClipperSourceScout(userId = getSystemUserId()): Pro
     sourceScout,
     trendCandidatesBatch,
     metricoolExecutionQueue: queueResult.metricoolExecutionQueue,
-    status: await getClipperStatus(userId),
+    status: {
+      ...statusBefore,
+      sourceScout,
+      trendRadar: trendCandidatesBatch ? queueResult.status.trendRadar : statusBefore.trendRadar,
+      metricoolExecutionQueue: queueResult.metricoolExecutionQueue,
+    },
   };
 }
 
