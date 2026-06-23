@@ -58,17 +58,22 @@ async function main() {
 
   const binDir = path.join(rootDir, "bin");
   const ytdlpPath = path.join(binDir, "yt-dlp");
-  if (!existsSync(ytdlpPath)) {
-    console.log("Downloading yt-dlp binary...");
-    mkdirSync(binDir, { recursive: true });
-    execSync(
-      `curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "${ytdlpPath}"`,
-      { stdio: "inherit" }
-    );
-    chmodSync(ytdlpPath, 0o755);
-    console.log("yt-dlp downloaded:", ytdlpPath);
-  } else {
+  if (existsSync(ytdlpPath)) {
     console.log("yt-dlp already present:", ytdlpPath);
+  } else {
+    console.log("Attempting to download yt-dlp binary...");
+    try {
+      mkdirSync(binDir, { recursive: true });
+      execSync(
+        `curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "${ytdlpPath}"`,
+        { stdio: "inherit", timeout: 60000 }
+      );
+      chmodSync(ytdlpPath, 0o755);
+      console.log("yt-dlp downloaded:", ytdlpPath);
+    } catch (err) {
+      console.warn("Warning: could not download yt-dlp during build:", err.message);
+      console.warn("The server will fall back to system yt-dlp or python3 -m yt_dlp at runtime.");
+    }
   }
 }
 

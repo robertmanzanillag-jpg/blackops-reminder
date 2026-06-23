@@ -28,16 +28,8 @@ function findBin(...candidates: string[]): string {
   return candidates[candidates.length - 1] ?? "unknown";
 }
 
-const FFMPEG_BIN = findBin(
-  process.env.FFMPEG_PATH?.trim() ?? "",
-  path.join(process.cwd(), "node_modules", "@ffmpeg-installer", "linux-x64", "ffmpeg"),
-  "ffmpeg",
-);
-const FFPROBE_BIN = findBin(
-  process.env.FFPROBE_PATH?.trim() ?? "",
-  path.join(process.cwd(), "node_modules", "ffprobe-static", "bin", "linux", "x64", "ffprobe"),
-  "ffprobe",
-);
+const FFMPEG_BIN = process.env.FFMPEG_PATH?.trim() || "ffmpeg";
+const FFPROBE_BIN = process.env.FFPROBE_PATH?.trim() || "ffprobe";
 const LOCAL_YTDLP_BIN = findBin(
   process.env.YT_DLP_PATH?.trim() ?? "",
   path.join(process.cwd(), "bin", "yt-dlp"),
