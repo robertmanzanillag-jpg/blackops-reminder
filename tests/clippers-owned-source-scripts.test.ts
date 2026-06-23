@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { access } from "node:fs/promises";
 import { mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
@@ -9,6 +10,7 @@ const queuePath = path.join(rootDir, "scheduled", "metricool-execution-queue.jso
 const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-queue.md");
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const safePublicBaseUrl = "https://app.clipprreview.com";
 
 const sliceRequired = (content: string, startNeedle: string, endNeedle: string) => {
   const start = content.indexOf(startNeedle);
@@ -17,6 +19,377 @@ const sliceRequired = (content: string, startNeedle: string, endNeedle: string) 
   assert.notEqual(end, -1, `Missing end marker after ${startNeedle}: ${endNeedle}`);
   return content.slice(start, end);
 };
+
+const pathExists = async (filePath: string) => {
+  return access(filePath).then(() => true, () => false);
+};
+
+const writeFileIfMissing = async (filePath: string, content: string) => {
+  if (await pathExists(filePath)) return;
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, content);
+};
+
+const writeJsonIfMissing = async (filePath: string, value: unknown) => {
+  await writeFileIfMissing(filePath, `${JSON.stringify(value, null, 2)}\n`);
+};
+
+const developerConnectionItem = (
+  platform: string,
+  label: string,
+  missingEnvVars: string[],
+  scopes: string[],
+) => ({
+  platform,
+  label,
+  status: "missing",
+  appIdentifier: null,
+  publicBaseUrl: null,
+  redirectUri: `${safePublicBaseUrl}/api/clippers/oauth/${platform}/callback`,
+  missingEnvVars,
+  scopes,
+  nextStep: `Create ${label} developer app and import submitted evidence row with real proof.`,
+});
+
+const officialSourceItem = (
+  platform: string,
+  sourceStatus: string,
+  accessMode: string,
+  submitDecision: string,
+  scopes: string[],
+  officialUrls: string[],
+  verifiedClaim: string,
+) => ({
+  platform,
+  label: `${platform} permission source verification`,
+  sourceStatus,
+  accessMode,
+  submitDecision,
+  scopes,
+  officialUrls,
+  verifiedClaims: [verifiedClaim],
+  reviewerEvidence: [`Attach ${platform} portal proof after the operator completes the action.`],
+  recheckSteps: [`Recheck the official ${platform} portal before importing proof.`],
+  blockers: [],
+  nextStep: "Official source is identified; attach real non-secret proof before approval.",
+});
+
+const ensureClipperScriptFixtures = async () => {
+  await mkdir(path.join(rootDir, "reports"), { recursive: true });
+  await mkdir(path.join(rootDir, "evidence-drop", "external-closeout-proofs"), { recursive: true });
+
+  await writeJsonIfMissing(path.join(rootDir, "production-public-url.json"), {
+    publicBaseUrl: safePublicBaseUrl,
+    updatedAt: "2026-06-20T00:00:00.000Z",
+    storage: "test-fixture",
+  });
+  await writeJsonIfMissing(path.join(rootDir, "config.json"), {
+    accounts: [
+      {
+        id: "sports-daily",
+        name: "Sports Daily Clips",
+        category: "sports",
+        platforms: ["tiktok", "instagram", "youtube"],
+        dailyClipTarget: 10,
+        weeklyViewsGoal: 1_000_000,
+        lastWeekViews: 0,
+        status: "active",
+        contentPolicy: "Owned, licensed, permissioned or recreated sports clips only.",
+        platformAccounts: [
+          {
+            platform: "tiktok",
+            handle: "@sportsdaily",
+            displayName: "Sports Daily Clips",
+            status: "ready",
+            requiredScopes: ["video.publish", "video.upload"],
+            missingSteps: [],
+            notes: "Fixture lane connected through Metricool approval_required mode.",
+          },
+          {
+            platform: "instagram",
+            handle: "@sportsdaily",
+            displayName: "Sports Daily Clips",
+            status: "not_created",
+            requiredScopes: ["instagram_basic", "instagram_content_publish", "pages_show_list"],
+            missingSteps: ["Connect Instagram profile and import real proof."],
+            notes: "External account proof still required.",
+          },
+          {
+            platform: "youtube",
+            handle: "@sportsdaily",
+            displayName: "Sports Daily Clips",
+            status: "not_created",
+            requiredScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+            missingSteps: ["Connect YouTube channel and import real proof."],
+            notes: "External account proof still required.",
+          },
+        ],
+      },
+      {
+        id: "meme-radar",
+        name: "Meme Radar",
+        category: "memes",
+        platforms: ["tiktok", "instagram", "youtube"],
+        dailyClipTarget: 12,
+        weeklyViewsGoal: 1_000_000,
+        lastWeekViews: 0,
+        status: "active",
+        contentPolicy: "Owned, licensed, permissioned or recreated meme clips only.",
+        platformAccounts: [
+          {
+            platform: "tiktok",
+            handle: "@memeradar",
+            displayName: "Meme Radar",
+            status: "ready",
+            requiredScopes: ["video.publish", "video.upload"],
+            missingSteps: [],
+            notes: "Fixture lane connected through Metricool approval_required mode.",
+          },
+          {
+            platform: "instagram",
+            handle: "@memeradar",
+            displayName: "Meme Radar",
+            status: "not_created",
+            requiredScopes: ["instagram_basic", "instagram_content_publish", "pages_show_list"],
+            missingSteps: ["Connect Instagram profile and import real proof."],
+            notes: "External account proof still required.",
+          },
+          {
+            platform: "youtube",
+            handle: "@memeradar",
+            displayName: "Meme Radar",
+            status: "not_created",
+            requiredScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+            missingSteps: ["Connect YouTube channel and import real proof."],
+            notes: "External account proof still required.",
+          },
+        ],
+      },
+      {
+        id: "streamer-pulse",
+        name: "Streamer Pulse",
+        category: "streamers",
+        platforms: ["tiktok", "instagram", "youtube"],
+        dailyClipTarget: 3,
+        weeklyViewsGoal: 1_000_000,
+        lastWeekViews: 0,
+        status: "needs_connection",
+        contentPolicy: "Streamer commentary only with permission or recreate-only source plans.",
+        platformAccounts: [
+          {
+            platform: "tiktok",
+            handle: "@streamerpulse",
+            displayName: "Streamer Pulse",
+            status: "not_created",
+            requiredScopes: ["video.publish", "video.upload"],
+            missingSteps: ["Connect TikTok profile and import real proof."],
+            notes: "External account proof still required.",
+          },
+          {
+            platform: "instagram",
+            handle: "@streamerpulse",
+            displayName: "Streamer Pulse",
+            status: "not_created",
+            requiredScopes: ["instagram_basic", "instagram_content_publish", "pages_show_list"],
+            missingSteps: ["Connect Instagram profile and import real proof."],
+            notes: "External account proof still required.",
+          },
+          {
+            platform: "youtube",
+            handle: "@streamerpulse",
+            displayName: "Streamer Pulse",
+            status: "not_created",
+            requiredScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+            missingSteps: ["Connect YouTube channel and import real proof."],
+            notes: "External account proof still required.",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        id: "owned-test-source",
+        label: "Safe owned test source folder",
+        type: "owned_folder",
+        freshness: "test",
+        rightsMode: "owned",
+        status: "planned",
+      },
+    ],
+  });
+
+  await writeJsonIfMissing(queuePath, {
+    status: "approval_required",
+    generatedAt: "2026-06-23T10:00:00.000Z",
+    publishMode: "approval_required",
+    realPublishEnabled: false,
+    sourceReadiness: {
+      status: "ready",
+      categories: [
+        {
+          accountId: "sports-daily",
+          accountName: "Sports Daily Clips",
+          category: "sports",
+          connectedNetworks: ["tiktok"],
+          rightsReadyAssets: 42,
+        },
+        {
+          accountId: "meme-radar",
+          accountName: "Meme Radar",
+          category: "memes",
+          connectedNetworks: ["tiktok"],
+          rightsReadyAssets: 71,
+        },
+      ],
+      totals: {
+        accounts: 2,
+        connectedNetworks: 2,
+        rightsReadyAssets: 113,
+        missingSourceAssets: 0,
+      },
+      localOwnedSourceTotals: { total: 113 },
+      nextStep: "Source readiness ready for Metricool approval queue.",
+    },
+    totals: {
+      queuedForApproval: 2,
+      readyToSend: 0,
+    },
+    items: [
+      {
+        id: "test-meme-approval",
+        postId: "test-meme-post",
+        accountId: "meme-radar",
+        accountName: "Meme Radar",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        gates: [
+          {
+            id: "approval-required",
+            label: "Metricool approval required",
+            done: true,
+            evidence: "Fixture remains in approval_required mode.",
+          },
+        ],
+        blockers: [],
+        nextStep: "Manual Metricool approval required before any publishing.",
+      },
+      {
+        id: "test-sports-approval",
+        postId: "test-sports-post",
+        accountId: "sports-daily",
+        accountName: "Sports Daily Clips",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        gates: [
+          {
+            id: "approval-required",
+            label: "Metricool approval required",
+            done: true,
+            evidence: "Fixture remains in approval_required mode.",
+          },
+        ],
+        blockers: [],
+        nextStep: "Manual Metricool approval required before any publishing.",
+      },
+    ],
+  });
+  await writeFileIfMissing(queueMarkdownPath, "# Metricool Execution Queue\n\nStatus: approval_required\n");
+  await writeFileIfMissing(queueCsvPath, "id,account_id,platform,status,approval_required,can_send_now\n");
+
+  await writeJsonIfMissing(path.join(rootDir, "account-evidence", "sports-daily-tiktok.json"), {
+    status: "verified",
+    accountId: "sports-daily",
+    accountName: "Sports Daily Clips",
+    platform: "tiktok",
+    handle: "@sportsdaily",
+    notes: "Metricool connected TikTok lane is verified for the safe test fixture; no secrets stored.",
+  });
+  await writeJsonIfMissing(path.join(rootDir, "account-evidence", "meme-radar-tiktok.json"), {
+    status: "verified",
+    accountId: "meme-radar",
+    accountName: "Meme Radar",
+    platform: "tiktok",
+    handle: "@memeradar",
+    notes: "Metricool connected TikTok lane is verified for the safe test fixture; no secrets stored.",
+  });
+
+  await writeJsonIfMissing(path.join(rootDir, "developer-app-evidence", "developer-app-connection-kit.json"), {
+    status: "empty",
+    generatedAt: "2026-06-23T10:00:00.000Z",
+    connectionKitItems: [
+      developerConnectionItem("tiktok", "TikTok", ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"], ["video.publish", "video.upload"]),
+      developerConnectionItem("instagram", "Instagram Reels", ["META_APP_ID", "META_APP_SECRET"], ["instagram_basic", "instagram_content_publish", "pages_show_list"]),
+      developerConnectionItem("youtube", "YouTube Shorts", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"], ["https://www.googleapis.com/auth/youtube.upload"]),
+    ],
+  });
+
+  await writeJsonIfMissing(path.join(rootDir, "official-permission-source-audit.json"), {
+    status: "needs_review",
+    generatedAt: "2026-06-23T10:00:00.000Z",
+    markdownPath: path.join(rootDir, "official-permission-source-audit.md"),
+    items: [
+      officialSourceItem(
+        "tiktok",
+        "official_verified",
+        "public",
+        "request_now",
+        ["video.publish", "video.upload"],
+        [
+          "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+          "https://developers.tiktok.com/doc/tiktok-api-scopes/",
+        ],
+        "Official TikTok Direct Post API reference lists video.publish as the Direct Post scope.",
+      ),
+      officialSourceItem(
+        "instagram",
+        "official_login_required",
+        "login_required",
+        "human_login_recheck",
+        ["instagram_content_publish", "instagram_basic", "pages_show_list"],
+        [
+          "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+          "https://developers.facebook.com/docs/permissions/reference/instagram_content_publish/",
+          "https://developers.facebook.com/docs/instagram-platform/",
+        ],
+        "Meta developer documentation requires an authenticated developer review before approval can be claimed.",
+      ),
+      officialSourceItem(
+        "youtube",
+        "official_verified",
+        "public",
+        "request_now",
+        ["https://www.googleapis.com/auth/youtube.upload"],
+        [
+          "https://developers.google.com/youtube/v3/docs/videos/insert",
+          "https://developers.google.com/youtube/v3/guides/authentication",
+        ],
+        "Official YouTube videos.insert reference supports uploads through the YouTube Data API.",
+      ),
+    ],
+  });
+
+  await writeFileIfMissing(
+    path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv"),
+    "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes\n",
+  );
+
+  const proofTodoPath = path.join(rootDir, "reports", "clippers-external-closeout-proof-todo.json");
+  if (!(await pathExists(proofTodoPath))) {
+    const closeoutPack = spawnSync(process.execPath, ["script/clippers-external-closeout-pack.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(closeoutPack.status, 0, closeoutPack.stderr || closeoutPack.stdout);
+  }
+};
+
+test.before(async () => {
+  await ensureClipperScriptFixtures();
+});
 
 test("owned source rights dry-run feeds Metricool source readiness sync without fake readiness", async () => {
   const originalQueue = await readFile(queuePath, "utf8").catch(() => null);
