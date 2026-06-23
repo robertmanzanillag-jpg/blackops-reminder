@@ -3800,6 +3800,10 @@ export interface ClipperRobertConnectNowHandoff {
     permissionTasks: number;
     oauthTasks: number;
     credentialTasks: number;
+    closeoutRows: number;
+    closeoutProofsNeeded: number;
+    closeoutArtifactSafety: string;
+    closeoutMetricoolReadyToSend: number;
     nextStep: string;
   };
   intakeConsole: {
@@ -4947,6 +4951,49 @@ export interface ClipperExternalExecutionFocusRun {
   nextStep: string;
 }
 
+export interface ClipperExternalCloseoutRunItem {
+  rank: number;
+  id: string;
+  lane: string;
+  platform: string;
+  accountId: string;
+  requiredStatus: string;
+  portalUrl: string;
+  docsUrl: string;
+  redirectUri: string;
+  proofPath: string;
+  missingCsvFields: string[];
+  blockers: string[];
+  operatorAction: string;
+  nextStep: string;
+  evidenceCsvRow: string;
+  checklist: string[];
+}
+
+export interface ClipperExternalCloseoutRun {
+  status: "not_prepared" | "needs_operator" | "complete";
+  generatedAt: string | null;
+  packPath: string;
+  actionSheetPath: string;
+  proofTodoPath: string;
+  operatorQueuePath: string;
+  evidenceCsvPath: string;
+  totals: {
+    rows: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+    proofFilesNeedRealEvidence: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+  };
+  artifactSafetyStatus: string;
+  metricoolPublishMode: string;
+  items: ClipperExternalCloseoutRunItem[];
+  nextItems: ClipperExternalCloseoutRunItem[];
+  nextStep: string;
+}
+
 export interface ClipperExternalExecutionSessionSummary {
   status: ClipperExternalExecutionHandoffStatus;
   generatedAt: string | null;
@@ -4959,6 +5006,7 @@ export interface ClipperExternalExecutionSessionSummary {
   unlockBoard: ClipperExternalExecutionUnlockBoardItem[];
   portalBatches: ClipperExternalExecutionPortalBatch[];
   focusRun: ClipperExternalExecutionFocusRun;
+  closeoutRun: ClipperExternalCloseoutRun;
   totals: {
     items: number;
     doNow: number;
@@ -6664,6 +6712,11 @@ const LAUNCH_LANE_EXECUTION_QUEUE_PATH = path.join(ROOT_DIR, "launch-lane-execut
 const LAUNCH_LANE_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-lane-execution-queue.md");
 const LAUNCH_LANE_EXECUTION_QUEUE_CSV_PATH = path.join(ROOT_DIR, "launch-lane-execution-queue.csv");
 const EXTERNAL_PORTAL_LAUNCHER_HTML_PATH = path.join(ROOT_DIR, "external-portal-launcher.html");
+const EXTERNAL_CLOSEOUT_PACK_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-pack.json");
+const EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH = path.join(REPORTS_DIR, "clippers-external-operator-action-sheet.md");
+const EXTERNAL_CLOSEOUT_PROOF_TODO_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-proof-todo.md");
+const EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-operator-queue.md");
+const EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH = path.join(ROOT_DIR, "evidence-drop", "external-closeout-evidence-import.csv");
 const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
 const LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.md");
 const LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.csv");
@@ -24097,6 +24150,134 @@ function buildExternalExecutionFocusRun(items: ClipperExternalExecutionSessionIt
   };
 }
 
+function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
+  const lane = String(row.lane || "");
+  const platform = String(row.platform || "");
+  const accountId = String(row.accountId || "");
+  const requiredStatus = String(row.requiredStatus || "");
+  const taskScope = typeof row.id === "string" && row.id.startsWith("permission:")
+    ? row.id.replace(/^permission:[^:]+:/, "")
+    : "";
+  return [
+    lane === "account" ? "account" : lane === "developer_app" ? "developer_app" : "permission",
+    lane === "account" ? accountId : "",
+    platform,
+    requiredStatus,
+    lane === "permission" ? taskScope : "",
+    "",
+    "",
+    String(row.redirectUri || ""),
+    String(row.portalUrl || ""),
+    String(row.docsUrl || ""),
+    "",
+    "",
+  ].map(csvEscape).join(",");
+}
+
+function closeoutChecklistForRow(row: Record<string, unknown>): string[] {
+  const lane = String(row.lane || "");
+  const platform = String(row.platform || "platform");
+  const proofPath = String(row.proofPath || "the matching proof file");
+  if (lane === "account") {
+    return [
+      `Open the ${platform} account/profile portal.`,
+      "Create or verify the real account, profile/channel URL and ownership access.",
+      "Capture non-private proof and fill the proof file.",
+      `Use status verified in ${EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH}.`,
+    ];
+  }
+  if (lane === "developer_app") {
+    return [
+      `Open the ${platform} developer portal.`,
+      "Create or submit the app/project and copy only the public app identifier.",
+      "Confirm production callback/public URL is registered.",
+      `Fill ${proofPath} before importing the closeout row.`,
+    ];
+  }
+  return [
+    `Open the ${platform} developer permission/app-review portal.`,
+    "Request or confirm the exact scope shown in this row.",
+    "Save the real review URL/ticket/screenshot note without private values.",
+    `Fill ${proofPath} before importing the closeout row.`,
+  ];
+}
+
+async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
+  const raw = await readFile(EXTERNAL_CLOSEOUT_PACK_PATH, "utf8").catch(() => null);
+  if (!raw) {
+    return {
+      status: "not_prepared",
+      generatedAt: null,
+      packPath: EXTERNAL_CLOSEOUT_PACK_PATH,
+      actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
+      proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
+      operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+      evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
+      totals: {
+        rows: 0,
+        accounts: 0,
+        developerApps: 0,
+        permissions: 0,
+        proofFilesNeedRealEvidence: 0,
+        metricoolQueuedForApproval: 0,
+        metricoolReadyToSend: 0,
+      },
+      artifactSafetyStatus: "not_scanned",
+      metricoolPublishMode: "approval_required",
+      items: [],
+      nextItems: [],
+      nextStep: "Run External Closeout Pack before starting portal work.",
+    };
+  }
+  const parsed = JSON.parse(raw) as Record<string, any>;
+  const rows = Array.isArray(parsed.actionSheet?.rows) ? parsed.actionSheet.rows : [];
+  const items = rows.map((row: Record<string, unknown>, index: number): ClipperExternalCloseoutRunItem => ({
+    rank: Number(row.rank || index + 1),
+    id: String(row.id || `closeout-${index + 1}`),
+    lane: String(row.lane || ""),
+    platform: String(row.platform || ""),
+    accountId: String(row.accountId || ""),
+    requiredStatus: String(row.requiredStatus || ""),
+    portalUrl: String(row.portalUrl || ""),
+    docsUrl: String(row.docsUrl || ""),
+    redirectUri: String(row.redirectUri || ""),
+    proofPath: String(row.proofPath || ""),
+    missingCsvFields: Array.isArray(row.missingCsvFields) ? row.missingCsvFields.map(String) : [],
+    blockers: Array.isArray(row.blockers) ? row.blockers.map(String) : [],
+    operatorAction: String(row.operatorAction || ""),
+    nextStep: String(row.nextStep || ""),
+    evidenceCsvRow: closeoutEvidenceCsvRow(row),
+    checklist: closeoutChecklistForRow(row),
+  }));
+  const totals = parsed.actionSheet?.totals || {};
+  const metricool = parsed.metricool || {};
+  return {
+    status: parsed.actionSheet?.status === "complete" ? "complete" : "needs_operator",
+    generatedAt: parsed.generatedAt ? String(parsed.generatedAt) : null,
+    packPath: EXTERNAL_CLOSEOUT_PACK_PATH,
+    actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
+    proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
+    operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+    evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
+    totals: {
+      rows: Number(totals.rows || items.length),
+      accounts: Number(totals.accounts || 0),
+      developerApps: Number(totals.developerApps || 0),
+      permissions: Number(totals.permissions || 0),
+      proofFilesNeedRealEvidence: Number(parsed.totals?.proofFilesNeedRealEvidence || 0),
+      metricoolQueuedForApproval: Number(metricool.queuedForApproval || 0),
+      metricoolReadyToSend: Number(metricool.readyToSend || 0),
+    },
+    artifactSafetyStatus: String(parsed.artifactSafety?.status || "unknown"),
+    metricoolPublishMode: String(metricool.publishMode || "approval_required"),
+    items,
+    nextItems: items.slice(0, 8),
+    nextStep: parsed.actionSheet?.nextAction?.operatorAction
+      || parsed.goLiveAudit?.nextStep
+      || "Complete the next closeout proof task, then validate the closeout evidence CSV.",
+  };
+}
+
 async function buildExternalExecutionSessionSummary(input: {
   externalExecutionHandoff: ClipperExternalExecutionHandoffSummary;
 }): Promise<ClipperExternalExecutionSessionSummary> {
@@ -24133,6 +24314,7 @@ async function buildExternalExecutionSessionSummary(input: {
   const unlockBoard = buildExternalExecutionUnlockBoard(items);
   const portalBatches = buildExternalExecutionPortalBatches(items);
   const focusRun = buildExternalExecutionFocusRun(items);
+  const closeoutRun = await buildExternalCloseoutRun();
   const totals = items.reduce<ClipperExternalExecutionSessionSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.lane === "do_now") sum.doNow += 1;
@@ -24163,6 +24345,7 @@ async function buildExternalExecutionSessionSummary(input: {
     unlockBoard,
     portalBatches,
     focusRun,
+    closeoutRun,
     totals,
     nextStep: items.find((item) => item.lane === "do_now")?.nextStep
       || items.find((item) => item.lane === "blocked")?.nextStep
@@ -24599,6 +24782,7 @@ export async function prepareClipperGoLiveEvidenceBundle(userId = getSystemUserI
 }
 
 function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutionSessionSummary): string {
+  const closeout = summary.closeoutRun;
   return [
     "# Clippers External Execution Session",
     "",
@@ -24620,6 +24804,40 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
     "```csv",
     summary.evidenceImportTemplate.trim(),
     "```",
+    "",
+    "## External Closeout Run",
+    "",
+    `Status: ${closeout.status}`,
+    `Rows: ${closeout.totals.rows}`,
+    `Accounts: ${closeout.totals.accounts}`,
+    `Developer apps: ${closeout.totals.developerApps}`,
+    `Permissions: ${closeout.totals.permissions}`,
+    `Proofs needed: ${closeout.totals.proofFilesNeedRealEvidence}`,
+    `Artifact safety: ${closeout.artifactSafetyStatus}`,
+    `Metricool: ${closeout.metricoolPublishMode}; ready_to_send ${closeout.totals.metricoolReadyToSend}`,
+    `Action sheet: ${closeout.actionSheetPath}`,
+    `Proof todo: ${closeout.proofTodoPath}`,
+    `Operator queue: ${closeout.operatorQueuePath}`,
+    `Evidence CSV: ${closeout.evidenceCsvPath}`,
+    "",
+    "Next closeout actions:",
+    ...(closeout.nextItems.length ? closeout.nextItems.flatMap((item) => [
+      `### ${item.rank}. ${item.id}`,
+      `- Lane: ${item.lane}`,
+      `- Platform: ${item.platform || "n/a"}`,
+      `- Required status: ${item.requiredStatus}`,
+      `- Portal: ${item.portalUrl || "n/a"}`,
+      `- Proof file: ${item.proofPath || "n/a"}`,
+      `- Missing CSV fields: ${item.missingCsvFields.join(", ") || "none"}`,
+      `- Operator action: ${item.operatorAction}`,
+      "Checklist:",
+      ...item.checklist.map((step) => `- [ ] ${step}`),
+      "CSV starter row:",
+      "```csv",
+      item.evidenceCsvRow,
+      "```",
+      "",
+    ]) : ["- No closeout actions are currently prepared."]),
     "",
     "## Focus Run",
     "",
@@ -38874,6 +39092,10 @@ async function buildRobertConnectNowHandoff(input: {
     permissionTasks: launcherItems.filter((item) => item.type === "permission").length,
     oauthTasks: launcherItems.filter((item) => item.type === "oauth").length,
     credentialTasks: launcherItems.filter((item) => item.type === "credential").length,
+    closeoutRows: input.externalExecutionSession.closeoutRun.totals.rows,
+    closeoutProofsNeeded: input.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence,
+    closeoutArtifactSafety: input.externalExecutionSession.closeoutRun.artifactSafetyStatus,
+    closeoutMetricoolReadyToSend: input.externalExecutionSession.closeoutRun.totals.metricoolReadyToSend,
     nextStep: input.externalExecutionSession.nextStep,
   };
   const credentialTemplate = credentialDrop?.copyReadyTemplate || "";
@@ -39315,6 +39537,10 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     `- Minutos estimados: ${summary.totals.estimatedMinutes}`,
     `- Source assets requeridos: ${handoff.sourceAssetsRequired}`,
     `- Focus run: ${handoff.focusRun.label} (${handoff.focusRun.status}, ${handoff.focusRun.estimatedMinutes} min)`,
+    `- External closeout rows: ${handoff.externalPortalLauncher.closeoutRows}`,
+    `- External closeout proofs needed: ${handoff.externalPortalLauncher.closeoutProofsNeeded}`,
+    `- External closeout artifact safety: ${handoff.externalPortalLauncher.closeoutArtifactSafety}`,
+    `- External closeout Metricool ready_to_send: ${handoff.externalPortalLauncher.closeoutMetricoolReadyToSend}`,
     "",
     "## Orden recomendado",
     "",
@@ -39714,6 +39940,38 @@ function renderExternalPortalLauncherHtml(
   const launcher = summary.connectNow.externalPortalLauncher;
   const focusEvidenceText = externalExecutionSession.focusRun.evidenceRows.join("\n");
   const focusCredentialText = externalExecutionSession.focusRun.credentialTemplates.join("\n\n");
+  const closeoutRowsText = externalExecutionSession.closeoutRun.nextItems.map((item) => item.evidenceCsvRow).join("\n");
+  const closeoutCards = externalExecutionSession.closeoutRun.nextItems.map((item, index) => {
+    const rowId = `closeout-row-${index + 1}`;
+    const portalHref = item.portalUrl ? escapeHtml(item.portalUrl) : "";
+    const docsHref = item.docsUrl ? escapeHtml(item.docsUrl) : "";
+    return `
+      <article class="intake-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(item.rank)}. ${escapeHtml(item.id)}</h2>
+            <p>${escapeHtml(item.lane)} / ${escapeHtml(item.platform || "mixed")} / ${escapeHtml(item.requiredStatus)}</p>
+          </div>
+          <span class="badge ${escapeHtml(item.blockers.length ? "blocked" : "do_now")}">${escapeHtml(item.missingCsvFields.length)} missing</span>
+        </div>
+        <div class="quick-links">
+          ${item.portalUrl ? `<a href="${portalHref}" target="_blank" rel="noreferrer">Portal</a>` : ""}
+          ${item.docsUrl ? `<a href="${docsHref}" target="_blank" rel="noreferrer">Docs</a>` : ""}
+        </div>
+        <dl>
+          <div><dt>Proof file</dt><dd>${escapeHtml(item.proofPath || "n/a")}</dd></div>
+          <div><dt>Missing CSV</dt><dd>${escapeHtml(item.missingCsvFields.join(", ") || "none")}</dd></div>
+          <div><dt>Action</dt><dd>${escapeHtml(item.operatorAction || item.nextStep)}</dd></div>
+          <div><dt>Evidence CSV</dt><dd><code>external-closeout-evidence-import.csv</code></dd></div>
+        </dl>
+        <h3>Checklist</h3>
+        <ul>${item.checklist.map((step) => `<li>${escapeHtml(step)}</li>`).join("") || "<li>none</li>"}</ul>
+        <label for="${rowId}">Closeout CSV starter row</label>
+        <textarea id="${rowId}" readonly>${escapeHtml(item.evidenceCsvRow)}</textarea>
+        <button type="button" class="copy-btn" data-copy-target="${rowId}">Copy closeout row</button>
+        <p>${escapeHtml(item.nextStep)}</p>
+      </article>`;
+  }).join("\n");
   const focusRunCards = externalExecutionSession.focusRun.items.map((item, index) => {
     const evidenceId = `focus-evidence-${index + 1}`;
     const credentialId = `focus-credential-${index + 1}`;
@@ -40119,6 +40377,19 @@ function renderExternalPortalLauncherHtml(
       <div class="stat"><span>OAuth/credentials</span><strong>${escapeHtml(launcher.oauthTasks + launcher.credentialTasks)}</strong></div>
     </section>
     <p class="notice">Launch Evidence Batch rows are templates. Replace placeholders with real profile URLs, app IDs, approval tickets, public URLs, proof paths and notes before importing.</p>
+    <section class="permission-section" aria-label="External closeout evidence run">
+      <h2>Closeout Evidence Run</h2>
+      <p>Authoritative queue from the current External Closeout Pack: ${escapeHtml(externalExecutionSession.closeoutRun.totals.rows)} actions, ${escapeHtml(externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence)} proofs needed, artifact safety ${escapeHtml(externalExecutionSession.closeoutRun.artifactSafetyStatus)}. Metricool stays ${escapeHtml(externalExecutionSession.closeoutRun.metricoolPublishMode)} with ${escapeHtml(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend)} ready_to_send.</p>
+      <p><strong>Next:</strong> ${escapeHtml(externalExecutionSession.closeoutRun.nextStep)}</p>
+      <div class="toolbar">
+        ${closeoutRowsText ? `<button type="button" class="copy-btn" data-copy-text="${escapeHtml(closeoutRowsText)}">Copy next closeout starter rows</button>` : ""}
+        <a href="/api/clippers/external-closeout-next-action" target="_blank" rel="noreferrer">Open next action JSON</a>
+        <a href="/api/clippers/external-closeout-proof-todo" target="_blank" rel="noreferrer">Open proof todo JSON</a>
+      </div>
+      <div class="intake-cards">
+        ${closeoutCards || "<p>No closeout run items are currently prepared. Refresh External Closeout Pack first.</p>"}
+      </div>
+    </section>
     <section class="gate" aria-label="External closeout evidence import gate">
       <div class="gate-head">
         <div>

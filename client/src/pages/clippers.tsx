@@ -3127,6 +3127,49 @@ interface ClipperExternalExecutionFocusRun {
   nextStep: string;
 }
 
+interface ClipperExternalCloseoutRunItem {
+  rank: number;
+  id: string;
+  lane: string;
+  platform: string;
+  accountId: string;
+  requiredStatus: string;
+  portalUrl: string;
+  docsUrl: string;
+  redirectUri: string;
+  proofPath: string;
+  missingCsvFields: string[];
+  blockers: string[];
+  operatorAction: string;
+  nextStep: string;
+  evidenceCsvRow: string;
+  checklist: string[];
+}
+
+interface ClipperExternalCloseoutRun {
+  status: "not_prepared" | "needs_operator" | "complete";
+  generatedAt: string | null;
+  packPath: string;
+  actionSheetPath: string;
+  proofTodoPath: string;
+  operatorQueuePath: string;
+  evidenceCsvPath: string;
+  totals: {
+    rows: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+    proofFilesNeedRealEvidence: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+  };
+  artifactSafetyStatus: string;
+  metricoolPublishMode: string;
+  items: ClipperExternalCloseoutRunItem[];
+  nextItems: ClipperExternalCloseoutRunItem[];
+  nextStep: string;
+}
+
 interface ClipperExternalExecutionSessionSummary {
   status: ClipperExternalExecutionHandoffStatus;
   generatedAt: string | null;
@@ -3139,6 +3182,7 @@ interface ClipperExternalExecutionSessionSummary {
   unlockBoard: ClipperExternalExecutionUnlockBoardItem[];
   portalBatches: ClipperExternalExecutionPortalBatch[];
   focusRun: ClipperExternalExecutionFocusRun;
+  closeoutRun?: ClipperExternalCloseoutRun;
   totals: {
     items: number;
     doNow: number;
@@ -14925,6 +14969,64 @@ export default function ClippersPage() {
                   </div>
                 </div>
               </div>
+
+              {status.externalExecutionSession.closeoutRun && (
+                <div className="rounded-md border border-amber-300/20 bg-amber-950/10 p-3" data-testid="clippers-external-closeout-run">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Closeout evidence run</p>
+                      <p className="mt-1 text-sm font-medium text-white">{status.externalExecutionSession.closeoutRun.actionSheetPath}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{status.externalExecutionSession.closeoutRun.nextStep}</p>
+                    </div>
+                    <Badge className={cn(
+                      "w-fit border",
+                      status.externalExecutionSession.closeoutRun.status === "complete"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {status.externalExecutionSession.closeoutRun.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                    <p>Rows: {status.externalExecutionSession.closeoutRun.totals.rows}</p>
+                    <p>Accounts: {status.externalExecutionSession.closeoutRun.totals.accounts}</p>
+                    <p>Apps: {status.externalExecutionSession.closeoutRun.totals.developerApps}</p>
+                    <p>Perms: {status.externalExecutionSession.closeoutRun.totals.permissions}</p>
+                    <p>Proofs: {status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence}</p>
+                    <p>Safety: {status.externalExecutionSession.closeoutRun.artifactSafetyStatus}</p>
+                    <p>Metricool: {status.externalExecutionSession.closeoutRun.metricoolPublishMode}</p>
+                    <p>Ready queue: {status.externalExecutionSession.closeoutRun.totals.metricoolReadyToSend}</p>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {status.externalExecutionSession.closeoutRun.nextItems.slice(0, 4).map((item) => (
+                      <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-3">
+                        <p className="truncate text-sm font-medium text-white">{item.rank}. {item.id}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.lane}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.platform || "mixed"}</Badge>
+                          <Badge className="border border-white/10 bg-black/30 text-[10px] text-zinc-300">{item.requiredStatus}</Badge>
+                        </div>
+                        <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">Proof: {item.proofPath}</p>
+                        <p className="mt-2 text-xs leading-5 text-zinc-400">{item.operatorAction}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.portalUrl && (
+                            <a href={item.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-300/20 px-2 py-1 text-xs text-sky-100 hover:bg-sky-300/10">
+                              Portal
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {item.docsUrl && (
+                            <a href={item.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                              Docs
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {status.externalExecutionSession.focusRun && (
                 <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3" data-testid="clippers-external-focus-run">

@@ -2663,6 +2663,19 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(externalExecutionSession.focusRun.items.every((item) => item.checklist.length >= 3));
     assert.ok(externalExecutionSession.focusRun.items.every((item) => item.doneCriteria.length >= 3));
     assert.ok(externalExecutionSession.focusRun.evidenceRows.length > 0 || externalExecutionSession.focusRun.credentialTemplates.length > 0);
+    assert.ok(["not_prepared", "needs_operator", "complete"].includes(externalExecutionSession.closeoutRun.status));
+    assert.ok(externalExecutionSession.closeoutRun.packPath.endsWith("clippers-external-closeout-pack.json"));
+    assert.ok(externalExecutionSession.closeoutRun.evidenceCsvPath.endsWith("external-closeout-evidence-import.csv"));
+    assert.equal(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend, 0);
+    assert.equal(externalExecutionSession.closeoutRun.metricoolPublishMode, "approval_required");
+    if (externalExecutionSession.closeoutRun.status !== "not_prepared") {
+      assert.equal(externalExecutionSession.closeoutRun.totals.rows, 16);
+      assert.equal(externalExecutionSession.closeoutRun.nextItems.length, 8);
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.proofPath.includes("external-closeout-proofs")));
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.startsWith("\"")));
+      assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.split(",").length === 12));
+      assert.equal(externalExecutionSession.closeoutRun.nextItems.some((item) => item.evidenceCsvRow.includes("<")), false);
+    }
     assert.equal(status.externalExecutionSession.manifestPath, externalExecutionSession.manifestPath);
     assert.equal(status.platformWarRoom.items.length, 3);
     assert.equal(status.platformWarRoom.totals.platforms, 3);
@@ -2712,6 +2725,8 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawWarRoomMarkdown.includes("Safety rules"));
     assert.ok(rawMarkdown.includes("Clippers External Execution Session"));
     assert.ok(rawMarkdown.includes("Launch Evidence Import"));
+    assert.ok(rawMarkdown.includes("External Closeout Run"));
+    assert.ok(rawMarkdown.includes("Metricool: approval_required; ready_to_send 0"));
     assert.ok(rawMarkdown.includes("Focus Run"));
     assert.ok(rawMarkdown.includes("Unlock Board"));
     assert.ok(rawMarkdown.includes("Portal Batches"));
@@ -2733,6 +2748,10 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawManifest.includes("credentialTemplate"));
     assert.ok(rawManifest.includes("evidenceRecipeRow"));
     assert.ok(rawManifest.includes("requiredInputs"));
+    assert.ok(rawManifest.includes("closeoutRun"));
+    const rawUi = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+    assert.ok(rawUi.includes('data-testid="clippers-external-closeout-run"'));
+    assert.ok(rawUi.includes("Closeout evidence run"));
     assert.ok(rawManifest.includes("evidenceImportTemplate"));
     assert.ok(rawManifest.includes("unlockBoard"));
     assert.ok(rawManifest.includes("portalBatches"));
@@ -5655,6 +5674,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.developerAppTasks > 0);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.permissionTasks > 0);
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.credentialTasks > 0);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutRows, status.externalExecutionSession.closeoutRun.totals.rows);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutProofsNeeded, status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutMetricoolReadyToSend, 0);
+    assert.equal(robertNextActions.connectNow.externalPortalLauncher.closeoutArtifactSafety, status.externalExecutionSession.closeoutRun.artifactSafetyStatus);
     assert.equal(robertNextActions.connectNow.intakeConsole.status, status.dropzoneReadyPack.status);
     assert.equal(robertNextActions.connectNow.intakeConsole.totals.lanes, status.dropzoneReadyPack.items.length);
     assert.ok(robertNextActions.connectNow.intakeConsole.totals.blockers >= 0);
@@ -5821,6 +5844,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("Refresh sequence"));
     assert.ok(rawConnectNow.includes("Post-Connect Activation Bridge"));
     assert.ok(rawConnectNow.includes("Focus Run"));
+    assert.ok(rawConnectNow.includes("External closeout rows"));
+    assert.ok(rawConnectNow.includes("External closeout Metricool ready_to_send"));
     assert.ok(rawConnectNow.includes("Evidence Closeout"));
     assert.ok(rawConnectNow.includes("Evidence import bridge"));
     assert.ok(rawConnectNow.includes("Source Closeout"));
@@ -5843,6 +5868,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.sourceIntakeTemplate.includes("refresh_token"), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("access_token"), false);
     assert.ok(rawPortalLauncher.includes("Clippers External Portal Launcher"));
+    assert.ok(rawPortalLauncher.includes("Closeout Evidence Run"));
+    assert.ok(rawPortalLauncher.includes("Copy next closeout starter rows"));
     assert.ok(rawPortalLauncher.includes("External Closeout Evidence Import Gate"));
     assert.ok(rawPortalLauncher.includes("External Closeout Proof Todo"));
     assert.ok(rawPortalLauncher.includes("clippers_workspace/reports/clippers-external-closeout-proof-todo.md"));
