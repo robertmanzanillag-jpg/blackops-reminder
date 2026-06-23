@@ -10685,6 +10685,23 @@ export default function ClippersPage() {
     }
   };
 
+  const copyExternalCloseoutPacket = async (packet: string) => {
+    const cleanPacket = packet.trim();
+    if (!cleanPacket) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanPacket}\n`);
+      toast({
+        title: "Closeout packet copiado",
+        description: "Usalo en el portal externo y en el proof file. No pegues secretos ni tokens.",
+      });
+    } catch {
+      toast({
+        title: "Packet listo para copiar",
+        description: "No pude escribir al clipboard; copia el bloque visible manualmente.",
+      });
+    }
+  };
+
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
     const uniqueEnvVars = Array.from(new Set(envVars.map((envVar) => envVar.trim()).filter(Boolean)));
     if (!uniqueEnvVars.length) return;
@@ -16227,14 +16244,28 @@ export default function ClippersPage() {
                           {externalCloseoutNextAction?.nextStep || (externalCloseoutOperatorQueue?.rows?.[0]?.operatorAction) || "Refresh External Closeout Pack para calcular la proxima accion."}
                         </p>
                       </div>
-                      <Badge className={cn(
-                        "w-fit border",
-                        externalCloseoutNextAction?.status === "complete"
-                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
-                          : "border-violet-300/30 bg-violet-300/10 text-violet-100"
-                      )}>
-                        {externalCloseoutNextAction?.status || "needs_operator"}
-                      </Badge>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {externalCloseoutNextAction?.copyPacket && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-violet-300/20 bg-transparent px-2 text-xs text-violet-100 hover:bg-violet-300/10"
+                            onClick={() => void copyExternalCloseoutPacket(externalCloseoutNextAction.copyPacket)}
+                          >
+                            <Copy className="mr-1 h-3 w-3" />
+                            Copy packet
+                          </Button>
+                        )}
+                        <Badge className={cn(
+                          "w-fit border",
+                          externalCloseoutNextAction?.status === "complete"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                        )}>
+                          {externalCloseoutNextAction?.status || "needs_operator"}
+                        </Badge>
+                      </div>
                     </div>
                     {(externalCloseoutNextAction?.nextAction || externalCloseoutOperatorQueue?.rows?.[0]) && (
                       <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-2">
