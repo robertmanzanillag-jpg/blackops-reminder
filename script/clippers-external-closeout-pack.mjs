@@ -1145,6 +1145,38 @@ function buildOperatorActionSheet(summary, audit) {
       proofPath: row.proofPath,
       nextStep: row.operatorAction,
     }));
+  const accountSetupCards = rows
+    .filter((row) => row.lane === "account")
+    .map((row) => {
+      const expectedHandle = row.accountId
+        ? row.platform === "youtube"
+          ? `@${row.accountId.replace(/-/g, "")}`
+          : `@${row.accountId.replace(/-/g, ".")}`
+        : "";
+      return {
+        id: row.id,
+        accountId: row.accountId,
+        platform: row.platform,
+        requiredStatus: row.requiredStatus,
+        portalUrl: row.portalUrl,
+        expectedHandle,
+        metricoolBridgeNeeded: row.accountId === "sports-daily" || row.accountId === "meme-radar",
+        evidenceNeeded: [
+          "Public profile/channel URL.",
+          "Ownership or manager proof reference without private screenshots.",
+          "2FA/recovery method proof reference without recovery values.",
+          ...(row.accountId === "sports-daily" || row.accountId === "meme-radar" ? ["Metricool connected-profile proof for the MVP publishing bridge."] : []),
+        ],
+        copyNote: [
+          `Create or verify ${row.platform} account for ${row.accountId}.`,
+          expectedHandle ? `Expected handle hint: ${expectedHandle}.` : "",
+          "Record public profile URL, owner/manager proof, and Metricool connected-profile proof when required.",
+          "Do not store login credentials, recovery values, cookies, or private screenshots.",
+        ].filter(Boolean).join(" "),
+        proofPath: row.proofPath,
+        nextStep: row.operatorAction,
+      };
+    });
   const blocks = audit.workBlocks.map((block) => ({
     id: block.id,
     label: block.label,
@@ -1179,6 +1211,7 @@ function buildOperatorActionSheet(summary, audit) {
     },
     nextAction: rows[0] || null,
     blocks,
+    accountSetupCards,
     permissionRequestCards,
     rows,
     guardrails: [
@@ -1241,6 +1274,25 @@ function renderActionSheetMarkdown(sheet) {
     ...card.evidenceNeeded.map((item) => `- ${item}`),
     "",
   ].join("\n"));
+  const accountLines = sheet.accountSetupCards.map((card) => [
+    `### ${card.accountId}: ${card.platform}`,
+    "",
+    `- Required status: ${card.requiredStatus}`,
+    `- Portal: ${card.portalUrl || "n/a"}`,
+    `- Expected handle hint: ${card.expectedHandle || "n/a"}`,
+    `- Metricool bridge proof needed: ${card.metricoolBridgeNeeded ? "yes" : "not for MVP"}`,
+    `- Proof file: ${card.proofPath}`,
+    `- Next step: ${card.nextStep}`,
+    "",
+    "Setup note:",
+    "```text",
+    card.copyNote,
+    "```",
+    "",
+    "Evidence needed:",
+    ...card.evidenceNeeded.map((item) => `- ${item}`),
+    "",
+  ].join("\n"));
   return [
     "# Clippers External Operator Action Sheet",
     "",
@@ -1265,6 +1317,10 @@ function renderActionSheetMarkdown(sheet) {
     "## Blocks",
     "",
     ...(blockLines.length ? blockLines : ["- No operator blocks remain."]),
+    "",
+    "## Account Setup Cards",
+    "",
+    ...(accountLines.length ? accountLines : ["- No account setup actions remain."]),
     "",
     "## Permission Request Cards",
     "",

@@ -645,6 +645,17 @@ interface ClipperExternalCloseoutPackSummary {
       accounts: number;
       estimatedMinutes: number;
     };
+    accountSetupCards?: Array<{
+      id: string;
+      accountId: string;
+      platform: string;
+      portalUrl: string;
+      expectedHandle: string;
+      metricoolBridgeNeeded: boolean;
+      copyNote: string;
+      proofPath: string;
+      nextStep: string;
+    }>;
     permissionRequestCards?: Array<{
       id: string;
       platform: string;
@@ -15819,6 +15830,16 @@ export default function ClippersPage() {
                         <p className="mt-2 text-xs leading-5 text-emerald-100">
                           Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
                         </p>
+                      )}
+                      {(externalCloseoutPack.actionSheet.accountSetupCards || []).length > 0 && (
+                        <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
+                          <p className="text-xs font-medium text-emerald-100">Account setup cards: {externalCloseoutPack.actionSheet.accountSetupCards?.length || 0}</p>
+                          {externalCloseoutPack.actionSheet.accountSetupCards?.[0] && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">
+                              First: {externalCloseoutPack.actionSheet.accountSetupCards[0].accountId} · {externalCloseoutPack.actionSheet.accountSetupCards[0].platform} · {externalCloseoutPack.actionSheet.accountSetupCards[0].portalUrl}
+                            </p>
+                          )}
+                        </div>
                       )}
                       {(externalCloseoutPack.actionSheet.permissionRequestCards || []).length > 0 && (
                         <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
