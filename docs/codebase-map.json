@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-06-21T05:29:58.376Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente",
+  "generatedAt": "2026-06-23T21:48:32.356Z",
+  "repoRoot": "/private/tmp/asistente-ytdlp-clean.wCVgIz/blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -17,6 +17,8 @@
     "test:scheduler": "node --import tsx --test tests/reminder-scheduler.test.ts",
     "test:telegram": "node --import tsx --test tests/telegram-*.test.ts",
     "test:assistant-chat": "node --import tsx --test tests/assistant-chat-flow.test.ts",
+    "test:ai-cost-notifications": "node --import tsx --test tests/ai-cost-notifications.test.ts",
+    "test:ai-router-cost-override": "node --import tsx --test tests/ai-router-cost-override.test.ts",
     "test:telegram-config-cli": "node --import tsx --test tests/telegram-config-cli.test.ts",
     "test:telegram-webhook-cli": "node --import tsx --test tests/telegram-webhook-cli.test.ts",
     "test:auth": "node --import tsx --test tests/user-context.test.ts",
@@ -63,6 +65,7 @@
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
     "radio:ensure-tiktok-drive-folder": "tsx script/ensure-radio-tiktok-drive-folder.ts",
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
+    "clippers:record-owned-source-rights": "tsx script/clippers-record-owned-source-rights.ts",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
@@ -70,33 +73,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 379,
-    "filesIndexed": 315,
-    "imports": 1258,
-    "routes": 400,
-    "symbols": 6186
+    "filesVisible": 387,
+    "filesIndexed": 322,
+    "imports": 1274,
+    "routes": 404,
+    "symbols": 6321
   },
   "directories": {
-    "script": {
-      "files": 28,
-      "indexed": 26,
+    ".": {
+      "files": 24,
+      "indexed": 17,
       "kinds": {
-        "script": 28
+        "other": 15,
+        "docs": 8,
+        "package": 1
       }
     },
-    "scripts": {
-      "files": 4,
-      "indexed": 1,
+    "server": {
+      "files": 92,
+      "indexed": 89,
       "kinds": {
-        "script": 4
-      }
-    },
-    "tutorials/dropshipping-ceo-tutorial": {
-      "files": 8,
-      "indexed": 1,
-      "kinds": {
-        "other": 7,
-        "docs": 1
+        "server": 92
       }
     },
     ".agents/skills": {
@@ -105,15 +102,6 @@
       "kinds": {
         "docs": 1,
         "other": 1
-      }
-    },
-    ".": {
-      "files": 23,
-      "indexed": 17,
-      "kinds": {
-        "other": 14,
-        "docs": 8,
-        "package": 1
       }
     },
     ".upm": {
@@ -156,11 +144,18 @@
         "docs": 11
       }
     },
-    "server": {
-      "files": 89,
-      "indexed": 86,
+    "script": {
+      "files": 29,
+      "indexed": 27,
       "kinds": {
-        "server": 89
+        "script": 29
+      }
+    },
+    "scripts": {
+      "files": 4,
+      "indexed": 1,
+      "kinds": {
+        "script": 4
       }
     },
     "server/replit_integrations": {
@@ -185,10 +180,18 @@
       }
     },
     "tests": {
-      "files": 53,
-      "indexed": 51,
+      "files": 56,
+      "indexed": 54,
       "kinds": {
-        "test": 53
+        "test": 56
+      }
+    },
+    "tutorials/dropshipping-ceo-tutorial": {
+      "files": 8,
+      "indexed": 1,
+      "kinds": {
+        "other": 7,
+        "docs": 1
       }
     }
   },
@@ -4132,6 +4135,42 @@
       "routes": []
     },
     {
+      "path": "script/clippers-record-owned-source-rights.ts",
+      "kind": "script",
+      "imports": [
+        "../server/clippers-agent",
+        "fs/promises",
+        "path"
+      ],
+      "exports": [],
+      "symbols": [
+        "OwnedSourceCategory",
+        "OwnedSourceRule",
+        "byCategory",
+        "content",
+        "dryRun",
+        "evidenceFile",
+        "evidencePath",
+        "evidencePathFor",
+        "evidenceProblem",
+        "force",
+        "main",
+        "match",
+        "ownedAssets",
+        "pendingAssets",
+        "refreshed",
+        "rightsNoteFor",
+        "rightsReady",
+        "rootDir",
+        "rule",
+        "ruleForAsset",
+        "sourceDropDir",
+        "status",
+        "validateEvidenceFile"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-tiktok-preflight.ts",
       "kind": "script",
       "imports": [
@@ -4578,6 +4617,47 @@
       "routes": []
     },
     {
+      "path": "server/ai-cost-notifications.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "estimateOpenAiAudioCostUsd",
+        "estimateTokenApiCostUsd",
+        "formatAiApiCostNotice",
+        "recordAiApiCostEvent",
+        "shouldNotifyAiApiCost"
+      ],
+      "symbols": [
+        "AiCostEventInput",
+        "AiProvider",
+        "AudioCostInput",
+        "TokenCostInput",
+        "botToken",
+        "estimateOpenAiAudioCostUsd",
+        "estimateTokenApiCostUsd",
+        "formatAiApiCostNotice",
+        "geminiTokenRates",
+        "inputTokens",
+        "metadata",
+        "minimum",
+        "normalized",
+        "notice",
+        "openAiTokenRates",
+        "outputTokens",
+        "parsed",
+        "rates",
+        "raw",
+        "readUsdEnv",
+        "recordAiApiCostEvent",
+        "roundUsd",
+        "seconds",
+        "shouldNotifyAiApiCost",
+        "telegramConfig",
+        "usdPerMinute"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-cost-policy.ts",
       "kind": "server",
       "imports": [],
@@ -4632,20 +4712,22 @@
     {
       "path": "server/ai-router.ts",
       "kind": "server",
-      "imports": [
-        "./ceo-doctor-cli"
-      ],
+      "imports": [],
       "exports": [
         "AssistantModelRoute",
         "shouldUseCheapScoutForWebChat"
       ],
       "symbols": [
         "cheapTerms",
+        "explicitlyApprovedApiSpend",
         "hasAny",
+        "hasExplicitApiSpendApproval",
+        "hasRealValue",
         "heavyManualTerms",
         "isStrictCostMode",
         "maxCheapChars",
         "normalizeText",
+        "normalized",
         "shouldUseCheapScoutForWebChat",
         "strongTerms",
         "text"
@@ -4850,6 +4932,7 @@
       "path": "server/assistant.ts",
       "kind": "server",
       "imports": [
+        "./ai-cost-notifications",
         "./ai-cost-policy",
         "./ai-router",
         "./blackroom-links",
@@ -4901,6 +4984,7 @@
         "approved",
         "audio",
         "audioBytes",
+        "audioSeconds",
         "blackRoomAddRegex",
         "blackRoomDeactivateRegex",
         "blackRoomPerformanceRegex",
@@ -4960,6 +5044,9 @@
         "endProbe",
         "errorMessage",
         "errorText",
+        "estimateTokensFromText",
+        "estimatedCostUsd",
+        "estimatedPreviewOutputTokens",
         "eventData",
         "eventId",
         "executeIfAlreadyApproved",
@@ -4980,8 +5067,10 @@
         "followUpData",
         "followUpRegex",
         "fontStyle",
+        "formatAiApiCostPreview",
         "formatPromoVideoSourceQuestion",
         "fullResponse",
+        "geminiModel",
         "generated",
         "getCachedCheapScoutResponse",
         "getCalendarContext",
@@ -5004,6 +5093,7 @@
         "infoData",
         "infoRegex",
         "input",
+        "inputTokens",
         "invData",
         "investments",
         "investmentsCache",
@@ -5016,6 +5106,7 @@
         "linkData",
         "match",
         "maxAudioBytes",
+        "maxCompletionTokens",
         "mentionsPromo",
         "mentionsVideo",
         "meridiem",
@@ -5029,10 +5120,12 @@
         "normalizeAssistantCacheText",
         "normalizePromoVideoGenerateData",
         "normalizedTitle",
+        "notice",
         "now",
         "oldestKey",
         "options",
         "outputNames",
+        "outputTokens",
         "parseDataUrl",
         "parseDirectCalendarDateKey",
         "parseDirectCalendarTimes",
@@ -5047,6 +5140,7 @@
         "personData",
         "personRegex",
         "platform",
+        "previewCostUsd",
         "probe",
         "profileData",
         "promoData",
@@ -5096,6 +5190,7 @@
         "upcomingTasks",
         "updateInvestmentRegex",
         "url",
+        "usage",
         "userAlreadyApprovedExecution",
         "userFacingError",
         "userId",
@@ -7117,6 +7212,7 @@
         "getGoogleAccessToken",
         "getGoogleCalendarClient",
         "getGoogleOAuthClient",
+        "hasConnectedReplitGoogleConnector",
         "hasReplitGoogleConnectorEnv",
         "isGoogleCalendarConnected",
         "updateCalendarEvent",
@@ -7124,13 +7220,19 @@
       ],
       "symbols": [
         "accessToken",
+        "cacheKey",
+        "cachedToken",
         "calListResponse",
         "calendar",
         "calendarIds",
+        "connected",
         "createCalendarEvent",
         "currentEvent",
         "endDate",
         "endTime",
+        "expiresAt",
+        "expiryTime",
+        "findAccessToken",
         "getCalendarEvents",
         "getGoogleAccessToken",
         "getGoogleApis",
@@ -7138,16 +7240,21 @@
         "getGoogleOAuthCalendarClient",
         "getGoogleOAuthClient",
         "google",
+        "hasConnectedReplitGoogleConnector",
         "hasReplitGoogleConnectorEnv",
         "hostname",
         "isAllDay",
+        "isConnectorTokenFresh",
         "isGoogleCalendarConnected",
         "mapEventToCalendarEvent",
         "oauth2Client",
+        "readConnectorAccessToken",
         "response",
         "seenIds",
+        "selectGoogleConnector",
         "startDate",
         "startTime",
+        "token",
         "updateCalendarEvent",
         "updateCalendarEventDescription",
         "xReplitToken"
@@ -7198,6 +7305,26 @@
         "wantsCreate",
         "wantsDrive",
         "wantsFolder"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/google-drive-folder-url.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "extractGoogleDriveFolderIdFromUrl"
+      ],
+      "symbols": [
+        "DRIVE_FOLDER_ID_PATTERN",
+        "cleanDriveFolderId",
+        "decoded",
+        "extractGoogleDriveFolderIdFromUrl",
+        "folderPathId",
+        "folderPathMatch",
+        "id",
+        "url",
+        "urlMatches"
       ],
       "routes": []
     },
@@ -7260,6 +7387,7 @@
         "redirectUri",
         "refreshToken",
         "replitConnectorAvailable",
+        "replitConnectorConnected",
         "requestGoogleToken",
         "resolveGoogleDriveRedirectUri",
         "response",
@@ -7296,8 +7424,11 @@
         "ensureAppDriveStructure",
         "ensureDriveFolderAtRoot",
         "ensureDriveFolderPath",
+        "ensureDriveFolderPathUnderParent",
         "ensureRadioDriveFolder",
         "findDriveFolderPath",
+        "findDriveFolderPathUnderParent",
+        "getConfiguredClippersDriveRootFolderId",
         "searchDriveFoldersByName",
         "uploadLocalFileToDriveFolder",
         "uploadRadioTemplatePng"
@@ -7308,7 +7439,6 @@
         "DRIVE_FOLDER_MIME",
         "DRIVE_KONG_VIDEOS_FOLDER",
         "DRIVE_RADIO_FLYERS_FOLDER",
-        "accessToken",
         "appRootId",
         "cleanName",
         "configuredRootId",
@@ -7318,11 +7448,13 @@
         "ensureAppDriveStructure",
         "ensureDriveFolderAtRoot",
         "ensureDriveFolderPath",
+        "ensureDriveFolderPathUnderParent",
         "ensureRadioDriveFolder",
         "escapeDriveQueryValue",
         "existingFileId",
         "filename",
         "findDriveFolderPath",
+        "findDriveFolderPathUnderParent",
         "findFileInFolder",
         "findFolder",
         "findOrCreateFolder",
@@ -7330,6 +7462,7 @@
         "folderId",
         "folderSpecs",
         "folders",
+        "getConfiguredClippersDriveRootFolderId",
         "getDriveClient",
         "getGoogleApis",
         "google",
@@ -8356,6 +8489,7 @@
         "./storage",
         "./telegram",
         "./trust-policy",
+        "./youtube-downloader",
         "node:child_process",
         "node:fs/promises",
         "node:os",
@@ -8401,7 +8535,6 @@
         "collectVideos",
         "command",
         "commandSpecs",
-        "commonArgs",
         "copyToGoogleDriveDesktop",
         "createMissingDjNameAction",
         "createRadioYoutubeDriveFolderConfirmation",
@@ -8419,6 +8552,7 @@
         "downloadYoutubeVideo",
         "driveEntry",
         "driveFolderPath",
+        "driveParentFolderId",
         "driveRoot",
         "driveTarget",
         "dropSecond",
@@ -8427,7 +8561,6 @@
         "errorMessage",
         "existing",
         "explicit",
-        "explicitBinary",
         "fadeOutStart",
         "fallbackInputDir",
         "fileName",
@@ -8516,6 +8649,7 @@
       "path": "server/radio-youtube-command.ts",
       "kind": "server",
       "imports": [
+        "./google-drive-folder-url",
         "./radio-video-edit-agent",
         "node:path"
       ],
@@ -8528,6 +8662,7 @@
         "formatRadioYoutubeResult"
       ],
       "symbols": [
+        "DEFAULT_DRIVE_CLIP_FOLDER_PATH",
         "ESTIMATED_COST_PER_EDITED_VIDEO_USD",
         "buildDirectRadioYoutubeCommand",
         "buildDriveFolderPath",
@@ -8544,6 +8679,8 @@
         "djName",
         "driveFolderPath",
         "driveFolderPathFromYoutubeTitle",
+        "driveParentFolderId",
+        "driveUrlChildPatterns",
         "executeDirectRadioYoutubeCommand",
         "extractDjNameFromMessage",
         "extractDriveCreateFolderPath",
@@ -8559,6 +8696,7 @@
         "mentionsClips",
         "mentionsDriveDestination",
         "mentionsRadio",
+        "messageWithoutDriveUrls",
         "musicUrl",
         "names",
         "nestedPatterns",
@@ -8568,6 +8706,7 @@
         "quotedCleaned",
         "quotedFolder",
         "quotedPath",
+        "removeDriveUrls",
         "resolvedDriveFolderPath",
         "secondNested",
         "splitDriveFolderPath",
@@ -9741,6 +9880,7 @@
         "/api/clippers/bootstrap-workspace",
         "/api/clippers/import-credential-drop-files",
         "/api/clippers/import-launch-evidence-drop-files",
+        "/api/clippers/import-metricool-approval-evidence",
         "/api/clippers/import-source-drop-files",
         "/api/clippers/ingest-metrics",
         "/api/clippers/ingest-trends",
@@ -9783,6 +9923,7 @@
         "/api/clippers/prepare-launch-lane-matrix",
         "/api/clippers/prepare-legal-policy-pack",
         "/api/clippers/prepare-manual-posting-pack",
+        "/api/clippers/prepare-metricool-approval-report",
         "/api/clippers/prepare-metricool-approval-session",
         "/api/clippers/prepare-metricool-execution-queue",
         "/api/clippers/prepare-metricool-mvp-launch-pack",
@@ -9803,6 +9944,7 @@
         "/api/clippers/prepare-publisher-connectors",
         "/api/clippers/prepare-publisher-execution-queue",
         "/api/clippers/prepare-publishing-package",
+        "/api/clippers/prepare-rights-evidence-ledger",
         "/api/clippers/prepare-rights-outreach",
         "/api/clippers/prepare-robert-next-actions",
         "/api/clippers/prepare-source-acquisition",
@@ -9810,6 +9952,7 @@
         "/api/clippers/prepare-source-hunt",
         "/api/clippers/prepare-source-ingestion-sprint",
         "/api/clippers/prepare-source-scout",
+        "/api/clippers/prepare-source-scout-daily-sprint",
         "/api/clippers/prepare-source-scout-exact-url-kit",
         "/api/clippers/prepare-source-scout-permission-pack",
         "/api/clippers/prepare-source-scout-source-file-kit",
@@ -10730,6 +10873,7 @@
         "input",
         "investment",
         "investments",
+        "radioYoutubeResult",
         "taskToUpdate",
         "tasks"
       ],
@@ -10887,6 +11031,37 @@
         "url",
         "vite",
         "viteLogger"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/youtube-downloader.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "YtDlpCommandSpec",
+        "buildYtDlpCommandSpecs",
+        "formatYtDlpFailureMessage"
+      ],
+      "symbols": [
+        "YtDlpDownloadMode",
+        "baseArgs",
+        "binaries",
+        "buildYtDlpCommandSpecs",
+        "commandPrefix",
+        "configuredYoutubeCookieArgs",
+        "cookieArgs",
+        "cookiesFromBrowser",
+        "cookiesPath",
+        "format",
+        "formatYtDlpFailureMessage",
+        "hasConfiguredValue",
+        "key",
+        "lower",
+        "normalized",
+        "runtimeVariants",
+        "seen",
+        "uniqueCommandSpecs"
       ],
       "routes": []
     },
@@ -11254,6 +11429,38 @@
       "routes": []
     },
     {
+      "path": "tests/ai-cost-notifications.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-cost-notifications",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "cost",
+        "notice",
+        "previous"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-router-cost-override.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-router",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "previousGemini",
+        "previousStrict",
+        "route"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/app-qa-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -11297,6 +11504,7 @@
       "imports": [
         "../server/ai-router",
         "../server/assistant",
+        "../server/radio-youtube-command",
         "node:assert/strict",
         "node:fs",
         "node:test"
@@ -11309,12 +11517,15 @@
         "dashboard",
         "dashboardChat",
         "designSkill",
+        "developerIndex",
         "direct",
+        "directRadioIndex",
         "executor",
         "geminiClient",
         "marketingSkill",
         "panel",
         "policy",
+        "previousCheapScoutEnabled",
         "previousKey",
         "previousStrict",
         "route",
@@ -11856,6 +12067,24 @@
       "routes": []
     },
     {
+      "path": "tests/google-connector.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/google-calendar",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "REPLIT_CONNECTOR_ENV_VARS",
+        "fetchMock",
+        "restoreEnv",
+        "snapshot",
+        "snapshotEnv"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/google-drive-folder-command.test.ts",
       "kind": "test",
       "imports": [
@@ -12020,12 +12249,15 @@
       "kind": "test",
       "imports": [
         "../server/radio-youtube-command",
+        "../server/youtube-downloader",
         "node:assert/strict",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "command",
+        "message",
+        "specs",
         "summary"
       ],
       "routes": []
@@ -12380,15 +12612,24 @@
       "path": "vite.config.ts",
       "kind": "other",
       "imports": [
-        "./vite-plugin-meta-images",
         "@replit/vite-plugin-runtime-error-modal",
         "@tailwindcss/vite",
         "@vitejs/plugin-react",
+        "fs",
         "path",
         "vite"
       ],
       "exports": [],
-      "symbols": [],
+      "symbols": [
+        "baseUrl",
+        "getDeploymentUrl",
+        "imageExt",
+        "imageUrl",
+        "log",
+        "metaImagesPlugin",
+        "publicDir",
+        "url"
+      ],
       "routes": []
     }
   ],
@@ -12403,6 +12644,8 @@
     "vite.config.ts"
   ],
   "tests": [
+    "tests/ai-cost-notifications.test.ts",
+    "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
     "tests/automation-registry.test.ts",
@@ -12430,6 +12673,7 @@
     "tests/dropshipping-ceo.test.ts",
     "tests/env-loader-core.test.ts",
     "tests/github-client-security.test.ts",
+    "tests/google-connector.test.ts",
     "tests/google-drive-folder-command.test.ts",
     "tests/google-drive-oauth.test.ts",
     "tests/legal-compliance-agent.test.ts",

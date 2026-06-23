@@ -209,7 +209,7 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
   const driveFolderPathFromYoutubeTitle = /\b(?:con|usa(?:r|ndo)?|segun|según)\s+(?:el\s+)?t[ií]tulo\b|\bt[ií]tulo\s+del\s+video\b/.test(text);
   const createFolderIfMissing = driveFolderPathFromYoutubeTitle || /\b(crea\w*|crear|nueva|nuevo|subcarpeta|folder nuevo|new folder)\b/.test(text);
   const djName = extractDjNameFromMessage(message) || undefined;
-  if (!driveFolderPath?.length && !driveFolderPathFromYoutubeTitle && mentionsDriveDestination) {
+  if (!driveFolderPath?.length && !driveFolderPathFromYoutubeTitle && mentionsDriveDestination && !driveParentFolderId) {
     return {
       youtubeUrl,
       driveFolderPath: DEFAULT_DRIVE_CLIP_FOLDER_PATH,
