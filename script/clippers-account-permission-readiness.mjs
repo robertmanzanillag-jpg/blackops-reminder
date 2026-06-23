@@ -7,6 +7,7 @@ const outJsonPath = path.join(rootDir, "account-permission-readiness.json");
 const outMarkdownPath = path.join(rootDir, "account-permission-readiness.md");
 const outCsvPath = path.join(rootDir, "account-permission-readiness.csv");
 const evidenceDropPath = path.join(rootDir, "account-permission-next-evidence.csv");
+const externalCloseoutProofTodoPath = path.join(rootDir, "reports", "clippers-external-closeout-proof-todo.json");
 
 const accounts = [
   { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdaily" },
@@ -244,6 +245,8 @@ function renderMarkdown(summary) {
     `- Direct API-ready lanes: ${summary.totals.directApiReadyLanes}`,
     `- Developer apps approved: ${summary.totals.developerAppsApproved}/${summary.totals.developerApps}`,
     `- Permission groups approved: ${summary.totals.permissionGroupsApproved}/${summary.totals.permissionGroups}`,
+    `- External proof files needing real evidence: ${summary.externalCloseout.proofFilesNeedRealEvidence}`,
+    `- External evidence repair rows: ${summary.externalCloseout.evidenceRepairRows}`,
     `- Local owned source assets: ${summary.sourceReadiness.localOwnedSourceAssets}`,
     `- Connected Metricool rights-ready assets: ${summary.sourceReadiness.connectedMetricoolRightsReadyAssets}`,
     "",
@@ -253,6 +256,15 @@ function renderMarkdown(summary) {
     "## Permissions",
     "",
     ...permissionLines,
+    "## External Closeout",
+    "",
+    `- Status: ${summary.externalCloseout.status}`,
+    `- Proof files needing real evidence: ${summary.externalCloseout.proofFilesNeedRealEvidence}`,
+    `- Evidence repair rows: ${summary.externalCloseout.evidenceRepairRows}`,
+    `- Operator actions: ${summary.externalCloseout.operatorActions}`,
+    `- Next action: ${summary.externalCloseout.nextActionId || "none"}`,
+    `- Next step: ${summary.externalCloseout.nextStep}`,
+    "",
     "## Official Research",
     "",
     ...summary.officialResearch.map((item) => `- ${item.platform}: ${item.notes.join(" ")} Source: ${item.docsUrl}`),
@@ -292,6 +304,7 @@ async function main() {
   const queue = await readJson(path.join(rootDir, "scheduled", "metricool-execution-queue.json"), {});
   const permissionTracker = await readJson(path.join(rootDir, "permission-tracker.json"), {});
   const developerKit = await readJson(path.join(rootDir, "developer-app-evidence", "developer-app-connection-kit.json"), {});
+  const externalCloseout = await readJson(externalCloseoutProofTodoPath, {});
   const permissionRows = platforms.map((platform) => {
     const permission = permissionStatusFor(permissionTracker, platform.platform, platform.requiredScopes);
     return {
@@ -372,7 +385,15 @@ async function main() {
   };
   const localOwnedSourceAssets = queue?.sourceReadiness?.localOwnedSourceTotals?.total || 0;
   const connectedMetricoolRightsReadyAssets = queue?.sourceReadiness?.totals?.rightsReadyAssets || 0;
-  const status = totals.metricoolReadyLanes >= 2 && connectedMetricoolRightsReadyAssets > 0 ? "metricool_mvp_ready" : "blocked";
+  const externalProofsNeedEvidence = externalCloseout?.totals?.proofFilesNeedRealEvidence || 0;
+  const externalOperatorActions = externalCloseout?.totals?.tasks || externalCloseout?.rows?.length || 0;
+  const externalEvidenceRepairRows = externalProofsNeedEvidence;
+  const metricoolMvpReady = totals.metricoolReadyLanes >= 2 && connectedMetricoolRightsReadyAssets > 0;
+  const status = metricoolMvpReady
+    ? externalProofsNeedEvidence > 0 || totals.directApiReadyLanes < totals.accountProfiles
+      ? "metricool_mvp_ready_with_external_blockers"
+      : "metricool_mvp_ready"
+    : "blocked";
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -394,6 +415,14 @@ async function main() {
       guardSafe: metricoolGuard.safe,
       blockers: metricoolGuard.blockers,
     },
+    externalCloseout: {
+      status: externalCloseout?.status || "not_prepared",
+      proofFilesNeedRealEvidence: externalProofsNeedEvidence,
+      evidenceRepairRows: externalEvidenceRepairRows,
+      operatorActions: externalOperatorActions,
+      nextActionId: externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
+      nextStep: externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
+    },
     officialResearch: platforms.map((platform) => ({
       platform: platform.platform,
       docsUrl: platform.directApiDocsUrl,
@@ -403,7 +432,9 @@ async function main() {
     totals,
     nextEvidenceDropPath: evidenceDropPath,
     nextStep: status === "metricool_mvp_ready"
-      ? "Open Metricool and manually review Sports Daily + Meme Radar queued TikTok clips; connect Streamer Pulse and import proof next."
+      ? "Open Metricool and manually review approved queued clips; all external blockers are clear."
+      : status === "metricool_mvp_ready_with_external_blockers"
+        ? "Metricool MVP is usable only in approval_required mode. Complete external proof files, developer apps and permissions before claiming full readiness."
       : "Create/connect missing external accounts and import real account/developer/permission evidence before enabling more lanes.",
   };
 
@@ -417,6 +448,8 @@ async function main() {
     accountProfiles: totals.accountProfiles,
     metricoolReadyLanes: totals.metricoolReadyLanes,
     directApiReadyLanes: totals.directApiReadyLanes,
+    externalProofsNeedEvidence,
+    externalEvidenceRepairRows,
     connectedMetricoolRightsReadyAssets,
     localOwnedSourceAssets,
     nextEvidenceDropPath: evidenceDropPath,

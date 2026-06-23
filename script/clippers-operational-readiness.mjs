@@ -119,6 +119,7 @@ function buildBlockers({ accountReadiness, metricoolQueue, localAppPorts }) {
   if ((accountReadiness?.totals?.developerAppsApproved || 0) < (accountReadiness?.totals?.developerApps || 0)) blockers.push("Developer apps are not all approved; direct API publishing remains blocked.");
   if ((accountReadiness?.totals?.permissionGroupsApproved || 0) < (accountReadiness?.totals?.permissionGroups || 0)) blockers.push("Platform permission groups are not all approved; direct API publishing remains blocked.");
   if ((accountReadiness?.totals?.verifiedAccounts || 0) < (accountReadiness?.totals?.accountProfiles || 0)) blockers.push("Not every account/platform profile is verified; only connected Metricool MVP lanes can be used.");
+  if ((accountReadiness?.externalCloseout?.proofFilesNeedRealEvidence || 0) > 0) blockers.push("External closeout proof files still need real non-secret evidence; full readiness remains blocked.");
   return unique(blockers);
 }
 
@@ -212,7 +213,9 @@ async function main() {
     && metricoolQueue?.realPublishEnabled === false
     && (queueTotals.queuedForApproval || 0) > 0
     && (queueTotals.readyToSend || 0) === 0;
-  const metricoolReady = accountReadiness?.status === "metricool_mvp_ready"
+  const metricoolMvpStatus = accountReadiness?.status === "metricool_mvp_ready"
+    || accountReadiness?.status === "metricool_mvp_ready_with_external_blockers";
+  const metricoolReady = metricoolMvpStatus
     && (accountTotals.metricoolReadyLanes || 0) >= 2
     && sourceReadinessReady
     && approvalQueueReady;

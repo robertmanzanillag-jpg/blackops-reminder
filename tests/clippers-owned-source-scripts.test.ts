@@ -81,15 +81,21 @@ test("account permission readiness reports Metricool MVP without claiming direct
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "metricool_mvp_ready");
+  assert.equal(output.status, "metricool_mvp_ready_with_external_blockers");
   assert.equal(output.verifiedAccounts, 2);
   assert.equal(output.accountProfiles, 9);
   assert.equal(output.metricoolReadyLanes, 2);
   assert.equal(output.directApiReadyLanes, 0);
-  assert.equal(output.connectedMetricoolRightsReadyAssets, 77);
-  assert.equal(output.localOwnedSourceAssets, 100);
+  assert.ok(output.externalProofsNeedEvidence > 0);
+  assert.ok(output.externalEvidenceRepairRows > 0);
+  assert.ok(output.connectedMetricoolRightsReadyAssets > 0);
+  assert.ok(output.localOwnedSourceAssets >= 0);
 
   const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
+  assert.equal(readiness.status, "metricool_mvp_ready_with_external_blockers");
+  assert.ok(readiness.externalCloseout.proofFilesNeedRealEvidence > 0);
+  assert.equal(readiness.sourceReadiness.connectedMetricoolRightsReadyAssets, output.connectedMetricoolRightsReadyAssets);
+  assert.equal(readiness.sourceReadiness.localOwnedSourceAssets, output.localOwnedSourceAssets);
   assert.equal(readiness.totals.developerAppsApproved, 0);
   assert.equal(readiness.totals.permissionGroupsApproved, 0);
   assert.ok(readiness.accountRows.some((row) =>

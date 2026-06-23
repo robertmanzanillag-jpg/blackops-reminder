@@ -179,7 +179,7 @@ type ClipperLegalPolicyPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
-type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready" | "ready";
+type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready_with_external_blockers" | "metricool_mvp_ready" | "ready";
 type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "full_ready";
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
 type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
@@ -385,6 +385,14 @@ interface ClipperAccountPermissionReadinessSummary {
     connectedMetricoolRightsReadyAssets: number;
     realPublishEnabled: boolean;
     publishMode: string;
+  };
+  externalCloseout?: {
+    status: string;
+    proofFilesNeedRealEvidence: number;
+    evidenceRepairRows: number;
+    operatorActions: number;
+    nextActionId: string | null;
+    nextStep: string;
   };
   totals: {
     accountProfiles: number;
@@ -16744,6 +16752,8 @@ export default function ClippersPage() {
                       "w-fit border",
                       accountPermissionReadiness.status === "metricool_mvp_ready"
                         ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : accountPermissionReadiness.status === "metricool_mvp_ready_with_external_blockers"
+                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
                         : "border-amber-300/30 bg-amber-300/10 text-amber-100"
                     )}>
                       {accountPermissionReadiness.status}
@@ -16774,6 +16784,17 @@ export default function ClippersPage() {
                     <p>Connected assets: {accountPermissionReadiness.sourceReadiness.connectedMetricoolRightsReadyAssets}</p>
                     <p>Publish: {accountPermissionReadiness.sourceReadiness.publishMode}</p>
                   </div>
+                  {accountPermissionReadiness.externalCloseout && (
+                    <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-2">
+                      <div className="grid gap-2 text-xs text-zinc-500 md:grid-cols-4">
+                        <p>External: {accountPermissionReadiness.externalCloseout.status}</p>
+                        <p>Proofs needed: {accountPermissionReadiness.externalCloseout.proofFilesNeedRealEvidence}</p>
+                        <p>Repair rows: {accountPermissionReadiness.externalCloseout.evidenceRepairRows}</p>
+                        <p>Actions: {accountPermissionReadiness.externalCloseout.operatorActions}</p>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-amber-100">{accountPermissionReadiness.externalCloseout.nextStep}</p>
+                    </div>
+                  )}
                   <p className="mt-2 break-all text-xs text-zinc-600">Next evidence CSV: {accountPermissionReadiness.nextEvidenceDropPath}</p>
                 </>
               ) : (
