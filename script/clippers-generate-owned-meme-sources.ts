@@ -7,6 +7,7 @@ const dropDir = path.join(rootDir, "source-drop", "memes");
 const framesDir = path.join(rootDir, "rendered", "owned-meme-frames");
 const evidencePath = path.join(dropDir, "owned-meme-production-notes.md");
 const manifestPath = path.join(dropDir, "source-drop-manifest.csv");
+const commandTimeoutMs = 5 * 60_000;
 
 const memes = [
   ["memes-owned-01.mp4", "POV: you opened the app", "and it already found the problem"],
@@ -29,12 +30,45 @@ function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+function killCommandProcess(child: ReturnType<typeof spawn>): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit" });
+    const child = spawn(command, args, { detached: true, stdio: ["ignore", "inherit", "pipe"] });
+    let stderr = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killCommandProcess(child);
+      reject(new Error(`${command} timed out after ${commandTimeoutMs}ms`));
+    }, commandTimeoutMs);
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk) => {
+      stderr = `${stderr}${chunk}`.slice(-4000);
+    });
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} failed with code ${code}`));
+      finish(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`${command} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+      });
     });
   });
 }

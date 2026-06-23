@@ -3800,6 +3800,10 @@ export interface ClipperRobertConnectNowHandoff {
     permissionTasks: number;
     oauthTasks: number;
     credentialTasks: number;
+    closeoutRows: number;
+    closeoutProofsNeeded: number;
+    closeoutArtifactSafety: string;
+    closeoutMetricoolReadyToSend: number;
     nextStep: string;
   };
   intakeConsole: {
@@ -3898,6 +3902,21 @@ export interface ClipperRobertNextActionsSummary {
   markdownPath: string;
   csvPath: string;
   connectNow: ClipperRobertConnectNowHandoff;
+  externalCloseout: {
+    status: ClipperExternalCloseoutRun["status"];
+    generatedAt: string | null;
+    packPath: string;
+    proofTodoPath: string;
+    operatorQueuePath: string;
+    evidenceCsvPath: string;
+    proofFilesNeedRealEvidence: number;
+    proofFilesFilled: number;
+    operatorQueueItems: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+    artifactSafetyStatus: string;
+    nextStep: string;
+  };
   items: ClipperRobertNextActionItem[];
   sourceArtifacts: {
     commandCenterPath: string;
@@ -4947,6 +4966,49 @@ export interface ClipperExternalExecutionFocusRun {
   nextStep: string;
 }
 
+export interface ClipperExternalCloseoutRunItem {
+  rank: number;
+  id: string;
+  lane: string;
+  platform: string;
+  accountId: string;
+  requiredStatus: string;
+  portalUrl: string;
+  docsUrl: string;
+  redirectUri: string;
+  proofPath: string;
+  missingCsvFields: string[];
+  blockers: string[];
+  operatorAction: string;
+  nextStep: string;
+  evidenceCsvRow: string;
+  checklist: string[];
+}
+
+export interface ClipperExternalCloseoutRun {
+  status: "not_prepared" | "needs_operator" | "complete";
+  generatedAt: string | null;
+  packPath: string;
+  actionSheetPath: string;
+  proofTodoPath: string;
+  operatorQueuePath: string;
+  evidenceCsvPath: string;
+  totals: {
+    rows: number;
+    accounts: number;
+    developerApps: number;
+    permissions: number;
+    proofFilesNeedRealEvidence: number;
+    metricoolQueuedForApproval: number;
+    metricoolReadyToSend: number;
+  };
+  artifactSafetyStatus: string;
+  metricoolPublishMode: string;
+  items: ClipperExternalCloseoutRunItem[];
+  nextItems: ClipperExternalCloseoutRunItem[];
+  nextStep: string;
+}
+
 export interface ClipperExternalExecutionSessionSummary {
   status: ClipperExternalExecutionHandoffStatus;
   generatedAt: string | null;
@@ -4959,6 +5021,7 @@ export interface ClipperExternalExecutionSessionSummary {
   unlockBoard: ClipperExternalExecutionUnlockBoardItem[];
   portalBatches: ClipperExternalExecutionPortalBatch[];
   focusRun: ClipperExternalExecutionFocusRun;
+  closeoutRun: ClipperExternalCloseoutRun;
   totals: {
     items: number;
     doNow: number;
@@ -6664,6 +6727,12 @@ const LAUNCH_LANE_EXECUTION_QUEUE_PATH = path.join(ROOT_DIR, "launch-lane-execut
 const LAUNCH_LANE_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-lane-execution-queue.md");
 const LAUNCH_LANE_EXECUTION_QUEUE_CSV_PATH = path.join(ROOT_DIR, "launch-lane-execution-queue.csv");
 const EXTERNAL_PORTAL_LAUNCHER_HTML_PATH = path.join(ROOT_DIR, "external-portal-launcher.html");
+const EXTERNAL_CLOSEOUT_PACK_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-pack.json");
+const EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH = path.join(REPORTS_DIR, "clippers-external-operator-action-sheet.md");
+const EXTERNAL_CLOSEOUT_PROOF_TODO_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-proof-todo.md");
+const EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-operator-queue.md");
+const EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH = path.join(ROOT_DIR, "evidence-drop", "external-closeout-evidence-import.csv");
+const EXTERNAL_CLOSEOUT_PROOF_DROP_DIR = path.join(ROOT_DIR, "evidence-drop", "external-closeout-proofs");
 const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
 const LAUNCH_EVIDENCE_FIX_PACK_MARKDOWN_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.md");
 const LAUNCH_EVIDENCE_FIX_PACK_CSV_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.csv");
@@ -6695,6 +6764,67 @@ const CREDENTIAL_SETUP_QUEUE_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-
 const CREDENTIAL_SETUP_QUEUE_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-setup-queue.md");
 const CREDENTIAL_SETUP_QUEUE_CSV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-setup-queue.csv");
 const CREDENTIAL_TRANSFER_KIT_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.json");
+
+const CLIPPER_JSON_SCRIPT_TIMEOUT_MS = 120_000;
+
+function killClipperScriptProcess(child: ReturnType<typeof spawn>): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct child when process groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
+function runClipperJsonScript(scriptPath: string, label: string, timeoutMs = CLIPPER_JSON_SCRIPT_TIMEOUT_MS): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: process.cwd(),
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killClipperScriptProcess(child);
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", (error) => finish(() => reject(error)));
+    child.on("close", (code) => {
+      finish(() => {
+        if (code !== 0) {
+          reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (error: any) {
+          reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+        }
+      });
+    });
+  });
+}
+
+export async function runClipperExternalCloseoutPack(): Promise<void> {
+  await runClipperJsonScript("script/clippers-external-closeout-pack.mjs", "External closeout pack");
+}
 const CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.md");
 const CREDENTIAL_TRANSFER_KIT_ENV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.env");
 const CREDENTIAL_DRIVE_INTAKE_RUNBOOK_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drive-intake-runbook.json");
@@ -6989,7 +7119,7 @@ const PLATFORM_SCOPES: Record<ClipperPlatform, string[]> = {
   youtube: ["https://www.googleapis.com/auth/youtube.upload"],
 };
 
-const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-21";
+const OFFICIAL_PERMISSION_DOCS_CHECKED_AT = "2026-06-23";
 
 const PLATFORM_REQUIREMENTS: ClipperPlatformRequirement[] = [
   {
@@ -10668,9 +10798,9 @@ function renderSourceScoutMarkdown(summary: ClipperSourceScoutSummary): string {
 
 async function writeSourceScoutArtifacts(summary: ClipperSourceScoutSummary): Promise<ClipperSourceScoutSummary> {
   const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_MARKDOWN_PATH, renderSourceScoutMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_CSV_PATH, renderSourceScoutCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_MARKDOWN_PATH, renderSourceScoutMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_CSV_PATH, renderSourceScoutCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -10834,7 +10964,21 @@ function validateSourceScoutEvidence(input: {
   return { evidencePath: proof, evidenceType };
 }
 
+function validateSourceScoutRecreatePlan(plan: string): string | null {
+  const trimmed = plan.trim();
+  if (!trimmed || hasTemplatePlaceholder(trimmed)) return "recreate_only requiere un plan de recreacion con assets propios/licenciados.";
+  if (trimmed.length < 90) return "recreate_only requiere un plan mas especifico: formato, assets propios/licenciados/generados, guion/caption y produccion.";
+  const normalized = trimmed.toLowerCase();
+  const hasOwnedAssetSignal = /(owned|original|generated|licensed|propio|propia|propios|generad|licenciad|voiceover|narration|narracion|script|guion|caption|visual|background|b-roll|recorded|grabado)/i.test(normalized);
+  const hasNoRawReuseSignal = /(recreate only|no raw|sin usar|not reuse|original script|own(ed)? voice|assets? propios?|generated visuals?|solo el formato|joke structure|caption pattern)/i.test(normalized);
+  if (!hasOwnedAssetSignal || !hasNoRawReuseSignal) {
+    return "recreate_only debe explicar que no se reutiliza el video original y que se usaran assets/guion/voz propios o licenciados.";
+  }
+  return null;
+}
+
 function buildSourceScoutIntakeManifestRow(item: ClipperSourceScoutIntakeItem): string {
+  const manifestRightsStatus = item.requestedStatus === "recreate_only" ? "owned_or_permissioned" : item.rightsStatus;
   return [
     item.category,
     item.title,
@@ -10842,15 +10986,18 @@ function buildSourceScoutIntakeManifestRow(item: ClipperSourceScoutIntakeItem): 
     item.source,
     item.platform,
     item.targetFileName || path.basename(item.sourceDropPath || item.sourceUrl),
-    item.rightsStatus,
+    manifestRightsStatus,
     item.evidencePath || "",
-    item.requestedStatus === "owned_or_permissioned" ? "high" : "review",
+    item.requestedStatus === "owned_or_permissioned" || item.requestedStatus === "recreate_only" ? "high" : "review",
     item.recreatePlan || item.nextStep,
   ].map(csvCell).join(",");
 }
 
 async function upsertSourceDropManifestForIntake(item: ClipperSourceScoutIntakeItem): Promise<string | null> {
-  if (!item.sourceDropPath || !item.targetFileName || item.rightsStatus !== "owned_or_permissioned" || !item.evidenceAccepted) return null;
+  const canWriteManifest = item.evidenceAccepted
+    && (item.rightsStatus === "owned_or_permissioned" || item.requestedStatus === "recreate_only")
+    && (item.requestedStatus !== "recreate_only" || item.decision === "ready_for_intake");
+  if (!item.sourceDropPath || !item.targetFileName || !canWriteManifest) return null;
   const categoryDir = path.join(SOURCE_DROP_DIR, item.category);
   await mkdir(categoryDir, { recursive: true });
   const manifestPath = path.join(categoryDir, "source-drop-manifest.csv");
@@ -11335,9 +11482,9 @@ async function writeSourceScoutPermissionPackArtifacts(summary: ClipperSourceSco
       ? "partial"
       : "ready";
   const withGeneratedAt: ClipperSourceScoutPermissionPackSummary = { ...summary, generatedAt: new Date().toISOString(), status };
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH, renderSourceScoutPermissionPackMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH, renderSourceScoutPermissionPackCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_MARKDOWN_PATH, renderSourceScoutPermissionPackMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_PERMISSION_PACK_CSV_PATH, renderSourceScoutPermissionPackCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11349,7 +11496,7 @@ export async function prepareClipperSourceScoutPermissionPack(userId = getSystem
     sourceScout: statusBefore.sourceScout,
     sourceScoutIntake: statusBefore.sourceScoutIntake,
   }));
-  return { sourceScoutPermissionPack, status: await getClipperStatus(userId) };
+  return { sourceScoutPermissionPack, status: { ...statusBefore, sourceScoutPermissionPack } };
 }
 
 function sourceScoutWorkQueueIntakeRow(candidate: ClipperSourceScoutCandidate, status: ClipperSourceScoutIntakeStatus): string {
@@ -11644,9 +11791,9 @@ function renderSourceScoutWorkQueueMarkdown(summary: ClipperSourceScoutWorkQueue
 async function writeSourceScoutWorkQueueArtifacts(summary: ClipperSourceScoutWorkQueueSummary): Promise<ClipperSourceScoutWorkQueueSummary> {
   const status: ClipperSourceScoutWorkQueueStatus = summary.totals.items > 0 ? "ready" : "blocked";
   const withGeneratedAt: ClipperSourceScoutWorkQueueSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH, renderSourceScoutWorkQueueMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_WORK_QUEUE_CSV_PATH, renderSourceScoutWorkQueueCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_MARKDOWN_PATH, renderSourceScoutWorkQueueMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_WORK_QUEUE_CSV_PATH, renderSourceScoutWorkQueueCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11661,7 +11808,7 @@ export async function prepareClipperSourceScoutWorkQueue(userId = getSystemUserI
     weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
   }));
-  return { sourceScoutWorkQueue, status: await getClipperStatus(userId) };
+  return { sourceScoutWorkQueue, status: { ...statusBefore, sourceScoutWorkQueue } };
 }
 
 function sourceScoutExactUrlSearchQuery(candidate: ClipperSourceScoutCandidate): string {
@@ -11836,9 +11983,9 @@ function renderSourceScoutExactUrlKitMarkdown(summary: ClipperSourceScoutExactUr
 async function writeSourceScoutExactUrlKitArtifacts(summary: ClipperSourceScoutExactUrlKitSummary): Promise<ClipperSourceScoutExactUrlKitSummary> {
   const status: ClipperSourceScoutExactUrlKitStatus = summary.totals.items > 0 ? "blocked" : "ready";
   const withGeneratedAt: ClipperSourceScoutExactUrlKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH, renderSourceScoutExactUrlKitMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH, renderSourceScoutExactUrlKitCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_MARKDOWN_PATH, renderSourceScoutExactUrlKitMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_EXACT_URL_KIT_CSV_PATH, renderSourceScoutExactUrlKitCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -11850,7 +11997,7 @@ export async function prepareClipperSourceScoutExactUrlKit(userId = getSystemUse
     sourceScout: statusBefore.sourceScout,
     sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
   }));
-  return { sourceScoutExactUrlKit, status: await getClipperStatus(userId) };
+  return { sourceScoutExactUrlKit, status: { ...statusBefore, sourceScoutExactUrlKit } };
 }
 
 const SOURCE_SCOUT_DAILY_CATEGORY_TARGETS: Record<ClipperAccountCategory, { leadTarget: number; exactUrlTarget: number; searchMinutes: number }> = {
@@ -12199,9 +12346,9 @@ function renderSourceScoutDailySprintMarkdown(summary: ClipperSourceScoutDailySp
 
 async function writeSourceScoutDailySprintArtifacts(summary: ClipperSourceScoutDailySprintSummary): Promise<ClipperSourceScoutDailySprintSummary> {
   const withGeneratedAt: ClipperSourceScoutDailySprintSummary = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH, renderSourceScoutDailySprintMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH, renderSourceScoutDailySprintCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_MARKDOWN_PATH, renderSourceScoutDailySprintMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_DAILY_SPRINT_CSV_PATH, renderSourceScoutDailySprintCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -12219,7 +12366,7 @@ export async function prepareClipperSourceScoutDailySprint(userId = getSystemUse
     exactUrlKit: statusBefore.sourceScoutExactUrlKit,
     weeklyProductionFunnel: statusBefore.weeklyProductionFunnel,
   }));
-  return { sourceScoutDailySprint, status: await getClipperStatus(userId) };
+  return { sourceScoutDailySprint, status: { ...statusBefore, sourceScoutDailySprint } };
 }
 
 function sourceScoutSourceFileName(item: ClipperSourceScoutWorkQueueItem): string {
@@ -12404,9 +12551,9 @@ function renderSourceScoutSourceFileKitMarkdown(summary: ClipperSourceScoutSourc
 async function writeSourceScoutSourceFileKitArtifacts(summary: ClipperSourceScoutSourceFileKitSummary): Promise<ClipperSourceScoutSourceFileKitSummary> {
   const status: ClipperSourceScoutSourceFileKitStatus = summary.totals.missingSourceFiles > 0 ? "blocked" : "ready";
   const withGeneratedAt: ClipperSourceScoutSourceFileKitSummary = { ...summary, status, generatedAt: new Date().toISOString() };
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH, renderSourceScoutSourceFileKitMarkdown(withGeneratedAt));
-  await writeFile(SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH, renderSourceScoutSourceFileKitCsv(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_MARKDOWN_PATH, renderSourceScoutSourceFileKitMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(SOURCE_SCOUT_SOURCE_FILE_KIT_CSV_PATH, renderSourceScoutSourceFileKitCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
@@ -12417,7 +12564,7 @@ export async function prepareClipperSourceScoutSourceFileKit(userId = getSystemU
   const sourceScoutSourceFileKit = await writeSourceScoutSourceFileKitArtifacts(await buildSourceScoutSourceFileKitSummary({
     sourceScoutWorkQueue: statusBefore.sourceScoutWorkQueue,
   }));
-  return { sourceScoutSourceFileKit, status: await getClipperStatus(userId) };
+  return { sourceScoutSourceFileKit, status: { ...statusBefore, sourceScoutSourceFileKit } };
 }
 
 function rightsEvidenceLedgerRepairRow(item: {
@@ -12464,6 +12611,15 @@ function rightsEvidenceIssueForIntake(item: ClipperSourceScoutIntakeItem): Pick<
   }
   if (item.decision === "rejected") {
     return { issue: "blocked", severity: "blocked", nextStep: item.rejectReason || item.nextStep };
+  }
+  if (item.requestedStatus === "recreate_only") {
+    if (!item.recreatePlan || !item.evidenceAccepted) {
+      return { issue: "missing_proof", severity: "blocked", nextStep: "Add an approved recreate plan with owned/licensed production notes before using this trend." };
+    }
+    if (!hasSourceFile) {
+      return { issue: "missing_source_file", severity: "blocked", nextStep: `Upload or generate the recreated owned source file at ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.` };
+    }
+    return { issue: "none", severity: "ready", nextStep: "Recreate plan and owned source file are ready for guarded intake/Metricool approval queue." };
   }
   if (item.sourceUrlKind === "discovery_search") {
     return { issue: "review_required", severity: "blocked", nextStep: "Convert discovery/search URL into an exact video/post URL or approved recreate plan before using it." };
@@ -12532,7 +12688,7 @@ function buildRightsEvidenceLedgerSummary(input: {
 
   const intakePaths = new Set(intakeItems.map((item) => item.sourcePath).filter((value): value is string => Boolean(value)));
   const assetItems = input.productionQueue.sourceAssets
-    .filter((asset) => !intakePaths.has(asset.path))
+    .filter((asset) => !intakePaths.has(asset.path) && !sourceAssetLooksTestArtifact(asset.fileName))
     .map<ClipperRightsEvidenceLedgerItem>((asset) => {
       const issue = rightsEvidenceIssueForAsset(asset);
       const redactedSourcePath = redactRightsEvidenceLedgerValue(asset.path);
@@ -13076,14 +13232,28 @@ function renderWeeklyProductionFunnelCsv(summary: ClipperWeeklyProductionFunnelS
 
 async function writeWeeklyProductionFunnelArtifacts(summary: ClipperWeeklyProductionFunnelSummary): Promise<ClipperWeeklyProductionFunnelSummary> {
   const withGeneratedAt = { ...summary, generatedAt: new Date().toISOString() };
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_PATH, JSON.stringify(withGeneratedAt, null, 2));
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH, renderWeeklyProductionFunnelMarkdown(withGeneratedAt));
-  await writeFile(WEEKLY_PRODUCTION_FUNNEL_CSV_PATH, renderWeeklyProductionFunnelCsv(withGeneratedAt));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_PATH, JSON.stringify(withGeneratedAt, null, 2));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_MARKDOWN_PATH, renderWeeklyProductionFunnelMarkdown(withGeneratedAt));
+  await writeTextFileAtomic(WEEKLY_PRODUCTION_FUNNEL_CSV_PATH, renderWeeklyProductionFunnelCsv(withGeneratedAt));
   return withGeneratedAt;
 }
 
+function readTextFileWithTimeout(filePath: string, timeoutMs = 1_500): Promise<string | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeout = setTimeout(() => resolve(null), timeoutMs);
+    timeout.unref?.();
+  });
+  return Promise.race([
+    readFile(filePath, "utf8").catch(() => null),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
+
 async function readCachedWeeklyProductionFunnelSummary(): Promise<ClipperWeeklyProductionFunnelSummary> {
-  const raw = await readFile(WEEKLY_PRODUCTION_FUNNEL_PATH, "utf8").catch(() => null);
+  const raw = await readTextFileWithTimeout(WEEKLY_PRODUCTION_FUNNEL_PATH);
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as ClipperWeeklyProductionFunnelSummary;
@@ -13129,7 +13299,7 @@ export async function prepareClipperWeeklyProductionFunnel(userId = getSystemUse
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
     metrics: statusBefore.metrics,
   }));
-  return { weeklyProductionFunnel, status: await getClipperStatus(userId) };
+  return { weeklyProductionFunnel, status: { ...statusBefore, weeklyProductionFunnel } };
 }
 
 export async function recordClipperSourceScoutIntake(input: unknown, userId = getSystemUserId()): Promise<{ sourceScoutIntake: ClipperSourceScoutIntakeSummary; trendCandidatesBatch: ClipperTrendCandidatesBatchImportSummary | null; sourceDropImport: ClipperSourceDropImportSummary | null; metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
@@ -13149,8 +13319,9 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
     const category = normalizeTrendCategory(firstString(record, ["category", "vertical", "niche"]) || candidate?.category || "memes");
     const platform = sourceDiscoveryPlatformFromHint(firstString(record, ["platform", "network"]) || candidate?.platform || "tiktok");
     const sourceUrl = firstString(record, ["source_url", "url", "video_url", "post_url", "link"]) || candidate?.sourceUrl || "";
-    const rejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
-    const sourceUrlKind: ClipperSourceScoutUrlKind = rejectReason ? "discovery_search" : "exact_video_or_post";
+    const urlRejectReason = sourceUrl ? exactSourceUrlRejectReason(sourceUrl) : "URL exacta requerida.";
+    let rejectReason: string | null = urlRejectReason;
+    const sourceUrlKind: ClipperSourceScoutUrlKind = urlRejectReason ? "discovery_search" : "exact_video_or_post";
     const requestedStatus = sourceScoutIntakeRequestedStatus(record);
     const proofRaw = firstString(record, ["permission_url", "proof_url", "proof_path", "proof", "evidence_path", "evidence_link", "license"]);
     const evidenceTypeRaw = firstString(record, ["evidence_type", "evidenceType", "proof_type", "proofType"]);
@@ -13173,7 +13344,7 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
     const sourceFileExists = await sourceIntakeFileLooksReady(sourceDropPath);
     const targetSourceExists = await sourceIntakeFileLooksReady(targetSourcePath);
 
-    if (!rejectReason && requestedStatus === "owned_or_permissioned") {
+    if (!urlRejectReason && requestedStatus === "owned_or_permissioned") {
       try {
         const evidence = validateSourceScoutEvidence({
           requestedStatus,
@@ -13193,29 +13364,45 @@ export async function recordClipperSourceScoutIntake(input: unknown, userId = ge
       }
     }
 
-    if (!rejectReason && requestedStatus === "recreate_only") {
-      if (!recreatePlan || hasTemplatePlaceholder(recreatePlan)) {
+    if (requestedStatus === "recreate_only") {
+      const recreatePlanProblem = validateSourceScoutRecreatePlan(recreatePlan);
+      if (recreatePlanProblem) {
         decision = "rejected";
-        nextStep = "recreate_only requiere un plan de recreacion con assets propios/licenciados.";
+        nextStep = recreatePlanProblem;
+        rejectReason = nextStep;
+      } else if (urlRejectReason && !urlRejectReason.startsWith("La URL parece busqueda/explore/results")) {
+        decision = "rejected";
+        publishGate = "blocked_rights";
+        nextStep = urlRejectReason;
       } else {
-        if (evidenceTypeRaw && evidenceTypeRaw !== "recreate_plan_approved") evidenceType = evidenceTypeRaw.toLowerCase();
-        else evidenceType = "recreate_plan_approved";
-        evidencePath = proofRaw && !hasTemplatePlaceholder(proofRaw) && !/^(approved|permissioned|ok|yes|si|sí)$/i.test(proofRaw) ? proofRaw : null;
-        evidenceAccepted = Boolean(evidencePath || recreatePlan);
-        decision = "blocked_source_file";
-        publishGate = "blocked_source_file";
-        nextStep = "Recrear con assets propios/licenciados, subir archivo fuente y guardar proof antes de Metricool.";
+        evidenceType = "recreate_plan_approved";
+        evidencePath = proofRaw && !hasTemplatePlaceholder(proofRaw) && !/^(approved|permissioned|ok|yes|si|sí)$/i.test(proofRaw)
+          ? proofRaw
+          : `ownership note: approved recreate plan - ${recreatePlan}`;
+        evidenceAccepted = true;
+        rejectReason = null;
+        if (sourceFileExists || targetSourceExists) {
+          decision = "ready_for_intake";
+          publishGate = "ready_for_intake";
+          nextStep = "Recreate plan y archivo propio detectados; source-drop puede crear allowlist sin usar el video original.";
+        } else {
+          decision = "blocked_source_file";
+          publishGate = "blocked_source_file";
+          nextStep = "Recrear con assets propios/licenciados, subir archivo fuente y guardar proof antes de Metricool.";
+        }
       }
     }
 
-    if (rejectReason) {
+    if (urlRejectReason && requestedStatus !== "recreate_only") {
       decision = "rejected";
       publishGate = "blocked_rights";
-      nextStep = rejectReason;
+      nextStep = urlRejectReason;
+      rejectReason = urlRejectReason;
     } else if (requestedStatus === "blocked") {
       decision = "rejected";
       publishGate = "blocked_rights";
       nextStep = "Marcado blocked/no usable; no avanza a produccion.";
+      rejectReason = nextStep;
     } else if (requestedStatus === "review_required") {
       decision = "blocked_rights";
       publishGate = "blocked_rights";
@@ -17568,7 +17755,8 @@ function launchEvidenceDropFileIgnored(fileName: string): boolean {
     || fileName === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH)
     || fileName === path.basename(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH)
     || fileName === path.basename(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH)
-    || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH);
+    || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH)
+    || fileName === "external-closeout-evidence-import.csv";
 }
 
 function parseLaunchEvidenceDropRaw(raw: string): Record<string, unknown>[] {
@@ -24096,6 +24284,141 @@ function buildExternalExecutionFocusRun(items: ClipperExternalExecutionSessionIt
   };
 }
 
+function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
+  const lane = String(row.lane || "");
+  const platform = String(row.platform || "");
+  const accountId = String(row.accountId || "");
+  const requiredStatus = closeoutRequiredStatus(row);
+  const taskScope = typeof row.id === "string" && row.id.startsWith("permission:")
+    ? row.id.replace(/^permission:[^:]+:/, "")
+    : "";
+  return [
+    lane === "account" ? "account" : lane === "developer_app" ? "developer_app" : "permission",
+    lane === "account" ? accountId : "",
+    platform,
+    requiredStatus,
+    lane === "permission" ? taskScope : "",
+    "",
+    "",
+    String(row.redirectUri || ""),
+    String(row.portalUrl || ""),
+    String(row.docsUrl || ""),
+    "",
+    "",
+  ].map(csvEscape).join(",");
+}
+
+function closeoutRequiredStatus(row: Record<string, unknown>): string {
+  return String(row.requiredStatus || row.requiredCsvStatus || "");
+}
+
+function closeoutChecklistForRow(row: Record<string, unknown>): string[] {
+  const lane = String(row.lane || "");
+  const platform = String(row.platform || "platform");
+  const proofPath = String(row.proofPath || "the matching proof file");
+  if (lane === "account") {
+    return [
+      `Open the ${platform} account/profile portal.`,
+      "Create or verify the real account, profile/channel URL and ownership access.",
+      "Capture non-private proof and fill the proof file.",
+      `Use status verified in ${EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH}.`,
+    ];
+  }
+  if (lane === "developer_app") {
+    return [
+      `Open the ${platform} developer portal.`,
+      "Create or submit the app/project and copy only the public app identifier.",
+      "Confirm production callback/public URL is registered.",
+      `Fill ${proofPath} before importing the closeout row.`,
+    ];
+  }
+  return [
+    `Open the ${platform} developer permission/app-review portal.`,
+    "Request or confirm the exact scope shown in this row.",
+    "Save the real review URL/ticket/screenshot note without private values.",
+    `Fill ${proofPath} before importing the closeout row.`,
+  ];
+}
+
+async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
+  const raw = await readFile(EXTERNAL_CLOSEOUT_PACK_PATH, "utf8").catch(() => null);
+  if (!raw) {
+    return {
+      status: "not_prepared",
+      generatedAt: null,
+      packPath: EXTERNAL_CLOSEOUT_PACK_PATH,
+      actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
+      proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
+      operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+      evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
+      totals: {
+        rows: 0,
+        accounts: 0,
+        developerApps: 0,
+        permissions: 0,
+        proofFilesNeedRealEvidence: 0,
+        metricoolQueuedForApproval: 0,
+        metricoolReadyToSend: 0,
+      },
+      artifactSafetyStatus: "not_scanned",
+      metricoolPublishMode: "approval_required",
+      items: [],
+      nextItems: [],
+      nextStep: "Run External Closeout Pack before starting portal work.",
+    };
+  }
+  const parsed = JSON.parse(raw) as Record<string, any>;
+  const actionRows = Array.isArray(parsed.actionSheet?.rows) ? parsed.actionSheet.rows : [];
+  const operatorQueueRows = Array.isArray(parsed.operatorQueue) ? parsed.operatorQueue : [];
+  const rows = operatorQueueRows.length ? operatorQueueRows : actionRows;
+  const items = rows.map((row: Record<string, unknown>, index: number): ClipperExternalCloseoutRunItem => ({
+    rank: Number(row.rank || index + 1),
+    id: String(row.id || `closeout-${index + 1}`),
+    lane: String(row.lane || ""),
+    platform: String(row.platform || ""),
+    accountId: String(row.accountId || ""),
+    requiredStatus: closeoutRequiredStatus(row),
+    portalUrl: String(row.portalUrl || ""),
+    docsUrl: String(row.docsUrl || ""),
+    redirectUri: String(row.redirectUri || ""),
+    proofPath: String(row.proofPath || ""),
+    missingCsvFields: Array.isArray(row.missingCsvFields) ? row.missingCsvFields.map(String) : [],
+    blockers: Array.isArray(row.blockers) ? row.blockers.map(String) : [],
+    operatorAction: String(row.operatorAction || ""),
+    nextStep: String(row.nextStep || ""),
+    evidenceCsvRow: closeoutEvidenceCsvRow(row),
+    checklist: closeoutChecklistForRow(row),
+  }));
+  const totals = parsed.actionSheet?.totals || {};
+  const metricool = parsed.metricool || {};
+  return {
+    status: parsed.actionSheet?.status === "complete" ? "complete" : "needs_operator",
+    generatedAt: parsed.generatedAt ? String(parsed.generatedAt) : null,
+    packPath: EXTERNAL_CLOSEOUT_PACK_PATH,
+    actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
+    proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
+    operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+    evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
+    totals: {
+      rows: Number(totals.rows || items.length),
+      accounts: Number(totals.accounts || 0),
+      developerApps: Number(totals.developerApps || 0),
+      permissions: Number(totals.permissions || 0),
+      proofFilesNeedRealEvidence: Number(parsed.totals?.proofFilesNeedRealEvidence || 0),
+      metricoolQueuedForApproval: Number(metricool.queuedForApproval || 0),
+      metricoolReadyToSend: Number(metricool.readyToSend || 0),
+    },
+    artifactSafetyStatus: String(parsed.artifactSafety?.status || "unknown"),
+    metricoolPublishMode: String(metricool.publishMode || "approval_required"),
+    items,
+    nextItems: items.slice(0, 8),
+    nextStep: items[0]?.operatorAction
+      || parsed.actionSheet?.nextAction?.operatorAction
+      || parsed.goLiveAudit?.nextStep
+      || "Complete the next closeout proof task, then validate the closeout evidence CSV.",
+  };
+}
+
 async function buildExternalExecutionSessionSummary(input: {
   externalExecutionHandoff: ClipperExternalExecutionHandoffSummary;
 }): Promise<ClipperExternalExecutionSessionSummary> {
@@ -24132,6 +24455,7 @@ async function buildExternalExecutionSessionSummary(input: {
   const unlockBoard = buildExternalExecutionUnlockBoard(items);
   const portalBatches = buildExternalExecutionPortalBatches(items);
   const focusRun = buildExternalExecutionFocusRun(items);
+  const closeoutRun = await buildExternalCloseoutRun();
   const totals = items.reduce<ClipperExternalExecutionSessionSummary["totals"]>((sum, item) => {
     sum.items += 1;
     if (item.lane === "do_now") sum.doNow += 1;
@@ -24162,6 +24486,7 @@ async function buildExternalExecutionSessionSummary(input: {
     unlockBoard,
     portalBatches,
     focusRun,
+    closeoutRun,
     totals,
     nextStep: items.find((item) => item.lane === "do_now")?.nextStep
       || items.find((item) => item.lane === "blocked")?.nextStep
@@ -24598,6 +24923,7 @@ export async function prepareClipperGoLiveEvidenceBundle(userId = getSystemUserI
 }
 
 function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutionSessionSummary): string {
+  const closeout = summary.closeoutRun;
   return [
     "# Clippers External Execution Session",
     "",
@@ -24619,6 +24945,40 @@ function renderExternalExecutionSessionMarkdown(summary: ClipperExternalExecutio
     "```csv",
     summary.evidenceImportTemplate.trim(),
     "```",
+    "",
+    "## External Closeout Run",
+    "",
+    `Status: ${closeout.status}`,
+    `Rows: ${closeout.totals.rows}`,
+    `Accounts: ${closeout.totals.accounts}`,
+    `Developer apps: ${closeout.totals.developerApps}`,
+    `Permissions: ${closeout.totals.permissions}`,
+    `Proofs needed: ${closeout.totals.proofFilesNeedRealEvidence}`,
+    `Artifact safety: ${closeout.artifactSafetyStatus}`,
+    `Metricool: ${closeout.metricoolPublishMode}; ready_to_send ${closeout.totals.metricoolReadyToSend}`,
+    `Action sheet: ${closeout.actionSheetPath}`,
+    `Proof todo: ${closeout.proofTodoPath}`,
+    `Operator queue: ${closeout.operatorQueuePath}`,
+    `Evidence CSV: ${closeout.evidenceCsvPath}`,
+    "",
+    "Next closeout actions:",
+    ...(closeout.nextItems.length ? closeout.nextItems.flatMap((item) => [
+      `### ${item.rank}. ${item.id}`,
+      `- Lane: ${item.lane}`,
+      `- Platform: ${item.platform || "n/a"}`,
+      `- Required status: ${item.requiredStatus}`,
+      `- Portal: ${item.portalUrl || "n/a"}`,
+      `- Proof file: ${item.proofPath || "n/a"}`,
+      `- Missing CSV fields: ${item.missingCsvFields.join(", ") || "none"}`,
+      `- Operator action: ${item.operatorAction}`,
+      "Checklist:",
+      ...item.checklist.map((step) => `- [ ] ${step}`),
+      "CSV starter row:",
+      "```csv",
+      item.evidenceCsvRow,
+      "```",
+      "",
+    ]) : ["- No closeout actions are currently prepared."]),
     "",
     "## Focus Run",
     "",
@@ -24890,6 +25250,7 @@ export async function prepareClipperExternalExecutionHandoff(userId = getSystemU
 export async function prepareClipperExternalExecutionSession(userId = getSystemUserId()): Promise<{ externalExecutionSession: ClipperExternalExecutionSessionSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await runClipperExternalCloseoutPack();
   const { externalExecutionHandoff } = await prepareClipperExternalExecutionHandoff(userId);
   const draftSummary = await buildExternalExecutionSessionSummary({ externalExecutionHandoff });
   const externalExecutionSession: ClipperExternalExecutionSessionSummary = {
@@ -27631,6 +27992,10 @@ function renderPermissionSubmissionDossierCsv(summary: ClipperPermissionSubmissi
 export async function prepareClipperPermissionSubmissionDossier(userId = getSystemUserId()): Promise<{ permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await prepareClipperOfficialPermissionMatrix(userId);
+  await prepareClipperPermissionRequestPack(userId);
+  await prepareClipperAppReviewSubmissionPack(userId);
+  await prepareClipperDeveloperApplicationDrafts(userId);
   const statusBefore = await getClipperStatus(userId);
   const draftSummary = await buildPermissionSubmissionDossierSummary({
     permissionRequestPack: statusBefore.permissionRequestPack,
@@ -38873,6 +39238,10 @@ async function buildRobertConnectNowHandoff(input: {
     permissionTasks: launcherItems.filter((item) => item.type === "permission").length,
     oauthTasks: launcherItems.filter((item) => item.type === "oauth").length,
     credentialTasks: launcherItems.filter((item) => item.type === "credential").length,
+    closeoutRows: input.externalExecutionSession.closeoutRun.totals.rows,
+    closeoutProofsNeeded: input.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence,
+    closeoutArtifactSafety: input.externalExecutionSession.closeoutRun.artifactSafetyStatus,
+    closeoutMetricoolReadyToSend: input.externalExecutionSession.closeoutRun.totals.metricoolReadyToSend,
     nextStep: input.externalExecutionSession.nextStep,
   };
   const credentialTemplate = credentialDrop?.copyReadyTemplate || "";
@@ -39113,6 +39482,74 @@ async function buildRobertNextActionsSummary(input: {
     nextStep: input.launchEvidenceFixPack.nextStep,
   }] : [];
 
+  const externalCloseout = input.externalExecutionSession.closeoutRun;
+  const externalCloseoutPending = externalCloseout.items.length > 0 || externalCloseout.totals.proofFilesNeedRealEvidence > 0;
+  const externalCloseoutNextItem = externalCloseout.items[0] || externalCloseout.nextItems[0] || null;
+  const externalCloseoutPriorityItems: ClipperRobertNextActionItem[] = externalCloseoutPending
+    ? externalCloseoutNextItem ? [{
+      id: `external-closeout-${externalCloseoutNextItem.id}`,
+      rank: 0,
+      lane: "external_portal",
+      label: `External closeout: ${externalCloseoutNextItem.platform || "platform"} ${externalCloseoutNextItem.lane || "evidence"}`,
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: externalCloseoutNextItem.lane === "account" ? 12 : externalCloseoutNextItem.lane === "permission" ? 20 : 18,
+      platform: ["tiktok", "instagram", "youtube"].includes(externalCloseoutNextItem.platform)
+        ? externalCloseoutNextItem.platform as ClipperPlatform
+        : "mixed",
+      actionUrl: "/api/clippers/run-external-closeout-pack",
+      artifactPath: externalCloseout.operatorQueuePath || externalCloseout.proofTodoPath,
+      portalUrl: externalCloseoutNextItem.portalUrl || null,
+      dropDirs: externalCloseoutNextItem.proofPath ? [path.dirname(externalCloseoutNextItem.proofPath)] : [],
+      evidenceRows: externalCloseoutNextItem.evidenceCsvRow ? [externalCloseoutNextItem.evidenceCsvRow] : [],
+      operatorSteps: externalCloseoutNextItem.checklist.length ? externalCloseoutNextItem.checklist : [
+        externalCloseoutNextItem.portalUrl ? `Open ${externalCloseoutNextItem.portalUrl}.` : "Open the external portal listed in the closeout queue.",
+        "Complete the account, developer app, permission or proof step shown in the queue.",
+        externalCloseoutNextItem.proofPath ? `Fill the real proof file: ${externalCloseoutNextItem.proofPath}.` : "Save a real proof URL, ticket ID or approval note.",
+        `Import the completed closeout row into: ${externalCloseout.evidenceCsvPath}.`,
+      ],
+      blockers: [
+        ...(externalCloseoutNextItem.blockers.length ? externalCloseoutNextItem.blockers : ["External portal proof is still missing real evidence."]),
+        ...(externalCloseout.totals.proofFilesNeedRealEvidence > 0 ? [`${externalCloseout.totals.proofFilesNeedRealEvidence} closeout proof file(s) still need real evidence.`] : []),
+      ],
+      doneCriteria: [
+        "The closeout proof file contains real non-placeholder evidence.",
+        "The closeout evidence CSV row is imported and accepted.",
+        "The item no longer appears in the External Closeout operator queue after refresh.",
+      ],
+      nextStep: externalCloseout.nextStep,
+    }] : [{
+      id: "external-closeout-proof-evidence",
+      rank: 0,
+      lane: "evidence",
+      label: "External closeout proof evidence",
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: 20,
+      platform: "mixed",
+      actionUrl: "/api/clippers/run-external-closeout-pack",
+      artifactPath: externalCloseout.proofTodoPath || externalCloseout.operatorQueuePath,
+      portalUrl: null,
+      dropDirs: [EXTERNAL_CLOSEOUT_PROOF_DROP_DIR],
+      evidenceRows: [],
+      operatorSteps: [
+        `Open the proof todo: ${externalCloseout.proofTodoPath}.`,
+        `Fill missing real proof files in: ${EXTERNAL_CLOSEOUT_PROOF_DROP_DIR}.`,
+        `Import completed evidence rows into: ${externalCloseout.evidenceCsvPath}.`,
+        "Refresh Robert Next Actions and External Closeout after import.",
+      ],
+      blockers: [
+        `${externalCloseout.totals.proofFilesNeedRealEvidence} closeout proof file(s) still need real evidence.`,
+        "No operator queue row is currently available, so proof todo files must be completed first.",
+      ],
+      doneCriteria: [
+        "Every closeout proof file contains real non-placeholder evidence.",
+        "Completed closeout evidence rows are imported and accepted.",
+        "External Closeout returns complete after refresh.",
+      ],
+      nextStep: externalCloseout.nextStep,
+    }]
+    : [];
   const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
     && input.metricoolApprovalSession.totals.readyForReview > 0
     ? [{
@@ -39121,7 +39558,7 @@ async function buildRobertNextActionsSummary(input: {
       lane: "external_portal",
       label: "Review Metricool approval session",
       status: "ready_to_execute",
-      priority: "critical",
+      priority: externalCloseoutPending ? "high" : "critical",
       estimatedMinutes: Math.max(15, Math.min(90, input.metricoolApprovalSession.totals.readyForReview * 4)),
       platform: "mixed",
       actionUrl: "/api/clippers/prepare-metricool-approval-session",
@@ -39150,7 +39587,7 @@ async function buildRobertNextActionsSummary(input: {
     : [];
 
   const deduped = new Map<string, ClipperRobertNextActionItem>();
-  [...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
+  [...externalCloseoutPriorityItems, ...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
     const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
     if (!deduped.has(key)) deduped.set(key, item);
   });
@@ -39178,12 +39615,15 @@ async function buildRobertNextActionsSummary(input: {
 
   const status: ClipperRobertNextActionsStatus = !generatedAt
     ? "not_prepared"
-    : input.goLiveCompletionAudit.readyToPublish
-      ? "ready"
-      : totals.critical > 0
-        ? "blocked"
+    : externalCloseoutPending || totals.critical > 0
+      ? "blocked"
+      : input.goLiveCompletionAudit.readyToPublish
+        ? "ready"
         : "needs_action";
   const connectNow = await buildRobertConnectNowHandoff(input);
+  const nextStep = externalCloseoutPending
+    ? externalCloseout.nextStep
+    : items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.";
 
   return {
     status,
@@ -39192,6 +39632,21 @@ async function buildRobertNextActionsSummary(input: {
     markdownPath: ROBERT_NEXT_ACTIONS_MARKDOWN_PATH,
     csvPath: ROBERT_NEXT_ACTIONS_CSV_PATH,
     connectNow,
+    externalCloseout: {
+      status: externalCloseout.status,
+      generatedAt: externalCloseout.generatedAt,
+      packPath: externalCloseout.packPath,
+      proofTodoPath: externalCloseout.proofTodoPath,
+      operatorQueuePath: externalCloseout.operatorQueuePath,
+      evidenceCsvPath: externalCloseout.evidenceCsvPath,
+      proofFilesNeedRealEvidence: externalCloseout.totals.proofFilesNeedRealEvidence,
+      proofFilesFilled: Math.max(0, externalCloseout.totals.rows - externalCloseout.totals.proofFilesNeedRealEvidence),
+      operatorQueueItems: externalCloseout.items.length,
+      metricoolQueuedForApproval: externalCloseout.totals.metricoolQueuedForApproval,
+      metricoolReadyToSend: externalCloseout.totals.metricoolReadyToSend,
+      artifactSafetyStatus: externalCloseout.artifactSafetyStatus,
+      nextStep: externalCloseout.nextStep,
+    },
     items,
     sourceArtifacts: {
       commandCenterPath: input.commandCenter.markdownPath,
@@ -39203,7 +39658,7 @@ async function buildRobertNextActionsSummary(input: {
       sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
     },
     totals,
-    nextStep: items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.",
+    nextStep,
   };
 }
 
@@ -39261,6 +39716,22 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     `- Post-connect activation bridge: ${summary.connectNow.postConnectActivationBridge.length} account/platform lane(s); ${summary.connectNow.postConnectActivationBridge.filter((item) => item.status === "ready" || item.status === "activation_ready").length} activation-ready`,
     `- Handoff file: ${summary.connectNow.markdownPath}`,
     "",
+    "## External Closeout",
+    "",
+    `- Status: ${summary.externalCloseout.status}`,
+    `- Generated: ${summary.externalCloseout.generatedAt || "pending"}`,
+    `- Proofs needing real evidence: ${summary.externalCloseout.proofFilesNeedRealEvidence}`,
+    `- Proofs filled: ${summary.externalCloseout.proofFilesFilled}`,
+    `- Operator queue: ${summary.externalCloseout.operatorQueueItems}`,
+    `- Metricool queued for approval: ${summary.externalCloseout.metricoolQueuedForApproval}`,
+    `- Metricool ready to send: ${summary.externalCloseout.metricoolReadyToSend}`,
+    `- Artifact safety: ${summary.externalCloseout.artifactSafetyStatus}`,
+    `- Pack: ${summary.externalCloseout.packPath}`,
+    `- Proof todo: ${summary.externalCloseout.proofTodoPath}`,
+    `- Operator queue path: ${summary.externalCloseout.operatorQueuePath}`,
+    `- Evidence CSV: ${summary.externalCloseout.evidenceCsvPath}`,
+    `- Next step: ${summary.externalCloseout.nextStep}`,
+    "",
     "## Priority Actions",
     "",
     ...summary.items.flatMap((item) => [
@@ -39314,6 +39785,10 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     `- Minutos estimados: ${summary.totals.estimatedMinutes}`,
     `- Source assets requeridos: ${handoff.sourceAssetsRequired}`,
     `- Focus run: ${handoff.focusRun.label} (${handoff.focusRun.status}, ${handoff.focusRun.estimatedMinutes} min)`,
+    `- External closeout rows: ${handoff.externalPortalLauncher.closeoutRows}`,
+    `- External closeout proofs needed: ${handoff.externalPortalLauncher.closeoutProofsNeeded}`,
+    `- External closeout artifact safety: ${handoff.externalPortalLauncher.closeoutArtifactSafety}`,
+    `- External closeout Metricool ready_to_send: ${handoff.externalPortalLauncher.closeoutMetricoolReadyToSend}`,
     "",
     "## Orden recomendado",
     "",
@@ -39713,6 +40188,38 @@ function renderExternalPortalLauncherHtml(
   const launcher = summary.connectNow.externalPortalLauncher;
   const focusEvidenceText = externalExecutionSession.focusRun.evidenceRows.join("\n");
   const focusCredentialText = externalExecutionSession.focusRun.credentialTemplates.join("\n\n");
+  const closeoutRowsText = externalExecutionSession.closeoutRun.nextItems.map((item) => item.evidenceCsvRow).join("\n");
+  const closeoutCards = externalExecutionSession.closeoutRun.nextItems.map((item, index) => {
+    const rowId = `closeout-row-${index + 1}`;
+    const portalHref = item.portalUrl ? escapeHtml(item.portalUrl) : "";
+    const docsHref = item.docsUrl ? escapeHtml(item.docsUrl) : "";
+    return `
+      <article class="intake-card">
+        <div class="permission-head">
+          <div>
+            <h2>${escapeHtml(item.rank)}. ${escapeHtml(item.id)}</h2>
+            <p>${escapeHtml(item.lane)} / ${escapeHtml(item.platform || "mixed")} / ${escapeHtml(item.requiredStatus)}</p>
+          </div>
+          <span class="badge ${escapeHtml(item.blockers.length ? "blocked" : "do_now")}">${escapeHtml(item.missingCsvFields.length)} missing</span>
+        </div>
+        <div class="quick-links">
+          ${item.portalUrl ? `<a href="${portalHref}" target="_blank" rel="noreferrer">Portal</a>` : ""}
+          ${item.docsUrl ? `<a href="${docsHref}" target="_blank" rel="noreferrer">Docs</a>` : ""}
+        </div>
+        <dl>
+          <div><dt>Proof file</dt><dd>${escapeHtml(item.proofPath || "n/a")}</dd></div>
+          <div><dt>Missing CSV</dt><dd>${escapeHtml(item.missingCsvFields.join(", ") || "none")}</dd></div>
+          <div><dt>Action</dt><dd>${escapeHtml(item.operatorAction || item.nextStep)}</dd></div>
+          <div><dt>Evidence CSV</dt><dd><code>external-closeout-evidence-import.csv</code></dd></div>
+        </dl>
+        <h3>Checklist</h3>
+        <ul>${item.checklist.map((step) => `<li>${escapeHtml(step)}</li>`).join("") || "<li>none</li>"}</ul>
+        <label for="${rowId}">Closeout CSV starter row</label>
+        <textarea id="${rowId}" readonly>${escapeHtml(item.evidenceCsvRow)}</textarea>
+        <button type="button" class="copy-btn" data-copy-target="${rowId}">Copy closeout row</button>
+        <p>${escapeHtml(item.nextStep)}</p>
+      </article>`;
+  }).join("\n");
   const focusRunCards = externalExecutionSession.focusRun.items.map((item, index) => {
     const evidenceId = `focus-evidence-${index + 1}`;
     const credentialId = `focus-credential-${index + 1}`;
@@ -40021,9 +40528,16 @@ function renderExternalPortalLauncherHtml(
     .stat strong { display: block; margin-top: 6px; font-size: 22px; }
     .notice { border: 1px solid rgba(252, 211, 77, 0.35); background: rgba(252, 211, 77, 0.08); border-radius: 8px; padding: 12px; color: #fde68a; }
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .gate { border: 1px solid rgba(103, 232, 249, 0.24); background: #0d1724; border-radius: 8px; padding: 12px; margin: 14px 0 18px; }
+    .gate-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .gate-result { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: #05070b; padding: 10px; min-height: 76px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #d4d4d8; overflow-x: auto; }
     .copy-btn { border: 1px solid rgba(103, 232, 249, 0.28); border-radius: 6px; background: rgba(103, 232, 249, 0.08); color: #cffafe; cursor: pointer; font-weight: 700; padding: 7px 10px; }
     .copy-btn:hover { background: rgba(103, 232, 249, 0.14); }
     .copy-btn.copied { border-color: rgba(134, 239, 172, 0.4); color: #bbf7d0; background: rgba(134, 239, 172, 0.12); }
+    .gate-btn { border: 1px solid rgba(134, 239, 172, 0.28); border-radius: 6px; background: rgba(134, 239, 172, 0.09); color: #dcfce7; cursor: pointer; font-weight: 800; padding: 7px 10px; }
+    .gate-btn:hover { background: rgba(134, 239, 172, 0.15); }
+    .gate-btn.secondary { border-color: rgba(103, 232, 249, 0.28); background: rgba(103, 232, 249, 0.08); color: #cffafe; }
+    .gate-btn:disabled { opacity: 0.42; cursor: not-allowed; }
     .focus-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .focus-card { border: 1px solid rgba(103, 232, 249, 0.24); background: #0e1726; border-radius: 8px; padding: 12px; }
     .focus-card h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
@@ -40111,6 +40625,55 @@ function renderExternalPortalLauncherHtml(
       <div class="stat"><span>OAuth/credentials</span><strong>${escapeHtml(launcher.oauthTasks + launcher.credentialTasks)}</strong></div>
     </section>
     <p class="notice">Launch Evidence Batch rows are templates. Replace placeholders with real profile URLs, app IDs, approval tickets, public URLs, proof paths and notes before importing.</p>
+    <section class="permission-section" aria-label="External closeout evidence run">
+      <h2>Closeout Evidence Run</h2>
+      <p>Authoritative queue from the current External Closeout Pack: ${escapeHtml(externalExecutionSession.closeoutRun.totals.rows)} actions, ${escapeHtml(externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence)} proofs needed, artifact safety ${escapeHtml(externalExecutionSession.closeoutRun.artifactSafetyStatus)}. Metricool stays ${escapeHtml(externalExecutionSession.closeoutRun.metricoolPublishMode)} with ${escapeHtml(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend)} ready_to_send.</p>
+      <p><strong>Next:</strong> ${escapeHtml(externalExecutionSession.closeoutRun.nextStep)}</p>
+      <div class="toolbar">
+        ${closeoutRowsText ? `<button type="button" class="copy-btn" data-copy-text="${escapeHtml(closeoutRowsText)}">Copy next closeout starter rows</button>` : ""}
+        <a href="/api/clippers/external-closeout-next-action" target="_blank" rel="noreferrer">Open next action JSON</a>
+        <a href="/api/clippers/external-closeout-proof-todo" target="_blank" rel="noreferrer">Open proof todo JSON</a>
+      </div>
+      <div class="intake-cards">
+        ${closeoutCards || "<p>No closeout run items are currently prepared. Refresh External Closeout Pack first.</p>"}
+      </div>
+    </section>
+    <section class="gate" aria-label="External closeout evidence import gate">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Evidence Import Gate</h2>
+          <p>Fill the closeout CSV with real proof, validate it, then apply clean imports only when the gate reports <code>ready_to_apply</code>. If only some rows are valid, use <code>Apply ready rows</code> to import just those rows while the rest stay blocked.</p>
+          <p><strong>CSV:</strong> <code>clippers_workspace/evidence-drop/external-closeout-evidence-import.csv</code></p>
+          <p><strong>Report:</strong> <code>clippers_workspace/reports/clippers-external-closeout-evidence-import-report.md</code></p>
+        </div>
+        <span id="external-closeout-import-badge" class="badge waiting">not checked</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="gate-btn secondary" data-closeout-action="validate">Validate CSV</button>
+        <button type="button" class="gate-btn" data-closeout-action="apply" disabled>Apply clean import</button>
+        <button type="button" class="gate-btn secondary" data-closeout-action="apply-ready" disabled>Apply ready rows</button>
+        <a href="/api/clippers/external-closeout-evidence-import" target="_blank" rel="noreferrer">Open JSON report</a>
+      </div>
+      <pre id="external-closeout-import-result" class="gate-result">Use Validate after replacing placeholders. Apply remains disabled until the CSV is clean.</pre>
+    </section>
+    <section class="gate" aria-label="External closeout proof todo">
+      <div class="gate-head">
+        <div>
+          <h2>External Closeout Proof Todo</h2>
+          <p>Use this checklist while you are inside Metricool, TikTok, Meta and Google portals. It lists the exact proof file to fill and the exact CSV status to use after the external action is real.</p>
+          <p><strong>Proof todo:</strong> <code>clippers_workspace/reports/clippers-external-closeout-proof-todo.md</code></p>
+          <p><strong>Operator queue:</strong> <code>clippers_workspace/reports/clippers-external-closeout-operator-queue.md</code></p>
+          <p><strong>Proof dir:</strong> <code>clippers_workspace/evidence-drop/external-closeout-proofs</code></p>
+        </div>
+        <span id="external-closeout-proof-todo-badge" class="badge waiting">not loaded</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="gate-btn secondary" data-proof-todo-action="load">Load proof todo</button>
+        <a href="/api/clippers/external-closeout-proof-todo" target="_blank" rel="noreferrer">Open JSON todo</a>
+        <a href="/api/clippers/external-closeout-operator-queue" target="_blank" rel="noreferrer">Open operator queue</a>
+      </div>
+      <pre id="external-closeout-proof-todo-result" class="gate-result">Load the proof todo before editing the CSV. Do not paste tokens, passwords, cookies, client secrets, recovery codes or private screenshots.</pre>
+    </section>
     <section class="permission-section" aria-label="Next focus run">
       <h2>Next Focus Run</h2>
       <p>${escapeHtml(externalExecutionSession.focusRun.label)}. Estimated time: ${escapeHtml(externalExecutionSession.focusRun.estimatedMinutes)} minutes. Complete these first, then import evidence and regenerate the command center.</p>
@@ -40255,6 +40818,102 @@ function renderExternalPortalLauncherHtml(
       const target = targetId ? document.getElementById(targetId) : null;
       const text = target ? target.value || target.textContent || "" : button.getAttribute("data-copy-text") || "";
       copyLauncherText(text, button);
+    });
+
+    async function runCloseoutImportGate(mode) {
+      const result = document.getElementById("external-closeout-import-result");
+      const badge = document.getElementById("external-closeout-import-badge");
+      const applyButton = document.querySelector("[data-closeout-action='apply']");
+      const applyReadyButton = document.querySelector("[data-closeout-action='apply-ready']");
+      const endpoint = mode === "apply"
+        ? "/api/clippers/apply-external-closeout-evidence-import"
+        : mode === "apply-ready"
+          ? "/api/clippers/apply-ready-external-closeout-evidence-import"
+          : "/api/clippers/preview-external-closeout-evidence-import";
+      result.textContent = mode === "apply" ? "Applying clean import..." : mode === "apply-ready" ? "Applying ready rows..." : "Validating CSV...";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: mode === "apply"
+            ? { "x-clippers-operator-confirm": "apply-external-closeout-evidence" }
+            : mode === "apply-ready"
+              ? { "x-clippers-operator-confirm": "apply-ready-external-closeout-evidence" }
+              : undefined
+        });
+        const payload = await response.json();
+        const report = payload.externalCloseoutEvidenceImport || {};
+        const totals = report.totals || {};
+        badge.textContent = report.status || (response.ok ? "ok" : "blocked");
+        badge.className = "badge " + (report.status === "import_applied" || report.status === "partial_import_applied" || report.status === "ready_to_apply" || report.status === "partial_ready_to_apply" ? "do_now" : "blocked");
+        if (applyButton) applyButton.disabled = report.status !== "ready_to_apply";
+        if (applyReadyButton) applyReadyButton.disabled = (totals.accepted || 0) <= 0;
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Status: " + (report.status || payload.error || "unknown"),
+          "Mode: " + (report.mode || mode),
+          "Rows: " + (totals.rowsScanned ?? 0),
+          "Accepted: " + (totals.accepted ?? 0),
+          "Rejected: " + (totals.rejected ?? 0),
+          "Applied: " + (totals.applied ?? 0),
+          "",
+          report.nextStep || payload.error || "",
+          "",
+          (report.rejected || []).slice(0, 6).map((row) => "Row " + (row.index || "?") + ": " + (row.kind || "unknown") + " - " + (row.reason || "rejected")).join("\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        if (applyButton) applyButton.disabled = true;
+        if (applyReadyButton) applyReadyButton.disabled = true;
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-closeout-action]");
+      if (!button) return;
+      runCloseoutImportGate(button.getAttribute("data-closeout-action"));
+    });
+
+    async function loadExternalCloseoutProofTodo() {
+      const result = document.getElementById("external-closeout-proof-todo-result");
+      const badge = document.getElementById("external-closeout-proof-todo-badge");
+      result.textContent = "Loading proof todo...";
+      try {
+        const response = await fetch("/api/clippers/external-closeout-proof-todo");
+        const payload = await response.json();
+        const todo = payload.externalCloseoutProofTodo || {};
+        const totals = todo.totals || {};
+        const rows = todo.rows || [];
+        const operatorQueue = todo.operatorQueue || [];
+        badge.textContent = (operatorQueue.length || totals.proofFilesNeedRealEvidence || rows.length) + " pending";
+        badge.className = "badge " + ((totals.proofFilesNeedRealEvidence || 0) > 0 ? "waiting" : "do_now");
+        result.textContent = [
+          "HTTP: " + response.status,
+          "Rows: " + rows.length,
+          "Operator queue: " + operatorQueue.length,
+          "Proofs needing real evidence: " + (totals.proofFilesNeedRealEvidence ?? 0),
+          "Proofs filled: " + (totals.proofFilesFilled ?? 0),
+          "",
+          (operatorQueue.length ? operatorQueue : rows).slice(0, 8).map((row) => [
+            (row.rank ? "#" + row.rank + " " : "") + (row.id || "unknown"),
+            "status=" + (row.requiredCsvStatus || "unknown"),
+            "missing=" + ((row.missingCsvFields || []).join(", ") || "proof/evidence"),
+            row.operatorAction || row.csvEditHint || "",
+            "proof=" + (row.proofPath || "missing")
+          ].join("\\n  ")).join("\\n\\n")
+        ].join("\\n");
+      } catch (error) {
+        badge.textContent = "error";
+        badge.className = "badge blocked";
+        result.textContent = error && error.message ? error.message : String(error);
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-proof-todo-action='load']");
+      if (!button) return;
+      loadExternalCloseoutProofTodo();
     });
   </script>
 </body>
@@ -41055,6 +41714,10 @@ async function writeLaunchLaneMatrixManifest(summary: ClipperLaunchLaneMatrixSum
 export async function prepareClipperRobertNextActions(userId = getSystemUserId()): Promise<{ robertNextActions: ClipperRobertNextActionsSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await prepareClipperAccountCreationPack(userId);
+  await prepareClipperAccountSetupSession(userId);
+  await prepareClipperPermissionSubmissionDossier(userId);
+  await prepareClipperExternalExecutionSession(userId);
   const statusBefore = await getClipperStatus(userId);
   const draftSummary = await buildRobertNextActionsSummary({
     commandCenter: statusBefore.commandCenter,
@@ -41075,13 +41738,15 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     productionQueue: statusBefore.productionQueue,
     metricoolApprovalSession: statusBefore.metricoolApprovalSession,
   });
+  const externalCloseoutPending = statusBefore.externalExecutionSession.closeoutRun.items.length > 0
+    || statusBefore.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence > 0;
   const robertNextActions: ClipperRobertNextActionsSummary = {
     ...draftSummary,
     generatedAt: new Date().toISOString(),
-    status: statusBefore.goLiveCompletionAudit.readyToPublish
-      ? "ready"
-      : draftSummary.totals.critical > 0
-        ? "blocked"
+    status: externalCloseoutPending || draftSummary.totals.critical > 0
+      ? "blocked"
+      : statusBefore.goLiveCompletionAudit.readyToPublish
+        ? "ready"
         : "needs_action",
   };
   await writeFile(ROBERT_NEXT_ACTIONS_PATH, JSON.stringify(robertNextActions, null, 2));
@@ -44432,7 +45097,12 @@ export async function prepareClipperSourceScout(userId = getSystemUserId()): Pro
     sourceScout,
     trendCandidatesBatch,
     metricoolExecutionQueue: queueResult.metricoolExecutionQueue,
-    status: await getClipperStatus(userId),
+    status: {
+      ...statusBefore,
+      sourceScout,
+      trendRadar: trendCandidatesBatch ? queueResult.status.trendRadar : statusBefore.trendRadar,
+      metricoolExecutionQueue: queueResult.metricoolExecutionQueue,
+    },
   };
 }
 
@@ -44559,16 +45229,45 @@ function clipperRenderNumber(input: unknown, keys: string[], fallback: number, m
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function runFfmpeg(args: string[]): Promise<string> {
+const CLIPPER_FFMPEG_TIMEOUT_MS = 5 * 60_000;
+
+function killClipperFfmpegProcess(child: ReturnType<typeof spawn>): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct ffmpeg process when groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
+function runFfmpeg(args: string[], timeoutMs = CLIPPER_FFMPEG_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("ffmpeg", args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killClipperFfmpegProcess(child);
+      reject(new Error(`ffmpeg timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => { output += chunk.toString(); });
     child.stderr.on("data", (chunk) => { output += chunk.toString(); });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code === 0) resolve(output);
-      else reject(new Error(output || `ffmpeg exited with code ${code}`));
+      finish(() => {
+        if (code === 0) resolve(output);
+        else reject(new Error(output || `ffmpeg exited with code ${code}`));
+      });
     });
   });
 }
