@@ -94,6 +94,7 @@ test("account permission readiness reports Metricool MVP without claiming direct
   const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
   assert.equal(readiness.status, "metricool_mvp_ready_with_external_blockers");
   assert.ok(readiness.externalCloseout.proofFilesNeedRealEvidence > 0);
+  assert.ok(readiness.externalCloseout.nextEvidenceRows > 0);
   assert.equal(readiness.sourceReadiness.connectedMetricoolRightsReadyAssets, output.connectedMetricoolRightsReadyAssets);
   assert.equal(readiness.sourceReadiness.localOwnedSourceAssets, output.localOwnedSourceAssets);
   assert.equal(readiness.totals.developerAppsApproved, 0);
@@ -110,6 +111,12 @@ test("account permission readiness reports Metricool MVP without claiming direct
     && row.accountStatus !== "verified"
     && row.readyForMetricoolApproval === false
   ));
+
+  const nextEvidenceCsv = await readFile(path.join(rootDir, "account-permission-next-evidence.csv"), "utf8");
+  assert.ok(nextEvidenceCsv.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes"));
+  assert.match(nextEvidenceCsv, /external-closeout-proofs\/developer_app-instagram\.md/);
+  assert.match(nextEvidenceCsv, /https:\/\/app\.clipprreview\.com\/api\/clippers\/oauth\/instagram\/callback/);
+  assert.doesNotMatch(nextEvidenceCsv, /CLIENT_SECRET|client_secret|password=|refresh_token|access_token/);
 });
 
 test("operational readiness keeps MVP separate from full external readiness", async () => {

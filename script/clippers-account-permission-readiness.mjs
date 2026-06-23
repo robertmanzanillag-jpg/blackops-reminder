@@ -163,14 +163,59 @@ function metricoolQueueGuard(queue) {
   };
 }
 
-function nextEvidenceRows(accountRows, permissionRows, developerRows) {
-  const rows = ["kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"];
+const externalEvidenceHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
+
+function publicBaseUrlFromRedirect(redirectUri) {
+  if (!redirectUri) return "";
+  try {
+    const url = new URL(redirectUri);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return "";
+  }
+}
+
+function closeoutRowsForEvidenceDrop(externalCloseout) {
+  const rows = Array.isArray(externalCloseout?.operatorQueue) && externalCloseout.operatorQueue.length
+    ? externalCloseout.operatorQueue
+    : Array.isArray(externalCloseout?.rows)
+      ? externalCloseout.rows
+      : [];
+  return rows.map((row) => [
+    row.lane || "",
+    row.accountId || "",
+    row.platform || "",
+    row.requiredCsvStatus || "",
+    row.scope || "",
+    "",
+    publicBaseUrlFromRedirect(row.redirectUri),
+    row.redirectUri || "",
+    row.portalUrl || "",
+    row.docsUrl || "",
+    row.proofPath || "",
+    [
+      row.safeNotes || "Do not store passwords, recovery codes, cookies, tokens, or private screenshots in this repo.",
+      row.csvEditHint || row.operatorAction || row.nextStep || "Replace proof stub with real non-secret evidence before applying.",
+    ].filter(Boolean).join(" "),
+  ].map(csvCell).join(","));
+}
+
+function nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout = {}) {
+  const externalRows = closeoutRowsForEvidenceDrop(externalCloseout);
+  if (externalRows.length > 0) {
+    return `${[externalEvidenceHeader, ...externalRows].join("\n")}\n`;
+  }
+  const rows = [externalEvidenceHeader];
   for (const row of accountRows.filter((item) => item.accountStatus !== "verified")) {
     rows.push([
       "account",
       row.accountId,
       row.platform,
       "verified",
+      "",
+      "",
+      "",
+      "",
       "",
       "",
       "",
@@ -185,7 +230,11 @@ function nextEvidenceRows(accountRows, permissionRows, developerRows) {
       "submitted",
       "",
       `<${row.platform} app id/client key/project id>`,
-      "<public https app URL>",
+      publicBaseUrlFromRedirect(row.redirectUri) || "<public https app URL>",
+      row.redirectUri || "",
+      platforms.find((platform) => platform.platform === row.platform)?.developerPortalUrl || "",
+      platforms.find((platform) => platform.platform === row.platform)?.directApiDocsUrl || "",
+      "",
       "Developer app submitted for review; include portal screenshot/ticket URL without secrets.",
     ].map(csvCell).join(","));
   }
@@ -198,6 +247,10 @@ function nextEvidenceRows(accountRows, permissionRows, developerRows) {
         "requested",
         scope,
         "",
+        "",
+        "",
+        row.developerPortalUrl,
+        row.docsUrl,
         "",
         "<permission request/review URL, approval screenshot, ticket, email, or portal note>",
       ].map(csvCell).join(","));
@@ -272,6 +325,7 @@ function renderMarkdown(summary) {
     "## Next Evidence Drop",
     "",
     `Use: ${summary.nextEvidenceDropPath}`,
+    `Schema: ${externalEvidenceHeader}`,
     "",
     "## Next Step",
     "",
@@ -420,6 +474,7 @@ async function main() {
       proofFilesNeedRealEvidence: externalProofsNeedEvidence,
       evidenceRepairRows: externalEvidenceRepairRows,
       operatorActions: externalOperatorActions,
+      nextEvidenceRows: closeoutRowsForEvidenceDrop(externalCloseout).length,
       nextActionId: externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
       nextStep: externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
     },
@@ -441,7 +496,7 @@ async function main() {
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCsvPath, renderCsv(summary));
-  await writeFile(evidenceDropPath, nextEvidenceRows(accountRows, permissionRows, developerRows));
+  await writeFile(evidenceDropPath, nextEvidenceRows(accountRows, permissionRows, developerRows, externalCloseout));
   console.log(JSON.stringify({
     status: summary.status,
     verifiedAccounts: totals.verifiedAccounts,
