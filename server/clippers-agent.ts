@@ -27850,6 +27850,10 @@ function renderPermissionSubmissionDossierCsv(summary: ClipperPermissionSubmissi
 export async function prepareClipperPermissionSubmissionDossier(userId = getSystemUserId()): Promise<{ permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await prepareClipperOfficialPermissionMatrix(userId);
+  await prepareClipperPermissionRequestPack(userId);
+  await prepareClipperAppReviewSubmissionPack(userId);
+  await prepareClipperDeveloperApplicationDrafts(userId);
   const statusBefore = await getClipperStatus(userId);
   const draftSummary = await buildPermissionSubmissionDossierSummary({
     permissionRequestPack: statusBefore.permissionRequestPack,

@@ -3197,6 +3197,8 @@ test("prepareClipperPermissionSubmissionDossier writes unified platform submissi
     assert.equal(permissionSubmissionDossier.items.length, status.permissionRequestPack.platformBatches.length);
     assert.equal(permissionSubmissionDossier.totals.platforms, permissionSubmissionDossier.items.length);
     assert.equal(permissionSubmissionDossier.totals.scopes, status.permissionRequestPack.totals.permissions);
+    assert.ok(status.officialPermissionMatrix.generatedAt && status.officialPermissionMatrix.generatedAt >= permissionSubmissionDossier.generatedAt.slice(0, 10));
+    assert.ok(status.developerApplicationDrafts.generatedAt && status.developerApplicationDrafts.generatedAt >= permissionSubmissionDossier.generatedAt.slice(0, 10));
     assert.ok(permissionSubmissionDossier.totals.requestedRows >= status.permissionRequestPack.totals.platformBatches);
     assert.ok(permissionSubmissionDossier.totals.approvedRows >= status.permissionRequestPack.totals.platformBatches);
     assert.ok(permissionSubmissionDossier.items.some((item) => item.platform === "tiktok" && item.submitDecision === "request_now"));
