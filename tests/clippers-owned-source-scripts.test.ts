@@ -138,6 +138,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(output.proofTodoPath, /clippers-external-closeout-proof-todo\.md$/);
   assert.match(output.operatorQueuePath, /clippers-external-closeout-operator-queue\.md$/);
   assert.match(output.goLiveAuditPath, /clippers-external-go-live-audit\.md$/);
+  assert.match(output.actionSheetPath, /clippers-external-operator-action-sheet\.md$/);
 
   const pack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-closeout-pack.json"), "utf8"));
   assert.equal(pack.metricool.readyToSend, 0);
@@ -150,8 +151,16 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.ok(pack.tasks.every((task) => task.proofPath && task.proofPath.includes("external-closeout-proofs")));
   assert.equal(pack.totals.proofFilesNeedRealEvidence, 16);
   assert.equal(pack.artifactSafety.status, "clean");
-  assert.equal(pack.artifactSafety.scanned, 13);
+  assert.equal(pack.artifactSafety.scanned, 16);
   assert.equal(pack.artifactSafety.findings.length, 0);
+  assert.equal(pack.paths.actionSheetMarkdown.endsWith("clippers-external-operator-action-sheet.md"), true);
+  assert.equal(pack.actionSheet.status, "needs_operator");
+  assert.equal(pack.actionSheet.totals.rows, 16);
+  assert.equal(pack.actionSheet.totals.developerApps, 3);
+  assert.equal(pack.actionSheet.totals.permissions, 6);
+  assert.equal(pack.actionSheet.totals.accounts, 7);
+  assert.equal(pack.actionSheet.nextAction.id, "account:sports-daily:instagram");
+  assert.ok(pack.actionSheet.guardrails.some((item) => item.includes("Metricool remains approval_required")));
   assert.equal(pack.goLiveAudit.status, "blocked_external_actions");
   assert.equal(pack.goLiveAudit.totals.operatorActions, 16);
   assert.equal(pack.goLiveAudit.totals.proofFilesNeedRealEvidence, 16);
@@ -249,6 +258,18 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(goLiveAuditMarkdown, /Developer apps/);
   assert.match(goLiveAuditMarkdown, /Evidence Repair Queue/);
   assert.match(goLiveAuditMarkdown, /Copy packet:/);
+  const actionSheet = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.json"), "utf8"));
+  assert.equal(actionSheet.rows.length, 16);
+  assert.equal(actionSheet.blocks.length, 3);
+  assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
+  assert.ok(actionSheet.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
+  const actionSheetCsv = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.csv"), "utf8");
+  assert.match(actionSheetCsv, /operator_action/);
+  assert.match(actionSheetCsv, /proof_path/);
+  const actionSheetMarkdown = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.md"), "utf8");
+  assert.match(actionSheetMarkdown, /Clippers External Operator Action Sheet/);
+  assert.match(actionSheetMarkdown, /This is the working sheet/);
+  assert.match(actionSheetMarkdown, /Copy packet:/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
   const developerProof = await readFile(path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md"), "utf8");
@@ -297,6 +318,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-closeout-proof-todo"/);
   assert.match(ui, /data-testid="clippers-external-closeout-operator-queue"/);
   assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
+  assert.match(ui, /data-testid="clippers-external-action-sheet"/);
+  assert.match(ui, /External Operator Action Sheet/);
   assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
   assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);
   assert.match(ui, /data-testid="clippers-external-go-live-repair-queue"/);

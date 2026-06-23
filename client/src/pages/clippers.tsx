@@ -606,6 +606,9 @@ interface ClipperExternalCloseoutPackSummary {
     goLiveAuditJson?: string;
     goLiveAuditMarkdown?: string;
     goLiveAuditCsv?: string;
+    actionSheetJson?: string;
+    actionSheetMarkdown?: string;
+    actionSheetCsv?: string;
     evidenceCsv: string;
     proofDir?: string;
   };
@@ -630,6 +633,27 @@ interface ClipperExternalCloseoutPackSummary {
   proofTodo?: ClipperExternalCloseoutProofTodoRow[];
   operatorQueue?: ClipperExternalCloseoutOperatorQueueRow[];
   goLiveAudit?: ClipperExternalGoLiveAuditSummary;
+  actionSheet?: {
+    status: "needs_operator" | "complete";
+    paths: { markdown: string; csv: string; json: string };
+    totals: {
+      rows: number;
+      critical: number;
+      high: number;
+      developerApps: number;
+      permissions: number;
+      accounts: number;
+      estimatedMinutes: number;
+    };
+    nextAction: {
+      id: string;
+      lane: string;
+      platform: string;
+      proofPath: string;
+      operatorAction: string;
+      copyPacket: string;
+    } | null;
+  };
   nextStep: string;
 }
 
@@ -15758,6 +15782,35 @@ export default function ClippersPage() {
                     </div>
                   )}
                   <p className="mt-2 break-all text-xs text-zinc-600">Evidence CSV: {externalCloseoutPack.paths.evidenceCsv}</p>
+                  {externalCloseoutPack.actionSheet && (
+                    <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="clippers-external-action-sheet">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-emerald-100">External Operator Action Sheet</p>
+                          <p className="mt-1 break-all text-xs text-zinc-500">
+                            {externalCloseoutPack.actionSheet.paths.markdown || externalCloseoutPack.paths.actionSheetMarkdown || "clippers_workspace/reports/clippers-external-operator-action-sheet.md"}
+                          </p>
+                        </div>
+                        <Badge className="w-fit border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                          {externalCloseoutPack.actionSheet.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-3 xl:grid-cols-7">
+                        <p>Rows: {externalCloseoutPack.actionSheet.totals.rows}</p>
+                        <p>Critical: {externalCloseoutPack.actionSheet.totals.critical}</p>
+                        <p>Apps: {externalCloseoutPack.actionSheet.totals.developerApps}</p>
+                        <p>Perms: {externalCloseoutPack.actionSheet.totals.permissions}</p>
+                        <p>Accounts: {externalCloseoutPack.actionSheet.totals.accounts}</p>
+                        <p>Minutes: {externalCloseoutPack.actionSheet.totals.estimatedMinutes}</p>
+                        <p>Auto-send: {externalCloseoutPack.goLiveAudit?.totals.metricoolReadyToSend || 0}</p>
+                      </div>
+                      {externalCloseoutPack.actionSheet.nextAction && (
+                        <p className="mt-2 text-xs leading-5 text-emerald-100">
+                          Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {externalCloseoutPack.goLiveAudit && (
                     <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3" data-testid="clippers-external-go-live-audit">
                       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">

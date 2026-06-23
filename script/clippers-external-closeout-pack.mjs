@@ -18,6 +18,9 @@ const operatorQueueCsvPath = path.join(reportsDir, "clippers-external-closeout-o
 const goLiveAuditJsonPath = path.join(reportsDir, "clippers-external-go-live-audit.json");
 const goLiveAuditMarkdownPath = path.join(reportsDir, "clippers-external-go-live-audit.md");
 const goLiveAuditCsvPath = path.join(reportsDir, "clippers-external-go-live-audit.csv");
+const actionSheetJsonPath = path.join(reportsDir, "clippers-external-operator-action-sheet.json");
+const actionSheetMarkdownPath = path.join(reportsDir, "clippers-external-operator-action-sheet.md");
+const actionSheetCsvPath = path.join(reportsDir, "clippers-external-operator-action-sheet.csv");
 const evidenceImportReportPath = path.join(reportsDir, "clippers-external-closeout-evidence-import-report.json");
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
 const proofDir = path.join(rootDir, "evidence-drop", "external-closeout-proofs");
@@ -1088,6 +1091,158 @@ function renderGoLiveAuditCsv(audit) {
   return `${header.join(",")}\n${rows.join("\n")}\n`;
 }
 
+function buildOperatorActionSheet(summary, audit) {
+  const rows = audit.evidenceRepairQueue.map((row) => {
+    const task = summary.tasks.find((item) => item.id === row.id) || {};
+    const block = audit.workBlocks.find((item) => item.lane === row.lane) || null;
+    return {
+      rank: row.rank,
+      id: row.id,
+      lane: row.lane,
+      block: block?.label || row.lane,
+      priority: task.priority || "high",
+      platform: row.platform || task.platform || "",
+      accountId: task.accountId || "",
+      requiredStatus: row.requiredCsvStatus,
+      portalUrl: task.portalUrl || "",
+      docsUrl: task.docsUrl || "",
+      redirectUri: task.redirectUri || "",
+      proofPath: row.proofPath,
+      missingCsvFields: row.missingCsvFields,
+      blockers: row.blockers,
+      operatorAction: row.operatorAction,
+      nextStep: row.nextStep,
+      copyPacket: row.copyPacket,
+    };
+  });
+  const blocks = audit.workBlocks.map((block) => ({
+    id: block.id,
+    label: block.label,
+    lane: block.lane,
+    actions: rows.filter((row) => row.lane === block.lane).length,
+    estimatedMinutes: block.estimatedMinutes,
+    firstActionId: block.firstActionId,
+    portalUrls: block.portalUrls,
+    missingCsvFields: block.missingCsvFields,
+    doneCriteria: block.doneCriteria,
+    nextStep: block.nextStep,
+  }));
+  return {
+    status: rows.length ? "needs_operator" : "complete",
+    generatedAt: summary.generatedAt,
+    paths: {
+      json: actionSheetJsonPath,
+      markdown: actionSheetMarkdownPath,
+      csv: actionSheetCsvPath,
+      evidenceCsv: summary.paths.evidenceCsv,
+      proofDir: summary.paths.proofDir,
+      goLiveAudit: summary.paths.goLiveAuditMarkdown,
+    },
+    totals: {
+      rows: rows.length,
+      critical: rows.filter((row) => row.priority === "critical").length,
+      high: rows.filter((row) => row.priority === "high").length,
+      developerApps: rows.filter((row) => row.lane === "developer_app").length,
+      permissions: rows.filter((row) => row.lane === "permission").length,
+      accounts: rows.filter((row) => row.lane === "account").length,
+      estimatedMinutes: audit.totals.estimatedOperatorMinutes,
+    },
+    nextAction: rows[0] || null,
+    blocks,
+    rows,
+    guardrails: [
+      "Do the portal action first; only then paste proof into the proof file and evidence CSV.",
+      "Do not store passwords, cookies, recovery codes, OAuth private values, developer app private values, or signed private URLs.",
+      "Metricool remains approval_required; this sheet does not enable automatic publishing.",
+    ],
+  };
+}
+
+function renderActionSheetMarkdown(sheet) {
+  const blockLines = sheet.blocks.map((block) => [
+    `### ${block.label}`,
+    "",
+    `- Actions: ${block.actions}`,
+    `- Estimated minutes: ${block.estimatedMinutes}`,
+    `- First action: ${block.firstActionId || "none"}`,
+    `- Portal URLs: ${block.portalUrls.join(" | ") || "n/a"}`,
+    `- Missing CSV fields: ${block.missingCsvFields.join(", ") || "none"}`,
+    `- Next step: ${block.nextStep}`,
+    "",
+  ].join("\n"));
+  const rowLines = sheet.rows.map((row) => [
+    `### ${row.rank}. ${row.id}`,
+    "",
+    `- Lane: ${row.lane}`,
+    `- Priority: ${row.priority}`,
+    `- Platform: ${row.platform || "n/a"}`,
+    `- Required status: ${row.requiredStatus || "n/a"}`,
+    `- Portal: ${row.portalUrl || "n/a"}`,
+    row.docsUrl ? `- Docs: ${row.docsUrl}` : null,
+    row.redirectUri ? `- Redirect URI: ${row.redirectUri}` : null,
+    `- Proof file: ${row.proofPath || "n/a"}`,
+    `- Missing CSV fields: ${row.missingCsvFields.join(", ") || "none"}`,
+    `- Operator action: ${row.operatorAction}`,
+    `- Next step: ${row.nextStep}`,
+    "",
+    "Copy packet:",
+    "```text",
+    row.copyPacket || "n/a",
+    "```",
+    "",
+  ].filter(Boolean).join("\n"));
+  return [
+    "# Clippers External Operator Action Sheet",
+    "",
+    `Generated: ${sheet.generatedAt}`,
+    `Status: ${sheet.status}`,
+    "",
+    "This is the working sheet for the remaining external portal actions. It is not publishing approval.",
+    "",
+    "## Totals",
+    "",
+    `- Rows: ${sheet.totals.rows}`,
+    `- Critical: ${sheet.totals.critical}`,
+    `- Developer apps: ${sheet.totals.developerApps}`,
+    `- Permissions: ${sheet.totals.permissions}`,
+    `- Accounts: ${sheet.totals.accounts}`,
+    `- Estimated minutes: ${sheet.totals.estimatedMinutes}`,
+    "",
+    "## Guardrails",
+    "",
+    ...sheet.guardrails.map((item) => `- ${item}`),
+    "",
+    "## Blocks",
+    "",
+    ...(blockLines.length ? blockLines : ["- No operator blocks remain."]),
+    "",
+    "## Rows",
+    "",
+    ...(rowLines.length ? rowLines : ["- No operator actions remain."]),
+    "",
+  ].join("\n");
+}
+
+function renderActionSheetCsv(sheet) {
+  const header = ["rank", "id", "lane", "priority", "platform", "required_status", "portal_url", "docs_url", "redirect_uri", "proof_path", "missing_csv_fields", "operator_action", "next_step"];
+  const rows = sheet.rows.map((row) => [
+    row.rank,
+    row.id,
+    row.lane,
+    row.priority,
+    row.platform,
+    row.requiredStatus,
+    row.portalUrl,
+    row.docsUrl,
+    row.redirectUri,
+    row.proofPath,
+    row.missingCsvFields.join("|"),
+    row.operatorAction,
+    row.nextStep,
+  ].map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
@@ -1120,6 +1275,9 @@ async function main() {
       goLiveAuditJson: goLiveAuditJsonPath,
       goLiveAuditMarkdown: goLiveAuditMarkdownPath,
       goLiveAuditCsv: goLiveAuditCsvPath,
+      actionSheetJson: actionSheetJsonPath,
+      actionSheetMarkdown: actionSheetMarkdownPath,
+      actionSheetCsv: actionSheetCsvPath,
       evidenceCsv: evidenceCsvPath,
       proofDir,
     },
@@ -1177,9 +1335,13 @@ async function main() {
   const preliminaryAuditMarkdown = renderGoLiveAuditMarkdown(preliminaryAudit);
   const preliminaryAuditCsv = renderGoLiveAuditCsv(preliminaryAudit);
   const preliminaryAuditJson = JSON.stringify(preliminaryAudit, null, 2);
+  const preliminaryActionSheet = buildOperatorActionSheet(summary, preliminaryAudit);
+  const preliminaryActionSheetJson = JSON.stringify(preliminaryActionSheet, null, 2);
+  const preliminaryActionSheetMarkdown = renderActionSheetMarkdown(preliminaryActionSheet);
+  const preliminaryActionSheetCsv = renderActionSheetCsv(preliminaryActionSheet);
   const artifactSafety = {
     status: "clean",
-    scanned: 12,
+    scanned: 15,
     findings: artifactSafetyFindings([
       { path: outMarkdownPath, content: closeoutMarkdown },
       { path: outCsvPath, content: closeoutCsv },
@@ -1192,6 +1354,9 @@ async function main() {
       { path: goLiveAuditJsonPath, content: preliminaryAuditJson },
       { path: goLiveAuditMarkdownPath, content: preliminaryAuditMarkdown },
       { path: goLiveAuditCsvPath, content: preliminaryAuditCsv },
+      { path: actionSheetJsonPath, content: preliminaryActionSheetJson },
+      { path: actionSheetMarkdownPath, content: preliminaryActionSheetMarkdown },
+      { path: actionSheetCsvPath, content: preliminaryActionSheetCsv },
       { path: evidenceCsvPath, content: evidenceCsv },
     ]),
   };
@@ -1201,10 +1366,11 @@ async function main() {
     ...artifactSafety.findings,
     ...artifactSafetyFindings([{ path: outJsonPath, content: preliminarySummaryJson }]),
   ];
-  artifactSafety.scanned = 13;
+  artifactSafety.scanned = 16;
   artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
   const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
-  const finalSummary = { ...summary, artifactSafety, goLiveAudit };
+  const actionSheet = buildOperatorActionSheet(summary, goLiveAudit);
+  const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet };
   await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
   await writeFile(outMarkdownPath, closeoutMarkdown);
   await writeFile(outCsvPath, closeoutCsv);
@@ -1223,6 +1389,9 @@ async function main() {
   await writeFile(goLiveAuditJsonPath, JSON.stringify(goLiveAudit, null, 2));
   await writeFile(goLiveAuditMarkdownPath, renderGoLiveAuditMarkdown(goLiveAudit));
   await writeFile(goLiveAuditCsvPath, renderGoLiveAuditCsv(goLiveAudit));
+  await writeFile(actionSheetJsonPath, JSON.stringify(actionSheet, null, 2));
+  await writeFile(actionSheetMarkdownPath, renderActionSheetMarkdown(actionSheet));
+  await writeFile(actionSheetCsvPath, renderActionSheetCsv(actionSheet));
   await writeFile(evidenceCsvPath, evidenceCsv);
   console.log(JSON.stringify({
     status: summary.status,
@@ -1239,6 +1408,7 @@ async function main() {
     proofTodoPath: proofTodoMarkdownPath,
     operatorQueuePath: operatorQueueMarkdownPath,
     goLiveAuditPath: goLiveAuditMarkdownPath,
+    actionSheetPath: actionSheetMarkdownPath,
     evidenceCsvPath,
   }, null, 2));
 }
