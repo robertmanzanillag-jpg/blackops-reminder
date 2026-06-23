@@ -6748,6 +6748,37 @@ const CREDENTIAL_SETUP_QUEUE_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-
 const CREDENTIAL_SETUP_QUEUE_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-setup-queue.md");
 const CREDENTIAL_SETUP_QUEUE_CSV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-setup-queue.csv");
 const CREDENTIAL_TRANSFER_KIT_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.json");
+
+function runClipperJsonScript(scriptPath: string, label: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`${label} failed with code ${code}${stderr ? `\n${stderr}` : ""}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error: any) {
+        reject(new Error(`${label} returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+}
+
+async function refreshClipperExternalCloseoutPack(): Promise<void> {
+  await runClipperJsonScript("script/clippers-external-closeout-pack.mjs", "External closeout pack");
+}
 const CREDENTIAL_TRANSFER_KIT_MARKDOWN_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.md");
 const CREDENTIAL_TRANSFER_KIT_ENV_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-transfer-kit.env");
 const CREDENTIAL_DRIVE_INTAKE_RUNBOOK_PATH = path.join(CREDENTIAL_SETUP_DIR, "credential-drive-intake-runbook.json");
@@ -25109,6 +25140,7 @@ export async function prepareClipperExternalExecutionHandoff(userId = getSystemU
 export async function prepareClipperExternalExecutionSession(userId = getSystemUserId()): Promise<{ externalExecutionSession: ClipperExternalExecutionSessionSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
+  await refreshClipperExternalCloseoutPack();
   const { externalExecutionHandoff } = await prepareClipperExternalExecutionHandoff(userId);
   const draftSummary = await buildExternalExecutionSessionSummary({ externalExecutionHandoff });
   const externalExecutionSession: ClipperExternalExecutionSessionSummary = {
