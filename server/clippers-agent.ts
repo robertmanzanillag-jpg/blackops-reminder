@@ -45030,16 +45030,45 @@ function clipperRenderNumber(input: unknown, keys: string[], fallback: number, m
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function runFfmpeg(args: string[]): Promise<string> {
+const CLIPPER_FFMPEG_TIMEOUT_MS = 5 * 60_000;
+
+function killClipperFfmpegProcess(child: ReturnType<typeof spawn>): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      // Fall back to killing only the direct ffmpeg process when groups are unavailable.
+    }
+  }
+  child.kill("SIGKILL");
+}
+
+function runFfmpeg(args: string[], timeoutMs = CLIPPER_FFMPEG_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("ffmpeg", args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      killClipperFfmpegProcess(child);
+      reject(new Error(`ffmpeg timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => { output += chunk.toString(); });
     child.stderr.on("data", (chunk) => { output += chunk.toString(); });
-    child.on("error", reject);
+    child.on("error", (error) => finish(() => reject(error)));
     child.on("close", (code) => {
-      if (code === 0) resolve(output);
-      else reject(new Error(output || `ffmpeg exited with code ${code}`));
+      finish(() => {
+        if (code === 0) resolve(output);
+        else reject(new Error(output || `ffmpeg exited with code ${code}`));
+      });
     });
   });
 }

@@ -12,6 +12,7 @@ const outJsonPath = path.join(reportsDir, "clippers-operational-readiness.json")
 const outMarkdownPath = path.join(reportsDir, "clippers-operational-readiness.md");
 const outCsvPath = path.join(reportsDir, "clippers-operational-readiness.csv");
 const jsonScriptTimeoutMs = 120_000;
+const nestedJsonScriptTimeoutMs = 60_000;
 
 function killScriptProcess(child) {
   if (child.pid) {
@@ -189,7 +190,7 @@ function renderCsv(summary) {
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  await runJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+  await runJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness", nestedJsonScriptTimeoutMs);
   const [accountReadiness, metricoolQueue, ...localAppPorts] = await Promise.all([
     readJson(accountReadinessPath),
     readJson(metricoolQueuePath),

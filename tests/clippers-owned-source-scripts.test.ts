@@ -1088,11 +1088,13 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(routes.includes("process.kill(-child.pid"));
   const operationalReadinessScript = await readFile(path.join(process.cwd(), "script/clippers-operational-readiness.mjs"), "utf8");
   assert.ok(operationalReadinessScript.includes("jsonScriptTimeoutMs"));
+  assert.ok(operationalReadinessScript.includes("nestedJsonScriptTimeoutMs = 60_000"));
   assert.ok(operationalReadinessScript.includes('child.kill("SIGKILL")'));
   assert.ok(operationalReadinessScript.includes("detached: true"));
   assert.ok(operationalReadinessScript.includes("process.kill(-child.pid"));
   const externalCloseoutScript = await readFile(path.join(process.cwd(), "script/clippers-external-closeout-pack.mjs"), "utf8");
   assert.ok(externalCloseoutScript.includes("jsonScriptTimeoutMs"));
+  assert.ok(externalCloseoutScript.includes("nestedJsonScriptTimeoutMs = 90_000"));
   assert.ok(externalCloseoutScript.includes('child.kill("SIGKILL")'));
   assert.ok(externalCloseoutScript.includes("detached: true"));
   assert.ok(externalCloseoutScript.includes("process.kill(-child.pid"));

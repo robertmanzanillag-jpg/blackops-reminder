@@ -7904,6 +7904,10 @@ test("renderClipperDraftVideos renders mp4 clips from rights-cleared draft specs
     const rawManifest = await readFile(renderedClips.manifestPath, "utf8");
     assert.ok(rawManifest.includes("render-ready-highlight.mp4"));
     assert.equal(rawManifest.includes("access_token"), false);
+    const clippersAgentSource = await readFile(path.join(process.cwd(), "server", "clippers-agent.ts"), "utf8");
+    assert.ok(clippersAgentSource.includes("CLIPPER_FFMPEG_TIMEOUT_MS"));
+    assert.ok(clippersAgentSource.includes("killClipperFfmpegProcess"));
+    assert.ok(clippersAgentSource.includes("ffmpeg timed out after"));
 
     const { publishingPackage } = await prepareClipperPublishingPackage();
     assert.ok(publishingPackage.items.length >= 1);

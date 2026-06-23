@@ -30,6 +30,7 @@ const secretPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|a
 const secretQueryParamPattern = /(^|[?&;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|session)=/i;
 const placeholderPattern = /<[^>]+>|paste .* proof|submitted_or_approved|requested_or_approved|do not store passwords|placeholder|todo|tbd/i;
 const jsonScriptTimeoutMs = 120_000;
+const nestedJsonScriptTimeoutMs = 90_000;
 
 function killScriptProcess(child) {
   if (child.pid) {
@@ -1630,7 +1631,7 @@ function renderActionSheetCsv(sheet) {
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
-  await runJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
+  await runJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness", nestedJsonScriptTimeoutMs);
   const accountReadiness = await readJson(accountReadinessPath);
   const operationalReadiness = await readJson(operationalReadinessPath);
   const evidenceImport = await readJsonOptional(evidenceImportReportPath);
