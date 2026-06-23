@@ -165,7 +165,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(pack.actionSheet.totals.developerApps, 3);
   assert.equal(pack.actionSheet.totals.permissions, 6);
   assert.equal(pack.actionSheet.totals.accounts, 7);
-  assert.equal(pack.actionSheet.nextAction.id, "account:sports-daily:instagram");
+  assert.equal(pack.actionSheet.nextAction.id, "developer_app:instagram");
   assert.equal(pack.actionSheet.accountSetupCards.length, 7);
   assert.ok(pack.actionSheet.accountSetupCards.some((card) => card.id === "account:sports-daily:instagram" && card.metricoolBridgeNeeded === true));
   assert.ok(pack.actionSheet.accountSetupCards.every((card) => card.copyNote.includes("Do not store login credentials")));
@@ -291,7 +291,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.ok(actionSheet.portalCloseoutBoard.every((card) => card.evidenceStarterRows.length === card.actions));
   assert.ok(actionSheet.officialSourceCards.every((card) => card.permissionProofPath.includes("external-closeout-proofs")));
   assert.ok(actionSheet.officialSourceCards.some((card) => card.scope === "video.upload" && card.submitDecision === "request_now"));
-  assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
+  assert.equal(actionSheet.nextAction.id, "developer_app:instagram");
   assert.ok(actionSheet.rows.every((row) => row.copyPacket.includes("Evidence CSV fields to fill:")));
   const actionSheetCsv = await readFile(path.join(rootDir, "reports/clippers-external-operator-action-sheet.csv"), "utf8");
   assert.match(actionSheetCsv, /operator_action/);

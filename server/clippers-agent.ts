@@ -24230,7 +24230,7 @@ function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
   const lane = String(row.lane || "");
   const platform = String(row.platform || "");
   const accountId = String(row.accountId || "");
-  const requiredStatus = String(row.requiredStatus || "");
+  const requiredStatus = closeoutRequiredStatus(row);
   const taskScope = typeof row.id === "string" && row.id.startsWith("permission:")
     ? row.id.replace(/^permission:[^:]+:/, "")
     : "";
@@ -24248,6 +24248,10 @@ function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
     "",
     "",
   ].map(csvEscape).join(",");
+}
+
+function closeoutRequiredStatus(row: Record<string, unknown>): string {
+  return String(row.requiredStatus || row.requiredCsvStatus || "");
 }
 
 function closeoutChecklistForRow(row: Record<string, unknown>): string[] {
@@ -24306,14 +24310,16 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
     };
   }
   const parsed = JSON.parse(raw) as Record<string, any>;
-  const rows = Array.isArray(parsed.actionSheet?.rows) ? parsed.actionSheet.rows : [];
+  const actionRows = Array.isArray(parsed.actionSheet?.rows) ? parsed.actionSheet.rows : [];
+  const operatorQueueRows = Array.isArray(parsed.operatorQueue) ? parsed.operatorQueue : [];
+  const rows = operatorQueueRows.length ? operatorQueueRows : actionRows;
   const items = rows.map((row: Record<string, unknown>, index: number): ClipperExternalCloseoutRunItem => ({
     rank: Number(row.rank || index + 1),
     id: String(row.id || `closeout-${index + 1}`),
     lane: String(row.lane || ""),
     platform: String(row.platform || ""),
     accountId: String(row.accountId || ""),
-    requiredStatus: String(row.requiredStatus || ""),
+    requiredStatus: closeoutRequiredStatus(row),
     portalUrl: String(row.portalUrl || ""),
     docsUrl: String(row.docsUrl || ""),
     redirectUri: String(row.redirectUri || ""),
@@ -24348,7 +24354,8 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
     metricoolPublishMode: String(metricool.publishMode || "approval_required"),
     items,
     nextItems: items.slice(0, 8),
-    nextStep: parsed.actionSheet?.nextAction?.operatorAction
+    nextStep: items[0]?.operatorAction
+      || parsed.actionSheet?.nextAction?.operatorAction
       || parsed.goLiveAudit?.nextStep
       || "Complete the next closeout proof task, then validate the closeout evidence CSV.",
   };

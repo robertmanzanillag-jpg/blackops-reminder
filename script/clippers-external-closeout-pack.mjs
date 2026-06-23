@@ -1392,7 +1392,7 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
       accounts: rows.filter((row) => row.lane === "account").length,
       estimatedMinutes: audit.totals.estimatedOperatorMinutes,
     },
-    nextAction: rows[0] || null,
+    nextAction: summary.operatorQueue[0] || rows[0] || null,
     blocks,
     accountSetupCards,
     developerAppCards,

@@ -5579,6 +5579,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.externalCloseout.metricoolReadyToSend, 0);
     assert.ok(robertNextActions.externalCloseout.proofTodoPath.endsWith("clippers-external-closeout-proof-todo.md"));
     assert.ok(robertNextActions.externalCloseout.operatorQueuePath.endsWith("clippers-external-closeout-operator-queue.md"));
+    assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.id, "developer_app:instagram");
+    assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.requiredStatus, "submitted");
+    assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
+    assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
     assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
     assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
     assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
