@@ -404,7 +404,11 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="preview-clippers-external-closeout-evidence-import-button"/);
   assert.match(ui, /data-testid="apply-clippers-external-closeout-evidence-import-button"/);
   assert.match(ui, /data-testid="apply-ready-clippers-external-closeout-evidence-import-button"/);
+  assert.match(ui, /data-testid="clippers-external-closeout-accepted-rows"/);
   assert.match(ui, /Apply ready/);
+  assert.match(ui, /Accepted rows ready for apply/);
+  assert.match(ui, /Copy starter/);
+  assert.match(ui, /row\.safeProofStarter/);
   assert.match(ui, /x-clippers-operator-confirm/);
   assert.match(ui, /setQueryData\(\["\/api\/clippers\/external-closeout-operator-queue"\]/);
 });

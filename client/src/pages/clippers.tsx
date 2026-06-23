@@ -815,7 +815,7 @@ interface ClipperExternalCloseoutNextActionSummary {
 
 interface ClipperExternalCloseoutEvidenceImportSummary {
   status: ClipperExternalCloseoutEvidenceImportStatus;
-  mode: "preview" | "apply";
+  mode: "preview" | "apply" | "apply_ready";
   generatedAt: string;
   paths: { sourceCsv: string; json: string; markdown: string; csv: string };
   totals: {
@@ -16704,6 +16704,33 @@ export default function ClippersPage() {
                           <p>Applied: {externalCloseoutEvidenceImport.totals.applied}</p>
                         </div>
                         <p className="mt-2 text-xs leading-5 text-zinc-500">{externalCloseoutEvidenceImport.nextStep}</p>
+                        {externalCloseoutEvidenceImport.accepted.length > 0 && (
+                          <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2" data-testid="clippers-external-closeout-accepted-rows">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-xs font-medium text-cyan-100">Accepted rows ready for apply</p>
+                              <Badge className="w-fit border border-cyan-300/30 bg-cyan-300/10 text-[10px] text-cyan-100">
+                                {externalCloseoutEvidenceImport.accepted.length} ready
+                              </Badge>
+                            </div>
+                            <div className="mt-2 grid gap-2 xl:grid-cols-2">
+                              {externalCloseoutEvidenceImport.accepted.slice(0, 4).map((row) => (
+                                <div key={`${row.index}-${row.kind}-${row.platform}-${row.scope || row.accountId || "row"}`} className="rounded-md border border-cyan-300/10 bg-cyan-300/5 p-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="min-w-0 text-xs font-medium text-cyan-100">
+                                      Row {row.index}: {row.kind} {row.platform || ""}
+                                    </p>
+                                    <Badge className="shrink-0 border border-cyan-300/25 bg-transparent text-[10px] text-cyan-100">
+                                      {row.status || "accepted"}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">
+                                    {row.accountId || row.scope || "developer app evidence"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {(externalCloseoutEvidenceImport.repairQueue || []).length > 0 && (
                           <div className="mt-3 rounded-md border border-amber-300/15 bg-black/20 p-2">
                             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -16729,6 +16756,22 @@ export default function ClippersPage() {
                                     <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {row.missingCsvFields.join(", ")}</p>
                                   )}
                                   <p className="mt-1 text-[11px] leading-4 text-zinc-400">{row.nextStep}</p>
+                                  {row.safeProofStarter && (
+                                    <details className="mt-2 rounded border border-amber-300/10 bg-black/20 p-2">
+                                      <summary className="cursor-pointer text-[11px] font-medium text-amber-100">Proof starter</summary>
+                                      <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-[10px] leading-4 text-zinc-400">{row.safeProofStarter}</pre>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="mt-2 h-7 border-amber-300/20 bg-transparent px-2 text-xs text-amber-100 hover:bg-amber-300/10"
+                                        onClick={() => void copyExternalCloseoutPacket(row.safeProofStarter)}
+                                      >
+                                        <Copy className="mr-2 h-3.5 w-3.5" />
+                                        Copy starter
+                                      </Button>
+                                    </details>
+                                  )}
                                 </div>
                               ))}
                             </div>
