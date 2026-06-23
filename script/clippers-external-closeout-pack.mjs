@@ -711,7 +711,7 @@ function renderMarkdown(summary) {
     `- Permission tasks: ${summary.totals.permissions}`,
     `- Proof files needing real evidence: ${summary.totals.proofFilesNeedRealEvidence}`,
     `- Metricool queued for approval: ${summary.metricool.queuedForApproval}`,
-    `- Auto-send ready: ${summary.metricool.readyToSend}`,
+    `- Metricool ready queue: ${summary.metricool.readyToSend}`,
     "",
     "## Blockers",
     "",
@@ -1118,6 +1118,63 @@ function sourceAuditForPermission(officialPermissionSourceAudit, row, scope) {
   return items.find((item) => item.platform === row.platform && (item.scopes || []).includes(scope)) || null;
 }
 
+function buildPortalCloseoutBoard(rows, summary) {
+  const platformOrder = { instagram: 0, tiktok: 1, youtube: 2 };
+  const laneOrder = { developer_app: 0, permission: 1, account: 2 };
+  const grouped = new Map();
+  for (const row of rows) {
+    const platform = row.platform || "mixed";
+    if (!grouped.has(platform)) grouped.set(platform, []);
+    grouped.get(platform).push(row);
+  }
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => (platformOrder[a] ?? 9) - (platformOrder[b] ?? 9) || a.localeCompare(b))
+    .map(([platform, platformRows], index) => {
+      const sortedRows = [...platformRows].sort((a, b) => (
+        (laneOrder[a.lane] ?? 9) - (laneOrder[b.lane] ?? 9) ||
+        a.rank - b.rank
+      ));
+      const sourceTasks = sortedRows
+        .map((row) => summary.tasks.find((task) => task.id === row.id))
+        .filter(Boolean);
+      const portalUrls = Array.from(new Set(sortedRows.map((row) => row.portalUrl).filter(Boolean)));
+      const docsUrls = Array.from(new Set(sortedRows.map((row) => row.docsUrl).filter(Boolean)));
+      const accountIds = Array.from(new Set(sortedRows.map((row) => row.accountId).filter(Boolean)));
+      const scopes = Array.from(new Set(sourceTasks.map((task) => task.scope).filter(Boolean)));
+      const proofPaths = sortedRows.map((row) => row.proofPath).filter(Boolean);
+      const missingCsvFields = Array.from(new Set(sortedRows.flatMap((row) => row.missingCsvFields || [])));
+      const evidenceStarterRows = sourceTasks.map(evidenceRow);
+      const firstRow = sortedRows[0] || null;
+      return {
+        rank: index + 1,
+        id: `portal:${platform}`,
+        platform,
+        status: sortedRows.length ? "needs_operator" : "complete",
+        actions: sortedRows.length,
+        developerApps: sortedRows.filter((row) => row.lane === "developer_app").length,
+        permissions: sortedRows.filter((row) => row.lane === "permission").length,
+        accounts: sortedRows.filter((row) => row.lane === "account").length,
+        critical: sortedRows.filter((row) => row.priority === "critical").length,
+        high: sortedRows.filter((row) => row.priority === "high").length,
+        portalUrls,
+        docsUrls,
+        accountIds,
+        scopes,
+        proofPaths,
+        missingCsvFields,
+        evidenceStarterRows,
+        nextActionId: firstRow?.id || "",
+        nextAction: firstRow?.operatorAction || "No portal actions remain for this platform.",
+        checklist: [
+          `Open the official ${platform} portal link before editing proof files.`,
+          "Complete the portal action and save only a non-secret proof reference.",
+          "Fill the matching proof file and external-closeout-evidence-import.csv starter row.",
+          "Run Validate before Apply; Metricool stays approval_required with ready_to_send 0.",
+        ],
+      };
+    });
+}
+
 function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit = null) {
   const rows = audit.evidenceRepairQueue.map((row) => {
     const task = summary.tasks.find((item) => item.id === row.id) || {};
@@ -1284,6 +1341,7 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
     doneCriteria: block.doneCriteria,
     nextStep: block.nextStep,
   }));
+  const portalCloseoutBoard = buildPortalCloseoutBoard(rows, summary);
   return {
     status: rows.length ? "needs_operator" : "complete",
     generatedAt: summary.generatedAt,
@@ -1310,6 +1368,7 @@ function buildOperatorActionSheet(summary, audit, officialPermissionSourceAudit 
     developerAppCards,
     permissionRequestCards,
     officialSourceCards,
+    portalCloseoutBoard,
     rows,
     guardrails: [
       "Do the portal action first; only then paste proof into the proof file and evidence CSV.",
@@ -1329,6 +1388,32 @@ function renderActionSheetMarkdown(sheet) {
     `- Portal URLs: ${block.portalUrls.join(" | ") || "n/a"}`,
     `- Missing CSV fields: ${block.missingCsvFields.join(", ") || "none"}`,
     `- Next step: ${block.nextStep}`,
+    "",
+  ].join("\n"));
+  const portalBoardLines = (sheet.portalCloseoutBoard || []).map((card) => [
+    `### ${card.rank}. ${card.platform}`,
+    "",
+    `- Status: ${card.status}`,
+    `- Actions: ${card.actions}`,
+    `- Developer apps / permissions / accounts: ${card.developerApps}/${card.permissions}/${card.accounts}`,
+    `- Critical / high: ${card.critical}/${card.high}`,
+    `- Portal URLs: ${card.portalUrls.join(" | ") || "n/a"}`,
+    `- Docs URLs: ${card.docsUrls.join(" | ") || "n/a"}`,
+    `- Accounts: ${card.accountIds.join(", ") || "n/a"}`,
+    `- Scopes: ${card.scopes.join(", ") || "n/a"}`,
+    `- Missing CSV fields: ${card.missingCsvFields.join(", ") || "none"}`,
+    `- Next action: ${card.nextActionId || "none"} - ${card.nextAction}`,
+    "",
+    "Checklist:",
+    ...card.checklist.map((item) => `- [ ] ${item}`),
+    "",
+    "Proof files:",
+    ...(card.proofPaths.length ? card.proofPaths.map((item) => `- ${item}`) : ["- n/a"]),
+    "",
+    "Evidence starter rows:",
+    "```csv",
+    ...card.evidenceStarterRows,
+    "```",
     "",
   ].join("\n"));
   const rowLines = sheet.rows.map((row) => [
@@ -1465,6 +1550,10 @@ function renderActionSheetMarkdown(sheet) {
     "## Blocks",
     "",
     ...(blockLines.length ? blockLines : ["- No operator blocks remain."]),
+    "",
+    "## Portal Closeout Board",
+    "",
+    ...(portalBoardLines.length ? portalBoardLines : ["- No portal closeout actions remain."]),
     "",
     "## Account Setup Cards",
     "",

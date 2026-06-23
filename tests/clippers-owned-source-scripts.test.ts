@@ -277,6 +277,12 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.equal(actionSheet.developerAppCards.length, 3);
   assert.equal(actionSheet.permissionRequestCards.length, 6);
   assert.equal(actionSheet.officialSourceCards.length, 6);
+  assert.equal(actionSheet.portalCloseoutBoard.length, 3);
+  assert.ok(actionSheet.portalCloseoutBoard.some((card) => card.platform === "instagram" && card.actions > 0));
+  assert.ok(actionSheet.portalCloseoutBoard.some((card) => card.platform === "tiktok" && card.critical > 0));
+  assert.ok(actionSheet.portalCloseoutBoard.some((card) => card.platform === "youtube" && card.evidenceStarterRows.some((row) => row.includes("youtube"))));
+  assert.ok(actionSheet.portalCloseoutBoard.every((card) => card.checklist.some((item) => item.includes("approval_required"))));
+  assert.ok(actionSheet.portalCloseoutBoard.every((card) => card.evidenceStarterRows.length === card.actions));
   assert.ok(actionSheet.officialSourceCards.every((card) => card.permissionProofPath.includes("external-closeout-proofs")));
   assert.ok(actionSheet.officialSourceCards.some((card) => card.scope === "video.upload" && card.submitDecision === "request_now"));
   assert.equal(actionSheet.nextAction.id, "account:sports-daily:instagram");
@@ -290,6 +296,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(actionSheetMarkdown, /Account Setup Cards/);
   assert.match(actionSheetMarkdown, /Setup note:/);
   assert.match(actionSheetMarkdown, /Developer App Cards/);
+  assert.match(actionSheetMarkdown, /Portal Closeout Board/);
   assert.match(actionSheetMarkdown, /App review use case:/);
   assert.match(actionSheetMarkdown, /Permission Request Cards/);
   assert.match(actionSheetMarkdown, /Review note:/);
@@ -297,6 +304,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(actionSheetMarkdown, /Verified claims:/);
   assert.match(actionSheetMarkdown, /Recheck steps:/);
   assert.match(actionSheetMarkdown, /Copy packet:/);
+  assert.doesNotMatch(actionSheetMarkdown, /Auto-send/);
   const productionPublicUrl = JSON.parse(await readFile(path.join(rootDir, "production-public-url.json"), "utf8")).publicBaseUrl.replace(/\/$/, "");
   const productionPublicUrlPattern = regexEscape(productionPublicUrl);
   const developerProof = await readFile(path.join(rootDir, "evidence-drop/external-closeout-proofs/developer_app-tiktok.md"), "utf8");
@@ -347,6 +355,8 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-closeout-next-action"/);
   assert.match(ui, /data-testid="clippers-external-action-sheet"/);
   assert.match(ui, /External Operator Action Sheet/);
+  assert.match(ui, /data-testid="clippers-external-portal-closeout-board"/);
+  assert.match(ui, /portalCloseoutBoard/);
   assert.match(ui, /Account setup cards/);
   assert.match(ui, /Developer app cards/);
   assert.match(ui, /Permission request cards/);
@@ -1018,7 +1028,8 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("External Closeout Pack"));
   assert.ok(page.includes("more external actions in"));
   assert.ok(page.includes("Full Direct API"));
-  assert.ok(page.includes("Auto-send"));
+  assert.ok(page.includes("Ready queue"));
+  assert.ok(page.includes('data-testid="clippers-external-portal-closeout-board"'));
   assert.ok(page.includes("more blockers in"));
   const accountRowsBlock = sliceRequired(
     page,

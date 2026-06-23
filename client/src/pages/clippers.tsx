@@ -692,6 +692,28 @@ interface ClipperExternalCloseoutPackSummary {
       sourceAuditPath: string;
       nextStep: string;
     }>;
+    portalCloseoutBoard?: Array<{
+      rank: number;
+      id: string;
+      platform: string;
+      status: string;
+      actions: number;
+      developerApps: number;
+      permissions: number;
+      accounts: number;
+      critical: number;
+      high: number;
+      portalUrls: string[];
+      docsUrls: string[];
+      accountIds: string[];
+      scopes: string[];
+      proofPaths: string[];
+      missingCsvFields: string[];
+      evidenceStarterRows: string[];
+      nextActionId: string;
+      nextAction: string;
+      checklist: string[];
+    }>;
     nextAction: {
       id: string;
       lane: string;
@@ -15829,7 +15851,7 @@ export default function ClippersPage() {
                     <p>Full Direct API: {operationalReadiness.fullDirectApiReady ? "yes" : "no"}</p>
                     <p>Local app: {operationalReadiness.localApp.ready ? "open" : "closed"}</p>
                     <p>Queued: {operationalReadiness.metricool.queuedForApproval}</p>
-                    <p>Auto-send: {operationalReadiness.metricool.readyToSend}</p>
+                    <p>Ready queue: {operationalReadiness.metricool.readyToSend}</p>
                     <p>Publish: {operationalReadiness.metricool.publishMode}</p>
                     <p>Sources: {operationalReadiness.sources.connectedRightsReadyAssets}/{operationalReadiness.sources.localOwnedSourceAssets}</p>
                     <p>Accounts: {operationalReadiness.accounts.verified}/{operationalReadiness.accounts.total}</p>
@@ -15951,12 +15973,54 @@ export default function ClippersPage() {
                         <p>Perms: {externalCloseoutPack.actionSheet.totals.permissions}</p>
                         <p>Accounts: {externalCloseoutPack.actionSheet.totals.accounts}</p>
                         <p>Minutes: {externalCloseoutPack.actionSheet.totals.estimatedMinutes}</p>
-                        <p>Auto-send: {externalCloseoutPack.goLiveAudit?.totals.metricoolReadyToSend || 0}</p>
+                        <p>Ready queue: {externalCloseoutPack.goLiveAudit?.totals.metricoolReadyToSend || 0}</p>
                       </div>
                       {externalCloseoutPack.actionSheet.nextAction && (
                         <p className="mt-2 text-xs leading-5 text-emerald-100">
                           Next: {externalCloseoutPack.actionSheet.nextAction.id} · {externalCloseoutPack.actionSheet.nextAction.operatorAction}
                         </p>
+                      )}
+                      {(externalCloseoutPack.actionSheet.portalCloseoutBoard || []).length > 0 && (
+                        <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-external-portal-closeout-board">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-xs font-medium text-cyan-100">Portal closeout board</p>
+                              <p className="mt-1 text-xs leading-5 text-zinc-500">Acciones agrupadas por plataforma para cerrar cuentas, apps, permisos y proofs sin activar publicación automática.</p>
+                            </div>
+                            <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">
+                              {externalCloseoutPack.actionSheet.portalCloseoutBoard?.length || 0} portals
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {externalCloseoutPack.actionSheet.portalCloseoutBoard?.map((card) => (
+                              <div key={card.id} className="rounded-md border border-white/10 bg-black/30 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-medium text-white">{card.rank}. {card.platform}</p>
+                                  <Badge className="shrink-0 border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{card.status}</Badge>
+                                </div>
+                                <div className="mt-2 grid gap-1 text-[11px] text-zinc-500 sm:grid-cols-3">
+                                  <p>Actions: {card.actions}</p>
+                                  <p>Apps: {card.developerApps}</p>
+                                  <p>Perms: {card.permissions}</p>
+                                  <p>Accounts: {card.accounts}</p>
+                                  <p>Critical: {card.critical}</p>
+                                  <p>Proofs: {card.proofPaths.length}</p>
+                                </div>
+                                <p className="mt-2 line-clamp-2 text-xs leading-5 text-cyan-100/80">{card.nextActionId}: {card.nextAction}</p>
+                                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">Missing: {card.missingCsvFields.join(", ") || "none"}</p>
+                                {card.portalUrls[0] && (
+                                  <a href={card.portalUrls[0]} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-md border border-cyan-300/20 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-300/10">
+                                    Portal
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                                {card.evidenceStarterRows[0] && (
+                                  <p className="mt-2 break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{card.evidenceStarterRows[0]}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                       {(externalCloseoutPack.actionSheet.accountSetupCards || []).length > 0 && (
                         <div className="mt-3 rounded border border-emerald-300/10 bg-black/20 p-2">
@@ -16026,7 +16090,7 @@ export default function ClippersPage() {
                         <p>Proofs: {externalCloseoutPack.goLiveAudit.totals.proofFilesNeedRealEvidence}</p>
                         <p>Rejected: {externalCloseoutPack.goLiveAudit.totals.evidenceRejected}</p>
                         <p>Queued: {externalCloseoutPack.goLiveAudit.totals.metricoolQueuedForApproval}</p>
-                        <p>Auto-send: {externalCloseoutPack.goLiveAudit.totals.metricoolReadyToSend}</p>
+                        <p>Ready queue: {externalCloseoutPack.goLiveAudit.totals.metricoolReadyToSend}</p>
                         <p>Blocks: {externalCloseoutPack.goLiveAudit.totals.workBlocks || 0}</p>
                         <p>Minutes: {externalCloseoutPack.goLiveAudit.totals.estimatedOperatorMinutes || 0}</p>
                         <p>Repairs: {externalCloseoutPack.goLiveAudit.totals.evidenceRepairRows || 0}</p>
