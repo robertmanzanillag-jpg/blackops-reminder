@@ -12,9 +12,25 @@ export function hasReplitGoogleConnectorEnv() {
   );
 }
 
+function readConnectorAccessToken(connection: any): string | null {
+  return connection?.settings?.access_token || connection?.settings?.oauth?.credentials?.access_token || null;
+}
+
+function isConnectorTokenFresh(connection: any): boolean {
+  const expiresAt = connection?.settings?.expires_at || connection?.settings?.oauth?.credentials?.expiry_date;
+  if (!expiresAt) return Boolean(readConnectorAccessToken(connection));
+  const expiryTime = typeof expiresAt === "number" ? expiresAt : new Date(expiresAt).getTime();
+  return Number.isFinite(expiryTime) && expiryTime > Date.now();
+}
+
+function selectGoogleConnector(items: any[] = []) {
+  return items.find((item) => readConnectorAccessToken(item)) || null;
+}
+
 export async function getGoogleAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  if (connectionSettings && isConnectorTokenFresh(connectionSettings)) {
+    const cachedToken = readConnectorAccessToken(connectionSettings);
+    if (cachedToken) return cachedToken;
   }
   
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -36,14 +52,24 @@ export async function getGoogleAccessToken() {
         'X_REPLIT_TOKEN': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  ).then(res => res.json()).then(data => selectGoogleConnector(data.items || []));
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
+  const accessToken = readConnectorAccessToken(connectionSettings);
 
   if (!connectionSettings || !accessToken) {
     throw new Error('Google connector not connected');
   }
   return accessToken;
+}
+
+export async function hasConnectedReplitGoogleConnector(): Promise<boolean> {
+  if (!hasReplitGoogleConnectorEnv()) return false;
+  try {
+    await getGoogleAccessToken();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // WARNING: Never cache this client.
