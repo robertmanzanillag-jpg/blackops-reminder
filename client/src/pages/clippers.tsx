@@ -968,6 +968,7 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
       reason: string;
       nextStep: string;
     } | null;
+    nextRepairPacket: string;
     nextStep: string;
   };
   repairQueue?: Array<{
@@ -17044,9 +17045,24 @@ export default function ClippersPage() {
                                     <p className="text-[11px] font-medium text-amber-100">Repair summary</p>
                                     <p className="mt-1 text-[11px] leading-4 text-zinc-500">{externalCloseoutEvidenceImport.repairSummary.nextStep}</p>
                                   </div>
-                                  <Badge className="w-fit border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
-                                    {externalCloseoutEvidenceImport.repairSummary.totalRejected} rejected
-                                  </Badge>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    {externalCloseoutEvidenceImport.repairSummary.nextRepairPacket && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 border-amber-300/20 bg-transparent px-2 text-xs text-amber-100 hover:bg-amber-300/10"
+                                        onClick={() => void copyExternalCloseoutPacket(externalCloseoutEvidenceImport.repairSummary?.nextRepairPacket || "")}
+                                        data-testid="copy-clippers-external-next-repair-button"
+                                      >
+                                        <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                        Copy next
+                                      </Button>
+                                    )}
+                                    <Badge className="w-fit border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
+                                      {externalCloseoutEvidenceImport.repairSummary.totalRejected} rejected
+                                    </Badge>
+                                  </div>
                                 </div>
                                 <div className="mt-2 grid gap-2 text-[10px] text-zinc-500 md:grid-cols-3">
                                   <p>By kind: {externalCloseoutEvidenceImport.repairSummary.byKind.map((item) => `${item.kind} ${item.count}`).join(" · ") || "none"}</p>
@@ -17061,6 +17077,11 @@ export default function ClippersPage() {
                                       </p>
                                     ))}
                                   </div>
+                                )}
+                                {externalCloseoutEvidenceImport.repairSummary.nextRepairPacket && (
+                                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/20 p-2 text-[10px] leading-4 text-zinc-400">
+                                    {externalCloseoutEvidenceImport.repairSummary.nextRepairPacket}
+                                  </pre>
                                 )}
                               </div>
                             )}

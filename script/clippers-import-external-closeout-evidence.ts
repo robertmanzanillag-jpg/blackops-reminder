@@ -230,6 +230,24 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
     .map(([field, count]) => ({ field, count }))
     .sort((left, right) => right.count - left.count || left.field.localeCompare(right.field));
   const firstRepair = repairQueue[0] || null;
+  const nextRepairPacket = firstRepair ? [
+    `Next evidence repair: ${firstRepair.closeoutId || firstRepair.lane || "external evidence"}`,
+    `CSV row: ${firstRepair.csvRow || "?"}`,
+    `Lane: ${firstRepair.lane || "unknown"}`,
+    `Platform: ${firstRepair.platform || "n/a"}`,
+    firstRepair.accountId ? `Account: ${firstRepair.accountId}` : null,
+    firstRepair.scope ? `Scope: ${firstRepair.scope}` : null,
+    `Required status: ${firstRepair.requiredStatus || "n/a"}`,
+    `Reason blocked: ${firstRepair.reason || "Rejected evidence row."}`,
+    firstRepair.portalUrl ? `Portal: ${firstRepair.portalUrl}` : null,
+    firstRepair.docsUrl ? `Docs: ${firstRepair.docsUrl}` : null,
+    `Proof file: ${firstRepair.proofPath || "missing"}`,
+    Array.isArray(firstRepair.missingCsvFields) && firstRepair.missingCsvFields.length
+      ? `Missing CSV fields: ${firstRepair.missingCsvFields.join(", ")}`
+      : null,
+    `CSV edit hint: ${firstRepair.csvEditHint || "Fill only real non-secret evidence after the portal action is done."}`,
+    `Next step: ${firstRepair.nextStep || "Fix this row, then rerun Validate."}`,
+  ].filter(Boolean).join("\n") : "";
   return {
     status: rejected.length ? "needs_repair" : "clean",
     totalRejected: rejected.length,
@@ -245,6 +263,7 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
       reason: firstRepair.reason || "",
       nextStep: firstRepair.nextStep || "",
     } : null,
+    nextRepairPacket,
     nextStep: firstRepair
       ? `Fix CSV row ${firstRepair.csvRow || "?"} (${firstRepair.closeoutId || firstRepair.lane || "external evidence"}) first, then rerun Validate.`
       : "No rejected evidence rows remain.",
