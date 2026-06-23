@@ -18,6 +18,8 @@
     "test:scheduler": "node --import tsx --test tests/reminder-scheduler.test.ts",
     "test:telegram": "node --import tsx --test tests/telegram-*.test.ts",
     "test:assistant-chat": "node --import tsx --test tests/assistant-chat-flow.test.ts",
+    "test:ai-cost-notifications": "node --import tsx --test tests/ai-cost-notifications.test.ts",
+    "test:ai-router-cost-override": "node --import tsx --test tests/ai-router-cost-override.test.ts",
     "test:telegram-config-cli": "node --import tsx --test tests/telegram-config-cli.test.ts",
     "test:telegram-webhook-cli": "node --import tsx --test tests/telegram-webhook-cli.test.ts",
     "test:auth": "node --import tsx --test tests/user-context.test.ts",

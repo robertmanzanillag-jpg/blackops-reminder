@@ -15,6 +15,7 @@ import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitize
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
+import { estimateOpenAiAudioCostUsd, estimateTokenApiCostUsd, recordAiApiCostEvent } from "./ai-cost-notifications";
 import { shouldUseCheapScoutForWebChat } from "./ai-router";
 import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
@@ -28,6 +29,14 @@ const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
+
+function estimateTokensFromText(text: string): number {
+  return Math.ceil(Math.max(0, text.length) / 4);
+}
+
+function formatAiApiCostPreview(provider: string, model: string, operation: string, estimatedCostUsd: number): string {
+  return `Costo API aproximado antes de ejecutar: ${provider.toUpperCase()} ${model} para ${operation} puede salir hasta ~$${estimatedCostUsd.toFixed(4)} USD. Si ya lo aprobaste, sigo con la tarea.`;
+}
 
 function normalizeAssistantCacheText(message = ""): string {
   return message
@@ -1031,8 +1040,26 @@ export function registerAssistantRoutes(app: Express): void {
         prompt: "El audio es una nota para un asistente personal en español/Spanglish sobre la app, tareas, calendario, negocio o inversiones.",
       });
       const text = typeof transcription === "string" ? transcription : String((transcription as any).text || "");
+      const audioSeconds = Number(req.body?.durationSeconds || req.body?.audioDurationSeconds || 60);
+      const estimatedCostUsd = estimateOpenAiAudioCostUsd({
+        provider: "openai",
+        model: OPENAI_TRANSCRIPTION_MODEL,
+        audioSeconds: Number.isFinite(audioSeconds) ? audioSeconds : 60,
+      });
+      await recordAiApiCostEvent({
+        userId: getCurrentUserId(req),
+        provider: "openai",
+        model: OPENAI_TRANSCRIPTION_MODEL,
+        operation: "transcripcion de audio del asistente",
+        estimatedCostUsd,
+        metadata: {
+          audioBytes: audioBytes.length,
+          durationSeconds: Number.isFinite(audioSeconds) ? audioSeconds : null,
+          estimateSource: Number.isFinite(audioSeconds) ? "client_duration" : "fallback_60_seconds",
+        },
+      });
 
-      return res.json({ text: text.trim() });
+      return res.json({ text: text.trim(), estimatedApiCostUsd: estimatedCostUsd });
     } catch (error) {
       console.error("Error transcribing assistant audio:", error);
       return res.status(500).json({ error: "No pude transcribir el audio" });
@@ -1068,7 +1095,7 @@ export function registerAssistantRoutes(app: Express): void {
         res.write(`data: ${JSON.stringify({
           content,
           ...(directPendingExecution.executed ? { actionExecuted: true, title: directPendingExecution.title } : {}),
-          ...(directPendingExecution.error ? { blackRoomLinkError: directPendingExecution.error } : {}),
+          ...(directPendingExecution.error ? { actionExecutionError: directPendingExecution.error } : {}),
         })}\n\n`);
         await saveCeoConversationMessage(userId, "assistant", content).catch((historyError) => {
           console.error("Error saving direct approval assistant response:", historyError);
@@ -1446,28 +1473,109 @@ export function registerAssistantRoutes(app: Express): void {
             sharedConversationHistory,
             modelRoute,
           });
+          const geminiModel = getGeminiChatModel({ hasImage: false });
+          const estimatedPreviewOutputTokens = Number(process.env.BLACKOPS_GEMINI_PREVIEW_OUTPUT_TOKENS || 700);
+          const previewCostUsd = estimateTokenApiCostUsd({
+            provider: "gemini",
+            model: geminiModel,
+            inputTokens: estimateTokensFromText(cheapPrompt),
+            outputTokens: Number.isFinite(estimatedPreviewOutputTokens) ? estimatedPreviewOutputTokens : 700,
+          });
+          res.write(`data: ${JSON.stringify({
+            content: `${formatAiApiCostPreview("gemini", geminiModel, "respuesta cheap scout del chat", previewCostUsd)}\n\n`,
+            apiCostPreview: true,
+            estimatedApiCostUsd: previewCostUsd,
+            modelRoute,
+          })}\n\n`);
           const result = await getGeminiClient().models.generateContent({
-            model: getGeminiChatModel({ hasImage: false }),
+            model: geminiModel,
             contents: [{ role: "user", parts: [{ text: cheapPrompt }] }],
           });
           fullResponse = result.text || "No pude generar una respuesta util esta vez.";
           setCachedCheapScoutResponse(userId, message, fullResponse);
           res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute, compactContext: true })}\n\n`);
+          const usage = (result as any).usageMetadata || {};
+          const inputTokens = Number(usage.promptTokenCount || usage.inputTokenCount || estimateTokensFromText(cheapPrompt));
+          const outputTokens = Number(usage.candidatesTokenCount || usage.outputTokenCount || estimateTokensFromText(fullResponse));
+          const estimatedCostUsd = estimateTokenApiCostUsd({
+            provider: "gemini",
+            model: geminiModel,
+            inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+            outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+          });
+          const notice = await recordAiApiCostEvent({
+            userId,
+            provider: "gemini",
+            model: geminiModel,
+            operation: "respuesta cheap scout del chat",
+            estimatedCostUsd,
+            metadata: {
+              inputTokens,
+              outputTokens,
+              totalTokens: usage.totalTokenCount || null,
+              modelRoute,
+            },
+          });
+          if (notice) {
+            res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
+          }
         }
       } else {
+        const maxCompletionTokens = getOpenAiMaxCompletionTokens();
+        const previewCostUsd = estimateTokenApiCostUsd({
+          provider: "openai",
+          model: OPENAI_ASSISTANT_MODEL,
+          inputTokens: estimateTokensFromText(JSON.stringify(openAiMessages)),
+          outputTokens: maxCompletionTokens,
+        });
+        res.write(`data: ${JSON.stringify({
+          content: `${formatAiApiCostPreview("openai", OPENAI_ASSISTANT_MODEL, "respuesta fuerte del chat", previewCostUsd)}\n\n`,
+          apiCostPreview: true,
+          estimatedApiCostUsd: previewCostUsd,
+          modelRoute,
+        })}\n\n`);
         const stream = await getOpenAIClient().chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,
           messages: openAiMessages,
           stream: true,
-          max_completion_tokens: getOpenAiMaxCompletionTokens(),
-        });
+          max_completion_tokens: maxCompletionTokens,
+          stream_options: { include_usage: true },
+        } as any);
 
+        let openAiUsage: any = null;
         for await (const chunk of stream) {
+          if ((chunk as any).usage) {
+            openAiUsage = (chunk as any).usage;
+          }
           const content = chunk.choices[0]?.delta?.content || "";
           if (content) {
             fullResponse += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
+        }
+        const inputTokens = Number(openAiUsage?.prompt_tokens || estimateTokensFromText(JSON.stringify(openAiMessages)));
+        const outputTokens = Number(openAiUsage?.completion_tokens || estimateTokensFromText(fullResponse));
+        const estimatedCostUsd = estimateTokenApiCostUsd({
+          provider: "openai",
+          model: OPENAI_ASSISTANT_MODEL,
+          inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+          outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+        });
+        const notice = await recordAiApiCostEvent({
+          userId,
+          provider: "openai",
+          model: OPENAI_ASSISTANT_MODEL,
+          operation: "respuesta fuerte del chat",
+          estimatedCostUsd,
+          metadata: {
+            inputTokens,
+            outputTokens,
+            totalTokens: openAiUsage?.total_tokens || null,
+            modelRoute,
+          },
+        });
+        if (notice) {
+          res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
         }
       }
 
