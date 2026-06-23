@@ -6,6 +6,7 @@ import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
 import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { buildClipperExternalCloseoutNextActionCopyPacket } from "../server/routes";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
   "GOOGLE_CLIENT_ID",
@@ -83,6 +84,34 @@ test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   assert.equal(result.clipsPerAccount, 50);
   assert.equal(result.publishMode, "approval_required");
   assert.equal(result.riskTolerance, "growth");
+});
+
+test("external closeout next action copy packet guides proof without requesting secrets", () => {
+  const packet = buildClipperExternalCloseoutNextActionCopyPacket({
+    id: "developer_app:instagram",
+    lane: "developer_app",
+    priority: "critical",
+    platform: "instagram",
+    accountId: "",
+    scope: "",
+    proofPath: "/tmp/external-closeout-proofs/developer_app-instagram.md",
+    requiredCsvStatus: "submitted",
+    missingCsvFields: ["app_identifier", "proof"],
+    portalUrl: "https://developers.facebook.com/",
+    redirectUri: "https://app.clipprreview.com/api/clippers/oauth/instagram/callback",
+    operatorAction: "Open instagram developer portal and submit the app.",
+    csvEditHint: "Set status to submitted and fill app_identifier and proof.",
+    blockers: ["fill app_identifier from the developer portal"],
+  });
+
+  assert.match(packet, /Next external action: developer_app:instagram/);
+  assert.match(packet, /Redirect URI \/ callback to register: https:\/\/app\.clipprreview\.com\/api\/clippers\/oauth\/instagram\/callback/);
+  assert.match(packet, /Public app\/account identifier: <paste public id only, never client secret>/);
+  assert.match(packet, /app_identifier=<public app id if this is a developer app>/);
+  assert.match(packet, /proof=<proof URL, ticket ID or local proof file path>/);
+  assert.match(packet, /Metricool stays approval_required/);
+  assert.doesNotMatch(packet, /client_secret=/i);
+  assert.doesNotMatch(packet, /oauth_token=/i);
 });
 
 test("runClipperDailyPlan creates drafts for each configured account", async () => {

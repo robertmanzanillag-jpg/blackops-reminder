@@ -54,6 +54,55 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+export function buildClipperExternalCloseoutNextActionCopyPacket(nextAction: any): string {
+  if (!nextAction) return "";
+  const missingFields = Array.isArray(nextAction.missingCsvFields) ? nextAction.missingCsvFields.join(", ") : "none";
+  const blockers = Array.isArray(nextAction.blockers) ? nextAction.blockers : [];
+  return [
+    `Next external action: ${nextAction.id}`,
+    `Lane: ${nextAction.lane || "unknown"}`,
+    `Platform: ${nextAction.platform || "unknown"}`,
+    `Action: ${nextAction.operatorAction || "Complete the external closeout action."}`,
+    `Portal: ${nextAction.portalUrl || "n/a"}`,
+    nextAction.docsUrl ? `Docs: ${nextAction.docsUrl}` : null,
+    nextAction.redirectUri ? `Redirect URI / callback to register: ${nextAction.redirectUri}` : null,
+    `Proof file to fill: ${nextAction.proofPath || "n/a"}`,
+    `Required CSV status: ${nextAction.requiredCsvStatus || "n/a"}`,
+    `Missing CSV fields: ${missingFields}`,
+    `CSV hint: ${nextAction.csvEditHint || "Fill only real non-secret evidence after the portal action is done."}`,
+    "",
+    "Proof file template:",
+    `# External closeout proof - ${nextAction.id}`,
+    "",
+    `- Platform: ${nextAction.platform || ""}`,
+    `- Lane: ${nextAction.lane || ""}`,
+    `- Required status: ${nextAction.requiredCsvStatus || ""}`,
+    `- Public app/account identifier: <paste public id only, never client secret>`,
+    `- Proof URL or ticket ID: <paste non-secret review URL/ticket/public portal URL>`,
+    `- Local proof path, if used: ${nextAction.proofPath || "<local proof markdown path>"}`,
+    `- Registered redirect URI: ${nextAction.redirectUri || "n/a"}`,
+    "- Notes: <20+ characters explaining what was submitted/created and when>",
+    "",
+    "Evidence CSV row guide:",
+    `kind=${nextAction.lane || ""}`,
+    `account_id=${nextAction.accountId || ""}`,
+    `platform=${nextAction.platform || ""}`,
+    `status=${nextAction.requiredCsvStatus || ""}`,
+    `scope=${nextAction.scope || ""}`,
+    "app_identifier=<public app id if this is a developer app>",
+    "proof=<proof URL, ticket ID or local proof file path>",
+    "notes=<real operator note; no placeholders>",
+    "",
+    "Safety guardrails:",
+    "- Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes, signed URLs or private screenshots.",
+    "- Do not mark this done until the portal action is real and the proof file has non-placeholder evidence.",
+    "- Metricool stays approval_required; this packet does not enable automatic publishing.",
+    "",
+    blockers.length ? "Current blockers:" : "Current blockers: none",
+    ...blockers.map((blocker: unknown) => `- ${String(blocker)}`),
+  ].filter((line): line is string => line !== null).join("\n");
+}
+
 let revenueEngineRouteQueue = Promise.resolve();
 
 export async function registerRoutes(
@@ -143,16 +192,7 @@ export async function registerRoutes(
   const readClipperExternalCloseoutNextAction = async () => {
     const operatorQueue = await readClipperExternalCloseoutOperatorQueue();
     const nextAction = operatorQueue.rows?.[0] || null;
-    const copyPacket = nextAction ? [
-      `Next external action: ${nextAction.id}`,
-      `Action: ${nextAction.operatorAction}`,
-      `Portal: ${nextAction.portalUrl || "n/a"}`,
-      `Proof file: ${nextAction.proofPath}`,
-      `Required CSV status: ${nextAction.requiredCsvStatus}`,
-      `Missing CSV fields: ${(nextAction.missingCsvFields || []).join(", ") || "none"}`,
-      `CSV hint: ${nextAction.csvEditHint}`,
-      "Do not paste passwords, cookies, client secrets, OAuth tokens, recovery codes, signed URLs or private screenshots.",
-    ].join("\n") : "";
+    const copyPacket = buildClipperExternalCloseoutNextActionCopyPacket(nextAction);
     return {
       generatedAt: operatorQueue.generatedAt,
       status: nextAction ? "needs_operator" : "complete",
