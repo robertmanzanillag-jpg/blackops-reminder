@@ -44,8 +44,22 @@ function writeCookieSecretToTempFile(rawCookieFile: string): string {
   return cookiePath;
 }
 
+function readSequentialEnvChunks(baseName: string, maxChunks = 200): string | null {
+  const chunks: string[] = [];
+  for (let index = 1; index <= maxChunks; index += 1) {
+    const paddedIndex = String(index).padStart(3, "0");
+    const value = process.env[`${baseName}_${index}`] || process.env[`${baseName}_${paddedIndex}`];
+    if (!hasConfiguredValue(value)) break;
+    chunks.push(value.trim());
+  }
+  return chunks.length > 0 ? chunks.join("") : null;
+}
+
 function configuredYoutubeCookieFileFromSecret(): string | null {
-  const cookiesBase64 = process.env.YT_DLP_COOKIES_B64 || process.env.YT_DLP_COOKIES_BASE64;
+  const cookiesBase64 = readSequentialEnvChunks("YT_DLP_COOKIES_B64")
+    || readSequentialEnvChunks("YT_DLP_COOKIES_BASE64")
+    || process.env.YT_DLP_COOKIES_B64
+    || process.env.YT_DLP_COOKIES_BASE64;
   if (hasConfiguredValue(cookiesBase64)) {
     const decoded = decodeBase64CookieSecret(cookiesBase64);
     if (decoded) return writeCookieSecretToTempFile(decoded);
@@ -95,18 +109,24 @@ function uniqueCommandSpecs(specs: YtDlpCommandSpec[]): YtDlpCommandSpec[] {
 
 function configuredJsRuntimeVariants(): string[][] {
   const rawRuntimes = process.env.YT_DLP_JS_RUNTIMES?.trim();
-  if (!hasConfiguredValue(rawRuntimes) || /^(0|false|off|none|disabled)$/i.test(rawRuntimes)) {
+  if (/^(0|false|off|none|disabled)$/i.test(rawRuntimes || "")) {
     return [[]];
   }
 
-  const runtimes = rawRuntimes
-    .split(/[,\s]+/)
-    .map((runtime) => runtime.trim())
-    .filter(Boolean);
+  const runtimes = hasConfiguredValue(rawRuntimes)
+    ? rawRuntimes.split(/[,\s]+/).map((runtime) => runtime.trim()).filter(Boolean)
+    : ["node"];
+
+  const remoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS?.trim() || "ejs:github";
+  const allowRemoteComponents = hasConfiguredValue(remoteComponents)
+    && !/^(0|false|off|none|disabled)$/i.test(remoteComponents);
 
   return [
     [],
-    ...runtimes.map((runtime) => ["--js-runtimes", runtime]),
+    ...runtimes.flatMap((runtime) => [
+      ...(allowRemoteComponents ? [["--js-runtimes", runtime, "--remote-components", remoteComponents]] : []),
+      ["--js-runtimes", runtime],
+    ]),
   ];
 }
 
@@ -198,7 +218,7 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque YouTube bloqueó la descarga desde Replit con verificación de bot/login.`,
       "Google Drive puede estar conectado bien; el bloqueo ocurre antes, al bajar el YouTube.",
-      "Para automatizarlo de forma estable, configura cookies de YouTube en un Replit Secret YT_DLP_COOKIES_B64 o YT_DLP_COOKIES_PATH; no pegues cookies en el chat. Alternativa: sube el MP4 fuente a Google Drive y pásame ese archivo como entrada.",
+      "Para automatizarlo de forma estable, configura cookies de YouTube en Replit Secrets YT_DLP_COOKIES_B64 o YT_DLP_COOKIES_B64_1/_2 cuando el export sea grande; no pegues cookies en el chat. Alternativa: sube el MP4 fuente a Google Drive y pásame ese archivo como entrada.",
     ].join(" ");
   }
 
@@ -220,7 +240,7 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque YouTube devolvió formatos inválidos o incompletos para yt-dlp.`,
       "Esto suele pasar cuando yt-dlp está viejo o cuando las cookies de YouTube expiraron/rompen el extractor.",
-      "El agente intenta primero un yt-dlp actualizado y también prueba con y sin cookies; si sigue pasando, regenera el secret YT_DLP_COOKIES_B64 o usa un MP4 fuente desde Google Drive.",
+      "El agente intenta primero un yt-dlp actualizado, node con remote-components ejs:github, y también prueba con y sin cookies; si sigue pasando, regenera los secrets YT_DLP_COOKIES_B64_* o usa un MP4 fuente desde Google Drive.",
     ].join(" ");
   }
 
