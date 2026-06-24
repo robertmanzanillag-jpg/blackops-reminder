@@ -51,6 +51,7 @@ type RadioVideoJobInput = {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
 };
@@ -817,6 +818,7 @@ async function createMissingDjNameAction(params: {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
 }): Promise<string> {
@@ -847,6 +849,7 @@ async function createMissingDjNameAction(params: {
       driveFolderId: params.driveFolderId,
       driveFolderName: params.driveFolderName,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       musicPath: params.musicPath,
       musicUrl: params.musicUrl,
     },
@@ -873,6 +876,7 @@ export async function processRadioVideo(params: {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
 }): Promise<RadioVideoProcessResult> {
@@ -892,6 +896,7 @@ export async function processRadioVideo(params: {
         driveFolderId: params.driveFolderId,
         driveFolderName: params.driveFolderName,
         driveFolderPath: params.driveFolderPath,
+        driveParentFolderId: params.driveParentFolderId,
         musicPath: params.musicPath,
         musicUrl: params.musicUrl,
       });
@@ -910,6 +915,7 @@ export async function processRadioVideo(params: {
       driveFolderId: params.driveFolderId,
       driveFolderName: params.driveFolderName,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       musicPath: params.musicPath,
       musicUrl: params.musicUrl,
     });
@@ -944,6 +950,7 @@ export async function processRadioVideos(options: {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
 }): Promise<RadioVideoProcessResult[]> {
@@ -967,6 +974,7 @@ export async function processRadioVideos(options: {
       driveFolderId: options.driveFolderId,
       driveFolderName: options.driveFolderName,
       driveFolderPath: options.driveFolderPath,
+      driveParentFolderId: options.driveParentFolderId,
       musicPath: options.musicPath,
       musicUrl: options.musicUrl,
     }));
@@ -978,6 +986,7 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
   userId: string;
   youtubeUrl: string;
   driveFolderPath: string[];
+  driveParentFolderId?: string;
   djName?: string;
   musicUrl?: string;
   origin?: "web" | "telegram" | "scheduler";
@@ -1007,6 +1016,7 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
     input: {
       youtubeUrl: params.youtubeUrl,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       createFolderIfMissing: true,
       djName: params.djName,
       musicUrl: params.musicUrl,
@@ -1014,6 +1024,7 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
     proposedChanges: {
       youtubeUrl: params.youtubeUrl,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       djName: params.djName,
       musicUrl: params.musicUrl,
       outputs: ["<DJ>_60s_horizontal_ig.mp4", "<DJ>_30s_vertical_tiktok.mp4"],
@@ -1030,6 +1041,7 @@ export async function processYoutubeRadioVideoLink(params: {
   userId: string;
   youtubeUrl: string;
   driveFolderPath: string[] | string;
+  driveParentFolderId?: string;
   createFolderIfMissing?: boolean;
   driveFolderPathFromYoutubeTitle?: boolean;
   sourceDir?: string;
@@ -1042,7 +1054,8 @@ export async function processYoutubeRadioVideoLink(params: {
   const driveFolderPath = Array.isArray(params.driveFolderPath)
     ? params.driveFolderPath.map((part) => part.trim()).filter(Boolean)
     : splitDriveFolderPath(params.driveFolderPath);
-  if (driveFolderPath.length === 0 && !params.driveFolderPathFromYoutubeTitle) {
+  const driveParentFolderId = params.driveParentFolderId || getConfiguredClippersDriveRootFolderId() || undefined;
+  if (driveFolderPath.length === 0 && !params.driveFolderPathFromYoutubeTitle && !driveParentFolderId) {
     throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
   }
 
@@ -1054,7 +1067,7 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderPath.push(folderNameFromDownloadedYoutubeVideo(videoPath));
   }
 
-  const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId);
+  const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId, driveParentFolderId);
   if (resolved.ambiguousMatches?.length && !params.createFolderIfMissing) {
     return {
       youtubeUrl: params.youtubeUrl,
@@ -1073,6 +1086,7 @@ export async function processYoutubeRadioVideoLink(params: {
         userId: params.userId,
         youtubeUrl: params.youtubeUrl,
         driveFolderPath,
+        driveParentFolderId,
         djName: params.djName,
         musicUrl: params.musicUrl,
       });
@@ -1084,7 +1098,9 @@ export async function processYoutubeRadioVideoLink(params: {
         driveFolderPath,
       };
     }
-    driveFolderId = await ensureDriveFolderPath(driveFolderPath, params.userId);
+    driveFolderId = driveParentFolderId
+      ? await ensureDriveFolderPathUnderParent(driveFolderPath, driveParentFolderId, params.userId)
+      : await ensureDriveFolderPath(driveFolderPath, params.userId);
     driveFolderCreated = true;
   }
 
@@ -1102,6 +1118,7 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderId,
     driveFolderName: driveFolderPath.join("/"),
     driveFolderPath,
+    driveParentFolderId,
     musicPath,
     musicUrl: params.musicUrl,
   });

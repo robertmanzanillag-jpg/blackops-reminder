@@ -66,6 +66,18 @@ test("web assistant prioritizes YouTube clip requests before Developer Autopilot
   assert.doesNotMatch(direct.content, /repo de GitHub/);
 });
 
+test("web assistant treats typoed Drive YouTube clip requests as local radio clip jobs", () => {
+  const direct = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU , quiero que saques los clips de instagram y de TikTok y los guardes en la carte de drives"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.content, /Voy a descargar ese YouTube/);
+  assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
+  assert.deepEqual(direct.driveFolderPath, ["Videos creados"]);
+  assert.equal(direct.createFolderIfMissing, true);
+});
+
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
   const executor = readFileSync("server/trust-executor.ts", "utf8");
@@ -139,7 +151,9 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
 
 test("AI router sends low-risk work to cheap scout and risky work to strong supervisor", () => {
   const previousKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const previousCheapScoutEnabled = process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED;
   process.env.AI_INTEGRATIONS_GEMINI_API_KEY = "test-gemini-key";
+  process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED = "true";
 
   try {
     assert.equal(
@@ -173,6 +187,8 @@ test("AI router sends low-risk work to cheap scout and risky work to strong supe
   } finally {
     if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
     else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+    if (previousCheapScoutEnabled === undefined) delete process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED;
+    else process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED = previousCheapScoutEnabled;
   }
 });
 
@@ -288,6 +304,25 @@ test("dashboard assistant chat shows Black Room approval creation errors", () =>
 
   assert.match(source, /data\.blackRoomLinkError/);
   assert.match(source, /No pude completar la accion/);
+});
+
+test("assistant chats surface radio YouTube execution errors", () => {
+  const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+  const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(dashboardChat, /data\.radioYoutubeError/);
+  assert.match(dashboardChat, /data\.actionExecutionError/);
+  assert.match(assistantPage, /data\.radioYoutubeError/);
+  assert.match(assistantPage, /data\.actionExecutionError/);
+  assert.match(webAssistant, /actionExecutionError/);
+});
+
+test("radio YouTube approval executor fails failed processor results", () => {
+  const executor = readFileSync("server/trust-executor.ts", "utf8");
+
+  assert.match(executor, /radioYoutubeResult\.status === "failed"/);
+  assert.match(executor, /No pude procesar el link de YouTube para radio/);
 });
 
 test("web assistant only auto-executes after explicit chat approval", () => {
