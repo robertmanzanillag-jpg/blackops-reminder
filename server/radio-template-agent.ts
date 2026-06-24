@@ -1,7 +1,6 @@
 import { createHash } from "crypto";
 import { existsSync } from "fs";
 import path from "path";
-import sharp from "sharp";
 import { storage } from "./storage";
 import { getRadioSlotsForMonth, type RadioSlot } from "./radio-agent";
 import { ensureRadioDriveFolder, uploadRadioTemplatePng } from "./google-drive";
@@ -26,6 +25,8 @@ const RADIO_TEXT_BOX_HEIGHT = 58;
 const RADIO_TEXT_FONT_SIZE = 36;
 const RADIO_TEXT_FONT_FAMILY = "DIN Condensed, Avenir Next Condensed, Impact, Arial Narrow, sans-serif";
 const RADIO_TEXT_ERASE_PADDING = 10;
+type SharpFactory = typeof import("sharp").default;
+let sharpFactoryPromise: Promise<SharpFactory> | null = null;
 
 export interface GeneratedRadioTemplate {
   eventId: string;
@@ -54,6 +55,17 @@ interface RadioTemplateDesignReference {
   designId: string;
   editUrl: string | null;
   viewUrl: string | null;
+}
+
+async function loadSharp(): Promise<SharpFactory> {
+  sharpFactoryPromise ||= import("sharp")
+    .then((module) => module.default)
+    .catch((error) => {
+      sharpFactoryPromise = null;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Radio template image rendering requires sharp/libvips. Reinstall optional dependencies before generating radio templates. ${message}`);
+    });
+  return sharpFactoryPromise;
 }
 
 function getRequiredCanvaTemplateConfig() {
@@ -150,6 +162,7 @@ function getTemplateInputs(slot: RadioSlot): Array<{ slotHour: number; djName: s
 }
 
 export async function forceTransparentBackground(input: Buffer): Promise<Buffer> {
+  const sharp = await loadSharp();
   const image = sharp(input).ensureAlpha();
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
 
@@ -236,6 +249,7 @@ function buildDjTextOverlay(djName: string): Buffer {
 }
 
 export async function renderLocalRadioTemplatePng(djName: string): Promise<Buffer> {
+  const sharp = await loadSharp();
   const templatePath = getRadioTemplatePath();
   const template = await sharp(templatePath)
     .resize(RADIO_TEMPLATE_WIDTH, RADIO_TEMPLATE_HEIGHT, { fit: "fill" })
