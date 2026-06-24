@@ -1,10 +1,38 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { chatStorage } from "./storage";
 import { getGeminiClient } from "../../gemini-client";
+import { getCurrentUserId, getSystemUserId, allowsDevUserFallback } from "../../user-context";
+
+function requireOwner(req: Request, res: Response, next: NextFunction): void {
+  let requestUserId: string;
+  try {
+    requestUserId = getCurrentUserId(req);
+  } catch {
+    res.status(401).json({ error: "Authentication required", reason: "missing_user_context" });
+    return;
+  }
+  let ownerId: string;
+  try {
+    ownerId = getSystemUserId();
+  } catch {
+    if (process.env.NODE_ENV === "production") {
+      res.status(503).json({ error: "Owner not configured", reason: "missing_default_user_id" });
+      return;
+    }
+    if (allowsDevUserFallback()) return next();
+    res.status(503).json({ error: "Owner not configured", reason: "missing_default_user_id" });
+    return;
+  }
+  if (requestUserId !== ownerId) {
+    res.status(403).json({ error: "Forbidden", reason: "owner_only" });
+    return;
+  }
+  next();
+}
 
 export function registerChatRoutes(app: Express): void {
-  // Get all conversations
-  app.get("/api/conversations", async (req: Request, res: Response) => {
+  // Get all conversations — owner-only
+  app.get("/api/conversations", requireOwner, async (req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations();
       res.json(conversations);
@@ -14,8 +42,8 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  // Get single conversation with messages
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  // Get single conversation with messages — owner-only
+  app.get("/api/conversations/:id", requireOwner, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const conversation = await chatStorage.getConversation(id);
@@ -30,8 +58,8 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  // Create new conversation
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  // Create new conversation — owner-only
+  app.post("/api/conversations", requireOwner, async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
       const conversation = await chatStorage.createConversation(title || "New Chat");
@@ -42,8 +70,8 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  // Delete conversation
-  app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+  // Delete conversation — owner-only
+  app.delete("/api/conversations/:id", requireOwner, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       await chatStorage.deleteConversation(id);
@@ -54,8 +82,8 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 
-  // Send message and get AI response (streaming)
-  app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
+  // Send message and get AI response (streaming) — owner-only
+  app.post("/api/conversations/:id/messages", requireOwner, async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
       const { content } = req.body;
