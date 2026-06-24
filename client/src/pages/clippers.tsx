@@ -180,9 +180,9 @@ type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready_with_external_blockers" | "metricool_mvp_ready" | "ready";
-type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "full_ready";
+type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "metricool_mvp_ready" | "full_ready";
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
-type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
+type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "partial_import_applied" | "ready_to_apply" | "partial_ready_to_apply" | "empty";
 type ClipperExternalGoLiveAuditGateStatus = "blocked" | "verified";
 
 interface ClipperPlatformAccount {
@@ -358,6 +358,8 @@ interface ClipperAccountPermissionReadinessRow {
   readyForMetricoolApproval: boolean;
   directApiReady: boolean;
   blockers: string[];
+  metricoolBlockers?: string[];
+  directApiBacklog?: string[];
   nextStep: string;
 }
 
@@ -377,6 +379,8 @@ interface ClipperAccountPermissionReadinessPermissionRow {
 interface ClipperAccountPermissionReadinessSummary {
   status: ClipperAccountPermissionReadinessStatus;
   generatedAt: string;
+  launchMode?: string;
+  directSocialApisRequired?: boolean;
   paths: { json: string; markdown: string; csv: string };
   accountRows: ClipperAccountPermissionReadinessRow[];
   permissionRows: ClipperAccountPermissionReadinessPermissionRow[];
@@ -476,7 +480,9 @@ interface ClipperOperationalReadinessSummary {
   paths: { json: string; markdown: string; csv: string };
   mvp: {
     metricoolReady: boolean;
+    launchMode?: string;
     approvalQueueReady: boolean;
+    directSocialApisRequired?: boolean;
   };
   fullDirectApiReady: boolean;
   accounts: {
@@ -515,6 +521,9 @@ interface ClipperOperationalReadinessSummary {
     ports: Array<{ port: number; open: boolean; error: string | null }>;
   };
   blockers: string[];
+  metricoolMvpBlockers?: string[];
+  qaFollowups?: string[];
+  directApiBacklog?: string[];
   nextStep: string;
 }
 
@@ -4180,6 +4189,14 @@ interface ClipperGoLiveCompletionAuditSummary {
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
   closeoutQueue?: ClipperGoLiveCompletionCloseoutQueueItem[];
+  launchModes?: {
+    metricoolMvpReady: boolean;
+    approvalQueueReady: boolean;
+    directSocialApisRequiredForMvp: boolean;
+    fullDirectApiReady: boolean;
+    metricoolMvpBlockers: string[];
+    directApiBacklog: string[];
+  };
   totals: {
     requirements: number;
     verified: number;
@@ -12919,8 +12936,8 @@ export default function ClippersPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className={cn("w-fit border", goLiveCompletionAuditBadge(status.goLiveCompletionAudit.status))}>{status.goLiveCompletionAudit.status}</Badge>
-                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                      {status.goLiveCompletionAudit.readyToPublish ? "ready_for_manual_approval" : "not_ready"}
+                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.launchModes?.metricoolMvpReady || status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                      {status.goLiveCompletionAudit.readyToPublish ? "full_ready" : status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "metricool_mvp_ready" : "not_ready"}
                     </Badge>
                     <Button
                       size="sm"
@@ -12942,7 +12959,31 @@ export default function ClippersPage() {
                   <p>Needs evidence: {status.goLiveCompletionAudit.totals.needsEvidence}</p>
                   <p>Blocked: {status.goLiveCompletionAudit.totals.blocked}</p>
                   <p>External: {status.goLiveCompletionAudit.totals.externalRequired}</p>
+                  <p>Metricool MVP: {status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "ready" : "blocked"}</p>
+                  <p>Direct APIs: {status.goLiveCompletionAudit.launchModes?.directSocialApisRequiredForMvp ? "required" : "not required"}</p>
                 </div>
+                {status.goLiveCompletionAudit.launchModes && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <div className="rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3">
+                      <p className="text-xs font-semibold uppercase text-emerald-200">Metricool MVP launch mode</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        Approval queue {status.goLiveCompletionAudit.launchModes.approvalQueueReady ? "ready" : "blocked"}; direct social APIs are {status.goLiveCompletionAudit.launchModes.directSocialApisRequiredForMvp ? "required" : "not required"} for this mode.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers.length > 0 && (
+                        <p className="mt-2 text-xs leading-5 text-amber-100">{status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers[0]}</p>
+                      )}
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-semibold uppercase text-zinc-300">Direct API backlog</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">
+                        Full direct API is {status.goLiveCompletionAudit.launchModes.fullDirectApiReady ? "ready" : "future/backlog"}.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.directApiBacklog.slice(0, 2).map((item) => (
+                        <p key={item} className="mt-1 text-xs leading-5 text-zinc-500">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {status.goLiveCompletionAudit.generatedAt && (
                   <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveCompletionAudit.generatedAt)}</p>
                 )}
@@ -16207,7 +16248,7 @@ export default function ClippersPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">{operationalReadiness?.paths.markdown || "clippers_workspace/reports/clippers-operational-readiness.md"}</p>
                   <p className="mt-1 text-xs leading-5 text-zinc-500">
-                    {operationalReadiness?.nextStep || "Genera el gate operativo para separar Metricool MVP, Direct API, source readiness, browser QA y blockers reales."}
+                    {operationalReadiness?.nextStep || "Genera el gate operativo para separar Metricool MVP, QA local, Direct API backlog, source readiness y blockers reales."}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -16241,7 +16282,8 @@ export default function ClippersPage() {
                 <>
                   <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
                     <p>Metricool MVP: {operationalReadiness.mvp.metricoolReady ? "yes" : "no"}</p>
-                    <p>Full Direct API: {operationalReadiness.fullDirectApiReady ? "yes" : "no"}</p>
+                    <p>Mode: {operationalReadiness.mvp.launchMode || "metricool_approval_required"}</p>
+                    <p>Direct APIs: {operationalReadiness.mvp.directSocialApisRequired ? "required" : "not required"}</p>
                     <p>Local app: {operationalReadiness.localApp.ready ? "open" : "closed"}</p>
                     <p>Queued: {operationalReadiness.metricool.queuedForApproval}</p>
                     <p>Ready queue: {operationalReadiness.metricool.readyToSend}</p>
@@ -16257,15 +16299,35 @@ export default function ClippersPage() {
                       </div>
                     ))}
                   </div>
-                  {operationalReadiness.blockers.length > 0 && (
+                  {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {operationalReadiness.blockers.slice(0, 5).map((blocker) => (
+                      {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).slice(0, 5).map((blocker) => (
                         <p key={blocker} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">{blocker}</p>
                       ))}
-                      {operationalReadiness.blockers.length > 5 && (
+                      {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length > 5 && (
                         <p className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-400">
-                          +{operationalReadiness.blockers.length - 5} more blockers in {operationalReadiness.paths.markdown}
+                          +{(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length - 5} more Metricool MVP blockers in {operationalReadiness.paths.markdown}
                         </p>
+                      )}
+                    </div>
+                  )}
+                  {((operationalReadiness.qaFollowups || []).length > 0 || (operationalReadiness.directApiBacklog || []).length > 0) && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {(operationalReadiness.qaFollowups || []).length > 0 && (
+                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs font-semibold uppercase text-zinc-300">QA followups</p>
+                          {(operationalReadiness.qaFollowups || []).slice(0, 3).map((item) => (
+                            <p key={item} className="mt-2 text-xs leading-5 text-zinc-500">{item}</p>
+                          ))}
+                        </div>
+                      )}
+                      {(operationalReadiness.directApiBacklog || []).length > 0 && (
+                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs font-semibold uppercase text-zinc-300">Direct API backlog</p>
+                          {(operationalReadiness.directApiBacklog || []).slice(0, 3).map((item) => (
+                            <p key={item} className="mt-2 text-xs leading-5 text-zinc-500">{item}</p>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
@@ -16650,11 +16712,11 @@ export default function ClippersPage() {
                               <p className="mt-1 text-xs leading-5 text-zinc-500">Rejected CSV rows mapped back to the proof/action to fix.</p>
                             </div>
                             <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
-                              {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.length} repairs
+                              {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).length} repairs
                             </Badge>
                           </div>
                           <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 8).map((row) => (
+                            {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).slice(0, 8).map((row) => (
                               <div key={`${row.rank}-${row.id}`} className="rounded-md border border-amber-300/10 bg-black/25 p-2">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="min-w-0 truncate text-xs font-medium text-amber-100">Row {row.csvRow || "?"}: {row.id}</p>
@@ -17265,10 +17327,10 @@ export default function ClippersPage() {
                       accountPermissionReadiness.status === "metricool_mvp_ready"
                         ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
                         : accountPermissionReadiness.status === "metricool_mvp_ready_with_external_blockers"
-                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
                         : "border-amber-300/30 bg-amber-300/10 text-amber-100"
                     )}>
-                      {accountPermissionReadiness.status}
+                      {accountPermissionReadiness.status === "metricool_mvp_ready_with_external_blockers" ? "metricool_mvp_ready + backlog" : accountPermissionReadiness.status}
                     </Badge>
                   )}
                   <Button
@@ -17288,8 +17350,9 @@ export default function ClippersPage() {
                 <>
                   <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
                     <p>Accounts: {accountPermissionReadiness.totals.verifiedAccounts}/{accountPermissionReadiness.totals.accountProfiles}</p>
+                    <p>Mode: {accountPermissionReadiness.launchMode || "metricool_approval_required"}</p>
                     <p>Metricool lanes: {accountPermissionReadiness.totals.metricoolReadyLanes}</p>
-                    <p>Direct API: {accountPermissionReadiness.totals.directApiReadyLanes}</p>
+                    <p>Direct APIs: {accountPermissionReadiness.directSocialApisRequired ? "required" : "not required"}</p>
                     <p>Dev apps: {accountPermissionReadiness.totals.developerAppsApproved}/{accountPermissionReadiness.totals.developerApps}</p>
                     <p>Permissions: {accountPermissionReadiness.totals.permissionGroupsApproved}/{accountPermissionReadiness.totals.permissionGroups}</p>
                     <p>Local assets: {accountPermissionReadiness.sourceReadiness.localOwnedSourceAssets}</p>
@@ -17425,6 +17488,11 @@ export default function ClippersPage() {
                             </p>
                           )}
                         </div>
+                      )}
+                      {(row.directApiBacklog || []).length > 0 && row.readyForMetricoolApproval && (
+                        <p className="mt-3 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs leading-5 text-zinc-500">
+                          Direct API backlog: {(row.directApiBacklog || []).slice(0, 2).join(" | ")}
+                        </p>
                       )}
                       <p className="mt-3 text-xs leading-5 text-emerald-100/80">{row.nextStep}</p>
                     </div>

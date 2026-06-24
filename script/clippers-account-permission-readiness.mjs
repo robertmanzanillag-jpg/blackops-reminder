@@ -327,6 +327,7 @@ function renderMarkdown(summary) {
     `- Connected rights-ready assets for category: ${row.metricoolRightsReadyAssets}`,
     `- Ready for Metricool approval queue: ${row.readyForMetricoolApproval ? "yes" : "no"}`,
     `- Direct API ready: ${row.directApiReady ? "yes" : "no"}`,
+    `- Direct API backlog: ${row.directApiBacklog.length ? row.directApiBacklog.join("; ") : "none"}`,
     `- Evidence path: ${row.evidencePath}`,
     `- Next step: ${row.nextStep}`,
     "",
@@ -361,6 +362,8 @@ function renderMarkdown(summary) {
     "",
     "## Totals",
     "",
+    `- Launch mode: ${summary.launchMode}`,
+    `- Direct social APIs required for MVP: ${summary.directSocialApisRequired ? "yes" : "no"}`,
     `- Account/platform profiles verified: ${summary.totals.verifiedAccounts}/${summary.totals.accountProfiles}`,
     `- Metricool-connected approval lanes ready: ${summary.totals.metricoolReadyLanes}`,
     `- Direct API-ready lanes: ${summary.totals.directApiReadyLanes}`,
@@ -490,11 +493,13 @@ async function main() {
       const directApiReady = accountStatus === "verified"
         && developerRow?.status === "approved"
         && permissionRow?.status === "approved";
-      const blockers = [
+      const metricoolBlockers = [
         accountStatus !== "verified" ? "account evidence not verified" : null,
         !metricool.connected ? "not connected in Metricool for this platform" : null,
         metricool.connected && metricool.rightsReadyAssets <= 0 ? "no rights-ready source assets for this category" : null,
         metricool.connected && !metricoolGuard.safe ? metricoolGuard.blockers[0] || "Metricool queue guard is blocked" : null,
+      ].filter(Boolean);
+      const directApiBacklog = [
         developerRow?.status !== "approved" ? `${platform.platform} developer app not approved` : null,
         permissionRow?.status !== "approved" ? `${platform.platform} permissions not approved` : null,
       ].filter(Boolean);
@@ -513,8 +518,10 @@ async function main() {
         metricoolRightsReadyAssets: metricool.rightsReadyAssets,
         readyForMetricoolApproval,
         directApiReady,
-        blockers,
-        nextStep: blockers[0] || "Ready for Metricool approval_required review; keep direct API blocked until explicit approval.",
+        blockers: metricoolBlockers,
+        metricoolBlockers,
+        directApiBacklog,
+        nextStep: metricoolBlockers[0] || "Ready for Metricool approval_required review; direct APIs are future scale work.",
       });
     }
   }
@@ -557,6 +564,8 @@ async function main() {
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,
@@ -617,8 +626,8 @@ async function main() {
     nextStep: status === "metricool_mvp_ready"
       ? "Open Metricool and manually review approved queued clips; all external blockers are clear."
       : status === "metricool_mvp_ready_with_external_blockers"
-        ? "Metricool MVP is usable only in approval_required mode. Complete external proof files, developer apps and permissions before claiming full readiness."
-      : "Create/connect missing external accounts and import real account/developer/permission evidence before enabling more lanes.",
+        ? "Use Metricool in approval_required mode for connected lanes. Complete developer apps and permissions later only if you want direct API publishing."
+        : "Create/connect missing external accounts and import real account/developer/permission evidence before enabling more lanes.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
@@ -627,6 +636,8 @@ async function main() {
   await writeFile(evidenceDropPath, nextEvidenceCsv);
   console.log(JSON.stringify({
     status: summary.status,
+    launchMode: summary.launchMode,
+    directSocialApisRequired: summary.directSocialApisRequired,
     verifiedAccounts: totals.verifiedAccounts,
     accountProfiles: totals.accountProfiles,
     metricoolReadyLanes: totals.metricoolReadyLanes,
