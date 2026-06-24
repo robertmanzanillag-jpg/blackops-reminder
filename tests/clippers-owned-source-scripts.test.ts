@@ -556,6 +556,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "metricool_mvp_ready_with_external_blockers");
+  assert.equal(output.launchMode, "metricool_approval_required");
+  assert.equal(output.directSocialApisRequired, false);
   assert.equal(output.verifiedAccounts, 2);
   assert.equal(output.accountProfiles, 9);
   assert.equal(output.metricoolReadyLanes, 2);
@@ -570,6 +572,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
 
   const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
   assert.equal(readiness.status, "metricool_mvp_ready_with_external_blockers");
+  assert.equal(readiness.launchMode, "metricool_approval_required");
+  assert.equal(readiness.directSocialApisRequired, false);
   assert.ok(readiness.externalCloseout.proofFilesNeedRealEvidence > 0);
   assert.ok(readiness.externalCloseout.nextEvidenceRows > 0);
   assert.match(readiness.externalCloseout.evidenceImportCsvPath, /external-closeout-evidence-import\.csv$/);
@@ -600,6 +604,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
     && row.platform === "tiktok"
     && row.readyForMetricoolApproval === true
     && row.directApiReady === false
+    && row.nextStep.includes("Ready for Metricool approval_required")
+    && row.directApiBacklog.some((blocker) => blocker.includes("developer app not approved"))
   ));
   assert.ok(readiness.accountRows.some((row) =>
     row.accountId === "streamer-pulse"
@@ -622,17 +628,23 @@ test("operational readiness keeps MVP separate from full external readiness", as
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "metricool_mvp_ready");
   assert.equal(output.metricoolMvpReady, true);
   assert.equal(output.fullDirectApiReady, false);
   assert.equal(output.readyToSend, 0);
-  assert.ok(output.blockers > 0);
+  assert.equal(output.metricoolMvpBlockers, 0);
+  assert.ok(output.directApiBacklog > 0);
 
   const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-operational-readiness.json"), "utf8"));
+  assert.equal(report.status, "metricool_mvp_ready");
+  assert.equal(report.mvp.launchMode, "metricool_approval_required");
+  assert.equal(report.mvp.directSocialApisRequired, false);
   assert.equal(report.metricool.realPublishEnabled, false);
   assert.equal(report.metricool.publishMode, "approval_required");
   assert.equal(report.metricool.readyToSend, 0);
   assert.equal(report.accounts.directApiReadyLanes, 0);
-  assert.ok(report.blockers.some((blocker) => blocker.includes("direct API publishing remains blocked")));
+  assert.deepEqual(report.metricoolMvpBlockers, []);
+  assert.ok(report.directApiBacklog.some((blocker) => blocker.includes("direct API publishing remains blocked")));
 });
 
 test("external closeout pack lists remaining account developer and permission actions", async () => {
@@ -1699,6 +1711,38 @@ test("account permission readiness rejects unsafe Metricool queue state", async 
   }
 });
 
+test("operational readiness blocks unsafe Metricool auto-publish state", async () => {
+  const reportPath = path.join(rootDir, "reports/clippers-operational-readiness.json");
+  const originalQueue = await readFile(queuePath, "utf8");
+  const originalReport = await readFile(reportPath, "utf8").catch(() => null);
+  try {
+    const queue = JSON.parse(originalQueue);
+    queue.status = "approval_required";
+    queue.publishMode = "auto_after_connection";
+    queue.realPublishEnabled = true;
+    queue.totals = { ...(queue.totals || {}), queuedForApproval: 14, readyToSend: 1 };
+    queue.items = [{ id: "unsafe-operational-item", status: "ready_to_send", canSendNow: true }];
+    await writeFile(queuePath, JSON.stringify(queue, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-operational-readiness.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked");
+    assert.equal(output.metricoolMvpReady, false);
+    assert.ok(output.metricoolMvpBlockers > 0);
+
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    assert.equal(report.mvp.metricoolReady, false);
+    assert.ok(report.metricoolMvpBlockers.some((blocker) => blocker.includes("realPublishEnabled") || blocker.includes("publishMode") || blocker.includes("readyToSend") || blocker.includes("can send now")));
+  } finally {
+    await writeFile(queuePath, originalQueue);
+    if (originalReport !== null) await writeFile(reportPath, originalReport);
+  }
+});
+
 test("operational readiness rejects stale account readiness when source readiness is blocked", async () => {
   const accountPath = path.join(rootDir, "account-permission-readiness.json");
   const reportPath = path.join(rootDir, "reports/clippers-operational-readiness.json");
@@ -1832,10 +1876,11 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("Uses external evidence import schema"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.proofFilesNeedRealEvidence"));
   assert.ok(page.includes("status.robertNextActions.externalCloseout.operatorQueueItems"));
-  assert.ok(page.includes("Full Direct API"));
+  assert.ok(page.includes("Direct APIs"));
+  assert.ok(page.includes("Direct API backlog"));
   assert.ok(page.includes("Ready queue"));
   assert.ok(page.includes('data-testid="clippers-external-portal-closeout-board"'));
-  assert.ok(page.includes("more blockers in"));
+  assert.ok(page.includes("more Metricool MVP blockers in"));
   const accountRowsBlock = sliceRequired(
     page,
     "accountPermissionReadiness.accountRows.map((row) =>",
