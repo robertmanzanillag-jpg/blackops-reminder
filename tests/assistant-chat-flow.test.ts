@@ -10,7 +10,7 @@ import {
   userAlreadyApprovedExecution,
 } from "../server/assistant";
 import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
-import { buildDirectRadioYoutubeCommand } from "../server/radio-youtube-command";
+import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand } from "../server/radio-youtube-command";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -111,6 +111,25 @@ test("web assistant continues YouTube clip requests when user replies with only 
   assert.ok(direct);
   assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
   assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
+});
+
+test("web assistant continues Drive MP4 clip requests when user replies with only the Drive folder", () => {
+  const continuation = buildRadioYoutubeContinuationMessage("Robert a", [
+    {
+      role: "user",
+      content: "https://drive.google.com/file/d/1abcDEFghiJKLmnopQRSTuv/view quiero que me saques un clip para TikTok y otro para ig",
+    },
+    {
+      role: "assistant",
+      content: "Puedo hacerlo con el MP4 de Google Drive. Mándame también el nombre, ruta o link de la carpeta de Google Drive donde quieres que guarde los clips.",
+    },
+  ]);
+
+  assert.ok(continuation);
+  const direct = buildDirectRadioDriveVideoCommand(continuation);
+  assert.ok(direct);
+  assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
+  assert.match(direct.command, /RADIO_DRIVE_VIDEO_CLIPS/);
 });
 
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {

@@ -1,6 +1,7 @@
 import path from "node:path";
+import { extractGoogleDriveFileIdFromUrl } from "./google-drive-file-url";
 import { extractGoogleDriveFolderIdFromUrl } from "./google-drive-folder-url";
-import type { RadioYoutubeProcessResult } from "./radio-video-edit-agent";
+import type { RadioDriveVideoProcessResult, RadioYoutubeProcessResult } from "./radio-video-edit-agent";
 
 export type DirectRadioYoutubeCommand = {
   youtubeUrl: string;
@@ -18,12 +19,32 @@ export type DirectRadioYoutubeCommand = {
   command: string;
 };
 
+export type DirectRadioDriveVideoCommand = {
+  sourceDriveFileId: string;
+  sourceDriveUrl?: string;
+  driveFolderPath: string[];
+  driveParentFolderId?: string;
+  createFolderIfMissing?: boolean;
+  djName?: string;
+  musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
+  needsMusicUrl?: boolean;
+  content: string;
+  command: string;
+};
+
 const ESTIMATED_COST_PER_EDITED_VIDEO_USD = 0;
 const DEFAULT_DRIVE_CLIP_FOLDER_PATH = ["Videos creados"];
 const MAX_CLIPS_PER_PLATFORM = 10;
 
 export function directRadioYoutubeCommandNeedsDriveFolder(command: DirectRadioYoutubeCommand): boolean {
   return !command.driveFolderPath.length && !command.driveFolderPathFromYoutubeTitle && !command.driveParentFolderId;
+}
+
+export function directRadioDriveVideoCommandNeedsDriveFolder(command: DirectRadioDriveVideoCommand): boolean {
+  return !command.driveFolderPath.length && !command.driveParentFolderId;
 }
 
 function normalizeText(message: string): string {
@@ -323,6 +344,64 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
   };
 }
 
+export function buildDirectRadioDriveVideoCommand(message?: string): DirectRadioDriveVideoCommand | null {
+  if (!message) return null;
+  const urls = extractUrls(message);
+  const sourceDriveUrl = urls.find((url) => Boolean(extractGoogleDriveFileIdFromUrl(url)));
+  const sourceDriveFileId = extractGoogleDriveFileIdFromUrl(sourceDriveUrl || message);
+  if (!sourceDriveFileId) return null;
+
+  const text = normalizeText(message);
+  const mentionsRadio = /\b(radio|black room|dj|djs)\b/.test(text);
+  const mentionsSourceVideo = /\b(mp4|video largo|video fuente|archivo|file|drive)\b/.test(text);
+  const mentionsClips = /\b(clips?|videos?|edits?|reels?|tiktok|instagram|ig|shorts?)\b/.test(text);
+  const wantsCreate = /\b(haz\w*|saca\w*|genera\w*|edita\w*|prepara\w*|quiero|necesito|guard\w*|sube\w*|procesa\w*|toma)\b/.test(text);
+  if (!(mentionsRadio || mentionsSourceVideo) || !mentionsClips || !wantsCreate) return null;
+
+  const musicUrl = urls.find(isYouTubeUrl);
+  const wantsMusicDrop = /\b(audio|cancion|canción|musica|música|song|track|drop)\b/.test(text);
+  const driveParentFolderId = extractGoogleDriveFolderIdFromUrl(message) || undefined;
+  const driveFolderPath = extractDriveFolderPathFromMessage(message);
+  const createFolderIfMissing = /\b(crea\w*|crear|nueva|nuevo|subcarpeta|folder nuevo|new folder)\b/.test(text);
+  const djName = extractDjNameFromMessage(message) || undefined;
+  const { instagramClipCount, tiktokClipCount } = extractRequestedRadioClipCounts(message);
+  const deleteSourceAfterSuccess = shouldDeleteSourceAfterSuccess(message);
+  const clipDescription = describeRequestedClipCounts(instagramClipCount, tiktokClipCount);
+
+  if (!driveFolderPath?.length && !driveParentFolderId) {
+    return {
+      sourceDriveFileId,
+      sourceDriveUrl,
+      driveFolderPath: [],
+      createFolderIfMissing,
+      djName,
+      musicUrl,
+      instagramClipCount,
+      tiktokClipCount,
+      deleteSourceAfterSuccess,
+      content: "Puedo hacerlo con el MP4 de Google Drive. Mándame también el nombre, ruta o link de la carpeta de Google Drive donde quieres que guarde los clips.",
+      command: "",
+    };
+  }
+
+  const resolvedDriveFolderPath = driveFolderPath || [];
+  const folderLabel = resolvedDriveFolderPath.join("/");
+  return {
+    sourceDriveFileId,
+    sourceDriveUrl,
+    driveFolderPath: resolvedDriveFolderPath,
+    driveParentFolderId,
+    createFolderIfMissing,
+    djName,
+    musicUrl,
+    instagramClipCount,
+    tiktokClipCount,
+    deleteSourceAfterSuccess,
+    content: `Dale. Voy a descargar el MP4 de Google Drive, sacar ${clipDescription}, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y ${createFolderIfMissing ? "crear/usar" : "guardar en"} Google Drive${driveParentFolderId ? " dentro de la carpeta enviada" : ""}: ${folderLabel || "carpeta enviada"}. Después borro el MP4 fuente local.`,
+    command: `[RADIO_DRIVE_VIDEO_CLIPS: ${JSON.stringify({ sourceDriveFileId, sourceDriveUrl, driveFolderPath: resolvedDriveFolderPath, driveParentFolderId, createFolderIfMissing, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop, instagramClipCount, tiktokClipCount, deleteSourceAfterSuccess })}]`,
+  };
+}
+
 export async function executeDirectRadioYoutubeCommand(command: DirectRadioYoutubeCommand, userId: string): Promise<RadioYoutubeProcessResult> {
   if (directRadioYoutubeCommandNeedsDriveFolder(command)) {
     throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
@@ -344,7 +423,28 @@ export async function executeDirectRadioYoutubeCommand(command: DirectRadioYoutu
   });
 }
 
-export function formatRadioYoutubeResult(result: RadioYoutubeProcessResult): string {
+export async function executeDirectRadioDriveVideoCommand(command: DirectRadioDriveVideoCommand, userId: string): Promise<RadioDriveVideoProcessResult> {
+  if (directRadioDriveVideoCommandNeedsDriveFolder(command)) {
+    throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
+  }
+
+  const { processDriveRadioVideoFile } = await import("./radio-video-edit-agent");
+  return processDriveRadioVideoFile({
+    userId,
+    sourceDriveFileId: command.sourceDriveFileId,
+    sourceDriveUrl: command.sourceDriveUrl,
+    driveFolderPath: command.driveFolderPath,
+    driveParentFolderId: command.driveParentFolderId,
+    createFolderIfMissing: Boolean(command.createFolderIfMissing),
+    djName: command.djName,
+    musicUrl: command.musicUrl,
+    instagramClipCount: command.instagramClipCount,
+    tiktokClipCount: command.tiktokClipCount,
+    deleteSourceAfterSuccess: command.deleteSourceAfterSuccess !== false,
+  });
+}
+
+function formatRadioVideoResult(result: RadioYoutubeProcessResult | RadioDriveVideoProcessResult, sourceLabel: string): string {
   if (result.status === "queued" && result.pendingActionId) {
     return [
       "No encontré esa carpeta en Google Drive.",
@@ -355,7 +455,7 @@ export function formatRadioYoutubeResult(result: RadioYoutubeProcessResult): str
 
   if (result.status === "needs_dj_name" && result.pendingActionId) {
     return [
-      "Descargué el video, pero no pude leer el nombre del DJ.",
+      `Descargué el ${sourceLabel}, pero no pude leer el nombre del DJ.`,
       `Pendiente para completar el render: ${result.pendingActionId}`,
       `Puedes responder: nombre ${result.pendingActionId} DJ_NAME`,
     ].join("\n");
@@ -393,4 +493,12 @@ export function formatRadioYoutubeResult(result: RadioYoutubeProcessResult): str
     `Total estimado de esta edición: $${totalEstimatedCost.toFixed(2)} USD para ${clipCount} video${clipCount === 1 ? "" : "s"}.`,
     "Nota: usa herramientas locales gratuitas; Google Drive solo puede consumir almacenamiento de tu cuenta.",
   ].filter(Boolean).join("\n");
+}
+
+export function formatRadioYoutubeResult(result: RadioYoutubeProcessResult): string {
+  return formatRadioVideoResult(result, "video de YouTube");
+}
+
+export function formatRadioDriveVideoResult(result: RadioDriveVideoProcessResult): string {
+  return formatRadioVideoResult(result, "MP4 de Google Drive");
 }
