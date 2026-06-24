@@ -88,9 +88,12 @@ export type RadioYoutubeProcessResult = RadioVideoProcessResult & {
   pendingActionId?: string;
 };
 
-function runCommand(command: string, args: string[], options: { timeoutMs?: number } = {}): Promise<CommandResult> {
+function runCommand(command: string, args: string[], options: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+    });
     let stdout = "";
     let stderr = "";
     let didTimeout = false;
@@ -124,6 +127,45 @@ function runCommand(command: string, args: string[], options: { timeoutMs?: numb
       reject(new Error(`${command} failed with code ${code}: ${stderr || stdout}`));
     });
   });
+}
+
+let freshYtDlpPythonPackageDirPromise: Promise<string | null> | null = null;
+
+function shouldAutoInstallFreshYtDlp(): boolean {
+  const configured = process.env.YT_DLP_AUTO_UPDATE?.trim();
+  return !/^(0|false|off|none|disabled)$/i.test(configured || "");
+}
+
+async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
+  if (!shouldAutoInstallFreshYtDlp()) return null;
+
+  const targetDir = process.env.YT_DLP_PYTHON_TARGET_DIR?.trim()
+    || path.join(os.tmpdir(), "robplanner-yt-dlp-python");
+  const packageMarker = path.join(targetDir, "yt_dlp", "__init__.py");
+
+  if (await pathExists(packageMarker)) return targetDir;
+
+  await fs.mkdir(targetDir, { recursive: true });
+  try {
+    await runCommand("python3", [
+      "-m",
+      "pip",
+      "install",
+      "--upgrade",
+      "--target",
+      targetDir,
+      "yt-dlp",
+    ], { timeoutMs: 5 * 60 * 1000 });
+    return targetDir;
+  } catch (error) {
+    console.warn("[radio-video-edit] could not install fresh yt-dlp:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+function getFreshYtDlpPythonPackageDir(): Promise<string | null> {
+  freshYtDlpPythonPackageDirPromise ||= ensureFreshYtDlpPythonPackageDir();
+  return freshYtDlpPythonPackageDirPromise;
 }
 
 function sanitizeDjName(value: string): string {
@@ -199,7 +241,7 @@ async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeo
   const errors: string[] = [];
   for (const spec of commandSpecs) {
     try {
-      await runCommand(spec.command, spec.args, { timeoutMs });
+      await runCommand(spec.command, spec.args, { timeoutMs, env: spec.env });
       return;
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
@@ -216,11 +258,13 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
+  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "video",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
+    freshPythonPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
@@ -254,11 +298,13 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
+  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "audio",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
+    freshPythonPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
