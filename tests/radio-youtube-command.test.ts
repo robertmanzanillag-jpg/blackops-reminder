@@ -131,6 +131,17 @@ test("does not invent a child folder from a bare Google Drive folder URL prompt"
   assert.doesNotMatch(command?.content || "", /esta/);
 });
 
+test("does not invent a child folder from my Drive folder URL wording", () => {
+  const command = buildDirectRadioYoutubeCommand(
+    "Toma este video de YouTube: https://youtu.be/GcVZvXkz2jU Descárgalo en 1080p, no en 720p. Crea 2 clips listos para publicar: 1. TikTok/Reels vertical 9:16, 1080x1920, 30 segundos. 2. Instagram feed/reel 4:5, 1080x1350, 60 segundos. Usa el momento con más energía del set. Nómbralos con DJ QA_REPLIT_FINAL. Después de crear los clips, borra el video largo local. Guarda los clips en mi carpeta de Google Drive: https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW",
+  );
+
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, []);
+  assert.doesNotMatch(command?.content || "", /: mi\b/);
+  assert.match(command?.content || "", /carpeta de Google Drive que enviaste/);
+});
+
 test("extracts a child folder inside a Google Drive folder URL", () => {
   const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW dentro de esta carpeta crea una subcarpeta llamada Codex Clips");
   assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");

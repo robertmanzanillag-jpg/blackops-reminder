@@ -332,6 +332,8 @@ export default function AssistantPage() {
       const decoder = new TextDecoder();
       let assistantMessage = "";
       let streamBuffer = "";
+      let sawAssistantStatus = false;
+      let sawTerminalAssistantEvent = false;
 
       setMessages((prev) => [...prev, { role: "assistant", content: "", timestamp: new Date() }]);
 
@@ -354,6 +356,7 @@ export default function AssistantPage() {
           updateAssistantMessage();
         }
         if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
+          sawAssistantStatus = true;
           setAssistantStatus(data.assistantStatus.trim());
         }
         if (
@@ -376,11 +379,13 @@ export default function AssistantPage() {
           updateAssistantMessage();
         }
         if (data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError) {
+          sawTerminalAssistantEvent = true;
           setAssistantStatus("");
           assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError}`;
           updateAssistantMessage();
         }
         if (data.approvalRequired && data.pendingAction) {
+          sawTerminalAssistantEvent = true;
           setAssistantStatus("");
           assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
           queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
@@ -408,6 +413,10 @@ export default function AssistantPage() {
       }
       streamBuffer += decoder.decode();
       if (streamBuffer.trim()) processStreamEvent(streamBuffer);
+      if (sawAssistantStatus && !sawTerminalAssistantEvent && !/Listo\.|No pude completar|Pendiente de aprobacion|Total estimado de esta edición/i.test(assistantMessage)) {
+        assistantMessage += "\n\nNo pude completar la accion: el proceso terminó sin devolver resultado final. Gasto estimado de esta corrida: $0.00 USD.";
+        updateAssistantMessage();
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       setMessages((prev) => [
