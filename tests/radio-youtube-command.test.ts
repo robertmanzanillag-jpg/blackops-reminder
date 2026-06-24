@@ -462,3 +462,16 @@ test("yt-dlp failure message explains stale extractor format errors", () => {
   assert.match(message, /yt-dlp está viejo|cookies de YouTube/);
   assert.match(message, /YT_DLP_COOKIES_B64|MP4 fuente/);
 });
+
+test("yt-dlp failure message does not let unsupported js runtime variants hide bot blocks", () => {
+  const message = formatYtDlpFailureMessage(
+    [
+      "yt-dlp failed with code 2: __main__.py: error: no such option: --js-runtimes",
+      "ERROR: [youtube] GcVZvXkz2jU: Sign in to confirm you're not a bot. Use --cookies for the authentication.",
+    ].join("\n"),
+    "video",
+  );
+
+  assert.match(message, /YouTube bloqueó la descarga desde Replit/);
+  assert.doesNotMatch(message, /no soporta --js-runtimes|demasiado vieja/);
+});

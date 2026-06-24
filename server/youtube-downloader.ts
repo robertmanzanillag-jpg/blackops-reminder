@@ -213,8 +213,15 @@ export function buildYtDlpCommandSpecs(params: {
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {
   const lower = rawError.toLowerCase();
+  const meaningfulError = rawError
+    .split(/\n+/)
+    .filter((line) => !/no such option:\s*--js-runtimes|unsupported option.*js-runtimes/i.test(line))
+    .join("\n")
+    .trim();
+  const meaningfulLower = meaningfulError.toLowerCase();
+  const errorForGenericDetail = meaningfulError || rawError;
 
-  if (/sign in to confirm|not a bot|confirm you.?re not a bot|use --cookies|cookies for the authentication|http error 429/.test(lower)) {
+  if (/sign in to confirm|not a bot|confirm you.?re not a bot|use --cookies|cookies for the authentication|http error 429/.test(meaningfulLower || lower)) {
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque YouTube bloqueó la descarga desde Replit con verificación de bot/login.`,
       "Google Drive puede estar conectado bien; el bloqueo ocurre antes, al bajar el YouTube.",
@@ -224,19 +231,19 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
 
   if (/no such option:\s*--js-runtimes|unsupported option.*js-runtimes/.test(lower)) {
     return [
-      `No pude descargar el ${mediaLabel} de YouTube porque la versión de yt-dlp instalada no soporta --js-runtimes.`,
-      "Actualiza yt-dlp en Replit o usa el fallback sin ese flag; el agente ya intenta ambas rutas en esta versión.",
+      `No pude descargar el ${mediaLabel} de YouTube porque la versión de yt-dlp disponible en Replit es demasiado vieja para resolver YouTube moderno.`,
+      "El deploy debe usar el paquete Python actualizado de yt-dlp incluido en la build; si vuelve a pasar, revisa que la build haya instalado yt-dlp fresco y que YT_DLP_AUTO_UPDATE no esté desactivado.",
     ].join(" ");
   }
 
-  if (/no supported javascript runtime could be found|javascript runtime/.test(lower)) {
+  if (/no supported javascript runtime could be found|javascript runtime/.test(meaningfulLower || lower)) {
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque falta un runtime JavaScript para yt-dlp.`,
       "Instala deno en Replit y vuelve a intentar.",
     ].join(" ");
   }
 
-  if (/precondition check failed|signature extraction failed|only images are available|requested format is not available|unable to download api page|http error 400|bad request/.test(lower)) {
+  if (/precondition check failed|signature extraction failed|only images are available|requested format is not available|unable to download api page|http error 400|bad request/.test(meaningfulLower || lower)) {
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque YouTube devolvió formatos inválidos o incompletos para yt-dlp.`,
       "Esto suele pasar cuando yt-dlp está viejo o cuando las cookies de YouTube expiraron/rompen el extractor.",
@@ -244,12 +251,12 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
     ].join(" ");
   }
 
-  if (/command not found|enoent|no module named yt_dlp|no module named yt-dlp/.test(lower)) {
+  if (/command not found|enoent|no module named yt_dlp|no module named yt-dlp/.test(meaningfulLower || lower)) {
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque yt-dlp no está instalado o no está en PATH.`,
       "Instala yt-dlp en Replit o configura YT_DLP_PATH con la ruta correcta.",
     ].join(" ");
   }
 
-  return `No pude descargar el ${mediaLabel} de YouTube. Detalle: ${rawError}`;
+  return `No pude descargar el ${mediaLabel} de YouTube. Detalle: ${errorForGenericDetail}`;
 }
