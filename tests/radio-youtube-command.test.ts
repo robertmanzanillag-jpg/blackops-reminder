@@ -152,7 +152,11 @@ test("yt-dlp command specs try 1080p video without JS runtime flags by default",
 
     assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
     assert.ok(specs.every((spec) => !spec.args.includes("--js-runtimes")));
-    assert.ok(specs.every((spec) => spec.args.includes("bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best")));
+    assert.ok(specs.some((spec) => spec.args.includes("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best")));
+    assert.ok(specs.every((spec) => {
+      const formatIndex = spec.args.indexOf("-f");
+      return formatIndex !== -1 && /height<=1080|best/.test(spec.args[formatIndex + 1] || "");
+    }));
     assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
   } finally {
     if (previousRuntimeConfig === undefined) {
@@ -221,7 +225,8 @@ test("yt-dlp command specs materialize YouTube cookies from base64 secret", () =
     assert.match(materializedPath, /yt-dlp-youtube-cookies-[a-f0-9]+\.txt$/);
     assert.ok(existsSync(materializedPath));
     assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
-    assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes(materializedPath)));
+    assert.ok(specs.some((spec) => spec.args.includes("--cookies") && spec.args.includes(materializedPath)));
+    assert.ok(specs.some((spec) => !spec.args.includes("--cookies")));
   } finally {
     if (materializedPath) rmSync(materializedPath, { force: true });
     for (const [key, value] of Object.entries(previous)) {
@@ -234,6 +239,19 @@ test("yt-dlp command specs materialize YouTube cookies from base64 secret", () =
   }
 });
 
+test("yt-dlp command specs prefer fresh Python package when available", () => {
+  const specs = buildYtDlpCommandSpecs({
+    url: "https://youtu.be/GcVZvXkz2jU",
+    outputTemplate: "/tmp/%(id)s.%(ext)s",
+    mode: "video",
+    freshPythonPackageDir: "/tmp/robplanner-yt-dlp-python",
+  });
+
+  assert.equal(specs[0].command, "python3");
+  assert.deepEqual(specs[0].args.slice(0, 2), ["-m", "yt_dlp"]);
+  assert.match(specs[0].env?.PYTHONPATH || "", /\/tmp\/robplanner-yt-dlp-python/);
+});
+
 test("yt-dlp failure message explains YouTube bot blocks without routing to GitHub", () => {
   const message = formatYtDlpFailureMessage(
     "ERROR: [youtube] GcVZvXkz2jU: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
@@ -243,4 +261,15 @@ test("yt-dlp failure message explains YouTube bot blocks without routing to GitH
   assert.match(message, /YouTube bloqueó la descarga desde Replit/);
   assert.match(message, /YT_DLP_COOKIES_B64|YT_DLP_COOKIES_PATH|MP4 fuente/);
   assert.doesNotMatch(message, /GitHub|handoff|PR/i);
+});
+
+test("yt-dlp failure message explains stale extractor format errors", () => {
+  const message = formatYtDlpFailureMessage(
+    "WARNING: [youtube] YouTube said: ERROR - Precondition check failed. ERROR: Requested format is not available. Only images are available for download.",
+    "video",
+  );
+
+  assert.match(message, /formatos inválidos o incompletos/);
+  assert.match(message, /yt-dlp está viejo|cookies de YouTube/);
+  assert.match(message, /YT_DLP_COOKIES_B64|MP4 fuente/);
 });

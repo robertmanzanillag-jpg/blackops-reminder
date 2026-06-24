@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { chmodSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 type YtDlpDownloadMode = "video" | "audio";
 
 export type YtDlpCommandSpec = {
   command: string;
   args: string[];
+  env?: NodeJS.ProcessEnv;
 };
 
 function hasConfiguredValue(value?: string | null): value is string {
@@ -71,10 +72,21 @@ function configuredYoutubeCookieArgs(): string[] {
   return [];
 }
 
+function configuredYoutubeCookieArgVariants(explicitCookieArgs?: string[]): string[][] {
+  if (explicitCookieArgs) return [explicitCookieArgs];
+
+  const configured = configuredYoutubeCookieArgs();
+  if (configured.length === 0) return [[]];
+
+  // A stale browser cookie export can make YouTube return HTTP 400/precondition errors.
+  // Try the authenticated path first, then fall back to the anonymous extractor path.
+  return [configured, []];
+}
+
 function uniqueCommandSpecs(specs: YtDlpCommandSpec[]): YtDlpCommandSpec[] {
   const seen = new Set<string>();
   return specs.filter((spec) => {
-    const key = `${spec.command}\0${spec.args.join("\0")}`;
+    const key = `${spec.command}\0${spec.args.join("\0")}\0${spec.env?.PYTHONPATH || ""}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -98,43 +110,85 @@ function configuredJsRuntimeVariants(): string[][] {
   ];
 }
 
+function configuredYoutubeClientVariants(): string[][] {
+  const rawClients = process.env.YT_DLP_YOUTUBE_CLIENTS?.trim();
+  if (/^(0|false|off|none|disabled)$/i.test(rawClients || "")) return [[]];
+
+  const clientSets = hasConfiguredValue(rawClients)
+    ? rawClients.split(/[;\n]+/).map((clientSet) => clientSet.trim()).filter(Boolean)
+    : [
+        "web,ios,android",
+        "mweb",
+      ];
+
+  return [
+    [],
+    ...clientSets.map((clientSet) => ["--extractor-args", `youtube:player_client=${clientSet}`]),
+  ];
+}
+
+function formatVariants(mode: YtDlpDownloadMode): string[] {
+  if (mode === "audio") return ["ba/bestaudio/best"];
+
+  return [
+    "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best",
+    "bv*[height<=1080]+ba/b[height<=1080]/best[height<=1080]/best",
+    "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+  ];
+}
+
+function pythonEnvForPackageDir(packageDir: string): NodeJS.ProcessEnv {
+  const currentPythonPath = process.env.PYTHONPATH?.trim();
+  return {
+    ...process.env,
+    PYTHONPATH: currentPythonPath ? `${packageDir}${delimiter}${currentPythonPath}` : packageDir,
+  };
+}
+
 export function buildYtDlpCommandSpecs(params: {
   url: string;
   outputTemplate: string;
   mode: YtDlpDownloadMode;
   explicitBinary?: string;
   cookieArgs?: string[];
+  freshPythonPackageDir?: string | null;
 }): YtDlpCommandSpec[] {
-  const cookieArgs = params.cookieArgs || configuredYoutubeCookieArgs();
-  const format = params.mode === "video"
-    ? "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best"
-    : "ba/bestaudio";
-  const baseArgs = [
-    "--no-playlist",
-    ...cookieArgs,
-    "-f",
-    format,
-    ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
-    "--restrict-filenames",
-    "-o",
-    params.outputTemplate,
-    params.url,
-  ];
+  const cookieArgVariants = configuredYoutubeCookieArgVariants(params.cookieArgs);
+  const clientVariants = configuredYoutubeClientVariants();
+  const formats = formatVariants(params.mode);
   const runtimeVariants = configuredJsRuntimeVariants();
-  const binaries = [
-    ...(params.explicitBinary?.trim() ? [params.explicitBinary.trim()] : []),
-    "yt-dlp",
-    "python3",
-    "python",
+  const binaries: Array<{ command: string; argsPrefix?: string[]; env?: NodeJS.ProcessEnv }> = [
+    ...(hasConfiguredValue(params.freshPythonPackageDir)
+      ? [{ command: "python3", argsPrefix: ["-m", "yt_dlp"], env: pythonEnvForPackageDir(params.freshPythonPackageDir) }]
+      : []),
+    ...(params.explicitBinary?.trim() ? [{ command: params.explicitBinary.trim() }] : []),
+    { command: "yt-dlp" },
+    { command: "python3", argsPrefix: ["-m", "yt_dlp"] },
+    { command: "python", argsPrefix: ["-m", "yt_dlp"] },
   ];
 
-  return uniqueCommandSpecs(binaries.flatMap((command) => {
-    const commandPrefix = command === "python3" || command === "python" ? ["-m", "yt_dlp"] : [];
-    return runtimeVariants.map((runtimeArgs) => ({
-      command,
-      args: [...commandPrefix, ...runtimeArgs, ...baseArgs],
-    }));
-  }));
+  return uniqueCommandSpecs(binaries.flatMap((binary) => runtimeVariants.flatMap((runtimeArgs) =>
+    clientVariants.flatMap((clientArgs) => formats.flatMap((format) =>
+      cookieArgVariants.map((cookieArgs) => ({
+        command: binary.command,
+        env: binary.env,
+        args: [
+          ...(binary.argsPrefix || []),
+          ...runtimeArgs,
+          ...clientArgs,
+          "--no-playlist",
+          ...cookieArgs,
+          "-f",
+          format,
+          ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
+          "--restrict-filenames",
+          "-o",
+          params.outputTemplate,
+          params.url,
+        ],
+      }))
+    ))
+  )));
 }
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {
@@ -159,6 +213,14 @@ export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" 
     return [
       `No pude descargar el ${mediaLabel} de YouTube porque falta un runtime JavaScript para yt-dlp.`,
       "Instala deno en Replit y vuelve a intentar.",
+    ].join(" ");
+  }
+
+  if (/precondition check failed|signature extraction failed|only images are available|requested format is not available|unable to download api page|http error 400|bad request/.test(lower)) {
+    return [
+      `No pude descargar el ${mediaLabel} de YouTube porque YouTube devolvió formatos inválidos o incompletos para yt-dlp.`,
+      "Esto suele pasar cuando yt-dlp está viejo o cuando las cookies de YouTube expiraron/rompen el extractor.",
+      "El agente intenta primero un yt-dlp actualizado y también prueba con y sin cookies; si sigue pasando, regenera el secret YT_DLP_COOKIES_B64 o usa un MP4 fuente desde Google Drive.",
     ].join(" ");
   }
 
