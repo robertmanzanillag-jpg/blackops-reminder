@@ -15,7 +15,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -414,7 +414,7 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
 
   const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
   if (directRadioYoutubeCommand) {
-    if (!directRadioYoutubeCommand.driveFolderPath.length || directRadioYoutubeCommand.needsMusicUrl) {
+    if (directRadioYoutubeCommandNeedsDriveFolder(directRadioYoutubeCommand) || directRadioYoutubeCommand.needsMusicUrl) {
       return directRadioYoutubeCommand.content;
     }
 
@@ -1010,7 +1010,9 @@ async function processAssistantResponse(userId: string, response: string): Promi
       const result = await executeDirectRadioYoutubeCommand({
         youtubeUrl: radioYoutubeData.youtubeUrl,
         driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
+        driveParentFolderId: typeof radioYoutubeData.driveParentFolderId === "string" ? radioYoutubeData.driveParentFolderId : undefined,
         createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
+        driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
         djName: radioYoutubeData.djName,
         musicUrl: radioYoutubeData.musicUrl,
         content: "Voy a procesar ese YouTube para radio.",

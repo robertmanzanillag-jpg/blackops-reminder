@@ -1,7 +1,10 @@
 // Google Calendar Integration - using Replit connector
-import { google } from 'googleapis';
-
 let connectionSettings: any;
+let connectionSettingsCacheKey: string | null = null;
+
+async function getGoogleApis() {
+  return (await import("googleapis")).google;
+}
 
 export function hasReplitGoogleConnectorEnv() {
   return Boolean(
@@ -10,17 +13,57 @@ export function hasReplitGoogleConnectorEnv() {
   );
 }
 
-export async function getGoogleAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+function findAccessToken(value: any, depth = 0): string | null {
+  if (!value || depth > 5) return null;
+  if (typeof value !== "object") return null;
+
+  for (const key of ["access_token", "accessToken"]) {
+    const token = value[key];
+    if (typeof token === "string" && token.trim()) return token;
   }
-  
+
+  for (const child of Object.values(value)) {
+    const token = findAccessToken(child, depth + 1);
+    if (token) return token;
+  }
+
+  return null;
+}
+
+function readConnectorAccessToken(connection: any): string | null {
+  return findAccessToken(connection?.settings);
+}
+
+function isConnectorTokenFresh(connection: any): boolean {
+  const expiresAt = connection?.settings?.expires_at || connection?.settings?.oauth?.credentials?.expiry_date;
+  if (!expiresAt) return Boolean(readConnectorAccessToken(connection));
+  const expiryTime = typeof expiresAt === "number" ? expiresAt : new Date(expiresAt).getTime();
+  return Number.isFinite(expiryTime) && expiryTime > Date.now();
+}
+
+function selectGoogleConnector(items: any[] = []) {
+  const connected = items.filter((item) => readConnectorAccessToken(item));
+  return (
+    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google-drive")) ||
+    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google")) ||
+    connected[0] ||
+    null
+  );
+}
+
+export async function getGoogleAccessToken() {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
     : process.env.WEB_REPL_RENEWAL 
     ? 'depl ' + process.env.WEB_REPL_RENEWAL 
     : null;
+
+  const cacheKey = `${hostname || ""}:${xReplitToken || ""}`;
+  if (connectionSettings && connectionSettingsCacheKey === cacheKey && isConnectorTokenFresh(connectionSettings)) {
+    const cachedToken = readConnectorAccessToken(connectionSettings);
+    if (cachedToken) return cachedToken;
+  }
 
   if (!xReplitToken) {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
@@ -34,14 +77,25 @@ export async function getGoogleAccessToken() {
         'X_REPLIT_TOKEN': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  ).then(res => res.json()).then(data => selectGoogleConnector(data.items || []));
+  connectionSettingsCacheKey = cacheKey;
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
+  const accessToken = readConnectorAccessToken(connectionSettings);
 
   if (!connectionSettings || !accessToken) {
     throw new Error('Google connector not connected');
   }
   return accessToken;
+}
+
+export async function hasConnectedReplitGoogleConnector(): Promise<boolean> {
+  if (!hasReplitGoogleConnectorEnv()) return false;
+  try {
+    await getGoogleAccessToken();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // WARNING: Never cache this client.
@@ -52,7 +106,8 @@ export async function getGoogleCalendarClient() {
   return getGoogleOAuthCalendarClient(accessToken);
 }
 
-export function getGoogleOAuthClient(accessToken: string) {
+export async function getGoogleOAuthClient(accessToken: string) {
+  const google = await getGoogleApis();
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({
     access_token: accessToken
@@ -61,8 +116,9 @@ export function getGoogleOAuthClient(accessToken: string) {
   return oauth2Client;
 }
 
-function getGoogleOAuthCalendarClient(accessToken: string) {
-  const oauth2Client = getGoogleOAuthClient(accessToken);
+async function getGoogleOAuthCalendarClient(accessToken: string) {
+  const google = await getGoogleApis();
+  const oauth2Client = await getGoogleOAuthClient(accessToken);
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 

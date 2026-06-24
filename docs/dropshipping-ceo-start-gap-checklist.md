@@ -28,6 +28,7 @@ Estado: el agente ya esta implementado en modo pre-cuentas. Esta lista resume lo
 
 2. Conectar Postgres/Trust Center.
    - Configurar `DATABASE_URL`.
+   - En Replit: abrir Database/Postgres, crear o conectar la base, y copiar el connection string que Replit expone como `DATABASE_URL` en Secrets.
    - Ejecutar `npm run db:push`.
    - Correr `npm run ceo:db-check -- --json`.
    - Migrar approvals locales primero con dry-run.
@@ -48,9 +49,21 @@ Estado: el agente ya esta implementado en modo pre-cuentas. Esta lista resume lo
    - Shipping, tax, refund/cancel y order confirmation probados.
 
 6. Conectar social/manual publishing.
-   - Mantener publishing manual si no hay webhook confiable.
+   - Si Metricool ya esta configurado con `METRICOOL_USER_TOKEN` + `METRICOOL_USER_ID`, el agente lo reconoce como puente social listo para cola/aprobacion.
+   - `DROPSHIPPING_SOCIAL_PUBLISH_WEBHOOK_URL` solo hace falta para publicar con un webhook propio compatible que acepte el payload del agente.
+   - Mantener publishing manual si no hay webhook confiable; registrar la URL publicada como evidencia.
    - Publicar primer contenido organico solo con approval.
    - Mantener ads en `$0` hasta tener tracking y senal organica.
+
+## Defaults que ya no requieren secreto extra
+
+- Si existe `PUBLIC_APP_URL`, las politicas de dropshipping usan automaticamente:
+  - `${PUBLIC_APP_URL}/dropshipping/legal/privacy`
+  - `${PUBLIC_APP_URL}/dropshipping/legal/refund-policy`
+  - `${PUBLIC_APP_URL}/dropshipping/legal/shipping-policy`
+  - `${PUBLIC_APP_URL}/dropshipping/legal/terms`
+  - `${PUBLIC_APP_URL}/dropshipping/legal/checkout-readiness`
+- Por eso `DROPSHIPPING_RETURN_POLICY_URL` y `DROPSHIPPING_PRIVACY_POLICY_URL` solo son necesarios si quieres reemplazar esas rutas por URLs finales de Shopify.
 
 ## Primer dia operativo recomendado
 

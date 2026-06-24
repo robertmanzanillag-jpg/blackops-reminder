@@ -1,5 +1,3 @@
-import { hasRealValue } from "./ceo-doctor-cli";
-
 export type AssistantModelRoute = {
   tier: "cheap_scout" | "strong_supervisor" | "subscription_handoff";
   provider: "gemini" | "openai" | "membership";
@@ -17,15 +15,51 @@ function normalizeText(value = ""): string {
 }
 
 function hasAny(text: string, terms: string[]): boolean {
-  return terms.some((term) => text.includes(term));
+  return terms.some((term) => {
+    if (/^[a-z0-9]{1,3}$/.test(term)) {
+      return new RegExp(`(?:^|\\s)${term}(?:\\s|$)`).test(text);
+    }
+    return text.includes(term);
+  });
 }
 
 function isStrictCostMode(): boolean {
   return (process.env.BLACKOPS_STRICT_COST_MODE || "true").toLowerCase() !== "false";
 }
 
+function hasRealValue(value: unknown): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized && normalized !== "changeme" && normalized !== "replace-me" && normalized !== "todo");
+}
+
+function hasExplicitApiSpendApproval(text: string): boolean {
+  return hasAny(text, [
+    "hazlo aqui",
+    "hazlo aqui no pasa nada",
+    "no pasa nada",
+    "aunque sea caro",
+    "a pesar de que sea caro",
+    "a pesar de que salga caro",
+    "lo apruebo",
+    "te apruebo",
+    "autorizo",
+    "autorizado",
+    "usa la api",
+    "usa api",
+    "usa openai",
+    "usa gemini",
+    "pagalo",
+    "paga la api",
+    "gasta la api",
+    "dale con api",
+    "continua aunque cueste",
+    "continua igual",
+  ]);
+}
+
 export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImages?: boolean }): AssistantModelRoute {
   const text = normalizeText(input.message);
+  const explicitlyApprovedApiSpend = hasExplicitApiSpendApproval(text);
   const heavyManualTerms = [
     "campana completa", "campanas completas", "estrategia completa", "plan completo", "analisis profundo",
     "reporte profundo", "modelo fuerte", "revisalo fuerte", "decision final", "copy final",
@@ -33,7 +67,7 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     "marketing completo", "dropshipping estrategia", "clippers campana", "muchos videos",
     "multiples cuentas", "10 cuentas", "presupuesto de ads", "budget de ads", "retorno de inversion",
   ];
-  if (isStrictCostMode() && text && hasAny(text, heavyManualTerms)) {
+  if (isStrictCostMode() && text && hasAny(text, heavyManualTerms) && !explicitlyApprovedApiSpend) {
     return { tier: "subscription_handoff", provider: "membership", reason: "strict cost mode routes heavy manual work to subscription handoff" };
   }
 
@@ -41,6 +75,9 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout disabled by env" };
   }
   if (!hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY)) {
+    if (isStrictCostMode() && explicitlyApprovedApiSpend) {
+      return { tier: "strong_supervisor", provider: "openai", reason: "Robert explicitly approved API spend despite strict cost mode" };
+    }
     return isStrictCostMode()
       ? { tier: "subscription_handoff", provider: "membership", reason: "cheap scout key not configured and strict cost mode blocks automatic OpenAI fallback" }
       : { tier: "strong_supervisor", provider: "openai", reason: "cheap scout key not configured" };
@@ -78,6 +115,10 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
   const maxCheapChars = Number(process.env.BLACKOPS_WEB_CHEAP_SCOUT_MAX_MESSAGE_CHARS || 900);
   if (text.length <= Math.max(200, maxCheapChars)) {
     return { tier: "cheap_scout", provider: "gemini", reason: "short low-risk chat fallback" };
+  }
+
+  if (isStrictCostMode() && explicitlyApprovedApiSpend) {
+    return { tier: "strong_supervisor", provider: "openai", reason: "Robert explicitly approved API spend for an ambiguous or heavy request" };
   }
 
   return isStrictCostMode()
