@@ -1,12 +1,16 @@
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Readable } from "stream";
+import { pipeline } from "node:stream/promises";
 import { getGoogleAccessToken, getGoogleOAuthClient, hasReplitGoogleConnectorEnv } from "./google-calendar";
 import { getGoogleDriveOAuthClient, getGoogleDriveRefreshTokenFromEnv, hasGoogleDriveOAuthClientConfig } from "./google-drive-oauth";
 import { getSystemUserId } from "./user-context";
 import { hasRealValue } from "./ceo-doctor-cli";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+const DEFAULT_MAX_DRIVE_VIDEO_DOWNLOAD_BYTES = 3 * 1024 * 1024 * 1024;
+const ALLOWED_VIDEO_MIME_TYPES = new Set(["application/octet-stream"]);
 export const DRIVE_APP_ROOT_FOLDER = "Robert A";
 export const DRIVE_RADIO_FLYERS_FOLDER = "Flyers de la radio";
 export const DRIVE_BLACK_ROOM_VIDEOS_FOLDER = "Videos de Black Room";
@@ -16,6 +20,13 @@ export interface DriveUploadResult {
   fileId: string;
   webViewLink: string | null;
   webContentLink: string | null;
+}
+
+export interface DriveDownloadResult {
+  fileId: string;
+  name: string;
+  mimeType: string | null;
+  filePath: string;
 }
 
 export interface DriveFolderSetupResult {
@@ -266,6 +277,95 @@ async function findFileInFolder(drive: any, filename: string, folderId: string):
   });
 
   return response.data.files?.[0]?.id || null;
+}
+
+function sanitizeDriveDownloadFilename(value: string, fallback: string, mimeType?: string | null): string {
+  const cleaned = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 140);
+  const base = cleaned || fallback;
+  if (path.extname(base)) return base;
+  if (mimeType === "video/mp4") return `${base}.mp4`;
+  if (mimeType === "video/quicktime") return `${base}.mov`;
+  return base;
+}
+
+function getMaxDriveVideoDownloadBytes(): number {
+  const raw = process.env.RADIO_MAX_DRIVE_VIDEO_BYTES || process.env.MAX_DRIVE_VIDEO_DOWNLOAD_BYTES;
+  if (!raw) return DEFAULT_MAX_DRIVE_VIDEO_DOWNLOAD_BYTES;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_DRIVE_VIDEO_DOWNLOAD_BYTES;
+}
+
+function isAllowedDriveVideoMimeType(mimeType?: string | null): boolean {
+  if (!mimeType) return true;
+  if (mimeType.startsWith("video/")) return true;
+  return ALLOWED_VIDEO_MIME_TYPES.has(mimeType);
+}
+
+export async function downloadDriveFileToPath(params: {
+  fileId: string;
+  outputDir: string;
+  userId?: string;
+  allowedExtensions?: Set<string>;
+}): Promise<DriveDownloadResult> {
+  try {
+    const drive = await getDriveClient(params.userId || getSystemUserId());
+    const metadata = await drive.files.get({
+      fileId: params.fileId,
+      fields: "id, name, mimeType, size",
+      supportsAllDrives: true,
+    });
+    const name = String(metadata.data.name || `${params.fileId}.mp4`);
+    const mimeType = metadata.data.mimeType || null;
+    const sizeBytes = metadata.data.size ? Number(metadata.data.size) : null;
+    if (mimeType?.startsWith("application/vnd.google-apps.")) {
+      throw new Error("El archivo de Drive no es un MP4 descargable. Sube o comparte el archivo de video original.");
+    }
+    if (!isAllowedDriveVideoMimeType(mimeType)) {
+      throw new Error(`El archivo de Drive debe ser un video MP4/MOV/M4V, pero recibí ${mimeType}.`);
+    }
+    const maxBytes = getMaxDriveVideoDownloadBytes();
+    if (sizeBytes && sizeBytes > maxBytes) {
+      throw new Error(`El video de Drive pesa ${(sizeBytes / 1024 / 1024 / 1024).toFixed(1)}GB y supera el límite configurado de ${(maxBytes / 1024 / 1024 / 1024).toFixed(1)}GB.`);
+    }
+
+    const filename = sanitizeDriveDownloadFilename(name, `${params.fileId}.mp4`, mimeType);
+    const extension = path.extname(filename).toLowerCase();
+    if (params.allowedExtensions?.size && !params.allowedExtensions.has(extension)) {
+      throw new Error(`El archivo de Drive debe ser video MP4/MOV/M4V, pero recibí ${extension || "sin extensión"}.`);
+    }
+
+    const safeFileId = params.fileId.replace(/[^a-zA-Z0-9_-]+/g, "").slice(0, 48) || "drive-file";
+    const jobDir = path.join(params.outputDir, `${Date.now()}-${randomUUID()}-${safeFileId}`);
+    await fs.promises.mkdir(jobDir, { recursive: true });
+    const filePath = path.join(jobDir, filename);
+    const response = await drive.files.get(
+      { fileId: params.fileId, alt: "media", supportsAllDrives: true },
+      { responseType: "stream" },
+    );
+    try {
+      await pipeline(response.data as NodeJS.ReadableStream, fs.createWriteStream(filePath));
+    } catch (error) {
+      await fs.promises.rm(filePath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+
+    return {
+      fileId: params.fileId,
+      name,
+      mimeType,
+      filePath,
+    };
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing.");
+    }
+    throw error;
+  }
 }
 
 export async function uploadLocalFileToDriveFolder(params: {

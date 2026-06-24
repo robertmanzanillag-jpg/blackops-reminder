@@ -17,7 +17,7 @@ export function extractGoogleDriveFolderIdFromUrl(value?: string | null): string
   for (const match of urlMatches) {
     try {
       const url = new URL(match.replace(/[),.;]+$/, ""));
-      const id = cleanDriveFolderId(url.searchParams.get("id") || url.searchParams.get("folderId"));
+      const id = cleanDriveFolderId(url.searchParams.get("folderId"));
       if (id) return id;
     } catch {
       continue;
@@ -26,4 +26,3 @@ export function extractGoogleDriveFolderIdFromUrl(value?: string | null): string
 
   return null;
 }
-

@@ -15,7 +15,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -285,7 +285,8 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
-- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
+- [RADIO_DRIVE_VIDEO_CLIPS: {"sourceDriveFileId": "GOOGLE_DRIVE_FILE_ID", "sourceDriveUrl": "https://drive.google.com/file/d/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
 - [ELIMINAR_INVERSION: {"symbol": "AAPL"}]
@@ -299,7 +300,10 @@ INFORMACIÓN SOBRE RADIO:
 - Si el usuario manda un YouTube y pide sacar clips/videos de radio, usa RADIO_YOUTUBE_CLIPS. Necesitas driveFolderPath; si no dice carpeta de Drive, pregunta antes.
 - Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, incluye createFolderIfMissing:true. Si solo pide guardar en una carpeta, deja que el sistema confirme si no existe.
 - Si el usuario dice el DJ o aparece claro en el contexto, incluye djName. Si no, el sistema intenta leerlo abajo a la izquierda del video y pregunta si no lo encuentra.
+- Por defecto genera 1 clip para Instagram 4:5 y 1 clip para TikTok/Reels 9:16. Si el usuario pide cantidad, usa instagramClipCount y tiktokClipCount; “3 de IG y TikTok” significa 3 y 3 con momentos distintos.
 - Si pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente. Si manda un segundo link, usa ese audio externo.
+- Para YouTube, usa deleteSourceAfterSuccess:true salvo que el usuario pida conservar el video largo; el sistema borra solo el MP4 fuente descargado después de subir los clips.
+- Si YouTube bloquea la descarga y el usuario manda un link de archivo MP4 de Google Drive, usa RADIO_DRIVE_VIDEO_CLIPS. El sistema descarga ese MP4 temporalmente, crea clips, los sube a Drive y borra el MP4 local al completar.
 - Si el usuario pide crear carpetas o subcarpetas en Google Drive, usa GOOGLE_DRIVE_CREATE_FOLDER. Si no dice la ruta/nombre exacto, pregunta antes.
 
 METRICOOL / SOCIAL PUBLISHING:
@@ -410,6 +414,20 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
       return `Guardé el nombre ${djNameResolution.djName}, pero falló el render: ${result.error}`;
     }
     return `✅ Listo. Guardé ${djNameResolution.djName} y generé los clips de radio.`;
+  }
+
+  const directRadioDriveVideoCommand = buildDirectRadioDriveVideoCommand(message);
+  if (directRadioDriveVideoCommand) {
+    if (directRadioDriveVideoCommandNeedsDriveFolder(directRadioDriveVideoCommand) || directRadioDriveVideoCommand.needsMusicUrl) {
+      return directRadioDriveVideoCommand.content;
+    }
+
+    try {
+      const result = await executeDirectRadioDriveVideoCommand(directRadioDriveVideoCommand, userId);
+      return formatRadioDriveVideoResult(result);
+    } catch (error) {
+      return `No pude procesar ese MP4 de Drive para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
+    }
   }
 
   const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
@@ -1015,12 +1033,40 @@ async function processAssistantResponse(userId: string, response: string): Promi
         driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
         djName: radioYoutubeData.djName,
         musicUrl: radioYoutubeData.musicUrl,
+        instagramClipCount: Number.isFinite(Number(radioYoutubeData.instagramClipCount)) ? Number(radioYoutubeData.instagramClipCount) : undefined,
+        tiktokClipCount: Number.isFinite(Number(radioYoutubeData.tiktokClipCount)) ? Number(radioYoutubeData.tiktokClipCount) : undefined,
+        deleteSourceAfterSuccess: radioYoutubeData.deleteSourceAfterSuccess !== false,
         content: "Voy a procesar ese YouTube para radio.",
         command: radioYoutubeMatch[0],
       }, userId);
       actions.push(formatRadioYoutubeResult(result));
     } catch (e) {
       actions.push(`No pude procesar el YouTube de radio: ${e instanceof Error ? e.message : "error desconocido"}`);
+    }
+  }
+
+  const radioDriveVideoRegex = /\[RADIO_DRIVE_VIDEO_CLIPS:\s*(\{[^}]+\})\]/g;
+  let radioDriveVideoMatch;
+  while ((radioDriveVideoMatch = radioDriveVideoRegex.exec(response)) !== null) {
+    try {
+      const radioDriveVideoData = JSON.parse(radioDriveVideoMatch[1]);
+      const result = await executeDirectRadioDriveVideoCommand({
+        sourceDriveFileId: radioDriveVideoData.sourceDriveFileId,
+        sourceDriveUrl: radioDriveVideoData.sourceDriveUrl,
+        driveFolderPath: Array.isArray(radioDriveVideoData.driveFolderPath) ? radioDriveVideoData.driveFolderPath : [],
+        driveParentFolderId: typeof radioDriveVideoData.driveParentFolderId === "string" ? radioDriveVideoData.driveParentFolderId : undefined,
+        createFolderIfMissing: Boolean(radioDriveVideoData.createFolderIfMissing),
+        djName: radioDriveVideoData.djName,
+        musicUrl: radioDriveVideoData.musicUrl,
+        instagramClipCount: Number.isFinite(Number(radioDriveVideoData.instagramClipCount)) ? Number(radioDriveVideoData.instagramClipCount) : undefined,
+        tiktokClipCount: Number.isFinite(Number(radioDriveVideoData.tiktokClipCount)) ? Number(radioDriveVideoData.tiktokClipCount) : undefined,
+        deleteSourceAfterSuccess: radioDriveVideoData.deleteSourceAfterSuccess !== false,
+        content: "Voy a procesar ese MP4 de Drive para radio.",
+        command: radioDriveVideoMatch[0],
+      }, userId);
+      actions.push(formatRadioDriveVideoResult(result));
+    } catch (e) {
+      actions.push(`No pude procesar el MP4 de Drive: ${e instanceof Error ? e.message : "error desconocido"}`);
     }
   }
 
