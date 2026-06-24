@@ -1,13 +1,18 @@
 import type { Express, Request, Response } from "express";
-import { chatStorage } from "./storage";
+import { chatStorage, stripScopedConversationTitle } from "./storage";
 import { getGeminiClient } from "../../gemini-client";
+import { getCurrentUserId } from "../../user-context";
+
+function stripConversationOwner<T extends { title: string }>(conversation: T): T {
+  return { ...conversation, title: stripScopedConversationTitle(conversation.title) };
+}
 
 export function registerChatRoutes(app: Express): void {
   // Get all conversations
   app.get("/api/conversations", async (req: Request, res: Response) => {
     try {
-      const conversations = await chatStorage.getAllConversations();
-      res.json(conversations);
+      const conversations = await chatStorage.getAllConversations(getCurrentUserId(req));
+      res.json(conversations.map(stripConversationOwner));
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ error: "Failed to fetch conversations" });
@@ -18,12 +23,12 @@ export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const conversation = await chatStorage.getConversation(id);
+      const conversation = await chatStorage.getConversation(id, getCurrentUserId(req));
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
       const messages = await chatStorage.getMessagesByConversation(id);
-      res.json({ ...conversation, messages });
+      res.json({ ...stripConversationOwner(conversation), messages });
     } catch (error) {
       console.error("Error fetching conversation:", error);
       res.status(500).json({ error: "Failed to fetch conversation" });
@@ -34,8 +39,8 @@ export function registerChatRoutes(app: Express): void {
   app.post("/api/conversations", async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
-      const conversation = await chatStorage.createConversation(title || "New Chat");
-      res.status(201).json(conversation);
+      const conversation = await chatStorage.createConversation(title || "New Chat", getCurrentUserId(req));
+      res.status(201).json(stripConversationOwner(conversation));
     } catch (error) {
       console.error("Error creating conversation:", error);
       res.status(500).json({ error: "Failed to create conversation" });
@@ -46,7 +51,7 @@ export function registerChatRoutes(app: Express): void {
   app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      await chatStorage.deleteConversation(id);
+      await chatStorage.deleteConversation(id, getCurrentUserId(req));
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting conversation:", error);
@@ -59,6 +64,10 @@ export function registerChatRoutes(app: Express): void {
     try {
       const conversationId = parseInt(req.params.id);
       const { content } = req.body;
+      const conversation = await chatStorage.getConversation(conversationId, getCurrentUserId(req));
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
 
       // Save user message
       await chatStorage.createMessage(conversationId, "user", content);

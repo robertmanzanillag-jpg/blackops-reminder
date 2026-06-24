@@ -125,6 +125,20 @@ test("shared Google integrations are gated to the configured single-user owner",
   assert.match(routesSource, /shared Google integrations are connected/, "Google rejection should explain the shared integration limitation");
 });
 
+test("Replit chat conversation routes are scoped to the authenticated owner", () => {
+  const routesSource = readFileSync("server/replit_integrations/chat/routes.ts", "utf8");
+  const storageSource = readFileSync("server/replit_integrations/chat/storage.ts", "utf8");
+
+  assert.match(routesSource, /getAllConversations\(getCurrentUserId\(req\)\)/, "conversation list should read only the authenticated owner's conversations");
+  assert.match(routesSource, /getConversation\(id, getCurrentUserId\(req\)\)/, "conversation detail should verify owner before returning messages");
+  assert.match(routesSource, /createConversation\(title \|\| "New Chat", getCurrentUserId\(req\)\)/, "conversation creation should write owner-scoped records");
+  assert.match(routesSource, /deleteConversation\(id, getCurrentUserId\(req\)\)/, "conversation delete should be owner-scoped");
+  assert.match(routesSource, /getConversation\(conversationId, getCurrentUserId\(req\)\)/, "message send should verify conversation owner before mutating history");
+  assert.match(storageSource, /ownerTitlePrefix\(userId: string\)/, "chat storage should have an owner marker for legacy conversation rows");
+  assert.match(storageSource, /conversation\.title\.startsWith\(ownerTitlePrefix\(userId\)\)/, "chat storage should reject records outside the owner marker");
+  assert.match(storageSource, /stripScopedConversationTitle/, "chat storage should hide the internal owner marker from clients");
+});
+
 test("Clippers OAuth callbacks and token vault records keep explicit owner metadata", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
