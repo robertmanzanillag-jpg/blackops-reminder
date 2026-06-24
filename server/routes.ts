@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { readFile as readNodeFile } from "fs/promises";
 import { spawn } from "child_process";
@@ -52,6 +52,31 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function requireOwnerApi(req: Request, res: Response, next: NextFunction): void {
+  let requestUserId: string;
+  try {
+    requestUserId = getCurrentUserId(req);
+  } catch {
+    res.status(401).json({ error: "Authentication required", reason: "missing_user_context" });
+    return;
+  }
+  let ownerId: string;
+  try {
+    ownerId = getSystemUserId();
+  } catch {
+    if (process.env.NODE_ENV === "production") {
+      res.status(503).json({ error: "Owner not configured", reason: "missing_default_user_id" });
+      return;
+    }
+    return next();
+  }
+  if (requestUserId !== ownerId) {
+    res.status(403).json({ error: "Forbidden", reason: "owner_only" });
+    return;
+  }
+  next();
 }
 
 export function buildClipperExternalCloseoutNextActionCopyPacket(nextAction: any): string {
@@ -930,8 +955,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET Calendar connection status (Google + Zoho)
-  app.get("/api/calendar/status", async (req, res) => {
+  // GET Calendar connection status (Google + Zoho) — owner-only
+  app.get("/api/calendar/status", requireOwnerApi, async (req, res) => {
     try {
       const googleConnected = await isGoogleCalendarConnected();
       const zohoStatus = await checkZohoConnection();
@@ -951,8 +976,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET Google Drive OAuth status
-  app.get("/api/google-drive/status", async (req, res) => {
+  // GET Google Drive OAuth status — owner-only
+  app.get("/api/google-drive/status", requireOwnerApi, async (req, res) => {
     try {
       const status = await getGoogleDriveOAuthStatus(getCurrentUserId(req));
       res.json(status);
@@ -1069,7 +1094,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google-drive/organize", async (req, res) => {
+  app.post("/api/google-drive/organize", requireOwnerApi, async (req, res) => {
     try {
       const result = await ensureAppDriveStructure(getCurrentUserId(req));
       res.json(result);
@@ -1078,8 +1103,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET Google Drive OAuth authorization URL - redirects to Google login/approval
-  app.get("/api/google-drive/auth", (req, res) => {
+  // GET Google Drive OAuth authorization URL - redirects to Google login/approval (owner-only)
+  app.get("/api/google-drive/auth", requireOwnerApi, (req, res) => {
     try {
       res.redirect(createGoogleDriveAuthorizationUrl(getCurrentUserId(req), req));
     } catch (error: any) {
@@ -1198,8 +1223,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST Zoho Calendar sync
-  app.post("/api/calendar/zoho/sync", async (req, res) => {
+  // POST Zoho Calendar sync — owner-only
+  app.post("/api/calendar/zoho/sync", requireOwnerApi, async (req, res) => {
     try {
       const result = await syncZohoCalendar(getCurrentUserId(req));
       res.json({ success: true, synced: result.synced, errors: result.errors });
@@ -1270,8 +1295,8 @@ export async function registerRoutes(
     `);
   });
 
-  // GET Google Calendar events and sync to local tasks
-  app.post("/api/calendar/sync", async (req, res) => {
+  // POST Google Calendar sync — owner-only
+  app.post("/api/calendar/sync", requireOwnerApi, async (req, res) => {
     try {
       const result = await syncGoogleCalendarToTasks(getCurrentUserId(req));
       res.json({ success: true, ...result });
@@ -1281,8 +1306,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET calendar events without syncing (just for display)
-  app.get("/api/calendar/events", async (req, res) => {
+  // GET calendar events without syncing — owner-only
+  app.get("/api/calendar/events", requireOwnerApi, async (req, res) => {
     try {
       const weekStart = new Date();
       weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));

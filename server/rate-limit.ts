@@ -40,8 +40,8 @@ export function checkRateLimit(
 }
 
 function getClientKey(req: Request, scope: string): string {
-  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  return `${scope}:${forwarded || req.ip || req.socket.remoteAddress || "unknown"}`;
+  const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+  return `${scope}:${clientIp}`;
 }
 
 export function createRateLimiter(options: {
