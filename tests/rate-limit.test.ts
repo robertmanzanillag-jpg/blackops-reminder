@@ -94,6 +94,35 @@ test("uses persistent rate limit store before in-memory fallback", async () => {
   assert.equal(keys[0], "telegram-webhook:10.0.0.1:2:1000");
 });
 
+test("does not trust spoofed x-forwarded-for headers for bucket identity", async () => {
+  const keys: string[] = [];
+  const limiter = createRateLimiter({
+    scope: "public-api",
+    limit: 2,
+    windowMs: 1000,
+    persistentStore: {
+      async checkPersistentRateLimit(key, limit, windowMs) {
+        keys.push(`${key}:${limit}:${windowMs}`);
+        return { allowed: true, remaining: 1, resetAt: 1100 };
+      },
+    },
+  });
+  const res = mockRes();
+  let nextCalled = false;
+  const req = {
+    ip: "10.0.0.5",
+    socket: { remoteAddress: "10.0.0.5" },
+    header(name: string) {
+      return name.toLowerCase() === "x-forwarded-for" ? "198.51.100.77" : undefined;
+    },
+  } as any;
+
+  await limiter(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, true);
+  assert.equal(keys[0], "public-api:10.0.0.5:2:1000");
+});
+
 test("falls back to in-memory rate limit store when persistent store fails", async () => {
   const errors: unknown[] = [];
   const limiter = createRateLimiter({

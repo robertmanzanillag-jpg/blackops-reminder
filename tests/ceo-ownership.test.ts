@@ -115,6 +115,16 @@ test("Clippers API is gated to the configured single-user owner while local arti
   assert.match(routesSource, /local workspace, token vault, and launch artifacts are shared/, "Clippers rejection should explain the shared local artifact limitation");
 });
 
+test("shared Google integrations are gated to the configured single-user owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /app\.use\(\["\/api\/calendar", "\/api\/google-drive"\]/, "shared Google APIs should have a route guard");
+  assert.match(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Google OAuth callbacks should bypass the owner guard after public callback classification");
+  assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const googleOwnerUserId = getSystemUserId\(\);/s, "Google guard should compare authenticated user to configured owner");
+  assert.match(routesSource, /if \(userId !== googleOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Google APIs should reject non-owner users while connectors are shared");
+  assert.match(routesSource, /shared Google integrations are connected/, "Google rejection should explain the shared integration limitation");
+});
+
 test("Clippers OAuth callbacks and token vault records keep explicit owner metadata", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
