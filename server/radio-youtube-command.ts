@@ -96,7 +96,7 @@ function cleanFolderHint(value?: string): string | null {
     .replace(/^[\s:]+|[\s:]+$/g, "")
     .trim();
 
-  if (/^(?:de|del|la|el|los|las|en|a|esta|este|esa|ese|aqui|ah[ií]|drive|google drive)$/i.test(cleaned)) return null;
+  if (/^(?:de|del|la|el|los|las|mi|mis|tu|tus|su|sus|en|a|esta|este|esa|ese|enviada?|enviado|link|url|aqui|ah[ií]|drive|google drive)$/i.test(cleaned)) return null;
   return cleaned.length >= 2 ? cleaned : null;
 }
 
@@ -238,7 +238,12 @@ export function extractDriveFolderPathFromMessage(message: string): string[] | n
     ];
 
     for (const pattern of driveUrlChildPatterns) {
-      const cleaned = cleanCreateFolderHint(messageWithoutDriveUrls.match(pattern)?.[1]);
+      const match = messageWithoutDriveUrls.match(pattern);
+      const matchText = match?.[0] || "";
+      if (match && !/\b(?:crea|crear|creame|créame|haz(?:me)?|usa(?:r)?|subcarpeta|llamada?|nombre)\b/i.test(matchText)) {
+        continue;
+      }
+      const cleaned = cleanCreateFolderHint(match?.[1]);
       if (cleaned) return splitDriveFolderPath(cleaned);
     }
   }
