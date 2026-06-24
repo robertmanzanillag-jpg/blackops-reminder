@@ -39,9 +39,12 @@ export function checkRateLimit(
   return { allowed: true, remaining: Math.max(0, limit - existing.count), resetAt: existing.resetAt };
 }
 
+export function getClientRateLimitAddress(req: Request): string {
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
+
 function getClientKey(req: Request, scope: string): string {
-  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  return `${scope}:${forwarded || req.ip || req.socket.remoteAddress || "unknown"}`;
+  return `${scope}:${getClientRateLimitAddress(req)}`;
 }
 
 export function createRateLimiter(options: {

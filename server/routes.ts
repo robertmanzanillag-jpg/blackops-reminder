@@ -930,6 +930,18 @@ export async function registerRoutes(
     }
   });
 
+  app.use(["/api/calendar", "/api/google-drive"], (req, res, next) => {
+    if (isPublicApiRequest(req)) return next();
+    const userId = getCurrentUserId(req);
+    const googleOwnerUserId = getSystemUserId();
+    if (userId !== googleOwnerUserId) {
+      return res.status(403).json({
+        error: "Google Calendar and Drive tools are limited to the configured single-user owner while shared Google integrations are connected.",
+      });
+    }
+    return next();
+  });
+
   // GET Calendar connection status (Google + Zoho)
   app.get("/api/calendar/status", async (req, res) => {
     try {
