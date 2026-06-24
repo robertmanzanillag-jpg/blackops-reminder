@@ -182,7 +182,7 @@ type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" |
 type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready_with_external_blockers" | "metricool_mvp_ready" | "ready";
 type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "metricool_mvp_ready" | "full_ready";
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
-type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
+type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "partial_import_applied" | "ready_to_apply" | "partial_ready_to_apply" | "empty";
 type ClipperExternalGoLiveAuditGateStatus = "blocked" | "verified";
 
 interface ClipperPlatformAccount {
@@ -16680,11 +16680,11 @@ export default function ClippersPage() {
                               <p className="mt-1 text-xs leading-5 text-zinc-500">Rejected CSV rows mapped back to the proof/action to fix.</p>
                             </div>
                             <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
-                              {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.length} repairs
+                              {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).length} repairs
                             </Badge>
                           </div>
                           <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 8).map((row) => (
+                            {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).slice(0, 8).map((row) => (
                               <div key={`${row.rank}-${row.id}`} className="rounded-md border border-amber-300/10 bg-black/25 p-2">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="min-w-0 truncate text-xs font-medium text-amber-100">Row {row.csvRow || "?"}: {row.id}</p>

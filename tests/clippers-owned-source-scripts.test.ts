@@ -951,7 +951,7 @@ test("external closeout pack lists remaining account developer and permission ac
   assert.match(ui, /data-testid="clippers-external-go-live-audit"/);
   assert.match(ui, /data-testid="clippers-external-go-live-work-blocks"/);
   assert.match(ui, /data-testid="clippers-external-go-live-repair-queue"/);
-  assert.match(ui, /evidenceRepairQueue\.slice\(0, 8\)/);
+  assert.match(ui, /\(externalCloseoutPack\.goLiveAudit\.evidenceRepairQueue \|\| \[\]\)\.slice\(0, 8\)/);
   assert.match(ui, /<details/);
   assert.match(ui, /row\.copyPacket/);
   assert.match(ui, /External Go-Live Audit/);

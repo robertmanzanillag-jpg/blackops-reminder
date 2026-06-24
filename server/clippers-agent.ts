@@ -29024,7 +29024,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
     ).length;
     const manualPackageReadyPosts = input.publishingPackage.items.filter((item) =>
       item.accountId === channel.accountId
-      && (item.status === "ready_for_manual" || item.status === "scheduled")
+      && item.status === "ready_for_manual"
       && channel.connectedNetworks.includes(item.platform)
     ).length;
     const manualReadyPosts = manualPackageReadyPosts;
@@ -30592,11 +30592,11 @@ function productionDnsLookupTimeoutMs(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 5_000;
 }
 
-async function lookupProductionDnsRecords(host: string): Promise<Awaited<ReturnType<typeof dns.lookup>>> {
+async function lookupProductionDnsRecords(host: string): Promise<Array<{ address: string; family: number }>> {
   let timeout: NodeJS.Timeout | null = null;
   try {
     return await Promise.race([
-      dns.lookup(host, { all: true }),
+      dns.lookup(host, { all: true }) as Promise<Array<{ address: string; family: number }>>,
       new Promise<never>((_, reject) => {
         timeout = setTimeout(() => {
           reject(new Error(`DNS lookup timed out after ${productionDnsLookupTimeoutMs()}ms`));

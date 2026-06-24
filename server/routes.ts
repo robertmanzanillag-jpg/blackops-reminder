@@ -5655,7 +5655,7 @@ export async function registerRoutes(
         storage.getAutomationRuns(userId, undefined, 500),
         storage.getAutomationDefinitions(userId),
       ]);
-      res.json(buildMonthlyAiSpendReport(runs, undefined, automations));
+      res.json({ ...buildMonthlyAiSpendReport(runs), automations });
     } catch (error) {
       res.status(500).json({ error: "Failed to build AI spend report" });
     }
