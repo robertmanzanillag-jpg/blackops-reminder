@@ -1,6 +1,57 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile } from "fs/promises";
+import { mkdir, rm, readFile } from "fs/promises";
+import { spawn } from "child_process";
+
+function runCommand(command: string, args: string[], timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: "inherit",
+      env: process.env,
+    });
+    let didTimeout = false;
+    const timer = setTimeout(() => {
+      didTimeout = true;
+      child.kill("SIGKILL");
+    }, timeoutMs);
+
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (didTimeout) {
+        reject(new Error(`${command} timed out`));
+        return;
+      }
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} exited with ${code}`));
+    });
+  });
+}
+
+async function bundleFreshYtDlp() {
+  const targetDir = "dist/yt-dlp-python";
+  await mkdir(targetDir, { recursive: true });
+  try {
+    console.log("installing fresh yt-dlp for production...");
+    await runCommand("python3", [
+      "-m",
+      "pip",
+      "install",
+      "--upgrade",
+      "--target",
+      targetDir,
+      "yt-dlp",
+    ], 3 * 60 * 1000);
+  } catch (error) {
+    console.warn("[build] could not bundle fresh yt-dlp:", error instanceof Error ? error.message : error);
+  }
+}
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -37,6 +88,8 @@ async function buildAll() {
 
   console.log("building client...");
   await viteBuild();
+
+  await bundleFreshYtDlp();
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
