@@ -137,21 +137,55 @@ test("includes estimated cost in completed radio YouTube summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
 });
 
-test("yt-dlp command specs try 1080p video with and without JS runtime flags", () => {
-  const specs = buildYtDlpCommandSpecs({
-    url: "https://youtu.be/GcVZvXkz2jU",
-    outputTemplate: "/tmp/%(id)s.%(ext)s",
-    mode: "video",
-    explicitBinary: "/workspace/bin/yt-dlp",
-    cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
-  });
+test("yt-dlp command specs try 1080p video without JS runtime flags by default", () => {
+  const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
 
-  assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
-  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
-  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
-  assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
-  assert.ok(specs.every((spec) => spec.args.includes("bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best")));
-  assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
+  try {
+    delete process.env.YT_DLP_JS_RUNTIMES;
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+      explicitBinary: "/workspace/bin/yt-dlp",
+      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+    });
+
+    assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
+    assert.ok(specs.every((spec) => !spec.args.includes("--js-runtimes")));
+    assert.ok(specs.every((spec) => spec.args.includes("bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best")));
+    assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
+  } finally {
+    if (previousRuntimeConfig === undefined) {
+      delete process.env.YT_DLP_JS_RUNTIMES;
+    } else {
+      process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
+    }
+  }
+});
+
+test("yt-dlp command specs allow explicit JS runtime flags", () => {
+  const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
+
+  try {
+    process.env.YT_DLP_JS_RUNTIMES = "deno,node";
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+      explicitBinary: "/workspace/bin/yt-dlp",
+      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+    });
+
+    assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
+    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
+    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
+  } finally {
+    if (previousRuntimeConfig === undefined) {
+      delete process.env.YT_DLP_JS_RUNTIMES;
+    } else {
+      process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
+    }
+  }
 });
 
 test("yt-dlp command specs materialize YouTube cookies from base64 secret", () => {

@@ -81,6 +81,23 @@ function uniqueCommandSpecs(specs: YtDlpCommandSpec[]): YtDlpCommandSpec[] {
   });
 }
 
+function configuredJsRuntimeVariants(): string[][] {
+  const rawRuntimes = process.env.YT_DLP_JS_RUNTIMES?.trim();
+  if (!hasConfiguredValue(rawRuntimes) || /^(0|false|off|none|disabled)$/i.test(rawRuntimes)) {
+    return [[]];
+  }
+
+  const runtimes = rawRuntimes
+    .split(/[,\s]+/)
+    .map((runtime) => runtime.trim())
+    .filter(Boolean);
+
+  return [
+    [],
+    ...runtimes.map((runtime) => ["--js-runtimes", runtime]),
+  ];
+}
+
 export function buildYtDlpCommandSpecs(params: {
   url: string;
   outputTemplate: string;
@@ -103,11 +120,7 @@ export function buildYtDlpCommandSpecs(params: {
     params.outputTemplate,
     params.url,
   ];
-  const runtimeVariants = [
-    ["--js-runtimes", "deno"],
-    ["--js-runtimes", "node"],
-    [],
-  ];
+  const runtimeVariants = configuredJsRuntimeVariants();
   const binaries = [
     ...(params.explicitBinary?.trim() ? [params.explicitBinary.trim()] : []),
     "yt-dlp",
