@@ -76,6 +76,8 @@ export default function AssistantPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const recordingTimeoutRef = useRef<number | null>(null);
+  const accumulatedCostRef = useRef(0);
+  const taskStartTimeRef = useRef<number>(0);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -288,6 +290,8 @@ export default function AssistantPage() {
     const currentImages = [...selectedImages];
     setInput("");
     setSelectedImages([]);
+    accumulatedCostRef.current = 0;
+    taskStartTimeRef.current = Date.now();
 
     const imageCountText =
       currentImages.length > 1
@@ -356,6 +360,9 @@ export default function AssistantPage() {
         if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
           setAssistantStatus(data.assistantStatus.trim());
         }
+        if (typeof data.estimatedApiCostUsd === "number" && data.estimatedApiCostUsd > 0) {
+          accumulatedCostRef.current += data.estimatedApiCostUsd;
+        }
         if (
           data.taskCreated ||
           data.radioUpdated ||
@@ -408,6 +415,16 @@ export default function AssistantPage() {
       }
       streamBuffer += decoder.decode();
       if (streamBuffer.trim()) processStreamEvent(streamBuffer);
+
+      if (!assistantMessage.trim()) {
+        const elapsedMin = Math.round((Date.now() - taskStartTimeRef.current) / 60000);
+        const costPart = accumulatedCostRef.current > 0
+          ? ` Gasto estimado de esta corrida: ~$${accumulatedCostRef.current.toFixed(4)} USD.`
+          : "";
+        const timePart = elapsedMin > 0 ? ` (${elapsedMin} min de procesamiento)` : "";
+        assistantMessage = `No pude completar la acción porque el proceso terminó sin devolver un resultado final${timePart}.${costPart} Intenta de nuevo o revisa los logs de producción para más detalles.`;
+        updateAssistantMessage();
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       setMessages((prev) => [
@@ -614,20 +631,20 @@ export default function AssistantPage() {
                               ))}
                             </div>
                           )}
-                          <p className="whitespace-pre-wrap">{formatContent(msg.content) || (isLoading && i === messages.length - 1 ? "Trabajando..." : "Listo.")}</p>
+                          <p className="whitespace-pre-wrap">{formatContent(msg.content) || (isLoading && i === messages.length - 1 ? "Trabajando..." : "")}</p>
                         </div>
                         <span className="mt-1 block px-1 text-[11px] text-zinc-600">{formatTime(msg.timestamp)}</span>
                       </div>
                     </motion.div>
                   ))}
-                  {isLoading && (messages[messages.length - 1]?.role === "user" || assistantStatus) && (
+                  {isLoading && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
                       <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
                         <Bot className="h-4 w-4 text-zinc-100" />
                       </div>
-                      <div className="flex max-w-[88%] items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-400 md:max-w-[72%]" data-testid="assistant-working-status">
-                        <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
-                        {assistantStatus || "Pensando y revisando tu contexto..."}
+                      <div className="flex max-w-[88%] items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-950/20 px-4 py-3 text-sm text-amber-200/80 md:max-w-[72%]" data-testid="assistant-working-status">
+                        <Loader2 className="h-4 w-4 animate-spin text-amber-300 shrink-0" />
+                        <span>{assistantStatus || "Trabajando, esto puede tardar unos minutos..."}</span>
                       </div>
                     </motion.div>
                   )}

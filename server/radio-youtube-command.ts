@@ -241,6 +241,7 @@ export function extractDriveFolderPathFromMessage(message: string): string[] | n
       const cleaned = cleanCreateFolderHint(messageWithoutDriveUrls.match(pattern)?.[1]);
       if (cleaned) return splitDriveFolderPath(cleaned);
     }
+    return null;
   }
 
   const createFolderPath = extractDriveCreateFolderPath(message);
