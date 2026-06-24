@@ -161,14 +161,50 @@ function shouldAutoInstallFreshYtDlp(): boolean {
   return !/^(0|false|off|none|disabled)$/i.test(configured || "");
 }
 
+function pythonEnvForYtDlpPackageDir(packageDir: string): NodeJS.ProcessEnv {
+  const currentPythonPath = process.env.PYTHONPATH?.trim();
+  return {
+    ...process.env,
+    PYTHONPATH: currentPythonPath ? `${packageDir}${path.delimiter}${currentPythonPath}` : packageDir,
+  };
+}
+
+async function packageSupportsYtDlpJsRuntimes(packageDir: string): Promise<boolean> {
+  try {
+    await runCommand("python3", [
+      "-m",
+      "yt_dlp",
+      "--js-runtimes",
+      "node",
+      "--version",
+    ], {
+      timeoutMs: 15_000,
+      env: pythonEnvForYtDlpPackageDir(packageDir),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function existingFreshYtDlpPackageDir(packageDir: string): Promise<string | null> {
+  const packageMarker = path.join(packageDir, "yt_dlp", "__init__.py");
+  if (!(await pathExists(packageMarker))) return null;
+  return (await packageSupportsYtDlpJsRuntimes(packageDir)) ? packageDir : null;
+}
+
 async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
   if (!shouldAutoInstallFreshYtDlp()) return null;
 
+  const bundledDir = process.env.YT_DLP_BUNDLED_PYTHON_DIR?.trim()
+    || path.join(process.cwd(), "dist", "yt-dlp-python");
+  const existingBundledDir = await existingFreshYtDlpPackageDir(bundledDir);
+  if (existingBundledDir) return existingBundledDir;
+
   const targetDir = process.env.YT_DLP_PYTHON_TARGET_DIR?.trim()
     || path.join(os.tmpdir(), "robplanner-yt-dlp-python");
-  const packageMarker = path.join(targetDir, "yt_dlp", "__init__.py");
-
-  if (await pathExists(packageMarker)) return targetDir;
+  const existingTargetDir = await existingFreshYtDlpPackageDir(targetDir);
+  if (existingTargetDir) return existingTargetDir;
 
   await fs.mkdir(targetDir, { recursive: true });
   try {
@@ -177,11 +213,12 @@ async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
       "pip",
       "install",
       "--upgrade",
+      "--force-reinstall",
       "--target",
       targetDir,
       "yt-dlp",
     ], { timeoutMs: 5 * 60 * 1000 });
-    return targetDir;
+    return (await existingFreshYtDlpPackageDir(targetDir)) || targetDir;
   } catch (error) {
     console.warn("[radio-video-edit] could not install fresh yt-dlp:", error instanceof Error ? error.message : error);
     return null;
