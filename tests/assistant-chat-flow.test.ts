@@ -6,6 +6,7 @@ import {
   buildDirectGoogleCalendarCommand,
   buildDirectMetricoolCommand,
   buildDirectPromoVideoCommand,
+  buildRadioYoutubeContinuationMessage,
   userAlreadyApprovedExecution,
 } from "../server/assistant";
 import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
@@ -52,7 +53,7 @@ test("web assistant routes natural promo video requests to the local video agent
 
 test("web assistant prioritizes YouTube clip requests before Developer Autopilot", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
-  const directRadioIndex = source.indexOf("const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message)");
+  const directRadioIndex = source.indexOf("const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(radioYoutubeMessage)");
   const developerIndex = source.indexOf("const developerAutopilotHandoff = message");
   const direct = buildDirectRadioYoutubeCommand(
     "Prueba QA Codex: https://youtu.be/jNQXAC9IVRw sacame un clip corto de prueba y guardalo en Drive en una carpeta llamada Codex QA Replit 2026-06-21. Dime si empezo la descarga o si fallo el procesador."
@@ -76,6 +77,40 @@ test("web assistant treats typoed Drive YouTube clip requests as local radio cli
   assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
   assert.deepEqual(direct.driveFolderPath, ["Videos creados"]);
   assert.equal(direct.createFolderIfMissing, true);
+});
+
+test("web assistant supports multiple YouTube clips per platform with source cleanup", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const direct = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU quiero 3 videos de ig y de tiktok diferentes, guardalos en carpeta Robert A/Lucia Reina del drive y despues borra el video largo"
+  );
+
+  assert.ok(direct);
+  assert.equal(direct.instagramClipCount, 3);
+  assert.equal(direct.tiktokClipCount, 3);
+  assert.equal(direct.deleteSourceAfterSuccess, true);
+  assert.match(source, /instagramClipCount/);
+  assert.match(source, /tiktokClipCount/);
+  assert.match(source, /deleteSourceAfterSuccess/);
+});
+
+test("web assistant continues YouTube clip requests when user replies with only the Drive folder", () => {
+  const continuation = buildRadioYoutubeContinuationMessage("Robert a", [
+    {
+      role: "user",
+      content: "https://youtu.be/GcVZvXkz2jU quiero que me saques un clip para TikTok y otro para ig y lo guardes en el drive",
+    },
+    {
+      role: "assistant",
+      content: "Puedo hacerlo. Mándame también el nombre o ruta de la carpeta de Google Drive donde quieres que guarde los clips.",
+    },
+  ]);
+
+  assert.ok(continuation);
+  const direct = buildDirectRadioYoutubeCommand(continuation);
+  assert.ok(direct);
+  assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
+  assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
 });
 
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {

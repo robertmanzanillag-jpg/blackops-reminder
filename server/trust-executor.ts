@@ -179,6 +179,9 @@ export async function executeApprovedPendingAction(
           djName: input.djName,
           musicUrl: input.musicUrl,
           musicPath: input.musicPath,
+          instagramClipCount: Number.isFinite(Number(input.instagramClipCount)) ? Number(input.instagramClipCount) : undefined,
+          tiktokClipCount: Number.isFinite(Number(input.tiktokClipCount)) ? Number(input.tiktokClipCount) : undefined,
+          deleteSourceAfterSuccess: input.deleteSourceAfterSuccess !== false,
         });
         if (radioYoutubeResult.status === "failed") {
           throw new Error(radioYoutubeResult.error || "No pude procesar el link de YouTube para radio");
