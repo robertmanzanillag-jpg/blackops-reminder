@@ -218,6 +218,18 @@ test("includes estimated cost in completed radio YouTube summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
 });
 
+test("includes estimated cost in failed radio video summary", () => {
+  const summary = formatRadioDriveVideoResult({
+    sourceDriveFileId: "1abcDEFghiJKLmnopQRSTuv",
+    videoPath: "https://drive.google.com/file/d/1abcDEFghiJKLmnopQRSTuv/view",
+    status: "failed",
+    error: "Drive download failed",
+  });
+
+  assert.match(summary, /No pude completar los clips: Drive download failed/);
+  assert.match(summary, /Gasto estimado de esta edición: \$0\.00 USD/);
+});
+
 test("includes local source cleanup in completed Drive MP4 summary", () => {
   const summary = formatRadioDriveVideoResult({
     sourceDriveFileId: "1abcDEFghiJKLmnopQRSTuv",

@@ -462,7 +462,10 @@ function formatRadioVideoResult(result: RadioYoutubeProcessResult | RadioDriveVi
   }
 
   if (result.status !== "completed") {
-    return `No pude completar los clips: ${result.error || "error desconocido"}`;
+    return [
+      `No pude completar los clips: ${result.error || "error desconocido"}`,
+      `Gasto estimado de esta edición: $${ESTIMATED_COST_PER_EDITED_VIDEO_USD.toFixed(2)} USD.`,
+    ].join("\n");
   }
 
   const links = (result.clips || [])

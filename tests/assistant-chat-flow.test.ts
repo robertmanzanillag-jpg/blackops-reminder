@@ -360,16 +360,25 @@ test("dashboard assistant chat shows Black Room approval creation errors", () =>
   assert.match(source, /No pude completar la accion/);
 });
 
-test("assistant chats surface radio YouTube execution errors", () => {
+test("assistant chats surface radio video status, errors, and cost", () => {
   const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
   const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
   const webAssistant = readFileSync("server/assistant.ts", "utf8");
 
   assert.match(dashboardChat, /data\.radioYoutubeError/);
+  assert.match(dashboardChat, /data\.radioDriveVideoError/);
+  assert.match(dashboardChat, /data\.assistantStatus/);
+  assert.match(dashboardChat, /streamBuffer/);
   assert.match(dashboardChat, /data\.actionExecutionError/);
   assert.match(assistantPage, /data\.radioYoutubeError/);
+  assert.match(assistantPage, /data\.radioDriveVideoError/);
+  assert.match(assistantPage, /data\.assistantStatus/);
+  assert.match(assistantPage, /streamBuffer/);
   assert.match(assistantPage, /data\.actionExecutionError/);
   assert.match(webAssistant, /actionExecutionError/);
+  assert.match(webAssistant, /RADIO_DRIVE_VIDEO_STATUS_MESSAGE/);
+  assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
+  assert.match(webAssistant, /withRadioEditEstimatedCost/);
 });
 
 test("radio YouTube approval executor fails failed processor results", () => {
