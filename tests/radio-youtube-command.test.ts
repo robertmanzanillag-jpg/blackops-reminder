@@ -272,10 +272,12 @@ test("includes local source cleanup in completed Drive MP4 summary", () => {
 test("yt-dlp command specs try 1080p video with JS solver fallbacks by default", () => {
   const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
   const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
+  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
 
   try {
     delete process.env.YT_DLP_JS_RUNTIMES;
     delete process.env.YT_DLP_REMOTE_COMPONENTS;
+    delete process.env.YT_DLP_IMPERSONATE_TARGETS;
     const specs = buildYtDlpCommandSpecs({
       url: "https://youtu.be/GcVZvXkz2jU",
       outputTemplate: "/tmp/%(id)s.%(ext)s",
@@ -288,6 +290,7 @@ test("yt-dlp command specs try 1080p video with JS solver fallbacks by default",
     assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
     assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
     assert.ok(specs.every((spec) => !spec.args.includes("deno")));
+    assert.ok(specs.some((spec) => spec.args.includes("--impersonate") && spec.args.includes("chrome")));
     assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
     assert.ok(specs.some((spec) => spec.args.includes("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best")));
     assert.ok(specs.every((spec) => {
@@ -305,6 +308,35 @@ test("yt-dlp command specs try 1080p video with JS solver fallbacks by default",
       delete process.env.YT_DLP_REMOTE_COMPONENTS;
     } else {
       process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
+    }
+    if (previousImpersonateTargets === undefined) {
+      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
+    } else {
+      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
+    }
+  }
+});
+
+test("yt-dlp command specs allow disabling impersonation attempts", () => {
+  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
+
+  try {
+    process.env.YT_DLP_IMPERSONATE_TARGETS = "off";
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+      explicitBinary: "/workspace/bin/yt-dlp",
+      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+    });
+
+    assert.ok(specs.length > 0);
+    assert.ok(specs.every((spec) => !spec.args.includes("--impersonate")));
+  } finally {
+    if (previousImpersonateTargets === undefined) {
+      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
+    } else {
+      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
     }
   }
 });

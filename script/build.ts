@@ -6,6 +6,7 @@ import { spawn } from "child_process";
 function pipInstallEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    PIP_CONFIG_FILE: process.platform === "win32" ? "NUL" : "/dev/null",
     PIP_USER: "false",
     PYTHONNOUSERSITE: "1",
   };
@@ -50,12 +51,12 @@ async function bundleFreshYtDlp() {
     await runCommand("python3", [
       "-m",
       "pip",
-      "--isolated",
       "install",
       "--upgrade",
       "--target",
       targetDir,
-      "yt-dlp",
+      "yt-dlp[default]",
+      "curl-cffi>=0.11",
     ], 3 * 60 * 1000, pipInstallEnv());
   } catch (error) {
     console.warn("[build] could not bundle fresh yt-dlp:", error instanceof Error ? error.message : error);
