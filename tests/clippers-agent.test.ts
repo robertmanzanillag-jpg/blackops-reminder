@@ -4862,14 +4862,110 @@ test("verifyClipperProductionUrl writes endpoint evidence without secrets", asyn
   }
 });
 
+test("verifyClipperProductionUrl times out stuck DNS lookups", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.productionUrlVerification.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.productionUrlVerification.markdownPath, "utf8").catch(() => null);
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousDnsTimeout = process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+  const originalFetch = globalThis.fetch;
+  const lookupMock = mock.method(dns, "lookup", async () => new Promise(() => undefined));
+
+  try {
+    process.env.PUBLIC_BASE_URL = "https://app.clipprreview.com";
+    process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS = "20";
+    globalThis.fetch = (async () => {
+      throw new Error("DNS unavailable");
+    }) as typeof fetch;
+
+    const startedAt = Date.now();
+    const { productionUrlVerification } = await verifyClipperProductionUrl();
+
+    assert.ok(Date.now() - startedAt < 2_000);
+    assert.equal(productionUrlVerification.dnsDiagnostic.status, "unresolved");
+    assert.ok(productionUrlVerification.dnsDiagnostic.error?.includes("DNS lookup timed out after 20ms"));
+    assert.equal(productionUrlVerification.status, "fail");
+    assert.equal(productionUrlVerification.totals.fail, productionUrlVerification.totals.endpoints);
+    assert.ok(productionUrlVerification.nextStep.includes("Add or fix DNS records"));
+    const { productionUrlSetup } = await prepareClipperProductionUrlSetup();
+    assert.equal(productionUrlSetup.status, "partial");
+    assert.ok(productionUrlSetup.nextStep.includes("Production URL Verification"));
+    assert.ok(productionUrlSetup.setupSession
+      .filter((item) => item.id.startsWith("register-"))
+      .every((item) => item.status === "blocked" && item.nextStep.includes("fix DNS/endpoints")));
+
+    const rawManifest = await readFile(productionUrlVerification.manifestPath, "utf8");
+    const rawMarkdown = await readFile(productionUrlVerification.markdownPath, "utf8");
+    assert.ok(rawManifest.includes("DNS lookup timed out"));
+    assert.ok(rawMarkdown.includes("DNS lookup timed out"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    lookupMock.mock.restore();
+    globalThis.fetch = originalFetch;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousDnsTimeout === undefined) delete process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+    else process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS = previousDnsTimeout;
+    if (previousManifest === null) await unlink(beforeStatus.productionUrlVerification.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlVerification.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.productionUrlVerification.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlVerification.markdownPath, previousMarkdown);
+  }
+});
+
+test("prepareClipperProductionUrlSetup blocks stale production URL verification", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousSetupManifest = await readFile(beforeStatus.productionUrlSetup.manifestPath, "utf8").catch(() => null);
+  const previousSetupMarkdown = await readFile(beforeStatus.productionUrlSetup.markdownPath, "utf8").catch(() => null);
+  const previousVerificationManifest = await readFile(beforeStatus.productionUrlVerification.manifestPath, "utf8").catch(() => null);
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+
+  try {
+    process.env.PUBLIC_BASE_URL = "https://app.clipprreview.com";
+    await writeFile(beforeStatus.productionUrlVerification.manifestPath, JSON.stringify({
+      status: "pass",
+      generatedAt: "2020-01-01T00:00:00.000Z",
+      publicBaseUrl: "https://app.clipprreview.com",
+      productionUrlReady: true,
+      dnsDiagnostic: { status: "resolved" },
+      items: [],
+      totals: { endpoints: 7, pass: 7, fail: 0, skipped: 0 },
+      nextStep: "Public URL endpoints verified.",
+    }, null, 2));
+
+    const { productionUrlSetup } = await prepareClipperProductionUrlSetup();
+
+    assert.equal(productionUrlSetup.status, "partial");
+    assert.ok(productionUrlSetup.blockers.some((blocker) => blocker.includes("stale")));
+    assert.ok(productionUrlSetup.nextStep.includes("Production URL Verification"));
+    assert.ok(productionUrlSetup.setupSession
+      .filter((item) => item.id.startsWith("register-"))
+      .every((item) => item.status === "blocked"));
+  } finally {
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousSetupManifest === null) await unlink(beforeStatus.productionUrlSetup.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlSetup.manifestPath, previousSetupManifest);
+    if (previousSetupMarkdown === null) await unlink(beforeStatus.productionUrlSetup.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlSetup.markdownPath, previousSetupMarkdown);
+    if (previousVerificationManifest === null) await unlink(beforeStatus.productionUrlVerification.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlVerification.manifestPath, previousVerificationManifest);
+  }
+});
+
 test("prepareClipperProductionUrlSetup treats quick tunnels as temporary", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(beforeStatus.productionUrlSetup.manifestPath, "utf8").catch(() => null);
   const previousMarkdown = await readFile(beforeStatus.productionUrlSetup.markdownPath, "utf8").catch(() => null);
+  const previousAppBaseUrl = process.env.APP_BASE_URL;
   const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousIgnoreStoredPublicBaseUrl = process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
 
   try {
+    delete process.env.APP_BASE_URL;
     process.env.PUBLIC_BASE_URL = "https://demo.trycloudflare.com";
+    process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL = "true";
     const { productionUrlSetup } = await prepareClipperProductionUrlSetup();
 
     assert.equal(productionUrlSetup.productionUrlReady, true);
@@ -4882,8 +4978,12 @@ test("prepareClipperProductionUrlSetup treats quick tunnels as temporary", async
     const rawMarkdown = await readFile(productionUrlSetup.markdownPath, "utf8");
     assert.ok(rawMarkdown.includes("Production URL stable: no (temporary_tunnel)"));
   } finally {
+    if (previousAppBaseUrl === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = previousAppBaseUrl;
     if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
     else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousIgnoreStoredPublicBaseUrl === undefined) delete process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
+    else process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL = previousIgnoreStoredPublicBaseUrl;
     if (previousManifest === null) await unlink(beforeStatus.productionUrlSetup.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.productionUrlSetup.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.productionUrlSetup.markdownPath).catch(() => undefined);
