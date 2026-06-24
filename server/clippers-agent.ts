@@ -30294,20 +30294,53 @@ export async function prepareClipperPublisherExecutionQueue(userId = getSystemUs
   return { publisherExecutionQueue, status: await getClipperStatus(userId) };
 }
 
+async function readProductionUrlVerificationGate(publicBaseUrl: string): Promise<Pick<ClipperProductionUrlVerificationSummary, "status" | "generatedAt" | "publicBaseUrl" | "totals" | "nextStep"> | null> {
+  try {
+    const raw = await readFile(PRODUCTION_URL_VERIFICATION_PATH, "utf8");
+    const parsed = JSON.parse(raw) as Partial<ClipperProductionUrlVerificationSummary>;
+    if (parsed.publicBaseUrl !== publicBaseUrl) return null;
+    if (!["not_run", "pass", "partial", "fail", "blocked"].includes(String(parsed.status))) return null;
+    const generatedAt = typeof parsed.generatedAt === "string" ? parsed.generatedAt : null;
+    const generatedMs = generatedAt ? Date.parse(generatedAt) : Number.NaN;
+    const maxAgeMs = 24 * 60 * 60 * 1_000;
+    const stalePass = parsed.status === "pass" && (!Number.isFinite(generatedMs) || Date.now() - generatedMs > maxAgeMs);
+    return {
+      status: stalePass ? "blocked" : parsed.status as ClipperProductionUrlVerificationSummary["status"],
+      generatedAt,
+      publicBaseUrl,
+      totals: parsed.totals || { endpoints: 0, pass: 0, fail: 0, skipped: 0 },
+      nextStep: stalePass
+        ? "Production URL Verification pass is stale; rerun Verify URL before registering final redirect URIs."
+        : typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Production URL verification before registering final redirect URIs.",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSetupSummary> {
   const publicBaseUrl = getPublicBaseUrl();
   const productionUrlReady = isProductionPublicBaseUrl(publicBaseUrl);
   const productionUrlStabilityStatus = productionUrlStability(publicBaseUrl);
   const productionUrlStable = productionUrlStabilityStatus === "stable_public";
   const normalizedBaseUrl = publicBaseUrl.replace(/\/$/, "");
+  const verificationGate = productionUrlReady ? await readProductionUrlVerificationGate(publicBaseUrl) : null;
+  const productionUrlVerified = verificationGate?.status === "pass";
   const productionUrlNote = productionUrlReady
     ? productionUrlStable
-      ? "PUBLIC_BASE_URL usa HTTPS estable y no apunta a localhost; apta para registrar redirect URIs y app review."
+      ? productionUrlVerified
+        ? "PUBLIC_BASE_URL usa HTTPS estable y Production URL Verification paso; apta para registrar redirect URIs y app review."
+        : "PUBLIC_BASE_URL usa HTTPS estable, pero todavia necesita Production URL Verification en pass antes de registrar redirect URIs finales o app review."
       : "PUBLIC_BASE_URL usa HTTPS publico pero parece un tunel temporal; sirve para pruebas, no para app review/OAuth final hasta cambiarlo por un dominio/tunel estable."
     : "PUBLIC_BASE_URL debe ser una URL publica HTTPS, no localhost/127.0.0.1, antes de pedir app review o publicar en produccion.";
   const blockers = [
     ...(productionUrlReady ? [] : [productionUrlNote]),
     ...(productionUrlReady && !productionUrlStable ? ["PUBLIC_BASE_URL es un tunel temporal; usa dominio propio, Cloudflare named tunnel, deploy estable o dominio reservado antes de app review/OAuth final."] : []),
+    ...(productionUrlReady && productionUrlStable && !productionUrlVerified ? [
+      verificationGate
+        ? `Production URL Verification esta ${verificationGate.status}; ${verificationGate.nextStep}`
+        : "Production URL Verification todavia no ha pasado; corre Verify URL antes de registrar redirect URIs finales.",
+    ] : []),
   ];
   const platforms: ClipperProductionUrlSetupPlatform[] = PLATFORM_REQUIREMENTS.map((requirement) => ({
     platform: requirement.platform,
@@ -30369,9 +30402,11 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       verificationUrls: endpointChecks.slice(0, 4).map((check) => check.url),
       evidenceRecipeRow: ["developer_app", "", "tiktok", "draft", "", "<strategy: cloudflare/ngrok/deploy>", productionUrlReady ? normalizedBaseUrl : "<public HTTPS base URL>", "<public URL strategy + owner/operator note>"].map(csvEscape).join(","),
       evidenceNeeded: ["Chosen strategy, public HTTPS URL, and owner/operator note."],
-      doneCriteria: ["A stable HTTPS URL is selected and will not rotate during app review/OAuth."],
+      doneCriteria: ["A stable HTTPS URL is selected and will not rotate during app review/OAuth.", "Production URL Verification passes before app review/OAuth go-live."],
       nextStep: productionUrlStable
-        ? "Stable URL strategy already set."
+        ? productionUrlVerified
+          ? "Stable URL strategy already set and verified."
+          : "Stable URL strategy is set; run Production URL Verification and fix DNS/endpoints until it passes."
         : productionUrlReady
           ? "Public quick tunnel works for testing; replace it with Cloudflare named tunnel, reserved domain or managed deploy before app review."
           : "Pick Cloudflare Tunnel, reserved ngrok domain, or managed deploy from HTTPS Tunnel Plan.",
@@ -30399,7 +30434,6 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       rank: index + 3,
       id: `register-${platform.platform}-redirect-uri`,
       label: `Register ${platform.label} redirect URI`,
-      status: productionUrlReady ? "ready" : "blocked",
       owner: "Permission Ops",
       requiredValue: platform.redirectUri,
       copyValue: platform.redirectUri,
@@ -30419,13 +30453,19 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       doneCriteria: [
         `Developer portal contains exact redirect URI ${platform.redirectUri}.`,
         "Developer App Evidence references this redirect URI and the public base URL.",
+        "Production URL Verification is pass for the public base URL.",
       ],
-      nextStep: productionUrlReady ? `Register ${platform.redirectUri} in ${platform.developerPortalUrl}.` : "Wait for PUBLIC_BASE_URL public HTTPS, then register this redirect URI.",
+      status: productionUrlReady && productionUrlVerified ? "ready" : "blocked",
+      nextStep: productionUrlReady
+        ? productionUrlVerified
+          ? `Register ${platform.redirectUri} in ${platform.developerPortalUrl}.`
+          : "Run Production URL Verification and fix DNS/endpoints before registering this final redirect URI."
+        : "Wait for PUBLIC_BASE_URL public HTTPS, then register this redirect URI.",
     })),
   ];
   const generatedAt = await stat(PRODUCTION_URL_SETUP_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
-    status: !generatedAt ? "not_prepared" : productionUrlStable ? "ready" : productionUrlReady ? "partial" : "blocked",
+    status: !generatedAt ? "not_prepared" : productionUrlStable && productionUrlVerified ? "ready" : productionUrlReady ? "partial" : "blocked",
     generatedAt,
     manifestPath: PRODUCTION_URL_SETUP_PATH,
     markdownPath: PRODUCTION_URL_SETUP_MARKDOWN_PATH,
@@ -30443,7 +30483,9 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
     blockers,
     nextStep: productionUrlReady
       ? productionUrlStable
-        ? "Registrar estos redirect URIs en TikTok, Meta y Google; luego correr OAuth Go-Live."
+        ? productionUrlVerified
+          ? "Registrar estos redirect URIs en TikTok, Meta y Google; luego correr OAuth Go-Live."
+          : "Correr Production URL Verification y arreglar DNS/endpoints antes de registrar redirect URIs finales."
         : "Usar esta URL solo para pruebas; configurar un dominio/tunel estable antes de registrar redirect URIs finales."
       : "Configurar PUBLIC_BASE_URL con una URL publica HTTPS y volver a generar este setup.",
   };
@@ -30542,6 +30584,28 @@ function productionUrlFetchErrorMessage(error: unknown): string {
     return [error.message, code, syscall].filter(Boolean).join(": ");
   }
   return error.message;
+}
+
+function productionDnsLookupTimeoutMs(): number {
+  const raw = process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : 5_000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5_000;
+}
+
+async function lookupProductionDnsRecords(host: string): Promise<Awaited<ReturnType<typeof dns.lookup>>> {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      dns.lookup(host, { all: true }),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`DNS lookup timed out after ${productionDnsLookupTimeoutMs()}ms`));
+        }, productionDnsLookupTimeoutMs());
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function productionUrlHost(publicBaseUrl: string): string | null {
@@ -30751,7 +30815,7 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
     };
   }
   try {
-    const records = await dns.lookup(host, { all: true });
+    const records = await lookupProductionDnsRecords(host);
     return {
       host,
       rootDomain,
@@ -31202,9 +31266,15 @@ export async function prepareClipperProductionUrlSetup(userId = getSystemUserId(
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const generatedAt = new Date().toISOString();
+  const draft = await buildProductionUrlSetupSummary();
   const productionUrlSetup: ClipperProductionUrlSetupSummary = {
-    ...await buildProductionUrlSetupSummary(),
+    ...draft,
     generatedAt,
+    status: draft.status === "not_prepared"
+      ? draft.productionUrlStable && draft.blockers.length === 0
+        ? "ready"
+        : draft.productionUrlReady ? "partial" : "blocked"
+      : draft.status,
   };
   await writeFile(PRODUCTION_URL_SETUP_PATH, JSON.stringify(productionUrlSetup, null, 2));
   await writeFile(PRODUCTION_URL_SETUP_MARKDOWN_PATH, renderProductionUrlSetupMarkdown(productionUrlSetup));
