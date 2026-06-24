@@ -4413,8 +4413,11 @@ test("go-live completion audit receives normalized Metricool approval-only queue
       realPublishEnabled: true,
       sourceReadiness: {
         status: "ready",
-        categories: [],
-        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        categories: [
+          { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", connectedNetworks: ["tiktok"], dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/sports", nextStep: "ready" },
+          { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", connectedNetworks: ["tiktok"], dailyClipTarget: 6, weeklyTargetClips: 42, minimumWeeklySourceAssets: 21, rightsReadyAssets: 35, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/memes", nextStep: "ready" },
+        ],
+        totals: { accounts: 2, connectedNetworks: 2, dailyClipTarget: 14, weeklyTargetClips: 98, minimumWeeklySourceAssets: 49, rightsReadyAssets: 77, missingSourceAssets: 0 },
         nextStep: "unsafe cache",
       },
       items: [{
@@ -4464,6 +4467,68 @@ test("go-live completion audit receives normalized Metricool approval-only queue
     else process.env.METRICOOL_USER_ID = previousUserId;
     if (previousPublishingManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousPublishingManifest);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+  }
+});
+
+test("go-live completion audit blocks Metricool MVP when source lanes are not ready", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "blocked-source-readiness-cache",
+      publishMode: "approval_required",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "blocked",
+        categories: [
+          { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", connectedNetworks: ["tiktok"], dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/sports", nextStep: "ready" },
+        ],
+        totals: { accounts: 1, connectedNetworks: 1, dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 7 },
+        nextStep: "Add memes source assets before claiming Metricool MVP.",
+      },
+      items: [{
+        id: "approval-only-but-source-blocked",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "safe",
+        captionSeed: "safe",
+        requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "review first",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 1, readyToSend: 0, approvalRequired: 1 },
+      nextStep: "Queue exists but source readiness is blocked.",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.goLiveCompletionAudit.launchModes?.metricoolMvpReady, false);
+    assert.equal(status.goLiveCompletionAudit.launchModes?.approvalQueueReady, false);
+    assert.ok(status.goLiveCompletionAudit.launchModes?.metricoolMvpBlockers.some((blocker) =>
+      blocker.includes("source readiness") || blocker.includes("Fewer than two Metricool MVP lanes")
+    ));
+  } finally {
     if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
     if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);

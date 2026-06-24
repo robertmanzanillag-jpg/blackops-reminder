@@ -42922,11 +42922,29 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.productionUrlVerification.status === "pass";
   const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
   const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
-  const metricoolApprovalQueueReady = input.metricoolExecutionQueue.status === "approval_required"
+  const metricoolMvpSourceLanes = input.metricoolExecutionQueue.sourceReadiness.categories.filter((category) =>
+    category.connectedNetworks.length > 0
+    && category.rightsReadyAssets > 0
+    && category.missingSourceAssets === 0
+  );
+  const metricoolApprovalQueueSafe = input.metricoolExecutionQueue.status === "approval_required"
+    && input.metricoolExecutionQueue.publishMode === "approval_required"
     && input.metricoolExecutionQueue.totals.queuedForApproval > 0
     && input.metricoolExecutionQueue.totals.readyToSend === 0
     && !input.metricoolExecutionQueue.realPublishEnabled
-    && input.metricoolPublishing.totals.connectedProfiles >= 2;
+    && input.metricoolExecutionQueue.items.every((item) => item.status !== "ready_to_send" && item.canSendNow === false);
+  const metricoolMvpSourceReady = input.metricoolExecutionQueue.sourceReadiness.status === "ready"
+    && input.metricoolExecutionQueue.sourceReadiness.totals.rightsReadyAssets > 0
+    && input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets === 0
+    && metricoolMvpSourceLanes.length >= 2;
+  const metricoolMvpGateBlockers = [
+    !metricoolApprovalQueueSafe ? "Metricool approval queue is not safely approval_required with zero ready_to_send items." : null,
+    input.metricoolExecutionQueue.sourceReadiness.status !== "ready" ? `Metricool source readiness is ${input.metricoolExecutionQueue.sourceReadiness.status}.` : null,
+    input.metricoolExecutionQueue.sourceReadiness.totals.rightsReadyAssets <= 0 ? "Metricool source readiness has no rights-ready assets." : null,
+    input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets > 0 ? `Metricool source readiness is missing ${input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets} source asset(s).` : null,
+    metricoolMvpSourceLanes.length < 2 ? "Fewer than two Metricool MVP lanes have connected networks and rights-ready assets." : null,
+  ].filter((item): item is string => Boolean(item));
+  const metricoolApprovalQueueReady = metricoolApprovalQueueSafe && metricoolMvpSourceReady;
   const metricoolBridgeProgress = metricoolApprovalQueueReady
     || input.metricoolPublishing.status === "ready_to_connect"
     || input.metricoolPublishing.totals.connectedProfiles > 0
@@ -42958,7 +42976,7 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.developerAppEvidence.totals.approved >= input.developerAppEvidence.totals.expected
     && input.permissionTracker.totals.approved >= input.permissionTracker.totals.permissions
     && input.permissionTracker.totals.permissions > 0;
-  const metricoolMvpBlockers = metricoolApprovalQueueReady ? [] : metricoolBridgeBlockers;
+  const metricoolMvpBlockers = metricoolApprovalQueueReady ? [] : [...metricoolMvpGateBlockers, ...metricoolBridgeBlockers].filter((item, index, all) => all.indexOf(item) === index);
   const directApiBacklog = [
     ...input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
     ...input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
