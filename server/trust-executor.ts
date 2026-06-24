@@ -168,16 +168,25 @@ export async function executeApprovedPendingAction(
       }
 
       case "radio_edit.youtube_to_drive": {
-        result = await processYoutubeRadioVideoLink({
+        const radioYoutubeResult = await processYoutubeRadioVideoLink({
           userId: action.userId,
           youtubeUrl: input.youtubeUrl,
           driveFolderPath: input.driveFolderPath,
+          driveParentFolderId: input.driveParentFolderId,
           createFolderIfMissing: Boolean(input.createFolderIfMissing),
+          driveFolderPathFromYoutubeTitle: Boolean(input.driveFolderPathFromYoutubeTitle),
           force: Boolean(input.force),
           djName: input.djName,
           musicUrl: input.musicUrl,
           musicPath: input.musicPath,
+          instagramClipCount: Number.isFinite(Number(input.instagramClipCount)) ? Number(input.instagramClipCount) : undefined,
+          tiktokClipCount: Number.isFinite(Number(input.tiktokClipCount)) ? Number(input.tiktokClipCount) : undefined,
+          deleteSourceAfterSuccess: input.deleteSourceAfterSuccess !== false,
         });
+        if (radioYoutubeResult.status === "failed") {
+          throw new Error(radioYoutubeResult.error || "No pude procesar el link de YouTube para radio");
+        }
+        result = radioYoutubeResult;
         break;
       }
 

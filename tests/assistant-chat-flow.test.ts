@@ -6,6 +6,7 @@ import {
   buildDirectGoogleCalendarCommand,
   buildDirectMetricoolCommand,
   buildDirectPromoVideoCommand,
+  buildRadioYoutubeContinuationMessage,
   userAlreadyApprovedExecution,
 } from "../server/assistant";
 import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
@@ -52,7 +53,7 @@ test("web assistant routes natural promo video requests to the local video agent
 
 test("web assistant prioritizes YouTube clip requests before Developer Autopilot", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
-  const directRadioIndex = source.indexOf("const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message)");
+  const directRadioIndex = source.indexOf("const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(radioYoutubeMessage)");
   const developerIndex = source.indexOf("const developerAutopilotHandoff = message");
   const direct = buildDirectRadioYoutubeCommand(
     "Prueba QA Codex: https://youtu.be/jNQXAC9IVRw sacame un clip corto de prueba y guardalo en Drive en una carpeta llamada Codex QA Replit 2026-06-21. Dime si empezo la descarga o si fallo el procesador."
@@ -64,6 +65,52 @@ test("web assistant prioritizes YouTube clip requests before Developer Autopilot
   assert.ok(directRadioIndex < developerIndex);
   assert.match(direct.content, /Voy a descargar ese YouTube/);
   assert.doesNotMatch(direct.content, /repo de GitHub/);
+});
+
+test("web assistant treats typoed Drive YouTube clip requests as local radio clip jobs", () => {
+  const direct = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU , quiero que saques los clips de instagram y de TikTok y los guardes en la carte de drives"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.content, /Voy a descargar ese YouTube/);
+  assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
+  assert.deepEqual(direct.driveFolderPath, ["Videos creados"]);
+  assert.equal(direct.createFolderIfMissing, true);
+});
+
+test("web assistant supports multiple YouTube clips per platform with source cleanup", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const direct = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU quiero 3 videos de ig y de tiktok diferentes, guardalos en carpeta Robert A/Lucia Reina del drive y despues borra el video largo"
+  );
+
+  assert.ok(direct);
+  assert.equal(direct.instagramClipCount, 3);
+  assert.equal(direct.tiktokClipCount, 3);
+  assert.equal(direct.deleteSourceAfterSuccess, true);
+  assert.match(source, /instagramClipCount/);
+  assert.match(source, /tiktokClipCount/);
+  assert.match(source, /deleteSourceAfterSuccess/);
+});
+
+test("web assistant continues YouTube clip requests when user replies with only the Drive folder", () => {
+  const continuation = buildRadioYoutubeContinuationMessage("Robert a", [
+    {
+      role: "user",
+      content: "https://youtu.be/GcVZvXkz2jU quiero que me saques un clip para TikTok y otro para ig y lo guardes en el drive",
+    },
+    {
+      role: "assistant",
+      content: "Puedo hacerlo. Mándame también el nombre o ruta de la carpeta de Google Drive donde quieres que guarde los clips.",
+    },
+  ]);
+
+  assert.ok(continuation);
+  const direct = buildDirectRadioYoutubeCommand(continuation);
+  assert.ok(direct);
+  assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
+  assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
 });
 
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {
@@ -139,7 +186,9 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
 
 test("AI router sends low-risk work to cheap scout and risky work to strong supervisor", () => {
   const previousKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const previousCheapScoutEnabled = process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED;
   process.env.AI_INTEGRATIONS_GEMINI_API_KEY = "test-gemini-key";
+  process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED = "true";
 
   try {
     assert.equal(
@@ -173,6 +222,8 @@ test("AI router sends low-risk work to cheap scout and risky work to strong supe
   } finally {
     if (previousKey === undefined) delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
     else process.env.AI_INTEGRATIONS_GEMINI_API_KEY = previousKey;
+    if (previousCheapScoutEnabled === undefined) delete process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED;
+    else process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED = previousCheapScoutEnabled;
   }
 });
 
@@ -205,11 +256,14 @@ test("dashboard exposes monthly AI spend tracking", () => {
   assert.match(policy, /BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD/);
   assert.match(policy, /BLACKOPS_METRICOOL_MONTHLY_USD/);
   assert.match(routes, /\/api\/ai-spend\/monthly/);
-  assert.match(routes, /buildMonthlyAiSpendReport\(runs\)/);
+  assert.match(routes, /storage\.getAutomationDefinitions\(userId\)/);
+  assert.match(routes, /buildMonthlyAiSpendReport\(runs, undefined, automations\)/);
   assert.match(dashboard, /MonthlySpendPanel/);
   assert.match(panel, /monthly-spend-panel/);
   assert.match(panel, /\/api\/ai-spend\/monthly/);
   assert.match(panel, /Gasto mensual/);
+  assert.match(panel, /Historial de gasto/);
+  assert.match(policy, /history/);
 });
 
 test("web assistant prepares clear Google Calendar requests without model routing", () => {
@@ -288,6 +342,25 @@ test("dashboard assistant chat shows Black Room approval creation errors", () =>
 
   assert.match(source, /data\.blackRoomLinkError/);
   assert.match(source, /No pude completar la accion/);
+});
+
+test("assistant chats surface radio YouTube execution errors", () => {
+  const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+  const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
+
+  assert.match(dashboardChat, /data\.radioYoutubeError/);
+  assert.match(dashboardChat, /data\.actionExecutionError/);
+  assert.match(assistantPage, /data\.radioYoutubeError/);
+  assert.match(assistantPage, /data\.actionExecutionError/);
+  assert.match(webAssistant, /actionExecutionError/);
+});
+
+test("radio YouTube approval executor fails failed processor results", () => {
+  const executor = readFileSync("server/trust-executor.ts", "utf8");
+
+  assert.match(executor, /radioYoutubeResult\.status === "failed"/);
+  assert.match(executor, /No pude procesar el link de YouTube para radio/);
 });
 
 test("web assistant only auto-executes after explicit chat approval", () => {

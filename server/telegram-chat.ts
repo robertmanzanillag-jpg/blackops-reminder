@@ -15,7 +15,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -285,7 +285,7 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
-- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
 - [ELIMINAR_INVERSION: {"symbol": "AAPL"}]
@@ -299,7 +299,9 @@ INFORMACIÓN SOBRE RADIO:
 - Si el usuario manda un YouTube y pide sacar clips/videos de radio, usa RADIO_YOUTUBE_CLIPS. Necesitas driveFolderPath; si no dice carpeta de Drive, pregunta antes.
 - Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, incluye createFolderIfMissing:true. Si solo pide guardar en una carpeta, deja que el sistema confirme si no existe.
 - Si el usuario dice el DJ o aparece claro en el contexto, incluye djName. Si no, el sistema intenta leerlo abajo a la izquierda del video y pregunta si no lo encuentra.
+- Por defecto genera 1 clip para Instagram 4:5 y 1 clip para TikTok/Reels 9:16. Si el usuario pide cantidad, usa instagramClipCount y tiktokClipCount; “3 de IG y TikTok” significa 3 y 3 con momentos distintos.
 - Si pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente. Si manda un segundo link, usa ese audio externo.
+- Para YouTube, usa deleteSourceAfterSuccess:true salvo que el usuario pida conservar el video largo; el sistema borra solo el MP4 fuente descargado después de subir los clips.
 - Si el usuario pide crear carpetas o subcarpetas en Google Drive, usa GOOGLE_DRIVE_CREATE_FOLDER. Si no dice la ruta/nombre exacto, pregunta antes.
 
 METRICOOL / SOCIAL PUBLISHING:
@@ -414,7 +416,7 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
 
   const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
   if (directRadioYoutubeCommand) {
-    if (!directRadioYoutubeCommand.driveFolderPath.length || directRadioYoutubeCommand.needsMusicUrl) {
+    if (directRadioYoutubeCommandNeedsDriveFolder(directRadioYoutubeCommand) || directRadioYoutubeCommand.needsMusicUrl) {
       return directRadioYoutubeCommand.content;
     }
 
@@ -1010,9 +1012,14 @@ async function processAssistantResponse(userId: string, response: string): Promi
       const result = await executeDirectRadioYoutubeCommand({
         youtubeUrl: radioYoutubeData.youtubeUrl,
         driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
+        driveParentFolderId: typeof radioYoutubeData.driveParentFolderId === "string" ? radioYoutubeData.driveParentFolderId : undefined,
         createFolderIfMissing: Boolean(radioYoutubeData.createFolderIfMissing),
+        driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
         djName: radioYoutubeData.djName,
         musicUrl: radioYoutubeData.musicUrl,
+        instagramClipCount: Number.isFinite(Number(radioYoutubeData.instagramClipCount)) ? Number(radioYoutubeData.instagramClipCount) : undefined,
+        tiktokClipCount: Number.isFinite(Number(radioYoutubeData.tiktokClipCount)) ? Number(radioYoutubeData.tiktokClipCount) : undefined,
+        deleteSourceAfterSuccess: radioYoutubeData.deleteSourceAfterSuccess !== false,
         content: "Voy a procesar ese YouTube para radio.",
         command: radioYoutubeMatch[0],
       }, userId);

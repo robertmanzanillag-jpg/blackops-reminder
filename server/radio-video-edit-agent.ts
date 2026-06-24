@@ -11,11 +11,15 @@ import {
   DRIVE_BLACK_ROOM_VIDEOS_FOLDER,
   ensureAppDriveFolderPath,
   ensureDriveFolderPath,
+  ensureDriveFolderPathUnderParent,
   findDriveFolderPath,
+  findDriveFolderPathUnderParent,
+  getConfiguredClippersDriveRootFolderId,
   searchDriveFoldersByName,
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
+import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage, type YtDlpCommandSpec } from "./youtube-downloader";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXTENSIONS = new Set([".aac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"]);
@@ -23,6 +27,9 @@ const DEFAULT_OUTPUT_DIR = path.join(process.cwd(), "radio_video_edits", "03_lis
 const DEFAULT_FALLBACK_INPUT_DIR = path.join(process.cwd(), "radio_video_edits", "01_originales");
 const IG_RADIO_FOLDER_NAME = "Instagram";
 const TIKTOK_RADIO_FOLDER_NAME = "TikTok";
+const DEFAULT_INSTAGRAM_CLIP_COUNT = 1;
+const DEFAULT_TIKTOK_CLIP_COUNT = 1;
+const MAX_CLIPS_PER_PLATFORM = 10;
 
 function getTelegramBotToken(): string | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -42,13 +49,18 @@ type RadioVideoJobInput = {
   sourceDir?: string;
   fallbackInputDir?: string;
   bestDropSecond?: number;
+  bestDropSeconds?: number[];
   djName?: string;
   userId?: string;
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
 };
 
 type RenderedClip = {
@@ -62,6 +74,8 @@ type RenderedClip = {
   height: number;
   audioSource?: "source_drop" | "music_drop" | "original";
   musicDropSecond?: number;
+  clipNumber?: number;
+  startSecond?: number;
 };
 
 export type RadioVideoProcessResult = {
@@ -71,6 +85,9 @@ export type RadioVideoProcessResult = {
   pendingActionId?: string;
   clips?: RenderedClip[];
   error?: string;
+  sourceVideoDeleted?: boolean;
+  sourceVideoDeletedPath?: string;
+  sourceVideoCleanupError?: string;
 };
 
 export type RadioYoutubeProcessResult = RadioVideoProcessResult & {
@@ -154,6 +171,31 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+function normalizeClipCount(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(MAX_CLIPS_PER_PLATFORM, Math.floor(parsed)));
+}
+
+function uniqueDropSeconds(values: number[], duration: number): number[] {
+  const result: number[] = [];
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    const clamped = Math.max(0, Math.min(duration, value));
+    if (result.some((existing) => Math.abs(existing - clamped) < 2)) continue;
+    result.push(clamped);
+  }
+  return result;
+}
+
+function evenlyDistributedDropSeconds(duration: number, count: number): number[] {
+  const normalizedCount = normalizeClipCount(count, 1);
+  if (normalizedCount === 1) return [duration / 2];
+  return Array.from({ length: normalizedCount }, (_, index) => (
+    Math.min(duration, Math.max(0, ((index + 1) / (normalizedCount + 1)) * duration))
+  ));
+}
+
 function splitDriveFolderPath(value: string): string[] {
   return value
     .split("/")
@@ -190,7 +232,7 @@ function isYouTubeUrl(value: string): boolean {
   }
 }
 
-async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; args: string[] }>, timeoutMs: number): Promise<void> {
+async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeoutMs: number, mediaLabel: "video" | "audio" = "video"): Promise<void> {
   const errors: string[] = [];
   for (const spec of commandSpecs) {
     try {
@@ -201,10 +243,7 @@ async function runFirstSuccessfulCommand(commandSpecs: Array<{ command: string; 
     }
   }
 
-  throw new Error([
-    "No pude descargar el video de YouTube. Instala yt-dlp o configura YT_DLP_PATH.",
-    ...errors.slice(0, 2),
-  ].join(" "));
+  throw new Error(formatYtDlpFailureMessage(errors.join("\n"), mediaLabel));
 }
 
 async function downloadYoutubeVideo(url: string, outputDir: string): Promise<string> {
@@ -214,30 +253,15 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "bv*+ba/best",
-    "--merge-output-format",
-    "mp4",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
-  const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "video",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "video");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
@@ -267,28 +291,15 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const commonArgs = [
-    "--no-playlist",
-    "--js-runtimes",
-    "node",
-    "-f",
-    "ba/bestaudio",
-    "--restrict-filenames",
-    "-o",
-    outputTemplate,
+  const commandSpecs = buildYtDlpCommandSpecs({
     url,
-  ];
-
-  const explicitBinary = process.env.YT_DLP_PATH?.trim();
-  const commandSpecs = [
-    ...(explicitBinary ? [{ command: explicitBinary, args: commonArgs }] : []),
-    { command: "yt-dlp", args: commonArgs },
-    { command: "python3", args: ["-m", "yt_dlp", ...commonArgs] },
-    { command: "python", args: ["-m", "yt_dlp", ...commonArgs] },
-  ];
+    outputTemplate,
+    mode: "audio",
+    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+  });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
-  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000);
+  await runFirstSuccessfulCommand(commandSpecs, 30 * 60 * 1000, "audio");
   const files = await fs.readdir(outputDir, { withFileTypes: true });
   const candidates = files
     .filter((entry) => entry.isFile() && AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
@@ -305,10 +316,17 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
   return selected;
 }
 
-async function resolveExistingDriveFolderId(folderPath: string[], userId: string): Promise<{ folderId: string | null; folderName: string; ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }> }> {
+async function resolveExistingDriveFolderId(folderPath: string[], userId: string, parentFolderId?: string | null): Promise<{ folderId: string | null; folderName: string; ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }> }> {
   const cleanPath = folderPath.map((part) => part.trim()).filter(Boolean);
   const folderName = cleanPath.at(-1) || "Drive";
-  if (cleanPath.length === 0) return { folderId: null, folderName };
+  if (cleanPath.length === 0) return { folderId: parentFolderId || null, folderName };
+
+  if (parentFolderId) {
+    return {
+      folderId: await findDriveFolderPathUnderParent(cleanPath, parentFolderId, userId),
+      folderName,
+    };
+  }
 
   if (cleanPath.length > 1) {
     return {
@@ -408,26 +426,43 @@ async function measureAudioMeanVolume(videoPath: string, start: number, seconds:
   return Number.parseFloat(match[1]);
 }
 
-async function findBestDropSecond(videoPath: string, duration: number): Promise<number> {
+async function findBestDropSeconds(videoPath: string, duration: number, count: number): Promise<number[]> {
+  const requestedCount = normalizeClipCount(count, 1);
   if (!(await hasAudio(videoPath))) {
-    return duration / 2;
+    return evenlyDistributedDropSeconds(duration, requestedCount);
   }
 
   const sampleSeconds = Math.min(10, Math.max(3, duration / 8));
   const stepSeconds = duration > 900 ? 30 : duration > 300 ? 20 : 10;
   const maxStart = Math.max(0, duration - sampleSeconds);
-  let bestStart = 0;
-  let bestVolume = Number.NEGATIVE_INFINITY;
+  const candidates: Array<{ second: number; volume: number }> = [];
 
   for (let start = 0; start <= maxStart; start += stepSeconds) {
     const volume = await measureAudioMeanVolume(videoPath, start, sampleSeconds).catch(() => Number.NEGATIVE_INFINITY);
-    if (volume > bestVolume) {
-      bestVolume = volume;
-      bestStart = start;
-    }
+    candidates.push({ second: Math.min(duration, start + sampleSeconds / 2), volume });
   }
 
-  return Math.min(duration, bestStart + sampleSeconds / 2);
+  if (!candidates.length) {
+    return evenlyDistributedDropSeconds(duration, requestedCount);
+  }
+
+  const spacingSeconds = Math.min(75, Math.max(20, duration / Math.max(2, requestedCount + 1)));
+  const selected: number[] = [];
+  for (const candidate of candidates.sort((a, b) => b.volume - a.volume)) {
+    if (selected.some((second) => Math.abs(second - candidate.second) < spacingSeconds)) continue;
+    selected.push(candidate.second);
+    if (selected.length >= requestedCount) break;
+  }
+
+  if (selected.length < requestedCount) {
+    selected.push(...candidates.map((candidate) => candidate.second));
+  }
+
+  return uniqueDropSeconds(selected, duration).slice(0, requestedCount);
+}
+
+async function findBestDropSecond(videoPath: string, duration: number): Promise<number> {
+  return (await findBestDropSeconds(videoPath, duration, 1))[0] ?? duration / 2;
 }
 
 async function detectDjNameByOcr(videoPath: string): Promise<string | null> {
@@ -656,73 +691,136 @@ async function copyToGoogleDriveDesktop(filePath: string, folderName = IG_RADIO_
   return destination;
 }
 
+async function deleteSourceVideoAfterSuccess(videoPath: string, sourceDir?: string): Promise<{
+  deleted: boolean;
+  path?: string;
+  error?: string;
+}> {
+  if (!sourceDir) return { deleted: false };
+
+  const resolvedSourceDir = path.resolve(sourceDir);
+  const resolvedVideoPath = path.resolve(videoPath);
+  if (!resolvedVideoPath.startsWith(`${resolvedSourceDir}${path.sep}`)) {
+    return { deleted: false };
+  }
+
+  try {
+    await fs.rm(resolvedVideoPath, { force: true });
+    return {
+      deleted: !(await pathExists(resolvedVideoPath)),
+      path: resolvedVideoPath,
+    };
+  } catch (error) {
+    return {
+      deleted: false,
+      path: resolvedVideoPath,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function renderRadioVideoJob(input: RadioVideoJobInput & { djName: string; force?: boolean }): Promise<RenderedClip[]> {
   const stagingDir = await fs.mkdtemp(path.join(os.tmpdir(), "radio-drive-upload-"));
 
   const duration = await getVideoDuration(input.videoPath);
-  const dropSecond = input.bestDropSecond ?? await findBestDropSecond(input.videoPath, duration);
+  const instagramClipCount = normalizeClipCount(input.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT);
+  const tiktokClipCount = normalizeClipCount(input.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT);
+  const maxClipCount = Math.max(instagramClipCount, tiktokClipCount);
+  const knownDropSeconds = uniqueDropSeconds([
+    ...(input.bestDropSeconds || []),
+    ...(typeof input.bestDropSecond === "number" ? [input.bestDropSecond] : []),
+  ], duration);
+  const detectedDropSeconds = knownDropSeconds.length >= maxClipCount
+    ? knownDropSeconds
+    : uniqueDropSeconds([
+      ...knownDropSeconds,
+      ...await findBestDropSeconds(input.videoPath, duration, maxClipCount),
+      ...evenlyDistributedDropSeconds(duration, maxClipCount),
+    ], duration);
+  const dropSeconds = detectedDropSeconds.length
+    ? detectedDropSeconds.slice(0, maxClipCount)
+    : [duration / 2];
   const longDuration = Math.min(60, duration);
   const shortDuration = Math.min(30, duration);
-  const longStart = clipStartAroundDrop(duration, longDuration, dropSecond);
-  const shortStart = clipStartAroundDrop(duration, shortDuration, dropSecond);
   const musicDuration = input.musicPath ? await getVideoDuration(input.musicPath) : null;
   const musicDropSecond = input.musicPath && musicDuration
     ? await findBestDropSecond(input.musicPath, musicDuration)
     : null;
-  const longMusicStart = input.musicPath && musicDuration && musicDropSecond !== null
-    ? clipStartAroundDrop(musicDuration, longDuration, musicDropSecond)
-    : undefined;
-  const shortMusicStart = input.musicPath && musicDuration && musicDropSecond !== null
-    ? clipStartAroundDrop(musicDuration, shortDuration, musicDropSecond)
-    : undefined;
-
-  const horizontalPath = buildOutputPath(stagingDir, input.djName, "60s_horizontal_ig");
-  const verticalPath = buildOutputPath(stagingDir, input.djName, "30s_vertical_tiktok");
 
   try {
-    await renderClip({
-      videoPath: input.videoPath,
-      outputPath: horizontalPath,
-      start: longStart,
-      duration: longDuration,
-      mode: "horizontal_ig",
-      force: true,
-      musicPath: input.musicPath,
-      musicStart: longMusicStart,
-    });
-    await renderClip({
-      videoPath: input.videoPath,
-      outputPath: verticalPath,
-      start: shortStart,
-      duration: shortDuration,
-      mode: "vertical_tiktok",
-      force: true,
-      musicPath: input.musicPath,
-      musicStart: shortMusicStart,
-    });
+    const clips: RenderedClip[] = [];
 
-    const clips: RenderedClip[] = [
-      {
+    for (let index = 0; index < instagramClipCount; index += 1) {
+      const dropSecond = dropSeconds[index % dropSeconds.length];
+      const start = clipStartAroundDrop(duration, longDuration, dropSecond);
+      const musicStart = input.musicPath && musicDuration && musicDropSecond !== null
+        ? clipStartAroundDrop(musicDuration, longDuration, musicDropSecond)
+        : undefined;
+      const suffix = instagramClipCount === 1
+        ? "60s_horizontal_ig"
+        : `60s_instagram_4x5_clip${String(index + 1).padStart(2, "0")}`;
+      const outputPath = buildOutputPath(stagingDir, input.djName, suffix);
+
+      await renderClip({
+        videoPath: input.videoPath,
+        outputPath,
+        start,
+        duration: longDuration,
+        mode: "horizontal_ig",
+        force: true,
+        musicPath: input.musicPath,
+        musicStart,
+      });
+
+      clips.push({
         kind: "horizontal_ig",
-        path: horizontalPath,
+        path: outputPath,
         driveFolderName: IG_RADIO_FOLDER_NAME,
         durationSeconds: longDuration,
         width: 1080,
         height: 1350,
         audioSource: input.musicPath ? "music_drop" : "source_drop",
         musicDropSecond: input.musicPath ? musicDropSecond ?? undefined : dropSecond,
-      },
-      {
+        clipNumber: index + 1,
+        startSecond: start,
+      });
+    }
+
+    for (let index = 0; index < tiktokClipCount; index += 1) {
+      const dropSecond = dropSeconds[index % dropSeconds.length];
+      const start = clipStartAroundDrop(duration, shortDuration, dropSecond);
+      const musicStart = input.musicPath && musicDuration && musicDropSecond !== null
+        ? clipStartAroundDrop(musicDuration, shortDuration, musicDropSecond)
+        : undefined;
+      const suffix = tiktokClipCount === 1
+        ? "30s_vertical_tiktok"
+        : `30s_vertical_tiktok_clip${String(index + 1).padStart(2, "0")}`;
+      const outputPath = buildOutputPath(stagingDir, input.djName, suffix);
+
+      await renderClip({
+        videoPath: input.videoPath,
+        outputPath,
+        start,
+        duration: shortDuration,
+        mode: "vertical_tiktok",
+        force: true,
+        musicPath: input.musicPath,
+        musicStart,
+      });
+
+      clips.push({
         kind: "vertical_tiktok",
-        path: verticalPath,
+        path: outputPath,
         driveFolderName: TIKTOK_RADIO_FOLDER_NAME,
         durationSeconds: shortDuration,
         width: 1080,
         height: 1920,
         audioSource: input.musicPath ? "music_drop" : "source_drop",
         musicDropSecond: input.musicPath ? musicDropSecond ?? undefined : dropSecond,
-      },
-    ];
+        clipNumber: index + 1,
+        startSecond: start,
+      });
+    }
 
     for (const clip of clips) {
       const folderName = input.driveFolderName || clip.driveFolderName || IG_RADIO_FOLDER_NAME;
@@ -788,11 +886,16 @@ async function createMissingDjNameAction(params: {
   fallbackInputDir?: string;
   outputDir?: string;
   bestDropSecond?: number;
+  bestDropSeconds?: number[];
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
 }): Promise<string> {
   const existing = (await storage.getPendingActions(params.userId)).find((action) => (
     action.actionType === "radio_edit.resolve_dj_name" &&
@@ -818,15 +921,23 @@ async function createMissingDjNameAction(params: {
       fallbackInputDir: params.fallbackInputDir,
       outputDir: params.outputDir || DEFAULT_OUTPUT_DIR,
       bestDropSecond: params.bestDropSecond,
+      bestDropSeconds: params.bestDropSeconds,
       driveFolderId: params.driveFolderId,
       driveFolderName: params.driveFolderName,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       musicPath: params.musicPath,
       musicUrl: params.musicUrl,
+      instagramClipCount: params.instagramClipCount,
+      tiktokClipCount: params.tiktokClipCount,
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
     },
     proposedChanges: {
       expectedTelegramFormat: "nombre <pendingActionId> MYNA",
-      outputs: ["<DJ>_60s_horizontal_ig.mp4", "<DJ>_30s_vertical_tiktok.mp4"],
+      outputs: [
+        `<DJ>_${normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT) === 1 ? "60s_horizontal_ig.mp4" : "60s_instagram_4x5_clipNN.mp4"}`,
+        `<DJ>_${normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT) === 1 ? "30s_vertical_tiktok.mp4" : "30s_vertical_tiktok_clipNN.mp4"}`,
+      ],
     },
     metadata: { status: "needs_dj_name" satisfies RadioEditStatus },
     scope: "system",
@@ -847,12 +958,19 @@ export async function processRadioVideo(params: {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
 }): Promise<RadioVideoProcessResult> {
   try {
+    const instagramClipCount = normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT);
+    const tiktokClipCount = normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT);
     const duration = await getVideoDuration(params.videoPath);
-    const bestDropSecond = await findBestDropSecond(params.videoPath, duration);
+    const bestDropSeconds = await findBestDropSeconds(params.videoPath, duration, Math.max(instagramClipCount, tiktokClipCount));
+    const bestDropSecond = bestDropSeconds[0] ?? duration / 2;
     const djName = sanitizeDjName(params.djName || "") || await detectDjNameByOcr(params.videoPath);
 
     if (!djName) {
@@ -863,11 +981,16 @@ export async function processRadioVideo(params: {
         fallbackInputDir: params.fallbackInputDir,
         outputDir: params.outputDir,
         bestDropSecond,
+        bestDropSeconds,
         driveFolderId: params.driveFolderId,
         driveFolderName: params.driveFolderName,
         driveFolderPath: params.driveFolderPath,
+        driveParentFolderId: params.driveParentFolderId,
         musicPath: params.musicPath,
         musicUrl: params.musicUrl,
+        instagramClipCount,
+        tiktokClipCount,
+        deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
       });
       return { videoPath: params.videoPath, status: "needs_dj_name", pendingActionId };
     }
@@ -878,14 +1001,19 @@ export async function processRadioVideo(params: {
       sourceDir: params.sourceDir,
       fallbackInputDir: params.fallbackInputDir,
       bestDropSecond,
+      bestDropSeconds,
       djName,
       force: params.force,
       userId: params.userId,
       driveFolderId: params.driveFolderId,
       driveFolderName: params.driveFolderName,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       musicPath: params.musicPath,
       musicUrl: params.musicUrl,
+      instagramClipCount,
+      tiktokClipCount,
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
     });
 
     await writeAuditLog({
@@ -901,7 +1029,19 @@ export async function processRadioVideo(params: {
       executionMode: "user_requested",
     }).catch(() => undefined);
 
-    return { videoPath: params.videoPath, status: "completed", djName, clips };
+    const cleanup = params.deleteSourceAfterSuccess
+      ? await deleteSourceVideoAfterSuccess(params.videoPath, params.sourceDir)
+      : { deleted: false };
+
+    return {
+      videoPath: params.videoPath,
+      status: "completed",
+      djName,
+      clips,
+      sourceVideoDeleted: cleanup.deleted || undefined,
+      sourceVideoDeletedPath: cleanup.deleted ? cleanup.path : undefined,
+      sourceVideoCleanupError: cleanup.error,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return { videoPath: params.videoPath, status: "failed", error: errorMessage };
@@ -918,8 +1058,12 @@ export async function processRadioVideos(options: {
   driveFolderId?: string;
   driveFolderName?: string;
   driveFolderPath?: string[];
+  driveParentFolderId?: string;
   musicPath?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
 }): Promise<RadioVideoProcessResult[]> {
   const sourceDir = options.sourceDir || path.join(os.homedir(), "Movies");
   const fallbackInputDir = options.fallbackInputDir || DEFAULT_FALLBACK_INPUT_DIR;
@@ -941,8 +1085,12 @@ export async function processRadioVideos(options: {
       driveFolderId: options.driveFolderId,
       driveFolderName: options.driveFolderName,
       driveFolderPath: options.driveFolderPath,
+      driveParentFolderId: options.driveParentFolderId,
       musicPath: options.musicPath,
       musicUrl: options.musicUrl,
+      instagramClipCount: options.instagramClipCount,
+      tiktokClipCount: options.tiktokClipCount,
+      deleteSourceAfterSuccess: options.deleteSourceAfterSuccess,
     }));
   }
   return results;
@@ -952,8 +1100,12 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
   userId: string;
   youtubeUrl: string;
   driveFolderPath: string[];
+  driveParentFolderId?: string;
   djName?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
   origin?: "web" | "telegram" | "scheduler";
   ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }>;
 }): Promise<string> {
@@ -981,16 +1133,27 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
     input: {
       youtubeUrl: params.youtubeUrl,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       createFolderIfMissing: true,
       djName: params.djName,
       musicUrl: params.musicUrl,
+      instagramClipCount: params.instagramClipCount,
+      tiktokClipCount: params.tiktokClipCount,
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
     },
     proposedChanges: {
       youtubeUrl: params.youtubeUrl,
       driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
       djName: params.djName,
       musicUrl: params.musicUrl,
-      outputs: ["<DJ>_60s_horizontal_ig.mp4", "<DJ>_30s_vertical_tiktok.mp4"],
+      instagramClipCount: normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT),
+      tiktokClipCount: normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT),
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
+      outputs: [
+        `<DJ>_${normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT) === 1 ? "60s_horizontal_ig.mp4" : "60s_instagram_4x5_clipNN.mp4"}`,
+        `<DJ>_${normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT) === 1 ? "30s_vertical_tiktok.mp4" : "30s_vertical_tiktok_clipNN.mp4"}`,
+      ],
       ambiguousMatches: params.ambiguousMatches || [],
     },
     metadata: { status: "needs_drive_folder_confirmation" },
@@ -1004,6 +1167,7 @@ export async function processYoutubeRadioVideoLink(params: {
   userId: string;
   youtubeUrl: string;
   driveFolderPath: string[] | string;
+  driveParentFolderId?: string;
   createFolderIfMissing?: boolean;
   driveFolderPathFromYoutubeTitle?: boolean;
   sourceDir?: string;
@@ -1012,15 +1176,20 @@ export async function processYoutubeRadioVideoLink(params: {
   djName?: string;
   musicUrl?: string;
   musicPath?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
 }): Promise<RadioYoutubeProcessResult> {
   const driveFolderPath = Array.isArray(params.driveFolderPath)
     ? params.driveFolderPath.map((part) => part.trim()).filter(Boolean)
     : splitDriveFolderPath(params.driveFolderPath);
-  if (driveFolderPath.length === 0 && !params.driveFolderPathFromYoutubeTitle) {
+  const driveParentFolderId = params.driveParentFolderId || getConfiguredClippersDriveRootFolderId() || undefined;
+  if (driveFolderPath.length === 0 && !params.driveFolderPathFromYoutubeTitle && !driveParentFolderId) {
     throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
   }
 
   const sourceDir = params.sourceDir || path.join(process.cwd(), "radio_video_edits", "01_originales", "youtube");
+  const deleteSourceAfterSuccess = params.deleteSourceAfterSuccess ?? true;
   const videoPath = params.driveFolderPathFromYoutubeTitle
     ? await downloadYoutubeVideo(params.youtubeUrl, sourceDir)
     : null;
@@ -1028,7 +1197,7 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderPath.push(folderNameFromDownloadedYoutubeVideo(videoPath));
   }
 
-  const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId);
+  const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId, driveParentFolderId);
   if (resolved.ambiguousMatches?.length && !params.createFolderIfMissing) {
     return {
       youtubeUrl: params.youtubeUrl,
@@ -1047,8 +1216,12 @@ export async function processYoutubeRadioVideoLink(params: {
         userId: params.userId,
         youtubeUrl: params.youtubeUrl,
         driveFolderPath,
+        driveParentFolderId,
         djName: params.djName,
         musicUrl: params.musicUrl,
+        instagramClipCount: params.instagramClipCount,
+        tiktokClipCount: params.tiktokClipCount,
+        deleteSourceAfterSuccess,
       });
       return {
         youtubeUrl: params.youtubeUrl,
@@ -1058,7 +1231,9 @@ export async function processYoutubeRadioVideoLink(params: {
         driveFolderPath,
       };
     }
-    driveFolderId = await ensureDriveFolderPath(driveFolderPath, params.userId);
+    driveFolderId = driveParentFolderId
+      ? await ensureDriveFolderPathUnderParent(driveFolderPath, driveParentFolderId, params.userId)
+      : await ensureDriveFolderPath(driveFolderPath, params.userId);
     driveFolderCreated = true;
   }
 
@@ -1076,8 +1251,12 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderId,
     driveFolderName: driveFolderPath.join("/"),
     driveFolderPath,
+    driveParentFolderId,
     musicPath,
     musicUrl: params.musicUrl,
+    instagramClipCount: params.instagramClipCount,
+    tiktokClipCount: params.tiktokClipCount,
+    deleteSourceAfterSuccess,
   });
 
   return {
@@ -1094,6 +1273,9 @@ export async function processYoutubeRadioVideoLink(params: {
 export async function resumeRadioVideoEditWithDjName(actionInput: RadioVideoJobInput): Promise<{
   djName: string;
   clips: RenderedClip[];
+  sourceVideoDeleted?: boolean;
+  sourceVideoDeletedPath?: string;
+  sourceVideoCleanupError?: string;
 }> {
   const djName = sanitizeDjName(String(actionInput.djName || ""));
   if (!djName) {
@@ -1107,8 +1289,17 @@ export async function resumeRadioVideoEditWithDjName(actionInput: RadioVideoJobI
     ...actionInput,
     djName,
   });
+  const cleanup = actionInput.deleteSourceAfterSuccess
+    ? await deleteSourceVideoAfterSuccess(actionInput.videoPath, actionInput.sourceDir)
+    : { deleted: false };
 
-  return { djName, clips };
+  return {
+    djName,
+    clips,
+    sourceVideoDeleted: cleanup.deleted || undefined,
+    sourceVideoDeletedPath: cleanup.deleted ? cleanup.path : undefined,
+    sourceVideoCleanupError: cleanup.error,
+  };
 }
 
 export function parseDjNameResolutionCommand(message: string): { actionId: string; djName: string } | null {
