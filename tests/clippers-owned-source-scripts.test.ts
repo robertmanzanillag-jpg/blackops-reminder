@@ -1878,6 +1878,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("status.robertNextActions.externalCloseout.operatorQueueItems"));
   assert.ok(page.includes("Direct APIs"));
   assert.ok(page.includes("Direct API backlog"));
+  assert.ok(page.includes("Metricool MVP launch mode"));
   assert.ok(page.includes("Ready queue"));
   assert.ok(page.includes('data-testid="clippers-external-portal-closeout-board"'));
   assert.ok(page.includes("more Metricool MVP blockers in"));

@@ -4488,6 +4488,14 @@ export interface ClipperGoLiveCompletionAuditSummary {
   closeoutQueueMarkdownPath: string;
   closeoutQueueCsvPath: string;
   readyToPublish: boolean;
+  launchModes?: {
+    metricoolMvpReady: boolean;
+    approvalQueueReady: boolean;
+    directSocialApisRequiredForMvp: boolean;
+    fullDirectApiReady: boolean;
+    metricoolMvpBlockers: string[];
+    directApiBacklog: string[];
+  };
   score: number;
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
@@ -42914,12 +42922,11 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.productionUrlVerification.status === "pass";
   const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
   const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
-  const metricoolApprovalQueueReady = input.metricoolPublishing.status === "ready_for_approval_queue"
-    && input.metricoolPublishing.totals.readyForApprovalQueue > 0
-    && input.metricoolExecutionQueue.status === "approval_required"
+  const metricoolApprovalQueueReady = input.metricoolExecutionQueue.status === "approval_required"
     && input.metricoolExecutionQueue.totals.queuedForApproval > 0
     && input.metricoolExecutionQueue.totals.readyToSend === 0
-    && !input.metricoolExecutionQueue.realPublishEnabled;
+    && !input.metricoolExecutionQueue.realPublishEnabled
+    && input.metricoolPublishing.totals.connectedProfiles >= 2;
   const metricoolBridgeProgress = metricoolApprovalQueueReady
     || input.metricoolPublishing.status === "ready_to_connect"
     || input.metricoolPublishing.totals.connectedProfiles > 0
@@ -42946,6 +42953,18 @@ async function buildGoLiveCompletionAuditSummary(input: {
   const directOAuthProgress = input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0;
   const directPublisherReady = input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready";
   const directPublisherProgress = input.publisherConnectors.status === "partial" || input.goLiveExecutionPack.status === "in_progress";
+  const fullDirectApiReady = directOAuthReady
+    && directPublisherReady
+    && input.developerAppEvidence.totals.approved >= input.developerAppEvidence.totals.expected
+    && input.permissionTracker.totals.approved >= input.permissionTracker.totals.permissions
+    && input.permissionTracker.totals.permissions > 0;
+  const metricoolMvpBlockers = metricoolApprovalQueueReady ? [] : metricoolBridgeBlockers;
+  const directApiBacklog = [
+    ...input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
+    ...input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
+    ...input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
+    ...input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
+  ].filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 12);
   const requirements: ClipperGoLiveCompletionRequirement[] = [
     {
       id: "accounts-created-verified",
@@ -43260,6 +43279,14 @@ async function buildGoLiveCompletionAuditSummary(input: {
     closeoutQueueMarkdownPath: GO_LIVE_COMPLETION_CLOSEOUT_QUEUE_MARKDOWN_PATH,
     closeoutQueueCsvPath: GO_LIVE_COMPLETION_CLOSEOUT_QUEUE_CSV_PATH,
     readyToPublish,
+    launchModes: {
+      metricoolMvpReady: metricoolApprovalQueueReady && metricoolMvpBlockers.length === 0,
+      approvalQueueReady: metricoolApprovalQueueReady,
+      directSocialApisRequiredForMvp: false,
+      fullDirectApiReady,
+      metricoolMvpBlockers,
+      directApiBacklog,
+    },
     score,
     requirements,
     externalSession,
@@ -43277,6 +43304,10 @@ function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAud
     "",
     `Status: ${summary.status}`,
     `Ready for approval-gated launch: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Metricool MVP ready: ${summary.launchModes?.metricoolMvpReady ? "yes" : "no"}`,
+    `Metricool approval queue ready: ${summary.launchModes?.approvalQueueReady ? "yes" : "no"}`,
+    `Direct social APIs required for Metricool MVP: ${summary.launchModes?.directSocialApisRequiredForMvp ? "yes" : "no"}`,
+    `Full direct API ready: ${summary.launchModes?.fullDirectApiReady ? "yes" : "no"}`,
     `Score: ${summary.score}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Totals: ${summary.totals.verified}/${summary.totals.requirements} verified, ${summary.totals.needsEvidence} needs_evidence, ${summary.totals.blocked} blocked`,
@@ -43289,6 +43320,16 @@ function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAud
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Launch Modes",
+    "",
+    `- Metricool MVP: ${summary.launchModes?.metricoolMvpReady ? "ready" : "blocked"}`,
+    `- Direct social APIs required for Metricool MVP: ${summary.launchModes?.directSocialApisRequiredForMvp ? "yes" : "no"}`,
+    `- Full direct API: ${summary.launchModes?.fullDirectApiReady ? "ready" : "backlog"}`,
+    "Metricool MVP blockers:",
+    ...(summary.launchModes?.metricoolMvpBlockers.length ? summary.launchModes.metricoolMvpBlockers.map((blocker) => `- ${blocker}`) : ["- none"]),
+    "Direct API backlog:",
+    ...(summary.launchModes?.directApiBacklog.length ? summary.launchModes.directApiBacklog.map((item) => `- ${item}`) : ["- none"]),
     "",
     "## Closeout Queue Preview",
     "",

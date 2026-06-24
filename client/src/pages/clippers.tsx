@@ -4189,6 +4189,14 @@ interface ClipperGoLiveCompletionAuditSummary {
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
   closeoutQueue?: ClipperGoLiveCompletionCloseoutQueueItem[];
+  launchModes?: {
+    metricoolMvpReady: boolean;
+    approvalQueueReady: boolean;
+    directSocialApisRequiredForMvp: boolean;
+    fullDirectApiReady: boolean;
+    metricoolMvpBlockers: string[];
+    directApiBacklog: string[];
+  };
   totals: {
     requirements: number;
     verified: number;
@@ -12928,8 +12936,8 @@ export default function ClippersPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className={cn("w-fit border", goLiveCompletionAuditBadge(status.goLiveCompletionAudit.status))}>{status.goLiveCompletionAudit.status}</Badge>
-                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                      {status.goLiveCompletionAudit.readyToPublish ? "ready_for_manual_approval" : "not_ready"}
+                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.launchModes?.metricoolMvpReady || status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                      {status.goLiveCompletionAudit.readyToPublish ? "full_ready" : status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "metricool_mvp_ready" : "not_ready"}
                     </Badge>
                     <Button
                       size="sm"
@@ -12951,7 +12959,31 @@ export default function ClippersPage() {
                   <p>Needs evidence: {status.goLiveCompletionAudit.totals.needsEvidence}</p>
                   <p>Blocked: {status.goLiveCompletionAudit.totals.blocked}</p>
                   <p>External: {status.goLiveCompletionAudit.totals.externalRequired}</p>
+                  <p>Metricool MVP: {status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "ready" : "blocked"}</p>
+                  <p>Direct APIs: {status.goLiveCompletionAudit.launchModes?.directSocialApisRequiredForMvp ? "required" : "not required"}</p>
                 </div>
+                {status.goLiveCompletionAudit.launchModes && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <div className="rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3">
+                      <p className="text-xs font-semibold uppercase text-emerald-200">Metricool MVP launch mode</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        Approval queue {status.goLiveCompletionAudit.launchModes.approvalQueueReady ? "ready" : "blocked"}; direct social APIs are {status.goLiveCompletionAudit.launchModes.directSocialApisRequiredForMvp ? "required" : "not required"} for this mode.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers.length > 0 && (
+                        <p className="mt-2 text-xs leading-5 text-amber-100">{status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers[0]}</p>
+                      )}
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-semibold uppercase text-zinc-300">Direct API backlog</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">
+                        Full direct API is {status.goLiveCompletionAudit.launchModes.fullDirectApiReady ? "ready" : "future/backlog"}.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.directApiBacklog.slice(0, 2).map((item) => (
+                        <p key={item} className="mt-1 text-xs leading-5 text-zinc-500">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {status.goLiveCompletionAudit.generatedAt && (
                   <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveCompletionAudit.generatedAt)}</p>
                 )}
