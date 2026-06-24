@@ -19,7 +19,7 @@ import {
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
-import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage, resolveCookieArgsForYtDlp, type YtDlpCommandSpec } from "./youtube-downloader";
+import { buildYtDlpCommandSpecs, formatYtDlpFailureMessage, type YtDlpCommandSpec } from "./youtube-downloader";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"]);
 const AUDIO_EXTENSIONS = new Set([".aac", ".m4a", ".mp3", ".mp4", ".ogg", ".opus", ".wav", ".webm"]);
@@ -215,13 +215,11 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const cookieArgs = await resolveCookieArgsForYtDlp();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "video",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
-    cookieArgs,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
@@ -255,13 +253,11 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const cookieArgs = await resolveCookieArgsForYtDlp();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "audio",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
-    cookieArgs,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
