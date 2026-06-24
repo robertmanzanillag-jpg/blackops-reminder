@@ -1540,7 +1540,7 @@ export function registerAssistantRoutes(app: Express): void {
           stream: true,
           max_completion_tokens: maxCompletionTokens,
           stream_options: { include_usage: true },
-        } as any);
+        } as any) as unknown as AsyncIterable<any>;
 
         let openAiUsage: any = null;
         for await (const chunk of stream) {

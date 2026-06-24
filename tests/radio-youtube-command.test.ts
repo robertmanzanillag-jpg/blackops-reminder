@@ -137,11 +137,13 @@ test("includes estimated cost in completed radio YouTube summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
 });
 
-test("yt-dlp command specs try 1080p video without JS runtime flags by default", () => {
+test("yt-dlp command specs try 1080p video with JS solver fallbacks by default", () => {
   const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
+  const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
 
   try {
     delete process.env.YT_DLP_JS_RUNTIMES;
+    delete process.env.YT_DLP_REMOTE_COMPONENTS;
     const specs = buildYtDlpCommandSpecs({
       url: "https://youtu.be/GcVZvXkz2jU",
       outputTemplate: "/tmp/%(id)s.%(ext)s",
@@ -151,7 +153,10 @@ test("yt-dlp command specs try 1080p video without JS runtime flags by default",
     });
 
     assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
-    assert.ok(specs.every((spec) => !spec.args.includes("--js-runtimes")));
+    assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
+    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
+    assert.ok(specs.every((spec) => !spec.args.includes("deno")));
+    assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
     assert.ok(specs.some((spec) => spec.args.includes("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best")));
     assert.ok(specs.every((spec) => {
       const formatIndex = spec.args.indexOf("-f");
@@ -164,14 +169,21 @@ test("yt-dlp command specs try 1080p video without JS runtime flags by default",
     } else {
       process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
     }
+    if (previousRemoteComponents === undefined) {
+      delete process.env.YT_DLP_REMOTE_COMPONENTS;
+    } else {
+      process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
+    }
   }
 });
 
 test("yt-dlp command specs allow explicit JS runtime flags", () => {
   const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
+  const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
 
   try {
     process.env.YT_DLP_JS_RUNTIMES = "deno,node";
+    delete process.env.YT_DLP_REMOTE_COMPONENTS;
     const specs = buildYtDlpCommandSpecs({
       url: "https://youtu.be/GcVZvXkz2jU",
       outputTemplate: "/tmp/%(id)s.%(ext)s",
@@ -183,11 +195,17 @@ test("yt-dlp command specs allow explicit JS runtime flags", () => {
     assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
     assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
     assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
+    assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
   } finally {
     if (previousRuntimeConfig === undefined) {
       delete process.env.YT_DLP_JS_RUNTIMES;
     } else {
       process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
+    }
+    if (previousRemoteComponents === undefined) {
+      delete process.env.YT_DLP_REMOTE_COMPONENTS;
+    } else {
+      process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
     }
   }
 });
@@ -196,6 +214,8 @@ test("yt-dlp command specs materialize YouTube cookies from base64 secret", () =
   const previous = {
     YT_DLP_COOKIES_PATH: process.env.YT_DLP_COOKIES_PATH,
     YT_DLP_COOKIES_B64: process.env.YT_DLP_COOKIES_B64,
+    YT_DLP_COOKIES_B64_1: process.env.YT_DLP_COOKIES_B64_1,
+    YT_DLP_COOKIES_B64_2: process.env.YT_DLP_COOKIES_B64_2,
     YT_DLP_COOKIES_BASE64: process.env.YT_DLP_COOKIES_BASE64,
     YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
     YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
@@ -211,6 +231,8 @@ test("yt-dlp command specs materialize YouTube cookies from base64 secret", () =
     delete process.env.YT_DLP_COOKIES_BASE64;
     delete process.env.YT_DLP_COOKIES;
     delete process.env.YT_DLP_COOKIES_FROM_BROWSER;
+    delete process.env.YT_DLP_COOKIES_B64_1;
+    delete process.env.YT_DLP_COOKIES_B64_2;
     process.env.YT_DLP_COOKIES_B64 = Buffer.from(cookieFile, "utf8").toString("base64");
 
     const specs = buildYtDlpCommandSpecs({
@@ -227,6 +249,54 @@ test("yt-dlp command specs materialize YouTube cookies from base64 secret", () =
     assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
     assert.ok(specs.some((spec) => spec.args.includes("--cookies") && spec.args.includes(materializedPath)));
     assert.ok(specs.some((spec) => !spec.args.includes("--cookies")));
+  } finally {
+    if (materializedPath) rmSync(materializedPath, { force: true });
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test("yt-dlp command specs prefer chunked base64 YouTube cookies over single secret", () => {
+  const previous = {
+    YT_DLP_COOKIES_PATH: process.env.YT_DLP_COOKIES_PATH,
+    YT_DLP_COOKIES_B64: process.env.YT_DLP_COOKIES_B64,
+    YT_DLP_COOKIES_B64_1: process.env.YT_DLP_COOKIES_B64_1,
+    YT_DLP_COOKIES_B64_2: process.env.YT_DLP_COOKIES_B64_2,
+    YT_DLP_COOKIES_BASE64: process.env.YT_DLP_COOKIES_BASE64,
+    YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
+    YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
+  };
+  const cookieFile = [
+    "# Netscape HTTP Cookie File",
+    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tLOGIN_INFO\tfull-cookie-test-value",
+  ].join("\n");
+  const encoded = Buffer.from(cookieFile, "utf8").toString("base64");
+  let materializedPath = "";
+
+  try {
+    delete process.env.YT_DLP_COOKIES_PATH;
+    delete process.env.YT_DLP_COOKIES_BASE64;
+    delete process.env.YT_DLP_COOKIES;
+    delete process.env.YT_DLP_COOKIES_FROM_BROWSER;
+    process.env.YT_DLP_COOKIES_B64 = Buffer.from("stale-cookie", "utf8").toString("base64");
+    process.env.YT_DLP_COOKIES_B64_1 = encoded.slice(0, 12);
+    process.env.YT_DLP_COOKIES_B64_2 = encoded.slice(12);
+
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+    });
+
+    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
+    assert.notEqual(firstCookiesIndex, -1);
+    materializedPath = specs[0].args[firstCookiesIndex + 1];
+    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
   } finally {
     if (materializedPath) rmSync(materializedPath, { force: true });
     for (const [key, value] of Object.entries(previous)) {

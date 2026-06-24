@@ -101,7 +101,7 @@ function unique(values) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function buildBlockers({ accountReadiness, metricoolQueue, localAppPorts }) {
+function buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue }) {
   const blockers = [];
   if (!accountReadiness) blockers.push("account-permission-readiness.json missing; run npm run clippers:account-permission-readiness.");
   if (!metricoolQueue) blockers.push("metricool-execution-queue.json missing; run npm run clippers:sync-metricool-source-readiness.");
@@ -115,17 +115,30 @@ function buildBlockers({ accountReadiness, metricoolQueue, localAppPorts }) {
   if (metricoolQueue && metricoolQueue?.sourceReadiness?.status !== "ready") blockers.push(`Metricool source readiness is ${metricoolQueue?.sourceReadiness?.status || "missing"}; expected ready.`);
   if ((metricoolQueue?.sourceReadiness?.totals?.rightsReadyAssets || 0) <= 0) blockers.push("Metricool source readiness has no connected rights-ready assets.");
   if (!Array.isArray(metricoolQueue?.sourceReadiness?.categories) || metricoolQueue.sourceReadiness.categories.length < 2) blockers.push("Metricool source readiness has fewer than two connected lanes.");
-  if (!localAppPorts.some((item) => item.open)) blockers.push("Local app is not listening on 127.0.0.1:5010 or 127.0.0.1:5000; browser QA cannot run yet.");
+  if ((accountReadiness?.totals?.metricoolReadyLanes || 0) < 2) blockers.push("Fewer than two Metricool approval lanes are ready; SPORT and memes must stay connected first.");
+  return unique(blockers);
+}
+
+function buildQaFollowups({ localAppPorts, accountReadiness }) {
+  const followups = [];
+  if (!localAppPorts.some((item) => item.open)) followups.push("Local app is not listening on 127.0.0.1:5010 or 127.0.0.1:5000; browser QA cannot run yet.");
+  if ((accountReadiness?.externalCloseout?.proofFilesNeedRealEvidence || 0) > 0) followups.push("External closeout proof files still need real non-secret evidence before claiming full readiness.");
+  return unique(followups);
+}
+
+function buildDirectApiBacklog({ accountReadiness }) {
+  const blockers = [];
   if ((accountReadiness?.totals?.developerAppsApproved || 0) < (accountReadiness?.totals?.developerApps || 0)) blockers.push("Developer apps are not all approved; direct API publishing remains blocked.");
   if ((accountReadiness?.totals?.permissionGroupsApproved || 0) < (accountReadiness?.totals?.permissionGroups || 0)) blockers.push("Platform permission groups are not all approved; direct API publishing remains blocked.");
   if ((accountReadiness?.totals?.verifiedAccounts || 0) < (accountReadiness?.totals?.accountProfiles || 0)) blockers.push("Not every account/platform profile is verified; only connected Metricool MVP lanes can be used.");
-  if ((accountReadiness?.externalCloseout?.proofFilesNeedRealEvidence || 0) > 0) blockers.push("External closeout proof files still need real non-secret evidence; full readiness remains blocked.");
   return unique(blockers);
 }
 
 function renderMarkdown(summary) {
   const portLines = summary.localApp.ports.map((item) => `- 127.0.0.1:${item.port}: ${item.open ? "open" : `closed (${item.error || "unknown"})`}`);
-  const blockerLines = summary.blockers.length ? summary.blockers.map((item) => `- ${item}`) : ["- None"];
+  const blockerLines = summary.metricoolMvpBlockers.length ? summary.metricoolMvpBlockers.map((item) => `- ${item}`) : ["- None"];
+  const qaLines = summary.qaFollowups.length ? summary.qaFollowups.map((item) => `- ${item}`) : ["- None"];
+  const directApiLines = summary.directApiBacklog.length ? summary.directApiBacklog.map((item) => `- ${item}`) : ["- None"];
   const laneLines = summary.metricool.lanes.map((lane) => `- ${lane.accountName} (${lane.category}): ${lane.connectedNetworks.join(", ") || "none"}; rights-ready ${lane.rightsReadyAssets}`);
   return [
     "# Clippers Operational Readiness",
@@ -136,9 +149,11 @@ function renderMarkdown(summary) {
     "## MVP",
     "",
     `- Metricool MVP ready: ${summary.mvp.metricoolReady ? "yes" : "no"}`,
+    `- Launch mode: ${summary.mvp.launchMode}`,
     `- Approval queue ready: ${summary.mvp.approvalQueueReady ? "yes" : "no"}`,
     `- Real publish enabled: ${summary.metricool.realPublishEnabled ? "yes" : "no"}`,
     `- Publish mode: ${summary.metricool.publishMode}`,
+    `- Direct social APIs required for MVP: no`,
     "",
     "## Totals",
     "",
@@ -158,9 +173,17 @@ function renderMarkdown(summary) {
     "",
     ...portLines,
     "",
-    "## Blockers",
+    "## Metricool MVP Blockers",
     "",
     ...blockerLines,
+    "",
+    "## QA Followups",
+    "",
+    ...qaLines,
+    "",
+    "## Direct API Backlog",
+    "",
+    ...directApiLines,
     "",
     "## Next Step",
     "",
@@ -173,6 +196,7 @@ function renderCsv(summary) {
   const rows = [
     ["status", summary.status],
     ["metricool_mvp_ready", summary.mvp.metricoolReady],
+    ["launch_mode", summary.mvp.launchMode],
     ["approval_queue_ready", summary.mvp.approvalQueueReady],
     ["full_direct_api_ready", summary.fullDirectApiReady],
     ["verified_account_profiles", `${summary.accounts.verified}/${summary.accounts.total}`],
@@ -183,7 +207,9 @@ function renderCsv(summary) {
     ["queued_for_approval", summary.metricool.queuedForApproval],
     ["ready_to_send", summary.metricool.readyToSend],
     ["real_publish_enabled", summary.metricool.realPublishEnabled],
-    ["blockers", summary.blockers.join(" | ")],
+    ["metricool_mvp_blockers", summary.metricoolMvpBlockers.join(" | ")],
+    ["qa_followups", summary.qaFollowups.join(" | ")],
+    ["direct_api_backlog", summary.directApiBacklog.join(" | ")],
     ["next_step", summary.nextStep],
   ];
   return `metric,value\n${rows.map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
@@ -203,7 +229,9 @@ async function main() {
   const queueTotals = metricoolQueue?.totals || {};
   const sourceTotals = metricoolQueue?.sourceReadiness?.localOwnedSourceTotals || {};
   const lanes = Array.isArray(metricoolQueue?.sourceReadiness?.categories) ? metricoolQueue.sourceReadiness.categories : [];
-  const blockers = buildBlockers({ accountReadiness, metricoolQueue, localAppPorts });
+  const metricoolMvpBlockers = buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue });
+  const qaFollowups = buildQaFollowups({ accountReadiness, localAppPorts });
+  const directApiBacklog = buildDirectApiBacklog({ accountReadiness });
   const sourceReadinessReady = metricoolQueue?.sourceReadiness?.status === "ready"
     && (metricoolQueue?.sourceReadiness?.totals?.rightsReadyAssets || 0) > 0
     && lanes.length >= 2
@@ -218,7 +246,8 @@ async function main() {
   const metricoolReady = metricoolMvpStatus
     && (accountTotals.metricoolReadyLanes || 0) >= 2
     && sourceReadinessReady
-    && approvalQueueReady;
+    && approvalQueueReady
+    && metricoolMvpBlockers.length === 0;
   const fullDirectApiReady = (accountTotals.directApiReadyLanes || 0) >= (accountTotals.accountProfiles || 1)
     && (accountTotals.developerAppsApproved || 0) >= (accountTotals.developerApps || 1)
     && (accountTotals.permissionGroupsApproved || 0) >= (accountTotals.permissionGroups || 1);
@@ -226,7 +255,7 @@ async function main() {
   const status = fullDirectApiReady && metricoolReady && localAppReady
     ? "full_ready"
     : metricoolReady
-      ? "metricool_mvp_ready_with_blockers"
+      ? "metricool_mvp_ready"
       : "blocked";
   const summary = {
     status,
@@ -238,7 +267,9 @@ async function main() {
     },
     mvp: {
       metricoolReady,
+      launchMode: "metricool_approval_required",
       approvalQueueReady,
+      directSocialApisRequired: false,
     },
     fullDirectApiReady,
     accounts: {
@@ -276,10 +307,13 @@ async function main() {
       ready: localAppReady,
       ports: localAppPorts,
     },
-    blockers,
-    nextStep: blockers.length
-      ? "Keep Metricool in approval_required, fix the listed blockers, then rerun this script before claiming full readiness."
-      : "Run browser QA and final approval review before enabling any real publishing.",
+    metricoolMvpBlockers,
+    qaFollowups,
+    directApiBacklog,
+    blockers: metricoolMvpBlockers,
+    nextStep: metricoolMvpBlockers.length
+      ? "Keep Metricool in approval_required, fix the listed Metricool MVP blockers, then rerun this script."
+      : "Use Metricool approval_required for SPORT and memes. Direct social APIs are future scale work, not required for this launch mode.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
@@ -292,6 +326,9 @@ async function main() {
     localAppReady: summary.localApp.ready,
     queuedForApproval: summary.metricool.queuedForApproval,
     readyToSend: summary.metricool.readyToSend,
+    metricoolMvpBlockers: summary.metricoolMvpBlockers.length,
+    qaFollowups: summary.qaFollowups.length,
+    directApiBacklog: summary.directApiBacklog.length,
     blockers: summary.blockers.length,
     reportPath: outMarkdownPath,
   }, null, 2));
