@@ -5,7 +5,7 @@ import { writeAuditLog } from "./trust-policy";
 import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
 import { executeMetricoolAutomationAction } from "./metricool-chat-actions";
-import { processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
+import { processDriveRadioVideoFile, processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
 
 type JsonRecord = Record<string, any>;
 
@@ -187,6 +187,29 @@ export async function executeApprovedPendingAction(
           throw new Error(radioYoutubeResult.error || "No pude procesar el link de YouTube para radio");
         }
         result = radioYoutubeResult;
+        break;
+      }
+
+      case "radio_edit.drive_video_to_drive": {
+        const radioDriveVideoResult = await processDriveRadioVideoFile({
+          userId: action.userId,
+          sourceDriveFileId: input.sourceDriveFileId,
+          sourceDriveUrl: input.sourceDriveUrl,
+          driveFolderPath: input.driveFolderPath,
+          driveParentFolderId: input.driveParentFolderId,
+          createFolderIfMissing: Boolean(input.createFolderIfMissing),
+          force: Boolean(input.force),
+          djName: input.djName,
+          musicUrl: input.musicUrl,
+          musicPath: input.musicPath,
+          instagramClipCount: Number.isFinite(Number(input.instagramClipCount)) ? Number(input.instagramClipCount) : undefined,
+          tiktokClipCount: Number.isFinite(Number(input.tiktokClipCount)) ? Number(input.tiktokClipCount) : undefined,
+          deleteSourceAfterSuccess: input.deleteSourceAfterSuccess !== false,
+        });
+        if (radioDriveVideoResult.status === "failed") {
+          throw new Error(radioDriveVideoResult.error || "No pude procesar el MP4 de Google Drive para radio");
+        }
+        result = radioDriveVideoResult;
         break;
       }
 

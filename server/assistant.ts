@@ -10,7 +10,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
@@ -26,6 +26,9 @@ import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "open
 const ASSISTANT_TIMEZONE = "America/New_York";
 const CHEAP_SCOUT_CACHE_TTL_MS = 10 * 60 * 1000;
 const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
+const RADIO_EDIT_ESTIMATED_COST_TEXT = "Gasto estimado de esta corrida: $0.00 USD.";
+const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: preparo Drive, descargo el MP4 fuente, creo los clips y luego los subo a tu carpeta. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
+const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargo el YouTube, creo los clips, los subo a Drive y borro el video largo local. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
@@ -36,6 +39,10 @@ function estimateTokensFromText(text: string): number {
 
 function formatAiApiCostPreview(provider: string, model: string, operation: string, estimatedCostUsd: number): string {
   return `Costo API aproximado antes de ejecutar: ${provider.toUpperCase()} ${model} para ${operation} puede salir hasta ~$${estimatedCostUsd.toFixed(4)} USD. Si ya lo aprobaste, sigo con la tarea.`;
+}
+
+function withRadioEditEstimatedCost(message: string): string {
+  return /gasto estimado/i.test(message) ? message : `${message}\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 }
 
 function normalizeAssistantCacheText(message = ""): string {
@@ -120,8 +127,12 @@ export function buildRadioYoutubeContinuationMessage(
 
   const previousUserMessage = [...recentHistory].reverse().find((entry) => {
     if (entry.role !== "user") return false;
-    const command = buildDirectRadioYoutubeCommand(entry.content);
-    return Boolean(command && (directRadioYoutubeCommandNeedsDriveFolder(command) || /carpeta de Google Drive/i.test(lastAssistantMessage)));
+    const youtubeCommand = buildDirectRadioYoutubeCommand(entry.content);
+    const driveVideoCommand = buildDirectRadioDriveVideoCommand(entry.content);
+    return Boolean(
+      (youtubeCommand && (directRadioYoutubeCommandNeedsDriveFolder(youtubeCommand) || /carpeta de Google Drive/i.test(lastAssistantMessage))) ||
+      (driveVideoCommand && (directRadioDriveVideoCommandNeedsDriveFolder(driveVideoCommand) || /carpeta de Google Drive/i.test(lastAssistantMessage))),
+    );
   })?.content;
 
   if (!previousUserMessage) return null;
@@ -935,6 +946,7 @@ COMANDOS DISPONIBLES:
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3, "hookText": "...", "ctaText": "...", "fontStyle": "bold|clean|luxury|impact|neon", "sourceHint": "Pool parties"}]
 - [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
+- [RADIO_DRIVE_VIDEO_CLIPS: {"sourceDriveFileId": "GOOGLE_DRIVE_FILE_ID", "sourceDriveUrl": "https://drive.google.com/file/d/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
@@ -992,6 +1004,7 @@ Si el usuario manda un link de YouTube y pide clips/videos/edits de radio, usa R
 - Si el usuario pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente.
 - Si el usuario manda un segundo link de canción en musicUrl, usa ese audio externo. En ambos casos el sistema busca el drop por volumen y lo recorta al largo exacto del clip.
 - Para descargas de YouTube, usa deleteSourceAfterSuccess:true salvo que el usuario pida conservar el video largo; el sistema borra solo el MP4 fuente descargado después de subir los clips.
+- Si YouTube está bloqueando la descarga y el usuario manda un link de archivo MP4 de Google Drive, usa RADIO_DRIVE_VIDEO_CLIPS en vez de RADIO_YOUTUBE_CLIPS. Necesitas sourceDriveFileId/sourceDriveUrl y carpeta destino. El sistema descarga el MP4 temporalmente desde Drive, crea los clips, los sube a Drive y borra el MP4 fuente local después del éxito.
 
 ## GOOGLE DRIVE:
 Puedes crear carpetas y subcarpetas en Google Drive con GOOGLE_DRIVE_CREATE_FOLDER.
@@ -1143,6 +1156,62 @@ export function registerAssistantRoutes(app: Express): void {
       }
 
       const radioYoutubeMessage = buildRadioYoutubeContinuationMessage(message, conversationHistory) || message;
+      const directRadioDriveVideoCommand = buildDirectRadioDriveVideoCommand(radioYoutubeMessage);
+      if (directRadioDriveVideoCommand) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        if (message) {
+          await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+            console.error("Error saving direct radio Drive video user message:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ content: directRadioDriveVideoCommand.content })}\n\n`);
+
+        if (directRadioDriveVideoCommandNeedsDriveFolder(directRadioDriveVideoCommand) || directRadioDriveVideoCommand.needsMusicUrl) {
+          await saveCeoConversationMessage(userId, "assistant", directRadioDriveVideoCommand.content).catch((historyError) => {
+            console.error("Error saving direct radio Drive video folder question:", historyError);
+          });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
+        try {
+          res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_DRIVE_VIDEO_STATUS_MESSAGE })}\n\n`);
+          const result = await executeDirectRadioDriveVideoCommand(directRadioDriveVideoCommand, userId);
+          const summary = formatRadioDriveVideoResult(result);
+          if (result.status === "failed") {
+            res.write(`data: ${JSON.stringify({ radioDriveVideoError: summary })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({
+              content: `\n\n${summary}`,
+              radioDriveVideoProcessed: result.status === "completed",
+              radioDriveVideoNeedsConfirmation: result.status === "queued",
+              radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
+              pendingActionId: result.pendingActionId,
+              driveFolderPath: result.driveFolderPath,
+              clips: result.clips,
+            })}\n\n`);
+          }
+          await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\n${directRadioDriveVideoCommand.command}\n${summary}`).catch((historyError) => {
+            console.error("Error saving direct radio Drive video assistant response:", historyError);
+          });
+        } catch (e: any) {
+          const errorText = e.message || "No pude procesar el MP4 de Google Drive para radio";
+          res.write(`data: ${JSON.stringify({ radioDriveVideoError: withRadioEditEstimatedCost(errorText) })}\n\n`);
+          await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\nError: ${errorText}`).catch((historyError) => {
+            console.error("Error saving direct radio Drive video assistant error:", historyError);
+          });
+        }
+
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+
       const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(radioYoutubeMessage);
       if (directRadioYoutubeCommand) {
         res.setHeader("Content-Type", "text/event-stream");
@@ -1167,23 +1236,28 @@ export function registerAssistantRoutes(app: Express): void {
         }
 
         try {
+          res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_YOUTUBE_STATUS_MESSAGE })}\n\n`);
           const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
           const summary = formatRadioYoutubeResult(result);
-          res.write(`data: ${JSON.stringify({
-            content: `\n\n${summary}`,
-            radioYoutubeProcessed: result.status === "completed",
-            radioYoutubeNeedsConfirmation: result.status === "queued",
-            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
-            pendingActionId: result.pendingActionId,
-            driveFolderPath: result.driveFolderPath,
-            clips: result.clips,
-          })}\n\n`);
+          if (result.status === "failed") {
+            res.write(`data: ${JSON.stringify({ radioYoutubeError: summary })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({
+              content: `\n\n${summary}`,
+              radioYoutubeProcessed: result.status === "completed",
+              radioYoutubeNeedsConfirmation: result.status === "queued",
+              radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+              pendingActionId: result.pendingActionId,
+              driveFolderPath: result.driveFolderPath,
+              clips: result.clips,
+            })}\n\n`);
+          }
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\n${directRadioYoutubeCommand.command}\n${summary}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant response:", historyError);
           });
         } catch (e: any) {
           const errorText = e.message || "No pude procesar el link de YouTube para radio";
-          res.write(`data: ${JSON.stringify({ radioYoutubeError: errorText })}\n\n`);
+          res.write(`data: ${JSON.stringify({ radioYoutubeError: withRadioEditEstimatedCost(errorText) })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant error:", historyError);
           });
@@ -1651,6 +1725,7 @@ export function registerAssistantRoutes(app: Express): void {
       while ((radioYoutubeMatch = radioYoutubeRegex.exec(fullResponse)) !== null) {
         try {
           const radioYoutubeData = JSON.parse(radioYoutubeMatch[1]);
+          res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_YOUTUBE_STATUS_MESSAGE })}\n\n`);
           const result = await executeDirectRadioYoutubeCommand({
             youtubeUrl: radioYoutubeData.youtubeUrl,
             driveFolderPath: Array.isArray(radioYoutubeData.driveFolderPath) ? radioYoutubeData.driveFolderPath : [],
@@ -1665,18 +1740,64 @@ export function registerAssistantRoutes(app: Express): void {
             content: "Voy a procesar ese YouTube para radio.",
             command: radioYoutubeMatch[0],
           }, userId);
-          res.write(`data: ${JSON.stringify({
-            content: `\n\n${formatRadioYoutubeResult(result)}`,
-            radioYoutubeProcessed: result.status === "completed",
-            radioYoutubeNeedsConfirmation: result.status === "queued",
-            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
-            pendingActionId: result.pendingActionId,
-            driveFolderPath: result.driveFolderPath,
-            clips: result.clips,
-          })}\n\n`);
+          const summary = formatRadioYoutubeResult(result);
+          if (result.status === "failed") {
+            res.write(`data: ${JSON.stringify({ radioYoutubeError: summary })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({
+              content: `\n\n${summary}`,
+              radioYoutubeProcessed: result.status === "completed",
+              radioYoutubeNeedsConfirmation: result.status === "queued",
+              radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+              pendingActionId: result.pendingActionId,
+              driveFolderPath: result.driveFolderPath,
+              clips: result.clips,
+            })}\n\n`);
+          }
         } catch (e: any) {
           res.write(`data: ${JSON.stringify({
-            radioYoutubeError: e.message || "No pude procesar el link de YouTube para radio",
+            radioYoutubeError: withRadioEditEstimatedCost(e.message || "No pude procesar el link de YouTube para radio"),
+          })}\n\n`);
+        }
+      }
+
+      const radioDriveVideoRegex = /\[RADIO_DRIVE_VIDEO_CLIPS:\s*(\{[^}]+\})\]/g;
+      let radioDriveVideoMatch;
+      while ((radioDriveVideoMatch = radioDriveVideoRegex.exec(fullResponse)) !== null) {
+        try {
+          const radioDriveVideoData = JSON.parse(radioDriveVideoMatch[1]);
+          res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_DRIVE_VIDEO_STATUS_MESSAGE })}\n\n`);
+          const result = await executeDirectRadioDriveVideoCommand({
+            sourceDriveFileId: radioDriveVideoData.sourceDriveFileId,
+            sourceDriveUrl: radioDriveVideoData.sourceDriveUrl,
+            driveFolderPath: Array.isArray(radioDriveVideoData.driveFolderPath) ? radioDriveVideoData.driveFolderPath : [],
+            driveParentFolderId: typeof radioDriveVideoData.driveParentFolderId === "string" ? radioDriveVideoData.driveParentFolderId : undefined,
+            createFolderIfMissing: Boolean(radioDriveVideoData.createFolderIfMissing),
+            djName: radioDriveVideoData.djName,
+            musicUrl: radioDriveVideoData.musicUrl,
+            instagramClipCount: Number.isFinite(Number(radioDriveVideoData.instagramClipCount)) ? Number(radioDriveVideoData.instagramClipCount) : undefined,
+            tiktokClipCount: Number.isFinite(Number(radioDriveVideoData.tiktokClipCount)) ? Number(radioDriveVideoData.tiktokClipCount) : undefined,
+            deleteSourceAfterSuccess: radioDriveVideoData.deleteSourceAfterSuccess !== false,
+            content: "Voy a procesar ese MP4 de Drive para radio.",
+            command: radioDriveVideoMatch[0],
+          }, userId);
+          const summary = formatRadioDriveVideoResult(result);
+          if (result.status === "failed") {
+            res.write(`data: ${JSON.stringify({ radioDriveVideoError: summary })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({
+              content: `\n\n${summary}`,
+              radioDriveVideoProcessed: result.status === "completed",
+              radioDriveVideoNeedsConfirmation: result.status === "queued",
+              radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
+              pendingActionId: result.pendingActionId,
+              driveFolderPath: result.driveFolderPath,
+              clips: result.clips,
+            })}\n\n`);
+          }
+        } catch (e: any) {
+          res.write(`data: ${JSON.stringify({
+            radioDriveVideoError: withRadioEditEstimatedCost(e.message || "No pude procesar el MP4 de Google Drive para radio"),
           })}\n\n`);
         }
       }

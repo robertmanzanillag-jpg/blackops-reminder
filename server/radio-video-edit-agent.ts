@@ -16,6 +16,7 @@ import {
   findDriveFolderPathUnderParent,
   getConfiguredClippersDriveRootFolderId,
   searchDriveFoldersByName,
+  downloadDriveFileToPath,
   uploadLocalFileToDriveFolder,
 } from "./google-drive";
 import { hasRealValue } from "./ceo-doctor-cli";
@@ -92,6 +93,18 @@ export type RadioVideoProcessResult = {
 
 export type RadioYoutubeProcessResult = RadioVideoProcessResult & {
   youtubeUrl: string;
+  driveFolderPath?: string[];
+  driveFolderId?: string;
+  driveFolderCreated?: boolean;
+  musicUrl?: string;
+  musicPath?: string;
+  pendingActionId?: string;
+};
+
+export type RadioDriveVideoProcessResult = RadioVideoProcessResult & {
+  sourceDriveFileId: string;
+  sourceDriveUrl?: string;
+  sourceDriveFileName?: string;
   driveFolderPath?: string[];
   driveFolderId?: string;
   driveFolderCreated?: boolean;
@@ -1209,6 +1222,76 @@ export async function createRadioYoutubeDriveFolderConfirmation(params: {
   return pendingAction.id;
 }
 
+export async function createRadioDriveVideoFolderConfirmation(params: {
+  userId: string;
+  sourceDriveFileId: string;
+  sourceDriveUrl?: string;
+  driveFolderPath: string[];
+  driveParentFolderId?: string;
+  djName?: string;
+  musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
+  origin?: "web" | "telegram" | "scheduler";
+  ambiguousMatches?: Array<{ id: string; name: string; webViewLink: string | null }>;
+}): Promise<string> {
+  const folderLabel = params.driveFolderPath.join("/");
+  const existing = (await storage.getPendingActions(params.userId)).find((action) => (
+    action.actionType === "radio_edit.drive_video_to_drive" &&
+    action.resourceId === params.sourceDriveFileId &&
+    ["pending", "edited", "snoozed", "approved", "executing"].includes(action.status)
+  ));
+  if (existing) return existing.id;
+
+  const pendingAction = await createPendingActionForApproval({
+    userId: params.userId,
+    actorType: "assistant",
+    actorId: "radio-drive-video-agent",
+    origin: params.origin || "web",
+    executionMode: "user_requested",
+    actionType: "radio_edit.drive_video_to_drive",
+    resourceType: "drive_video",
+    resourceId: params.sourceDriveFileId,
+    title: "Crear clips de radio desde MP4 de Drive",
+    description: params.ambiguousMatches?.length
+      ? `Encontré más de una carpeta llamada ${folderLabel}. Confirma la ruta exacta antes de guardar.`
+      : `No encontré la carpeta ${folderLabel} en Google Drive. Confirma si quieres crearla y guardar ahí los clips.`,
+    input: {
+      sourceDriveFileId: params.sourceDriveFileId,
+      sourceDriveUrl: params.sourceDriveUrl,
+      driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
+      createFolderIfMissing: true,
+      djName: params.djName,
+      musicUrl: params.musicUrl,
+      instagramClipCount: params.instagramClipCount,
+      tiktokClipCount: params.tiktokClipCount,
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
+    },
+    proposedChanges: {
+      sourceDriveFileId: params.sourceDriveFileId,
+      sourceDriveUrl: params.sourceDriveUrl,
+      driveFolderPath: params.driveFolderPath,
+      driveParentFolderId: params.driveParentFolderId,
+      djName: params.djName,
+      musicUrl: params.musicUrl,
+      instagramClipCount: normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT),
+      tiktokClipCount: normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT),
+      deleteSourceAfterSuccess: params.deleteSourceAfterSuccess,
+      outputs: [
+        `<DJ>_${normalizeClipCount(params.instagramClipCount, DEFAULT_INSTAGRAM_CLIP_COUNT) === 1 ? "60s_horizontal_ig.mp4" : "60s_instagram_4x5_clipNN.mp4"}`,
+        `<DJ>_${normalizeClipCount(params.tiktokClipCount, DEFAULT_TIKTOK_CLIP_COUNT) === 1 ? "30s_vertical_tiktok.mp4" : "30s_vertical_tiktok_clipNN.mp4"}`,
+      ],
+      ambiguousMatches: params.ambiguousMatches || [],
+    },
+    metadata: { status: "needs_drive_folder_confirmation" },
+    scope: "system",
+  });
+
+  return pendingAction.id;
+}
+
 export async function processYoutubeRadioVideoLink(params: {
   userId: string;
   youtubeUrl: string;
@@ -1308,6 +1391,116 @@ export async function processYoutubeRadioVideoLink(params: {
   return {
     ...result,
     youtubeUrl: params.youtubeUrl,
+    driveFolderPath,
+    driveFolderId,
+    driveFolderCreated,
+    musicUrl: params.musicUrl,
+    musicPath,
+  };
+}
+
+export async function processDriveRadioVideoFile(params: {
+  userId: string;
+  sourceDriveFileId: string;
+  sourceDriveUrl?: string;
+  driveFolderPath: string[] | string;
+  driveParentFolderId?: string;
+  createFolderIfMissing?: boolean;
+  sourceDir?: string;
+  outputDir?: string;
+  force?: boolean;
+  djName?: string;
+  musicUrl?: string;
+  musicPath?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
+}): Promise<RadioDriveVideoProcessResult> {
+  const driveFolderPath = Array.isArray(params.driveFolderPath)
+    ? params.driveFolderPath.map((part) => part.trim()).filter(Boolean)
+    : splitDriveFolderPath(params.driveFolderPath);
+  const driveParentFolderId = params.driveParentFolderId || getConfiguredClippersDriveRootFolderId() || undefined;
+  if (driveFolderPath.length === 0 && !driveParentFolderId) {
+    throw new Error("Falta la carpeta de Google Drive donde guardar los clips.");
+  }
+
+  const sourceDir = params.sourceDir || path.join(process.cwd(), "radio_video_edits", "01_originales", "drive");
+  const deleteSourceAfterSuccess = params.deleteSourceAfterSuccess ?? true;
+  const resolved = await resolveExistingDriveFolderId(driveFolderPath, params.userId, driveParentFolderId);
+  if (resolved.ambiguousMatches?.length && !params.createFolderIfMissing) {
+    return {
+      sourceDriveFileId: params.sourceDriveFileId,
+      sourceDriveUrl: params.sourceDriveUrl,
+      videoPath: params.sourceDriveUrl || params.sourceDriveFileId,
+      status: "failed",
+      error: `Encontré varias carpetas llamadas ${driveFolderPath.join("/")}. Dime la ruta completa, por ejemplo "Robert A/Videos de Black Room/Radio Junio".`,
+      driveFolderPath,
+    };
+  }
+
+  let driveFolderId = resolved.folderId;
+  let driveFolderCreated = false;
+  if (!driveFolderId) {
+    if (!params.createFolderIfMissing) {
+      const pendingActionId = await createRadioDriveVideoFolderConfirmation({
+        userId: params.userId,
+        sourceDriveFileId: params.sourceDriveFileId,
+        sourceDriveUrl: params.sourceDriveUrl,
+        driveFolderPath,
+        driveParentFolderId,
+        djName: params.djName,
+        musicUrl: params.musicUrl,
+        instagramClipCount: params.instagramClipCount,
+        tiktokClipCount: params.tiktokClipCount,
+        deleteSourceAfterSuccess,
+      });
+      return {
+        sourceDriveFileId: params.sourceDriveFileId,
+        sourceDriveUrl: params.sourceDriveUrl,
+        videoPath: params.sourceDriveUrl || params.sourceDriveFileId,
+        status: "queued",
+        pendingActionId,
+        driveFolderPath,
+      };
+    }
+    driveFolderId = driveParentFolderId
+      ? await ensureDriveFolderPathUnderParent(driveFolderPath, driveParentFolderId, params.userId)
+      : await ensureDriveFolderPath(driveFolderPath, params.userId);
+    driveFolderCreated = true;
+  }
+
+  const downloaded = await downloadDriveFileToPath({
+    fileId: params.sourceDriveFileId,
+    outputDir: sourceDir,
+    userId: params.userId,
+    allowedExtensions: VIDEO_EXTENSIONS,
+  });
+  const musicPath = params.musicPath || (params.musicUrl
+    ? await downloadYoutubeAudio(params.musicUrl, path.join(sourceDir, "audio"))
+    : undefined);
+  const result = await processRadioVideo({
+    userId: params.userId,
+    videoPath: downloaded.filePath,
+    sourceDir,
+    outputDir: params.outputDir,
+    force: params.force,
+    djName: params.djName,
+    driveFolderId,
+    driveFolderName: driveFolderPath.join("/"),
+    driveFolderPath,
+    driveParentFolderId,
+    musicPath,
+    musicUrl: params.musicUrl,
+    instagramClipCount: params.instagramClipCount,
+    tiktokClipCount: params.tiktokClipCount,
+    deleteSourceAfterSuccess,
+  });
+
+  return {
+    ...result,
+    sourceDriveFileId: params.sourceDriveFileId,
+    sourceDriveUrl: params.sourceDriveUrl,
+    sourceDriveFileName: downloaded.name,
     driveFolderPath,
     driveFolderId,
     driveFolderCreated,

@@ -10,7 +10,7 @@ import {
   userAlreadyApprovedExecution,
 } from "../server/assistant";
 import { shouldUseCheapScoutForWebChat } from "../server/ai-router";
-import { buildDirectRadioYoutubeCommand } from "../server/radio-youtube-command";
+import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand } from "../server/radio-youtube-command";
 
 test("web assistant saves streamed responses and failures into shared CEO history", () => {
   const source = readFileSync("server/assistant.ts", "utf8");
@@ -111,6 +111,25 @@ test("web assistant continues YouTube clip requests when user replies with only 
   assert.ok(direct);
   assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
   assert.match(direct.command, /RADIO_YOUTUBE_CLIPS/);
+});
+
+test("web assistant continues Drive MP4 clip requests when user replies with only the Drive folder", () => {
+  const continuation = buildRadioYoutubeContinuationMessage("Robert a", [
+    {
+      role: "user",
+      content: "https://drive.google.com/file/d/1abcDEFghiJKLmnopQRSTuv/view quiero que me saques un clip para TikTok y otro para ig",
+    },
+    {
+      role: "assistant",
+      content: "Puedo hacerlo con el MP4 de Google Drive. Mándame también el nombre, ruta o link de la carpeta de Google Drive donde quieres que guarde los clips.",
+    },
+  ]);
+
+  assert.ok(continuation);
+  const direct = buildDirectRadioDriveVideoCommand(continuation);
+  assert.ok(direct);
+  assert.deepEqual(direct.driveFolderPath, ["Robert a"]);
+  assert.match(direct.command, /RADIO_DRIVE_VIDEO_CLIPS/);
 });
 
 test("web assistant routes Metricool posting requests into approval-gated automation", () => {
@@ -341,16 +360,25 @@ test("dashboard assistant chat shows Black Room approval creation errors", () =>
   assert.match(source, /No pude completar la accion/);
 });
 
-test("assistant chats surface radio YouTube execution errors", () => {
+test("assistant chats surface radio video status, errors, and cost", () => {
   const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
   const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
   const webAssistant = readFileSync("server/assistant.ts", "utf8");
 
   assert.match(dashboardChat, /data\.radioYoutubeError/);
+  assert.match(dashboardChat, /data\.radioDriveVideoError/);
+  assert.match(dashboardChat, /data\.assistantStatus/);
+  assert.match(dashboardChat, /streamBuffer/);
   assert.match(dashboardChat, /data\.actionExecutionError/);
   assert.match(assistantPage, /data\.radioYoutubeError/);
+  assert.match(assistantPage, /data\.radioDriveVideoError/);
+  assert.match(assistantPage, /data\.assistantStatus/);
+  assert.match(assistantPage, /streamBuffer/);
   assert.match(assistantPage, /data\.actionExecutionError/);
   assert.match(webAssistant, /actionExecutionError/);
+  assert.match(webAssistant, /RADIO_DRIVE_VIDEO_STATUS_MESSAGE/);
+  assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
+  assert.match(webAssistant, /withRadioEditEstimatedCost/);
 });
 
 test("radio YouTube approval executor fails failed processor results", () => {
