@@ -8,6 +8,7 @@ function pipInstallEnv(): NodeJS.ProcessEnv {
     ...process.env,
     PIP_USER: "false",
     PYTHONNOUSERSITE: "1",
+    PIP_CONFIG_FILE: "/dev/null",
   };
 }
 
@@ -50,7 +51,6 @@ async function bundleFreshYtDlp() {
     await runCommand("python3", [
       "-m",
       "pip",
-      "--isolated",
       "install",
       "--upgrade",
       "--target",

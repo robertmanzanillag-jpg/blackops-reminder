@@ -174,6 +174,7 @@ function pipInstallEnv(): NodeJS.ProcessEnv {
     ...process.env,
     PIP_USER: "false",
     PYTHONNOUSERSITE: "1",
+    PIP_CONFIG_FILE: "/dev/null",
   };
 }
 
@@ -219,7 +220,6 @@ async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
     await runCommand("python3", [
       "-m",
       "pip",
-      "--isolated",
       "install",
       "--upgrade",
       "--force-reinstall",
@@ -237,6 +237,49 @@ async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
 function getFreshYtDlpPythonPackageDir(): Promise<string | null> {
   freshYtDlpPythonPackageDirPromise ||= ensureFreshYtDlpPythonPackageDir();
   return freshYtDlpPythonPackageDirPromise;
+}
+
+let curlCffiPackageDirPromise: Promise<string | null> | null = null;
+
+async function ensureCurlCffiPackageDir(): Promise<string | null> {
+  if (!shouldAutoInstallFreshYtDlp()) return null;
+
+  const targetDir = path.join(os.tmpdir(), "robplanner-curl-cffi");
+  const marker = path.join(targetDir, "curl_cffi", "__init__.py");
+  if (await pathExists(marker)) {
+    console.log("[radio-video-edit] curl-cffi already installed at", targetDir);
+    return targetDir;
+  }
+
+  await fs.mkdir(targetDir, { recursive: true });
+  try {
+    await runCommand("python3", [
+      "-m",
+      "pip",
+      "install",
+      "--upgrade",
+      "--target",
+      targetDir,
+      "curl-cffi",
+    ], { timeoutMs: 3 * 60 * 1000, env: pipInstallEnv() });
+    console.log("[radio-video-edit] curl-cffi installed successfully for --impersonate support");
+    return targetDir;
+  } catch (error) {
+    console.warn("[radio-video-edit] curl-cffi install failed (--impersonate will be skipped):", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+function getCurlCffiPackageDir(): Promise<string | null> {
+  curlCffiPackageDirPromise ||= ensureCurlCffiPackageDir();
+  return curlCffiPackageDirPromise;
+}
+
+async function getWorkspaceYtDlpBin(): Promise<string | null> {
+  const envPath = process.env.YT_DLP_PATH?.trim();
+  if (envPath) return envPath;
+  const workspaceBin = path.join(process.cwd(), "bin", "yt-dlp");
+  return (await pathExists(workspaceBin)) ? workspaceBin : null;
 }
 
 function sanitizeDjName(value: string): string {
@@ -335,16 +378,23 @@ function isYouTubeUrl(value: string): boolean {
 
 async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeoutMs: number, mediaLabel: "video" | "audio" = "video"): Promise<void> {
   const errors: string[] = [];
+  console.log(`[radio-video-edit] running ${commandSpecs.length} yt-dlp variant(s) for ${mediaLabel}`);
   for (const spec of commandSpecs) {
     try {
       await runCommand(spec.command, spec.args, { timeoutMs, env: spec.env });
+      const usedImpersonate = spec.args.includes("--impersonate");
+      const usedCookies = spec.args.includes("--cookies");
+      console.log(`[radio-video-edit] yt-dlp succeeded: cmd=${spec.command} impersonate=${usedImpersonate} cookies=${usedCookies}`);
       return;
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(msg);
     }
   }
 
-  throw new Error(formatYtDlpFailureMessage(errors.join("\n"), mediaLabel));
+  const rawJoined = errors.join("\n---\n");
+  console.error(`[radio-video-edit] all ${commandSpecs.length} yt-dlp variant(s) failed. First 3 errors:\n${errors.slice(0, 3).join("\n---\n")}`);
+  throw new Error(formatYtDlpFailureMessage(rawJoined, mediaLabel));
 }
 
 async function downloadYoutubeVideo(url: string, outputDir: string): Promise<string> {
@@ -354,13 +404,19 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
+  const [freshPythonPackageDir, curlCffiPackageDir, workspaceBin] = await Promise.all([
+    getFreshYtDlpPythonPackageDir(),
+    getCurlCffiPackageDir(),
+    getWorkspaceYtDlpBin(),
+  ]);
+  console.log(`[radio-video-edit] download: workspaceBin=${workspaceBin || "none"} curlCffi=${curlCffiPackageDir ? "ready" : "unavailable"}`);
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "video",
-    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+    explicitBinary: workspaceBin || undefined,
     freshPythonPackageDir,
+    curlCffiPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
@@ -394,13 +450,18 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
+  const [freshPythonPackageDir, curlCffiPackageDir, workspaceBin] = await Promise.all([
+    getFreshYtDlpPythonPackageDir(),
+    getCurlCffiPackageDir(),
+    getWorkspaceYtDlpBin(),
+  ]);
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "audio",
-    explicitBinary: process.env.YT_DLP_PATH?.trim(),
+    explicitBinary: workspaceBin || undefined,
     freshPythonPackageDir,
+    curlCffiPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
