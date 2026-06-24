@@ -2176,7 +2176,6 @@ export async function registerRoutes(
   // ==================== CLIPPERS COMMAND CENTER ====================
 
   app.use("/api/clippers", (req, res, next) => {
-    if (isPublicApiRequest(req)) return next();
     const userId = getCurrentUserId(req);
     const clipperOwnerUserId = getSystemUserId();
     if (userId !== clipperOwnerUserId) {
@@ -3570,7 +3569,7 @@ export async function registerRoutes(
         code: req.query.code,
         state: req.query.state,
         error: req.query.error,
-      }, getSystemUserId());
+      }, getCurrentUserId(req));
       const isError = connection.status === "error";
       res.status(isError ? 400 : 200).send(`
         <html>
@@ -6072,12 +6071,19 @@ export async function registerRoutes(
   });
 
   app.post("/api/developer-autopilot/handoff", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Developer Autopilot GitHub handoffs are limited to the configured single-user owner while GitHub connectors are shared.",
+      });
+    }
+
     try {
       const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
       if (!message) {
         return res.status(400).json({ error: "message is required" });
       }
-      const result = await createDeveloperAutopilotHandoff(getCurrentUserId(req), message, "web_chat");
+      const result = await createDeveloperAutopilotHandoff(userId, message, "web_chat");
       res.status(result.status === "created" || result.status === "codex_dispatched" ? 201 : result.status === "subscription_brief" ? 200 : result.status === "needs_repo" ? 422 : 400).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to create Developer Autopilot handoff" });
