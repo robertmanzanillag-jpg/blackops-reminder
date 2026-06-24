@@ -172,6 +172,7 @@ function pythonEnvForYtDlpPackageDir(packageDir: string): NodeJS.ProcessEnv {
 function pipInstallEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    PIP_CONFIG_FILE: process.platform === "win32" ? "NUL" : "/dev/null",
     PIP_USER: "false",
     PYTHONNOUSERSITE: "1",
   };
@@ -219,13 +220,13 @@ async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
     await runCommand("python3", [
       "-m",
       "pip",
-      "--isolated",
       "install",
       "--upgrade",
       "--force-reinstall",
       "--target",
       targetDir,
-      "yt-dlp",
+      "yt-dlp[default]",
+      "curl-cffi>=0.11",
     ], { timeoutMs: 5 * 60 * 1000, env: pipInstallEnv() });
     return (await existingFreshYtDlpPackageDir(targetDir)) || targetDir;
   } catch (error) {

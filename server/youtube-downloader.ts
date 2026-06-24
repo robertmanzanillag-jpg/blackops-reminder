@@ -205,6 +205,15 @@ function configuredYoutubeClientVariants(): string[][] {
   ];
 }
 
+function configuredImpersonateTargets(): string[] {
+  const rawTargets = process.env.YT_DLP_IMPERSONATE_TARGETS?.trim();
+  if (/^(0|false|off|none|disabled)$/i.test(rawTargets || "")) return [];
+
+  return hasConfiguredValue(rawTargets)
+    ? rawTargets.split(/[,\s;]+/).map((target) => target.trim()).filter(Boolean)
+    : ["chrome"];
+}
+
 function formatVariants(mode: YtDlpDownloadMode): string[] {
   if (mode === "audio") return ["ba/bestaudio/best"];
 
@@ -235,6 +244,7 @@ export function buildYtDlpCommandSpecs(params: {
   const clientVariants = configuredYoutubeClientVariants();
   const formats = formatVariants(params.mode);
   const runtimeVariants = configuredJsRuntimeVariants();
+  const impersonateTargets = configuredImpersonateTargets();
   const binaries: Array<{ command: string; argsPrefix?: string[]; env?: NodeJS.ProcessEnv }> = [
     ...(hasConfiguredValue(params.freshPythonPackageDir)
       ? [{ command: "python3", argsPrefix: ["-m", "yt_dlp"], env: pythonEnvForPackageDir(params.freshPythonPackageDir) }]
@@ -245,28 +255,55 @@ export function buildYtDlpCommandSpecs(params: {
     { command: "python", argsPrefix: ["-m", "yt_dlp"] },
   ];
 
-  return uniqueCommandSpecs(binaries.flatMap((binary) => runtimeVariants.flatMap((runtimeArgs) =>
+  const buildArgs = (binary: typeof binaries[number], options: {
+    runtimeArgs?: string[];
+    clientArgs?: string[];
+    impersonateArgs?: string[];
+    cookieArgs: string[];
+    format: string;
+  }): YtDlpCommandSpec => ({
+    command: binary.command,
+    env: binary.env,
+    args: [
+      ...(binary.argsPrefix || []),
+      ...(options.runtimeArgs || []),
+      ...(options.clientArgs || []),
+      ...(options.impersonateArgs || []),
+      "--no-playlist",
+      ...options.cookieArgs,
+      "-f",
+      options.format,
+      ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
+      "--restrict-filenames",
+      "-o",
+      params.outputTemplate,
+      params.url,
+    ],
+  });
+
+  const primaryFormat = formats[0];
+  const impersonateSpecs = binaries.flatMap((binary) =>
+    impersonateTargets.flatMap((target) =>
+      cookieArgVariants.map((cookieArgs) => buildArgs(binary, {
+        impersonateArgs: ["--impersonate", target],
+        cookieArgs,
+        format: primaryFormat,
+      }))
+    )
+  );
+
+  const fallbackSpecs = binaries.flatMap((binary) => runtimeVariants.flatMap((runtimeArgs) =>
     clientVariants.flatMap((clientArgs) => formats.flatMap((format) =>
-      cookieArgVariants.map((cookieArgs) => ({
-        command: binary.command,
-        env: binary.env,
-        args: [
-          ...(binary.argsPrefix || []),
-          ...runtimeArgs,
-          ...clientArgs,
-          "--no-playlist",
-          ...cookieArgs,
-          "-f",
-          format,
-          ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
-          "--restrict-filenames",
-          "-o",
-          params.outputTemplate,
-          params.url,
-        ],
+      cookieArgVariants.map((cookieArgs) => buildArgs(binary, {
+        runtimeArgs,
+        clientArgs,
+        cookieArgs,
+        format,
       }))
     ))
-  )));
+  ));
+
+  return uniqueCommandSpecs([...impersonateSpecs, ...fallbackSpecs]);
 }
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {
