@@ -10,7 +10,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
-import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { buildDirectRadioYoutubeCommand, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
@@ -90,6 +90,42 @@ function setCachedCheapScoutResponse(userId: string, message: string | undefined
     response,
     expiresAt: now + CHEAP_SCOUT_CACHE_TTL_MS,
   });
+}
+
+type AssistantConversationHistoryMessage = {
+  role: string;
+  content: string;
+};
+
+function looksLikeShortDriveFolderReply(message?: string): boolean {
+  if (!message) return false;
+  const text = message.trim();
+  if (text.length < 2 || text.length > 120) return false;
+  if (/https?:\/\//i.test(text)) return false;
+  if (/^(si|sí|ok|dale|hazlo|aprobado|confirmado|autorizado)$/i.test(text)) return false;
+  return Boolean(extractDriveFolderPathFromMessage(`carpeta ${text}`)?.length);
+}
+
+export function buildRadioYoutubeContinuationMessage(
+  message?: string,
+  conversationHistory: AssistantConversationHistoryMessage[] = [],
+): string | null {
+  if (!looksLikeShortDriveFolderReply(message)) return null;
+
+  const recentHistory = conversationHistory
+    .filter((entry) => entry?.content && (entry.role === "assistant" || entry.role === "user"))
+    .slice(-8);
+  const lastAssistantMessage = [...recentHistory].reverse().find((entry) => entry.role === "assistant")?.content || "";
+  if (!/carpeta de Google Drive|donde quieres que guarde|donde guardar/i.test(lastAssistantMessage)) return null;
+
+  const previousUserMessage = [...recentHistory].reverse().find((entry) => {
+    if (entry.role !== "user") return false;
+    const command = buildDirectRadioYoutubeCommand(entry.content);
+    return Boolean(command && (directRadioYoutubeCommandNeedsDriveFolder(command) || /carpeta de Google Drive/i.test(lastAssistantMessage)));
+  })?.content;
+
+  if (!previousUserMessage) return null;
+  return `${previousUserMessage.trim()} en la carpeta ${message?.trim()}`;
 }
 
 function buildCompactCheapScoutPrompt(input: {
@@ -898,7 +934,7 @@ COMANDOS DISPONIBLES:
 - [LISTAR_RECORDATORIOS: {}]
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [PROMO_VIDEO_GENERATE: {"count": 5, "platform": "tiktok|reels|shorts", "targetSeconds": 15, "cuts": 3, "hookText": "...", "ctaText": "...", "fontStyle": "bold|clean|luxury|impact|neon", "sourceHint": "Pool parties"}]
-- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 
 Para editar eventos existentes de Google Calendar usa EDITAR_EVENTO_GOOGLE con el eventId del contexto. Puedes cambiar solo los campos necesarios: title, date, endDate, description, location o isAllDay.
 
@@ -952,9 +988,10 @@ Si el usuario manda un link de YouTube y pide clips/videos/edits de radio, usa R
 - Necesitas la carpeta destino de Google Drive. Si no la dice, pregunta por la carpeta antes de procesar.
 - Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, pon createFolderIfMissing:true. Si solo pide guardar en una carpeta y no sabes si existe, no lo pongas; el sistema pedirá confirmación si no la encuentra.
 - Si el usuario dice el nombre del DJ o lo ves en el contexto, ponlo en djName. Si no, el sistema intenta leerlo abajo a la izquierda del video; si no lo encuentra, pregunta el nombre antes de guardar los clips finales.
-- El resultado genera dos clips: horizontal Instagram y vertical TikTok.
+- Por defecto genera 1 clip horizontal Instagram 4:5 y 1 clip vertical TikTok/Reels. Si el usuario pide una cantidad, usa instagramClipCount y tiktokClipCount; por ejemplo “3 de IG y TikTok” significa 3 para Instagram y 3 para TikTok, con momentos distintos.
 - Si el usuario pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente.
 - Si el usuario manda un segundo link de canción en musicUrl, usa ese audio externo. En ambos casos el sistema busca el drop por volumen y lo recorta al largo exacto del clip.
+- Para descargas de YouTube, usa deleteSourceAfterSuccess:true salvo que el usuario pida conservar el video largo; el sistema borra solo el MP4 fuente descargado después de subir los clips.
 
 ## GOOGLE DRIVE:
 Puedes crear carpetas y subcarpetas en Google Drive con GOOGLE_DRIVE_CREATE_FOLDER.
@@ -1105,7 +1142,8 @@ export function registerAssistantRoutes(app: Express): void {
         return;
       }
 
-      const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(message);
+      const radioYoutubeMessage = buildRadioYoutubeContinuationMessage(message, conversationHistory) || message;
+      const directRadioYoutubeCommand = buildDirectRadioYoutubeCommand(radioYoutubeMessage);
       if (directRadioYoutubeCommand) {
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
@@ -1621,6 +1659,9 @@ export function registerAssistantRoutes(app: Express): void {
             driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
             djName: radioYoutubeData.djName,
             musicUrl: radioYoutubeData.musicUrl,
+            instagramClipCount: Number.isFinite(Number(radioYoutubeData.instagramClipCount)) ? Number(radioYoutubeData.instagramClipCount) : undefined,
+            tiktokClipCount: Number.isFinite(Number(radioYoutubeData.tiktokClipCount)) ? Number(radioYoutubeData.tiktokClipCount) : undefined,
+            deleteSourceAfterSuccess: radioYoutubeData.deleteSourceAfterSuccess !== false,
             content: "Voy a procesar ese YouTube para radio.",
             command: radioYoutubeMatch[0],
           }, userId);

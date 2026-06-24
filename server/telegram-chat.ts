@@ -285,7 +285,7 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
 - [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
-- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/..."}]
+- [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
 - [ELIMINAR_INVERSION: {"symbol": "AAPL"}]
@@ -299,7 +299,9 @@ INFORMACIÓN SOBRE RADIO:
 - Si el usuario manda un YouTube y pide sacar clips/videos de radio, usa RADIO_YOUTUBE_CLIPS. Necesitas driveFolderPath; si no dice carpeta de Drive, pregunta antes.
 - Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, incluye createFolderIfMissing:true. Si solo pide guardar en una carpeta, deja que el sistema confirme si no existe.
 - Si el usuario dice el DJ o aparece claro en el contexto, incluye djName. Si no, el sistema intenta leerlo abajo a la izquierda del video y pregunta si no lo encuentra.
+- Por defecto genera 1 clip para Instagram 4:5 y 1 clip para TikTok/Reels 9:16. Si el usuario pide cantidad, usa instagramClipCount y tiktokClipCount; “3 de IG y TikTok” significa 3 y 3 con momentos distintos.
 - Si pide canción/audio/música/drop sin segundo link, usa el drop del mismo video fuente. Si manda un segundo link, usa ese audio externo.
+- Para YouTube, usa deleteSourceAfterSuccess:true salvo que el usuario pida conservar el video largo; el sistema borra solo el MP4 fuente descargado después de subir los clips.
 - Si el usuario pide crear carpetas o subcarpetas en Google Drive, usa GOOGLE_DRIVE_CREATE_FOLDER. Si no dice la ruta/nombre exacto, pregunta antes.
 
 METRICOOL / SOCIAL PUBLISHING:
@@ -1015,6 +1017,9 @@ async function processAssistantResponse(userId: string, response: string): Promi
         driveFolderPathFromYoutubeTitle: Boolean(radioYoutubeData.driveFolderPathFromYoutubeTitle),
         djName: radioYoutubeData.djName,
         musicUrl: radioYoutubeData.musicUrl,
+        instagramClipCount: Number.isFinite(Number(radioYoutubeData.instagramClipCount)) ? Number(radioYoutubeData.instagramClipCount) : undefined,
+        tiktokClipCount: Number.isFinite(Number(radioYoutubeData.tiktokClipCount)) ? Number(radioYoutubeData.tiktokClipCount) : undefined,
+        deleteSourceAfterSuccess: radioYoutubeData.deleteSourceAfterSuccess !== false,
         content: "Voy a procesar ese YouTube para radio.",
         command: radioYoutubeMatch[0],
       }, userId);

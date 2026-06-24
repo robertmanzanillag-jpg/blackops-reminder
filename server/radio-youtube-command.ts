@@ -10,6 +10,9 @@ export type DirectRadioYoutubeCommand = {
   driveFolderPathFromYoutubeTitle?: boolean;
   djName?: string;
   musicUrl?: string;
+  instagramClipCount?: number;
+  tiktokClipCount?: number;
+  deleteSourceAfterSuccess?: boolean;
   needsMusicUrl?: boolean;
   content: string;
   command: string;
@@ -17,6 +20,7 @@ export type DirectRadioYoutubeCommand = {
 
 const ESTIMATED_COST_PER_EDITED_VIDEO_USD = 0;
 const DEFAULT_DRIVE_CLIP_FOLDER_PATH = ["Videos creados"];
+const MAX_CLIPS_PER_PLATFORM = 10;
 
 export function directRadioYoutubeCommandNeedsDriveFolder(command: DirectRadioYoutubeCommand): boolean {
   return !command.driveFolderPath.length && !command.driveFolderPathFromYoutubeTitle && !command.driveParentFolderId;
@@ -153,6 +157,45 @@ function extractDjNameFromMessage(message: string): string | null {
   return null;
 }
 
+function normalizeRequestedClipCount(value?: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.min(MAX_CLIPS_PER_PLATFORM, parsed);
+}
+
+function extractRequestedRadioClipCounts(message: string): { instagramClipCount?: number; tiktokClipCount?: number } {
+  const text = normalizeText(message);
+  const sharedCount = normalizeRequestedClipCount(
+    text.match(/\b(\d{1,2})\s+(?:clips?|videos?|reels?|edits?)\b(?=[\s\S]{0,100}\b(?:ig|instagram)\b)(?=[\s\S]{0,100}\btiktok\b)/i)?.[1],
+  );
+  const instagramClipCount = normalizeRequestedClipCount(
+    text.match(/\b(\d{1,2})\s+(?:clips?|videos?|reels?|edits?)\s+(?:diferentes\s+)?(?:para|de|en)?\s*(?:ig|instagram)\b/i)?.[1] ||
+    text.match(/\b(\d{1,2})\s+(?:para|de|en)\s+(?:ig|instagram)\b/i)?.[1],
+  ) || (/\b(?:ig|instagram)\b/.test(text) ? sharedCount : undefined);
+  const tiktokClipCount = normalizeRequestedClipCount(
+    text.match(/\b(\d{1,2})\s+(?:clips?|videos?|reels?|edits?)\s+(?:diferentes\s+)?(?:para|de|en)?\s*tiktok\b/i)?.[1] ||
+    text.match(/\b(\d{1,2})\s+(?:para|de|en)\s+tiktok\b/i)?.[1],
+  ) || (/\btiktok\b/.test(text) ? sharedCount : undefined);
+
+  return { instagramClipCount, tiktokClipCount };
+}
+
+function shouldDeleteSourceAfterSuccess(message: string): boolean {
+  const text = normalizeText(message);
+  if (/\b(?:conserva|guarda|manten|mantener|keep)\b[\s\S]{0,80}\b(?:video largo|video fuente|original|source|mp4)\b/.test(text)) {
+    return false;
+  }
+  return true;
+}
+
+function describeRequestedClipCounts(instagramClipCount?: number, tiktokClipCount?: number): string {
+  const instagramCount = instagramClipCount || 1;
+  const tiktokCount = tiktokClipCount || 1;
+  if (instagramCount === 1 && tiktokCount === 1) return "los clips de radio para Instagram y TikTok";
+  return `${instagramCount} clip${instagramCount === 1 ? "" : "s"} para Instagram y ${tiktokCount} clip${tiktokCount === 1 ? "" : "s"} para TikTok`;
+}
+
 export function extractDriveFolderPathFromMessage(message: string): string[] | null {
   if (extractGoogleDriveFolderIdFromUrl(message)) {
     const messageWithoutDriveUrls = removeDriveUrls(message);
@@ -209,6 +252,9 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
   const driveFolderPathFromYoutubeTitle = /\b(?:con|usa(?:r|ndo)?|segun|según)\s+(?:el\s+)?t[ií]tulo\b|\bt[ií]tulo\s+del\s+video\b/.test(text);
   const createFolderIfMissing = driveFolderPathFromYoutubeTitle || /\b(crea\w*|crear|nueva|nuevo|subcarpeta|folder nuevo|new folder)\b/.test(text);
   const djName = extractDjNameFromMessage(message) || undefined;
+  const { instagramClipCount, tiktokClipCount } = extractRequestedRadioClipCounts(message);
+  const deleteSourceAfterSuccess = shouldDeleteSourceAfterSuccess(message);
+  const clipDescription = describeRequestedClipCounts(instagramClipCount, tiktokClipCount);
   if (!driveFolderPath?.length && !driveFolderPathFromYoutubeTitle && mentionsDriveDestination && !driveParentFolderId) {
     return {
       youtubeUrl,
@@ -218,8 +264,11 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
       driveFolderPathFromYoutubeTitle,
       djName,
       musicUrl,
-      content: `Dale. Voy a descargar ese YouTube, sacar los clips de radio para Instagram y TikTok, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y crear/usar Google Drive: ${DEFAULT_DRIVE_CLIP_FOLDER_PATH.join("/")}.`,
-      command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: DEFAULT_DRIVE_CLIP_FOLDER_PATH, driveParentFolderId, createFolderIfMissing: true, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop })}]`,
+      instagramClipCount,
+      tiktokClipCount,
+      deleteSourceAfterSuccess,
+      content: `Dale. Voy a descargar ese YouTube, sacar ${clipDescription}, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"}, crear/usar Google Drive: ${DEFAULT_DRIVE_CLIP_FOLDER_PATH.join("/")} y borrar el video largo local al terminar.`,
+      command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: DEFAULT_DRIVE_CLIP_FOLDER_PATH, driveParentFolderId, createFolderIfMissing: true, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop, instagramClipCount, tiktokClipCount, deleteSourceAfterSuccess })}]`,
     };
   }
 
@@ -233,8 +282,11 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
         driveFolderPathFromYoutubeTitle,
         djName,
         musicUrl,
-        content: `Dale. Voy a descargar ese YouTube, sacar los clips de radio para Instagram y TikTok, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y guardarlos en la carpeta de Google Drive que enviaste.`,
-        command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: [], driveParentFolderId, createFolderIfMissing, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop })}]`,
+        instagramClipCount,
+        tiktokClipCount,
+        deleteSourceAfterSuccess,
+        content: `Dale. Voy a descargar ese YouTube, sacar ${clipDescription}, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"}, guardarlos en la carpeta de Google Drive que enviaste y borrar el video largo local al terminar.`,
+        command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: [], driveParentFolderId, createFolderIfMissing, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop, instagramClipCount, tiktokClipCount, deleteSourceAfterSuccess })}]`,
       };
     }
 
@@ -245,6 +297,9 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
       driveFolderPathFromYoutubeTitle,
       djName,
       musicUrl,
+      instagramClipCount,
+      tiktokClipCount,
+      deleteSourceAfterSuccess,
       content: "Puedo hacerlo. Mándame también el nombre o ruta de la carpeta de Google Drive donde quieres que guarde los clips.",
       command: "",
     };
@@ -260,8 +315,11 @@ export function buildDirectRadioYoutubeCommand(message?: string): DirectRadioYou
     driveFolderPathFromYoutubeTitle,
     djName,
     musicUrl,
-    content: `Dale. Voy a descargar ese YouTube, sacar los clips de radio para Instagram y TikTok, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y ${driveFolderPathFromYoutubeTitle ? `${driveFolderPath?.length ? "crear/usar una subcarpeta con el título del video dentro de" : "crear/usar una carpeta con el título del video en"} Google Drive${folderLabel ? `: ${folderLabel}` : ""}` : `${createFolderIfMissing ? "crear/usar" : "guardar en"} Google Drive${driveParentFolderId ? " dentro de la carpeta enviada" : ""}: ${folderLabel}`}.`,
-    command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: resolvedDriveFolderPath, driveParentFolderId, createFolderIfMissing, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop })}]`,
+    instagramClipCount,
+    tiktokClipCount,
+    deleteSourceAfterSuccess,
+    content: `Dale. Voy a descargar ese YouTube, sacar ${clipDescription}, usar el drop ${musicUrl ? "de la canción enviada" : "del mismo video"} como audio, nombrarlos con ${djName || "el DJ que lea abajo a la izquierda"} y ${driveFolderPathFromYoutubeTitle ? `${driveFolderPath?.length ? "crear/usar una subcarpeta con el título del video dentro de" : "crear/usar una carpeta con el título del video en"} Google Drive${folderLabel ? `: ${folderLabel}` : ""}` : `${createFolderIfMissing ? "crear/usar" : "guardar en"} Google Drive${driveParentFolderId ? " dentro de la carpeta enviada" : ""}: ${folderLabel}`}. Después borro el video largo local.`,
+    command: `[RADIO_YOUTUBE_CLIPS: ${JSON.stringify({ youtubeUrl, driveFolderPath: resolvedDriveFolderPath, driveParentFolderId, createFolderIfMissing, driveFolderPathFromYoutubeTitle, djName, musicUrl, sourceAudioDrop: !musicUrl || wantsMusicDrop, instagramClipCount, tiktokClipCount, deleteSourceAfterSuccess })}]`,
   };
 }
 
@@ -280,6 +338,9 @@ export async function executeDirectRadioYoutubeCommand(command: DirectRadioYoutu
     driveFolderPathFromYoutubeTitle: Boolean(command.driveFolderPathFromYoutubeTitle),
     djName: command.djName,
     musicUrl: command.musicUrl,
+    instagramClipCount: command.instagramClipCount,
+    tiktokClipCount: command.tiktokClipCount,
+    deleteSourceAfterSuccess: command.deleteSourceAfterSuccess !== false,
   });
 }
 
@@ -323,6 +384,11 @@ export function formatRadioYoutubeResult(result: RadioYoutubeProcessResult): str
         : "Audio: usé el audio original sincronizado del video.",
     names.length ? `Archivos: ${names.join(" | ")}` : null,
     links.length ? `Links: ${links.join(" | ")}` : null,
+    result.sourceVideoDeleted
+      ? "Limpieza: borré el video largo local después de subir los clips."
+      : result.sourceVideoCleanupError
+        ? `Limpieza: los clips se subieron, pero no pude borrar el video largo local (${result.sourceVideoCleanupError}).`
+        : null,
     `Costo estimado por video editado: $${ESTIMATED_COST_PER_EDITED_VIDEO_USD.toFixed(2)} USD.`,
     `Total estimado de esta edición: $${totalEstimatedCost.toFixed(2)} USD para ${clipCount} video${clipCount === 1 ? "" : "s"}.`,
     "Nota: usa herramientas locales gratuitas; Google Drive solo puede consumir almacenamiento de tu cuenta.",

@@ -91,6 +91,20 @@ test("extracts explicit DJ name when provided", () => {
   assert.match(command?.command || "", /Lucía Reina/);
 });
 
+test("extracts requested Instagram and TikTok clip counts and source cleanup", () => {
+  const command = buildDirectRadioYoutubeCommand(
+    "https://youtu.be/GcVZvXkz2jU saca 3 videos de IG y de TikTok diferentes, guardalos en carpeta Robert A/Lucia Reina del Drive y despues borra el video largo",
+  );
+
+  assert.equal(command?.instagramClipCount, 3);
+  assert.equal(command?.tiktokClipCount, 3);
+  assert.equal(command?.deleteSourceAfterSuccess, true);
+  assert.match(command?.command || "", /"instagramClipCount":3/);
+  assert.match(command?.command || "", /"tiktokClipCount":3/);
+  assert.match(command?.content || "", /3 clips para Instagram y 3 clips para TikTok/);
+  assert.match(command?.content || "", /borr[ao]r? el video largo local/i);
+});
+
 test("marks Drive folder creation as approved when user asks for a subfolder", () => {
   const command = buildDirectRadioYoutubeCommand("https://youtu.be/video123 saca clips de radio y en la carpeta Robert A crea una subcarpeta LUCIA REINA del Drive");
   assert.equal(command?.createFolderIfMissing, true);
@@ -130,9 +144,12 @@ test("includes estimated cost in completed radio YouTube summary", () => {
         musicDropSecond: 42,
       },
     ],
+    sourceVideoDeleted: true,
+    sourceVideoDeletedPath: "/tmp/source.mp4",
   });
 
   assert.match(summary, /Audio: usé el drop del mismo video fuente/);
+  assert.match(summary, /borré el video largo local/);
   assert.match(summary, /Costo estimado por video editado: \$0\.00 USD/);
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
 });
