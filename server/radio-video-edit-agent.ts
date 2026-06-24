@@ -169,6 +169,14 @@ function pythonEnvForYtDlpPackageDir(packageDir: string): NodeJS.ProcessEnv {
   };
 }
 
+function pipInstallEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PIP_USER: "false",
+    PYTHONNOUSERSITE: "1",
+  };
+}
+
 async function packageSupportsYtDlpJsRuntimes(packageDir: string): Promise<boolean> {
   try {
     await runCommand("python3", [
@@ -211,13 +219,14 @@ async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
     await runCommand("python3", [
       "-m",
       "pip",
+      "--isolated",
       "install",
       "--upgrade",
       "--force-reinstall",
       "--target",
       targetDir,
       "yt-dlp",
-    ], { timeoutMs: 5 * 60 * 1000 });
+    ], { timeoutMs: 5 * 60 * 1000, env: pipInstallEnv() });
     return (await existingFreshYtDlpPackageDir(targetDir)) || targetDir;
   } catch (error) {
     console.warn("[radio-video-edit] could not install fresh yt-dlp:", error instanceof Error ? error.message : error);

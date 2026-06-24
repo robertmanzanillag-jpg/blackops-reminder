@@ -11,6 +11,11 @@ export type YtDlpCommandSpec = {
   env?: NodeJS.ProcessEnv;
 };
 
+type CookieSecretCandidate = {
+  label: string;
+  value: string;
+};
+
 function hasConfiguredValue(value?: string | null): value is string {
   if (!value) return false;
   const normalized = value.trim();
@@ -22,13 +27,33 @@ function normalizeCookieFileContent(rawValue: string): string {
   return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
 }
 
+function looksLikeYoutubeCookieFile(rawValue: string): boolean {
+  const normalized = normalizeCookieFileContent(rawValue);
+  const hasCookieHeader = /Netscape HTTP Cookie File/i.test(normalized);
+  const hasCookieRows = /(?:^|\n)(?:#HttpOnly_)?\.?(?:youtube|google)\.com\t(?:TRUE|FALSE)\t/i.test(normalized);
+  return hasCookieHeader && hasCookieRows;
+}
+
+function normalizeDecodedCookieSecret(rawValue: string): string | null {
+  const normalized = normalizeCookieFileContent(rawValue);
+  if (looksLikeYoutubeCookieFile(normalized)) return normalized;
+
+  const headerIndex = normalized.search(/#\s*Netscape HTTP Cookie File/i);
+  if (headerIndex > 0) {
+    const sliced = normalizeCookieFileContent(normalized.slice(headerIndex));
+    if (looksLikeYoutubeCookieFile(sliced)) return sliced;
+  }
+
+  return null;
+}
+
 function decodeBase64CookieSecret(rawValue: string): string | null {
   const trimmed = rawValue.trim();
   const encoded = trimmed.startsWith("data:")
     ? trimmed.slice(trimmed.indexOf(",") + 1)
     : trimmed;
   const decoded = Buffer.from(encoded.replace(/\s+/g, ""), "base64").toString("utf8");
-  return hasConfiguredValue(decoded) ? normalizeCookieFileContent(decoded) : null;
+  return hasConfiguredValue(decoded) ? normalizeDecodedCookieSecret(decoded) : null;
 }
 
 function writeCookieSecretToTempFile(rawCookieFile: string): string {
@@ -44,30 +69,63 @@ function writeCookieSecretToTempFile(rawCookieFile: string): string {
   return cookiePath;
 }
 
-function readSequentialEnvChunks(baseName: string, maxChunks = 200): string | null {
-  const chunks: string[] = [];
+function uniqueCookieCandidates(candidates: CookieSecretCandidate[]): CookieSecretCandidate[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const normalized = candidate.value.trim();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function readEnvChunkCandidates(baseName: string, maxChunks = 200): CookieSecretCandidate[] {
+  const chunks: Array<{ index: number; key: string; value: string }> = [];
   for (let index = 1; index <= maxChunks; index += 1) {
     const paddedIndex = String(index).padStart(3, "0");
-    const value = process.env[`${baseName}_${index}`] || process.env[`${baseName}_${paddedIndex}`];
-    if (!hasConfiguredValue(value)) break;
-    chunks.push(value.trim());
+    const unpaddedKey = `${baseName}_${index}`;
+    const paddedKey = `${baseName}_${paddedIndex}`;
+    const value = process.env[unpaddedKey] || process.env[paddedKey];
+    if (hasConfiguredValue(value)) {
+      chunks.push({
+        index,
+        key: process.env[unpaddedKey] ? unpaddedKey : paddedKey,
+        value: value.trim(),
+      });
+    }
   }
-  return chunks.length > 0 ? chunks.join("") : null;
+  if (!chunks.length) return [];
+
+  const numeric = [...chunks].sort((a, b) => a.index - b.index);
+  const lexicographic = [...chunks].sort((a, b) => a.key.localeCompare(b.key));
+  return uniqueCookieCandidates([
+    { label: `${baseName}_numeric`, value: numeric.map((chunk) => chunk.value).join("") },
+    { label: `${baseName}_lexicographic`, value: lexicographic.map((chunk) => chunk.value).join("") },
+  ]);
 }
 
 function configuredYoutubeCookieFileFromSecret(): string | null {
-  const cookiesBase64 = readSequentialEnvChunks("YT_DLP_COOKIES_B64")
-    || readSequentialEnvChunks("YT_DLP_COOKIES_BASE64")
-    || process.env.YT_DLP_COOKIES_B64
-    || process.env.YT_DLP_COOKIES_BASE64;
-  if (hasConfiguredValue(cookiesBase64)) {
-    const decoded = decodeBase64CookieSecret(cookiesBase64);
+  const base64Candidates = uniqueCookieCandidates([
+    ...readEnvChunkCandidates("YT_DLP_COOKIES_B64"),
+    ...readEnvChunkCandidates("YT_DLP_COOKIES_BASE64"),
+    { label: "YT_DLP_COOKIES_B64", value: process.env.YT_DLP_COOKIES_B64 || "" },
+    { label: "YT_DLP_COOKIES_BASE64", value: process.env.YT_DLP_COOKIES_BASE64 || "" },
+  ]);
+
+  for (const candidate of base64Candidates) {
+    if (!hasConfiguredValue(candidate.value)) continue;
+    const decoded = decodeBase64CookieSecret(candidate.value);
     if (decoded) return writeCookieSecretToTempFile(decoded);
   }
 
-  const cookiesRaw = process.env.YT_DLP_COOKIES;
-  if (hasConfiguredValue(cookiesRaw)) {
-    return writeCookieSecretToTempFile(cookiesRaw);
+  const rawCandidates = uniqueCookieCandidates([
+    ...readEnvChunkCandidates("YT_DLP_COOKIES"),
+    { label: "YT_DLP_COOKIES", value: process.env.YT_DLP_COOKIES || "" },
+  ]);
+  for (const candidate of rawCandidates) {
+    if (!hasConfiguredValue(candidate.value)) continue;
+    const normalized = normalizeDecodedCookieSecret(candidate.value);
+    if (normalized) return writeCookieSecretToTempFile(normalized);
   }
 
   return null;

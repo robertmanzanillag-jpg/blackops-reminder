@@ -3,11 +3,19 @@ import { build as viteBuild } from "vite";
 import { mkdir, rm, readFile } from "fs/promises";
 import { spawn } from "child_process";
 
-function runCommand(command: string, args: string[], timeoutMs: number): Promise<void> {
+function pipInstallEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PIP_USER: "false",
+    PYTHONNOUSERSITE: "1",
+  };
+}
+
+function runCommand(command: string, args: string[], timeoutMs: number, env: NodeJS.ProcessEnv = process.env): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      env: process.env,
+      env,
     });
     let didTimeout = false;
     const timer = setTimeout(() => {
@@ -42,12 +50,13 @@ async function bundleFreshYtDlp() {
     await runCommand("python3", [
       "-m",
       "pip",
+      "--isolated",
       "install",
       "--upgrade",
       "--target",
       targetDir,
       "yt-dlp",
-    ], 3 * 60 * 1000);
+    ], 3 * 60 * 1000, pipInstallEnv());
   } catch (error) {
     console.warn("[build] could not bundle fresh yt-dlp:", error instanceof Error ? error.message : error);
   }
