@@ -118,6 +118,19 @@ test("uses a Google Drive folder URL as the parent destination", () => {
   assert.equal(command ? directRadioYoutubeCommandNeedsDriveFolder(command) : true, false);
 });
 
+test("does not invent a child folder from a bare Google Drive folder URL prompt", () => {
+  const command = buildDirectRadioYoutubeCommand(
+    "Toma este video de YouTube: https://youtu.be/GcVZvXkz2jU Descárgalo en 1080p, no en 720p. Crea 2 clips listos para publicar: 1. TikTok/Reels vertical 9:16, 1080x1920, 30 segundos. 2. Instagram feed/reel 4:5, 1080x1350, 60 segundos. Usa el momento con más energía del set. Nómbralos con DJ QA TEST. Después de crear los clips, borra el video largo local. Guarda los clips en esta carpeta de Google Drive: https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW",
+  );
+
+  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
+  assert.deepEqual(command?.driveFolderPath, []);
+  assert.equal(command?.instagramClipCount, undefined);
+  assert.equal(command?.tiktokClipCount, undefined);
+  assert.match(command?.content || "", /los clips de radio para Instagram y TikTok/);
+  assert.doesNotMatch(command?.content || "", /esta/);
+});
+
 test("extracts a child folder inside a Google Drive folder URL", () => {
   const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW dentro de esta carpeta crea una subcarpeta llamada Codex Clips");
   assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
@@ -424,6 +437,53 @@ test("yt-dlp command specs prefer chunked base64 YouTube cookies over single sec
       } else {
         process.env[key] = value;
       }
+    }
+  }
+});
+
+test("yt-dlp cookie chunks tolerate Replit lexicographic secret ordering", () => {
+  const names = [
+    "YT_DLP_COOKIES_PATH",
+    "YT_DLP_COOKIES_B64",
+    "YT_DLP_COOKIES_BASE64",
+    "YT_DLP_COOKIES",
+    "YT_DLP_COOKIES_FROM_BROWSER",
+    ...Array.from({ length: 12 }, (_, index) => `YT_DLP_COOKIES_B64_${index + 1}`),
+  ];
+  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    for (const name of names) delete process.env[name];
+    const cookieFile = [
+      "# Netscape HTTP Cookie File",
+      ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tVISITOR_INFO1_LIVE\tabc",
+      ".google.com\tTRUE\t/\tTRUE\t1893456000\tSID\tdef",
+      "",
+    ].join("\n");
+    const encoded = Buffer.from(cookieFile, "utf8").toString("base64");
+    const chunkSize = Math.ceil(encoded.length / 12);
+    const chunks = Array.from({ length: 12 }, (_, index) => encoded.slice(index * chunkSize, (index + 1) * chunkSize));
+    const keysInReplitVisualOrder = [1, 10, 11, 12, 2, 3, 4, 5, 6, 7, 8, 9];
+    keysInReplitVisualOrder.forEach((keyNumber, index) => {
+      process.env[`YT_DLP_COOKIES_B64_${keyNumber}`] = chunks[index];
+    });
+
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXKz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+      freshPythonPackageDir: null,
+    });
+    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
+    assert.notEqual(firstCookiesIndex, -1);
+    const materializedPath = specs[0].args[firstCookiesIndex + 1];
+    assert.ok(existsSync(materializedPath));
+    const materialized = readFileSync(materializedPath, "utf8");
+    assert.match(materialized, /Netscape HTTP Cookie File/);
+    assert.match(materialized, /\.youtube\.com/);
+  } finally {
+    for (const [name, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 });
