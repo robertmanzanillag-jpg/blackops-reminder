@@ -269,6 +269,11 @@ if (sessionMiddleware) {
   log("SESSION_SECRET not configured; local session auth is disabled", "auth");
 }
 
+// Public health-check — before requireAppUser so no session is needed
+app.get(["/health", "/api/health"], (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use(requireAppUser);
 
 export function log(message: string, source = "express") {
@@ -359,11 +364,6 @@ app.use((req, res, next) => {
 
     res.status(status).json({ message });
     throw err;
-  });
-
-  // Fast health-check endpoints — must come before the SPA catch-all
-  app.get(["/health", "/api/health"], (_req, res) => {
-    res.json({ status: "ok" });
   });
 
   // importantly only setup vite in development and after
