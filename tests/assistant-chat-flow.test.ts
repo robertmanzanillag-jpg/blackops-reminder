@@ -409,6 +409,8 @@ test("web assistant only auto-executes after explicit chat approval", () => {
   assert.equal(userAlreadyApprovedExecution("si, hazlo"), true);
   assert.equal(userAlreadyApprovedExecution("lo apruebo, ejecutalo"), true);
   assert.equal(userAlreadyApprovedExecution("si quiero que empiece la tarea"), true);
+  assert.equal(userAlreadyApprovedExecution("continuar"), true);
+  assert.equal(userAlreadyApprovedExecution("continua con la tarea"), true);
   assert.equal(userAlreadyApprovedExecution("quiero que cambies el link de Black Room"), false);
   assert.equal(userAlreadyApprovedExecution("prepara la tarea para aprobar"), false);
 });
@@ -425,6 +427,8 @@ test("assistant approval prompt explains chat approval shortcut", () => {
   const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
   const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
 
-  assert.match(dashboardChat, /Puedes decir "si, hazlo"/);
-  assert.match(assistantPage, /Puedes decir "si, hazlo"/);
+  assert.match(dashboardChat, /"si, hazlo"/);
+  assert.match(assistantPage, /"si, hazlo"/);
+  assert.match(dashboardChat, /Puedes decir "continuar"/);
+  assert.match(assistantPage, /Puedes decir "continuar"/);
 });

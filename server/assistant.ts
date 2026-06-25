@@ -240,9 +240,10 @@ export function userAlreadyApprovedExecution(message?: string): boolean {
   if (!message) return false;
   const text = normalizeApprovalText(message);
   return [
-    /\b(hazlo|hazlo ya|dale|aprobado|apruebo|lo apruebo|confirmo|confirmado|autorizo|autorizado|ejecuta|ejecutalo|procede|empieza|comienza)\b/,
-    /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|empieza|comienza|ejecuta|ejecutalo|hazlo|procede)\b/,
-    /\b(quiero que|puedes)\b.*\b(empiece|empieces|comience|comiences|lo hagas|lo haga|ejecutes|ejecutarlo)\b/,
+    /\b(hazlo|hazlo ya|dale|aprobado|apruebo|lo apruebo|confirmo|confirmado|autorizo|autorizado|ejecuta|ejecutalo|procede|empieza|comienza|continua|continuar|continue|siguelo)\b/,
+    /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|empieza|comienza|continua|continuar|sigue|ejecuta|ejecutalo|hazlo|procede)\b/,
+    /\b(quiero que|puedes)\b.*\b(empiece|empieces|comience|comiences|continue|continues|siga|sigas|lo hagas|lo haga|ejecutes|ejecutarlo)\b/,
+    /\b(sigue|continua|continuar)\b.*\b(con )?(eso|la tarea|el trabajo|la accion|lo pendiente)\b/,
   ].some((pattern) => pattern.test(text));
 }
 

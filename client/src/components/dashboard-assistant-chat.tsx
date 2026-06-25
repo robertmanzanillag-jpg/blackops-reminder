@@ -160,7 +160,7 @@ export function DashboardAssistantChat() {
         if (data.approvalRequired && data.pendingAction) {
           sawTerminalAssistantEvent = true;
           setAssistantStatus("");
-          assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
+          assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "continuar" o "si, hazlo" aqui mismo, o revisarlo en approvals antes de ejecutar.`;
           queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
           updateAssistantMessage();
         }
