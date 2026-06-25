@@ -368,17 +368,34 @@ test("assistant chats surface radio video status, errors, and cost", () => {
   assert.match(dashboardChat, /data\.radioYoutubeError/);
   assert.match(dashboardChat, /data\.radioDriveVideoError/);
   assert.match(dashboardChat, /data\.assistantStatus/);
+  assert.match(dashboardChat, /data\.radioYoutubeNeedsConfirmation/);
+  assert.match(dashboardChat, /data\.radioDriveVideoNeedsDjName/);
   assert.match(dashboardChat, /streamBuffer/);
   assert.match(dashboardChat, /data\.actionExecutionError/);
   assert.match(assistantPage, /data\.radioYoutubeError/);
   assert.match(assistantPage, /data\.radioDriveVideoError/);
   assert.match(assistantPage, /data\.assistantStatus/);
+  assert.match(assistantPage, /data\.radioYoutubeNeedsConfirmation/);
+  assert.match(assistantPage, /data\.radioDriveVideoNeedsDjName/);
   assert.match(assistantPage, /streamBuffer/);
   assert.match(assistantPage, /data\.actionExecutionError/);
   assert.match(webAssistant, /actionExecutionError/);
   assert.match(webAssistant, /RADIO_DRIVE_VIDEO_STATUS_MESSAGE/);
   assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
+  assert.match(webAssistant, /startAssistantStatusHeartbeat/);
+  assert.match(webAssistant, /Tiempo trabajando/);
   assert.match(webAssistant, /withRadioEditEstimatedCost/);
+});
+
+test("production health check responds before static fallback", () => {
+  const source = readFileSync("server/index.ts", "utf8");
+  const healthIndex = source.indexOf('app.get(["/health", "/api/health"]');
+  const staticIndex = source.indexOf("serveStatic(app)");
+
+  assert.ok(healthIndex > -1);
+  assert.ok(staticIndex > -1);
+  assert.ok(healthIndex < staticIndex);
+  assert.match(source, /status: "ok"/);
 });
 
 test("radio YouTube approval executor fails failed processor results", () => {

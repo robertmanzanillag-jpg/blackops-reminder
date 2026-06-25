@@ -22,6 +22,10 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
+app.get(["/health", "/api/health"], (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 async function getStartupMaintenanceUserIds(): Promise<string[]> {
   const configuredOwners = (await storage.getEnabledTelegramConfigs())
     .map((config) => config.userId)

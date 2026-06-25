@@ -114,6 +114,17 @@ export function DashboardAssistantChat() {
           setAssistantStatus(data.assistantStatus.trim());
         }
         if (
+          data.radioYoutubeProcessed ||
+          data.radioYoutubeNeedsConfirmation ||
+          data.radioYoutubeNeedsDjName ||
+          data.radioDriveVideoProcessed ||
+          data.radioDriveVideoNeedsConfirmation ||
+          data.radioDriveVideoNeedsDjName
+        ) {
+          sawTerminalAssistantEvent = true;
+          setAssistantStatus("");
+        }
+        if (
           data.taskCreated ||
           data.googleEventCreated ||
           data.actionExecuted ||
