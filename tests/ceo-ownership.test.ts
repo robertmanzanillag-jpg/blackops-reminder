@@ -184,8 +184,8 @@ test("assistant shared connector commands are owner-only", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
 
   assert.match(assistantSource, /getCurrentUserId, getSystemUserId/, "assistant should compare the active user against the configured owner");
-  assert.match(assistantSource, /DEFAULT_DEV_USER_ID, allowsDevUserFallback/, "assistant should allow the explicitly approved dev fallback owner while production auth is still in fallback mode");
-  assert.match(assistantSource, /userId === DEFAULT_DEV_USER_ID && allowsDevUserFallback\(\)/, "approved dev fallback owner should pass shared connector ownership checks only while fallback auth is enabled");
+  assert.match(assistantSource, /DEFAULT_DEV_USER_ID/, "assistant should allow the explicitly approved dev fallback owner while DEFAULT_USER_ID is still missing");
+  assert.match(assistantSource, /missingConfiguredOwner && userId === DEFAULT_DEV_USER_ID/, "approved dev fallback owner should pass shared connector ownership checks only while the configured owner is absent");
   assert.match(assistantSource, /writeOwnerOnlySharedConnectorBlock/, "assistant should emit a clear block message for non-owner shared connector commands");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*YouTube, Google Drive y clips de radio/s, "radio YouTube command execution should be owner-only");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Calendar/s, "calendar command execution should be owner-only");
