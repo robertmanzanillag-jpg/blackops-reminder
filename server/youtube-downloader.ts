@@ -16,6 +16,8 @@ type CookieSecretCandidate = {
   value: string;
 };
 
+const DEFAULT_MAX_YT_DLP_VARIANTS = 18;
+
 function hasConfiguredValue(value?: string | null): value is string {
   if (!value) return false;
   const normalized = value.trim();
@@ -214,6 +216,12 @@ function configuredImpersonateTargets(): string[] {
     : ["chrome"];
 }
 
+function configuredMaxYtDlpVariants(): number {
+  const parsed = Number.parseInt(process.env.YT_DLP_MAX_VARIANTS || "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.max(1, Math.min(parsed, 100));
+  return DEFAULT_MAX_YT_DLP_VARIANTS;
+}
+
 function formatVariants(mode: YtDlpDownloadMode): string[] {
   if (mode === "audio") return ["ba/bestaudio/best"];
 
@@ -244,7 +252,9 @@ export function buildYtDlpCommandSpecs(params: {
   const clientVariants = configuredYoutubeClientVariants();
   const formats = formatVariants(params.mode);
   const runtimeVariants = configuredJsRuntimeVariants();
-  const impersonateTargets = configuredImpersonateTargets();
+  const impersonateTargets = hasConfiguredValue(params.freshPythonPackageDir)
+    ? configuredImpersonateTargets()
+    : [];
   const binaries: Array<{ command: string; argsPrefix?: string[]; env?: NodeJS.ProcessEnv }> = [
     ...(hasConfiguredValue(params.freshPythonPackageDir)
       ? [{ command: "python3", argsPrefix: ["-m", "yt_dlp"], env: pythonEnvForPackageDir(params.freshPythonPackageDir) }]
@@ -271,6 +281,14 @@ export function buildYtDlpCommandSpecs(params: {
       ...(options.impersonateArgs || []),
       "--no-playlist",
       ...options.cookieArgs,
+      "--socket-timeout",
+      "30",
+      "--retries",
+      "2",
+      "--fragment-retries",
+      "2",
+      "--extractor-retries",
+      "2",
       "-f",
       options.format,
       ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
@@ -303,7 +321,7 @@ export function buildYtDlpCommandSpecs(params: {
     ))
   ));
 
-  return uniqueCommandSpecs([...impersonateSpecs, ...fallbackSpecs]);
+  return uniqueCommandSpecs([...impersonateSpecs, ...fallbackSpecs]).slice(0, configuredMaxYtDlpVariants());
 }
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {

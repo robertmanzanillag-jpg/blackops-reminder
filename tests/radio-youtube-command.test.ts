@@ -280,15 +280,17 @@ test("includes local source cleanup in completed Drive MP4 summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 1 video/);
 });
 
-test("yt-dlp command specs try 1080p video with JS solver fallbacks by default", () => {
+test("yt-dlp command specs try 1080p video with bounded JS solver fallbacks by default", () => {
   const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
   const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
   const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
+  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
 
   try {
     delete process.env.YT_DLP_JS_RUNTIMES;
     delete process.env.YT_DLP_REMOTE_COMPONENTS;
     delete process.env.YT_DLP_IMPERSONATE_TARGETS;
+    delete process.env.YT_DLP_MAX_VARIANTS;
     const specs = buildYtDlpCommandSpecs({
       url: "https://youtu.be/GcVZvXkz2jU",
       outputTemplate: "/tmp/%(id)s.%(ext)s",
@@ -298,10 +300,12 @@ test("yt-dlp command specs try 1080p video with JS solver fallbacks by default",
     });
 
     assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
+    assert.ok(specs.length <= 18);
     assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
     assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
     assert.ok(specs.every((spec) => !spec.args.includes("deno")));
-    assert.ok(specs.some((spec) => spec.args.includes("--impersonate") && spec.args.includes("chrome")));
+    assert.ok(specs.every((spec) => !spec.args.includes("--impersonate")));
+    assert.ok(specs.every((spec) => spec.args.includes("--socket-timeout") && spec.args.includes("30")));
     assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
     assert.ok(specs.some((spec) => spec.args.includes("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best")));
     assert.ok(specs.every((spec) => {
@@ -324,6 +328,42 @@ test("yt-dlp command specs try 1080p video with JS solver fallbacks by default",
       delete process.env.YT_DLP_IMPERSONATE_TARGETS;
     } else {
       process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
+    }
+    if (previousMaxVariants === undefined) {
+      delete process.env.YT_DLP_MAX_VARIANTS;
+    } else {
+      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
+    }
+  }
+});
+
+test("yt-dlp command specs use impersonation only when a fresh Python package is available", () => {
+  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
+  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
+
+  try {
+    delete process.env.YT_DLP_IMPERSONATE_TARGETS;
+    process.env.YT_DLP_MAX_VARIANTS = "100";
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+      explicitBinary: "/workspace/bin/yt-dlp",
+      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+      freshPythonPackageDir: "/tmp/robplanner-yt-dlp-python",
+    });
+
+    assert.ok(specs.some((spec) => spec.args.includes("--impersonate") && spec.args.includes("chrome")));
+  } finally {
+    if (previousImpersonateTargets === undefined) {
+      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
+    } else {
+      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
+    }
+    if (previousMaxVariants === undefined) {
+      delete process.env.YT_DLP_MAX_VARIANTS;
+    } else {
+      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
     }
   }
 });
@@ -355,10 +395,12 @@ test("yt-dlp command specs allow disabling impersonation attempts", () => {
 test("yt-dlp command specs allow explicit JS runtime flags", () => {
   const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
   const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
+  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
 
   try {
     process.env.YT_DLP_JS_RUNTIMES = "deno,node";
     delete process.env.YT_DLP_REMOTE_COMPONENTS;
+    process.env.YT_DLP_MAX_VARIANTS = "100";
     const specs = buildYtDlpCommandSpecs({
       url: "https://youtu.be/GcVZvXkz2jU",
       outputTemplate: "/tmp/%(id)s.%(ext)s",
@@ -381,6 +423,11 @@ test("yt-dlp command specs allow explicit JS runtime flags", () => {
       delete process.env.YT_DLP_REMOTE_COMPONENTS;
     } else {
       process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
+    }
+    if (previousMaxVariants === undefined) {
+      delete process.env.YT_DLP_MAX_VARIANTS;
+    } else {
+      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
     }
   }
 });
