@@ -109,7 +109,7 @@ test("Clippers API is gated to the configured single-user owner while local arti
   const routesSource = readFileSync("server/routes.ts", "utf8");
 
   assert.match(routesSource, /app\.use\("\/api\/clippers"/, "Clippers API should have a shared route guard");
-  assert.match(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Clippers OAuth callbacks should bypass the owner guard after public callback classification");
+  assert.doesNotMatch(routesSource, /app\.use\("\/api\/clippers"[\s\S]*if \(isPublicApiRequest\(req\)\) return next\(\);/s, "Clippers OAuth callbacks should not bypass the owner guard while tokens are stored in a shared vault");
   assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const clipperOwnerUserId = getSystemUserId\(\);/s, "Clippers guard should compare authenticated user to configured owner");
   assert.match(routesSource, /if \(userId !== clipperOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Clippers API should reject non-owner users while artifacts are shared");
   assert.match(routesSource, /local workspace, token vault, and launch artifacts are shared/, "Clippers rejection should explain the shared local artifact limitation");
@@ -143,11 +143,52 @@ test("Clippers OAuth callbacks and token vault records keep explicit owner metad
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
 
-  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getSystemUserId\(\)\)/s, "public Clippers OAuth callback should bind to the configured single-user owner");
+  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getCurrentUserId\(req\)\)/s, "Clippers OAuth callback should bind to the authenticated owner after the route guard");
   assert.match(clippersSource, /export interface ClipperOAuthConnection \{[\s\S]*ownerUserId: string;/s, "OAuth connection records should include owner metadata");
   assert.match(clippersSource, /export interface ClipperTokenSummary \{[\s\S]*ownerUserId: string;/s, "token vault summaries should include owner metadata");
   assert.match(clippersSource, /saveClipperTokenPayload\([\s\S]*ownerUserIdOrAccountId = getSystemUserId\(\)[\s\S]*accountId\?: string \| null/s, "token vault writes should accept an explicit owner and optional account");
   assert.match(clippersSource, /tryExchangeAndStoreClipperToken\([\s\S]*ownerUserId: string,[\s\S]*accountId\?: string \| null/s, "OAuth token exchange should carry owner metadata through storage");
+});
+
+test("public API classification keeps shared OAuth token writers behind owner auth", () => {
+  const userContextSource = readFileSync("server/user-context.ts", "utf8");
+
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/oauth\/callback/, "Shopify OAuth callback should require the owner session before writing the shared store token");
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/oauth\/start/, "Shopify OAuth start should require the owner session before creating a shared token flow");
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/install/, "Shopify install should require the owner session before creating a shared token flow");
+  assert.doesNotMatch(userContextSource, /clippers\/oauth/, "Clippers OAuth callbacks should require the owner session before writing shared publisher tokens");
+});
+
+test("local auth mutations reject cross-site and non-json requests", () => {
+  const localAuthSource = readFileSync("server/local-auth.ts", "utf8");
+
+  assert.match(localAuthSource, /function requireSameOriginAuthRequest/, "local auth should have a same-origin guard");
+  assert.match(localAuthSource, /sec-fetch-site/, "local auth should inspect browser fetch metadata");
+  assert.match(localAuthSource, /sameOriginMatchesRequestHost/, "local auth should compare Origin to the request host or configured public origin");
+  assert.match(localAuthSource, /function requireJsonAuthRequest/, "local auth should require JSON request bodies for credential submissions");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/register", requireSameOriginAuthRequest, requireJsonAuthRequest, localAuthRateLimit/, "registration should run origin and JSON guards before rate-limited auth");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/login", requireSameOriginAuthRequest, requireJsonAuthRequest, localAuthRateLimit/, "login should run origin and JSON guards before rate-limited auth");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/logout", requireSameOriginAuthRequest/, "logout should reject cross-site requests");
+});
+
+test("global request parsers keep unauthenticated bodies small", () => {
+  const indexSource = readFileSync("server/index.ts", "utf8");
+
+  assert.doesNotMatch(indexSource, /limit:\s*['"]50mb['"]/, "global JSON parser should not accept 50MB unauthenticated bodies");
+  assert.match(indexSource, /limit:\s*['"]8mb['"]/, "global JSON parser should stay below the previous unauthenticated abuse ceiling");
+  assert.match(indexSource, /express\.urlencoded\(\{ extended: false, limit: "64kb", parameterLimit: 100 \}\)/, "urlencoded parser should have an explicit small limit");
+});
+
+test("assistant shared connector commands are owner-only", () => {
+  const assistantSource = readFileSync("server/assistant.ts", "utf8");
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(assistantSource, /getCurrentUserId, getSystemUserId/, "assistant should compare the active user against the configured owner");
+  assert.match(assistantSource, /writeOwnerOnlySharedConnectorBlock/, "assistant should emit a clear block message for non-owner shared connector commands");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*YouTube, Google Drive y clips de radio/s, "radio YouTube command execution should be owner-only");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Calendar/s, "calendar command execution should be owner-only");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Drive/s, "Drive command execution should be owner-only");
+  assert.match(routesSource, /Developer Autopilot GitHub handoffs are limited to the configured single-user owner/, "GitHub handoff route should be owner-only while GitHub connectors are shared");
 });
 
 test("public OAuth callback pages escape dynamic text and do not print tokens", () => {
