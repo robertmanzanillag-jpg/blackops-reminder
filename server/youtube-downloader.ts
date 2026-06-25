@@ -29,9 +29,14 @@ function normalizeCookieFileContent(rawValue: string): string {
 
 function looksLikeValidCookieFile(rawValue: string): boolean {
   const normalized = normalizeCookieFileContent(rawValue);
-  if (/Netscape HTTP Cookie File/i.test(normalized)) return true;
+  if (!/Netscape HTTP Cookie File/i.test(normalized)) return false;
   const dataLines = normalized.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
-  return dataLines.some((l) => l.split("\t").length >= 6);
+  return dataLines.some((l) => {
+    const fields = l.split("\t");
+    if (fields.length < 6) return false;
+    const domain = fields[0].replace(/^\./, "");
+    return domain.endsWith("youtube.com") || domain.endsWith("google.com");
+  });
 }
 
 function normalizeDecodedCookieSecret(rawValue: string): string | null {
