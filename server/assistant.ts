@@ -30,6 +30,7 @@ const RADIO_EDIT_ESTIMATED_COST_TEXT = "Gasto estimado de esta corrida: $0.00 US
 const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: preparo Drive, descargo el MP4 fuente, creo los clips y luego los subo a tu carpeta. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargo el YouTube, creo los clips, los subo a Drive y borro el video largo local. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const APPROVED_SHARED_CONNECTOR_OWNER_IDS = new Set([DEFAULT_DEV_USER_ID, "robert"]);
+const APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set(["robert"]);
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
@@ -46,14 +47,17 @@ function withRadioEditEstimatedCost(message: string): string {
   return /gasto estimado/i.test(message) ? message : `${message}\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 }
 
-function isConfiguredSingleUserOwner(userId: string): boolean {
+async function isConfiguredSingleUserOwner(userId: string): Promise<boolean> {
   try {
     if (userId === getSystemUserId()) return true;
   } catch {
     // Robert approved this temporary owner path while DEFAULT_USER_ID is absent in production.
   }
 
-  return APPROVED_SHARED_CONNECTOR_OWNER_IDS.has(userId);
+  if (APPROVED_SHARED_CONNECTOR_OWNER_IDS.has(userId)) return true;
+
+  const user = await storage.getUser(userId).catch(() => undefined);
+  return Boolean(user?.username && APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES.has(user.username.trim().toLowerCase()));
 }
 
 function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
@@ -1178,7 +1182,7 @@ export function registerAssistantRoutes(app: Express): void {
     try {
       const userId = getCurrentUserId(req);
       requestUserId = userId;
-      const isOwnerUser = isConfiguredSingleUserOwner(userId);
+      const isOwnerUser = await isConfiguredSingleUserOwner(userId);
       const { message, conversationHistory = [], images } = req.body;
       
       console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
