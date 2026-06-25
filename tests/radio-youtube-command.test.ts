@@ -484,6 +484,51 @@ test("yt-dlp command specs prefer chunked base64 YouTube cookies over single sec
   }
 });
 
+test("yt-dlp command specs skip invalid chunks and fall through to valid single key", () => {
+  const names = [
+    "YT_DLP_COOKIES_PATH",
+    "YT_DLP_COOKIES_B64",
+    "YT_DLP_COOKIES_BASE64",
+    "YT_DLP_COOKIES",
+    "YT_DLP_COOKIES_FROM_BROWSER",
+    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_B64_${index + 1}`),
+    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_B64_${String(index + 1).padStart(3, "0")}`),
+    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_BASE64_${index + 1}`),
+    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_BASE64_${String(index + 1).padStart(3, "0")}`),
+  ];
+  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const cookieFile = [
+    "# Netscape HTTP Cookie File",
+    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tLOGIN_INFO\tvalid-single-key",
+    ".google.com\tTRUE\t/\tTRUE\t1893456000\tSID\tvalid-google-cookie",
+  ].join("\n");
+  let materializedPath = "";
+
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.YT_DLP_COOKIES_B64_1 = Buffer.from("not cookies\tbut\tmany\ttabs\tthat\tlook\tstructured\n", "utf8").toString("base64");
+    process.env.YT_DLP_COOKIES_B64_2 = Buffer.from("also\tinvalid\tand\tmissing\tyoutube\tdomains\n", "utf8").toString("base64");
+    process.env.YT_DLP_COOKIES_B64 = Buffer.from(cookieFile, "utf8").toString("base64");
+
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+    });
+
+    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
+    assert.notEqual(firstCookiesIndex, -1);
+    materializedPath = specs[0].args[firstCookiesIndex + 1];
+    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
+  } finally {
+    if (materializedPath) rmSync(materializedPath, { force: true });
+    for (const [name, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 test("yt-dlp cookie chunks tolerate Replit lexicographic secret ordering", () => {
   const names = [
     "YT_DLP_COOKIES_PATH",
