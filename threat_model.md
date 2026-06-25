@@ -10,6 +10,8 @@
 ## Application summary
 BlackOps Reminder is a public full-stack TypeScript app with a React frontend and an Express backend backed by PostgreSQL. The server exposes a large `/api` surface for tasks, calendar sync, assistant actions, finance, automations, Telegram, OAuth connectors, Clippers workflows, and code/GitHub tooling.
 
+Several high-impact third-party integrations are effectively deployment-scoped rather than user-scoped when they use environment tokens or shared Replit connectors. Any route or assistant flow that reaches those integrations must be treated as owner-sensitive unless there is an explicit per-user ownership mapping.
+
 ## Primary trust boundaries
 1. **Internet to Express API**: Public routes, authenticated routes, and OAuth/webhook callbacks.
 2. **User account boundary**: Data and actions should stay isolated per authenticated user.
@@ -23,6 +25,7 @@ BlackOps Reminder is a public full-stack TypeScript app with a React frontend an
 - Google Calendar events and Google Drive contents reachable through connected tokens.
 - Telegram bot configuration and delivery paths.
 - Connected third-party OAuth tokens and shared connector capabilities.
+- Private GitHub repository inventory and any write access available through the connected GitHub identity.
 
 ## Threat actors
 - Unauthenticated internet attackers.
@@ -39,6 +42,7 @@ BlackOps Reminder is a public full-stack TypeScript app with a React frontend an
 - `/api/telegram/*`
 - `/api/clippers/*`
 - `/api/code/*` and `/api/github/*` owner-only tooling routes
+- Authenticated helper routes that indirectly call shared connectors, especially GitHub, Google, Shopify, and Clippers automation helpers
 
 ## Areas intentionally deprioritized for this scan
 - Dev/test-only fallback behavior without evidence of production enablement.
@@ -46,8 +50,10 @@ BlackOps Reminder is a public full-stack TypeScript app with a React frontend an
 - Mockup sandbox behavior not deployed to production.
 
 ## Scan anchors for future scans
-- Verify every public callback route has strong state / origin validation.
+- Verify every public callback route has strong state / origin validation and is bound to the initiating user or owner session.
 - Check that every authenticated route enforces per-user ownership, not just “any logged-in user”.
 - Re-check shared integrations that use env tokens or global connectors for cross-account exposure.
-- Re-check rate-limit key derivation for spoofable headers on public endpoints.
+- Re-check assistant and autopilot shortcuts for direct execution against shared third-party accounts.
+- Re-check public auth flows for login CSRF or other account-confusion paths.
+- Re-check public endpoints for expensive body parsing or similar pre-auth resource exhaustion before abuse controls run.
 - Re-check owner-only tooling routes if auth/user-resolution logic changes.
