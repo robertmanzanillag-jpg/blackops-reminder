@@ -47,8 +47,12 @@ function withRadioEditEstimatedCost(message: string): string {
 
 const APPROVED_OWNER_IDS = new Set(["mock-user-123", "robert"]);
 
-function isConfiguredSingleUserOwner(userId: string): boolean {
+async function isConfiguredSingleUserOwner(userId: string): Promise<boolean> {
   if (APPROVED_OWNER_IDS.has(userId)) return true;
+  try {
+    const user = await storage.getUser(userId);
+    if (user?.username === "robert") return true;
+  } catch {}
   try {
     return userId === getSystemUserId();
   } catch {
@@ -1141,7 +1145,7 @@ export function registerAssistantRoutes(app: Express): void {
     try {
       const userId = getCurrentUserId(req);
       requestUserId = userId;
-      const isOwnerUser = isConfiguredSingleUserOwner(userId);
+      const isOwnerUser = await isConfiguredSingleUserOwner(userId);
       const { message, conversationHistory = [], images } = req.body;
       
       console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
