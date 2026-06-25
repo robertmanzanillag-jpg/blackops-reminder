@@ -29,6 +29,7 @@ const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
 const RADIO_EDIT_ESTIMATED_COST_TEXT = "Gasto estimado de esta corrida: $0.00 USD.";
 const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: preparo Drive, descargo el MP4 fuente, creo los clips y luego los subo a tu carpeta. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargo el YouTube, creo los clips, los subo a Drive y borro el video largo local. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
+const APPROVED_SHARED_CONNECTOR_OWNER_IDS = new Set([DEFAULT_DEV_USER_ID, "robert"]);
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
@@ -52,8 +53,7 @@ function isConfiguredSingleUserOwner(userId: string): boolean {
     // Robert approved this temporary owner path while DEFAULT_USER_ID is absent in production.
   }
 
-  const missingConfiguredOwner = !process.env.DEFAULT_USER_ID?.trim();
-  return missingConfiguredOwner && userId === DEFAULT_DEV_USER_ID;
+  return APPROVED_SHARED_CONNECTOR_OWNER_IDS.has(userId);
 }
 
 function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
