@@ -322,6 +322,7 @@ test("yt-dlp command specs allow explicit JS runtime flags", () => {
       mode: "video",
       explicitBinary: "/workspace/bin/yt-dlp",
       cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
+      maxVariants: 0,
     });
 
     assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));

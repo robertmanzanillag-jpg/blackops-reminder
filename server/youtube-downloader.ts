@@ -247,6 +247,13 @@ function configuredImpersonateTargets(): string[] {
   return ["chrome", "chrome-120"];
 }
 
+const NETWORK_TIMEOUT_FLAGS = [
+  "--socket-timeout", "30",
+  "--retries", "2",
+  "--fragment-retries", "2",
+  "--extractor-retries", "2",
+];
+
 function buildCommandArgs(params: {
   argsPrefix: string[];
   extraFlags: string[];
@@ -262,6 +269,7 @@ function buildCommandArgs(params: {
     ...params.extraFlags,
     ...params.clientArgs,
     "--no-playlist",
+    ...NETWORK_TIMEOUT_FLAGS,
     ...params.cookieArgs,
     "-f",
     params.format,
@@ -273,6 +281,8 @@ function buildCommandArgs(params: {
   ];
 }
 
+const DEFAULT_MAX_VARIANTS = 18;
+
 export function buildYtDlpCommandSpecs(params: {
   url: string;
   outputTemplate: string;
@@ -281,6 +291,7 @@ export function buildYtDlpCommandSpecs(params: {
   cookieArgs?: string[];
   freshPythonPackageDir?: string | null;
   curlCffiPackageDir?: string | null;
+  maxVariants?: number;
 }): YtDlpCommandSpec[] {
   const cookieArgVariants = configuredYoutubeCookieArgVariants(params.cookieArgs);
   const clientVariants = configuredYoutubeClientVariants();
@@ -309,7 +320,12 @@ export function buildYtDlpCommandSpecs(params: {
         ]
       : [];
 
-  const impersonationSpecs: YtDlpCommandSpec[] = impersonateTargets.length > 0
+  const canImpersonate =
+    impersonateTargets.length > 0 &&
+    binariesWithCurlCffi.length > 0 &&
+    (hasConfiguredValue(params.freshPythonPackageDir) || hasConfiguredValue(params.curlCffiPackageDir));
+
+  const impersonationSpecs: YtDlpCommandSpec[] = canImpersonate
     ? binariesWithCurlCffi.flatMap((binary) =>
         impersonateTargets.flatMap((target) =>
           cookieArgVariants.flatMap((cookieArgs) =>
@@ -355,7 +371,9 @@ export function buildYtDlpCommandSpecs(params: {
     )
   );
 
-  return uniqueCommandSpecs([...impersonationSpecs, ...regularSpecs]);
+  const limit = params.maxVariants ?? DEFAULT_MAX_VARIANTS;
+  const allSpecs = uniqueCommandSpecs([...impersonationSpecs, ...regularSpecs]);
+  return limit > 0 ? allSpecs.slice(0, limit) : allSpecs;
 }
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {
