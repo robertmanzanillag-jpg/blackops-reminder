@@ -38,7 +38,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
   {
     name: "Blackops Reminder",
     slug: "blackops-reminder",
-    description: "BlackOps Reminder full-stack TypeScript PWA. GitHub: robertmanzanillag-jpg/blackops-reminder.",
+    description: "BlackOps Reminder full-stack TypeScript PWA, also referred to as Dialer Planner when running from its alternate Replit deployment. GitHub: robertmanzanillag-jpg/blackops-reminder.",
     environment: "production",
     publicUrl: "https://robplanner.replit.app",
     healthUrl: null,
@@ -53,7 +53,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-health-url"],
+    tags: ["known-github-inventory", "needs-health-url", "alias-dialer-planner", "alternate-replit-deployment"],
   },
   {
     name: "DROPKIT",
