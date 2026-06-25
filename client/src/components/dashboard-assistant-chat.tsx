@@ -140,6 +140,10 @@ export function DashboardAssistantChat() {
           assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.metricoolAutomationError || data.actionExecutionError}`;
           updateAssistantMessage();
         }
+        if (data.radioYoutubeNeedsConfirmation || data.radioYoutubeNeedsDjName || data.radioDriveVideoNeedsConfirmation || data.radioDriveVideoNeedsDjName) {
+          setAssistantStatus("");
+          updateAssistantMessage();
+        }
         if (data.approvalRequired && data.pendingAction) {
           setAssistantStatus("");
           assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;

@@ -361,6 +361,11 @@ app.use((req, res, next) => {
     throw err;
   });
 
+  // Fast health-check endpoints — must come before the SPA catch-all
+  app.get(["/health", "/api/health"], (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes

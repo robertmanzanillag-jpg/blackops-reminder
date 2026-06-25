@@ -1202,36 +1202,47 @@ export function registerAssistantRoutes(app: Express): void {
           return;
         }
 
+        res.setTimeout(0);
+        const driveKeepalive = setInterval(() => {
+          if (!res.writableEnded) res.write(": keepalive\n\n");
+        }, 25_000);
+
         try {
           res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_DRIVE_VIDEO_STATUS_MESSAGE })}\n\n`);
           const result = await executeDirectRadioDriveVideoCommand(directRadioDriveVideoCommand, userId);
           const summary = formatRadioDriveVideoResult(result);
-          if (result.status === "failed") {
-            res.write(`data: ${JSON.stringify({ radioDriveVideoError: summary })}\n\n`);
-          } else {
-            res.write(`data: ${JSON.stringify({
-              content: `\n\n${summary}`,
-              radioDriveVideoProcessed: result.status === "completed",
-              radioDriveVideoNeedsConfirmation: result.status === "queued",
-              radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            })}\n\n`);
+          if (!res.writableEnded) {
+            if (result.status === "failed") {
+              res.write(`data: ${JSON.stringify({ radioDriveVideoError: summary })}\n\n`);
+            } else {
+              res.write(`data: ${JSON.stringify({
+                content: `\n\n${summary}`,
+                radioDriveVideoProcessed: result.status === "completed",
+                radioDriveVideoNeedsConfirmation: result.status === "queued",
+                radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
+                pendingActionId: result.pendingActionId,
+                driveFolderPath: result.driveFolderPath,
+                clips: result.clips,
+              })}\n\n`);
+            }
           }
           await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\n${directRadioDriveVideoCommand.command}\n${summary}`).catch((historyError) => {
             console.error("Error saving direct radio Drive video assistant response:", historyError);
           });
         } catch (e: any) {
           const errorText = e.message || "No pude procesar el MP4 de Google Drive para radio";
-          res.write(`data: ${JSON.stringify({ radioDriveVideoError: withRadioEditEstimatedCost(errorText) })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ radioDriveVideoError: withRadioEditEstimatedCost(errorText) })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct radio Drive video assistant error:", historyError);
           });
+        } finally {
+          clearInterval(driveKeepalive);
         }
 
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-        res.end();
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+        }
         return;
       }
 
@@ -1265,36 +1276,47 @@ export function registerAssistantRoutes(app: Express): void {
           return;
         }
 
+        res.setTimeout(0);
+        const ytKeepalive = setInterval(() => {
+          if (!res.writableEnded) res.write(": keepalive\n\n");
+        }, 25_000);
+
         try {
           res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_YOUTUBE_STATUS_MESSAGE })}\n\n`);
           const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
           const summary = formatRadioYoutubeResult(result);
-          if (result.status === "failed") {
-            res.write(`data: ${JSON.stringify({ radioYoutubeError: summary })}\n\n`);
-          } else {
-            res.write(`data: ${JSON.stringify({
-              content: `\n\n${summary}`,
-              radioYoutubeProcessed: result.status === "completed",
-              radioYoutubeNeedsConfirmation: result.status === "queued",
-              radioYoutubeNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            })}\n\n`);
+          if (!res.writableEnded) {
+            if (result.status === "failed") {
+              res.write(`data: ${JSON.stringify({ radioYoutubeError: summary })}\n\n`);
+            } else {
+              res.write(`data: ${JSON.stringify({
+                content: `\n\n${summary}`,
+                radioYoutubeProcessed: result.status === "completed",
+                radioYoutubeNeedsConfirmation: result.status === "queued",
+                radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+                pendingActionId: result.pendingActionId,
+                driveFolderPath: result.driveFolderPath,
+                clips: result.clips,
+              })}\n\n`);
+            }
           }
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\n${directRadioYoutubeCommand.command}\n${summary}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant response:", historyError);
           });
         } catch (e: any) {
           const errorText = e.message || "No pude procesar el link de YouTube para radio";
-          res.write(`data: ${JSON.stringify({ radioYoutubeError: withRadioEditEstimatedCost(errorText) })}\n\n`);
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify({ radioYoutubeError: withRadioEditEstimatedCost(errorText) })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant error:", historyError);
           });
+        } finally {
+          clearInterval(ytKeepalive);
         }
 
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-        res.end();
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+        }
         return;
       }
 
