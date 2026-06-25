@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { getCurrentUserId, getSystemUserId } from "./user-context";
+import { DEFAULT_DEV_USER_ID, getCurrentUserId, getSystemUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
@@ -49,7 +49,9 @@ function isConfiguredSingleUserOwner(userId: string): boolean {
   try {
     return userId === getSystemUserId();
   } catch {
-    return false;
+    // DEFAULT_USER_ID not configured: fall back to the canonical
+    // bootstrap user id so single-user deployments still work.
+    return userId === DEFAULT_DEV_USER_ID;
   }
 }
 
