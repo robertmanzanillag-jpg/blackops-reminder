@@ -1,4 +1,5 @@
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { recordScheduledAutomationRun } from "./automation-registry";
@@ -783,7 +784,7 @@ function isValidUrl(value: string | null | undefined): boolean {
 }
 
 function getVisualBaseUrl(): string | null {
-  const raw = process.env.APP_QA_BASE_URL || process.env.PUBLIC_APP_URL || null;
+  const raw = process.env.APP_QA_BASE_URL || process.env.PUBLIC_APP_URL || process.env.PUBLIC_BASE_URL || null;
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -811,6 +812,33 @@ async function loadPlaywright(): Promise<any | null> {
   } catch {
     return null;
   }
+}
+
+function resolveChromiumExecutablePath(): string | undefined {
+  const configured = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || process.env.CHROMIUM_EXECUTABLE_PATH;
+  if (configured && existsSync(configured)) return configured;
+
+  const candidates = ["chromium", "chromium-browser", "google-chrome", "chrome"];
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    if (!dir) continue;
+    for (const binary of candidates) {
+      const candidatePath = path.join(dir, binary);
+      if (existsSync(candidatePath)) return candidatePath;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeVisualText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isVisualAuthScreen(bodyText: string): boolean {
+  const normalized = normalizeVisualText(bodyText);
+  return normalized.includes("blackops ceo")
+    && normalized.includes("password")
+    && (normalized.includes("entrar") || normalized.includes("crear cuenta"));
 }
 
 async function probeUrl(url: string, timeoutMs = 5000): Promise<{ ok: boolean; statusCode?: number; responseTimeMs: number; error?: string }> {
@@ -1065,7 +1093,35 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
   }
 
   await mkdir(VISUAL_SCREENSHOT_DIR, { recursive: true });
-  const browser = await playwright.chromium.launch({ headless: true });
+  let browser: any;
+  try {
+    const executablePath = resolveChromiumExecutablePath();
+    browser = await playwright.chromium.launch({
+      headless: true,
+      ...(executablePath ? { executablePath } : {}),
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+  } catch (error: any) {
+    findings.push(createFinding(
+      syntheticApp,
+      "visual-click-scout",
+      "Visual QA setup",
+      "high",
+      "Chromium no disponible",
+      `Visual Click Scout encontro Playwright, pero no pudo arrancar Chromium: ${error?.message || "browser launch failed"}.`,
+      "Instalar Chromium en el runtime (por ejemplo pkgs.chromium en Replit/Nix) o ejecutar npx playwright install chromium antes de activar QA visual.",
+      baseUrl
+    ));
+    return {
+      id: "visual-click-scout",
+      name: "Visual Click Scout",
+      status: "fail",
+      summary: "Playwright esta instalado, pero Chromium no pudo arrancar; QA visual queda pendiente.",
+      checked: 0,
+      findings,
+      visualScans,
+    };
+  }
 
   try {
     const context = await browser.newContext({
@@ -1074,7 +1130,15 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
     });
 
     await context.addInitScript(() => {
-      window.localStorage.setItem("blackops-local-auth-user", JSON.stringify({ id: "visual-qa-user", username: "visual-qa" }));
+      try {
+        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+          window.localStorage.setItem("blackops-local-auth-user", JSON.stringify({ id: "visual-qa-user", username: "visual-qa" }));
+          (window as any).__visualQaAuthSeeded = true;
+        }
+      } catch {
+        (window as any).__visualQaAuthSeedError = true;
+        // Some browser-internal documents deny storage access before the app page loads.
+      }
     });
 
     for (const route of routes) {
@@ -1101,10 +1165,23 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         title = await page.title().catch(() => null);
         const statusCode = response?.status?.() || 0;
         const bodyText = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).trim();
+        const authSeed = await page.evaluate(() => ({
+          seeded: Boolean((window as any).__visualQaAuthSeeded),
+          errored: Boolean((window as any).__visualQaAuthSeedError),
+          hasUser: Boolean(window.localStorage.getItem("blackops-local-auth-user")),
+        })).catch(() => ({ seeded: false, errored: true, hasUser: false }));
 
         if (statusCode >= 400) {
           status = "fail";
           notes.push(`HTTP ${statusCode}`);
+        }
+        if (!authSeed.seeded || authSeed.errored || !authSeed.hasUser) {
+          status = "fail";
+          notes.push("No se pudo sembrar auth local para QA visual");
+        }
+        if (isVisualAuthScreen(bodyText)) {
+          status = "fail";
+          notes.push("QA visual cayo en pantalla de login");
         }
         if (bodyText.length < 10) {
           status = "fail";
@@ -1714,6 +1791,8 @@ export const __appQaAgentInternals = {
   formatTelegramReport,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,
+  isVisualAuthScreen,
+  resolveChromiumExecutablePath,
   runBugPatrolHandoffs,
   runVisualClickScout,
   shouldRunVisualScout,

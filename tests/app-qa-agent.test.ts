@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
 import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runBugPatrolHandoffs } from "../server/app-qa-agent";
@@ -326,6 +329,124 @@ test("visual click scout reports setup guidance when base URL is missing", async
   } finally {
     if (previousBaseUrl) process.env.APP_QA_BASE_URL = previousBaseUrl;
     if (previousPublicUrl) process.env.PUBLIC_APP_URL = previousPublicUrl;
+  }
+});
+
+test("visual click scout reports setup guidance when Chromium cannot launch", async () => {
+  const previousBaseUrl = process.env.APP_QA_BASE_URL;
+  const previousPublicUrl = process.env.PUBLIC_APP_URL;
+  const previousExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "app-qa-fake-chromium-"));
+  const fakeChromiumPath = path.join(tempDir, "chromium");
+
+  await writeFile(fakeChromiumPath, "#!/bin/sh\nexit 1\n");
+  await chmod(fakeChromiumPath, 0o755);
+  process.env.APP_QA_BASE_URL = "http://127.0.0.1:1";
+  delete process.env.PUBLIC_APP_URL;
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
+
+  try {
+    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+
+    assert.equal(report.status, "fail");
+    assert.equal(report.checked, 0);
+    assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
+  } finally {
+    if (previousBaseUrl) {
+      process.env.APP_QA_BASE_URL = previousBaseUrl;
+    } else {
+      delete process.env.APP_QA_BASE_URL;
+    }
+    if (previousPublicUrl) {
+      process.env.PUBLIC_APP_URL = previousPublicUrl;
+    } else {
+      delete process.env.PUBLIC_APP_URL;
+    }
+    if (previousExecutablePath) {
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
+    } else {
+      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("visual click scout uses PUBLIC_BASE_URL as Replit base URL fallback", async () => {
+  const previousBaseUrl = process.env.APP_QA_BASE_URL;
+  const previousPublicAppUrl = process.env.PUBLIC_APP_URL;
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "app-qa-replit-base-url-"));
+  const fakeChromiumPath = path.join(tempDir, "chromium");
+
+  await writeFile(fakeChromiumPath, "#!/bin/sh\nexit 1\n");
+  await chmod(fakeChromiumPath, 0o755);
+  delete process.env.APP_QA_BASE_URL;
+  delete process.env.PUBLIC_APP_URL;
+  process.env.PUBLIC_BASE_URL = "https://robplanner.replit.app/some/path";
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
+
+  try {
+    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+
+    assert.equal(report.status, "fail");
+    assert.equal(report.checked, 0);
+    assert.equal(report.findings.some((finding) => finding.title === "APP_QA_BASE_URL no configurado"), false);
+    assert.equal(report.findings[0]?.url, "https://robplanner.replit.app");
+    assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
+  } finally {
+    if (previousBaseUrl) {
+      process.env.APP_QA_BASE_URL = previousBaseUrl;
+    } else {
+      delete process.env.APP_QA_BASE_URL;
+    }
+    if (previousPublicAppUrl) {
+      process.env.PUBLIC_APP_URL = previousPublicAppUrl;
+    } else {
+      delete process.env.PUBLIC_APP_URL;
+    }
+    if (previousPublicBaseUrl) {
+      process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    } else {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+    if (previousExecutablePath) {
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
+    } else {
+      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("visual click scout detects auth screens as failed target pages", () => {
+  assert.equal(
+    __appQaAgentInternals.isVisualAuthScreen("BlackOps CEO\nEntrar\nCrear\nUsuario\nPassword\nEntrar con huella / Face ID"),
+    true,
+  );
+  assert.equal(
+    __appQaAgentInternals.isVisualAuthScreen("APP QA AGENT\nSubagentes revisando paginas, links y errores\nCorrer patrulla"),
+    false,
+  );
+});
+
+test("visual click scout resolves explicit Chromium executable paths", async () => {
+  const previousExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "app-qa-chromium-path-"));
+  const fakeChromiumPath = path.join(tempDir, "chromium");
+
+  await writeFile(fakeChromiumPath, "#!/bin/sh\nexit 0\n");
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
+
+  try {
+    assert.equal(__appQaAgentInternals.resolveChromiumExecutablePath(), fakeChromiumPath);
+  } finally {
+    if (previousExecutablePath) {
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
+    } else {
+      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    }
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 
