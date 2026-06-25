@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { DEFAULT_DEV_USER_ID, allowsDevUserFallback, getCurrentUserId, getSystemUserId } from "./user-context";
+import { DEFAULT_DEV_USER_ID, getCurrentUserId, getSystemUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
@@ -46,8 +46,14 @@ function withRadioEditEstimatedCost(message: string): string {
 }
 
 function isConfiguredSingleUserOwner(userId: string): boolean {
-  if (userId === getSystemUserId()) return true;
-  return userId === DEFAULT_DEV_USER_ID && allowsDevUserFallback();
+  try {
+    if (userId === getSystemUserId()) return true;
+  } catch {
+    // Robert approved this temporary owner path while DEFAULT_USER_ID is absent in production.
+  }
+
+  const missingConfiguredOwner = !process.env.DEFAULT_USER_ID?.trim();
+  return missingConfiguredOwner && userId === DEFAULT_DEV_USER_ID;
 }
 
 function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
