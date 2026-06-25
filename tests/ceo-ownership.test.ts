@@ -186,6 +186,8 @@ test("assistant shared connector commands are owner-only", () => {
   assert.match(assistantSource, /getCurrentUserId, getSystemUserId/, "assistant should compare the active user against the configured owner");
   assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_IDS/, "assistant should allow Robert's explicitly approved production connector owner ids");
   assert.match(assistantSource, /new Set\(\[DEFAULT_DEV_USER_ID, "robert"\]\)/, "approved production connector owners should include mock-user-123 and robert");
+  assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set\(\["robert"\]\)/, "approved production connector owners should include Robert's local auth username");
+  assert.match(assistantSource, /storage\.getUser\(userId\)/, "assistant owner check should resolve local auth users by username when the session stores an internal id");
   assert.match(assistantSource, /writeOwnerOnlySharedConnectorBlock/, "assistant should emit a clear block message for non-owner shared connector commands");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*YouTube, Google Drive y clips de radio/s, "radio YouTube command execution should be owner-only");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Calendar/s, "calendar command execution should be owner-only");
