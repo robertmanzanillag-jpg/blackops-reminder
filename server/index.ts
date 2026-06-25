@@ -54,14 +54,14 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: '50mb',
+    limit: '8mb',
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
 app.get("/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt", (_req, res) => {
   res

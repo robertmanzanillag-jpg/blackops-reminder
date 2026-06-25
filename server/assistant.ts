@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { getCurrentUserId } from "./user-context";
+import { getCurrentUserId, getSystemUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
@@ -43,6 +43,21 @@ function formatAiApiCostPreview(provider: string, model: string, operation: stri
 
 function withRadioEditEstimatedCost(message: string): string {
   return /gasto estimado/i.test(message) ? message : `${message}\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
+}
+
+function isConfiguredSingleUserOwner(userId: string): boolean {
+  try {
+    return userId === getSystemUserId();
+  } catch {
+    return false;
+  }
+}
+
+function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
+  res.write(`data: ${JSON.stringify({
+    content: `No puedo ejecutar ${connectorName} para este usuario porque usa conectores compartidos de producción. Solo el owner configurado puede correr esta acción.`,
+    sharedConnectorBlocked: true,
+  })}\n\n`);
 }
 
 function normalizeAssistantCacheText(message = ""): string {
@@ -1121,6 +1136,7 @@ export function registerAssistantRoutes(app: Express): void {
     try {
       const userId = getCurrentUserId(req);
       requestUserId = userId;
+      const isOwnerUser = isConfiguredSingleUserOwner(userId);
       const { message, conversationHistory = [], images } = req.body;
       
       console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
@@ -1174,6 +1190,13 @@ export function registerAssistantRoutes(app: Express): void {
           await saveCeoConversationMessage(userId, "assistant", directRadioDriveVideoCommand.content).catch((historyError) => {
             console.error("Error saving direct radio Drive video folder question:", historyError);
           });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Drive/radio video");
           res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           res.end();
           return;
@@ -1235,6 +1258,13 @@ export function registerAssistantRoutes(app: Express): void {
           return;
         }
 
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "YouTube, Google Drive y clips de radio");
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
         try {
           res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_YOUTUBE_STATUS_MESSAGE })}\n\n`);
           const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
@@ -1269,7 +1299,9 @@ export function registerAssistantRoutes(app: Express): void {
       }
 
       const developerAutopilotHandoff = message
-        ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
+        ? isOwnerUser
+          ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
+          : null
         : null;
       if (developerAutopilotHandoff && developerAutopilotHandoff.status !== "invalid_request") {
         res.setHeader("Content-Type", "text/event-stream");
@@ -1310,6 +1342,13 @@ export function registerAssistantRoutes(app: Express): void {
           await saveCeoConversationMessage(userId, "assistant", directGoogleDriveFolderCommand.content).catch((historyError) => {
             console.error("Error saving direct Google Drive folder question:", historyError);
           });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
+
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Drive");
           res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           res.end();
           return;
@@ -1408,6 +1447,13 @@ export function registerAssistantRoutes(app: Express): void {
         }
 
         res.write(`data: ${JSON.stringify({ content: directGoogleCalendarCommand.content })}\n\n`);
+
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
+        }
 
         try {
           const pendingAction = await createPendingActionForApproval({
@@ -1723,6 +1769,10 @@ export function registerAssistantRoutes(app: Express): void {
       const radioYoutubeRegex = /\[RADIO_YOUTUBE_CLIPS:\s*(\{[^}]+\})\]/g;
       let radioYoutubeMatch;
       while ((radioYoutubeMatch = radioYoutubeRegex.exec(fullResponse)) !== null) {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "YouTube, Google Drive y clips de radio");
+          continue;
+        }
         try {
           const radioYoutubeData = JSON.parse(radioYoutubeMatch[1]);
           res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_YOUTUBE_STATUS_MESSAGE })}\n\n`);
@@ -1764,6 +1814,10 @@ export function registerAssistantRoutes(app: Express): void {
       const radioDriveVideoRegex = /\[RADIO_DRIVE_VIDEO_CLIPS:\s*(\{[^}]+\})\]/g;
       let radioDriveVideoMatch;
       while ((radioDriveVideoMatch = radioDriveVideoRegex.exec(fullResponse)) !== null) {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Drive/radio video");
+          continue;
+        }
         try {
           const radioDriveVideoData = JSON.parse(radioDriveVideoMatch[1]);
           res.write(`data: ${JSON.stringify({ assistantStatus: RADIO_DRIVE_VIDEO_STATUS_MESSAGE })}\n\n`);
@@ -1805,6 +1859,10 @@ export function registerAssistantRoutes(app: Express): void {
       const googleDriveCreateFolderRegex = /\[GOOGLE_DRIVE_CREATE_FOLDER:\s*(\{[^}]+\})\]/g;
       let googleDriveCreateFolderMatch;
       while ((googleDriveCreateFolderMatch = googleDriveCreateFolderRegex.exec(fullResponse)) !== null) {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Drive");
+          continue;
+        }
         try {
           const driveData = JSON.parse(googleDriveCreateFolderMatch[1]);
           const result = await createGoogleDriveFolderPath({
@@ -1892,7 +1950,9 @@ export function registerAssistantRoutes(app: Express): void {
 
       const radioMatch = fullResponse.match(/\[MODIFICAR_RADIO:\s*(\{[^}]+\})\]/);
       if (radioMatch) {
-        try {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Calendar/radio");
+        } else try {
           const radioData = JSON.parse(radioMatch[1]);
           const pendingAction = await createPendingActionForApproval({
             userId,
@@ -1924,7 +1984,9 @@ export function registerAssistantRoutes(app: Express): void {
 
       const googleEventMatch = fullResponse.match(/\[CREAR_EVENTO_GOOGLE:\s*(\{[^}]+\})\]/);
       if (googleEventMatch) {
-        try {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
+        } else try {
           const eventData = JSON.parse(googleEventMatch[1]);
           const pendingAction = await createPendingActionForApproval({
             userId,
@@ -1956,6 +2018,10 @@ export function registerAssistantRoutes(app: Express): void {
       const editGoogleEventRegex = /\[EDITAR_EVENTO_GOOGLE:\s*(\{[^}]+\})\]/g;
       let editGoogleEventMatch;
       while ((editGoogleEventMatch = editGoogleEventRegex.exec(fullResponse)) !== null) {
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
+          continue;
+        }
         try {
           const eventData = JSON.parse(editGoogleEventMatch[1]);
           if (!eventData.eventId) {

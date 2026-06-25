@@ -109,7 +109,7 @@ test("Clippers API is gated to the configured single-user owner while local arti
   const routesSource = readFileSync("server/routes.ts", "utf8");
 
   assert.match(routesSource, /app\.use\("\/api\/clippers"/, "Clippers API should have a shared route guard");
-  assert.match(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Clippers OAuth callbacks should bypass the owner guard after public callback classification");
+  assert.doesNotMatch(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Clippers owner guard must not have an isPublicApiRequest bypass — OAuth callbacks are handled as authenticated owner requests");
   assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const clipperOwnerUserId = getSystemUserId\(\);/s, "Clippers guard should compare authenticated user to configured owner");
   assert.match(routesSource, /if \(userId !== clipperOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Clippers API should reject non-owner users while artifacts are shared");
   assert.match(routesSource, /local workspace, token vault, and launch artifacts are shared/, "Clippers rejection should explain the shared local artifact limitation");
@@ -119,7 +119,7 @@ test("Clippers OAuth callbacks and token vault records keep explicit owner metad
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
 
-  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getSystemUserId\(\)\)/s, "public Clippers OAuth callback should bind to the configured single-user owner");
+  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getCurrentUserId\(req\)\)/s, "Clippers OAuth callback should bind to the authenticated request owner");
   assert.match(clippersSource, /export interface ClipperOAuthConnection \{[\s\S]*ownerUserId: string;/s, "OAuth connection records should include owner metadata");
   assert.match(clippersSource, /export interface ClipperTokenSummary \{[\s\S]*ownerUserId: string;/s, "token vault summaries should include owner metadata");
   assert.match(clippersSource, /saveClipperTokenPayload\([\s\S]*ownerUserIdOrAccountId = getSystemUserId\(\)[\s\S]*accountId\?: string \| null/s, "token vault writes should accept an explicit owner and optional account");

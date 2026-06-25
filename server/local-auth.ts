@@ -79,6 +79,36 @@ function clearLocalAuthUserCookie(res: Response): void {
   res.clearCookie(LOCAL_AUTH_USER_COOKIE_NAME, localAuthCookieOptions());
 }
 
+function sameOriginMatchesRequestHost(req: Request, origin: string): boolean {
+  try {
+    const originHost = new URL(origin).host;
+    const requestHost = (req.headers as Record<string, string | string[] | undefined>)["host"];
+    if (!requestHost) return false;
+    const normalizedHost = Array.isArray(requestHost) ? requestHost[0] : requestHost;
+    return originHost === normalizedHost;
+  } catch {
+    return false;
+  }
+}
+
+function requireSameOriginAuthRequest(req: Request, res: Response, next: () => void): void {
+  const origin = req.headers["origin"];
+  if (!origin || !sameOriginMatchesRequestHost(req, origin)) {
+    res.status(403).json({ error: "Cross-site auth requests are not allowed." });
+    return;
+  }
+  next();
+}
+
+function requireJsonAuthRequest(req: Request, res: Response, next: () => void): void {
+  const contentType = req.headers["content-type"] || "";
+  if (!contentType.includes("application/json")) {
+    res.status(415).json({ error: "Auth requests must use Content-Type: application/json." });
+    return;
+  }
+  next();
+}
+
 function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
   if (!req.session?.save) return Promise.resolve();
 
@@ -123,7 +153,7 @@ export function registerLocalAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/register", localAuthRateLimit, async (req: RequestWithSession, res: Response) => {
+  app.post("/api/auth/register", localAuthRateLimit, requireSameOriginAuthRequest, requireJsonAuthRequest, async (req: RequestWithSession, res: Response) => {
     try {
       if (!isLocalAuthEnabled() || !isLocalAuthRegistrationAllowed()) {
         return res.status(403).json({ error: "Local registration is disabled" });
@@ -157,7 +187,7 @@ export function registerLocalAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/login", localAuthRateLimit, async (req: RequestWithSession, res: Response) => {
+  app.post("/api/auth/login", localAuthRateLimit, requireSameOriginAuthRequest, requireJsonAuthRequest, async (req: RequestWithSession, res: Response) => {
     try {
       if (!isLocalAuthEnabled()) {
         return res.status(403).json({ error: "Local auth is disabled" });
@@ -186,7 +216,7 @@ export function registerLocalAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/logout", (req: RequestWithSession, res: Response) => {
+  app.post("/api/auth/logout", requireSameOriginAuthRequest, (req: RequestWithSession, res: Response) => {
     clearLocalAuthUserCookie(res);
     if (!req.session?.destroy) {
       return res.json({ authenticated: false });
