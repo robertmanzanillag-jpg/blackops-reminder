@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, Brain, BriefcaseBusiness, CalendarClock, Camera, Layers3, Megaphone, RefreshCcw, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Brain, BriefcaseBusiness, CalendarClock, Layers3, Megaphone, RefreshCcw, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,12 +144,6 @@ export default function MarketingCommandCenterPage() {
               <Button className="bg-zinc-800 text-white hover:bg-zinc-700">
                 <BriefcaseBusiness className="mr-2 h-4 w-4" />
                 Dropshipping client
-              </Button>
-            </Link>
-            <Link href="/instagram-campaign-lab">
-              <Button className="bg-zinc-800 text-white hover:bg-zinc-700">
-                <Camera className="mr-2 h-4 w-4" />
-                Social Lab
               </Button>
             </Link>
           </div>

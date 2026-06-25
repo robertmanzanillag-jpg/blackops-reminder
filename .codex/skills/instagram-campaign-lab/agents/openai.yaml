@@ -1,4 +1,0 @@
-interface:
-  display_name: "Social Campaign Lab"
-  short_description: "Turn social references into ownable campaigns"
-  default_prompt: "Use $instagram-campaign-lab to analyze three social reference accounts and create original platform-native campaign, photo, video, and prompt directions."
