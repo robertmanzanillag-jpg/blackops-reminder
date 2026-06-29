@@ -14337,11 +14337,16 @@ export default function ClippersPage() {
         : tiktokMvpCockpitBlocked
           ? tiktokOperatorCockpit?.nextStep
         : null;
-  const effectiveTikTokNextAction = tiktokNextAction ?? status?.tiktokNextAction;
-  const effectiveTikTokBatchTracker = tiktokBatchTracker ?? status?.tiktokBatchTracker;
+  const statusTikTokNextActionBlocker = status?.tiktokNextAction?.status.startsWith("blocked") ? status.tiktokNextAction : undefined;
+  const statusMetricoolSessionBlocker = status?.metricoolCurrentBatchSessionPacket?.status.startsWith("blocked") ? status.metricoolCurrentBatchSessionPacket : undefined;
+  const statusTikTokTrackerBlocker = status?.tiktokBatchTracker?.status === "needs_evidence_fix" ? status.tiktokBatchTracker : undefined;
+  const effectiveTikTokNextAction = tiktokNextAction ?? statusTikTokNextActionBlocker;
+  const effectiveTikTokBatchTracker = tiktokBatchTracker ?? statusTikTokTrackerBlocker;
   const effectiveMetricoolUploadPack = metricoolCurrentBatchUploadPack ?? status?.metricoolCurrentBatchUploadPack;
-  const effectiveMetricoolSessionPacket = metricoolCurrentBatchSessionPacket ?? status?.metricoolCurrentBatchSessionPacket;
-  const effectiveTikTokGoLivePacket = tiktokMvpGoLivePacket ?? status?.tiktokMvpGoLivePacket;
+  const effectiveMetricoolSessionPacket = metricoolCurrentBatchSessionPacket ?? statusMetricoolSessionBlocker;
+  const effectiveTikTokGoLivePacket = tiktokMvpGoLivePacket;
+  const statusBatchTrackerForDisplay = tiktokBatchTracker ?? status?.tiktokBatchTracker;
+  const statusTikTokNextActionForDisplay = tiktokNextAction ?? status?.tiktokNextAction;
   const statusMvpBlockingStatus = effectiveMetricoolSessionPacket?.status.startsWith("blocked")
     ? effectiveMetricoolSessionPacket.status
     : effectiveTikTokNextAction?.status.startsWith("blocked")
@@ -14369,8 +14374,8 @@ export default function ClippersPage() {
     batchId: tiktokOperatorCockpit?.batchId
       || tiktokMvpReadinessVerifier?.active.currentBatchId
       || effectiveMetricoolUploadPack?.batchId
-      || effectiveTikTokBatchTracker?.batch.id
-      || effectiveTikTokNextAction?.batch.id
+      || statusBatchTrackerForDisplay?.batch.id
+      || statusTikTokNextActionForDisplay?.batch.id
       || "metricool-batch-01",
     nextStep: tiktokMvpBlockingNextStep
       || statusMvpBlockingNextStep
@@ -14383,8 +14388,8 @@ export default function ClippersPage() {
       || "Prepare the TikTok Metricool operator cockpit before opening Metricool.",
     uploadRows: effectiveMetricoolUploadPack?.totals.rows ?? tiktokOperatorCockpit?.totals.uploadRows ?? 0,
     copiedFiles: effectiveMetricoolUploadPack?.totals.copied ?? tiktokOperatorCockpit?.totals.copiedFiles ?? 0,
-    scheduled: effectiveTikTokBatchTracker?.totals.scheduled ?? tiktokOperatorCockpit?.totals.scheduled ?? 0,
-    readyToImport: effectiveTikTokBatchTracker?.totals.readyToImport ?? tiktokOperatorCockpit?.totals.readyToImport ?? 0,
+    scheduled: tiktokBatchTracker?.totals.scheduled ?? tiktokOperatorCockpit?.totals.scheduled ?? status?.tiktokBatchTracker?.totals.scheduled ?? 0,
+    readyToImport: tiktokBatchTracker?.totals.readyToImport ?? tiktokOperatorCockpit?.totals.readyToImport ?? 0,
     missingApproval: tiktokEvidenceChecklist?.totals.missingApproval || 0,
     checksPassed: tiktokMvpReadinessVerifier?.totals.passed || tiktokOperatorCockpitPreflight?.totals.passed || 0,
     checksTotal: tiktokMvpReadinessVerifier?.totals.checks || tiktokOperatorCockpitPreflight?.totals.checks || 0,
@@ -14392,7 +14397,7 @@ export default function ClippersPage() {
     uploadHtml: effectiveMetricoolUploadPack?.paths.html || tiktokOperatorCockpit?.paths.uploadHtml || "",
     uploadDir: effectiveMetricoolUploadPack?.paths.uploadDir || "",
     evidenceHtml: tiktokEvidenceChecklist?.paths.html || tiktokOperatorCockpit?.paths.evidenceHtml || "",
-    evidenceCsv: effectiveMetricoolUploadPack?.paths.batchEvidenceCsv || effectiveTikTokBatchTracker?.paths.evidenceCsv || tiktokMvpReadinessVerifier?.paths.currentBatchEvidenceCsv || "",
+    evidenceCsv: effectiveMetricoolUploadPack?.paths.batchEvidenceCsv || statusBatchTrackerForDisplay?.paths.evidenceCsv || tiktokMvpReadinessVerifier?.paths.currentBatchEvidenceCsv || "",
   };
   const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
   const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
