@@ -59,15 +59,68 @@ async function withFutureCurrentBatchSchedule(callback: () => Promise<void>) {
   const workbookPath = path.join(rootDir, "scheduled/metricool-100-current-batch-workbook.json");
   const handoffPath = path.join(rootDir, "scheduled/metricool-100-operator-handoff.json");
   const batchEvidencePath = path.join(rootDir, "scheduled/metricool-100-batch-evidence-imports/metricool-batch-01-evidence-import.csv");
+  const sportsEvidencePath = path.join(rootDir, "account-evidence/sports-daily-tiktok.json");
+  const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
   const originalWorkbook = await readFile(workbookPath, "utf8");
   const originalBatchEvidence = await readFile(batchEvidencePath, "utf8");
+  const originalSportsEvidence = await readFile(sportsEvidencePath, "utf8").catch(() => null);
+  const originalMemesEvidence = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  const runFixtureScript = (args: string[], allowErrorPattern?: RegExp) => {
+    const refresh = spawnSync(process.execPath, args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    if (refresh.status !== 0 && allowErrorPattern?.test(`${refresh.stderr}\n${refresh.stdout}`)) return;
+    assert.equal(refresh.status, 0, refresh.stderr || refresh.stdout);
+  };
+  const runFixtureRefreshScripts = () => {
+    for (const args of [
+      ["script/clippers-account-permission-readiness.mjs"],
+      ["script/clippers-metricool-operator-handoff.mjs"],
+      ["script/clippers-tiktok-launch-control.mjs"],
+      ["script/clippers-tiktok-mvp-go-live-packet.mjs"],
+      ["script/clippers-goal-completion-audit.mjs"],
+      ["script/clippers-tiktok-mvp-readiness-verifier.mjs"],
+    ]) {
+      runFixtureScript(args);
+    }
+  };
   try {
+    await mkdir(path.dirname(sportsEvidencePath), { recursive: true });
+    const recordedAt = new Date().toISOString();
+    await writeFile(sportsEvidencePath, JSON.stringify({
+      status: "verified",
+      notes: "Test fixture: SPORT TikTok profile and Metricool bridge proof verified for local operator cockpit assertions.",
+      accountId: "sports-daily",
+      platform: "tiktok",
+      profileUrl: "https://www.tiktok.com/@sportsdaily",
+      proofUrl: "https://app.metricool.com/brands/6431687",
+      recordedAt,
+      source: "test-fixture",
+    }, null, 2));
+    await writeFile(memesEvidencePath, JSON.stringify({
+      status: "verified",
+      notes: "Test fixture: memes TikTok profile and Metricool bridge proof verified for local operator cockpit assertions.",
+      accountId: "meme-radar",
+      platform: "tiktok",
+      profileUrl: "https://www.tiktok.com/@memeradar",
+      proofUrl: "https://app.metricool.com/brands/6431685",
+      recordedAt,
+      source: "test-fixture",
+    }, null, 2));
+    runFixtureRefreshScripts();
     const workbook = JSON.parse(originalWorkbook);
     const base = Date.now() + 90 * 60 * 1000;
-    workbook.rows = (workbook.rows || []).map((row: Record<string, unknown>, index: number) => ({
-      ...row,
-      publishAt: new Date(base + index * 20 * 60 * 1000).toISOString(),
-    }));
+    workbook.rows = (workbook.rows || []).map((row: Record<string, unknown>, index: number) => {
+      const sourceCategory = row.accountId === "sports-daily" ? "sports" : "memes";
+      const sourceFileName = path.basename(String(row.sourcePath || `${sourceCategory}-owned-01.mp4`));
+      const fixtureSourcePath = path.join(rootDir, "sources", sourceCategory, sourceFileName);
+      return {
+        ...row,
+        sourcePath: fixtureSourcePath,
+        publishAt: new Date(base + index * 20 * 60 * 1000).toISOString(),
+      };
+    });
     await writeFile(workbookPath, JSON.stringify(workbook, null, 2));
     const workbookRowsById = new Map((workbook.rows || []).map((row: Record<string, unknown>) => [String(row.metricoolQueueItemId || ""), row]));
     await writeFile(
@@ -110,18 +163,26 @@ async function withFutureCurrentBatchSchedule(callback: () => Promise<void>) {
   } finally {
     await writeFile(workbookPath, originalWorkbook);
     await writeFile(batchEvidencePath, originalBatchEvidence);
-    spawnSync(process.execPath, ["script/clippers-metricool-current-batch-upload-pack.mjs"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
-    spawnSync(process.execPath, ["script/clippers-tiktok-operator-cockpit.mjs"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
-    spawnSync(process.execPath, ["script/clippers-tiktok-operator-cockpit-preflight.mjs"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
+    if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
+    else await writeFile(sportsEvidencePath, originalSportsEvidence);
+    if (originalMemesEvidence === null) await unlink(memesEvidencePath).catch(() => undefined);
+    else await writeFile(memesEvidencePath, originalMemesEvidence);
+    runFixtureRefreshScripts();
+    for (const args of [
+      ["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"],
+      ["script/clippers-tiktok-batch-tracker.mjs"],
+      ["script/clippers-tiktok-batch-runbook.mjs"],
+      ["script/clippers-tiktok-evidence-checklist.mjs"],
+      ["script/clippers-tiktok-post-schedule-verifier.mjs"],
+      ["script/clippers-tiktok-batch-closeout-verifier.mjs"],
+    ]) {
+      runFixtureScript(args);
+    }
+    runFixtureScript(["script/clippers-metricool-current-batch-upload-pack.mjs"], /Upload pack blocked: verifier=fail/);
+    runFixtureScript(["script/clippers-tiktok-operator-cockpit.mjs"]);
+    runFixtureScript(["script/clippers-tiktok-operator-cockpit-preflight.mjs"]);
+    runFixtureScript(["script/clippers-tiktok-next-action.mjs"]);
+    runFixtureScript(["script/clippers-metricool-current-batch-session-packet.mjs"]);
   }
 }
 
