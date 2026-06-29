@@ -1925,6 +1925,11 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-metricool-mvp-evidence-only"'));
   assert.ok(page.includes('data-testid="load-clippers-tiktok-metricool-bridge-template-button"'));
   assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-preview"'));
+  assert.ok(page.includes('data-testid="clippers-metricool-bridge-required-fields"'));
+  assert.ok(page.includes("Public TikTok profile URL"));
+  assert.ok(page.includes("Real HTTPS Metricool proof URL"));
+  assert.ok(page.includes("20+ character operator notes"));
+  assert.ok(page.includes("No passwords, tokens, cookies or private screenshots"));
   assert.ok(page.includes("bridgeEvidenceCsvPath"));
   assert.ok(page.includes("bridgeEvidenceTemplate"));
   assert.ok(page.includes("bridgeEvidencePreviewRows"));

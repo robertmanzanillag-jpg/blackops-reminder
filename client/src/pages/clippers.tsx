@@ -15793,6 +15793,19 @@ export default function ClippersPage() {
               MVP TikTok bloqueado por {tiktokMetricoolBlockedRows.length} lane(s): registra evidencia bridge no secreta para desbloquear scheduling.
             </p>
           )}
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" data-testid="clippers-metricool-bridge-required-fields">
+            {[
+              "Public TikTok profile URL",
+              "Real HTTPS Metricool proof URL",
+              "20+ character operator notes",
+              "No passwords, tokens, cookies or private screenshots",
+            ].map((item) => (
+              <div key={item} className="rounded-md border border-teal-300/10 bg-black/25 p-2 text-[11px] leading-4 text-teal-100/80">
+                <CheckCircle2 className="mb-1 h-3.5 w-3.5 text-teal-200" />
+                {item}
+              </div>
+            ))}
+          </div>
           <div className="mt-3 flex flex-col gap-2 rounded-md border border-white/10 bg-black/20 p-3 text-xs leading-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
