@@ -4848,6 +4848,14 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
   assert.match(page, /getMetricoolBridgeEvidenceClientCheck/);
   assert.match(page, /parseMetricoolBridgeCsvLine/);
+  assert.match(page, /metricoolBridgeActiveTikTokMvpLanes/);
+  assert.match(page, /sports-daily:tiktok/);
+  assert.match(page, /meme-radar:tiktok/);
+  assert.match(page, /only sports-daily:tiktok and meme-radar:tiktok are active Metricool MVP lanes/);
+  assert.match(page, /isTikTokProfileUrl/);
+  assert.match(page, /isMetricoolProofUrl/);
+  assert.match(page, /profile_url must be a public TikTok profile URL/);
+  assert.match(page, /proof must be a Metricool HTTPS proof URL/);
   assert.match(page, /sk-\[A-Za-z0-9_-\]\{12,\}/);
   assert.match(page, /private\[_ -\]\?key/);
   assert.match(page, /passcode/);

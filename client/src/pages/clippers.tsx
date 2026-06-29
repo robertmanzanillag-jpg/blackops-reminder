@@ -9335,6 +9335,7 @@ const metricoolBridgeEvidenceTemplate = [
   "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
   "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
 ].join("\n");
+const metricoolBridgeActiveTikTokMvpLanes = new Set(["sports-daily:tiktok", "meme-radar:tiktok"]);
 const metricoolBridgeUnsafeClientPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
 const googleCredentialEnvTemplate = [
   "# Google / YouTube / Drive OAuth",
@@ -9382,6 +9383,31 @@ function isSafeHttpsUrl(value: string) {
   try {
     const url = new URL(value.trim());
     return url.protocol === "https:" && !metricoolBridgeUnsafeClientPattern.test(url.hostname) && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function isTikTokProfileUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:"
+      && (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com"))
+      && /^\/@[A-Za-z0-9._-]+\/?$/.test(url.pathname)
+      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolProofUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:"
+      && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
+      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
   } catch {
     return false;
   }
@@ -9438,12 +9464,24 @@ function getMetricoolBridgeEvidenceClientCheck(raw: string) {
       issues.push(`Row ${rowNumber}: this MVP accepts TikTok rows only.`);
       return;
     }
+    if (!metricoolBridgeActiveTikTokMvpLanes.has(`${accountId}:tiktok`)) {
+      issues.push(`Row ${rowNumber}: only sports-daily:tiktok and meme-radar:tiktok are active Metricool MVP lanes.`);
+      return;
+    }
     if (metricoolBridgeUnsafeClientPattern.test(rowText)) {
       issues.push(`Row ${rowNumber}: remove placeholders or credential-like text.`);
       return;
     }
     if (!isSafeHttpsUrl(profileUrl) || !isSafeHttpsUrl(proof)) {
       issues.push(`Row ${rowNumber}: profile_url and proof must be safe https URLs.`);
+      return;
+    }
+    if (!isTikTokProfileUrl(profileUrl)) {
+      issues.push(`Row ${rowNumber}: profile_url must be a public TikTok profile URL like https://www.tiktok.com/@handle.`);
+      return;
+    }
+    if (!isMetricoolProofUrl(proof)) {
+      issues.push(`Row ${rowNumber}: proof must be a Metricool HTTPS proof URL.`);
       return;
     }
     validRows += 1;
