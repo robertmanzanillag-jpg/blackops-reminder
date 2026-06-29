@@ -1938,6 +1938,18 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("nextEvidenceDrop"));
   assert.ok(page.includes("metricoolMvpEvidence"));
   assert.ok(page.includes("activeMvp"));
+  assert.ok(page.includes('data-testid="clippers-active-tiktok-mvp-now"'));
+  assert.ok(page.includes('data-testid="clippers-active-tiktok-mvp-safety-blockers"'));
+  assert.ok(page.includes('data-testid="clippers-active-tiktok-mvp-safe"'));
+  assert.ok(page.includes("Active TikTok MVP now"));
+  assert.ok(page.includes("Safety blocker first"));
+  assert.ok(page.includes("Safety clear: Metricool remains approval_required"));
+  assert.ok(page.includes("Metricool safety state is incomplete; refresh readiness before operating."));
+  assert.ok(page.includes("fix safety guard"));
+  assert.ok(page.includes("readyToSend"));
+  assert.ok(page.includes("requiredApprovalMode"));
+  assert.ok(page.includes("safetyBlockers"));
+  assert.ok(page.includes("Bridge evidence CSV:"));
   assert.ok(page.includes('data-testid="clippers-tiktok-mvp-active-badge"'));
   assert.ok(page.includes("TikTok MVP"));
   assert.ok(page.includes("TikTok es el MVP activo"));

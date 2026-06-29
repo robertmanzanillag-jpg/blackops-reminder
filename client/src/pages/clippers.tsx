@@ -1632,8 +1632,22 @@ interface ClipperAccountPermissionReadinessSummary {
     permissionGroupsApproved: number;
   };
   activeMvp?: {
+    scope?: string;
     platforms: string[];
     accountIds: string[];
+    metricoolBrands?: string[];
+    deferredLanes?: string[];
+    launchMode?: string;
+    directSocialApisRequired?: boolean;
+    approvalRequired?: boolean;
+    requiredApprovalMode?: string;
+    realPublishEnabled?: boolean;
+    requiredRealPublishEnabled?: boolean;
+    readyToSend?: number;
+    safetyBlockers?: string[];
+    bridgeEvidenceCsvPath?: string;
+    accountEvidenceCsvPath?: string;
+    pendingProfileEvidenceCsvPath?: string;
     readyLanes: number;
     targetLanes: number;
     status: string;
@@ -14578,6 +14592,23 @@ export default function ClippersPage() {
   const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
   const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
   const tiktokMetricoolBridgeRows = accountPermissionReadiness?.tiktokMvpAccountCloseout?.rows || [];
+  const activeTikTokMvp = accountPermissionReadiness?.activeMvp || null;
+  const activeTikTokMvpSafetyBlockers = activeTikTokMvp?.safetyBlockers || [];
+  const activeTikTokMvpSafetyClear = Boolean(
+    activeTikTokMvp
+    && activeTikTokMvp.approvalRequired === true
+    && activeTikTokMvp.realPublishEnabled !== true
+    && (activeTikTokMvp.readyToSend || 0) === 0
+    && activeTikTokMvpSafetyBlockers.length === 0
+  );
+  const activeTikTokMvpSafetyMessage = activeTikTokMvpSafetyBlockers[0]
+    || (!activeTikTokMvp?.approvalRequired
+      ? "Metricool approval_required mode is not confirmed for the active TikTok MVP."
+      : activeTikTokMvp?.realPublishEnabled
+        ? "Metricool real publishing is enabled; disable it before importing bridge evidence."
+        : (activeTikTokMvp?.readyToSend || 0) > 0
+          ? "Metricool has readyToSend rows; clear them before importing bridge evidence."
+          : "Metricool safety state is incomplete; refresh readiness before operating.");
   const tiktokMetricoolBridgeDisplayRows = tiktokMetricoolBridgeRows.length ? tiktokMetricoolBridgeRows : [
     { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "SPORT", operatorAction: "Record non-secret SPORT TikTok Metricool bridge proof." },
     { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
@@ -24231,6 +24262,60 @@ export default function ClippersPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {activeTikTokMvp && (
+                    <div className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-3" data-testid="clippers-active-tiktok-mvp-now">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-teal-100">Active TikTok MVP now</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{activeTikTokMvp.nextStep}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className={cn(
+                            "w-fit border text-[10px]",
+                            activeTikTokMvp.status === "ready"
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                              : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          )}>
+                            {activeTikTokMvp.readyLanes}/{activeTikTokMvp.targetLanes} lanes
+                          </Badge>
+                          <Badge className={cn(
+                            "w-fit border text-[10px]",
+                            activeTikTokMvpSafetyClear
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                              : "border-red-300/30 bg-red-300/10 text-red-100"
+                          )}>
+                            {activeTikTokMvpSafetyClear ? "approval_required" : "fix safety guard"}
+                          </Badge>
+                          <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">
+                            no direct APIs
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-[11px] leading-4 text-zinc-500 md:grid-cols-2 xl:grid-cols-4">
+                        <p>Scope: {activeTikTokMvp.scope || "tiktok_only_metricool_mvp"}</p>
+                        <p>Platforms: {activeTikTokMvp.platforms.join(", ")}</p>
+                        <p>Accounts: {activeTikTokMvp.accountIds.join(", ")}</p>
+                        <p>Brands: {(activeTikTokMvp.metricoolBrands || []).join(", ") || "SPORT, memes"}</p>
+                        <p>Deferred: {(activeTikTokMvp.deferredLanes || []).join(", ") || "instagram, youtube, streamers"}</p>
+                        <p>Ready to send: {activeTikTokMvp.readyToSend || 0}</p>
+                        <p>Publish enabled: {activeTikTokMvp.realPublishEnabled ? "yes" : "no"}</p>
+                        <p>Required mode: {activeTikTokMvp.requiredApprovalMode || "approval_required"}</p>
+                      </div>
+                      {!activeTikTokMvpSafetyClear ? (
+                        <div className="mt-3 rounded-md border border-red-300/20 bg-red-950/20 p-2" data-testid="clippers-active-tiktok-mvp-safety-blockers">
+                          <p className="text-[11px] font-medium text-red-100">Safety blocker first</p>
+                          <p className="mt-1 text-[11px] leading-4 text-red-100/80">{activeTikTokMvpSafetyMessage}</p>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-[11px] leading-4 text-teal-100/75" data-testid="clippers-active-tiktok-mvp-safe">
+                          Safety clear: Metricool remains approval_required, realPublishEnabled is false, and readyToSend is 0.
+                        </p>
+                      )}
+                      {activeTikTokMvp.bridgeEvidenceCsvPath && (
+                        <p className="mt-2 break-all text-[11px] leading-4 text-teal-100/75">Bridge evidence CSV: {activeTikTokMvp.bridgeEvidenceCsvPath}</p>
+                      )}
                     </div>
                   )}
                   {accountPermissionReadiness.metricoolMvpEvidence && (
