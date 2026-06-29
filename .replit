@@ -6,7 +6,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 channel = "stable-24_05"
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "vm"
 build = ["npm", "run", "build"]
 run = ["npm", "run", "start"]
 
@@ -50,6 +50,7 @@ expertMode = true
 VAPID_PUBLIC_KEY = "BIAaILBovysFVFO9O5AfY7XSrIwocsImYIWvkuDKwLe9N8wualJusj019HmHNobIXYgzbUtlAcXixMbckepaeZ8"
 VAPID_PRIVATE_KEY = "5Dgnu39z7-81QnxzXjZ_tmT9btmss4GJo-Pge7nmd90"
 VAPID_SUBJECT = "mailto:blackops@reminder.app"
+DEFAULT_USER_ID = "mock-user-123"
 
 [postMerge]
 path = "scripts/post-merge.sh"
