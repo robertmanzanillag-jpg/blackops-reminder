@@ -587,11 +587,31 @@ function buildTikTokMetricoolBridgeProofPack(closeout, bridgeOperatorCards, sour
     status: card.status === "ready_for_metricool_tiktok" ? "ready" : "needs_real_proof",
     requiredProof: [
       "public TikTok profile URL",
+      "real account ownership/security proof URL",
       "real HTTPS Metricool proof URL",
       "20+ character operator notes",
     ],
+    accountEvidenceFields: [
+      "kind",
+      "account_id",
+      "platform",
+      "status",
+      "proof",
+      "notes",
+    ],
+    bridgeEvidenceFields: [
+      "account_id",
+      "platform",
+      "metricool_brand_name",
+      "metricool_blog_id",
+      "profile_url",
+      "proof",
+      "notes",
+    ],
+    accountEvidenceCsv: mvpAccountEvidenceDropPath,
     allowedEvidence: [
       "public TikTok profile URL",
+      "public/non-secret Google Drive or Docs proof for account ownership/security",
       "public/non-secret Metricool planner, brand or profile URL",
       "non-secret operator note confirming the account is connected in Metricool",
     ],
@@ -624,6 +644,7 @@ function buildTikTokMetricoolBridgeProofPack(closeout, bridgeOperatorCards, sour
       markdown: metricoolTiktokBridgeProofPackMarkdownPath,
       csv: metricoolTiktokBridgeProofPackCsvPath,
       bridgeEvidenceCsv: metricoolTiktokBridgeEvidencePath,
+      accountEvidenceCsv: mvpAccountEvidenceDropPath,
     },
     totals: {
       rows: rows.length,
@@ -641,7 +662,7 @@ function buildTikTokMetricoolBridgeProofPack(closeout, bridgeOperatorCards, sour
     nextStep: !safetyClear
       ? `Fix Metricool safety before collecting bridge proof: ${safetyBlockers.join("; ") || "approval_required not confirmed"}.`
       : blockedRows.length
-      ? `Collect real non-secret Metricool proof for ${blockedRows.map((row) => row.accountId).join(", ")} and paste it into ${metricoolTiktokBridgeEvidencePath}.`
+      ? `Collect real non-secret TikTok account proof plus Metricool proof for ${blockedRows.map((row) => row.accountId).join(", ")}. Use ${mvpAccountEvidenceDropPath} for account proof and ${metricoolTiktokBridgeEvidencePath} for Metricool bridge proof.`
       : "Open Metricool operator flow for SPORT and memes TikTok in approval_required mode.",
   };
 }
@@ -666,6 +687,7 @@ function renderTikTokMetricoolBridgeProofPackMarkdown(pack) {
     `- Real publish enabled observed: ${pack.realPublishEnabled ? "yes" : "no"}`,
     `- Ready to send observed: ${pack.readyToSend}`,
     `- Bridge CSV: ${pack.paths.bridgeEvidenceCsv}`,
+    `- Account proof CSV: ${pack.paths.accountEvidenceCsv}`,
     `- Safety blockers: ${pack.safetyBlockers.join("; ") || "none"}`,
     "",
     "## Rows",
@@ -678,6 +700,9 @@ function renderTikTokMetricoolBridgeProofPackMarkdown(pack) {
       `- Public profile URL: ${row.publicProfileUrl}`,
       `- Status: ${row.status}`,
       `- Required proof: ${row.requiredProof.join("; ")}`,
+      `- Account evidence fields: ${row.accountEvidenceFields.join(", ")}`,
+      `- Bridge evidence fields: ${row.bridgeEvidenceFields.join(", ")}`,
+      `- Account proof CSV: ${row.accountEvidenceCsv}`,
       `- Next step: ${row.nextStep}`,
       "",
       "```csv",
@@ -705,7 +730,7 @@ function renderTikTokMetricoolBridgeProofPackMarkdown(pack) {
 }
 
 function renderTikTokMetricoolBridgeProofPackCsv(pack) {
-  const header = ["account_id", "account_name", "platform", "metricool_brand_name", "public_profile_url", "status", "required_proof", "next_step", "csv_row_template"];
+  const header = ["account_id", "account_name", "platform", "metricool_brand_name", "public_profile_url", "status", "required_proof", "account_evidence_fields", "bridge_evidence_fields", "account_evidence_csv", "next_step", "csv_row_template"];
   return [
     header.map(csvCell).join(","),
     ...pack.rows.map((row) => [
@@ -716,6 +741,9 @@ function renderTikTokMetricoolBridgeProofPackCsv(pack) {
       row.publicProfileUrl,
       row.status,
       row.requiredProof.join("; "),
+      row.accountEvidenceFields.join("; "),
+      row.bridgeEvidenceFields.join("; "),
+      row.accountEvidenceCsv,
       row.nextStep,
       row.csvRowTemplate,
     ].map(csvCell).join(",")),
