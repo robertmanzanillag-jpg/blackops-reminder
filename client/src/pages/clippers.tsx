@@ -12185,7 +12185,13 @@ export default function ClippersPage() {
       toast({
         title: refreshComplete ? "Bridge Metricool batch registrado" : "Bridge guardado; refresco pendiente",
         description: refreshComplete
-          ? `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. ${data.bridgeRefreshStatus === "refreshed_next_action" ? "Next action refrescado." : "No publica."}`
+          ? [
+              `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas.`,
+              data.accountPermissionReadiness?.tiktokMvpAccountCloseout
+                ? `TikTok lanes ready ${data.accountPermissionReadiness.tiktokMvpAccountCloseout.totals.ready}/${data.accountPermissionReadiness.tiktokMvpAccountCloseout.totals.rows}.`
+                : "",
+              data.bridgeRefreshStatus === "refreshed_next_action" ? "Next action refrescado." : "No publica.",
+            ].filter(Boolean).join(" ")
           : data.refreshError || "La evidencia se guardo, pero hay que refrescar los reportes antes de confiar en el next action.",
         variant: refreshComplete ? undefined : "destructive",
       });

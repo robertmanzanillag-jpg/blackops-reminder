@@ -1953,6 +1953,8 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-metricool-bridge-operator-card-button"'));
   assert.ok(page.includes("copyMetricoolBridgeOperatorPacket"));
   assert.ok(page.includes("Bridge packet copiado"));
+  assert.ok(page.includes("TikTok lanes ready"));
+  assert.ok(page.includes("tiktokMvpAccountCloseout.totals.ready"));
   assert.ok(page.includes('data-testid="clippers-tiktok-mvp-account-closeout"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
