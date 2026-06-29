@@ -4743,6 +4743,54 @@ test("TikTok MVP refresh returns account readiness and updates UI cache", async 
   assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
 });
 
+test("Metricool bridge evidence batch returns refreshed TikTok next action payload", async () => {
+  const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const bridgeEvidenceBatchRoute = routes.slice(
+    routes.indexOf('app.post("/api/clippers/record-metricool-bridge-evidence-batch"'),
+    routes.indexOf('app.post("/api/clippers/prepare-publisher-execution-queue"'),
+  );
+  assert.match(bridgeEvidenceBatchRoute, /bridgeRefreshStatus: "skipped_no_recorded_rows"/);
+  assert.match(bridgeEvidenceBatchRoute, /bridgeRefreshStatus: "refreshed_next_action"/);
+  assert.match(bridgeEvidenceBatchRoute, /partial_refresh_failed/);
+  assert.match(bridgeEvidenceBatchRoute, /res\.status\(refreshComplete \? 200 : 202\)/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-account-permission-readiness\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-tiktok-batch-tracker\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-tiktok-evidence-checklist\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-tiktok-post-schedule-verifier\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-tiktok-batch-closeout-verifier\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-goal-completion-audit\.mjs/);
+  assert.match(bridgeEvidenceBatchRoute, /clippers-tiktok-next-action\.mjs/);
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-account-permission-readiness.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-batch-tracker.mjs"));
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-batch-tracker.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-evidence-checklist.mjs"));
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-evidence-checklist.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-post-schedule-verifier.mjs"));
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-post-schedule-verifier.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-batch-closeout-verifier.mjs"));
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-batch-closeout-verifier.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-goal-completion-audit.mjs"));
+  assert.ok(bridgeEvidenceBatchRoute.indexOf("clippers-goal-completion-audit.mjs") < bridgeEvidenceBatchRoute.indexOf("clippers-tiktok-next-action.mjs"));
+  assert.match(bridgeEvidenceBatchRoute, /readClipperAccountPermissionReadiness/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokBatchTracker/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokEvidenceChecklist/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokPostScheduleVerifier/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokBatchCloseoutVerifier/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperGoalCompletionAudit/);
+  assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokNextAction/);
+
+  const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+  assert.match(page, /bridgeRefreshStatus\?: "skipped_no_recorded_rows" \| "refreshed_next_action"/);
+  assert.match(page, /refreshStatus\?: "complete" \| "partial_refresh_failed"/);
+  assert.match(page, /const refreshComplete = data\.refreshStatus !== "partial_refresh_failed"/);
+  assert.match(page, /data\.accountPermissionReadiness/);
+  assert.match(page, /data\.tiktokBatchTracker/);
+  assert.match(page, /data\.tiktokEvidenceChecklist/);
+  assert.match(page, /data\.tiktokPostScheduleVerifier/);
+  assert.match(page, /data\.tiktokBatchCloseoutVerifier/);
+  assert.match(page, /data\.goalCompletionAudit/);
+  assert.match(page, /data\.tiktokNextAction/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-next-action"\], data\.tiktokNextAction/);
+  assert.match(page, /queryClient\.removeQueries\(\{ queryKey, exact: true \}\)/);
+  assert.match(page, /Bridge guardado; refresco pendiente/);
+  assert.match(page, /Next action refrescado/);
+});
+
 test("TikTok post-schedule verifier exposes public URL and 24h metric capture timeline", async () => {
   const workbookPath = path.join(rootDir, "scheduled/metricool-100-current-batch-workbook.json");
   const batchEvidencePath = path.join(rootDir, "scheduled/metricool-100-batch-evidence-imports/metricool-batch-01-evidence-import.csv");

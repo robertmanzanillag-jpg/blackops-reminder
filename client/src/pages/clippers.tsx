@@ -12092,24 +12092,74 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude registrar batch Metricool bridge");
-      return data as { metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status?: ClipperStatus };
+      return data as {
+        metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult;
+        status?: ClipperStatus;
+        bridgeRefreshStatus?: "skipped_no_recorded_rows" | "refreshed_next_action";
+        refreshStatus?: "complete" | "partial_refresh_failed";
+        refreshError?: string | null;
+        accountPermissionReadiness?: ClipperAccountPermissionReadinessSummary;
+        tiktokBatchTracker?: ClipperTikTokBatchTrackerSummary;
+        tiktokEvidenceChecklist?: ClipperTikTokEvidenceChecklistSummary;
+        tiktokPostScheduleVerifier?: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier?: ClipperTikTokBatchCloseoutVerifierSummary;
+        goalCompletionAudit?: ClipperGoalCompletionAuditSummary;
+        tiktokNextAction?: ClipperTikTokNextActionSummary;
+      };
     },
     onSuccess: (data) => {
       setMetricoolBridgeEvidenceBatch(data.metricoolBridgeEvidenceBatch);
+      const refreshComplete = data.refreshStatus !== "partial_refresh_failed";
       if (data.status) {
         queryClient.setQueryData(["/api/clippers/status"], data.status);
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/clippers/status"] });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/clippers/account-permission-readiness"] });
+      if (refreshComplete && data.accountPermissionReadiness) {
+        queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/clippers/account-permission-readiness"] });
+      }
+      if (refreshComplete && data.tiktokBatchTracker) {
+        queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      }
+      if (refreshComplete && data.tiktokEvidenceChecklist) {
+        queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      }
+      if (refreshComplete && data.tiktokPostScheduleVerifier) {
+        queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      }
+      if (refreshComplete && data.tiktokBatchCloseoutVerifier) {
+        queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      }
+      if (refreshComplete && data.goalCompletionAudit) {
+        queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      }
+      if (refreshComplete && data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
+      if (!refreshComplete) {
+        [
+          ["/api/clippers/account-permission-readiness"],
+          ["/api/clippers/tiktok-batch-tracker"],
+          ["/api/clippers/tiktok-evidence-checklist"],
+          ["/api/clippers/tiktok-post-schedule-verifier"],
+          ["/api/clippers/tiktok-batch-closeout-verifier"],
+          ["/api/clippers/goal-completion-audit"],
+          ["/api/clippers/tiktok-next-action"],
+        ].forEach((queryKey) => queryClient.removeQueries({ queryKey, exact: true }));
+      }
       toast({
-        title: "Bridge Metricool batch registrado",
-        description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. No verifica cuentas ni publica.`,
+        title: refreshComplete ? "Bridge Metricool batch registrado" : "Bridge guardado; refresco pendiente",
+        description: refreshComplete
+          ? `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. ${data.bridgeRefreshStatus === "refreshed_next_action" ? "Next action refrescado." : "No publica."}`
+          : data.refreshError || "La evidencia se guardo, pero hay que refrescar los reportes antes de confiar en el next action.",
+        variant: refreshComplete ? undefined : "destructive",
       });
-      if (data.metricoolBridgeEvidenceBatch.totals.recorded > 0) {
+      if (refreshComplete && data.metricoolBridgeEvidenceBatch.totals.recorded > 0) {
         tiktokMvpNowRefreshMutation.mutate();
       }
-      refreshMetricoolCaches();
+      if (refreshComplete) refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar bridge Metricool", description: error.message, variant: "destructive" });

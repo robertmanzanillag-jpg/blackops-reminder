@@ -3921,7 +3921,67 @@ export async function registerRoutes(
   app.post("/api/clippers/record-metricool-bridge-evidence-batch", async (req, res) => {
     try {
       const result = await recordClipperMetricoolBridgeEvidenceBatch(req.body || {}, getCurrentUserId(req));
-      res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, status: result.status });
+      if (result.metricoolBridgeEvidenceBatch.totals.recorded <= 0) {
+        res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, status: result.status, bridgeRefreshStatus: "skipped_no_recorded_rows" });
+        return;
+      }
+      let refreshStatus: "complete" | "partial_refresh_failed" = "complete";
+      let refreshError: string | null = null;
+      let accountRun: any = null;
+      let trackerRun: any = null;
+      let evidenceChecklistRun: any = null;
+      let postScheduleVerifierRun: any = null;
+      let closeoutRun: any = null;
+      let goalAuditRun: any = null;
+      let tiktokNextActionRun: any = null;
+      try {
+        accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+        trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+        evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+        postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+        closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+        goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+        tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      } catch (refreshFailure: any) {
+        refreshStatus = "partial_refresh_failed";
+        refreshError = refreshFailure?.message || "Metricool bridge evidence was recorded, but one or more refresh scripts failed.";
+      }
+      const readFreshArtifact = async <T>(reader: () => Promise<T>) => {
+        try {
+          return await reader();
+        } catch {
+          return null;
+        }
+      };
+      const refreshComplete = refreshStatus === "complete";
+      const accountPermissionReadiness = await readFreshArtifact(readClipperAccountPermissionReadiness);
+      const tiktokBatchTracker = await readFreshArtifact(readClipperTikTokBatchTracker);
+      const tiktokEvidenceChecklist = await readFreshArtifact(readClipperTikTokEvidenceChecklist);
+      const tiktokPostScheduleVerifier = await readFreshArtifact(readClipperTikTokPostScheduleVerifier);
+      const tiktokBatchCloseoutVerifier = await readFreshArtifact(readClipperTikTokBatchCloseoutVerifier);
+      const goalCompletionAudit = await readFreshArtifact(readClipperGoalCompletionAudit);
+      const tiktokNextAction = await readFreshArtifact(readClipperTikTokNextAction);
+      res.status(refreshComplete ? 200 : 202).json({
+        metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch,
+        status: result.status,
+        bridgeRefreshStatus: "refreshed_next_action",
+        refreshStatus,
+        refreshError,
+        accountPermissionReadiness: refreshComplete ? accountPermissionReadiness : null,
+        tiktokBatchTracker: refreshComplete ? tiktokBatchTracker : null,
+        tiktokEvidenceChecklist: refreshComplete ? tiktokEvidenceChecklist : null,
+        tiktokPostScheduleVerifier: refreshComplete ? tiktokPostScheduleVerifier : null,
+        tiktokBatchCloseoutVerifier: refreshComplete ? tiktokBatchCloseoutVerifier : null,
+        goalCompletionAudit: refreshComplete ? goalCompletionAudit : null,
+        tiktokNextAction: refreshComplete ? tiktokNextAction : null,
+        accountRun,
+        trackerRun,
+        evidenceChecklistRun,
+        postScheduleVerifierRun,
+        closeoutRun,
+        goalAuditRun,
+        tiktokNextActionRun,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record Clippers Metricool bridge evidence batch" });
     }
