@@ -190,6 +190,31 @@ function progressRow(id, label, ready, total, nextStep) {
 
 const externalEvidenceHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
 
+function metricoolSafetyBlockerFor(sourceReadiness) {
+  const blockers = Array.isArray(sourceReadiness?.blockers) ? sourceReadiness.blockers : [];
+  return blockers.find((blocker) =>
+    /realPublishEnabled|publishMode|status is not approval_required|readyToSend|can send now/i.test(blocker)
+  ) || "";
+}
+
+function activeMvpNextStep({ metricoolMvpReady, activeMvpReadyLanes, activeMvpTargetLanes, bridgeEvidenceCsvPath, sourceReadiness }) {
+  const safetyBlocker = metricoolSafetyBlockerFor(sourceReadiness);
+  if (safetyBlocker) {
+    return `Fix Metricool safety guard before importing bridge evidence: ${safetyBlocker}. Metricool must stay approval_required with realPublishEnabled=false and readyToSend=0.`;
+  }
+  if (metricoolMvpReady) {
+    return "Open Metricool and manually review/schedule TikTok queued clips for SPORT and memes. Add Instagram/YouTube later when Robert is ready.";
+  }
+  if (activeMvpTargetLanes > 0 && activeMvpReadyLanes < activeMvpTargetLanes) {
+    return [
+      "Preview/import real non-secret Metricool bridge evidence for SPORT and memes TikTok.",
+      bridgeEvidenceCsvPath ? `Use bridge CSV: ${bridgeEvidenceCsvPath}.` : "",
+      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL, and 20+ character notes. Direct social API keys are not required for this TikTok MVP.",
+    ].filter(Boolean).join(" ");
+  }
+  return "Use Metricool in approval_required mode for connected TikTok lanes. Add Instagram/YouTube later when Robert is ready.";
+}
+
 function publicBaseUrlFromRedirect(redirectUri) {
   if (!redirectUri) return "";
   try {
@@ -549,6 +574,18 @@ function renderMarkdown(summary) {
     `- Local owned source assets: ${summary.sourceReadiness.localOwnedSourceAssets}`,
     `- Connected Metricool rights-ready assets: ${summary.sourceReadiness.connectedMetricoolRightsReadyAssets}`,
     "",
+    "## Active MVP Now",
+    "",
+    `- Scope: ${summary.activeMvp.scope}`,
+    `- Platforms: ${summary.activeMvp.platforms.join(", ")}`,
+    `- Accounts: ${summary.activeMvp.accountIds.join(", ")}`,
+    `- Metricool brands: ${summary.activeMvp.metricoolBrands.join(", ")}`,
+    `- Ready lanes: ${summary.activeMvp.readyLanes}/${summary.activeMvp.targetLanes}`,
+    `- Deferred lanes: ${summary.activeMvp.deferredLanes.join(", ")}`,
+    `- Direct social APIs required: ${summary.activeMvp.directSocialApisRequired ? "yes" : "no"}`,
+    `- Bridge evidence CSV: ${summary.activeMvp.bridgeEvidenceCsvPath}`,
+    `- Next step: ${summary.activeMvp.nextStep}`,
+    "",
     "## Full Readiness Gap",
     "",
     `- Status: ${summary.fullReadinessGap.status}`,
@@ -799,6 +836,17 @@ async function main() {
   const status = metricoolMvpReady
     ? "metricool_mvp_ready"
     : "blocked";
+  const activeMvpMetricoolBrands = ["SPORT", "memes"];
+  const activeMvpDeferredLanes = ["instagram", "youtube", "streamers"];
+  const activeMvpNextAction = activeMvpNextStep({
+    metricoolMvpReady,
+    activeMvpReadyLanes,
+    activeMvpTargetLanes,
+    bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+    sourceReadiness: {
+      blockers: metricoolGuard.blockers,
+    },
+  });
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -852,14 +900,26 @@ async function main() {
     })),
     totals,
     activeMvp: {
+      scope: "tiktok_only_metricool_mvp",
       platforms: Array.from(activeMetricoolMvpPlatforms),
       accountIds: Array.from(activeMetricoolMvpAccountIds),
+      metricoolBrands: activeMvpMetricoolBrands,
+      deferredLanes: activeMvpDeferredLanes,
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      approvalRequired: queue?.publishMode === "approval_required" && queue?.status === "approval_required",
+      requiredApprovalMode: "approval_required",
+      realPublishEnabled: queue?.realPublishEnabled === true,
+      requiredRealPublishEnabled: false,
+      readyToSend: queue?.totals?.readyToSend || 0,
+      safetyBlockers: metricoolGuard.blockers,
+      bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+      accountEvidenceCsvPath: mvpAccountEvidenceDropPath,
+      pendingProfileEvidenceCsvPath: metricoolPendingProfileEvidencePath,
       readyLanes: activeMvpReadyLanes,
       targetLanes: activeMvpTargetLanes,
       status: metricoolMvpReady ? "ready" : "blocked",
-      nextStep: metricoolMvpReady
-        ? "TikTok lanes for SPORT and memes are ready in Metricool approval_required mode."
-        : "Connect/verify SPORT and memes TikTok in Metricool before starting the MVP.",
+      nextStep: activeMvpNextAction,
     },
     nextEvidenceDrop: {
       path: evidenceDropPath,
@@ -891,11 +951,7 @@ async function main() {
     },
     tiktokMvpAccountCloseout,
     nextEvidenceDropPath: evidenceDropPath,
-    nextStep: status === "metricool_mvp_ready"
-      ? "Open Metricool and manually review/schedule TikTok queued clips for SPORT and memes. Add Instagram/YouTube later when Robert is ready."
-      : status === "metricool_mvp_ready_with_external_blockers"
-        ? "Use Metricool in approval_required mode for connected TikTok lanes. Add Instagram/YouTube later when Robert is ready."
-        : "Create/connect missing external accounts and import real account/developer/permission evidence before enabling more lanes.",
+    nextStep: activeMvpNextAction,
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));

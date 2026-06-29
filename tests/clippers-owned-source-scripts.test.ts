@@ -286,6 +286,20 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(readiness.directSocialApisRequired, false);
   assert.match(readiness.nextStep, /review\/schedule TikTok queued clips/);
   assert.doesNotMatch(readiness.nextStep, /approved TikTok queued clips/i);
+  assert.equal(readiness.activeMvp.scope, "tiktok_only_metricool_mvp");
+  assert.deepEqual(readiness.activeMvp.platforms, ["tiktok"]);
+  assert.deepEqual(readiness.activeMvp.accountIds, ["sports-daily", "meme-radar"]);
+  assert.deepEqual(readiness.activeMvp.metricoolBrands, ["SPORT", "memes"]);
+  assert.deepEqual(readiness.activeMvp.deferredLanes, ["instagram", "youtube", "streamers"]);
+  assert.equal(readiness.activeMvp.directSocialApisRequired, false);
+  assert.equal(readiness.activeMvp.approvalRequired, true);
+  assert.equal(readiness.activeMvp.requiredApprovalMode, "approval_required");
+  assert.equal(readiness.activeMvp.realPublishEnabled, false);
+  assert.equal(readiness.activeMvp.requiredRealPublishEnabled, false);
+  assert.equal(readiness.activeMvp.readyToSend, 0);
+  assert.deepEqual(readiness.activeMvp.safetyBlockers, []);
+  assert.match(readiness.activeMvp.bridgeEvidenceCsvPath, /metricool-tiktok-bridge-evidence\.csv$/);
+  assert.match(readiness.activeMvp.nextStep, /review\/schedule TikTok queued clips/);
   assert.ok(readiness.externalCloseout.proofFilesNeedRealEvidence > 0);
   assert.ok(readiness.externalCloseout.nextEvidenceRows > 0);
   assert.match(readiness.externalCloseout.evidenceImportCsvPath, /external-closeout-evidence-import\.csv$/);
@@ -333,6 +347,10 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(readiness.nextEvidenceDrop.previewCards[0].copyText, /Proof file:/);
   const readinessMarkdown = await readFile(path.join(rootDir, "account-permission-readiness.md"), "utf8");
   assert.match(readinessMarkdown, /Full Readiness Gap/);
+  assert.match(readinessMarkdown, /Active MVP Now/);
+  assert.match(readinessMarkdown, /Scope: tiktok_only_metricool_mvp/);
+  assert.match(readinessMarkdown, /Metricool brands: SPORT, memes/);
+  assert.match(readinessMarkdown, /Deferred lanes: instagram, youtube, streamers/);
   assert.match(readinessMarkdown, /Preview rows:/);
   assert.match(readinessMarkdown, /Preview cards:/);
   assert.match(readinessMarkdown, /Metricool MVP Evidence Only/);
@@ -1650,6 +1668,15 @@ test("account permission readiness rejects unsafe Metricool queue state", async 
     const readiness = JSON.parse(await readFile(accountPath, "utf8"));
     assert.equal(readiness.sourceReadiness.guardSafe, false);
     assert.ok(readiness.sourceReadiness.blockers.some((blocker) => blocker.includes("publishMode") || blocker.includes("readyToSend") || blocker.includes("can send now")));
+    assert.equal(readiness.activeMvp.approvalRequired, false);
+    assert.equal(readiness.activeMvp.requiredApprovalMode, "approval_required");
+    assert.equal(readiness.activeMvp.realPublishEnabled, false);
+    assert.equal(readiness.activeMvp.requiredRealPublishEnabled, false);
+    assert.equal(readiness.activeMvp.readyToSend, 1);
+    assert.ok(readiness.activeMvp.safetyBlockers.some((blocker) => blocker.includes("publishMode") || blocker.includes("readyToSend") || blocker.includes("can send now")));
+    assert.match(readiness.activeMvp.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
+    assert.match(readiness.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
+    assert.doesNotMatch(readiness.nextStep, /^Preview\/import real non-secret Metricool bridge evidence/);
   } finally {
     await writeFile(queuePath, originalQueue);
     if (originalAccount !== null) await writeFile(accountPath, originalAccount);
