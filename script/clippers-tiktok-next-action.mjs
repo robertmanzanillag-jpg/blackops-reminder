@@ -49,7 +49,13 @@ function statusFor(input) {
 
 function nextStepFor(summary) {
   if (summary.status === "blocked_account_or_metricool_connection") {
-    return "Finish TikTok account/Metricool connection proof for SPORT and memes before scheduling clips.";
+    const blockedRows = (summary.account.rows || []).filter((row) => row.status !== "ready_for_metricool_tiktok");
+    const blockedLabels = blockedRows.map((row) => `${row.accountId || "unknown"}:${row.platform || "tiktok"}=${row.status || "blocked"}`).join(", ");
+    return [
+      "Record non-secret Metricool bridge evidence for SPORT and memes TikTok before scheduling clips.",
+      blockedLabels ? `Blocked lanes: ${blockedLabels}.` : "",
+      "Use the Metricool bridge evidence batch panel with public TikTok profile URL, real https Metricool proof URL, and 20+ character notes; do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+    ].filter(Boolean).join(" ");
   }
   if (summary.status === "blocked_evidence_fix") {
     return "Fix rejected or invalid Metricool evidence rows before moving this TikTok batch forward.";
@@ -79,7 +85,9 @@ function taskRowsFor(summary) {
       label: "TikTok accounts connected in Metricool",
       status: summary.account.ready ? "done" : "blocked",
       evidence: `${summary.account.readyLanes}/${summary.account.totalLanes} TikTok MVP lanes ready`,
-      nextAction: summary.account.ready ? "Use SPORT and memes TikTok lanes only." : "Add non-secret account and Metricool proof.",
+      nextAction: summary.account.ready
+        ? "Use SPORT and memes TikTok lanes only."
+        : "Import Metricool bridge evidence rows for SPORT/memes TikTok with public profile URL, real https Metricool proof URL, and safe notes.",
     },
     {
       id: "upload_pack",
@@ -136,6 +144,7 @@ function operatorPacketFor(summary) {
     "Do not mark published without a real public TikTok video URL.",
     "Do not paste profile/search/shortlink URLs.",
     "Do not store passwords, cookies, tokens, client secrets, or private screenshots.",
+    "For account blockers, use Metricool bridge evidence rows; direct social API keys are not required for this TikTok MVP.",
     "Metricool remains approval_required; this packet does not publish automatically.",
   ];
   return lines.join("\n");

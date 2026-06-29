@@ -14401,6 +14401,12 @@ export default function ClippersPage() {
   };
   const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
   const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
+  const tiktokMetricoolBridgeRows = accountPermissionReadiness?.tiktokMvpAccountCloseout?.rows || [];
+  const tiktokMetricoolBridgeDisplayRows = tiktokMetricoolBridgeRows.length ? tiktokMetricoolBridgeRows : [
+    { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "SPORT", operatorAction: "Record non-secret SPORT TikTok Metricool bridge proof." },
+    { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
+  ];
+  const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6 text-white md:px-8" data-testid="clippers-page">
@@ -15546,6 +15552,37 @@ export default function ClippersPage() {
               approval_required
             </Badge>
           </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {tiktokMetricoolBridgeDisplayRows.map((row) => (
+              <div key={`${row.accountId}-${row.platform}`} className={cn(
+                "rounded-md border p-3",
+                row.status === "ready_for_metricool_tiktok"
+                  ? "border-emerald-300/20 bg-emerald-950/15"
+                  : "border-amber-300/20 bg-amber-950/15"
+              )}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-white">{row.accountName || row.accountId}</p>
+                    <p className="mt-1 text-[11px] text-zinc-500">{row.metricoolBrandOrProfile || "Metricool brand pending"} / {row.platform}</p>
+                  </div>
+                  <Badge className={cn(
+                    "shrink-0 border text-[10px]",
+                    row.status === "ready_for_metricool_tiktok"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-200"
+                  )}>
+                    {row.status}
+                  </Badge>
+                </div>
+                {row.operatorAction && <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-400">{row.operatorAction}</p>}
+              </div>
+            ))}
+          </div>
+          {tiktokMetricoolBlockedRows.length > 0 && (
+            <p className="mt-2 text-xs leading-5 text-amber-100">
+              MVP TikTok bloqueado por {tiktokMetricoolBlockedRows.length} lane(s): registra evidencia bridge no secreta para desbloquear scheduling.
+            </p>
+          )}
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Textarea
               value={metricoolBridgeEvidenceBatchText}
