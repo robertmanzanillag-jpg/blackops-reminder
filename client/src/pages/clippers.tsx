@@ -132,7 +132,11 @@ type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "approval_re
 type ClipperMetricoolMvpLaunchStatus = "blocked" | "ready_for_review";
 type ClipperMetricoolApprovalSessionStatus = "not_prepared" | "blocked" | "ready_for_operator";
 type ClipperMetricoolApprovalSessionItemStatus = "blocked" | "ready_for_review";
+type ClipperMetricoolApprovalQuickRunStatus = "not_prepared" | "blocked" | "ready_for_operator";
+type ClipperMetricoolSourceUploadPackStatus = "not_prepared" | "blocked" | "ready_for_operator";
+type ClipperMetricoolOperatorCloseoutPackStatus = "not_prepared" | "ready_for_operator" | "waiting_evidence";
 type ClipperMetricoolApprovalReportStatus = "not_prepared" | "blocked" | "needs_operator" | "needs_evidence" | "ready_to_import";
+type ClipperMetricoolApprovalOperatorStatus = "blocked" | "needs_metricool_review" | "waiting_live_url" | "ready_to_import" | "evidence_rejected" | "evidence_mismatch";
 type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -180,10 +184,1209 @@ type ClipperAppReviewDemoPackStatus = "not_prepared" | "blocked" | "ready";
 type ClipperDeveloperApplicationDraftsStatus = "not_prepared" | "blocked" | "ready";
 type ClipperSourceSupplyDropKitStatus = "not_prepared" | "blocked" | "partial" | "ready";
 type ClipperAccountPermissionReadinessStatus = "blocked" | "metricool_mvp_ready_with_external_blockers" | "metricool_mvp_ready" | "ready";
-type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "full_ready";
+type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_blockers" | "metricool_mvp_ready" | "full_ready";
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
-type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "ready_to_apply" | "empty";
+type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "partial_import_applied" | "ready_to_apply" | "partial_ready_to_apply" | "empty";
 type ClipperExternalGoLiveAuditGateStatus = "blocked" | "verified";
+
+interface ClipperMetricoolLaunchSummary {
+  generatedAt: string;
+  launchMode: "metricool_approval_required";
+  status: "metricool_mvp_ready" | "blocked";
+  metricoolMvpReady: boolean;
+  approvalQueueReady: boolean;
+  directSocialApisRequiredForMvp: boolean;
+  fullDirectApiReady: boolean;
+  publishMode: string;
+  realPublishEnabled: boolean;
+  metricoolQueueStatus: string;
+  queuedForApproval: number;
+  readyToSend: number;
+  readyAccounts: number;
+  totalAccounts: number;
+  sourceScoutStatus: string;
+  weeklyFunnelStatus: string;
+  targetWeeklyClips: number;
+  sourceFilesReady: number;
+  draftReady: number;
+  metricoolApprovalQueued: number;
+  approvalEvidenceStatus: string;
+  approvalEvidenceRows: number;
+  importedPublishedRows: number;
+  importedViews: number;
+  evidenceImportCsvPath: string;
+  artifactAuditStatus?: "current" | "refresh_needed";
+  artifactAuditStale?: number;
+  artifactAuditMissing?: number;
+  artifactAuditNextStep?: string;
+  metricoolMvpBlockers: string[];
+  directApiBacklogCount: number;
+  nextStep: string;
+  reportPath: string;
+}
+
+interface ClipperMetricoolArtifactAuditItem {
+  id: string;
+  label: string;
+  status: "current" | "stale" | "missing";
+  artifactPath: string;
+  generatedAt: string | null;
+  queueItems: number;
+  artifactItems: number;
+  mismatchedIds: number;
+  staleReason: string | null;
+  nextStep: string;
+}
+
+interface ClipperMetricoolArtifactAuditSummary {
+  status: "current" | "refresh_needed";
+  generatedAt: string;
+  canonicalQueuePath: string;
+  canonicalQueueGeneratedAt: string | null;
+  canonicalQueueItems: number;
+  canonicalQueuedForApproval: number;
+  canonicalReadyToSend: number;
+  realPublishEnabled: boolean;
+  approvalRequired: true;
+  items: ClipperMetricoolArtifactAuditItem[];
+  totals: {
+    artifacts: number;
+    current: number;
+    stale: number;
+    missing: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricool100ApprovalRunSummary {
+  generatedAt: string | null;
+  status: "not_prepared" | "ready_for_operator" | "needs_review";
+  mode: "metricool_approval_required_100";
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  targetWeeklyClips: number;
+  approvalQueueTarget: number;
+  batchSize: number;
+  directSocialApisRequired: boolean;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  eligibleAccountIds: string[];
+  metricoolQueueItemIds: string[];
+  productionByAccount: Record<string, number>;
+  totals: {
+    productionItems: number;
+    draftReady: number;
+    metricoolQueuedForApproval: number;
+    metricoolBlocked: number;
+    readyToSend: number;
+    approvalSessionReadyForReview: number;
+    quickRunItems: number;
+    sourceUploadReady: number;
+    sourceUploadMissing: number;
+    closeoutReadyForReview: number;
+    closeoutEvidenceRows: number;
+    mvpReadyAccounts: number;
+    mvpAccounts: number;
+  };
+  artifacts: {
+    productionQueuePath: string | null;
+    metricoolPublishingPath: string;
+    metricoolExecutionQueuePath: string;
+    metricoolApprovalSessionPath: string;
+    metricoolApprovalQuickRunPath: string;
+    metricoolSourceUploadPackPath: string;
+    metricoolOperatorCloseoutPackPath: string;
+    metricoolOperatorRunSheetCsvPath: string;
+    evidenceImportCsvPath: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+  launchSummary?: ClipperMetricoolLaunchSummary;
+}
+
+interface ClipperMetricool100OperatorHandoffBatch {
+  id: string;
+  rank: number;
+  status: "ready_for_metricool_review" | "blocked_source_verification";
+  evidenceProgress?: {
+    status: string;
+    complete: boolean;
+    totals: {
+      rows: number;
+      notStarted: number;
+      scheduled: number;
+      waitingMetrics: number;
+      readyToImport: number;
+      needsFix: number;
+      rejected: number;
+      completeForMetricoolReview: number;
+    };
+  };
+  startRank: number;
+  endRank: number;
+  items: number;
+  accounts: string[];
+  platforms: string[];
+  firstScheduledFor: string;
+  lastScheduledFor: string;
+  operatorAction: string;
+  evidenceAction: string;
+}
+
+interface ClipperMetricool100OperatorHandoffSummary {
+  status: "ready_for_operator" | "blocked_source_verification";
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    runSheet: string;
+    evidenceCsv: string;
+    approvalRun: string;
+  };
+  totals: {
+    rows: number;
+    batches: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    readyToSend: number;
+  };
+  batches: ClipperMetricool100OperatorHandoffBatch[];
+  operatorConsole?: {
+    status: "ready_for_metricool_review" | "blocked_source_verification";
+    currentBatchId: string;
+    currentBatchRows: string;
+    currentBatchEvidenceStatus?: string;
+    completedBatches?: number;
+    evidenceCsvStatus: string;
+    publishedRowsCounted: number;
+    checklist: string[];
+    evidenceFields: string[];
+    paths: {
+      runSheet: string;
+      evidenceCsv: string;
+      currentBatchJson?: string;
+      currentBatchMarkdown?: string;
+      currentBatchCsv?: string;
+      currentBatchSessionJson?: string;
+      currentBatchSessionMarkdown?: string;
+      currentBatchSessionCsv?: string;
+      batchWorkbooksDir?: string;
+      batchEvidenceImportsDir?: string;
+    };
+    currentBatchWorkbook?: {
+      status: string;
+      rows: number;
+      jsonPath: string;
+      markdownPath: string;
+      csvPath: string;
+    };
+    currentBatchOperatorSession?: {
+      status: string;
+      rows: number;
+      sourceGateTotals?: {
+        rows: number;
+        ready: number;
+        blocked: number;
+        pending: number;
+      };
+      jsonPath: string;
+      markdownPath: string;
+      csvPath: string;
+    };
+    batchWorkbooks?: Array<{
+      batchId: string;
+      status: string;
+      evidenceStatus?: string;
+      rows: number;
+      jsonPath: string;
+      markdownPath: string;
+      csvPath: string;
+      evidenceCsvPath?: string;
+    }>;
+    nextStep: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokLaunchControlSummary {
+  status: "ready_for_metricool_review" | "in_progress" | "waiting_live_urls" | "waiting_24h_metrics" | "ready_to_import_metrics" | "needs_evidence_fix";
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    evidenceCsv: string;
+    handoff: string;
+    currentBatchWorkbook: string;
+    currentBatchSession: string;
+  };
+  currentBatch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  totals: {
+    rows: number;
+    tiktok: number;
+    instagram: number;
+    youtube: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    needsFix: number;
+    rejected: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokMvpReadinessVerifierSummary {
+  status: "pass" | "fail";
+  launchDecision: "ready_for_metricool_operator" | "blocked_before_metricool";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  active: {
+    accounts: string[];
+    metricoolBrands: string[];
+    platforms: string[];
+    deferredLanes: string[];
+    currentBatchId: string;
+    totalRows: number;
+    readyToImport: number;
+    readyToSend: number;
+  };
+  totals: {
+    checks: number;
+    passed: number;
+    failed: number;
+    metricoolQueuedForApproval: number;
+    currentBatchRows: number;
+    currentBatchSourcesReady: number;
+    publishedRowsCounted: number;
+    readyToImport: number;
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    operatorHandoff: string;
+    currentBatchWorkbook: string;
+    currentBatchCsv: string;
+    currentBatchEvidenceCsv: string;
+    masterEvidenceCsv: string;
+  };
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "pass" | "fail";
+    evidence: string;
+    blocker: string;
+    nextAction: string;
+  }>;
+  guardrails: string[];
+  externalWorkRemaining: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolMcpPreflightSummary {
+  status: "ready_for_operator" | "blocked";
+  generatedAt: string;
+  mode: "metricool_mcp_preflight_tiktok_only";
+  metricoolConfig: {
+    userTokenConfigured: boolean;
+    userIdConfigured: boolean;
+    mcpUrl: string;
+    readyForMcp: boolean;
+    missingEnv: string[];
+  };
+  metricoolPlan: {
+    brandCount: number;
+    socialProfileCount: number;
+    recommendedPlan: string;
+    directPlatformApisNeeded: boolean;
+    clippersBrands: Array<{
+      id: string;
+      name: string;
+      status: string;
+      networks: string[];
+      tiktokReady: boolean;
+    }>;
+  };
+  active: {
+    scope: string;
+    platforms: string[];
+    accounts: string[];
+    metricoolBrands: string[];
+    currentBatchId: string;
+    totalRows: number;
+    readyToImport: number;
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    verifier: string;
+    launchControl: string;
+    currentBatchEvidenceCsv: string;
+    mcpClientConfigTemplate: string;
+  };
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "pass" | "fail" | "warn";
+    evidence: string;
+    nextAction: string;
+  }>;
+  totals: {
+    checks: number;
+    passed: number;
+    warnings: number;
+    failed: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolCurrentBatchUploadPackSummary {
+  status: "ready_for_metricool_upload" | "blocked";
+  generatedAt: string;
+  batchId: string;
+  paths: {
+    json: string;
+    html?: string;
+    markdown: string;
+    csv: string;
+    uploadDir: string;
+    workbook: string;
+    batchEvidenceCsv: string;
+    evidenceChecklistHtml?: string;
+    evidenceChecklistMarkdown?: string;
+    verifier: string;
+    preflight: string;
+  };
+  totals: {
+    rows: number;
+    copied: number;
+    blocked: number;
+    bytes: number;
+    staleFiles?: number;
+  };
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    platform: string;
+    metricoolBrandName: string;
+    metricoolBlogId: string;
+    publishAt: string;
+    sourcePath: string;
+    sourceBytes: number;
+    uploadFileName: string;
+    uploadFilePath: string;
+    captionSeed: string;
+    status: "ready_to_upload" | "blocked_source_file";
+    blocker: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolCurrentBatchSessionPacketSummary {
+  status: "ready_for_metricool_session" | "blocked_next_action" | "blocked_upload_pack" | "blocked_schedule_freshness";
+  generatedAt: string;
+  mode: "metricool_current_batch_session_packet";
+  batch: {
+    id: string;
+    nextBatchId: string;
+    rows: number;
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    uploadPack: string;
+    uploadHtml: string;
+    uploadDir: string;
+    workbook: string;
+    nextAction: string;
+    batchEvidenceCsv: string;
+  };
+  totals: {
+    rows: number;
+    ready: number;
+    blocked: number;
+    sport: number;
+    memes: number;
+  };
+  consistencyIssues?: string[];
+  scheduleFreshness?: {
+    ok: boolean;
+    invalidRows: string[];
+    expiredRows: string[];
+    tooSoonRows: string[];
+    minLeadMinutes: number;
+    firstPublishAt: string;
+    lastPublishAt: string;
+  };
+  rows: Array<{
+    rank: number;
+    status: "ready_to_schedule" | "blocked";
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    metricoolBlogId: string;
+    platform: "tiktok";
+    publishAt: string;
+    uploadFileName: string;
+    uploadFilePath: string;
+    captionSeed: string;
+    scheduledEvidenceAction: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperGoalCompletionAuditSummary {
+  status: "tiktok_mvp_ready_external_work_remaining" | "not_ready";
+  fullGoalStatus?: "ready" | "blocked_external_actions";
+  generatedAt: string;
+  operatingMode?: {
+    publisher: "metricool";
+    activePlatforms: ClipperPlatform[];
+    activeAccountIds: string[];
+    activeMetricoolBrands: string[];
+    deferredPlatforms: string[];
+    directSocialApisRequired: boolean;
+    realPublishEnabled: boolean;
+    publishMode: "approval_required" | "unsafe_or_direct";
+    note: string;
+  };
+  paths: {
+    accountReadiness: string;
+    metricoolMvpLaunchPack: string;
+    metricool100ApprovalRun: string;
+    metricoolApprovalSession: string;
+    tiktokLaunchControl: string;
+    tiktokExternalCloseoutSession: string;
+    masterEvidenceCsv: string;
+    batchEvidenceDir: string;
+    outJson: string;
+    outMarkdown: string;
+    outCsv: string;
+  };
+  fullGoal?: {
+    metricoolMvpReady: boolean;
+    externalProofFilesNeedRealEvidence: number;
+    tiktokExternalCloseoutTasks: number;
+    fullReadinessMissing: number;
+    allAccountsVerified: boolean;
+    allDirectApiPermissionsReady: boolean;
+    allPublishedEvidenceReady: boolean;
+  };
+  requirements: Array<{
+    id: string;
+    label: string;
+    status: "ready" | "ready_for_tiktok_mvp" | "waiting_metricool_work" | "needs_external_action" | "deferred";
+    evidence: string;
+    nextAction: string;
+  }>;
+  totals: {
+    requirements: number;
+    ready: number;
+    tiktokMvpReady: number;
+    waitingMetricoolWork: number;
+    needsExternalAction: number;
+    deferred: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokBatchTrackerSummary {
+  status: "ready_for_metricool_review" | "in_progress" | "waiting_live_urls" | "waiting_24h_metrics" | "ready_to_import" | "needs_evidence_fix";
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    workbook: string;
+    session: string;
+    evidenceCsv: string;
+  };
+  batch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  totals: {
+    rows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    needsFix: number;
+    rejected: number;
+  };
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    platform: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    sourceFileName: string;
+    sourcePath: string;
+    captionSeed: string;
+    state: string;
+    blocker: string;
+    nextAction: string;
+    publishedPostUrl: string;
+    views24h: number;
+    likes24h: number;
+    comments24h: number;
+    shares24h: number;
+    operatorCopyText: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokBatchEvidenceSyncSummary {
+  status: "no_operator_updates" | "synced" | "blocked_invalid_batch_evidence";
+  generatedAt: string;
+  mode?: "current_batch" | "all_batches";
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    batchEvidence: string;
+    batchEvidenceDir?: string;
+    masterEvidence: string;
+    workbook: string;
+  };
+  totals: {
+    batchesChecked?: number;
+    batchRows: number;
+    applied: number;
+    untouched: number;
+    rejected: number;
+  };
+  consistency: {
+    synced: number;
+    placeholderAligned: number;
+    needsMasterSync: number;
+    masterHasOperatorUpdate: number;
+    conflicts: number;
+  };
+  rows: Array<{
+    batchId?: string;
+    metricoolQueueItemId: string;
+    result: string;
+    reason: string;
+    touched: boolean;
+    consistency: string;
+  }>;
+  nextStep: string;
+}
+
+interface ClipperTikTokEvidenceChecklistSummary {
+  status: "ready_for_metricool_operator" | "waiting_live_evidence" | "ready_for_import_preview" | "needs_evidence_fix";
+  generatedAt: string;
+  paths: {
+    json: string;
+    html?: string;
+    markdown: string;
+    csv: string;
+    tracker: string;
+    runbook: string;
+  };
+  batch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  totals: {
+    rows: number;
+    missingApproval: number;
+    missingPublicUrl: number;
+    missingMetrics: number;
+    readyForImportPreview: number;
+    invalidEvidence: number;
+  };
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    sourceFileName: string;
+    scheduledFor: string;
+    state: string;
+    blocker: string;
+    missingFields: string[];
+    nextAction: string;
+    evidenceTemplate: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokPostScheduleVerifierSummary {
+  status: "needs_metricool_scheduling" | "waiting_public_posts" | "waiting_24h_metrics" | "ready_for_import_review" | "needs_evidence_fix" | "in_progress";
+  generatedAt: string;
+  mode: "tiktok_metricool_post_schedule_verifier";
+  batch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    tracker: string;
+    checklist: string;
+    cockpit: string;
+    evidenceCsv: string;
+  };
+  totals: {
+    rows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    needsFix: number;
+    rejected: number;
+    missingApproval: number;
+    missingPublicUrl: number;
+    missingMetrics: number;
+    invalidEvidence: number;
+  };
+  timeline: {
+    publicUrlDueNow: number;
+    metricsEligibleNow: number;
+    metricsNotDueYet: number;
+    nextActionAt: string;
+    nextActionLabel: string;
+  };
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    sourceFileName: string;
+    state: string;
+    gate: string;
+    blocker: string;
+    nextAction: string;
+    timeline: {
+      status: string;
+      publicUrlDueAt: string;
+      metricsDueAt: string;
+      publicUrlDueNow: boolean;
+      metricsEligibleNow: boolean;
+      nextActionAt: string;
+      nextActionLabel: string;
+    };
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokBatchCloseoutVerifierSummary {
+  status: "blocked_evidence_fix" | "blocked_not_scheduled" | "waiting_public_posts" | "waiting_24h_metrics" | "waiting_import_apply" | "ready_to_close_batch" | "in_progress";
+  generatedAt: string;
+  mode: "tiktok_metricool_batch_closeout_verifier";
+  batch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  nextBatch: {
+    id: string;
+    status: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  } | null;
+  nextBatchUnlock: {
+    status: "ready_after_import_apply" | "waiting_import_apply" | "blocked_current_batch";
+    canPrepareNextBatch: boolean;
+    nextBatchId: string;
+    blockers: string[];
+    criteria: string[];
+    nextAction: string;
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    handoff: string;
+    tracker: string;
+    postScheduleVerifier: string;
+    evidenceCsv: string;
+  };
+  totals: {
+    rows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    importApplied: number;
+    needsFix: number;
+    rejected: number;
+  };
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    state: string;
+    closeoutGate: string;
+    importApplied: boolean;
+    blocker: string;
+    nextAction: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokNextActionSummary {
+  status: "blocked_account_or_metricool_connection" | "blocked_evidence_fix" | "ready_for_import_preview" | "waiting_24h_metrics" | "waiting_public_posts" | "ready_for_metricool_scheduling" | "blocked_upload_pack" | "in_progress";
+  generatedAt: string;
+  mode: "tiktok_metricool_next_action";
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    accountReadiness: string;
+    uploadPack: string;
+    postScheduleVerifier: string;
+    batchCloseout: string;
+    goalAudit: string;
+  };
+  account: {
+    ready: boolean;
+    status: string;
+    readyLanes: number;
+    totalLanes: number;
+    rows: Array<Record<string, unknown>>;
+  };
+  uploadPack: {
+    ready: boolean;
+    status: string;
+    rows: number;
+    copied: number;
+    blockedUploadFiles: number;
+    html: string;
+  };
+  batch: {
+    id: string;
+    nextBatchId: string;
+    rows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingPublicPosts: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    needsFix: number;
+    closeoutStatus: string;
+    postScheduleStatus: string;
+  };
+  goalAudit: {
+    status: string;
+    nextStep: string;
+  };
+  operator?: {
+    uploadHtml: string;
+    uploadDir: string;
+    workbook: string;
+    batchEvidenceCsv: string;
+    uploadPackReport: string;
+    sessionPacketReport: string;
+    copyPacket: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+  tasks: Array<{
+    id: string;
+    label: string;
+    status: "done" | "blocked" | "next";
+    evidence: string;
+    nextAction: string;
+  }>;
+}
+
+interface ClipperTikTokOperatorCockpitSummary {
+  status: "ready_for_metricool_operator" | "waiting_live_evidence" | "ready_for_import_review" | "needs_evidence_fix" | "blocked_verifier" | "blocked_metricool_preflight" | "blocked_upload_pack";
+  generatedAt: string;
+  batchId: string;
+  mode: "metricool_tiktok_operator_cockpit";
+  paths: {
+    json: string;
+    html: string;
+    markdown: string;
+    csv: string;
+    uploadHtml: string;
+    evidenceHtml: string;
+    batchEvidenceCsv: string;
+    workbookCsv: string;
+  };
+  totals: {
+    uploadRows: number;
+    copiedFiles: number;
+    blockedUploadFiles: number;
+    trackerRows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    invalidEvidence: number;
+    publishedCounted: number;
+  };
+  links: Array<{
+    id: string;
+    label: string;
+    status: string;
+    path: string;
+    nextAction: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokOperatorCockpitPreflightSummary {
+  status: "ready_for_operator" | "blocked";
+  generatedAt: string;
+  batchId: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    cockpit: string;
+    cockpitHtml: string;
+    uploadHtml: string;
+    evidenceHtml: string;
+    batchEvidenceCsv: string;
+    workbookCsv: string;
+    uploadFolder: string;
+  };
+  totals: {
+    checks: number;
+    passed: number;
+    failed: number;
+    uploadMp4Files: number;
+  };
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "pass" | "fail";
+    evidence: string;
+    nextAction: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokOperatorPacket {
+  status: string;
+  sourceGate: {
+    status: string;
+    label: string;
+    detail: string;
+  };
+  metricoolFields: {
+    brand: string;
+    account: string;
+    platform: string;
+    scheduledFor: string;
+    sourcePath: string;
+    caption: string;
+    evidenceCsvPath: string;
+  };
+  approvalEvidenceTemplate: Record<string, string>;
+  liveEvidenceTemplate: Record<string, string>;
+  checklist: string[];
+}
+
+interface ClipperTikTokBatchRunbookSummary {
+  status: "ready_for_metricool_operator" | "ready_for_import_review" | "in_progress";
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    tracker: string;
+    sync: string;
+    workbookCsv: string;
+    batchEvidence: string;
+  };
+  batch: {
+    id: string;
+    rows: number;
+    accounts: string[];
+    platforms: string[];
+  };
+  totals: {
+    rows: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    syncApplied: number;
+    syncRejected: number;
+    conflicts: number;
+  };
+  operatorSession?: {
+    status: string;
+    batchId: string;
+    currentStep: string;
+    nextAction: string;
+    nextRow: null | {
+      rank: number;
+      metricoolQueueItemId: string;
+      accountId: string;
+      accountName: string;
+      platform: string;
+      metricoolBrandName: string;
+      scheduledFor: string;
+      sourceFileName: string;
+      sourcePath: string;
+      captionSeed: string;
+      state: string;
+      operatorStep: string;
+      operatorCopyText: string;
+      nextAction?: string;
+      sourceExists?: boolean;
+      sourceBytes?: number;
+      sourceVideoValid?: boolean;
+      sourceDurationSeconds?: number;
+      sourceProbe?: string;
+      blocker?: string;
+      operatorPacket?: ClipperTikTokOperatorPacket;
+    };
+    syncBlocker?: null | {
+      metricoolQueueItemId: string;
+      result: string;
+      reason: string;
+      consistency: string;
+    };
+    brandQueue: Array<{
+      brand: string;
+      rows: number;
+      notStarted: number;
+      scheduled: number;
+      waitingMetrics: number;
+      readyToImport: number;
+      needsFix: number;
+    }>;
+    copyBlocks: null | {
+      metricoolQueueItemId: string;
+      metricoolBrandName: string;
+      accountName: string;
+      sourcePath: string;
+      captionSeed: string;
+      scheduledFor: string;
+      evidenceCsvPath: string;
+    };
+    evidenceRule: string;
+  };
+  runbook: string[];
+  rows: Array<{
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    platform: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    sourceFileName: string;
+    sourcePath: string;
+    captionSeed: string;
+    state: string;
+    operatorStep: string;
+    operatorCopyText: string;
+    sourceExists?: boolean;
+    sourceBytes?: number;
+    sourceVideoValid?: boolean;
+    sourceDurationSeconds?: number;
+    sourceProbe?: string;
+    blocker?: string;
+    nextAction?: string;
+    operatorPacket?: ClipperTikTokOperatorPacket;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokMvpGoLivePacketSummary {
+  status: "ready_for_metricool_operator" | "in_progress";
+  generatedAt: string;
+  launchMode: "metricool_approval_required";
+  operatingMode?: {
+    scope: string;
+    activePlatforms: string[];
+    deferredLanes: string[];
+    directSocialApisRequired: boolean;
+    metricoolApprovalRequired: boolean;
+    activeAccounts: Array<{
+      accountId: string;
+      accountName: string;
+      category: string;
+      platform: string;
+      handle: string;
+      metricoolBrandName: string;
+      rightsReadyAssets: number;
+      evidencePath: string;
+    }>;
+    activeMetricoolBrands: string[];
+    batchPlatforms: string[];
+    batchAccountIds: string[];
+    batchOnlyUsesActiveTikTokAccounts: boolean;
+    batchPlatformCheck: string;
+  };
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    accountCloseout: string;
+    runbook: string;
+    tracker: string;
+    sync: string;
+    evidenceChecklist: string;
+    goalAudit: string;
+    metricool100Handoff?: string;
+  };
+  sourceStatuses: Record<string, string>;
+  metricool100?: {
+    status: string;
+    consoleStatus: string;
+    rows: number;
+    batches: number;
+    sports: number;
+    memes: number;
+    streamers: number;
+    readyBatches: number;
+    blockedBatches: number;
+    readyToSend: number;
+    publishedRowsCounted: number;
+    currentBatchId: string;
+    currentBatchRows: string;
+    currentBatchSourceGateTotals: {
+      rows: number;
+      ready: number;
+      blocked: number;
+      pending: number;
+    };
+    markdownPath: string;
+    currentBatchEvidenceCsv: string;
+    ready: boolean;
+  };
+  totals: {
+    accountRows: number;
+    accountReady: number;
+    batchRows: number;
+    activeTikTokAccounts?: number;
+    notStarted: number;
+    scheduled: number;
+    waitingMetrics: number;
+    readyToImport: number;
+    evidenceMissingApproval: number;
+    evidenceMissingPublicUrl: number;
+    evidenceMissingMetrics: number;
+    evidenceReadyForImportPreview: number;
+    evidenceInvalid: number;
+    syncApplied: number;
+    conflicts: number;
+    waitingMetricoolWork: number;
+    metricool100Rows?: number;
+    metricool100ReadyBatches?: number;
+    metricool100BlockedBatches?: number;
+  };
+  nextRow: null | {
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    sourceFileName: string;
+    captionSeed: string;
+    operatorStep?: string;
+    operatorCopyText?: string;
+  };
+  operatorSteps: Array<{
+    id: string;
+    status: string;
+    owner: string;
+    action: string;
+    proof: string;
+    blocker: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokBatchEvidenceRowPreview {
+  accepted: boolean;
+  wouldWrite: false;
+  batchId: string;
+  batchEvidenceCsvPath: string;
+  metricoolQueueItemId: string;
+  classification: "not_started" | "scheduled" | "published" | "rejected";
+  nextAction: string;
+  formFingerprint?: string;
+}
+
+interface ClipperTikTokBatchEvidenceBatchSummary {
+  status: "empty" | "ready_to_apply" | "blocked_validation" | "applied";
+  generatedAt: string;
+  wouldWrite?: false;
+  totals: {
+    rows: number;
+    accepted?: number;
+    applied?: number;
+    rejected: number;
+    scheduled?: number;
+    published?: number;
+    rejectedStatus?: number;
+  };
+  rows?: Array<{
+    row: number;
+    metricoolQueueItemId: string;
+    accepted: boolean;
+    classification: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  preview?: ClipperTikTokBatchEvidenceBatchSummary;
+  applied?: Array<{
+    batchId: string;
+    batchEvidenceCsvPath: string;
+    metricoolQueueItemId: string;
+  }>;
+  nextStep: string;
+}
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -358,6 +1561,8 @@ interface ClipperAccountPermissionReadinessRow {
   readyForMetricoolApproval: boolean;
   directApiReady: boolean;
   blockers: string[];
+  metricoolBlockers?: string[];
+  directApiBacklog?: string[];
   nextStep: string;
 }
 
@@ -377,6 +1582,8 @@ interface ClipperAccountPermissionReadinessPermissionRow {
 interface ClipperAccountPermissionReadinessSummary {
   status: ClipperAccountPermissionReadinessStatus;
   generatedAt: string;
+  launchMode?: string;
+  directSocialApisRequired?: boolean;
   paths: { json: string; markdown: string; csv: string };
   accountRows: ClipperAccountPermissionReadinessRow[];
   permissionRows: ClipperAccountPermissionReadinessPermissionRow[];
@@ -424,6 +1631,14 @@ interface ClipperAccountPermissionReadinessSummary {
     permissionGroups: number;
     permissionGroupsApproved: number;
   };
+  activeMvp?: {
+    platforms: string[];
+    accountIds: string[];
+    readyLanes: number;
+    targetLanes: number;
+    status: string;
+    nextStep: string;
+  };
   nextEvidenceDrop?: {
     path: string;
     rows: number;
@@ -466,6 +1681,46 @@ interface ClipperAccountPermissionReadinessSummary {
     source: string;
     nextStep: string;
   };
+  metricoolMvpEvidence?: {
+    accountEvidenceCsvPath: string;
+    accountRows: number;
+    pendingProfileEvidenceCsvPath: string;
+    pendingProfileRows: number;
+    previewRows: string[];
+    nextStep: string;
+  };
+  tiktokMvpAccountCloseout?: {
+    status: "ready_for_metricool_tiktok" | "needs_tiktok_account_evidence";
+    generatedAt: string;
+    paths: { json: string; markdown: string; csv: string };
+    launchMode: string;
+    directSocialApisRequired: boolean;
+    rows: Array<{
+      accountId: string;
+      accountName: string;
+      category: string;
+      platform: "tiktok";
+      handle: string;
+      status: "ready_for_metricool_tiktok" | "needs_account_proof" | "needs_metricool_connection";
+      accountStatus: string;
+      metricoolConnected: boolean;
+      metricoolBrandOrProfile: string;
+      rightsReadyAssets: number;
+      evidencePath: string;
+      requiredProof: string[];
+      blockers: string[];
+      operatorAction: string;
+      copyText: string;
+    }>;
+    totals: {
+      rows: number;
+      ready: number;
+      needsProof: number;
+      needsMetricoolConnection: number;
+    };
+    guardrails: string[];
+    nextStep: string;
+  };
   nextEvidenceDropPath: string;
   nextStep: string;
 }
@@ -476,7 +1731,9 @@ interface ClipperOperationalReadinessSummary {
   paths: { json: string; markdown: string; csv: string };
   mvp: {
     metricoolReady: boolean;
+    launchMode?: string;
     approvalQueueReady: boolean;
+    directSocialApisRequired?: boolean;
   };
   fullDirectApiReady: boolean;
   accounts: {
@@ -515,6 +1772,9 @@ interface ClipperOperationalReadinessSummary {
     ports: Array<{ port: number; open: boolean; error: string | null }>;
   };
   blockers: string[];
+  metricoolMvpBlockers?: string[];
+  qaFollowups?: string[];
+  directApiBacklog?: string[];
   nextStep: string;
 }
 
@@ -707,6 +1967,9 @@ interface ClipperExternalCloseoutPackSummary {
     operatorQueueJson?: string;
     operatorQueueMarkdown?: string;
     operatorQueueCsv?: string;
+    batchHandoffJson?: string;
+    batchHandoffMarkdown?: string;
+    batchHandoffCsv?: string;
     goLiveAuditJson?: string;
     goLiveAuditMarkdown?: string;
     goLiveAuditCsv?: string;
@@ -915,6 +2178,61 @@ interface ClipperExternalCloseoutOperatorQueueSummary {
   nextStep: string;
 }
 
+interface ClipperExternalCloseoutBatchHandoffBatch {
+  id: string;
+  rank: number;
+  label: string;
+  platform: string;
+  lane: string;
+  status: string;
+  total: number;
+  critical: number;
+  high: number;
+  startRank: number;
+  endRank: number;
+  requiredStatuses: string[];
+  missingCsvFields: string[];
+  blockers: string[];
+  portalUrls: string[];
+  docsUrls: string[];
+  accountIds: string[];
+  scopes: string[];
+  proofPaths: string[];
+  evidenceRows: string[];
+  operatorActions: string[];
+  firstAction: string;
+  checklist: string[];
+  doneCriteria: string[];
+}
+
+interface ClipperExternalCloseoutBatchHandoffSummary {
+  status: "needs_operator" | "complete";
+  generatedAt: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    evidenceCsv: string;
+    proofDir: string;
+    operatorQueue: string;
+  };
+  totals: {
+    batches: number;
+    rows: number;
+    critical: number;
+    high: number;
+    proofFilesNeedRealEvidence: number;
+    evidenceRows: number;
+    metricoolReadyToSend: number;
+    realPublishEnabled: boolean;
+  };
+  batches: ClipperExternalCloseoutBatchHandoffBatch[];
+  nextBatch: ClipperExternalCloseoutBatchHandoffBatch | null;
+  nextStep: string;
+  guardrails: string[];
+  artifactSafety?: ClipperExternalCloseoutArtifactSafety;
+}
+
 interface ClipperExternalCloseoutNextActionSummary {
   generatedAt: string;
   status: "needs_operator" | "complete";
@@ -967,11 +2285,18 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
     byKind: Array<{ kind: string; count: number }>;
     topReasons: Array<{ reason: string; count: number }>;
     missingFields: Array<{ field: string; count: number }>;
+    priorityPolicy?: {
+      activeFirst: string[];
+      deferred: string[];
+      order: string;
+    };
     nextRepair: {
       csvRow: number | null;
       closeoutId: string | null;
       lane: string;
       platform: string;
+      priority?: number;
+      priorityLabel?: string;
       proofPath: string;
       reason: string;
       nextStep: string;
@@ -993,12 +2318,73 @@ interface ClipperExternalCloseoutEvidenceImportSummary {
     portalUrl: string;
     docsUrl: string;
     missingCsvFields: string[];
+    priority?: number;
+    priorityLabel?: string;
     operatorAction: string;
     csvEditHint: string;
     safeProofStarter: string;
     csvRowTemplate: string;
     nextStep: string;
   }>;
+  nextStep: string;
+}
+
+interface ClipperTikTokExternalCloseoutSessionSummary {
+  generatedAt: string;
+  status: "needs_tiktok_external_closeout" | "metricool_mvp_ready_deferred_backlog" | "stale_evidence_import_report" | "complete";
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    evidenceImport: string;
+    repairWorkPacket: string;
+  };
+  source: {
+    evidenceImportStatus: string;
+    repairWorkPacketStatus: string;
+    metricoolMvpReady?: boolean;
+    activeMetricoolAccountIds?: string[];
+    freshness?: {
+      status: string;
+      reportIsFresh: boolean;
+      evidenceCsvMtimeMs: number;
+      reportMtimeMs: number;
+      nextStep: string;
+    };
+  };
+  totals: {
+    tiktokTasks: number;
+    activeTasks?: number;
+    deferredTasks?: number;
+    account: number;
+    developerApp: number;
+    permission: number;
+    blocked: number;
+  };
+  tasks: Array<{
+    rank: number;
+    closeoutId: string;
+    lane: string;
+    accountId: string;
+    scope: string;
+    requiredStatus: string;
+    csvRow: number | null;
+    proofPath: string;
+    portalUrl: string;
+    docsUrl: string;
+    reason: string;
+    missingCsvFields: string[];
+    csvRowTemplate: string;
+    nextAction: string;
+    copyPacket: string;
+    activeForMetricoolMvp?: boolean;
+    deferredForMetricoolMvp?: boolean;
+    deferredReason?: string;
+    deferredNote?: string;
+  }>;
+  activeTasks?: ClipperTikTokExternalCloseoutSessionSummary["tasks"];
+  deferredTasks?: ClipperTikTokExternalCloseoutSessionSummary["tasks"];
+  guardrails: string[];
   nextStep: string;
 }
 
@@ -2327,6 +3713,8 @@ interface ClipperAccountCreationPackItem {
   evidenceCapturePlan: string[];
   operatorVaultChecklist: string[];
   postCreationNextActions: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   blockers: string[];
   nextStep: string;
 }
@@ -2357,6 +3745,8 @@ interface ClipperAccountCreationSessionItem {
   requiredProof: string[];
   operatorVaultChecklist: string[];
   postCreationNextActions: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   doneCriteria: string[];
 }
 
@@ -2411,6 +3801,8 @@ interface ClipperAccountCreationPlatformBatch {
   browserSessionChecklist: string[];
   operatorVaultChecklist: string[];
   requiredProof: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   blockers: string[];
   doneCriteria: string[];
   nextStep: string;
@@ -3379,6 +4771,24 @@ interface ClipperExternalCloseoutRunItem {
   checklist: string[];
 }
 
+interface ClipperExternalCloseoutRunBatch {
+  id: string;
+  platform: string;
+  lane: string;
+  label: string;
+  total: number;
+  startRank: number;
+  endRank: number;
+  proofFilesNeedRealEvidence: number;
+  portalUrls: string[];
+  proofPaths: string[];
+  evidenceRows: string[];
+  missingCsvFields: string[];
+  nextStep: string;
+  operatorChecklist: string[];
+  doneCriteria: string[];
+}
+
 interface ClipperExternalCloseoutRun {
   status: "not_prepared" | "needs_operator" | "complete";
   generatedAt: string | null;
@@ -3386,6 +4796,7 @@ interface ClipperExternalCloseoutRun {
   actionSheetPath: string;
   proofTodoPath: string;
   operatorQueuePath: string;
+  batchHandoffPath: string;
   evidenceCsvPath: string;
   totals: {
     rows: number;
@@ -3398,7 +4809,9 @@ interface ClipperExternalCloseoutRun {
   };
   artifactSafetyStatus: string;
   metricoolPublishMode: string;
+  realPublishEnabled: boolean;
   items: ClipperExternalCloseoutRunItem[];
+  batches: ClipperExternalCloseoutRunBatch[];
   nextItems: ClipperExternalCloseoutRunItem[];
   nextStep: string;
 }
@@ -4180,6 +5593,14 @@ interface ClipperGoLiveCompletionAuditSummary {
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
   closeoutQueue?: ClipperGoLiveCompletionCloseoutQueueItem[];
+  launchModes?: {
+    metricoolMvpReady: boolean;
+    approvalQueueReady: boolean;
+    directSocialApisRequiredForMvp: boolean;
+    fullDirectApiReady: boolean;
+    metricoolMvpBlockers: string[];
+    directApiBacklog: string[];
+  };
   totals: {
     requirements: number;
     verified: number;
@@ -4646,6 +6067,8 @@ interface ClipperMetricoolExecutionQueueSummary {
   publishMode: "draft_only" | "approval_required" | "auto_after_connection";
   realPublishEnabled: boolean;
   sourceReadiness?: ClipperMetricoolSourceReadinessSummary;
+  safetyNormalized?: boolean;
+  safetyNormalizationReasons?: string[];
   items: ClipperMetricoolExecutionQueueItem[];
   totals: {
     items: number;
@@ -4664,6 +6087,7 @@ interface ClipperMetricoolMvpLaunchAccountRow {
   metricoolBrandName: string;
   metricoolBlogId: string | null;
   connectedNetworks: MetricoolNetwork[];
+  pendingMetricoolProfiles: MetricoolNetwork[];
   primaryNetwork: MetricoolNetwork | null;
   dailyClipTarget: number;
   weeklyTargetClips: number;
@@ -4676,12 +6100,28 @@ interface ClipperMetricoolMvpLaunchAccountRow {
   nextStep: string;
 }
 
+interface ClipperMetricoolPendingProfileEvidenceRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  expectedProfileUrl: string;
+  evidenceBatchRow: string;
+  checklist: string[];
+  status: "needs_metricool_connection";
+  nextStep: string;
+}
+
 interface ClipperMetricoolMvpLaunchSummary {
   status: ClipperMetricoolMvpLaunchStatus;
   generatedAt: string;
   manifestPath: string;
   markdownPath: string;
   csvPath: string;
+  pendingProfileEvidenceCsvPath: string;
   mode: "metricool_approval_required_mvp";
   primaryBridge: "metricool";
   directPlatformApisNeeded: false;
@@ -4689,11 +6129,14 @@ interface ClipperMetricoolMvpLaunchSummary {
   approvalRequired: true;
   targetAccounts: string[];
   rows: ClipperMetricoolMvpLaunchAccountRow[];
+  pendingProfileEvidenceRows: ClipperMetricoolPendingProfileEvidenceRow[];
+  pendingProfileEvidenceTemplate: string;
   totals: {
     accounts: number;
     readyAccounts: number;
     blockedAccounts: number;
     connectedProfiles: number;
+    pendingMetricoolProfiles: number;
     queuedForApproval: number;
     manualReadyPosts: number;
     rightsReadyAssets: number;
@@ -4756,10 +6199,208 @@ interface ClipperMetricoolApprovalSessionSummary {
   nextStep: string;
 }
 
+interface ClipperMetricoolApprovalQuickRunAccount {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory | "uncategorized";
+  items: number;
+  readyForReview: number;
+  firstPublishAt: string | null;
+}
+
+interface ClipperMetricoolApprovalQuickRunItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourceFileName: string;
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  status: ClipperMetricoolApprovalSessionItemStatus;
+  evidenceCaptureRow: string;
+  nextStep: string;
+}
+
+interface ClipperMetricoolApprovalQuickRunSummary {
+  status: ClipperMetricoolApprovalQuickRunStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  portalUrl: string;
+  approvalSessionPath: string;
+  approvalSessionMarkdownPath: string;
+  approvalSessionCsvPath: string;
+  evidenceImportCsvPath: string;
+  metricoolQueuePath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  batchSize: number;
+  totals: {
+    items: number;
+    readyForReview: number;
+    blocked: number;
+    quickRunItems: number;
+    accounts: number;
+  };
+  accounts: ClipperMetricoolApprovalQuickRunAccount[];
+  items: ClipperMetricoolApprovalQuickRunItem[];
+  operatorSteps: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolSourceUploadPackItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  sourceFileName: string;
+  sourceExists: boolean;
+  sourceValid: boolean;
+  sourceInvalidReason: string | null;
+  sourceSizeBytes: number;
+  sourceSha256: string | null;
+  captionSeed: string;
+  hook: string;
+  queueStatus: ClipperMetricoolApprovalSessionItemStatus;
+  operatorStatus: ClipperMetricoolApprovalOperatorStatus;
+  uploadStatus: "ready_to_upload" | "missing_source" | "invalid_source" | "blocked" | "evidence_ready";
+  nextStep: string;
+}
+
+interface ClipperMetricoolSourceUploadPackSummary {
+  status: ClipperMetricoolSourceUploadPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  approvalSessionPath: string;
+  evidenceImportCsvPath: string;
+  portalUrl: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  totals: {
+    items: number;
+    readyToUpload: number;
+    missingSource: number;
+    blocked: number;
+    accounts: number;
+    totalSourceBytes: number;
+  };
+  accounts: Array<{
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    metricoolBlogId: string | null;
+    items: number;
+    readyToUpload: number;
+    firstPublishAt: string | null;
+  }>;
+  items: ClipperMetricoolSourceUploadPackItem[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperMetricoolOperatorRunSheetRow {
+  rank: number;
+  metricoolQueueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourceFileName: string;
+  sourcePath: string | null;
+  sourceSha256: string | null;
+  captionSeed: string;
+  uploadStatus: ClipperMetricoolSourceUploadPackItem["uploadStatus"];
+  operatorStatus: ClipperMetricoolApprovalOperatorStatus;
+  evidenceStatus: string;
+  evidenceAction: string;
+  metricoolAction: string;
+}
+
+interface ClipperMetricoolOperatorBatch {
+  batchNumber: number;
+  startRank: number;
+  endRank: number;
+  items: number;
+  readyToUpload: number;
+  needsMetricoolReview: number;
+  waitingLiveUrl: number;
+  readyToImport: number;
+  accounts: string[];
+  firstPublishAt: string | null;
+  lastPublishAt: string | null;
+  runSheetCsvPath: string;
+  evidenceImportCsvPath: string;
+  metricoolAction: string;
+  evidenceAction: string;
+  doneCriteria: string[];
+}
+
+interface ClipperMetricoolOperatorCloseoutPackSummary {
+  status: ClipperMetricoolOperatorCloseoutPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  runSheetCsvPath: string;
+  portalUrl: string;
+  approvalSessionPath: string;
+  sourceUploadPackPath: string;
+  sourceUploadCsvPath: string;
+  evidenceImportCsvPath: string;
+  approvalReportPath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  totals: {
+    readyForReview: number;
+    readyToUpload: number;
+    missingSource: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    evidenceRows: number;
+    needsMetricoolReview: number;
+    waitingLiveUrl: number;
+    readyToImport: number;
+    rejected: number;
+    evidenceMismatch: number;
+    publishedRows: number;
+    importedViews: number;
+    accounts: number;
+  };
+  operatorSteps: string[];
+  evidenceRules: string[];
+  doneCriteria: string[];
+  batches: ClipperMetricoolOperatorBatch[];
+  runSheetRows: ClipperMetricoolOperatorRunSheetRow[];
+  blockers: string[];
+  nextStep: string;
+}
+
 interface ClipperMetricoolApprovalEvidenceImportSummary {
-  status: "missing" | "needs_records" | "imported";
+  status: "missing" | "needs_records" | "imported" | "preview_missing" | "preview_needs_records" | "preview_ready";
   generatedAt: string;
   evidenceImportCsvPath: string;
+  evidenceImportCsvPaths: {
+    active: string;
+    shortRun: string;
+    metricool100: string;
+    metricool100BatchDir?: string;
+    metricool100BatchOperatorRows?: number;
+    combined: string;
+  };
   metricsOutputPath: string;
   rows: Array<{
     metricoolQueueItemId: string;
@@ -4772,11 +6413,12 @@ interface ClipperMetricoolApprovalEvidenceImportSummary {
     likes: number;
     comments: number;
     shares: number;
-    result: "imported" | "skipped" | "rejected";
+    result: "imported" | "importable" | "skipped" | "rejected";
     reason: string;
   }>;
   totals: {
     rows: number;
+    importable: number;
     imported: number;
     skipped: number;
     rejected: number;
@@ -4798,6 +6440,14 @@ interface ClipperMetricoolApprovalReportSummary {
   csvPath: string;
   approvalSessionPath: string;
   evidenceImportCsvPath: string;
+  evidenceImportCsvPaths: {
+    active: string;
+    shortRun: string;
+    metricool100: string;
+    metricool100BatchDir?: string;
+    metricool100BatchOperatorRows?: number;
+    combined: string;
+  };
   importedMetricsPath: string;
   realPublishEnabled: false;
   approvalRequired: true;
@@ -4823,6 +6473,7 @@ interface ClipperMetricoolApprovalReportSummary {
     platform: ClipperPlatform | "unknown";
     queueStatus: ClipperMetricoolApprovalSessionItemStatus | "missing_queue_item";
     evidenceResult: "imported" | "skipped" | "rejected" | "missing";
+    operatorStatus: ClipperMetricoolApprovalOperatorStatus;
     finalStatus: string;
     publishedPostUrl: string | null;
     views: number;
@@ -4853,6 +6504,31 @@ interface ClipperMetricoolAccountEvidenceResult {
     accountId: string;
     accountName: string;
     platform: MetricoolNetwork;
+    reason: string;
+  }>;
+  nextStep: string;
+}
+
+interface ClipperMetricoolBridgeEvidenceBatchResult {
+  generatedAt: string;
+  source: "metricool_manual_bridge";
+  template: string;
+  totals: {
+    rows: number;
+    recorded: number;
+    skipped: number;
+  };
+  recorded: Array<{
+    accountId: string;
+    platform: ClipperPlatform;
+    metricoolBrandName: string;
+    metricoolBlogId: string | null;
+    evidencePath: string;
+  }>;
+  skipped: Array<{
+    row: number;
+    accountId: string;
+    platform: string;
     reason: string;
   }>;
   nextStep: string;
@@ -5215,6 +6891,8 @@ interface ClipperRobertOfficialPermissionCloseoutQueue {
 
 interface ClipperRobertConnectNowHandoff {
   markdownPath: string;
+  launchMode?: "metricool_mvp" | "direct_api_full";
+  credentialMode?: "metricool_not_required" | "direct_api_required";
   focusRun: ClipperExternalExecutionFocusRun;
   evidenceCloseout?: ClipperRobertEvidenceCloseoutQueue;
   credentialCloseout?: ClipperRobertCredentialCloseoutQueue;
@@ -5229,6 +6907,29 @@ interface ClipperRobertConnectNowHandoff {
     doneGates: number;
     gates: ClipperRobertConnectionTunnelGate[];
     nextGate: ClipperRobertConnectionTunnelGate | null;
+    nextStep: string;
+  };
+  metricoolMvpTunnel?: {
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    progress: number;
+    blockedGates: number;
+    readyGates: number;
+    doneGates: number;
+    gates: Array<{
+      id: string;
+      rank: number;
+      label: string;
+      status: "blocked" | "ready_to_execute" | "waiting" | "done";
+      done: number;
+      total: number;
+      blockers: number;
+      actionLabel: string;
+      actionUrl: string | null;
+      artifactPath: string | null;
+      nextStep: string;
+      unlocks: string[];
+    }>;
+    nextGate: string | null;
     nextStep: string;
   };
   ownershipSplit?: {
@@ -5369,6 +7070,8 @@ interface ClipperRobertConnectNowHandoff {
   }>;
   recommendedOrder: string[];
   pendingCredentialEnvVars: string[];
+  directApiBacklogEnvVars?: string[];
+  credentialMvpNote?: string;
   credentialTemplate: string;
   credentialDropDirs: string[];
   credentialCandidateFiles: string[];
@@ -6986,9 +8689,11 @@ interface ClipperStatus {
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
   metricoolPublishing: ClipperMetricoolPublishingSummary;
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
   metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+  metricoolArtifactAudit: ClipperMetricoolArtifactAuditSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -7028,6 +8733,11 @@ interface ClipperStatus {
     totalWeeklyGoal: number;
     dailyClipsTarget: number;
     connectedAccounts: number;
+    metricoolConnectedAccounts?: number;
+    metricoolConnectedLanes?: number;
+    metricoolRequiredLanes?: number;
+    metricoolReadyForApprovalAccounts?: number;
+    directApiConnectedAccounts?: number;
   };
   latestReport: ClipperReport | null;
   guardrails: string[];
@@ -7057,13 +8767,16 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
+  if (!value) return "sin fecha";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("es-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function platformLabel(platform: string) {
@@ -7547,12 +9260,12 @@ function weeklyFunnelBadge(status: ClipperWeeklyProductionFunnelStatus | Clipper
 }
 
 function metricoolPublishGateLabel(gate: ClipperMetricoolPublishingChannel["publishGate"]) {
-  if (gate === "approval_required_ready") return "ready for approval queue";
+  if (gate === "approval_required_ready") return "ready for review queue";
   return "blocked";
 }
 
 function publisherExecutionLabel(status: ClipperPublisherExecutionStatus | ClipperPublisherExecutionItemStatus) {
-  if (status === "ready_to_send") return "ready for approval queue";
+  if (status === "ready_to_send") return "ready for review queue";
   if (status === "queued_for_approval") return "queued for approval";
   return status;
 }
@@ -7690,10 +9403,246 @@ export default function ClippersPage() {
   const [permissionRecordId, setPermissionRecordId] = useState("");
   const [permissionRecordStatus, setPermissionRecordStatus] = useState<ClipperPermissionTrackerItemStatus>("requested");
   const [permissionRecordNotes, setPermissionRecordNotes] = useState("Permiso solicitado/app review en progreso.");
+  const [metricoolEvidenceQueueItemId, setMetricoolEvidenceQueueItemId] = useState("");
+  const [metricoolEvidenceFinalStatus, setMetricoolEvidenceFinalStatus] = useState("scheduled");
+  const [metricoolEvidenceApprovalUrl, setMetricoolEvidenceApprovalUrl] = useState("");
+  const [metricoolEvidencePublishedUrl, setMetricoolEvidencePublishedUrl] = useState("");
+  const [metricoolEvidenceViews, setMetricoolEvidenceViews] = useState("");
+  const [metricoolEvidenceLikes, setMetricoolEvidenceLikes] = useState("");
+  const [metricoolEvidenceComments, setMetricoolEvidenceComments] = useState("");
+  const [metricoolEvidenceShares, setMetricoolEvidenceShares] = useState("");
+  const [metricoolEvidenceNotes, setMetricoolEvidenceNotes] = useState("Revisado en Metricool; pendiente URL publica y metricas 24h.");
+  const [tiktokBatchEvidenceRowPreview, setTikTokBatchEvidenceRowPreview] = useState<ClipperTikTokBatchEvidenceRowPreview | null>(null);
+  const [tiktokBatchEvidenceBatchText, setTikTokBatchEvidenceBatchText] = useState("");
+  const [tiktokBatchEvidenceBatchPreview, setTikTokBatchEvidenceBatchPreview] = useState<ClipperTikTokBatchEvidenceBatchSummary | null>(null);
+  const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState([
+    "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
+  ].join("\n"));
+  const [metricoolBridgeEvidenceBatch, setMetricoolBridgeEvidenceBatch] = useState<ClipperMetricoolBridgeEvidenceBatchResult | null>(null);
 
   const { data: status, isLoading, refetch } = useQuery<ClipperStatus>({
     queryKey: ["/api/clippers/status"],
   });
+  const { data: launchSummary, isLoading: isLaunchSummaryLoading, refetch: refetchLaunchSummary } = useQuery<ClipperMetricoolLaunchSummary | null>({
+    queryKey: ["/api/clippers/launch-summary"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/launch-summary");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer Metricool launch summary");
+      return data.launchSummary as ClipperMetricoolLaunchSummary;
+    },
+  });
+  const { data: metricool100ApprovalRun, refetch: refetchMetricool100ApprovalRun } = useQuery<ClipperMetricool100ApprovalRunSummary | null>({
+    queryKey: ["/api/clippers/metricool-100-approval-run"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-100-approval-run");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer Metricool 100 schedule run");
+      return data.metricool100ApprovalRun as ClipperMetricool100ApprovalRunSummary;
+    },
+  });
+  const { data: metricool100OperatorHandoff } = useQuery<ClipperMetricool100OperatorHandoffSummary | null>({
+    queryKey: ["/api/clippers/metricool-100-operator-handoff"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-100-operator-handoff");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricool100OperatorHandoff as ClipperMetricool100OperatorHandoffSummary;
+    },
+  });
+  const { data: tiktokLaunchControl } = useQuery<ClipperTikTokLaunchControlSummary | null>({
+    queryKey: ["/api/clippers/tiktok-launch-control"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-launch-control");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokLaunchControl as ClipperTikTokLaunchControlSummary;
+    },
+  });
+  const { data: tiktokMvpReadinessVerifier } = useQuery<ClipperTikTokMvpReadinessVerifierSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-readiness-verifier"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-readiness-verifier");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokMvpReadinessVerifier as ClipperTikTokMvpReadinessVerifierSummary;
+    },
+  });
+  const { data: metricoolMcpPreflight } = useQuery<ClipperMetricoolMcpPreflightSummary | null>({
+    queryKey: ["/api/clippers/metricool-mcp-preflight"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-mcp-preflight");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricoolMcpPreflight as ClipperMetricoolMcpPreflightSummary;
+    },
+  });
+  const { data: metricoolCurrentBatchUploadPack } = useQuery<ClipperMetricoolCurrentBatchUploadPackSummary | null>({
+    queryKey: ["/api/clippers/metricool-current-batch-upload-pack"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-current-batch-upload-pack");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricoolCurrentBatchUploadPack as ClipperMetricoolCurrentBatchUploadPackSummary;
+    },
+  });
+  const { data: metricoolCurrentBatchSessionPacket } = useQuery<ClipperMetricoolCurrentBatchSessionPacketSummary | null>({
+    queryKey: ["/api/clippers/metricool-current-batch-session-packet"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-current-batch-session-packet");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricoolCurrentBatchSessionPacket as ClipperMetricoolCurrentBatchSessionPacketSummary;
+    },
+  });
+  const { data: goalCompletionAudit } = useQuery<ClipperGoalCompletionAuditSummary | null>({
+    queryKey: ["/api/clippers/goal-completion-audit"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/goal-completion-audit");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.goalCompletionAudit as ClipperGoalCompletionAuditSummary;
+    },
+  });
+  const { data: tiktokBatchTracker } = useQuery<ClipperTikTokBatchTrackerSummary | null>({
+    queryKey: ["/api/clippers/tiktok-batch-tracker"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-batch-tracker");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokBatchTracker as ClipperTikTokBatchTrackerSummary;
+    },
+  });
+  const { data: tiktokBatchEvidenceSync } = useQuery<ClipperTikTokBatchEvidenceSyncSummary | null>({
+    queryKey: ["/api/clippers/tiktok-batch-evidence-sync"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-batch-evidence-sync");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokBatchEvidenceSync as ClipperTikTokBatchEvidenceSyncSummary;
+    },
+  });
+  const { data: tiktokBatchRunbook } = useQuery<ClipperTikTokBatchRunbookSummary | null>({
+    queryKey: ["/api/clippers/tiktok-batch-runbook"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-batch-runbook");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokBatchRunbook as ClipperTikTokBatchRunbookSummary;
+    },
+  });
+  const { data: tiktokEvidenceChecklist } = useQuery<ClipperTikTokEvidenceChecklistSummary | null>({
+    queryKey: ["/api/clippers/tiktok-evidence-checklist"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-evidence-checklist");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokEvidenceChecklist as ClipperTikTokEvidenceChecklistSummary;
+    },
+  });
+  const { data: tiktokPostScheduleVerifier } = useQuery<ClipperTikTokPostScheduleVerifierSummary | null>({
+    queryKey: ["/api/clippers/tiktok-post-schedule-verifier"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-post-schedule-verifier");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokPostScheduleVerifier as ClipperTikTokPostScheduleVerifierSummary;
+    },
+  });
+  const { data: tiktokBatchCloseoutVerifier } = useQuery<ClipperTikTokBatchCloseoutVerifierSummary | null>({
+    queryKey: ["/api/clippers/tiktok-batch-closeout-verifier"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-batch-closeout-verifier");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokBatchCloseoutVerifier as ClipperTikTokBatchCloseoutVerifierSummary;
+    },
+  });
+  const { data: tiktokNextAction } = useQuery<ClipperTikTokNextActionSummary | null>({
+    queryKey: ["/api/clippers/tiktok-next-action"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-next-action");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokNextAction as ClipperTikTokNextActionSummary;
+    },
+  });
+  const { data: tiktokOperatorCockpit } = useQuery<ClipperTikTokOperatorCockpitSummary | null>({
+    queryKey: ["/api/clippers/tiktok-operator-cockpit"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-operator-cockpit");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokOperatorCockpit as ClipperTikTokOperatorCockpitSummary;
+    },
+  });
+  const { data: tiktokOperatorCockpitPreflight } = useQuery<ClipperTikTokOperatorCockpitPreflightSummary | null>({
+    queryKey: ["/api/clippers/tiktok-operator-cockpit-preflight"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-operator-cockpit-preflight");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokOperatorCockpitPreflight as ClipperTikTokOperatorCockpitPreflightSummary;
+    },
+  });
+  const { data: tiktokMvpGoLivePacket } = useQuery<ClipperTikTokMvpGoLivePacketSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-go-live-packet"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-go-live-packet");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.tiktokMvpGoLivePacket as ClipperTikTokMvpGoLivePacketSummary;
+    },
+  });
+  const { data: metricoolApprovalQuickRun, refetch: refetchMetricoolApprovalQuickRun } = useQuery<ClipperMetricoolApprovalQuickRunSummary | null>({
+    queryKey: ["/api/clippers/metricool-approval-quick-run"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-approval-quick-run");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer Metricool quick run");
+      return data.metricoolApprovalQuickRun as ClipperMetricoolApprovalQuickRunSummary;
+    },
+  });
+  const { data: metricoolSourceUploadPack, refetch: refetchMetricoolSourceUploadPack } = useQuery<ClipperMetricoolSourceUploadPackSummary | null>({
+    queryKey: ["/api/clippers/metricool-source-upload-pack"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-source-upload-pack");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer Metricool source upload pack");
+      return data.metricoolSourceUploadPack as ClipperMetricoolSourceUploadPackSummary;
+    },
+  });
+  const { data: metricoolOperatorCloseoutPack, refetch: refetchMetricoolOperatorCloseoutPack } = useQuery<ClipperMetricoolOperatorCloseoutPackSummary | null>({
+    queryKey: ["/api/clippers/metricool-operator-closeout-pack"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-operator-closeout-pack");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer Metricool operator closeout pack");
+      return data.metricoolOperatorCloseoutPack as ClipperMetricoolOperatorCloseoutPackSummary;
+    },
+  });
+
+  const refreshMetricoolCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/status"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/launch-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-100-approval-run"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-100-operator-handoff"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-approval-quick-run"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-source-upload-pack"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-operator-closeout-pack"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-post-schedule-verifier"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-batch-closeout-verifier"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-next-action"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-current-batch-session-packet"] });
+    void refetch();
+    void refetchLaunchSummary();
+    void refetchMetricool100ApprovalRun();
+    void refetchMetricoolApprovalQuickRun();
+    void refetchMetricoolSourceUploadPack();
+    void refetchMetricoolOperatorCloseoutPack();
+  };
   const { data: accountPermissionReadiness } = useQuery<ClipperAccountPermissionReadinessSummary | null>({
     queryKey: ["/api/clippers/account-permission-readiness"],
     queryFn: async () => {
@@ -7734,6 +9683,16 @@ export default function ClippersPage() {
       return data.externalCloseoutEvidenceImport as ClipperExternalCloseoutEvidenceImportSummary;
     },
   });
+  const { data: tiktokExternalCloseoutSession } = useQuery<ClipperTikTokExternalCloseoutSessionSummary | null>({
+    queryKey: ["/api/clippers/tiktok-external-closeout-session"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-external-closeout-session");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok external closeout session");
+      return data.tiktokExternalCloseoutSession as ClipperTikTokExternalCloseoutSessionSummary;
+    },
+  });
   const { data: externalCloseoutProofTodo } = useQuery<ClipperExternalCloseoutProofTodoSummary | null>({
     queryKey: ["/api/clippers/external-closeout-proof-todo"],
     queryFn: async () => {
@@ -7752,6 +9711,16 @@ export default function ClippersPage() {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(data.error || "No pude leer external closeout operator queue");
       return data.externalCloseoutOperatorQueue as ClipperExternalCloseoutOperatorQueueSummary;
+    },
+  });
+  const { data: externalCloseoutBatches } = useQuery<ClipperExternalCloseoutBatchHandoffSummary | null>({
+    queryKey: ["/api/clippers/external-closeout-batches"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/external-closeout-batches");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer external closeout batches");
+      return data.externalCloseoutBatches as ClipperExternalCloseoutBatchHandoffSummary;
     },
   });
   const { data: externalCloseoutNextAction } = useQuery<ClipperExternalCloseoutNextActionSummary | null>({
@@ -8158,7 +10127,7 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
       toast({
         title: "Operational readiness listo",
-        description: `${data.operationalReadiness.metricool.queuedForApproval} en approval queue; ${data.operationalReadiness.metricool.readyToSend} auto-send.`,
+        description: `${data.operationalReadiness.metricool.queuedForApproval} en cola Metricool; auto-send bloqueado ${data.operationalReadiness.metricool.readyToSend}.`,
       });
     },
     onError: (error: Error) => {
@@ -8175,6 +10144,7 @@ export default function ClippersPage() {
         externalCloseoutPack: ClipperExternalCloseoutPackSummary;
         externalCloseoutProofTodo?: ClipperExternalCloseoutProofTodoSummary;
         externalCloseoutOperatorQueue?: ClipperExternalCloseoutOperatorQueueSummary;
+        externalCloseoutBatches?: ClipperExternalCloseoutBatchHandoffSummary;
         externalCloseoutNextAction?: ClipperExternalCloseoutNextActionSummary;
         externalCloseoutNextWorkRun?: ClipperExternalNextWorkRunSummary;
       };
@@ -8186,6 +10156,9 @@ export default function ClippersPage() {
       }
       if (data.externalCloseoutOperatorQueue) {
         queryClient.setQueryData(["/api/clippers/external-closeout-operator-queue"], data.externalCloseoutOperatorQueue);
+      }
+      if (data.externalCloseoutBatches) {
+        queryClient.setQueryData(["/api/clippers/external-closeout-batches"], data.externalCloseoutBatches);
       }
       if (data.externalCloseoutNextAction) {
         queryClient.setQueryData(["/api/clippers/external-closeout-next-action"], data.externalCloseoutNextAction);
@@ -8244,6 +10217,29 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude validar evidence import", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokExternalCloseoutSessionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-external-closeout-session", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok external closeout session");
+      return data as {
+        externalCloseoutEvidenceImport: ClipperExternalCloseoutEvidenceImportSummary;
+        tiktokExternalCloseoutSession: ClipperTikTokExternalCloseoutSessionSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/external-closeout-evidence-import"], data.externalCloseoutEvidenceImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-external-closeout-session"], data.tiktokExternalCloseoutSession);
+      toast({
+        title: "TikTok closeout session lista",
+        description: `${data.tiktokExternalCloseoutSession.totals.tiktokTasks} tareas TikTok externas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar TikTok closeout", description: error.message, variant: "destructive" });
     },
   });
 
@@ -8992,6 +10988,7 @@ export default function ClippersPage() {
         title: "Metricool publishing listo",
         description: `${data.metricoolPublishing.totals.readyForApprovalQueue}/${data.metricoolPublishing.totals.channels} canales listos; ${data.metricoolPublishing.totals.connectedProfiles}/${data.metricoolPublishing.totals.requiredProfiles} perfiles conectados.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar Metricool", description: error.message, variant: "destructive" });
@@ -8999,8 +10996,12 @@ export default function ClippersPage() {
   });
 
   const metricoolExecutionQueueMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/clippers/prepare-metricool-execution-queue", { method: "POST" });
+    mutationFn: async (input?: { approvalQueueTarget?: number }) => {
+      const response = await fetch("/api/clippers/prepare-metricool-execution-queue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ approvalQueueTarget: input?.approvalQueueTarget || 14 }),
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar cola Metricool");
       return data as { metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status?: ClipperStatus };
@@ -9015,9 +11016,528 @@ export default function ClippersPage() {
         title: "Cola Metricool lista",
         description: `${data.metricoolExecutionQueue.totals.queuedForApproval} en approval; ${data.metricoolExecutionQueue.totals.blocked} bloqueados.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar cola Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricool100ApprovalRunMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-100-approval-run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ targetWeeklyClips: 100, approvalQueueTarget: 100, batchSize: 100 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar 100 schedule run Metricool");
+      return data as {
+        metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
+        metricoolPublishing: ClipperMetricoolPublishingSummary;
+        queue: ClipperProductionQueueSummary;
+        metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+        metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
+        metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+        metricoolApprovalQuickRun: ClipperMetricoolApprovalQuickRunSummary;
+        metricoolSourceUploadPack: ClipperMetricoolSourceUploadPackSummary;
+        metricoolOperatorCloseoutPack: ClipperMetricoolOperatorCloseoutPackSummary;
+        status: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      queryClient.setQueryData(["/api/clippers/launch-summary"], data.metricool100ApprovalRun.launchSummary);
+      queryClient.setQueryData(["/api/clippers/metricool-100-approval-run"], data.metricool100ApprovalRun);
+      queryClient.setQueryData(["/api/clippers/metricool-approval-quick-run"], data.metricoolApprovalQuickRun);
+      queryClient.setQueryData(["/api/clippers/metricool-source-upload-pack"], data.metricoolSourceUploadPack);
+      queryClient.setQueryData(["/api/clippers/metricool-operator-closeout-pack"], data.metricoolOperatorCloseoutPack);
+      toast({
+        title: "100 TikTok Metricool listo",
+        description: `${data.metricool100ApprovalRun.totals.metricoolQueuedForApproval}/${data.metricool100ApprovalRun.approvalQueueTarget} en cola Metricool; auto-send bloqueado ${data.metricool100ApprovalRun.totals.readyToSend}.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar 100 Metricool run", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricool100OperatorHandoffMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-100-operator-handoff", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar handoff Metricool 100");
+      return data as { metricool100OperatorHandoff: ClipperMetricool100OperatorHandoffSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-100-operator-handoff"], data.metricool100OperatorHandoff);
+      toast({
+        title: "Handoff Metricool listo",
+        description: `${data.metricool100OperatorHandoff.totals.batches} batches / ${data.metricool100OperatorHandoff.totals.rows} filas; auto-send ${data.metricool100OperatorHandoff.totals.readyToSend}.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar handoff Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokLaunchControlMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-launch-control", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok Launch Control");
+      return data as { tiktokLaunchControl: ClipperTikTokLaunchControlSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-launch-control"], data.tiktokLaunchControl);
+      toast({
+        title: "TikTok Launch Control listo",
+        description: `${data.tiktokLaunchControl.totals.tiktok} TikToks; ${data.tiktokLaunchControl.totals.readyToImport} listos para importar.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar TikTok Launch Control", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const goalCompletionAuditMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-goal-completion-audit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar goal completion audit");
+      return data as { goalCompletionAudit: ClipperGoalCompletionAuditSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      toast({
+        title: "Goal audit listo",
+        description: `${data.goalCompletionAudit.status}; ${data.goalCompletionAudit.totals.waitingMetricoolWork} esperan Metricool.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar goal audit", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpReadinessVerifierMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-readiness-verifier", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP verifier");
+      return data as { tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      toast({
+        title: data.tiktokMvpReadinessVerifier.status === "pass" ? "TikTok MVP verificado" : "TikTok MVP bloqueado",
+        description: `${data.tiktokMvpReadinessVerifier.totals.passed}/${data.tiktokMvpReadinessVerifier.totals.checks} checks; ${data.tiktokMvpReadinessVerifier.launchDecision}.`,
+        variant: data.tiktokMvpReadinessVerifier.status === "pass" ? undefined : "destructive",
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar TikTok MVP verifier", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolMcpPreflightMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-mcp-preflight", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool MCP preflight");
+      return data as { metricoolMcpPreflight: ClipperMetricoolMcpPreflightSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      toast({
+        title: data.metricoolMcpPreflight.status === "ready_for_operator" ? "Metricool MCP preflight listo" : "Metricool MCP bloqueado",
+        description: `${data.metricoolMcpPreflight.totals.passed}/${data.metricoolMcpPreflight.totals.checks} checks; ${data.metricoolMcpPreflight.totals.warnings} warning.`,
+        variant: data.metricoolMcpPreflight.status === "ready_for_operator" ? undefined : "destructive",
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Metricool MCP preflight", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolCurrentBatchUploadPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-current-batch-upload-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool upload pack");
+      return data as { metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      toast({
+        title: data.metricoolCurrentBatchUploadPack.status === "ready_for_metricool_upload" ? "Upload pack listo" : "Upload pack bloqueado",
+        description: `${data.metricoolCurrentBatchUploadPack.totals.copied}/${data.metricoolCurrentBatchUploadPack.totals.rows} archivos copiados para ${data.metricoolCurrentBatchUploadPack.batchId}.`,
+        variant: data.metricoolCurrentBatchUploadPack.status === "ready_for_metricool_upload" ? undefined : "destructive",
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Metricool upload pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolCurrentBatchSessionPacketMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-current-batch-session-packet", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool session packet");
+      return data as {
+        metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary;
+        tiktokPostScheduleVerifier: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier: ClipperTikTokBatchCloseoutVerifierSummary;
+        goalCompletionAudit: ClipperGoalCompletionAuditSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
+      queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      toast({
+        title: data.metricoolCurrentBatchSessionPacket.status === "ready_for_metricool_session" ? "Session packet listo" : "Session packet bloqueado",
+        description: `${data.metricoolCurrentBatchSessionPacket.batch.id}: ${data.metricoolCurrentBatchSessionPacket.totals.ready}/${data.metricoolCurrentBatchSessionPacket.totals.rows} filas listas para agendar.`,
+        variant: data.metricoolCurrentBatchSessionPacket.status === "ready_for_metricool_session" ? undefined : "destructive",
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Metricool session packet", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpNowRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-now-refresh", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude refrescar TikTok MVP Now");
+      return data as {
+        mode: "tiktok_metricool_mvp_now_refresh";
+        realPublishEnabled: false;
+        directSocialApisRequired: false;
+        metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
+        metricoolPublishing: ClipperMetricoolPublishingSummary;
+        metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+        status: ClipperStatus;
+        metricool100OperatorHandoff: ClipperMetricool100OperatorHandoffSummary;
+        tiktokLaunchControl: ClipperTikTokLaunchControlSummary;
+        tiktokBatchEvidenceSync: ClipperTikTokBatchEvidenceSyncSummary;
+        tiktokBatchTracker: ClipperTikTokBatchTrackerSummary;
+        tiktokBatchRunbook: ClipperTikTokBatchRunbookSummary;
+        tiktokEvidenceChecklist: ClipperTikTokEvidenceChecklistSummary;
+        tiktokPostScheduleVerifier: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier: ClipperTikTokBatchCloseoutVerifierSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary;
+        metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary;
+        metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary;
+        tiktokOperatorCockpit: ClipperTikTokOperatorCockpitSummary;
+        tiktokOperatorCockpitPreflight: ClipperTikTokOperatorCockpitPreflightSummary;
+        tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary;
+        goalCompletionAudit: ClipperGoalCompletionAuditSummary;
+        tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary;
+        metricoolMcpPreflight: ClipperMetricoolMcpPreflightSummary;
+        runs: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/status"], data.status);
+      queryClient.setQueryData(["/api/clippers/metricool-100-approval-run"], data.metricool100ApprovalRun);
+      queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? {
+        ...current,
+        metricoolPublishing: data.metricoolPublishing,
+        metricoolExecutionQueue: data.metricoolExecutionQueue,
+      } : data.status);
+      queryClient.setQueryData(["/api/clippers/metricool-100-operator-handoff"], data.metricool100OperatorHandoff);
+      queryClient.setQueryData(["/api/clippers/tiktok-launch-control"], data.tiktokLaunchControl);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-evidence-sync"], data.tiktokBatchEvidenceSync);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-runbook"], data.tiktokBatchRunbook);
+      queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
+      queryClient.setQueryData(["/api/clippers/tiktok-operator-cockpit"], data.tiktokOperatorCockpit);
+      queryClient.setQueryData(["/api/clippers/tiktok-operator-cockpit-preflight"], data.tiktokOperatorCockpitPreflight);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      toast({
+        title: data.tiktokMvpReadinessVerifier.status === "pass" ? "TikTok MVP refrescado" : "TikTok MVP refrescado con blocker",
+        description: `${data.tiktokOperatorCockpit.batchId}: ${data.metricoolCurrentBatchUploadPack.totals.copied}/${data.metricoolCurrentBatchUploadPack.totals.rows} MP4; verifier ${data.tiktokMvpReadinessVerifier.totals.passed}/${data.tiktokMvpReadinessVerifier.totals.checks}.`,
+        variant: data.tiktokMvpReadinessVerifier.status === "pass" ? undefined : "destructive",
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude refrescar TikTok MVP Now", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchTrackerMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-batch-tracker", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok batch tracker");
+      return data as { tiktokBatchTracker: ClipperTikTokBatchTrackerSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      toast({
+        title: "Batch tracker listo",
+        description: `${data.tiktokBatchTracker.batch.id}: ${data.tiktokBatchTracker.totals.readyToImport}/${data.tiktokBatchTracker.totals.rows} importables.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar batch tracker", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchEvidenceSyncMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/sync-tiktok-batch-evidence", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude sincronizar evidencia del batch");
+      return data as {
+        tiktokBatchEvidenceSync: ClipperTikTokBatchEvidenceSyncSummary;
+        tiktokBatchTracker: ClipperTikTokBatchTrackerSummary;
+        metricoolApprovalEvidencePreview: ClipperMetricoolApprovalEvidenceImportSummary;
+        run: Record<string, unknown>;
+        trackerRun: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-evidence-sync"], data.tiktokBatchEvidenceSync);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      toast({
+        title: "Batch evidence sync listo",
+        description: `${data.tiktokBatchEvidenceSync.totals.applied} aplicadas; preview ${data.metricoolApprovalEvidencePreview.totals.importable} importables / ${data.metricoolApprovalEvidencePreview.totals.rejected} rechazadas.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude sincronizar evidencia del batch", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchRunbookMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-batch-runbook", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok batch runbook");
+      return data as { tiktokBatchRunbook: ClipperTikTokBatchRunbookSummary; run: Record<string, unknown>; trackerRun: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-runbook"], data.tiktokBatchRunbook);
+      toast({
+        title: "Batch runbook listo",
+        description: `${data.tiktokBatchRunbook.batch.id}: ${data.tiktokBatchRunbook.totals.notStarted} pendientes en Metricool.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar batch runbook", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokEvidenceChecklistMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-evidence-checklist", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok evidence checklist");
+      return data as { tiktokEvidenceChecklist: ClipperTikTokEvidenceChecklistSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      toast({
+        title: "Evidence checklist lista",
+        description: `${data.tiktokEvidenceChecklist.totals.missingApproval} sin prueba scheduled; ${data.tiktokEvidenceChecklist.totals.readyForImportPreview} listas para preview.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar evidence checklist", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokPostScheduleVerifierMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-post-schedule-verifier", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok post-schedule verifier");
+      return data as {
+        tiktokPostScheduleVerifier: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchTracker: ClipperTikTokBatchTrackerSummary;
+        tiktokEvidenceChecklist: ClipperTikTokEvidenceChecklistSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      toast({
+        title: "Post-schedule verifier listo",
+        description: `${data.tiktokPostScheduleVerifier.status}; scheduled ${data.tiktokPostScheduleVerifier.totals.scheduled}/${data.tiktokPostScheduleVerifier.totals.rows}.`,
+        variant: data.tiktokPostScheduleVerifier.status === "needs_evidence_fix" ? "destructive" : undefined,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar post-schedule verifier", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchCloseoutVerifierMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-batch-closeout-verifier", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok batch closeout verifier");
+      return data as {
+        tiktokBatchCloseoutVerifier: ClipperTikTokBatchCloseoutVerifierSummary;
+        tiktokPostScheduleVerifier: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchTracker: ClipperTikTokBatchTrackerSummary;
+        tiktokEvidenceChecklist: ClipperTikTokEvidenceChecklistSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      toast({
+        title: "Batch closeout listo",
+        description: `${data.tiktokBatchCloseoutVerifier.status}; import ${data.tiktokBatchCloseoutVerifier.totals.readyToImport}/${data.tiktokBatchCloseoutVerifier.totals.rows}.`,
+        variant: data.tiktokBatchCloseoutVerifier.status.startsWith("blocked") ? "destructive" : undefined,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar batch closeout", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokNextActionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-next-action", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok next action");
+      return data as {
+        tiktokNextAction: ClipperTikTokNextActionSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+        tiktokPostScheduleVerifier: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier: ClipperTikTokBatchCloseoutVerifierSummary;
+        goalCompletionAudit: ClipperGoalCompletionAuditSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      toast({
+        title: "TikTok next action listo",
+        description: `${data.tiktokNextAction.status}: ${data.tiktokNextAction.batch.id}.`,
+        variant: data.tiktokNextAction.status.startsWith("blocked") ? "destructive" : undefined,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar TikTok next action", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokOperatorCockpitMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-operator-cockpit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok operator cockpit");
+      return data as {
+        tiktokOperatorCockpit: ClipperTikTokOperatorCockpitSummary;
+        tiktokBatchTracker?: ClipperTikTokBatchTrackerSummary;
+        tiktokBatchRunbook?: ClipperTikTokBatchRunbookSummary;
+        tiktokEvidenceChecklist?: ClipperTikTokEvidenceChecklistSummary;
+        metricoolCurrentBatchUploadPack?: ClipperMetricoolCurrentBatchUploadPackSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-operator-cockpit"], data.tiktokOperatorCockpit);
+      if (data.tiktokBatchTracker) queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      if (data.tiktokBatchRunbook) queryClient.setQueryData(["/api/clippers/tiktok-batch-runbook"], data.tiktokBatchRunbook);
+      if (data.tiktokEvidenceChecklist) queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      if (data.metricoolCurrentBatchUploadPack) queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      toast({
+        title: "Operator cockpit listo",
+        description: `${data.tiktokOperatorCockpit.batchId}: ${data.tiktokOperatorCockpit.totals.copiedFiles} MP4 listos; ${data.tiktokOperatorCockpit.totals.scheduled} scheduled.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar operator cockpit", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokOperatorCockpitPreflightMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-operator-cockpit-preflight", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok cockpit preflight");
+      return data as {
+        tiktokOperatorCockpitPreflight: ClipperTikTokOperatorCockpitPreflightSummary;
+        tiktokOperatorCockpit?: ClipperTikTokOperatorCockpitSummary;
+        run: Record<string, unknown>;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-operator-cockpit-preflight"], data.tiktokOperatorCockpitPreflight);
+      if (data.tiktokOperatorCockpit) queryClient.setQueryData(["/api/clippers/tiktok-operator-cockpit"], data.tiktokOperatorCockpit);
+      toast({
+        title: "Cockpit preflight listo",
+        description: `${data.tiktokOperatorCockpitPreflight.totals.passed}/${data.tiktokOperatorCockpitPreflight.totals.checks} checks; ${data.tiktokOperatorCockpitPreflight.totals.uploadMp4Files} MP4.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar cockpit preflight", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpGoLivePacketMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-go-live-packet", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP go-live packet");
+      return data as { tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary; run: Record<string, unknown> };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      toast({
+        title: "TikTok go-live packet listo",
+        description: `${data.tiktokMvpGoLivePacket.totals.accountReady}/${data.tiktokMvpGoLivePacket.totals.accountRows} cuentas; ${data.tiktokMvpGoLivePacket.totals.notStarted} filas pendientes.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar TikTok go-live packet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9038,6 +11558,7 @@ export default function ClippersPage() {
         title: "MVP Metricool preparado",
         description: `${data.metricoolMvpLaunchPack.totals.readyAccounts}/${data.metricoolMvpLaunchPack.totals.accounts} cuentas listas para revision; ${data.metricoolMvpLaunchPack.totals.queuedForApproval} clips en approval.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar MVP Metricool", description: error.message, variant: "destructive" });
@@ -9048,7 +11569,7 @@ export default function ClippersPage() {
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-metricool-approval-session", { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude preparar approval session Metricool");
+      if (!response.ok) throw new Error(data.error || "No pude preparar review session Metricool");
       return data as { metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary; status?: ClipperStatus };
     },
     onSuccess: (data) => {
@@ -9058,12 +11579,94 @@ export default function ClippersPage() {
         queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolApprovalSession: data.metricoolApprovalSession } : current);
       }
       toast({
-        title: "Approval session Metricool lista",
+        title: "Review session Metricool lista",
         description: `${data.metricoolApprovalSession.totals.readyForReview} listos para revisar; ${data.metricoolApprovalSession.totals.blocked} bloqueados.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
-      toast({ title: "No pude preparar approval session", description: error.message, variant: "destructive" });
+      toast({ title: "No pude preparar review session", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolApprovalQuickRunMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-approval-quick-run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ batchSize: 14 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar quick run Metricool");
+      return data as {
+        metricoolApprovalQuickRun: ClipperMetricoolApprovalQuickRunSummary;
+        metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+        status?: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-approval-quick-run"], data.metricoolApprovalQuickRun);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.setQueryData<ClipperStatus | undefined>(["/api/clippers/status"], (current) => current ? { ...current, metricoolApprovalSession: data.metricoolApprovalSession } : current);
+      }
+      toast({
+        title: "Quick run Metricool listo",
+        description: `${data.metricoolApprovalQuickRun.totals.quickRunItems} clips en el primer batch; ${data.metricoolApprovalQuickRun.totals.blocked} bloqueados.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar quick run", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolSourceUploadPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-source-upload-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool source upload pack");
+      return data as {
+        metricoolSourceUploadPack: ClipperMetricoolSourceUploadPackSummary;
+        status?: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-source-upload-pack"], data.metricoolSourceUploadPack);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Source upload pack listo",
+        description: `${data.metricoolSourceUploadPack.totals.readyToUpload} archivos verificados; ${data.metricoolSourceUploadPack.totals.missingSource} faltantes.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar source upload pack", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolOperatorCloseoutPackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-metricool-operator-closeout-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar Metricool operator closeout pack");
+      return data as {
+        metricoolOperatorCloseoutPack: ClipperMetricoolOperatorCloseoutPackSummary;
+        status?: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/metricool-operator-closeout-pack"], data.metricoolOperatorCloseoutPack);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Closeout Metricool listo",
+        description: `${data.metricoolOperatorCloseoutPack.totals.readyToUpload} uploads; ${data.metricoolOperatorCloseoutPack.totals.publishedRows} filas con evidencia publicada.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar closeout Metricool", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9080,9 +11683,29 @@ export default function ClippersPage() {
         title: data.metricoolApprovalEvidenceImport.status === "imported" ? "Evidencia Metricool importada" : "Evidencia Metricool pendiente",
         description: `${data.metricoolApprovalEvidenceImport.totals.imported} publicados importados; ${formatNumber(data.metricoolApprovalEvidenceImport.totals.views)} views.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude importar evidencia Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolApprovalEvidencePreviewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-metricool-approval-evidence", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar evidencia Metricool");
+      return data as { metricoolApprovalEvidencePreview: ClipperMetricoolApprovalEvidenceImportSummary; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
+      toast({
+        title: "Preview Metricool listo",
+        description: `${data.metricoolApprovalEvidencePreview.totals.importable} importables; ${data.metricoolApprovalEvidencePreview.totals.pendingLive} pendientes; ${data.metricoolApprovalEvidencePreview.totals.rejected} rechazadas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude previsualizar evidencia Metricool", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9103,9 +11726,240 @@ export default function ClippersPage() {
         title: "Reporte Metricool listo",
         description: `${data.metricoolApprovalReport.totals.imported} filas validas para importar; ${data.metricoolApprovalReport.totals.pendingLive} pendientes; ${data.metricoolApprovalReport.totals.rejected} rechazadas.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar reporte Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolApprovalEvidenceRowMutation = useMutation({
+    mutationFn: async () => {
+      const endpoint = selectedMetricoolEvidenceItem?.origin === "tiktok batch"
+        ? "/api/clippers/record-tiktok-batch-evidence-row"
+        : "/api/clippers/record-metricool-approval-evidence-row";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          metricoolQueueItemId: metricoolEvidenceQueueItemId,
+          metricoolApprovalUrl: metricoolEvidenceApprovalUrl,
+          publishedPostUrl: metricoolEvidencePublishedUrl,
+          finalStatus: metricoolEvidenceFinalStatus,
+          views24h: metricoolEvidenceViews,
+          likes24h: metricoolEvidenceLikes,
+          comments24h: metricoolEvidenceComments,
+          shares24h: metricoolEvidenceShares,
+          operatorNotes: metricoolEvidenceNotes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude registrar evidencia Metricool");
+      return data as {
+        metricoolApprovalReport?: ClipperMetricoolApprovalReportSummary;
+        metricoolOperatorCloseoutPack?: ClipperMetricoolOperatorCloseoutPackSummary;
+        tiktokBatchEvidenceSync?: ClipperTikTokBatchEvidenceSyncSummary;
+        metricool100OperatorHandoff?: ClipperMetricool100OperatorHandoffSummary;
+        tiktokBatchTracker?: ClipperTikTokBatchTrackerSummary;
+        tiktokBatchRunbook?: ClipperTikTokBatchRunbookSummary;
+        tiktokEvidenceChecklist?: ClipperTikTokEvidenceChecklistSummary;
+        tiktokPostScheduleVerifier?: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier?: ClipperTikTokBatchCloseoutVerifierSummary;
+        tiktokNextAction?: ClipperTikTokNextActionSummary;
+        tiktokLaunchControl?: ClipperTikTokLaunchControlSummary;
+        tiktokMvpGoLivePacket?: ClipperTikTokMvpGoLivePacketSummary;
+        goalCompletionAudit?: ClipperGoalCompletionAuditSummary;
+        tiktokMvpReadinessVerifier?: ClipperTikTokMvpReadinessVerifierSummary;
+        metricoolMcpPreflight?: ClipperMetricoolMcpPreflightSummary;
+        metricoolCurrentBatchUploadPack?: ClipperMetricoolCurrentBatchUploadPackSummary;
+        metricoolCurrentBatchSessionPacket?: ClipperMetricoolCurrentBatchSessionPacketSummary;
+        metricoolApprovalEvidencePreview?: ClipperMetricoolApprovalEvidenceImportSummary;
+        refreshStatus?: "complete" | "partial_refresh_failed";
+        refreshError?: string | null;
+        status?: ClipperStatus;
+      };
+    },
+    onSuccess: (data) => {
+      if (data.metricoolApprovalReport) queryClient.setQueryData(["/api/clippers/metricool-approval-report"], data.metricoolApprovalReport);
+      if (data.metricoolOperatorCloseoutPack) queryClient.setQueryData(["/api/clippers/metricool-operator-closeout-pack"], data.metricoolOperatorCloseoutPack);
+      if (data.tiktokBatchEvidenceSync) queryClient.setQueryData(["/api/clippers/tiktok-batch-evidence-sync"], data.tiktokBatchEvidenceSync);
+      if (data.metricool100OperatorHandoff) queryClient.setQueryData(["/api/clippers/metricool-100-operator-handoff"], data.metricool100OperatorHandoff);
+      if (data.tiktokBatchTracker) queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      if (data.tiktokBatchRunbook) queryClient.setQueryData(["/api/clippers/tiktok-batch-runbook"], data.tiktokBatchRunbook);
+      if (data.tiktokEvidenceChecklist) queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      if (data.tiktokPostScheduleVerifier) queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      if (data.tiktokBatchCloseoutVerifier) queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      if (data.tiktokNextAction) queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      if (data.tiktokLaunchControl) queryClient.setQueryData(["/api/clippers/tiktok-launch-control"], data.tiktokLaunchControl);
+      if (data.tiktokMvpGoLivePacket) queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      if (data.goalCompletionAudit) queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      if (data.tiktokMvpReadinessVerifier) queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      if (data.metricoolMcpPreflight) queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      if (data.metricoolCurrentBatchUploadPack) queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      if (data.metricoolCurrentBatchSessionPacket) queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
+      if (data.status) queryClient.setQueryData(["/api/clippers/status"], data.status);
+      setMetricoolEvidenceQueueItemId("");
+      setMetricoolEvidenceApprovalUrl("");
+      setMetricoolEvidencePublishedUrl("");
+      setMetricoolEvidenceViews("");
+      setMetricoolEvidenceLikes("");
+      setMetricoolEvidenceComments("");
+      setMetricoolEvidenceShares("");
+      setTikTokBatchEvidenceRowPreview(null);
+      toast({
+        title: data.refreshStatus === "partial_refresh_failed" ? "Evidencia guardada; refresco pendiente" : "Evidencia Metricool guardada",
+        description: data.refreshStatus === "partial_refresh_failed"
+          ? data.refreshError || "La fila se guardó, pero hay que refrescar los reportes antes de confiar en los totales."
+          : data.tiktokBatchTracker
+          ? `${data.tiktokBatchTracker.totals.readyToImport} importables; ${data.tiktokBatchTracker.totals.scheduled} programadas; ${data.tiktokBatchTracker.totals.needsFix} con error.`
+          : `${data.metricoolOperatorCloseoutPack?.totals.readyToImport || 0} listas para importar; ${data.metricoolOperatorCloseoutPack?.totals.needsMetricoolReview || 0} necesitan review.`,
+        variant: data.refreshStatus === "partial_refresh_failed" ? "destructive" : undefined,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude guardar evidencia Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchEvidenceRowPreviewMutation = useMutation({
+    mutationFn: async (formFingerprint: string) => {
+      const response = await fetch("/api/clippers/preview-tiktok-batch-evidence-row", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          metricoolQueueItemId: metricoolEvidenceQueueItemId,
+          metricoolApprovalUrl: metricoolEvidenceApprovalUrl,
+          publishedPostUrl: metricoolEvidencePublishedUrl,
+          finalStatus: metricoolEvidenceFinalStatus,
+          views24h: metricoolEvidenceViews,
+          likes24h: metricoolEvidenceLikes,
+          comments24h: metricoolEvidenceComments,
+          shares24h: metricoolEvidenceShares,
+          operatorNotes: metricoolEvidenceNotes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar evidencia TikTok");
+      return { ...(data as { preview: ClipperTikTokBatchEvidenceRowPreview }), formFingerprint };
+    },
+    onSuccess: (data) => {
+      setTikTokBatchEvidenceRowPreview({ ...data.preview, formFingerprint: data.formFingerprint });
+      toast({
+        title: "Preview TikTok batch listo",
+        description: `${data.preview.classification}; no se escribio evidencia.`,
+      });
+    },
+    onError: (error: Error) => {
+      setTikTokBatchEvidenceRowPreview(null);
+      toast({ title: "Preview TikTok batch rechazado", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchEvidenceBatchPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-tiktok-batch-evidence-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ raw: tiktokBatchEvidenceBatchText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar evidencia TikTok batch");
+      return data as { tiktokBatchEvidenceBatch: ClipperTikTokBatchEvidenceBatchSummary };
+    },
+    onSuccess: (data) => {
+      setTikTokBatchEvidenceBatchPreview(data.tiktokBatchEvidenceBatch);
+      toast({
+        title: data.tiktokBatchEvidenceBatch.status === "ready_to_apply" ? "Batch evidence listo" : "Batch evidence requiere revision",
+        description: `${data.tiktokBatchEvidenceBatch.totals.accepted || 0}/${data.tiktokBatchEvidenceBatch.totals.rows} filas validas; ${data.tiktokBatchEvidenceBatch.totals.rejected} rechazadas.`,
+        variant: data.tiktokBatchEvidenceBatch.status === "blocked_validation" ? "destructive" : undefined,
+      });
+    },
+    onError: (error: Error) => {
+      setTikTokBatchEvidenceBatchPreview(null);
+      toast({ title: "Preview batch rechazado", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokBatchEvidenceBatchApplyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/record-tiktok-batch-evidence-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ raw: tiktokBatchEvidenceBatchText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar evidencia TikTok batch");
+      return data as {
+        tiktokBatchEvidenceBatch: ClipperTikTokBatchEvidenceBatchSummary;
+        tiktokBatchEvidenceSync?: ClipperTikTokBatchEvidenceSyncSummary;
+        metricool100OperatorHandoff?: ClipperMetricool100OperatorHandoffSummary;
+        tiktokBatchTracker?: ClipperTikTokBatchTrackerSummary;
+        tiktokBatchRunbook?: ClipperTikTokBatchRunbookSummary;
+        tiktokEvidenceChecklist?: ClipperTikTokEvidenceChecklistSummary;
+        tiktokPostScheduleVerifier?: ClipperTikTokPostScheduleVerifierSummary;
+        tiktokBatchCloseoutVerifier?: ClipperTikTokBatchCloseoutVerifierSummary;
+        tiktokNextAction?: ClipperTikTokNextActionSummary;
+        tiktokLaunchControl?: ClipperTikTokLaunchControlSummary;
+        tiktokMvpGoLivePacket?: ClipperTikTokMvpGoLivePacketSummary;
+        goalCompletionAudit?: ClipperGoalCompletionAuditSummary;
+        tiktokMvpReadinessVerifier?: ClipperTikTokMvpReadinessVerifierSummary;
+        metricoolMcpPreflight?: ClipperMetricoolMcpPreflightSummary;
+        metricoolCurrentBatchUploadPack?: ClipperMetricoolCurrentBatchUploadPackSummary;
+        metricoolCurrentBatchSessionPacket?: ClipperMetricoolCurrentBatchSessionPacketSummary;
+        metricoolApprovalEvidencePreview?: ClipperMetricoolApprovalEvidenceImportSummary;
+        refreshStatus?: "complete" | "partial_refresh_failed";
+        refreshError?: string | null;
+      };
+    },
+    onSuccess: (data) => {
+      setTikTokBatchEvidenceBatchPreview(data.tiktokBatchEvidenceBatch.preview || data.tiktokBatchEvidenceBatch);
+      const refreshComplete = data.refreshStatus !== "partial_refresh_failed";
+      if (refreshComplete && data.tiktokBatchEvidenceSync) queryClient.setQueryData(["/api/clippers/tiktok-batch-evidence-sync"], data.tiktokBatchEvidenceSync);
+      if (refreshComplete && data.metricool100OperatorHandoff) queryClient.setQueryData(["/api/clippers/metricool-100-operator-handoff"], data.metricool100OperatorHandoff);
+      if (refreshComplete && data.tiktokBatchTracker) queryClient.setQueryData(["/api/clippers/tiktok-batch-tracker"], data.tiktokBatchTracker);
+      if (refreshComplete && data.tiktokBatchRunbook) queryClient.setQueryData(["/api/clippers/tiktok-batch-runbook"], data.tiktokBatchRunbook);
+      if (refreshComplete && data.tiktokEvidenceChecklist) queryClient.setQueryData(["/api/clippers/tiktok-evidence-checklist"], data.tiktokEvidenceChecklist);
+      if (refreshComplete && data.tiktokPostScheduleVerifier) queryClient.setQueryData(["/api/clippers/tiktok-post-schedule-verifier"], data.tiktokPostScheduleVerifier);
+      if (refreshComplete && data.tiktokBatchCloseoutVerifier) queryClient.setQueryData(["/api/clippers/tiktok-batch-closeout-verifier"], data.tiktokBatchCloseoutVerifier);
+      if (refreshComplete && data.tiktokNextAction) queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      if (refreshComplete && data.tiktokLaunchControl) queryClient.setQueryData(["/api/clippers/tiktok-launch-control"], data.tiktokLaunchControl);
+      if (refreshComplete && data.tiktokMvpGoLivePacket) queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      if (refreshComplete && data.goalCompletionAudit) queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
+      if (refreshComplete && data.tiktokMvpReadinessVerifier) queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      if (refreshComplete && data.metricoolMcpPreflight) queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      if (refreshComplete && data.metricoolCurrentBatchUploadPack) queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      if (refreshComplete && data.metricoolCurrentBatchSessionPacket) queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
+      if (!refreshComplete) {
+        [
+          ["/api/clippers/tiktok-batch-evidence-sync"],
+          ["/api/clippers/metricool-100-operator-handoff"],
+          ["/api/clippers/tiktok-batch-tracker"],
+          ["/api/clippers/tiktok-batch-runbook"],
+          ["/api/clippers/tiktok-evidence-checklist"],
+          ["/api/clippers/tiktok-post-schedule-verifier"],
+          ["/api/clippers/tiktok-batch-closeout-verifier"],
+          ["/api/clippers/tiktok-next-action"],
+          ["/api/clippers/tiktok-launch-control"],
+          ["/api/clippers/tiktok-mvp-go-live-packet"],
+          ["/api/clippers/goal-completion-audit"],
+          ["/api/clippers/tiktok-mvp-readiness-verifier"],
+          ["/api/clippers/metricool-mcp-preflight"],
+          ["/api/clippers/metricool-current-batch-upload-pack"],
+          ["/api/clippers/metricool-current-batch-session-packet"],
+        ].forEach((queryKey) => queryClient.removeQueries({ queryKey, exact: true }));
+      }
+      toast({
+        title: data.refreshStatus === "partial_refresh_failed" ? "Batch evidence guardado; refresco pendiente" : "Batch evidence aplicado",
+        description: data.refreshStatus === "partial_refresh_failed"
+          ? data.refreshError || "Las filas se guardaron, pero hay que refrescar reportes antes de confiar en los totales."
+          : `${data.tiktokBatchEvidenceBatch.totals.applied || 0} filas guardadas; refresque el tracker antes de importar metricas.`,
+        variant: data.refreshStatus === "partial_refresh_failed" ? "destructive" : undefined,
+      });
+      if (refreshComplete) refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude aplicar batch evidence", description: error.message, variant: "destructive" });
     },
   });
 
@@ -9126,9 +11980,40 @@ export default function ClippersPage() {
         title: "Evidencia Metricool registrada",
         description: `${data.metricoolAccountEvidence.recorded.length} bridge evidence submitted; ${data.metricoolAccountEvidence.skipped.length} omitidas. Aun falta proof externo para verificar cuentas.`,
       });
+      refreshMetricoolCaches();
     },
     onError: (error: Error) => {
       toast({ title: "No pude registrar evidencia Metricool", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const metricoolBridgeEvidenceBatchMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/record-metricool-bridge-evidence-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ raw: metricoolBridgeEvidenceBatchText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude registrar batch Metricool bridge");
+      return data as { metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status?: ClipperStatus };
+    },
+    onSuccess: (data) => {
+      setMetricoolBridgeEvidenceBatch(data.metricoolBridgeEvidenceBatch);
+      if (data.status) {
+        queryClient.setQueryData(["/api/clippers/status"], data.status);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/clippers/status"] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/clippers/account-permission-readiness"] });
+      toast({
+        title: "Bridge Metricool batch registrado",
+        description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. No verifica cuentas ni publica.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude registrar bridge Metricool", description: error.message, variant: "destructive" });
     },
   });
 
@@ -10485,8 +13370,12 @@ export default function ClippersPage() {
   });
 
   const productionQueueMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/clippers/prepare-production-queue", { method: "POST" });
+    mutationFn: async (input?: { targetWeeklyClips?: number; metricoolReadyOnly?: boolean }) => {
+      const response = await fetch("/api/clippers/prepare-production-queue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input || {}),
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude preparar la cola");
       return data as { queue: ClipperProductionQueueSummary; status?: ClipperStatus };
@@ -11237,6 +14126,110 @@ export default function ClippersPage() {
   const metricoolApprovalReport = status?.metricoolApprovalReport;
   const metricoolApprovalReportRows = metricoolApprovalReport?.rows || [];
   const lastMetricoolApprovalEvidenceImport = metricoolApprovalEvidenceImportMutation.data?.metricoolApprovalEvidenceImport;
+  const lastMetricoolApprovalEvidencePreview = metricoolApprovalEvidencePreviewMutation.data?.metricoolApprovalEvidencePreview;
+  const lastTikTokBatchEvidencePreview = tiktokBatchEvidenceSyncMutation.data?.metricoolApprovalEvidencePreview;
+  const metricoolEvidenceSelectableItems = (() => {
+    const byId = new Map<string, {
+      id: string;
+      rank: number;
+      accountName: string;
+      platform: ClipperPlatform;
+      publishAt: string;
+      sourceFileName: string;
+      status: string;
+      origin: string;
+    }>();
+    metricoolApprovalSessionItems.forEach((item) => {
+      byId.set(item.id, {
+        id: item.id,
+        rank: item.rank,
+        accountName: item.accountName,
+        platform: item.platform,
+        publishAt: item.publishAt,
+        sourceFileName: item.sourceFileName || "missing source",
+        status: item.status,
+        origin: "session",
+      });
+    });
+    (metricoolApprovalQuickRun?.items || []).forEach((item) => {
+      if (byId.has(item.id)) return;
+      byId.set(item.id, {
+        id: item.id,
+        rank: item.rank,
+        accountName: item.accountName,
+        platform: item.platform,
+        publishAt: item.publishAt,
+        sourceFileName: item.sourceFileName || "missing source",
+        status: item.status,
+        origin: "quick run",
+      });
+    });
+    (metricoolOperatorCloseoutPack?.runSheetRows || []).forEach((row) => {
+      if (byId.has(row.metricoolQueueItemId)) return;
+      byId.set(row.metricoolQueueItemId, {
+        id: row.metricoolQueueItemId,
+        rank: row.rank,
+        accountName: row.accountName,
+        platform: row.platform,
+        publishAt: row.publishAt,
+        sourceFileName: row.sourceFileName || "missing source",
+        status: row.operatorStatus,
+        origin: "run sheet",
+      });
+    });
+    (tiktokBatchRunbook?.rows || []).forEach((row) => {
+      byId.set(row.metricoolQueueItemId, {
+        id: row.metricoolQueueItemId,
+        rank: row.rank,
+        accountName: row.accountName || row.accountId,
+        platform: "tiktok",
+        publishAt: row.scheduledFor,
+        sourceFileName: row.sourceFileName || "missing source",
+        status: row.state,
+        origin: "tiktok batch",
+      });
+    });
+    return Array.from(byId.values()).sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
+  })();
+  const selectedMetricoolEvidenceItem = metricoolEvidenceSelectableItems.find((item) => item.id === metricoolEvidenceQueueItemId);
+  const metricoolEvidenceFormFingerprint = [
+    metricoolEvidenceQueueItemId,
+    metricoolEvidenceApprovalUrl,
+    metricoolEvidencePublishedUrl,
+    metricoolEvidenceFinalStatus,
+    metricoolEvidenceViews,
+    metricoolEvidenceLikes,
+    metricoolEvidenceComments,
+    metricoolEvidenceShares,
+    metricoolEvidenceNotes,
+  ].join("\u001f");
+  const tiktokBatchEvidencePreviewIsCurrent = selectedMetricoolEvidenceItem?.origin === "tiktok batch"
+    && tiktokBatchEvidenceRowPreview?.accepted === true
+    && tiktokBatchEvidenceRowPreview.formFingerprint === metricoolEvidenceFormFingerprint;
+  const metricoolEvidenceSaveDisabled = metricoolApprovalEvidenceRowMutation.isPending
+    || !metricoolEvidenceQueueItemId
+    || !selectedMetricoolEvidenceItem
+    || (selectedMetricoolEvidenceItem?.origin === "tiktok batch" && !tiktokBatchEvidencePreviewIsCurrent);
+  const tiktokBatchEvidenceBatchApplyDisabled = tiktokBatchEvidenceBatchApplyMutation.isPending
+    || tiktokBatchEvidenceBatchPreview?.status !== "ready_to_apply";
+  const selectMetricoolEvidenceItem = (itemId: string) => {
+    setMetricoolEvidenceQueueItemId(itemId);
+    setMetricoolEvidenceFinalStatus("scheduled");
+    setMetricoolEvidenceApprovalUrl("");
+    setMetricoolEvidencePublishedUrl("");
+    setMetricoolEvidenceViews("");
+    setMetricoolEvidenceLikes("");
+    setMetricoolEvidenceComments("");
+    setMetricoolEvidenceShares("");
+    setMetricoolEvidenceNotes("Revisado en Metricool; pendiente URL publica y metricas 24h.");
+    setTikTokBatchEvidenceRowPreview(null);
+  };
+  const getTikTokSourceGate = (row?: { sourceExists?: boolean; sourceBytes?: number; sourceVideoValid?: boolean; blocker?: string } | null) => {
+    const sourceBlocked = row?.sourceExists === false || row?.sourceVideoValid === false || row?.blocker?.startsWith("source_file_");
+    if (sourceBlocked) return { label: "Source blocked", tone: "blocked" as const };
+    if (row?.sourceExists === true && row?.sourceVideoValid === true) return { label: "Source OK", tone: "ok" as const };
+    return { label: "Source pending", tone: "pending" as const };
+  };
   const externalSprintTotals = visibleExternalAccountPermissionSprint?.totals;
   const metricoolEffectiveApprovalGate = metricoolPublishing?.effectiveApprovalGate ?? true;
   const metricoolMode = metricoolEffectiveApprovalGate || metricoolExecutionQueue?.publishMode === "approval_required"
@@ -11246,6 +14239,9 @@ export default function ClippersPage() {
     && (metricoolExecutionQueue?.totals.queuedForApproval || 0) > 0
     && (metricoolExecutionQueue?.totals.readyToSend || 0) === 0
     && metricoolExecutionQueue.realPublishEnabled === false;
+  const metricoolMvpReviewReady = metricoolApprovalQueueReady
+    && status?.dropzoneReadyPack?.status === "ready"
+    && status?.robertNextActions?.items?.[0]?.id === "metricool-100-approval-run";
   const metricoolBridgeByAccountPlatform = new Map<string, {
     brandName: string;
     blogId: string | null;
@@ -11275,9 +14271,9 @@ export default function ClippersPage() {
     },
     {
       icon: CheckCircle2,
-      label: metricoolApprovalQueueReady ? "Approval queue ready" : "Needs approval queue",
+      label: metricoolApprovalQueueReady ? "Metricool queue ready" : "Needs Metricool queue",
       value: `${formatNumber(metricoolPublishing?.totals.readyForApprovalQueue || 0)} channels / ${formatNumber(metricoolExecutionQueue?.totals.queuedForApproval || 0)} queued`,
-      detail: `Metricool ${metricoolMode}; ${metricoolExecutionQueue?.realPublishEnabled ? "real publish enabled" : "real publish off"}; direct send-ready ${formatNumber(metricoolExecutionQueue?.totals.readyToSend || 0)}.`,
+      detail: `Metricool ${metricoolMode}; ${metricoolExecutionQueue?.realPublishEnabled ? "real publish enabled" : "real publish off"}; auto-send blocked ${formatNumber(metricoolExecutionQueue?.totals.readyToSend || 0)}.`,
       tone: metricoolApprovalQueueReady
         ? "border-emerald-300/20 bg-emerald-950/20 text-emerald-100"
         : metricoolExecutionQueue?.realPublishEnabled || (metricoolExecutionQueue?.totals.readyToSend || 0) > 0
@@ -11286,10 +14282,16 @@ export default function ClippersPage() {
     },
     {
       icon: ExternalLink,
-      label: "External blockers",
-      value: `${formatNumber(externalSprintTotals?.externalBlockers || externalSprintTotals?.blocked || 0)} blockers`,
-      detail: `${formatNumber(externalSprintTotals?.accountsNeedingSetup || 0)} accounts, ${formatNumber(externalSprintTotals?.permissionProofNeeded || 0)} permissions, ${formatNumber(externalSprintTotals?.credentialsMissing || 0)} credentials.`,
-      tone: "border-amber-300/20 bg-amber-950/20 text-amber-100",
+      label: metricoolMvpReviewReady ? "Direct API backlog" : "External blockers",
+      value: metricoolMvpReviewReady
+        ? "not blocking MVP"
+        : `${formatNumber(externalSprintTotals?.externalBlockers || externalSprintTotals?.blocked || 0)} blockers`,
+      detail: metricoolMvpReviewReady
+        ? "Metricool owns the launch path now; direct OAuth, app review and platform permissions stay parked for later autopublish."
+        : `${formatNumber(externalSprintTotals?.accountsNeedingSetup || 0)} accounts, ${formatNumber(externalSprintTotals?.permissionProofNeeded || 0)} permissions, ${formatNumber(externalSprintTotals?.credentialsMissing || 0)} credentials.`,
+      tone: metricoolMvpReviewReady
+        ? "border-cyan-300/20 bg-cyan-950/20 text-cyan-100"
+        : "border-amber-300/20 bg-amber-950/20 text-amber-100",
     },
     {
       icon: Search,
@@ -11306,6 +14308,59 @@ export default function ClippersPage() {
       tone: "border-lime-300/20 bg-lime-950/20 text-lime-100",
     },
   ] : [];
+  const tiktokMvpVerifierBlocked = tiktokMvpReadinessVerifier?.status === "fail" || tiktokMvpReadinessVerifier?.launchDecision === "blocked_before_metricool";
+  const tiktokMvpPreflightBlocked = tiktokOperatorCockpitPreflight?.status === "blocked";
+  const tiktokMvpSessionPacketBlocked = Boolean(metricoolCurrentBatchSessionPacket && metricoolCurrentBatchSessionPacket.status !== "ready_for_metricool_session");
+  const tiktokMvpCockpitBlocked = Boolean(tiktokOperatorCockpit?.status.startsWith("blocked") || tiktokOperatorCockpit?.status === "needs_evidence_fix");
+  const tiktokMvpBlockingStatus = tiktokMvpVerifierBlocked
+    ? tiktokMvpReadinessVerifier?.launchDecision || "fail"
+    : tiktokMvpPreflightBlocked
+      ? "blocked_metricool_preflight"
+      : tiktokMvpSessionPacketBlocked
+        ? metricoolCurrentBatchSessionPacket?.status
+        : tiktokMvpCockpitBlocked
+          ? tiktokOperatorCockpit?.status
+          : null;
+  const tiktokMvpBlockingNextStep = tiktokMvpVerifierBlocked
+    ? tiktokMvpReadinessVerifier?.nextStep
+    : tiktokMvpPreflightBlocked
+      ? tiktokOperatorCockpitPreflight?.nextStep
+      : tiktokMvpSessionPacketBlocked
+        ? metricoolCurrentBatchSessionPacket?.nextStep
+        : tiktokMvpCockpitBlocked
+          ? tiktokOperatorCockpit?.nextStep
+        : null;
+  const tiktokMvpNow = {
+    status: tiktokMvpBlockingStatus
+      || tiktokOperatorCockpit?.status
+      || tiktokMvpReadinessVerifier?.launchDecision
+      || goalCompletionAudit?.status
+      || "not_prepared",
+    batchId: tiktokOperatorCockpit?.batchId
+      || tiktokMvpReadinessVerifier?.active.currentBatchId
+      || metricoolCurrentBatchUploadPack?.batchId
+      || tiktokBatchTracker?.batch.id
+      || "metricool-batch-01",
+    nextStep: tiktokMvpBlockingNextStep
+      || tiktokOperatorCockpit?.nextStep
+      || tiktokMvpReadinessVerifier?.nextStep
+      || goalCompletionAudit?.nextStep
+      || "Prepare the TikTok Metricool operator cockpit before opening Metricool.",
+    uploadRows: metricoolCurrentBatchUploadPack?.totals.rows || tiktokOperatorCockpit?.totals.uploadRows || 0,
+    copiedFiles: metricoolCurrentBatchUploadPack?.totals.copied || tiktokOperatorCockpit?.totals.copiedFiles || 0,
+    scheduled: tiktokBatchTracker?.totals.scheduled || tiktokOperatorCockpit?.totals.scheduled || 0,
+    readyToImport: tiktokBatchTracker?.totals.readyToImport || tiktokOperatorCockpit?.totals.readyToImport || 0,
+    missingApproval: tiktokEvidenceChecklist?.totals.missingApproval || 0,
+    checksPassed: tiktokMvpReadinessVerifier?.totals.passed || tiktokOperatorCockpitPreflight?.totals.passed || 0,
+    checksTotal: tiktokMvpReadinessVerifier?.totals.checks || tiktokOperatorCockpitPreflight?.totals.checks || 0,
+    cockpitHtml: tiktokOperatorCockpit?.paths.html || "",
+    uploadHtml: metricoolCurrentBatchUploadPack?.paths.html || tiktokOperatorCockpit?.paths.uploadHtml || "",
+    uploadDir: metricoolCurrentBatchUploadPack?.paths.uploadDir || "",
+    evidenceHtml: tiktokEvidenceChecklist?.paths.html || tiktokOperatorCockpit?.paths.evidenceHtml || "",
+    evidenceCsv: metricoolCurrentBatchUploadPack?.paths.batchEvidenceCsv || tiktokBatchTracker?.paths.evidenceCsv || tiktokMvpReadinessVerifier?.paths.currentBatchEvidenceCsv || "",
+  };
+  const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
+  const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6 text-white md:px-8" data-testid="clippers-page">
@@ -11328,12 +14383,18 @@ export default function ClippersPage() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
-              onClick={() => refetch()}
-              disabled={isLoading}
+              onClick={() => {
+                void refetchLaunchSummary();
+                void refetchMetricoolApprovalQuickRun();
+                void refetchMetricoolSourceUploadPack();
+                void refetchMetricoolOperatorCloseoutPack();
+                void refetch();
+              }}
+              disabled={isLoading || isLaunchSummaryLoading}
               className="border-zinc-800"
               data-testid="refresh-clippers-status-button"
             >
-              <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
+              <RefreshCw className={cn("mr-2 h-4 w-4", (isLoading || isLaunchSummaryLoading) && "animate-spin")} />
               Refrescar
             </Button>
             <Button
@@ -12014,13 +15075,22 @@ export default function ClippersPage() {
               Rights outreach
             </Button>
             <Button
-              onClick={() => productionQueueMutation.mutate()}
+              onClick={() => productionQueueMutation.mutate({})}
               disabled={productionQueueMutation.isPending || isLoading}
               className="bg-rose-200 text-zinc-950 hover:bg-rose-100"
               data-testid="prepare-clippers-production-queue-button"
             >
               {productionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clapperboard className="mr-2 h-4 w-4" />}
               Preparar cola
+            </Button>
+            <Button
+              onClick={() => productionQueueMutation.mutate({ targetWeeklyClips: 100, metricoolReadyOnly: true })}
+              disabled={productionQueueMutation.isPending || isLoading}
+              className="bg-orange-200 text-zinc-950 hover:bg-orange-100"
+              data-testid="prepare-clippers-weekly-production-queue-button"
+            >
+              {productionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
+              100 Metricool queue
             </Button>
             <Button
               onClick={() => draftSpecsMutation.mutate()}
@@ -12050,13 +15120,184 @@ export default function ClippersPage() {
               Metricool
             </Button>
             <Button
-              onClick={() => metricoolExecutionQueueMutation.mutate()}
+              onClick={() => metricoolExecutionQueueMutation.mutate({ approvalQueueTarget: 14 })}
               disabled={metricoolExecutionQueueMutation.isPending || isLoading}
               className="bg-blue-200 text-zinc-950 hover:bg-blue-100"
               data-testid="prepare-clippers-metricool-execution-queue-button"
             >
               {metricoolExecutionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Cola Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolExecutionQueueMutation.mutate({ approvalQueueTarget: 100 })}
+              disabled={metricoolExecutionQueueMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-metricool-weekly-execution-queue-button"
+            >
+              {metricoolExecutionQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
+              Weekly Metricool
+            </Button>
+            <Button
+              onClick={() => metricool100ApprovalRunMutation.mutate()}
+              disabled={metricool100ApprovalRunMutation.isPending || productionQueueMutation.isPending || metricoolExecutionQueueMutation.isPending || isLoading}
+              className="bg-white text-zinc-950 hover:bg-zinc-200"
+              data-testid="prepare-clippers-metricool-100-approval-run-button"
+            >
+              {metricool100ApprovalRunMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+              Prep 100 approval
+            </Button>
+            <Button
+              onClick={() => metricool100OperatorHandoffMutation.mutate()}
+              disabled={metricool100OperatorHandoffMutation.isPending || metricool100ApprovalRunMutation.isPending || isLoading}
+              className="bg-violet-200 text-zinc-950 hover:bg-violet-100"
+              data-testid="prepare-clippers-metricool-100-operator-handoff-button"
+            >
+              {metricool100OperatorHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ListChecks className="mr-2 h-4 w-4" />}
+              100 handoff
+            </Button>
+            <Button
+              onClick={() => tiktokLaunchControlMutation.mutate()}
+              disabled={tiktokLaunchControlMutation.isPending || isLoading}
+              className="bg-fuchsia-200 text-zinc-950 hover:bg-fuchsia-100"
+              data-testid="prepare-clippers-tiktok-launch-control-button"
+            >
+              {tiktokLaunchControlMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Radar className="mr-2 h-4 w-4" />}
+              TikTok control
+            </Button>
+            <Button
+              onClick={() => tiktokMvpReadinessVerifierMutation.mutate()}
+              disabled={tiktokMvpReadinessVerifierMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-tiktok-mvp-readiness-verifier-button"
+            >
+              {tiktokMvpReadinessVerifierMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              TikTok verifier
+            </Button>
+            <Button
+              onClick={() => metricoolMcpPreflightMutation.mutate()}
+              disabled={metricoolMcpPreflightMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-metricool-mcp-preflight-button"
+            >
+              {metricoolMcpPreflightMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Network className="mr-2 h-4 w-4" />}
+              Metricool MCP
+            </Button>
+            <Button
+              onClick={() => metricoolCurrentBatchUploadPackMutation.mutate()}
+              disabled={metricoolCurrentBatchUploadPackMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-metricool-current-batch-upload-pack-button"
+            >
+              {metricoolCurrentBatchUploadPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+              Upload pack
+            </Button>
+            <Button
+              onClick={() => metricoolCurrentBatchSessionPacketMutation.mutate()}
+              disabled={metricoolCurrentBatchSessionPacketMutation.isPending || isLoading}
+              className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
+              data-testid="prepare-clippers-metricool-current-batch-session-packet-button"
+            >
+              {metricoolCurrentBatchSessionPacketMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Session packet
+            </Button>
+            <Button
+              onClick={() => goalCompletionAuditMutation.mutate()}
+              disabled={goalCompletionAuditMutation.isPending || isLoading}
+              className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+              data-testid="prepare-clippers-goal-completion-audit-button"
+            >
+              {goalCompletionAuditMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Goal audit
+            </Button>
+            <Button
+              onClick={() => tiktokBatchTrackerMutation.mutate()}
+              disabled={tiktokBatchTrackerMutation.isPending || isLoading}
+              className="bg-rose-200 text-zinc-950 hover:bg-rose-100"
+              data-testid="prepare-clippers-tiktok-batch-tracker-button"
+            >
+              {tiktokBatchTrackerMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ListChecks className="mr-2 h-4 w-4" />}
+              Batch tracker
+            </Button>
+            <Button
+              onClick={() => tiktokBatchEvidenceSyncMutation.mutate()}
+              disabled={tiktokBatchEvidenceSyncMutation.isPending || isLoading}
+              className="bg-orange-200 text-zinc-950 hover:bg-orange-100"
+              data-testid="sync-clippers-tiktok-batch-evidence-button"
+            >
+              {tiktokBatchEvidenceSyncMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Sync batch evidence
+            </Button>
+            <Button
+              onClick={() => tiktokBatchRunbookMutation.mutate()}
+              disabled={tiktokBatchRunbookMutation.isPending || isLoading}
+              className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+              data-testid="prepare-clippers-tiktok-batch-runbook-button"
+            >
+              {tiktokBatchRunbookMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
+              Batch runbook
+            </Button>
+            <Button
+              onClick={() => tiktokEvidenceChecklistMutation.mutate()}
+              disabled={tiktokEvidenceChecklistMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="prepare-clippers-tiktok-evidence-checklist-button"
+            >
+              {tiktokEvidenceChecklistMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Evidence checklist
+            </Button>
+            <Button
+              onClick={() => tiktokPostScheduleVerifierMutation.mutate()}
+              disabled={tiktokPostScheduleVerifierMutation.isPending || isLoading}
+              className="bg-amber-200 text-zinc-950 hover:bg-amber-100"
+              data-testid="prepare-clippers-tiktok-post-schedule-verifier-button"
+            >
+              {tiktokPostScheduleVerifierMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              Post-schedule
+            </Button>
+            <Button
+              onClick={() => tiktokBatchCloseoutVerifierMutation.mutate()}
+              disabled={tiktokBatchCloseoutVerifierMutation.isPending || isLoading}
+              className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+              data-testid="prepare-clippers-tiktok-batch-closeout-verifier-button"
+            >
+              {tiktokBatchCloseoutVerifierMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Batch closeout
+            </Button>
+            <Button
+              onClick={() => tiktokNextActionMutation.mutate()}
+              disabled={tiktokNextActionMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-tiktok-next-action-button"
+            >
+              {tiktokNextActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
+              Next action
+            </Button>
+            <Button
+              onClick={() => tiktokOperatorCockpitMutation.mutate()}
+              disabled={tiktokOperatorCockpitMutation.isPending || isLoading}
+              className="bg-indigo-200 text-zinc-950 hover:bg-indigo-100"
+              data-testid="prepare-clippers-tiktok-operator-cockpit-button"
+            >
+              {tiktokOperatorCockpitMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Gauge className="mr-2 h-4 w-4" />}
+              Operator cockpit
+            </Button>
+            <Button
+              onClick={() => tiktokOperatorCockpitPreflightMutation.mutate()}
+              disabled={tiktokOperatorCockpitPreflightMutation.isPending || isLoading}
+              className="bg-violet-200 text-zinc-950 hover:bg-violet-100"
+              data-testid="prepare-clippers-tiktok-operator-cockpit-preflight-button"
+            >
+              {tiktokOperatorCockpitPreflightMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              Cockpit preflight
+            </Button>
+            <Button
+              onClick={() => tiktokMvpGoLivePacketMutation.mutate()}
+              disabled={tiktokMvpGoLivePacketMutation.isPending || isLoading}
+              className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
+              data-testid="prepare-clippers-tiktok-mvp-go-live-packet-button"
+            >
+              {tiktokMvpGoLivePacketMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+              TikTok go-live
             </Button>
             <Button
               onClick={() => metricoolMvpLaunchPackMutation.mutate()}
@@ -12075,6 +15316,42 @@ export default function ClippersPage() {
             >
               {metricoolApprovalSessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ListChecks className="mr-2 h-4 w-4" />}
               Metricool review
+            </Button>
+            <Button
+              onClick={() => metricoolApprovalQuickRunMutation.mutate()}
+              disabled={metricoolApprovalQuickRunMutation.isPending || isLoading}
+              className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+              data-testid="prepare-clippers-metricool-approval-quick-run-button"
+            >
+              {metricoolApprovalQuickRunMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ListChecks className="mr-2 h-4 w-4" />}
+              Quick run Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolSourceUploadPackMutation.mutate()}
+              disabled={metricoolSourceUploadPackMutation.isPending || isLoading}
+              className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+              data-testid="prepare-clippers-metricool-source-upload-pack-button"
+            >
+              {metricoolSourceUploadPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+              Source upload pack
+            </Button>
+            <Button
+              onClick={() => metricoolOperatorCloseoutPackMutation.mutate()}
+              disabled={metricoolOperatorCloseoutPackMutation.isPending || isLoading}
+              className="bg-stone-200 text-zinc-950 hover:bg-stone-100"
+              data-testid="prepare-clippers-metricool-operator-closeout-pack-button"
+            >
+              {metricoolOperatorCloseoutPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Closeout Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolApprovalEvidencePreviewMutation.mutate()}
+              disabled={metricoolApprovalEvidencePreviewMutation.isPending || isLoading}
+              className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+              data-testid="preview-clippers-metricool-approval-evidence-button"
+            >
+              {metricoolApprovalEvidencePreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+              Preview Metricool evidence
             </Button>
             <Button
               onClick={() => metricoolApprovalEvidenceImportMutation.mutate()}
@@ -12102,6 +15379,15 @@ export default function ClippersPage() {
             >
               {metricoolAccountEvidenceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
               Evidencia Metricool
+            </Button>
+            <Button
+              onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
+              disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading}
+              className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
+              data-testid="record-clippers-metricool-bridge-evidence-batch-button"
+            >
+              {metricoolBridgeEvidenceBatchMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+              Bridge batch
             </Button>
             <Button
               onClick={() => publisherExecutionQueueMutation.mutate()}
@@ -12159,6 +15445,2363 @@ export default function ClippersPage() {
             </Button>
           </div>
         </header>
+
+        <section
+          className="rounded-lg border border-emerald-300/20 bg-emerald-950/10 p-4"
+          data-testid="clippers-metricool-only-mvp-mode"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                  Metricool-only MVP
+                </Badge>
+                <Badge className="border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                  approval_required
+                </Badge>
+                <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                  social APIs backlog
+                </Badge>
+              </div>
+              <h2 className="mt-2 text-lg font-semibold text-white">Metricool is the active publishing bridge</h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-zinc-400">
+                SPORT and memes run through Metricool review. Direct TikTok, Instagram and YouTube APIs are not required for this MVP, and missing direct API keys must not block the 100-clip Metricool queue.
+              </p>
+            </div>
+            <div className="grid min-w-[260px] grid-cols-3 gap-2 text-center">
+              <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Queued</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatNumber(status?.metricoolExecutionQueue?.totals?.queuedForApproval || 0)}
+                </p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Direct send</p>
+                <p className="mt-1 text-xl font-semibold text-emerald-200">
+                  {formatNumber(status?.metricoolExecutionQueue?.totals?.readyToSend || 0)}
+                </p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Published</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {formatNumber(status?.metricoolApprovalReport?.totals?.publishedRows || 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-emerald-300/15 bg-black/25 p-3 text-xs leading-5 text-emerald-100/80">
+            Metricool queued/scheduled items are not counted as published. Published rows, views and performance only come from imported live-post evidence after Robert reviews the posts in Metricool.
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-teal-300/20 bg-teal-950/10 p-4" data-testid="clippers-metricool-bridge-evidence-batch">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-white">Metricool bridge evidence batch</h2>
+              <p className="mt-1 text-sm leading-6 text-zinc-400">
+                Pega las conexiones reales de Metricool para SPORT/memes. Esto registra evidencia submitted; no verifica cuentas, no guarda secretos y no publica.
+              </p>
+            </div>
+            <Badge className="w-fit border border-teal-300/30 bg-teal-300/10 text-teal-100">
+              approval_required
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <Textarea
+              value={metricoolBridgeEvidenceBatchText}
+              onChange={(event) => setMetricoolBridgeEvidenceBatchText(event.target.value)}
+              className="min-h-32 border-teal-300/20 bg-black/40 font-mono text-xs text-teal-50"
+              data-testid="clippers-metricool-bridge-evidence-batch-textarea"
+            />
+            <div className="rounded-md border border-teal-300/10 bg-black/25 p-3">
+              <Button
+                type="button"
+                onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
+                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading}
+                className="w-full bg-teal-200 text-zinc-950 hover:bg-teal-100"
+                data-testid="submit-clippers-metricool-bridge-evidence-batch-button"
+              >
+                {metricoolBridgeEvidenceBatchMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                Import bridge rows
+              </Button>
+              <div className="mt-3 grid gap-1 text-xs text-zinc-500">
+                <p>Recorded: {metricoolBridgeEvidenceBatch?.totals.recorded ?? 0}</p>
+                <p>Skipped: {metricoolBridgeEvidenceBatch?.totals.skipped ?? 0}</p>
+                <p>Rows: {metricoolBridgeEvidenceBatch?.totals.rows ?? 0}</p>
+              </div>
+              {metricoolBridgeEvidenceBatch?.skipped.length ? (
+                <p className="mt-2 text-xs leading-5 text-amber-100">
+                  First skip: row {metricoolBridgeEvidenceBatch.skipped[0].row} - {metricoolBridgeEvidenceBatch.skipped[0].reason}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-5 text-zinc-500">Rows with placeholders, secrets, or short notes are rejected.</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className={cn(
+            "grid gap-3 rounded-lg border p-4 lg:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(130px,1fr))]",
+            launchSummary?.metricoolMvpReady
+              ? "border-emerald-300/20 bg-emerald-950/15"
+              : "border-amber-300/20 bg-amber-950/15"
+          )}
+          data-testid="metricool-launch-summary-panel"
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={cn(
+                "border",
+                launchSummary?.metricoolMvpReady
+                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+              )}>
+                {launchSummary?.status || "loading"}
+              </Badge>
+              <Badge className="border border-sky-300/30 bg-sky-300/10 text-sky-100">
+                {launchSummary?.metricoolMvpReady ? "Metricool only MVP" : "Metricool MVP check"}
+              </Badge>
+              <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                Direct APIs {launchSummary ? (launchSummary.directSocialApisRequiredForMvp ? "required" : "not required") : "checking"}
+              </Badge>
+            </div>
+            <h2 className="mt-2 text-lg font-semibold text-white">Metricool review queue</h2>
+            <p className="mt-1 text-sm leading-6 text-zinc-400">
+              {launchSummary?.nextStep || "Leyendo resumen de lanzamiento Metricool..."}
+            </p>
+            <div className="mt-3 grid gap-2 text-xs leading-5 text-zinc-300 sm:grid-cols-2">
+              <div className="rounded-md border border-emerald-300/15 bg-emerald-950/15 p-2">
+                <p className="font-medium text-emerald-100">
+                  {launchSummary?.metricoolMvpReady ? "MVP activo por Metricool" : "MVP Metricool pendiente de verificacion"}
+                </p>
+                <p className="mt-1 text-emerald-100/70">
+                  {launchSummary?.metricoolMvpReady
+                    ? "SPORT y memes usan Metricool en approval_required; Robert revisa y programa dentro de Metricool."
+                    : "La app esta verificando cola, cuentas, source files y publish guard antes de marcarlo activo."}
+                </p>
+              </div>
+              <div className="rounded-md border border-zinc-700 bg-black/25 p-2">
+                <p className="font-medium text-zinc-200">APIs directas quedan en backlog</p>
+                <p className="mt-1 text-zinc-500">
+                  {launchSummary
+                    ? "No son requisito para este MVP; IG/YT, permisos y app review se activan solo para escalar automatizacion directa."
+                    : "Esperando resumen del backend antes de separar MVP de full automation."}
+                </p>
+              </div>
+            </div>
+            {launchSummary?.reportPath && (
+              <p className="mt-2 truncate text-[11px] text-zinc-500">{launchSummary.reportPath}</p>
+            )}
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Metricool queue</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{formatNumber(launchSummary?.queuedForApproval || 0)}</p>
+            <p className="mt-1 text-xs text-zinc-500">auto-send blocked {formatNumber(launchSummary?.readyToSend || 0)}</p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Real publish</p>
+            <p className={cn("mt-1 text-2xl font-semibold", launchSummary?.realPublishEnabled ? "text-red-200" : "text-emerald-200")}>
+              {launchSummary?.realPublishEnabled ? "on" : "off"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">{launchSummary?.publishMode || "approval_required"}</p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Accounts</p>
+            <p className="mt-1 text-2xl font-semibold text-white">
+              {formatNumber(launchSummary?.readyAccounts || 0)}/{formatNumber(launchSummary?.totalAccounts || 0)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">Metricool-ready lanes</p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Weekly funnel</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{launchSummary?.weeklyFunnelStatus || "loading"}</p>
+            <p className="mt-1 text-xs text-zinc-500">
+              {formatNumber(launchSummary?.metricoolApprovalQueued || 0)}/{formatNumber(launchSummary?.targetWeeklyClips || 100)} queued
+            </p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3 lg:col-start-2">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Published evidence</p>
+            <p className={cn("mt-1 text-2xl font-semibold", (launchSummary?.importedPublishedRows || 0) > 0 ? "text-emerald-200" : "text-amber-100")}>
+              {formatNumber(launchSummary?.importedPublishedRows || 0)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              {launchSummary?.approvalEvidenceStatus || "needs_evidence"} / {formatNumber(launchSummary?.approvalEvidenceRows || 0)} evidence rows
+            </p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/25 p-3 lg:col-span-3">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Evidence import</p>
+            <p className="mt-1 line-clamp-2 break-all text-xs leading-5 text-zinc-400">
+              {launchSummary?.evidenceImportCsvPath || "Prepare Metricool review session first"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">{formatNumber(launchSummary?.importedViews || 0)} imported views</p>
+          </div>
+        </section>
+
+        {status?.metricoolArtifactAudit && (
+          <section
+            className={cn(
+              "rounded-lg border p-4",
+              status.metricoolArtifactAudit.status === "current"
+                ? "border-emerald-300/20 bg-emerald-950/10"
+                : "border-amber-300/20 bg-amber-950/10"
+            )}
+            data-testid="clippers-metricool-artifact-audit"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    status.metricoolArtifactAudit.status === "current"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {status.metricoolArtifactAudit.status}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    canonical queue {formatNumber(status.metricoolArtifactAudit.canonicalQueueItems)}
+                  </Badge>
+                  <Badge className={cn(
+                    "border",
+                    status.metricoolArtifactAudit.realPublishEnabled
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                  )}>
+                    real publish {status.metricoolArtifactAudit.realPublishEnabled ? "on" : "off"}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Metricool artifact audit</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{status.metricoolArtifactAudit.nextStep}</p>
+                <p className="mt-2 truncate text-[11px] text-zinc-500">{status.metricoolArtifactAudit.canonicalQueuePath}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-zinc-500">Current</p>
+                  <p className="mt-1 text-lg font-semibold text-emerald-100">{status.metricoolArtifactAudit.totals.current}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-zinc-500">Stale</p>
+                  <p className="mt-1 text-lg font-semibold text-amber-100">{status.metricoolArtifactAudit.totals.stale}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-zinc-500">Missing</p>
+                  <p className="mt-1 text-lg font-semibold text-red-100">{status.metricoolArtifactAudit.totals.missing}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {status.metricoolArtifactAudit.items.map((item) => (
+                <div key={item.id} className="rounded-md border border-white/10 bg-black/25 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      item.status === "current"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : item.status === "stale"
+                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          : "border-red-300/30 bg-red-300/10 text-red-100"
+                    )}>
+                      {item.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    {formatNumber(item.artifactItems)}/{formatNumber(item.queueItems)} rows · mismatch {formatNumber(item.mismatchedIds)}
+                  </p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">
+                    {item.staleReason || item.nextStep}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {metricool100ApprovalRun && metricool100ApprovalRun.status !== "not_prepared" && (
+          <section
+            className={cn(
+              "grid gap-3 rounded-lg border p-4 md:grid-cols-4",
+              metricool100ApprovalRun.status === "ready_for_operator"
+                ? "border-emerald-300/20 bg-zinc-950"
+                : "border-amber-300/20 bg-zinc-950"
+            )}
+            data-testid="metricool-100-approval-run-panel"
+          >
+            <div className="min-w-0 md:col-span-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={cn(
+                  "border",
+                  metricool100ApprovalRun.status === "ready_for_operator"
+                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                )}>
+                  {metricool100ApprovalRun.status}
+                </Badge>
+                <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                  {metricool100ApprovalRun.mode}
+                </Badge>
+                <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                  no social API keys
+                </Badge>
+              </div>
+              <h2 className="mt-2 text-lg font-semibold text-white">100 TikTok schedule run</h2>
+              <p className="mt-1 text-sm leading-6 text-zinc-400">{metricool100ApprovalRun.nextStep}</p>
+              <p className="mt-2 text-xs leading-5 text-emerald-100/75">
+                Metricool es el puente activo para SPORT y memes; TikTok, Instagram y YouTube direct APIs quedan como backlog, no bloquean este run.
+              </p>
+              <p className="mt-2 truncate text-[11px] text-zinc-500">{metricool100ApprovalRun.artifacts.metricoolOperatorRunSheetCsvPath}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Queued</p>
+              <p className="mt-1 text-2xl font-semibold text-white">
+                {formatNumber(metricool100ApprovalRun.totals.metricoolQueuedForApproval)}/{formatNumber(metricool100ApprovalRun.approvalQueueTarget)}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">blocked {formatNumber(metricool100ApprovalRun.totals.metricoolBlocked)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Direct-send blocked</p>
+              <p className={cn("mt-1 text-2xl font-semibold", metricool100ApprovalRun.totals.readyToSend === 0 ? "text-emerald-200" : "text-red-200")}>
+                {formatNumber(metricool100ApprovalRun.totals.readyToSend)}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">real publish {metricool100ApprovalRun.realPublishEnabled ? "on" : "off"}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Production</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{formatNumber(metricool100ApprovalRun.totals.productionItems)}</p>
+              <p className="mt-1 text-xs text-zinc-500">{formatNumber(metricool100ApprovalRun.totals.draftReady)} draft-ready</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Source upload</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{formatNumber(metricool100ApprovalRun.totals.sourceUploadReady)}</p>
+              <p className="mt-1 text-xs text-zinc-500">missing {formatNumber(metricool100ApprovalRun.totals.sourceUploadMissing)}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/25 p-3 md:col-span-2">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Accounts</p>
+              <p className="mt-1 line-clamp-2 break-all text-xs leading-5 text-zinc-400">
+                {Object.entries(metricool100ApprovalRun.productionByAccount).map(([accountId, count]) => `${accountId}: ${count}`).join(" · ") || "none"}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">{metricool100ApprovalRun.eligibleAccountIds.join(", ") || "no ready accounts"}</p>
+            </div>
+          </section>
+        )}
+
+        {metricool100OperatorHandoff && (
+          <section
+            className="rounded-lg border border-violet-300/20 bg-zinc-950 p-4"
+            data-testid="metricool-100-operator-handoff-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border border-violet-300/30 bg-violet-300/10 text-violet-100">
+                    {metricool100OperatorHandoff.status}
+                  </Badge>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                    approval_required
+                  </Badge>
+                  <Badge className={cn("border", metricool100OperatorHandoff.totals.readyToSend === 0 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-red-300/30 bg-red-300/10 text-red-100")}>
+                    auto-send {metricool100OperatorHandoff.totals.readyToSend}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Metricool 100 operator handoff</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{metricool100OperatorHandoff.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{metricool100OperatorHandoff.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[260px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricool100OperatorHandoff.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Batches</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricool100OperatorHandoff.totals.batches)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Published</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">0</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-4">
+              <p>Sports: {formatNumber(metricool100OperatorHandoff.totals.sports)}</p>
+              <p>Memes: {formatNumber(metricool100OperatorHandoff.totals.memes)}</p>
+              <p>Streamers: {formatNumber(metricool100OperatorHandoff.totals.streamers)}</p>
+              <p>Evidence: {metricool100OperatorHandoff.paths.evidenceCsv}</p>
+            </div>
+            {metricool100OperatorHandoff.operatorConsole && (
+              <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="metricool-100-operator-console">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Operator console</p>
+                    <h3 className="mt-1 text-sm font-semibold text-white">
+                      {metricool100OperatorHandoff.operatorConsole.currentBatchId} · rows {metricool100OperatorHandoff.operatorConsole.currentBatchRows}
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-zinc-400">{metricool100OperatorHandoff.operatorConsole.nextStep}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                      {metricool100OperatorHandoff.operatorConsole.status}
+                    </Badge>
+                    <Badge className="border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                      completed {formatNumber(metricool100OperatorHandoff.operatorConsole.completedBatches || 0)}/{formatNumber(metricool100OperatorHandoff.totals.batches)}
+                    </Badge>
+                    {metricool100OperatorHandoff.operatorConsole.currentBatchEvidenceStatus && (
+                      <Badge className="border border-violet-300/30 bg-violet-300/10 text-violet-100">
+                        {metricool100OperatorHandoff.operatorConsole.currentBatchEvidenceStatus}
+                      </Badge>
+                    )}
+                    <Badge className="border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                      {metricool100OperatorHandoff.operatorConsole.evidenceCsvStatus}
+                    </Badge>
+                    <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                      published {formatNumber(metricool100OperatorHandoff.operatorConsole.publishedRowsCounted)}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                  <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Checklist</p>
+                    <div className="mt-2 space-y-2">
+                      {metricool100OperatorHandoff.operatorConsole.checklist.slice(0, 5).map((item) => (
+                        <div key={item} className="flex gap-2 text-xs leading-5 text-zinc-400">
+                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-200" />
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Evidence fields</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {metricool100OperatorHandoff.operatorConsole.evidenceFields.map((field) => (
+                        <Badge key={field} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook && (
+                  <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="metricool-100-current-batch-workbook">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200">Current batch workbook</p>
+                        <p className="mt-1 text-sm font-medium text-white">
+                          {metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook.rows} rows · {metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook.status}
+                        </p>
+                      </div>
+                      <Badge className="w-fit border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                        batch only
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-[11px] leading-4 text-cyan-100/70 md:grid-cols-3">
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook.csvPath}</p>
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook.markdownPath}</p>
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchWorkbook.jsonPath}</p>
+                    </div>
+                  </div>
+                )}
+                {metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession && (
+                  <div className="mt-3 rounded-md border border-lime-300/15 bg-lime-950/10 p-3" data-testid="metricool-100-current-batch-operator-session">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-lime-200">Current batch operator session</p>
+                        <p className="mt-1 text-sm font-medium text-white">
+                          {metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.rows} rows · {metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.status}
+                        </p>
+                      </div>
+                      <Badge className="w-fit border border-lime-300/30 bg-lime-300/10 text-lime-100">
+                        {metricool100OperatorHandoff.operatorConsole.currentBatchId || "current batch"} focus
+                      </Badge>
+                    </div>
+                    {metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.sourceGateTotals && (
+                      <div className="mt-3 grid gap-2 text-center sm:grid-cols-4" data-testid="metricool-100-current-batch-source-gates">
+                        {[
+                          ["Rows", metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.sourceGateTotals.rows, "text-white"],
+                          ["Source OK", metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.sourceGateTotals.ready, "text-emerald-200"],
+                          ["Blocked", metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.sourceGateTotals.blocked, "text-amber-200"],
+                          ["Pending", metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.sourceGateTotals.pending, "text-zinc-300"],
+                        ].map(([label, value, tone]) => (
+                          <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                            <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                            <p className={cn("mt-1 text-lg font-semibold", String(tone))}>{formatNumber(Number(value))}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-2 grid gap-1 text-[11px] leading-4 text-lime-100/70 md:grid-cols-3">
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.csvPath}</p>
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.markdownPath}</p>
+                      <p className="break-all">{metricool100OperatorHandoff.operatorConsole.currentBatchOperatorSession.jsonPath}</p>
+                    </div>
+                  </div>
+                )}
+                {metricool100OperatorHandoff.operatorConsole.batchWorkbooks && metricool100OperatorHandoff.operatorConsole.batchWorkbooks.length > 0 && (
+                  <div className="mt-3 rounded-md border border-white/10 bg-black/20 p-3" data-testid="metricool-100-all-batch-workbooks">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">All batch workbooks</p>
+                        <p className="mt-1 text-sm font-medium text-white">
+                          {formatNumber(metricool100OperatorHandoff.operatorConsole.batchWorkbooks.length)} batches {metricool100OperatorHandoff.operatorConsole.status === "blocked_source_verification" ? "waiting source verification" : "prepared for staged Metricool review"}
+                        </p>
+                        {metricool100OperatorHandoff.operatorConsole.paths.batchWorkbooksDir && (
+                          <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">
+                            {metricool100OperatorHandoff.operatorConsole.paths.batchWorkbooksDir}
+                          </p>
+                        )}
+                        {metricool100OperatorHandoff.operatorConsole.paths.batchEvidenceImportsDir && (
+                          <p className="mt-1 break-all text-[11px] leading-4 text-amber-100/60">
+                            Evidence imports: {metricool100OperatorHandoff.operatorConsole.paths.batchEvidenceImportsDir}
+                          </p>
+                        )}
+                      </div>
+                      <Badge className="w-fit border border-white/10 bg-white/5 text-zinc-300">
+                        Metricool queue only
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {metricool100OperatorHandoff.operatorConsole.batchWorkbooks.slice(0, 10).map((workbook) => (
+                        <div key={workbook.batchId} className="rounded-md border border-white/10 bg-zinc-950/60 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-white">{workbook.batchId}</p>
+                            <Badge className="shrink-0 border border-zinc-700 bg-zinc-900 text-[10px] text-zinc-300">
+                              {formatNumber(workbook.rows)} rows
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">{workbook.status}</p>
+                          {workbook.evidenceStatus && (
+                            <p className="mt-1 text-[10px] uppercase tracking-wide text-cyan-200/80">{workbook.evidenceStatus}</p>
+                          )}
+                          <p className="mt-1 break-all text-[11px] leading-4 text-zinc-400">{workbook.csvPath}</p>
+                          {workbook.evidenceCsvPath && (
+                            <p className="mt-1 break-all text-[11px] leading-4 text-amber-100/70">{workbook.evidenceCsvPath}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {metricool100OperatorHandoff.batches.slice(0, 6).map((batch) => (
+                <div key={batch.id} className="rounded-md border border-violet-300/10 bg-black/20 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-white">{batch.rank}. {batch.id}</p>
+                      <p className="mt-1 text-[11px] text-zinc-500">Rows {batch.startRank}-{batch.endRank} · {batch.accounts.join(", ")}</p>
+                    </div>
+                    <Badge className="shrink-0 border border-violet-300/20 bg-violet-300/10 text-[10px] text-violet-100">
+                      {batch.items}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">{batch.firstScheduledFor} {"->"} {batch.lastScheduledFor}</p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{batch.operatorAction}</p>
+                </div>
+              ))}
+            </div>
+            {metricool100OperatorHandoff.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {metricool100OperatorHandoff.guardrails.slice(0, 5).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tiktokLaunchControl && (
+          <section
+            className="rounded-lg border border-fuchsia-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-launch-control-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100">
+                    {tiktokLaunchControl.status}
+                  </Badge>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                    TikTok {formatNumber(tiktokLaunchControl.totals.tiktok)}
+                  </Badge>
+                  <Badge className={cn("border", tiktokLaunchControl.totals.readyToImport > 0 ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-zinc-700 bg-zinc-900 text-zinc-300")}>
+                    importable {formatNumber(tiktokLaunchControl.totals.readyToImport)}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Launch Control</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokLaunchControl.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokLaunchControl.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[260px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokLaunchControl.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Batch</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokLaunchControl.currentBatch.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Published</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokLaunchControl.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-4">
+              <p>Current: {tiktokLaunchControl.currentBatch.id}</p>
+              <p>Accounts: {tiktokLaunchControl.currentBatch.accounts.join(", ") || "none"}</p>
+              <p>Platforms: {tiktokLaunchControl.currentBatch.platforms.join(", ") || "none"}</p>
+              <p>Evidence: {tiktokLaunchControl.paths.evidenceCsv}</p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-5">
+              {[
+                ["Not started", tiktokLaunchControl.totals.notStarted],
+                ["Scheduled", tiktokLaunchControl.totals.scheduled],
+                ["Waiting metrics", tiktokLaunchControl.totals.waitingMetrics],
+                ["Needs fix", tiktokLaunchControl.totals.needsFix],
+                ["Rejected", tiktokLaunchControl.totals.rejected],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            {tiktokLaunchControl.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {tiktokLaunchControl.guardrails.slice(0, 4).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tiktokMvpReadinessVerifier && (
+          <section
+            className="rounded-lg border border-emerald-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-mvp-readiness-verifier-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokMvpReadinessVerifier.status === "pass"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokMvpReadinessVerifier.status}
+                  </Badge>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                    {tiktokMvpReadinessVerifier.launchDecision}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    {tiktokMvpReadinessVerifier.scope}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok MVP Readiness Verifier</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokMvpReadinessVerifier.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokMvpReadinessVerifier.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Checks</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokMvpReadinessVerifier.totals.passed)}/{formatNumber(tiktokMvpReadinessVerifier.totals.checks)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokMvpReadinessVerifier.active.totalRows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Published</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokMvpReadinessVerifier.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-4">
+              <p>Accounts: {tiktokMvpReadinessVerifier.active.accounts.join(", ") || "none"}</p>
+              <p>Brands: {tiktokMvpReadinessVerifier.active.metricoolBrands.join(", ") || "none"}</p>
+              <p>Current: {tiktokMvpReadinessVerifier.active.currentBatchId}</p>
+              <p>Batch evidence: {tiktokMvpReadinessVerifier.paths.currentBatchEvidenceCsv}</p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {tiktokMvpReadinessVerifier.checks.slice(0, 8).map((check) => (
+                <div key={check.id} className="rounded-md border border-emerald-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">{check.label}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{check.evidence}</p>
+                    </div>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      check.status === "pass"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {check.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-emerald-100/75">{check.nextAction}</p>
+                </div>
+              ))}
+            </div>
+            {tiktokMvpReadinessVerifier.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {tiktokMvpReadinessVerifier.guardrails.slice(0, 5).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {metricoolMcpPreflight && (
+          <section
+            className="rounded-lg border border-sky-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-metricool-mcp-preflight-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    metricoolMcpPreflight.status === "ready_for_operator"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {metricoolMcpPreflight.status}
+                  </Badge>
+                  <Badge className={cn(
+                    "border",
+                    metricoolMcpPreflight.metricoolConfig.readyForMcp
+                      ? "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    MCP keys {metricoolMcpPreflight.metricoolConfig.readyForMcp ? "configured" : "missing"}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    TikTok-only
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Metricool MCP Preflight</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{metricoolMcpPreflight.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{metricoolMcpPreflight.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Checks</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricoolMcpPreflight.totals.passed)}/{formatNumber(metricoolMcpPreflight.totals.checks)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Warnings</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(metricoolMcpPreflight.totals.warnings)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricoolMcpPreflight.active.totalRows)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-4">
+              <p>Accounts: {metricoolMcpPreflight.active.accounts.join(", ") || "none"}</p>
+              <p>Brands: {metricoolMcpPreflight.active.metricoolBrands.join(", ") || "none"}</p>
+              <p>Current: {metricoolMcpPreflight.active.currentBatchId}</p>
+              <p>Batch evidence: {metricoolMcpPreflight.paths.currentBatchEvidenceCsv}</p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {metricoolMcpPreflight.checks.slice(0, 6).map((check) => (
+                <div key={check.id} className="rounded-md border border-sky-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">{check.label}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{check.evidence}</p>
+                    </div>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      check.status === "pass"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : check.status === "warn"
+                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          : "border-red-300/30 bg-red-300/10 text-red-100"
+                    )}>
+                      {check.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-sky-100/75">{check.nextAction}</p>
+                </div>
+              ))}
+            </div>
+            {metricoolMcpPreflight.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {metricoolMcpPreflight.guardrails.slice(0, 5).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {metricoolCurrentBatchUploadPack && (
+          <section
+            className="rounded-lg border border-cyan-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-metricool-current-batch-upload-pack-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    metricoolCurrentBatchUploadPack.status === "ready_for_metricool_upload"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {metricoolCurrentBatchUploadPack.status}
+                  </Badge>
+                  <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                    {metricoolCurrentBatchUploadPack.batchId}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    copied {formatNumber(metricoolCurrentBatchUploadPack.totals.copied)}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Metricool Current Batch Upload Pack</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{metricoolCurrentBatchUploadPack.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{metricoolCurrentBatchUploadPack.paths.uploadDir}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricoolCurrentBatchUploadPack.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Copied</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(metricoolCurrentBatchUploadPack.totals.copied)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Blocked</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(metricoolCurrentBatchUploadPack.totals.blocked)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-3">
+              {metricoolCurrentBatchUploadPack.paths.html && <p>Console: {metricoolCurrentBatchUploadPack.paths.html}</p>}
+              <p>Manifest: {metricoolCurrentBatchUploadPack.paths.markdown}</p>
+              <p>CSV: {metricoolCurrentBatchUploadPack.paths.csv}</p>
+              <p>Evidence: {metricoolCurrentBatchUploadPack.paths.batchEvidenceCsv}</p>
+              {metricoolCurrentBatchUploadPack.paths.evidenceChecklistHtml && (
+                <p>Evidence checklist: {metricoolCurrentBatchUploadPack.paths.evidenceChecklistHtml}</p>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {metricoolCurrentBatchUploadPack.rows.slice(0, 10).map((row) => (
+                <div key={row.metricoolQueueItemId} className="rounded-md border border-cyan-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">{row.rank}. {row.metricoolBrandName} · {row.uploadFileName}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{row.captionSeed}</p>
+                    </div>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      row.status === "ready_to_upload"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {row.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 break-all text-[11px] leading-4 text-cyan-100/75">{row.uploadFilePath}</p>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">{row.publishAt}</p>
+                </div>
+              ))}
+            </div>
+            {metricoolCurrentBatchUploadPack.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {metricoolCurrentBatchUploadPack.guardrails.slice(0, 5).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {metricoolCurrentBatchSessionPacket && (
+          <section
+            className="rounded-lg border border-teal-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-metricool-current-batch-session-packet-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    metricoolCurrentBatchSessionPacket.status === "ready_for_metricool_session"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : metricoolCurrentBatchSessionPacket.status === "blocked_schedule_freshness"
+                        ? "border-red-300/30 bg-red-300/10 text-red-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {metricoolCurrentBatchSessionPacket.status}
+                  </Badge>
+                  <Badge className="border border-teal-300/20 bg-teal-300/10 text-teal-100">
+                    {metricoolCurrentBatchSessionPacket.batch.id}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    TikTok only
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Metricool Current Batch Session Packet</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{metricoolCurrentBatchSessionPacket.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{metricoolCurrentBatchSessionPacket.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Ready</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(metricoolCurrentBatchSessionPacket.totals.ready)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">SPORT</p>
+                  <p className="mt-1 text-xl font-semibold text-cyan-100">{formatNumber(metricoolCurrentBatchSessionPacket.totals.sport)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Memes</p>
+                  <p className="mt-1 text-xl font-semibold text-fuchsia-100">{formatNumber(metricoolCurrentBatchSessionPacket.totals.memes)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-3">
+              <p>Upload console: {metricoolCurrentBatchSessionPacket.paths.uploadHtml}</p>
+              <p>CSV: {metricoolCurrentBatchSessionPacket.paths.csv}</p>
+              <p>Workbook: {metricoolCurrentBatchSessionPacket.paths.workbook}</p>
+            </div>
+            {metricoolCurrentBatchSessionPacket.scheduleFreshness && !metricoolCurrentBatchSessionPacket.scheduleFreshness.ok && (
+              <div className="mt-3 rounded-md border border-red-300/20 bg-red-950/20 p-3 text-xs leading-5 text-red-100">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-semibold">Schedule freshness blocked</p>
+                    <p>First: {metricoolCurrentBatchSessionPacket.scheduleFreshness.firstPublishAt || "missing"} · Last: {metricoolCurrentBatchSessionPacket.scheduleFreshness.lastPublishAt || "missing"} · Min lead: {formatNumber(metricoolCurrentBatchSessionPacket.scheduleFreshness.minLeadMinutes)}m</p>
+                    <p>Expired: {metricoolCurrentBatchSessionPacket.scheduleFreshness.expiredRows.join(", ") || "0"} · Too soon: {metricoolCurrentBatchSessionPacket.scheduleFreshness.tooSoonRows.join(", ") || "0"} · Invalid: {metricoolCurrentBatchSessionPacket.scheduleFreshness.invalidRows.join(", ") || "0"}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => tiktokMvpNowRefreshMutation.mutate()}
+                    disabled={tiktokMvpNowRefreshMutation.isPending || isLoading}
+                    className="w-fit shrink-0 bg-red-100 text-red-950 hover:bg-red-50"
+                    data-testid="prepare-clippers-renew-stale-metricool-batch-button"
+                  >
+                    {tiktokMvpNowRefreshMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Renew batch schedule
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {metricoolCurrentBatchSessionPacket.rows.slice(0, 10).map((row) => (
+                <div key={row.metricoolQueueItemId} className="rounded-md border border-teal-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">{row.rank}. {row.metricoolBrandName} · {row.uploadFileName}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{row.publishAt}</p>
+                    </div>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      row.status === "ready_to_schedule"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {row.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{row.captionSeed}</p>
+                  <p className="mt-2 break-all text-[11px] leading-4 text-teal-100/75">{row.uploadFilePath}</p>
+                  <p className="mt-2 text-[11px] leading-4 text-zinc-500">{row.scheduledEvidenceAction}</p>
+                </div>
+              ))}
+            </div>
+            {metricoolCurrentBatchSessionPacket.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {metricoolCurrentBatchSessionPacket.guardrails.slice(0, 6).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tiktokBatchTracker && (
+          <section
+            className="rounded-lg border border-rose-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-batch-tracker-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border border-rose-300/30 bg-rose-300/10 text-rose-100">
+                    {tiktokBatchTracker.status}
+                  </Badge>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                    {tiktokBatchTracker.batch.id}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    importable {formatNumber(tiktokBatchTracker.totals.readyToImport)}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Tracker</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchTracker.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokBatchTracker.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokBatchTracker.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokBatchTracker.totals.scheduled)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Ready</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokBatchTracker.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-4">
+              <p>Accounts: {tiktokBatchTracker.batch.accounts.join(", ") || "none"}</p>
+              <p>Platforms: {tiktokBatchTracker.batch.platforms.join(", ") || "none"}</p>
+              <p>Workbook: {tiktokBatchTracker.paths.workbook}</p>
+              <p>Evidence: {tiktokBatchTracker.paths.evidenceCsv}</p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-6">
+              {[
+                ["Not started", tiktokBatchTracker.totals.notStarted],
+                ["Scheduled", tiktokBatchTracker.totals.scheduled],
+                ["Waiting metrics", tiktokBatchTracker.totals.waitingMetrics],
+                ["Ready import", tiktokBatchTracker.totals.readyToImport],
+                ["Needs fix", tiktokBatchTracker.totals.needsFix],
+                ["Rejected", tiktokBatchTracker.totals.rejected],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            {tiktokBatchTracker.rows[0]?.operatorCopyText && (
+              <div className="mt-3 rounded-md border border-rose-300/15 bg-rose-950/10 p-3" data-testid="clippers-tiktok-batch-operator-copy-packet">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-200">Next row copy packet</p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      #{tiktokBatchTracker.rows[0].rank} {tiktokBatchTracker.rows[0].accountName || tiktokBatchTracker.rows[0].accountId} · {tiktokBatchTracker.rows[0].metricoolBrandName}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-rose-300/20 bg-transparent px-3 text-xs text-rose-100 hover:bg-rose-300/10"
+                    onClick={() => selectMetricoolEvidenceItem(tiktokBatchTracker.rows[0].metricoolQueueItemId)}
+                    data-testid="select-tiktok-batch-next-row-button"
+                  >
+                    Usar fila
+                  </Button>
+                </div>
+                <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/35 p-3 text-[11px] leading-5 text-rose-50/80">
+                  {tiktokBatchTracker.rows[0].operatorCopyText}
+                </pre>
+              </div>
+            )}
+            <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+              {tiktokBatchTracker.rows.slice(0, 10).map((row) => (
+                <div key={row.metricoolQueueItemId} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 lg:grid-cols-[42px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_86px] lg:items-center">
+                  <p className="font-semibold text-rose-100">#{row.rank}</p>
+                  <p className="truncate text-rose-100">{row.accountName || row.accountId}</p>
+                  <p className="truncate text-zinc-400">{row.scheduledFor}</p>
+                  <p className="truncate text-zinc-400">{row.sourceFileName}</p>
+                  <p className="line-clamp-2 text-[11px] leading-4 text-rose-100/70">{row.nextAction}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-rose-300/20 bg-transparent px-2 text-[11px] text-rose-100 hover:bg-rose-300/10"
+                    onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
+                    data-testid={`select-tiktok-batch-tracker-row-${row.rank}`}
+                  >
+                    Usar fila
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {tiktokBatchTracker.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {tiktokBatchTracker.guardrails.slice(0, 4).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tiktokBatchEvidenceSync && (
+          (() => {
+            const evidenceSyncHasConflicts = Number(tiktokBatchEvidenceSync.consistency?.conflicts || 0) > 0;
+            const evidenceSyncBlocked = tiktokBatchEvidenceSync.status === "blocked_invalid_batch_evidence" || evidenceSyncHasConflicts;
+            return (
+          <section
+            className="rounded-lg border border-orange-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-batch-evidence-sync-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    evidenceSyncBlocked
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokBatchEvidenceSync.status === "synced"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-orange-300/30 bg-orange-300/10 text-orange-100"
+                  )}>
+                    {tiktokBatchEvidenceSync.status}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    {tiktokBatchEvidenceSync.mode === "all_batches" ? "all batches" : "batch evidence only"}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Evidence Sync</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchEvidenceSync.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokBatchEvidenceSync.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Applied</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokBatchEvidenceSync.totals.applied)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Untouched</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokBatchEvidenceSync.totals.untouched)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rejected</p>
+                  <p className="mt-1 text-xl font-semibold text-red-100">{formatNumber(tiktokBatchEvidenceSync.totals.rejected)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-3">
+              <p className="break-all">Batch CSV: {tiktokBatchEvidenceSync.paths.batchEvidence}</p>
+              <p className="break-all">Master CSV: {tiktokBatchEvidenceSync.paths.masterEvidence}</p>
+              <p className="break-all">
+                Rows: {formatNumber(tiktokBatchEvidenceSync.totals.batchRows)}
+                {tiktokBatchEvidenceSync.totals.batchesChecked ? ` / batches ${formatNumber(tiktokBatchEvidenceSync.totals.batchesChecked)}` : ""}
+              </p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-5" data-testid="clippers-tiktok-batch-evidence-consistency">
+              {[
+                ["Synced", tiktokBatchEvidenceSync.consistency.synced],
+                ["Placeholder", tiktokBatchEvidenceSync.consistency.placeholderAligned],
+                ["Needs sync", tiktokBatchEvidenceSync.consistency.needsMasterSync],
+                ["Master only", tiktokBatchEvidenceSync.consistency.masterHasOperatorUpdate],
+                ["Conflicts", tiktokBatchEvidenceSync.consistency.conflicts],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            {evidenceSyncHasConflicts && (
+              <div className="mt-3 rounded-md border border-red-300/25 bg-red-400/10 p-2 text-xs leading-5 text-red-50">
+                Conflicts detected. Fix the batch evidence CSV or master evidence row before syncing again.
+              </div>
+            )}
+            {lastTikTokBatchEvidencePreview && (
+              <div className="mt-3 grid gap-2 md:grid-cols-5" data-testid="clippers-tiktok-batch-evidence-preview">
+                {[
+                  ["Preview rows", lastTikTokBatchEvidencePreview.totals.rows],
+                  ["Importable", lastTikTokBatchEvidencePreview.totals.importable],
+                  ["Pending live", lastTikTokBatchEvidencePreview.totals.pendingLive],
+                  ["Skipped", lastTikTokBatchEvidencePreview.totals.skipped],
+                  ["Rejected", lastTikTokBatchEvidencePreview.totals.rejected],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                    <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {tiktokBatchEvidenceSync.rows.length > 0 && (
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {tiktokBatchEvidenceSync.rows.slice(0, 10).map((row) => (
+                  <div key={row.metricoolQueueItemId} className="rounded-md border border-orange-300/10 bg-black/25 p-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium text-white">{row.metricoolQueueItemId}</p>
+                      <Badge className="border border-orange-300/20 bg-orange-300/10 text-[10px] text-orange-100">
+                        {row.result}
+                      </Badge>
+                    </div>
+                    {row.batchId && <p className="mt-1 text-[10px] uppercase tracking-wide text-orange-100/70">{row.batchId}</p>}
+                    {row.reason && <p className="mt-1 text-orange-100/70">{row.reason}</p>}
+                    {row.consistency && <p className="mt-1 text-[11px] text-zinc-500">Consistency: {row.consistency}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+            );
+          })()
+        )}
+
+        {tiktokPostScheduleVerifier && (
+          <section
+            className="rounded-lg border border-amber-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-post-schedule-verifier-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokPostScheduleVerifier.status === "needs_evidence_fix"
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokPostScheduleVerifier.status === "ready_for_import_review"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokPostScheduleVerifier.status}
+                  </Badge>
+                  <Badge className="border border-amber-300/20 bg-amber-300/10 text-amber-100">
+                    {tiktokPostScheduleVerifier.batch.id}
+                  </Badge>
+                  <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                    read-only
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Post-Schedule Verifier</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokPostScheduleVerifier.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-amber-100/70">{tiktokPostScheduleVerifier.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(tiktokPostScheduleVerifier.totals.scheduled)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Import review</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokPostScheduleVerifier.totals.readyToImport)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Needs fix</p>
+                  <p className="mt-1 text-xl font-semibold text-red-100">{formatNumber(tiktokPostScheduleVerifier.totals.needsFix)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              {[
+                ["Not started", tiktokPostScheduleVerifier.totals.notStarted],
+                ["Waiting metrics", tiktokPostScheduleVerifier.totals.waitingMetrics],
+                ["Missing approval", tiktokPostScheduleVerifier.totals.missingApproval],
+                ["Invalid evidence", tiktokPostScheduleVerifier.totals.invalidEvidence],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              {[
+                ["URL due now", tiktokPostScheduleVerifier.timeline.publicUrlDueNow],
+                ["Metrics due now", tiktokPostScheduleVerifier.timeline.metricsEligibleNow],
+                ["Metrics wait", tiktokPostScheduleVerifier.timeline.metricsNotDueYet],
+                ["Next check", tiktokPostScheduleVerifier.timeline.nextActionAt || "none"],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-amber-300/10 bg-amber-950/10 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-amber-100/60">{label}</p>
+                  <p className="mt-1 break-all text-sm font-semibold text-amber-50">{typeof value === "number" ? formatNumber(value) : value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {tiktokPostScheduleVerifier.rows.slice(0, 6).map((row) => (
+                <div key={row.metricoolQueueItemId} className="rounded-md border border-amber-300/10 bg-black/25 p-3 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-white">#{row.rank} {row.accountName || row.accountId}</p>
+                    <Badge className="shrink-0 border border-amber-300/20 bg-amber-300/10 text-[10px] text-amber-100">
+                      {row.gate}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-amber-100/70">{row.nextAction}</p>
+                  {row.blocker && <p className="mt-1 text-[11px] text-zinc-500">Blocker: {row.blocker}</p>}
+                  <p className="mt-2 text-[11px] text-zinc-500">Timeline: {row.timeline.status}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">URL: {row.timeline.publicUrlDueAt || "none"} · Metrics: {row.timeline.metricsDueAt || "none"}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokPostScheduleVerifier.guardrails.slice(0, 5).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokBatchCloseoutVerifier && (
+          <section
+            className="rounded-lg border border-lime-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-batch-closeout-verifier-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokBatchCloseoutVerifier.status.startsWith("blocked")
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokBatchCloseoutVerifier.status === "ready_to_close_batch"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-lime-300/30 bg-lime-300/10 text-lime-100"
+                  )}>
+                    {tiktokBatchCloseoutVerifier.status}
+                  </Badge>
+                  <Badge className="border border-lime-300/20 bg-lime-300/10 text-lime-100">
+                    {tiktokBatchCloseoutVerifier.batch.id}
+                  </Badge>
+                  {tiktokBatchCloseoutVerifier.nextBatch && (
+                    <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                      next {tiktokBatchCloseoutVerifier.nextBatch.id}
+                    </Badge>
+                  )}
+                  <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                    no auto-advance
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Closeout</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchCloseoutVerifier.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-lime-100/70">{tiktokBatchCloseoutVerifier.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Ready import</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokBatchCloseoutVerifier.totals.readyToImport)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled</p>
+                  <p className="mt-1 text-xl font-semibold text-lime-100">{formatNumber(tiktokBatchCloseoutVerifier.totals.scheduled)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Not started</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(tiktokBatchCloseoutVerifier.totals.notStarted)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              {[
+                ["Rows", tiktokBatchCloseoutVerifier.totals.rows],
+                ["Import applied", tiktokBatchCloseoutVerifier.totals.importApplied],
+                ["Waiting metrics", tiktokBatchCloseoutVerifier.totals.waitingMetrics],
+                ["Needs fix", tiktokBatchCloseoutVerifier.totals.needsFix],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            <div className={cn(
+              "mt-3 rounded-md border p-3 text-xs leading-5",
+              tiktokBatchCloseoutVerifier.nextBatchUnlock.canPrepareNextBatch
+                ? "border-emerald-300/20 bg-emerald-950/20 text-emerald-100"
+                : "border-amber-300/20 bg-amber-950/20 text-amber-100"
+            )}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-semibold">Next batch unlock: {tiktokBatchCloseoutVerifier.nextBatchUnlock.status}</p>
+                  <p>{tiktokBatchCloseoutVerifier.nextBatchUnlock.nextAction}</p>
+                  <p className="mt-1">Blockers: {tiktokBatchCloseoutVerifier.nextBatchUnlock.blockers.join(", ") || "none"}</p>
+                </div>
+                <Badge className={cn(
+                  "w-fit shrink-0 border",
+                  tiktokBatchCloseoutVerifier.nextBatchUnlock.canPrepareNextBatch
+                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                )}>
+                  {tiktokBatchCloseoutVerifier.nextBatchUnlock.canPrepareNextBatch ? "next batch ready" : "hold current batch"}
+                </Badge>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {tiktokBatchCloseoutVerifier.rows.slice(0, 6).map((row) => (
+                <div key={row.metricoolQueueItemId} className="rounded-md border border-lime-300/10 bg-black/25 p-3 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-white">#{row.rank} {row.accountName || row.accountId}</p>
+                    <Badge className="shrink-0 border border-lime-300/20 bg-lime-300/10 text-[10px] text-lime-100">
+                      {row.closeoutGate}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-lime-100/70">{row.nextAction}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">Import applied: {row.importApplied ? "yes" : "no"}</p>
+                  {row.blocker && <p className="mt-1 text-[11px] text-zinc-500">Blocker: {row.blocker}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokBatchCloseoutVerifier.guardrails.slice(0, 5).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokNextAction && (
+          <section
+            className="rounded-lg border border-emerald-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-next-action-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokNextAction.status.startsWith("blocked")
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokNextAction.status === "ready_for_metricool_scheduling"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokNextAction.status}
+                  </Badge>
+                  <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                    {tiktokNextAction.batch.id}
+                  </Badge>
+                  <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                    TikTok + Metricool
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Next Action</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokNextAction.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-emerald-100/70">{tiktokNextAction.paths.markdown}</p>
+                {tiktokNextAction.operator && (
+                  <div className="mt-3 rounded-md border border-emerald-300/10 bg-black/25 p-3">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 space-y-1 text-[11px] leading-4 text-zinc-500">
+                        <p className="font-medium text-emerald-100">Metricool operator packet</p>
+                        <p className="break-all">Upload HTML: {tiktokNextAction.operator.uploadHtml || "missing"}</p>
+                        <p className="break-all">Evidence CSV: {tiktokNextAction.operator.batchEvidenceCsv || "missing"}</p>
+                      </div>
+                      {tiktokNextAction.operator.copyPacket && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 shrink-0 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                          onClick={() => void copyExternalCloseoutPacket(tiktokNextAction.operator?.copyPacket || "")}
+                          data-testid="copy-clippers-tiktok-next-action-operator-packet"
+                        >
+                          <Copy className="mr-1.5 h-3.5 w-3.5" />
+                          Copy packet
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Accounts</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokNextAction.account.readyLanes)}/{formatNumber(tiktokNextAction.account.totalLanes)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Upload pack</p>
+                  <p className="mt-1 text-xl font-semibold text-cyan-100">{formatNumber(tiktokNextAction.uploadPack.copied)}/{formatNumber(tiktokNextAction.uploadPack.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(tiktokNextAction.batch.scheduled)}/{formatNumber(tiktokNextAction.batch.rows)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-5">
+              {tiktokNextAction.tasks.map((task) => (
+                <div key={task.id} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium leading-4 text-white">{task.label}</p>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      task.status === "done"
+                        ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100"
+                        : task.status === "next"
+                          ? "border-amber-300/20 bg-amber-300/10 text-amber-100"
+                          : "border-red-300/20 bg-red-300/10 text-red-100"
+                    )}>
+                      {task.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-4 text-zinc-500">{task.evidence}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-emerald-100/75">{task.nextAction}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokNextAction.guardrails.slice(0, 5).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokOperatorCockpitPreflight && (
+          <section
+            className="rounded-lg border border-violet-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-operator-cockpit-preflight-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokOperatorCockpitPreflight.status === "ready_for_operator"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-red-300/30 bg-red-300/10 text-red-100"
+                  )}>
+                    {tiktokOperatorCockpitPreflight.status}
+                  </Badge>
+                  <Badge className="border border-violet-300/20 bg-violet-300/10 text-violet-100">
+                    {tiktokOperatorCockpitPreflight.batchId}
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Operator Cockpit Preflight</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokOperatorCockpitPreflight.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-violet-100/70">{tiktokOperatorCockpitPreflight.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Passed</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokOperatorCockpitPreflight.totals.passed)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Failed</p>
+                  <p className="mt-1 text-xl font-semibold text-red-100">{formatNumber(tiktokOperatorCockpitPreflight.totals.failed)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">MP4</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokOperatorCockpitPreflight.totals.uploadMp4Files)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {tiktokOperatorCockpitPreflight.checks.slice(0, 10).map((check) => (
+                <div key={check.id} className="rounded-md border border-violet-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-white">{check.label}</p>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      check.status === "pass"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-red-300/30 bg-red-300/10 text-red-100"
+                    )}>
+                      {check.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 break-all text-xs leading-5 text-zinc-400">{check.evidence}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokOperatorCockpit && (
+          <section
+            className="rounded-lg border border-indigo-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-operator-cockpit-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokOperatorCockpit.status.startsWith("blocked") || tiktokOperatorCockpit.status === "needs_evidence_fix"
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokOperatorCockpit.status === "ready_for_import_review"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-indigo-300/30 bg-indigo-300/10 text-indigo-100"
+                  )}>
+                    {tiktokOperatorCockpit.status}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    {tiktokOperatorCockpit.batchId}
+                  </Badge>
+                  <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                    no publish
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Operator Cockpit</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokOperatorCockpit.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-indigo-100/70">Console: {tiktokOperatorCockpit.paths.html}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">MP4 ready</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokOperatorCockpit.totals.copiedFiles)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled</p>
+                  <p className="mt-1 text-xl font-semibold text-sky-100">{formatNumber(tiktokOperatorCockpit.totals.scheduled)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Import review</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokOperatorCockpit.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {tiktokOperatorCockpit.links.map((link) => (
+                <div key={link.id} className="rounded-md border border-indigo-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-white">{link.label}</p>
+                    <Badge className="shrink-0 border border-indigo-300/20 bg-indigo-300/10 text-[10px] text-indigo-100">
+                      {link.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-zinc-400">{link.nextAction}</p>
+                  <p className="mt-2 break-all text-[11px] leading-4 text-indigo-100/70">{link.path}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokOperatorCockpit.guardrails.slice(0, 5).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokEvidenceChecklist && (
+          <section
+            className="rounded-lg border border-sky-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-evidence-checklist-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokEvidenceChecklist.status === "needs_evidence_fix"
+                      ? "border-red-300/30 bg-red-300/10 text-red-100"
+                      : tiktokEvidenceChecklist.status === "ready_for_import_preview"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                  )}>
+                    {tiktokEvidenceChecklist.status}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    read-only
+                  </Badge>
+                  <Badge className="border border-sky-300/20 bg-sky-300/10 text-sky-100">
+                    exact TikTok URL
+                  </Badge>
+                </div>
+	                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Evidence Checklist</h2>
+	                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokEvidenceChecklist.nextStep}</p>
+	                {tiktokEvidenceChecklist.paths.html && <p className="mt-2 break-all text-[11px] leading-4 text-sky-100/70">Console: {tiktokEvidenceChecklist.paths.html}</p>}
+	                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokEvidenceChecklist.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokEvidenceChecklist.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Scheduled proof</p>
+                  <p className="mt-1 text-xl font-semibold text-sky-100">{formatNumber(tiktokEvidenceChecklist.totals.missingApproval)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Import preview</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokEvidenceChecklist.totals.readyForImportPreview)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              {[
+                ["Missing public URL", tiktokEvidenceChecklist.totals.missingPublicUrl],
+                ["Missing metrics", tiktokEvidenceChecklist.totals.missingMetrics],
+                ["Invalid evidence", tiktokEvidenceChecklist.totals.invalidEvidence],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-md border border-sky-300/15 bg-sky-950/10 p-3" data-testid="clippers-tiktok-batch-evidence-batch-panel">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-200">Batch evidence paste</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-400">
+                    Paste CSV or JSON rows from Metricool. Preview validates every row first; apply writes nothing if any row is rejected.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                    onClick={() => tiktokBatchEvidenceBatchPreviewMutation.mutate()}
+                    disabled={tiktokBatchEvidenceBatchPreviewMutation.isPending || !tiktokBatchEvidenceBatchText.trim()}
+                    data-testid="preview-tiktok-batch-evidence-batch-button"
+                  >
+                    {tiktokBatchEvidenceBatchPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                    Preview batch
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+                    onClick={() => tiktokBatchEvidenceBatchApplyMutation.mutate()}
+                    disabled={tiktokBatchEvidenceBatchApplyDisabled}
+                    data-testid="apply-tiktok-batch-evidence-batch-button"
+                  >
+                    {tiktokBatchEvidenceBatchApplyMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                    Apply valid batch
+                  </Button>
+                </div>
+              </div>
+              <Textarea
+                className="mt-3 min-h-[120px] border-sky-300/20 bg-black/40 font-mono text-xs text-zinc-100"
+                value={tiktokBatchEvidenceBatchText}
+                onChange={(event) => {
+                  setTikTokBatchEvidenceBatchText(event.target.value);
+                  setTikTokBatchEvidenceBatchPreview(null);
+                }}
+                placeholder="metricool_queue_item_id,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes"
+                data-testid="tiktok-batch-evidence-batch-textarea"
+              />
+              {tiktokBatchEvidenceBatchPreview && (
+                <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3" data-testid="tiktok-batch-evidence-batch-preview">
+                  {tiktokBatchEvidenceBatchApplyMutation.data?.refreshStatus === "partial_refresh_failed" && (
+                    <div className="mb-3 rounded-md border border-red-300/25 bg-red-400/10 p-2 text-xs leading-5 text-red-50" data-testid="tiktok-batch-evidence-batch-refresh-warning">
+                      Evidence was saved, but refresh did not complete. Refresh tracker/checklist before trusting totals.
+                      {tiktokBatchEvidenceBatchApplyMutation.data.refreshError ? ` ${tiktokBatchEvidenceBatchApplyMutation.data.refreshError}` : ""}
+                    </div>
+                  )}
+                  <div className="grid gap-2 text-center sm:grid-cols-4">
+                    {[
+                      ["Rows", tiktokBatchEvidenceBatchPreview.totals.rows],
+                      ["Accepted", tiktokBatchEvidenceBatchPreview.totals.accepted || tiktokBatchEvidenceBatchPreview.totals.applied || 0],
+                      ["Scheduled", tiktokBatchEvidenceBatchPreview.totals.scheduled || 0],
+                      ["Rejected", tiktokBatchEvidenceBatchPreview.totals.rejected],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">{tiktokBatchEvidenceBatchPreview.nextStep}</p>
+                  {(tiktokBatchEvidenceBatchPreview.rows || []).slice(0, 6).map((row) => (
+                    <div key={`${row.row}-${row.metricoolQueueItemId}`} className="mt-2 rounded-md border border-white/10 bg-black/20 p-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-white">Row {row.row}: {row.metricoolQueueItemId || "missing id"}</p>
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          row.accepted ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-red-300/30 bg-red-300/10 text-red-100"
+                        )}>
+                          {row.accepted ? row.classification : "rejected"}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-zinc-400">{row.reason || row.nextAction}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+              {tiktokEvidenceChecklist.rows.slice(0, 10).map((row) => (
+                <div key={row.metricoolQueueItemId} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 lg:grid-cols-[42px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.2fr)_86px] lg:items-center">
+                  <p className="font-semibold text-sky-100">#{row.rank}</p>
+                  <p className="truncate text-sky-100">{row.metricoolBrandName || row.accountName || row.accountId}</p>
+                  <p className="truncate text-zinc-400">{row.sourceFileName}</p>
+                  <p className="line-clamp-2 text-[11px] leading-4 text-sky-100/70">
+                    {row.missingFields.length ? row.missingFields.join(", ") : row.nextAction}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-sky-300/20 bg-transparent px-2 text-[11px] text-sky-100 hover:bg-sky-300/10"
+                    onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
+                    data-testid={`select-tiktok-evidence-checklist-row-${row.rank}`}
+                  >
+                    Usar fila
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokEvidenceChecklist.guardrails.slice(0, 4).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokMvpGoLivePacket && (
+          <section
+            className="rounded-lg border border-teal-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-mvp-go-live-packet-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokMvpGoLivePacket.status === "ready_for_metricool_operator"
+                      ? "border-teal-300/30 bg-teal-300/10 text-teal-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokMvpGoLivePacket.status}
+                  </Badge>
+                  <Badge className="border border-teal-300/20 bg-teal-300/10 text-teal-100">
+                    approval_required
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    no auto publish
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok MVP Go-Live Packet</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokMvpGoLivePacket.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokMvpGoLivePacket.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Accounts</p>
+                  <p className="mt-1 text-xl font-semibold text-teal-100">{formatNumber(tiktokMvpGoLivePacket.totals.accountReady)}/{formatNumber(tiktokMvpGoLivePacket.totals.accountRows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokMvpGoLivePacket.totals.batchRows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Importable</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokMvpGoLivePacket.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            {tiktokMvpGoLivePacket.metricool100 && (
+              <div
+                className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3"
+                data-testid="clippers-tiktok-mvp-metricool-100-summary"
+              >
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">Metricool 100 run</p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      {formatNumber(tiktokMvpGoLivePacket.metricool100.rows)} rows · {formatNumber(tiktokMvpGoLivePacket.metricool100.readyBatches)}/{formatNumber(tiktokMvpGoLivePacket.metricool100.batches)} batches ready
+                    </p>
+                    <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">
+                      Current batch evidence: {tiktokMvpGoLivePacket.metricool100.currentBatchEvidenceCsv || "n/a"}
+                    </p>
+                  </div>
+                  <Badge className={cn(
+                    "w-fit border text-[10px]",
+                    tiktokMvpGoLivePacket.metricool100.ready
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokMvpGoLivePacket.metricool100.status}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-center sm:grid-cols-4">
+                  {[
+                    ["Sports", tiktokMvpGoLivePacket.metricool100.sports, "text-sky-100"],
+                    ["Memes", tiktokMvpGoLivePacket.metricool100.memes, "text-fuchsia-100"],
+                    ["Ready send", tiktokMvpGoLivePacket.metricool100.readyToSend, "text-amber-100"],
+                    ["Published", tiktokMvpGoLivePacket.metricool100.publishedRowsCounted, "text-zinc-300"],
+                  ].map(([label, value, tone]) => (
+                    <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                      <p className={cn("mt-1 text-lg font-semibold", String(tone))}>{formatNumber(Number(value))}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-2 text-[11px] leading-4 text-emerald-100/70 md:grid-cols-2">
+                  <p>Current batch: {tiktokMvpGoLivePacket.metricool100.currentBatchId || "n/a"} · {tiktokMvpGoLivePacket.metricool100.currentBatchRows || "n/a"}</p>
+                  <p>
+                    Source gates: {formatNumber(tiktokMvpGoLivePacket.metricool100.currentBatchSourceGateTotals.ready)}/{formatNumber(tiktokMvpGoLivePacket.metricool100.currentBatchSourceGateTotals.rows)} ready · {formatNumber(tiktokMvpGoLivePacket.metricool100.currentBatchSourceGateTotals.blocked)} blocked · {formatNumber(tiktokMvpGoLivePacket.metricool100.currentBatchSourceGateTotals.pending)} pending
+                  </p>
+                </div>
+              </div>
+            )}
+            {tiktokMvpGoLivePacket.operatingMode && (
+              <div className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-3" data-testid="clippers-tiktok-only-operating-mode">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-200">TikTok-only operating mode</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-300">
+                      Scope {tiktokMvpGoLivePacket.operatingMode.scope}; active platforms {tiktokMvpGoLivePacket.operatingMode.activePlatforms.join(", ")}; deferred {tiktokMvpGoLivePacket.operatingMode.deferredLanes.join(", ")}.
+                    </p>
+                  </div>
+                  <Badge className={cn(
+                    "w-fit border text-[10px]",
+                    tiktokMvpGoLivePacket.operatingMode.batchOnlyUsesActiveTikTokAccounts
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                      : "border-red-300/30 bg-red-300/10 text-red-200"
+                  )}>
+                    {tiktokMvpGoLivePacket.operatingMode.batchPlatformCheck}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 md:grid-cols-3">
+                  <p>Metricool brands: {tiktokMvpGoLivePacket.operatingMode.activeMetricoolBrands.join(", ") || "none"}</p>
+                  <p>Batch platforms: {tiktokMvpGoLivePacket.operatingMode.batchPlatforms.join(", ") || "none"}</p>
+                  <p>Active TikTok accounts: {formatNumber(tiktokMvpGoLivePacket.totals.activeTikTokAccounts ?? tiktokMvpGoLivePacket.operatingMode.activeAccounts.length)}</p>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <Badge className="border border-teal-300/20 bg-teal-300/10 text-[10px] text-teal-100">
+                    Direct social APIs required: {String(tiktokMvpGoLivePacket.operatingMode.directSocialApisRequired)}
+                  </Badge>
+                  <Badge className="border border-teal-300/20 bg-teal-300/10 text-[10px] text-teal-100">
+                    Metricool approval required: {String(tiktokMvpGoLivePacket.operatingMode.metricoolApprovalRequired)}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {tiktokMvpGoLivePacket.operatingMode.activeAccounts.map((account) => (
+                    <div key={account.accountId} className="rounded-md border border-white/10 bg-black/25 p-2 text-[11px] leading-4 text-zinc-300">
+                      <p className="font-medium text-white">{account.accountName} · {account.metricoolBrandName}</p>
+                      <p className="mt-1 text-zinc-500">{account.handle} / {account.category} / {formatNumber(account.rightsReadyAssets)} rights-ready assets</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              {[
+                ["Not started", tiktokMvpGoLivePacket.totals.notStarted],
+                ["Scheduled", tiktokMvpGoLivePacket.totals.scheduled],
+                ["Scheduled proof", tiktokMvpGoLivePacket.totals.evidenceMissingApproval ?? 0],
+                ["Import preview", tiktokMvpGoLivePacket.totals.evidenceReadyForImportPreview ?? 0],
+                ["Sync applied", tiktokMvpGoLivePacket.totals.syncApplied],
+                ["Conflicts", tiktokMvpGoLivePacket.totals.conflicts],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            {tiktokMvpGoLivePacket.nextRow && (
+              <div className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-200">Next Metricool row</p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      #{tiktokMvpGoLivePacket.nextRow.rank} {tiktokMvpGoLivePacket.nextRow.accountName || tiktokMvpGoLivePacket.nextRow.accountId} · {tiktokMvpGoLivePacket.nextRow.metricoolBrandName}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">{tiktokMvpGoLivePacket.nextRow.sourceFileName} · {tiktokMvpGoLivePacket.nextRow.scheduledFor}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-teal-300/20 bg-transparent px-3 text-xs text-teal-100 hover:bg-teal-300/10"
+                    onClick={() => selectMetricoolEvidenceItem(tiktokMvpGoLivePacket.nextRow?.metricoolQueueItemId || "")}
+                    data-testid="select-tiktok-go-live-next-row-button"
+                  >
+                    Usar fila
+                  </Button>
+                </div>
+                <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/35 p-3 text-[11px] leading-5 text-teal-50/80">
+                  {tiktokMvpGoLivePacket.nextRow.operatorCopyText || tiktokMvpGoLivePacket.nextRow.operatorStep || tiktokMvpGoLivePacket.nextStep}
+                </pre>
+              </div>
+            )}
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {tiktokMvpGoLivePacket.operatorSteps.slice(0, 4).map((step) => (
+                <div key={step.id} className="rounded-md border border-teal-300/10 bg-black/25 p-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-white">{step.id}</p>
+                    <Badge className="border border-teal-300/20 bg-teal-300/10 text-[10px] text-teal-100">
+                      {step.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-4 text-teal-100/75">{step.action}</p>
+                  {step.blocker && <p className="mt-1 text-[10px] text-zinc-500">{step.blocker}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {tiktokMvpGoLivePacket.guardrails.slice(0, 4).map((guardrail) => (
+                <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                  {guardrail}
+                </Badge>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tiktokBatchRunbook && (
+          <section
+            className="rounded-lg border border-cyan-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-tiktok-batch-runbook-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border",
+                    tiktokBatchRunbook.status === "ready_for_metricool_operator"
+                      ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                      : tiktokBatchRunbook.status === "ready_for_import_review"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokBatchRunbook.status}
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    TikTok Metricool only
+                  </Badge>
+                  <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                    approval_required
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Runbook</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchRunbook.nextStep}</p>
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokBatchRunbook.paths.markdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(tiktokBatchRunbook.totals.rows)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Not started</p>
+                  <p className="mt-1 text-xl font-semibold text-cyan-100">{formatNumber(tiktokBatchRunbook.totals.notStarted)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Importable</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(tiktokBatchRunbook.totals.readyToImport)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-zinc-400 md:grid-cols-2">
+              <p className="break-all">Workbook: {tiktokBatchRunbook.paths.workbookCsv}</p>
+              <p className="break-all">Batch evidence: {tiktokBatchRunbook.paths.batchEvidence}</p>
+              <p className="break-all">Tracker: {tiktokBatchRunbook.paths.tracker}</p>
+              <p className="break-all">Sync: {tiktokBatchRunbook.paths.sync}</p>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              {[
+                ["Scheduled", tiktokBatchRunbook.totals.scheduled],
+                ["Waiting metrics", tiktokBatchRunbook.totals.waitingMetrics],
+                ["Sync applied", tiktokBatchRunbook.totals.syncApplied],
+                ["Conflicts", tiktokBatchRunbook.totals.conflicts],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatNumber(Number(value))}</p>
+                </div>
+              ))}
+            </div>
+            {tiktokBatchRunbook.operatorSession && (
+              <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-tiktok-operator-session">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200">Metricool operator session</p>
+                    <p className="mt-1 text-xs leading-5 text-cyan-50/75">{tiktokBatchRunbook.operatorSession.nextAction}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-[10px] text-cyan-100">
+                      {tiktokBatchRunbook.operatorSession.currentStep}
+                    </Badge>
+                    {tiktokBatchRunbook.operatorSession.nextRow && (() => {
+                      const sourceGate = getTikTokSourceGate(tiktokBatchRunbook.operatorSession?.nextRow);
+                      return (
+                      <Badge
+                        className={cn(
+                          "w-fit border text-[10px]",
+                          sourceGate.tone === "blocked"
+                            ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                            : sourceGate.tone === "ok"
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                              : "border-zinc-600 bg-zinc-900 text-zinc-300"
+                        )}
+                        data-testid="clippers-tiktok-runbook-source-gate"
+                      >
+                        {sourceGate.label}
+                      </Badge>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {tiktokBatchRunbook.operatorSession.brandQueue.map((row) => (
+                    <div key={row.brand} className="rounded-md border border-white/10 bg-black/25 p-2 text-[11px] leading-4 text-zinc-300">
+                      <p className="font-medium text-white">{row.brand}</p>
+                      <p className="mt-1 text-zinc-500">
+                        {formatNumber(row.rows)} rows / {formatNumber(row.notStarted)} not started / {formatNumber(row.readyToImport)} importable
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {tiktokBatchRunbook.operatorSession.syncBlocker && (
+                  <div
+                    className="mt-2 rounded-md border border-amber-300/25 bg-amber-400/10 p-2 text-[11px] leading-4 text-amber-50"
+                    data-testid="clippers-tiktok-runbook-sync-blocker"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold uppercase tracking-wide text-amber-100">Evidence sync blocked</p>
+                      <Badge className="border border-amber-300/25 bg-amber-300/10 text-[10px] text-amber-100">
+                        {tiktokBatchRunbook.operatorSession.syncBlocker.result || "blocked"}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-amber-50/80 md:grid-cols-2">
+                      <p className="break-all">Queue item: {tiktokBatchRunbook.operatorSession.syncBlocker.metricoolQueueItemId || "batch CSV"}</p>
+                      <p className="break-all">Consistency: {tiktokBatchRunbook.operatorSession.syncBlocker.consistency || "n/a"}</p>
+                      <p className="break-all md:col-span-2">Reason: {tiktokBatchRunbook.operatorSession.syncBlocker.reason}</p>
+                    </div>
+                  </div>
+                )}
+                {tiktokBatchRunbook.operatorSession.copyBlocks && (
+                  <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 md:grid-cols-2">
+                    <p className="break-all">Queue item: {tiktokBatchRunbook.operatorSession.copyBlocks.metricoolQueueItemId}</p>
+                    <p className="break-all">Brand: {tiktokBatchRunbook.operatorSession.copyBlocks.metricoolBrandName}</p>
+                    <p className="break-all">Source: {tiktokBatchRunbook.operatorSession.copyBlocks.sourcePath}</p>
+                    <p className="break-all">Evidence CSV: {tiktokBatchRunbook.operatorSession.copyBlocks.evidenceCsvPath}</p>
+                    {tiktokBatchRunbook.operatorSession.nextRow && (() => {
+                      const sourceGate = getTikTokSourceGate(tiktokBatchRunbook.operatorSession?.nextRow);
+                      return (
+                      <p className="break-all">
+                        Source gate: {sourceGate.tone === "blocked"
+                          ? `blocked${tiktokBatchRunbook.operatorSession.nextRow.blocker ? ` (${tiktokBatchRunbook.operatorSession.nextRow.blocker})` : ""}`
+                          : sourceGate.tone === "ok"
+                            ? `ok${tiktokBatchRunbook.operatorSession.nextRow.sourceBytes ? ` (${formatNumber(tiktokBatchRunbook.operatorSession.nextRow.sourceBytes)} bytes${tiktokBatchRunbook.operatorSession.nextRow.sourceDurationSeconds ? `, ${formatNumber(Math.round(tiktokBatchRunbook.operatorSession.nextRow.sourceDurationSeconds))}s` : ""}${tiktokBatchRunbook.operatorSession.nextRow.sourceProbe ? `, ${tiktokBatchRunbook.operatorSession.nextRow.sourceProbe}` : ""})` : ""}`
+                            : "pending source verification"}
+                      </p>
+                      );
+                    })()}
+                  </div>
+                )}
+                {tiktokBatchRunbook.operatorSession.nextRow?.operatorPacket && (
+                  <div
+                    className="mt-2 rounded-md border border-cyan-300/15 bg-black/25 p-2"
+                    data-testid="clippers-tiktok-operator-packet"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200">Copy-safe Metricool packet</p>
+                      <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-[10px] text-cyan-100">
+                        {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-400 md:grid-cols-2">
+                      <p className="break-all">Brand: {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.metricoolFields.brand}</p>
+                      <p className="break-all">Schedule: {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.metricoolFields.scheduledFor}</p>
+                      <p className="break-all">Caption: {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.metricoolFields.caption}</p>
+                      <p className="break-all">Evidence: {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.metricoolFields.evidenceCsvPath}</p>
+                    </div>
+                    <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] leading-4 text-cyan-50/75">
+                      {tiktokBatchRunbook.operatorSession.nextRow.operatorPacket.checklist.slice(0, 6).map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] leading-4 text-cyan-100/65">{tiktokBatchRunbook.operatorSession.evidenceRule}</p>
+              </div>
+            )}
+            <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200">Runbook steps</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-5 text-cyan-50/75">
+                {tiktokBatchRunbook.runbook.slice(0, 6).map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+            <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+              {tiktokBatchRunbook.rows.slice(0, 10).map((row) => {
+                const sourceGate = getTikTokSourceGate(row);
+                return (
+                <div key={row.metricoolQueueItemId} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 lg:grid-cols-[42px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.4fr)_86px] lg:items-center">
+                  <p className="font-semibold text-cyan-100">#{row.rank}</p>
+                  <p className="truncate text-cyan-100">{row.metricoolBrandName}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-zinc-400">{row.sourceFileName}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`clippers-tiktok-runbook-row-source-gate-${row.rank}`}>
+                      <Badge
+                        className={cn(
+                          "border text-[10px]",
+                          sourceGate.tone === "blocked"
+                            ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                            : sourceGate.tone === "ok"
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                              : "border-zinc-600 bg-zinc-900 text-zinc-300"
+                        )}
+                      >
+                        {sourceGate.label}
+                      </Badge>
+                      {row.sourceBytes ? (
+                        <span className="text-[10px] text-zinc-500">
+                          {formatNumber(row.sourceBytes)} bytes
+                          {row.sourceDurationSeconds ? ` / ${formatNumber(Math.round(row.sourceDurationSeconds))}s` : ""}
+                          {row.sourceProbe ? ` / ${row.sourceProbe}` : ""}
+                        </span>
+                      ) : null}
+                      {row.blocker?.startsWith("source_file_") ? (
+                        <span className="text-[10px] text-amber-100/75">{row.blocker}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{row.operatorStep}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
+                    onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
+                    data-testid={`select-tiktok-batch-runbook-row-${row.rank}`}
+                  >
+                    Usar fila
+                  </Button>
+                </div>
+                );
+              })}
+            </div>
+            {tiktokBatchRunbook.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {tiktokBatchRunbook.guardrails.slice(0, 4).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {goalCompletionAudit && (
+          <section
+            className="rounded-lg border border-lime-300/20 bg-zinc-950 p-4"
+            data-testid="clippers-goal-completion-audit-panel"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn("border", goalCompletionAudit.status === "tiktok_mvp_ready_external_work_remaining" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                    MVP {goalCompletionAudit.status}
+                  </Badge>
+                  <Badge className={cn("border", goalCompletionAudit.fullGoalStatus === "ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                    Full goal {goalCompletionAudit.fullGoalStatus || "blocked_external_actions"}
+                  </Badge>
+                  <Badge className="border border-lime-300/20 bg-lime-300/10 text-lime-100">
+                    TikTok-only
+                  </Badge>
+                  <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                    no fake publish
+                  </Badge>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold text-white">Goal completion audit</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-400">{goalCompletionAudit.nextStep}</p>
+                {goalCompletionAudit.fullGoalStatus !== "ready" && (
+                  <p className="mt-1 text-xs leading-5 text-amber-100">
+                    La meta completa sigue pendiente: {formatNumber(goalCompletionAudit.fullGoal?.externalProofFilesNeedRealEvidence || 0)} proofs externos, {formatNumber(goalCompletionAudit.fullGoal?.tiktokExternalCloseoutTasks || 0)} tareas TikTok externas y {formatNumber(goalCompletionAudit.fullGoal?.fullReadinessMissing || 0)} readiness gaps faltan antes de decir “todo listo”.
+                  </p>
+                )}
+                {goalCompletionAudit.operatingMode && (
+                  <div className="mt-3 rounded-md border border-lime-300/10 bg-lime-950/10 p-3" data-testid="clippers-goal-operating-mode">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-lime-100">TikTok + Metricool only</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{goalCompletionAudit.operatingMode.note}</p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        goalCompletionAudit.operatingMode.publishMode === "approval_required"
+                          ? "border-lime-300/20 bg-lime-300/10 text-lime-100"
+                          : "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                      )}>
+                        {goalCompletionAudit.operatingMode.publishMode}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-3">
+                      <p>Publisher: {goalCompletionAudit.operatingMode.publisher}</p>
+                      <p>Active: {goalCompletionAudit.operatingMode.activePlatforms.join(", ")}</p>
+                      <p>Brands: {goalCompletionAudit.operatingMode.activeMetricoolBrands.join(" + ")}</p>
+                      <p>Accounts: {goalCompletionAudit.operatingMode.activeAccountIds.join(" + ")}</p>
+                      <p>Direct APIs: {goalCompletionAudit.operatingMode.directSocialApisRequired ? "required" : "deferred"}</p>
+                      <p>Deferred: {goalCompletionAudit.operatingMode.deferredPlatforms.join(", ") || "none"}</p>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{goalCompletionAudit.paths.outMarkdown}</p>
+              </div>
+              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Ready</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(goalCompletionAudit.totals.ready + goalCompletionAudit.totals.tiktokMvpReady)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Metricool</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(goalCompletionAudit.totals.waitingMetricoolWork)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">External</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(goalCompletionAudit.totals.needsExternalAction)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {goalCompletionAudit.requirements.map((requirement) => (
+                <div key={requirement.id} className="rounded-md border border-lime-300/10 bg-black/25 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white">{requirement.label}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{requirement.evidence}</p>
+                    </div>
+                    <Badge className={cn(
+                      "shrink-0 border text-[10px]",
+                      requirement.status === "ready" || requirement.status === "ready_for_tiktok_mvp"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : requirement.status === "waiting_metricool_work"
+                          ? "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100"
+                          : requirement.status === "deferred"
+                            ? "border-zinc-700 bg-zinc-900 text-zinc-300"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                    )}>
+                      {requirement.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-lime-100/75">{requirement.nextAction}</p>
+                </div>
+              ))}
+            </div>
+            {goalCompletionAudit.guardrails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {goalCompletionAudit.guardrails.slice(0, 4).map((guardrail) => (
+                  <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                    {guardrail}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {intakeRefreshSweep && (
           <div className="rounded-md border border-violet-300/20 bg-violet-950/20 p-3" data-testid="clippers-intake-refresh-sweep-global-result">
@@ -12274,7 +17917,7 @@ export default function ClippersPage() {
 
             <div className="mt-3 rounded-md border border-amber-300/20 bg-black/30 p-2 text-xs leading-5 text-amber-100">
               <ShieldCheck className="mr-2 inline h-3.5 w-3.5" />
-              No auto-posting. Metricool stays approval only / approval_required; this sprint only prepares blockers, proofs, profile connections, and approval queue work.
+              No auto-posting. Metricool stays review-only / approval_required; this sprint only prepares blockers, proofs, profile connections, and queue work.
               {visibleExternalAccountPermissionSprint.guardrail ? ` ${visibleExternalAccountPermissionSprint.guardrail}` : ""}
             </div>
 
@@ -12371,6 +18014,135 @@ export default function ClippersPage() {
           </div>
         )}
 
+        <section
+          className="rounded-lg border border-emerald-300/25 bg-emerald-950/10 p-4"
+          data-testid="clippers-tiktok-mvp-now-panel"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={cn(
+                  "border",
+                  tiktokMvpNowBlocked
+                    ? "border-red-300/30 bg-red-300/10 text-red-100"
+                    : tiktokMvpNowImportReady
+                      ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                )}>
+                  {tiktokMvpNow.status}
+                </Badge>
+                <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+                  {tiktokMvpNow.batchId}
+                </Badge>
+                <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                  TikTok + Metricool only
+                </Badge>
+                <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                  no direct APIs
+                </Badge>
+              </div>
+              <h2 className="mt-2 text-xl font-semibold text-white">TikTok MVP Now</h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-zinc-300">{tiktokMvpNow.nextStep}</p>
+              <div className="mt-3 grid gap-2 text-[11px] leading-4 text-emerald-100/75 md:grid-cols-2 xl:grid-cols-4">
+                {tiktokMvpNow.cockpitHtml && <p className="break-all">Cockpit: {tiktokMvpNow.cockpitHtml}</p>}
+                {tiktokMvpNow.uploadHtml && <p className="break-all">Upload console: {tiktokMvpNow.uploadHtml}</p>}
+                {tiktokMvpNow.evidenceHtml && <p className="break-all">Evidence console: {tiktokMvpNow.evidenceHtml}</p>}
+                {tiktokMvpNow.evidenceCsv && <p className="break-all">Evidence CSV: {tiktokMvpNow.evidenceCsv}</p>}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button
+                size="sm"
+                onClick={() => tiktokMvpNowRefreshMutation.mutate()}
+                disabled={tiktokMvpNowRefreshMutation.isPending || isLoading}
+                className="bg-white text-zinc-950 hover:bg-zinc-200"
+                data-testid="prepare-clippers-tiktok-mvp-now-refresh-button"
+              >
+                {tiktokMvpNowRefreshMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Refresh MVP
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => tiktokOperatorCockpitMutation.mutate()}
+                disabled={tiktokOperatorCockpitMutation.isPending || isLoading}
+                className="bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+                data-testid="prepare-clippers-tiktok-mvp-now-cockpit-button"
+              >
+                {tiktokOperatorCockpitMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Gauge className="mr-2 h-4 w-4" />}
+                Cockpit
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => metricoolCurrentBatchUploadPackMutation.mutate()}
+                disabled={metricoolCurrentBatchUploadPackMutation.isPending || isLoading}
+                className="bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+                data-testid="prepare-clippers-tiktok-mvp-now-upload-button"
+              >
+                {metricoolCurrentBatchUploadPackMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                Upload pack
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => metricoolCurrentBatchSessionPacketMutation.mutate()}
+                disabled={metricoolCurrentBatchSessionPacketMutation.isPending || isLoading}
+                className="bg-teal-200 text-zinc-950 hover:bg-teal-100"
+                data-testid="prepare-clippers-tiktok-mvp-now-session-packet-button"
+              >
+                {metricoolCurrentBatchSessionPacketMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                Session packet
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => tiktokEvidenceChecklistMutation.mutate()}
+                disabled={tiktokEvidenceChecklistMutation.isPending || isLoading}
+                className="bg-lime-200 text-zinc-950 hover:bg-lime-100"
+                data-testid="prepare-clippers-tiktok-mvp-now-evidence-button"
+              >
+                {tiktokEvidenceChecklistMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                Evidence
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => tiktokMvpReadinessVerifierMutation.mutate()}
+                disabled={tiktokMvpReadinessVerifierMutation.isPending || isLoading}
+                variant="outline"
+                className="border-emerald-300/30 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-now-verify-button"
+              >
+                {tiktokMvpReadinessVerifierMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                Verify
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+            {[
+              ["Checks", `${formatNumber(tiktokMvpNow.checksPassed)}/${formatNumber(tiktokMvpNow.checksTotal)}`],
+              ["Rows", formatNumber(tiktokMvpNow.uploadRows)],
+              ["MP4 ready", formatNumber(tiktokMvpNow.copiedFiles)],
+              ["Missing proof", formatNumber(tiktokMvpNow.missingApproval)],
+              ["Scheduled", formatNumber(tiktokMvpNow.scheduled)],
+              ["Import review", formatNumber(tiktokMvpNow.readyToImport)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-md border border-white/10 bg-black/25 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1">
+            {[
+              "Metricool remains approval_required.",
+              "Scheduled is not published.",
+              "Public TikTok URLs and 24h metrics must be real.",
+              "Instagram, YouTube, streamers, OAuth and direct APIs stay backlog for this run.",
+            ].map((guardrail) => (
+              <Badge key={guardrail} className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                {guardrail}
+              </Badge>
+            ))}
+          </div>
+        </section>
+
         {workflowOverviewCards.length > 0 && (
           <div className="rounded-md border border-white/10 bg-black/35 p-3" data-testid="clippers-weekly-approval-readiness-board">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -12378,7 +18150,7 @@ export default function ClippersPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">100 clips/week operator view</p>
                 <h2 className="mt-1 text-lg font-semibold text-white">Ready, blocked, and waiting on Robert</h2>
                 <p className="mt-1 text-xs leading-5 text-zinc-400">
-                  Uses current Clippers status only: approval queue, external account/permission blockers, Source Scout intake, and source-file supply.
+                  Uses current Clippers status only: Metricool queue, external account/permission blockers, Source Scout intake, and source-file supply.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -12410,13 +18182,17 @@ export default function ClippersPage() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Metricool MVP</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Approval queue for SPORT and memes</h2>
+                <h2 className="mt-1 text-lg font-semibold text-white">Metricool queue for SPORT and memes</h2>
                 <p className="mt-1 text-xs leading-5 text-zinc-400">{metricoolMvpLaunchPack.nextStep}</p>
+                <p className="mt-2 text-xs leading-5 text-emerald-100/75">
+                  Este panel no espera keys de redes sociales: solo usa cuentas conectadas en Metricool, assets con derechos y evidencia real despues de publicar.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge className={cn("w-fit border", metricoolMvpBadge(metricoolMvpLaunchPack.status))}>{metricoolMvpLaunchPack.status}</Badge>
                 <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">approval_required</Badge>
                 <Badge className="w-fit border border-zinc-600 bg-zinc-900 text-zinc-300">real publish off</Badge>
+                <Badge className="w-fit border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">no social API keys</Badge>
               </div>
             </div>
             <div className="mt-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2 lg:grid-cols-5">
@@ -12424,7 +18200,7 @@ export default function ClippersPage() {
               <p>Queued approval: {metricoolMvpLaunchPack.totals.queuedForApproval}</p>
               <p>Manual package-ready: {metricoolMvpLaunchPack.totals.manualReadyPosts}</p>
               <p>Rights assets: {metricoolMvpLaunchPack.totals.rightsReadyAssets}/{metricoolMvpLaunchPack.totals.minimumWeeklySourceAssets}</p>
-              <p>Full-auto blockers: {metricoolMvpLaunchPack.totals.fullAutomationBlockers}</p>
+              <p>Pending profiles: {metricoolMvpLaunchPack.totals.pendingMetricoolProfiles}</p>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {metricoolMvpLaunchPack.rows.map((row) => (
@@ -12441,6 +18217,7 @@ export default function ClippersPage() {
                     <p>Manual package-ready: {row.manualReadyPosts}</p>
                     <p>Assets: {row.rightsReadyAssets}/{row.minimumWeeklySourceAssets}</p>
                     <p>Networks: {row.connectedNetworks.join(", ") || "none"}</p>
+                    <p>Pending: {row.pendingMetricoolProfiles.join(", ") || "none"}</p>
                   </div>
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-amber-100">{row.nextStep}</p>
                   {row.blockers.length > 0 && (
@@ -12449,6 +18226,36 @@ export default function ClippersPage() {
                 </div>
               ))}
             </div>
+            {metricoolMvpLaunchPack.pendingProfileEvidenceRows.length > 0 && (
+              <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Pending Metricool profiles</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-400">
+                      Connect these profiles in Metricool, then replace placeholders in the evidence CSV with real proof before importing.
+                    </p>
+                  </div>
+                  <Badge className="w-fit border border-cyan-300/20 bg-cyan-300/10 text-[10px] text-cyan-100">
+                    {metricoolMvpLaunchPack.pendingProfileEvidenceRows.length} evidence rows
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {metricoolMvpLaunchPack.pendingProfileEvidenceRows.map((row) => (
+                    <div key={row.id} className="rounded-md border border-white/10 bg-black/25 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{row.metricoolBrandName} / {row.platform}</p>
+                          <p className="mt-1 truncate text-xs text-zinc-500">{row.expectedProfileUrl}</p>
+                        </div>
+                        <Badge className="shrink-0 border border-amber-300/20 bg-amber-300/10 text-[10px] text-amber-100">{row.status}</Badge>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-cyan-100">{row.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 break-all text-[10px] leading-4 text-cyan-100/70">{metricoolMvpLaunchPack.pendingProfileEvidenceCsvPath}</p>
+              </div>
+            )}
             {metricoolMvpLaunchPack.fullAutomationStillBlockedBy.length > 0 && (
               <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3 text-xs leading-5 text-amber-100">
                 <p className="font-medium">Full automation still blocked</p>
@@ -12464,7 +18271,7 @@ export default function ClippersPage() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Metricool review</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Operator approval session</h2>
+                <h2 className="mt-1 text-lg font-semibold text-white">Operator review session</h2>
                 <p className="mt-1 text-xs leading-5 text-zinc-400">{metricoolApprovalSession.nextStep}</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -12490,6 +18297,440 @@ export default function ClippersPage() {
               <p className="break-all">CSV: {metricoolApprovalSession.csvPath}</p>
               <p className="break-all">Evidence import CSV: {metricoolApprovalSession.evidenceImportCsvPath}</p>
             </div>
+            {metricoolApprovalQuickRun && (
+              <div className="mt-3 rounded-md border border-emerald-300/20 bg-emerald-950/15 p-3" data-testid="clippers-metricool-approval-quick-run-panel">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-emerald-100">Metricool quick run</p>
+                    <p className="mt-1 text-xs leading-5 text-emerald-100/75">{metricoolApprovalQuickRun.nextStep}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={cn("w-fit border", metricoolApprovalSessionBadge(metricoolApprovalQuickRun.status))}>{metricoolApprovalQuickRun.status}</Badge>
+                    <Badge className="w-fit border border-zinc-600 bg-zinc-900 text-zinc-300">
+                      {metricoolApprovalQuickRun.realPublishEnabled ? "real publish enabled" : "real publish off"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-emerald-100/70 md:grid-cols-5">
+                  <p>Batch: {metricoolApprovalQuickRun.totals.quickRunItems}</p>
+                  <p>Ready: {metricoolApprovalQuickRun.totals.readyForReview}</p>
+                  <p>Blocked: {metricoolApprovalQuickRun.totals.blocked}</p>
+                  <p>Accounts: {metricoolApprovalQuickRun.totals.accounts}</p>
+                  <p>Batch size: {metricoolApprovalQuickRun.batchSize}</p>
+                </div>
+                <div className="mt-3 grid gap-2 text-[10px] leading-4 text-emerald-100/60 md:grid-cols-3">
+                  <p className="break-all">Portal: {metricoolApprovalQuickRun.portalUrl}</p>
+                  <p className="break-all">Markdown: {metricoolApprovalQuickRun.markdownPath}</p>
+                  <p className="break-all">Evidence: {metricoolApprovalQuickRun.evidenceImportCsvPath}</p>
+                </div>
+                {metricoolApprovalQuickRun.accounts.length > 0 && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {metricoolApprovalQuickRun.accounts.slice(0, 4).map((account) => (
+                      <div key={account.accountId} className="rounded-md border border-white/10 bg-black/20 p-2 text-xs leading-5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate font-medium text-white">{account.accountName}</p>
+                          <Badge className="w-fit border border-emerald-300/20 bg-emerald-300/10 text-[10px] text-emerald-100">{account.category}</Badge>
+                        </div>
+                        <p className="mt-1 text-emerald-100/70">{account.readyForReview} ready / first {account.firstPublishAt || "unscheduled"}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {metricoolApprovalQuickRun.items.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+                    {metricoolApprovalQuickRun.items.slice(0, 5).map((item) => (
+                      <div key={item.id} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[44px_minmax(0,1fr)_90px_minmax(0,1fr)_minmax(0,1fr)_86px] md:items-center">
+                        <p className="font-semibold text-emerald-100">#{item.rank}</p>
+                        <p className="truncate font-medium text-white">{item.accountName}</p>
+                        <p className="truncate text-zinc-500">{item.platform}</p>
+                        <p className="truncate text-zinc-500">{item.sourceFileName || "missing source"}</p>
+                        <p className="line-clamp-2 text-[11px] leading-4 text-emerald-100/75">{item.nextStep}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-emerald-300/20 bg-transparent px-2 text-[11px] text-emerald-100 hover:bg-emerald-300/10"
+                          onClick={() => selectMetricoolEvidenceItem(item.id)}
+                          data-testid={`select-metricool-quick-run-row-${item.rank}`}
+                        >
+                          Usar fila
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {metricoolSourceUploadPack && (
+              <div className="mt-3 rounded-md border border-lime-300/20 bg-lime-950/15 p-3" data-testid="clippers-metricool-source-upload-pack-panel">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-lime-100">Metricool source upload pack</p>
+                    <p className="mt-1 text-xs leading-5 text-lime-100/75">{metricoolSourceUploadPack.nextStep}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={cn("w-fit border", metricoolApprovalSessionBadge(metricoolSourceUploadPack.status))}>{metricoolSourceUploadPack.status}</Badge>
+                    <Badge className="w-fit border border-zinc-600 bg-zinc-900 text-zinc-300">
+                      {metricoolSourceUploadPack.realPublishEnabled ? "real publish enabled" : "real publish off"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-lime-100/70 md:grid-cols-6">
+                  <p>Items: {metricoolSourceUploadPack.totals.items}</p>
+                  <p>Ready: {metricoolSourceUploadPack.totals.readyToUpload}</p>
+                  <p>Missing: {metricoolSourceUploadPack.totals.missingSource}</p>
+                  <p>Blocked: {metricoolSourceUploadPack.totals.blocked}</p>
+                  <p>Accounts: {metricoolSourceUploadPack.totals.accounts}</p>
+                  <p>MB: {(metricoolSourceUploadPack.totals.totalSourceBytes / 1024 / 1024).toFixed(1)}</p>
+                </div>
+                <div className="mt-3 grid gap-2 text-[10px] leading-4 text-lime-100/60 md:grid-cols-3">
+                  <p className="break-all">Markdown: {metricoolSourceUploadPack.markdownPath}</p>
+                  <p className="break-all">CSV: {metricoolSourceUploadPack.csvPath}</p>
+                  <p className="break-all">Evidence: {metricoolSourceUploadPack.evidenceImportCsvPath}</p>
+                </div>
+                {metricoolSourceUploadPack.accounts.length > 0 && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {metricoolSourceUploadPack.accounts.slice(0, 4).map((account) => (
+                      <div key={account.accountId} className="rounded-md border border-white/10 bg-black/20 p-2 text-xs leading-5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate font-medium text-white">{account.accountName}</p>
+                          <Badge className="w-fit border border-lime-300/20 bg-lime-300/10 text-[10px] text-lime-100">{account.metricoolBrandName}</Badge>
+                        </div>
+                        <p className="mt-1 text-lime-100/70">{account.readyToUpload}/{account.items} ready / first {account.firstPublishAt || "unscheduled"}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {metricoolSourceUploadPack.items.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
+                    {metricoolSourceUploadPack.items.slice(0, 6).map((item) => (
+                      <div key={item.id} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[44px_minmax(0,1fr)_110px_minmax(0,1.2fr)_minmax(0,1.6fr)] md:items-center">
+                        <p className="font-semibold text-lime-100">#{item.rank}</p>
+                        <p className="truncate font-medium text-white">{item.accountName}</p>
+                        <Badge className={cn(
+                          "w-fit border text-[10px]",
+                          item.uploadStatus === "ready_to_upload"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                            : item.uploadStatus === "evidence_ready"
+                              ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>{item.uploadStatus}</Badge>
+                        <p className="truncate text-zinc-500">{item.sourceFileName || "missing source"}</p>
+                        <p className="truncate text-[11px] text-lime-100/60">{item.sourceSha256 || item.nextStep}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {metricoolOperatorCloseoutPack && (
+              <div className="mt-3 rounded-md border border-stone-300/20 bg-stone-950/20 p-3" data-testid="clippers-metricool-operator-closeout-pack-panel">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-stone-100">Metricool operator closeout</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-100/75">{metricoolOperatorCloseoutPack.nextStep}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={cn(
+                      "w-fit border",
+                      metricoolOperatorCloseoutPack.status === "ready_for_operator"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                        : metricoolOperatorCloseoutPack.status === "waiting_evidence"
+                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          : "border-zinc-600 bg-zinc-900 text-zinc-300"
+                    )}>{metricoolOperatorCloseoutPack.status}</Badge>
+                    <Badge className="w-fit border border-zinc-600 bg-zinc-900 text-zinc-300">
+                      {metricoolOperatorCloseoutPack.realPublishEnabled ? "real publish enabled" : "real publish off"}
+                    </Badge>
+                    <Badge className="w-fit border border-stone-300/20 bg-stone-300/10 text-stone-100">
+                      approval required
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-stone-100/70 md:grid-cols-4">
+                  <p>Review ready: {metricoolOperatorCloseoutPack.totals.readyForReview}</p>
+                  <p>Upload ready: {metricoolOperatorCloseoutPack.totals.readyToUpload}</p>
+                  <p>Missing source: {metricoolOperatorCloseoutPack.totals.missingSource}</p>
+                  <p>Metricool queue: {metricoolOperatorCloseoutPack.totals.queuedForApproval}</p>
+                  <p>Ready to send: {metricoolOperatorCloseoutPack.totals.readyToSend}</p>
+                  <p>Evidence rows: {metricoolOperatorCloseoutPack.totals.evidenceRows}</p>
+                  <p>Needs review: {metricoolOperatorCloseoutPack.totals.needsMetricoolReview}</p>
+                  <p>Waiting URL: {metricoolOperatorCloseoutPack.totals.waitingLiveUrl}</p>
+                  <p>Ready import: {metricoolOperatorCloseoutPack.totals.readyToImport}</p>
+                  <p>Rejected: {metricoolOperatorCloseoutPack.totals.rejected}</p>
+                  <p>Mismatch: {metricoolOperatorCloseoutPack.totals.evidenceMismatch}</p>
+                  <p>Published evidence: {metricoolOperatorCloseoutPack.totals.publishedRows}</p>
+                  <p>Views imported: {formatNumber(metricoolOperatorCloseoutPack.totals.importedViews)}</p>
+                  <p>Accounts: {metricoolOperatorCloseoutPack.totals.accounts}</p>
+                </div>
+                <div className="mt-3 grid gap-2 text-[10px] leading-4 text-stone-100/60 md:grid-cols-3">
+                  <p className="break-all">Markdown: {metricoolOperatorCloseoutPack.markdownPath}</p>
+                  <p className="break-all">Upload CSV: {metricoolOperatorCloseoutPack.sourceUploadCsvPath}</p>
+                  <p className="break-all">Evidence CSV: {metricoolOperatorCloseoutPack.evidenceImportCsvPath}</p>
+                  <p className="break-all">Run sheet CSV: {metricoolOperatorCloseoutPack.runSheetCsvPath}</p>
+                </div>
+                {metricoolOperatorCloseoutPack.batches.length > 0 && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid="clippers-metricool-operator-batches">
+                    {metricoolOperatorCloseoutPack.batches.slice(0, 6).map((batch) => (
+                      <div key={batch.batchNumber} className="rounded-md border border-white/10 bg-black/20 p-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium text-stone-100">Batch {batch.batchNumber}</p>
+                          <Badge className="border border-stone-300/20 bg-stone-300/10 text-[10px] text-stone-100">
+                            rows {batch.startRank}-{batch.endRank}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] leading-4 text-stone-100/65">
+                          <p>Items: {batch.items}</p>
+                          <p>Upload: {batch.readyToUpload}</p>
+                          <p>Review: {batch.needsMetricoolReview}</p>
+                          <p>Waiting URL: {batch.waitingLiveUrl}</p>
+                          <p>Ready import: {batch.readyToImport}</p>
+                          <p>Accounts: {batch.accounts.length}</p>
+                        </div>
+                        <p className="mt-2 truncate text-[11px] text-stone-100/55">{`${batch.firstPublishAt || "no window"} -> ${batch.lastPublishAt || "no window"}`}</p>
+                        <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-stone-100/70">{batch.metricoolAction}</p>
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{batch.evidenceAction}</p>
+                      </div>
+                    ))}
+                    {metricoolOperatorCloseoutPack.batches.length > 6 && (
+                      <p className="rounded-md border border-white/10 bg-black/20 p-2 text-[11px] text-stone-100/55">
+                        +{metricoolOperatorCloseoutPack.batches.length - 6} more batches in {metricoolOperatorCloseoutPack.markdownPath}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {metricoolOperatorCloseoutPack.runSheetRows.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20" data-testid="clippers-metricool-operator-run-sheet">
+                    {metricoolOperatorCloseoutPack.runSheetRows.slice(0, 6).map((row) => (
+                      <div key={row.metricoolQueueItemId} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 lg:grid-cols-[42px_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.6fr)_86px] lg:items-center">
+                        <p className="font-semibold text-stone-100">#{row.rank}</p>
+                        <p className="truncate text-stone-100">{row.metricoolBrandName}</p>
+                        <p className="truncate text-zinc-400">{row.publishAt}</p>
+                        <p className="truncate text-zinc-400">{row.sourceFileName}</p>
+                        <p className="line-clamp-2 text-[11px] leading-4 text-stone-100/65">{row.metricoolAction}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-stone-300/20 bg-transparent px-2 text-[11px] text-stone-100 hover:bg-stone-300/10"
+                          onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
+                          data-testid={`select-metricool-run-sheet-row-${row.rank}`}
+                        >
+                          Usar fila
+                        </Button>
+                      </div>
+                    ))}
+                    {metricoolOperatorCloseoutPack.runSheetRows.length > 6 && (
+                      <p className="p-2 text-[11px] text-stone-100/55">
+                        +{metricoolOperatorCloseoutPack.runSheetRows.length - 6} more rows in {metricoolOperatorCloseoutPack.runSheetCsvPath}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className="mt-3 rounded-md border border-white/10 bg-black/20 p-3" data-testid="clippers-metricool-evidence-row-form">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_160px_minmax(0,1fr)]">
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Queue item</Label>
+                      <Select value={metricoolEvidenceQueueItemId} onValueChange={selectMetricoolEvidenceItem}>
+                        <SelectTrigger className="mt-1 border-white/10 bg-zinc-950 text-xs">
+                          <SelectValue placeholder="Selecciona clip" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {metricoolEvidenceSelectableItems.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              #{item.rank} {item.accountName} / {item.platform} / {item.origin}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Status</Label>
+                      <Select value={metricoolEvidenceFinalStatus} onValueChange={setMetricoolEvidenceFinalStatus}>
+                        <SelectTrigger className="mt-1 border-white/10 bg-zinc-950 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {selectedMetricoolEvidenceItem?.origin !== "tiktok batch" && <SelectItem value="approved">approved</SelectItem>}
+                          <SelectItem value="scheduled">scheduled</SelectItem>
+                          <SelectItem value="published">published</SelectItem>
+                          <SelectItem value="rejected">rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Metricool URL</Label>
+                      <Input value={metricoolEvidenceApprovalUrl} onChange={(event) => setMetricoolEvidenceApprovalUrl(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" placeholder="https://app.metricool.com/..." />
+                    </div>
+                  </div>
+                  {selectedMetricoolEvidenceItem && (
+                    <div className="mt-3 grid gap-2 rounded-md border border-stone-300/15 bg-stone-300/5 p-2 text-[11px] leading-4 text-stone-100/70 md:grid-cols-4">
+                      <p className="truncate">Selected: #{selectedMetricoolEvidenceItem.rank} {selectedMetricoolEvidenceItem.accountName}</p>
+                      <p className="truncate">{selectedMetricoolEvidenceItem.platform} / {selectedMetricoolEvidenceItem.status}</p>
+                      <p className="truncate">{selectedMetricoolEvidenceItem.publishAt}</p>
+                      <p className="truncate">{selectedMetricoolEvidenceItem.sourceFileName}</p>
+                    </div>
+                  )}
+                  {selectedMetricoolEvidenceItem?.origin === "tiktok batch" && metricoolEvidenceFinalStatus === "scheduled" && (
+                    <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/20 p-2 text-[11px] leading-4 text-amber-100" data-testid="clippers-tiktok-scheduled-evidence-guardrail">
+                      Scheduled evidence is only Metricool proof: use a real Metricool URL and notes, then leave Public URL and all 24h metrics blank until the TikTok post is live.
+                    </div>
+                  )}
+                  {selectedMetricoolEvidenceItem?.origin === "tiktok batch" && metricoolEvidenceFinalStatus === "published" && (
+                    <div className="mt-3 rounded-md border border-sky-300/20 bg-sky-950/20 p-2 text-[11px] leading-4 text-sky-100" data-testid="clippers-tiktok-published-evidence-guardrail">
+                      Published evidence requires an exact public TikTok video URL plus at least one real 24h metric. Metricool URLs, profiles, searches, and shortlinks are rejected.
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(76px,1fr))]">
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Public URL</Label>
+                      <Input value={metricoolEvidencePublishedUrl} onChange={(event) => setMetricoolEvidencePublishedUrl(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" placeholder="Solo cuando el post este live" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Views</Label>
+                      <Input value={metricoolEvidenceViews} onChange={(event) => setMetricoolEvidenceViews(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" inputMode="numeric" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Likes</Label>
+                      <Input value={metricoolEvidenceLikes} onChange={(event) => setMetricoolEvidenceLikes(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" inputMode="numeric" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Comments</Label>
+                      <Input value={metricoolEvidenceComments} onChange={(event) => setMetricoolEvidenceComments(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" inputMode="numeric" />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Shares</Label>
+                      <Input value={metricoolEvidenceShares} onChange={(event) => setMetricoolEvidenceShares(event.target.value)} className="mt-1 border-white/10 bg-zinc-950 text-xs" inputMode="numeric" />
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_180px] md:items-end">
+                    <div>
+                      <Label className="text-[11px] text-stone-100/70">Notes</Label>
+                      <Input
+                        value={metricoolEvidenceNotes}
+                        onChange={(event) => setMetricoolEvidenceNotes(event.target.value)}
+                        className="mt-1 border-white/10 bg-zinc-950 text-xs"
+                        placeholder="Real operator note, 20+ chars, no placeholders"
+                      />
+                      {selectedMetricoolEvidenceItem?.origin === "tiktok batch" && metricoolEvidenceNotes.trim().length < 20 && (
+                        <p className="mt-1 text-[10px] leading-4 text-amber-100" data-testid="clippers-tiktok-batch-notes-required">
+                          TikTok batch evidence needs a real 20+ character operator note.
+                        </p>
+                      )}
+                    </div>
+                      <Button
+                        variant="outline"
+                      onClick={() => tiktokBatchEvidenceRowPreviewMutation.mutate(metricoolEvidenceFormFingerprint)}
+                      disabled={tiktokBatchEvidenceRowPreviewMutation.isPending || !metricoolEvidenceQueueItemId || selectedMetricoolEvidenceItem?.origin !== "tiktok batch"}
+                      className="border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                      data-testid="preview-clippers-tiktok-batch-evidence-row-button"
+                    >
+                      {tiktokBatchEvidenceRowPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                      Preview row
+                    </Button>
+                    <Button
+                      onClick={() => metricoolApprovalEvidenceRowMutation.mutate()}
+                      disabled={metricoolEvidenceSaveDisabled}
+                      className="bg-stone-200 text-zinc-950 hover:bg-stone-100"
+                      data-testid="record-clippers-metricool-evidence-row-button"
+                    >
+                      {metricoolApprovalEvidenceRowMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                      Guardar evidencia
+                    </Button>
+                  </div>
+                  {selectedMetricoolEvidenceItem?.origin === "tiktok batch" && !tiktokBatchEvidencePreviewIsCurrent && (
+                    <p className="mt-2 text-[11px] leading-4 text-amber-100" data-testid="clippers-tiktok-batch-preview-required">
+                      Preview row is required before saving this TikTok batch evidence. Re-run preview after editing any field.
+                    </p>
+                  )}
+                  {tiktokBatchEvidenceRowPreview && selectedMetricoolEvidenceItem?.origin === "tiktok batch" && (
+                    <div
+                      className={cn(
+                        "mt-3 rounded-md border p-2 text-xs leading-5",
+                        tiktokBatchEvidencePreviewIsCurrent
+                          ? "border-sky-300/20 bg-sky-950/20 text-sky-100"
+                          : "border-amber-300/20 bg-amber-950/20 text-amber-100"
+                      )}
+                      data-testid="clippers-tiktok-batch-evidence-row-preview"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="border border-sky-300/30 bg-sky-300/10 text-sky-100">
+                          {tiktokBatchEvidenceRowPreview.classification}
+                        </Badge>
+                        <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">
+                          {tiktokBatchEvidencePreviewIsCurrent ? "current" : "stale"} / wouldWrite {String(tiktokBatchEvidenceRowPreview.wouldWrite)}
+                        </Badge>
+                        <span className="text-sky-100/70">{tiktokBatchEvidenceRowPreview.metricoolQueueItemId}</span>
+                      </div>
+                      <p className="mt-1 text-sky-100/75">{tiktokBatchEvidenceRowPreview.nextAction}</p>
+                    </div>
+                  )}
+                </div>
+                {metricoolOperatorCloseoutPack.blockers.length > 0 && (
+                  <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/20 p-2 text-xs leading-5 text-amber-100">
+                    {metricoolOperatorCloseoutPack.blockers.slice(0, 4).map((blocker) => (
+                      <p key={blocker}>{blocker}</p>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                    <p className="text-[11px] font-medium text-stone-100">Operator steps</p>
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-stone-100/65">
+                      {metricoolOperatorCloseoutPack.operatorSteps.slice(0, 4).map((step) => (
+                        <p key={step}>{step}</p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                    <p className="text-[11px] font-medium text-stone-100">Evidence rules</p>
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-stone-100/65">
+                      {metricoolOperatorCloseoutPack.evidenceRules.slice(0, 4).map((rule) => (
+                        <p key={rule}>{rule}</p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                    <p className="text-[11px] font-medium text-stone-100">Done criteria</p>
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-stone-100/65">
+                      {metricoolOperatorCloseoutPack.doneCriteria.slice(0, 4).map((criterion) => (
+                        <p key={criterion}>{criterion}</p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {lastMetricoolApprovalEvidencePreview && (
+              <div className="mt-3 rounded-md border border-sky-300/20 bg-sky-950/15 p-3" data-testid="clippers-metricool-approval-evidence-preview">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-sky-100">Metricool evidence preview</p>
+                    <p className="mt-1 text-xs leading-5 text-sky-100/75">{lastMetricoolApprovalEvidencePreview.nextStep}</p>
+                  </div>
+                  <Badge className={cn("w-fit border", lastMetricoolApprovalEvidencePreview.status === "preview_ready" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-100")}>
+                    {lastMetricoolApprovalEvidencePreview.status}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-sky-100/70 md:grid-cols-5">
+                  <p>Rows: {lastMetricoolApprovalEvidencePreview.totals.rows}</p>
+                  <p>Importable: {lastMetricoolApprovalEvidencePreview.totals.importable}</p>
+                  <p>Pending live: {lastMetricoolApprovalEvidencePreview.totals.pendingLive}</p>
+                  <p>Rejected: {lastMetricoolApprovalEvidencePreview.totals.rejected}</p>
+                  <p>Views preview: {formatNumber(lastMetricoolApprovalEvidencePreview.totals.views)}</p>
+                </div>
+                {lastMetricoolApprovalEvidencePreview.rows.find((row) => row.result !== "importable") && (
+                  <p className="mt-2 text-xs leading-5 text-sky-100/70">
+                    First non-importable row: {lastMetricoolApprovalEvidencePreview.rows.find((row) => row.result !== "importable")?.metricoolQueueItemId || "unknown"} - {lastMetricoolApprovalEvidencePreview.rows.find((row) => row.result !== "importable")?.reason || "review required"}
+                  </p>
+                )}
+                <p className="mt-2 break-all text-[10px] leading-4 text-sky-100/60">Active CSV: {lastMetricoolApprovalEvidencePreview.evidenceImportCsvPaths.active}</p>
+                {lastMetricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchDir && (
+                  <p className="mt-1 break-all text-[10px] leading-4 text-sky-100/60">
+                    Batch evidence dir: {lastMetricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchDir}
+                    {" "}({formatNumber(lastMetricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchOperatorRows || 0)} operator rows)
+                  </p>
+                )}
+              </div>
+            )}
             {lastMetricoolApprovalEvidenceImport && (
               <div className="mt-3 rounded-md border border-cyan-300/20 bg-cyan-950/15 p-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -12539,16 +18780,24 @@ export default function ClippersPage() {
                 <div className="mt-3 grid gap-2 text-[10px] leading-4 text-indigo-100/60 md:grid-cols-3">
                   <p className="break-all">Markdown: {metricoolApprovalReport.markdownPath}</p>
                   <p className="break-all">CSV: {metricoolApprovalReport.csvPath}</p>
-                  <p className="break-all">Evidence: {metricoolApprovalReport.evidenceImportCsvPath}</p>
+                  <p className="break-all">Active evidence: {metricoolApprovalReport.evidenceImportCsvPaths?.active || metricoolApprovalReport.evidenceImportCsvPath}</p>
+                  <p className="break-all">100 evidence: {metricoolApprovalReport.evidenceImportCsvPaths?.metricool100 || metricool100ApprovalRun?.artifacts.evidenceImportCsvPath || metricoolApprovalReport.evidenceImportCsvPath}</p>
+                  {metricoolApprovalReport.evidenceImportCsvPaths?.metricool100BatchDir && (
+                    <p className="break-all">
+                      Batch evidence: {metricoolApprovalReport.evidenceImportCsvPaths.metricool100BatchDir} ({formatNumber(metricoolApprovalReport.evidenceImportCsvPaths.metricool100BatchOperatorRows || 0)} operator rows)
+                    </p>
+                  )}
+                  <p className="break-all">Short evidence: {metricoolApprovalReport.evidenceImportCsvPaths?.shortRun || metricoolApprovalReport.evidenceImportCsvPath}</p>
+                  <p className="break-all">Combined evidence: {metricoolApprovalReport.evidenceImportCsvPaths?.combined || metricoolApprovalReport.evidenceImportCsvPath}</p>
                 </div>
                 {metricoolApprovalReportRows.length > 0 && (
                   <div className="mt-3 overflow-hidden rounded-md border border-white/10 bg-black/20">
                     {metricoolApprovalReportRows.slice(0, 5).map((row) => (
-                      <div key={`${row.metricoolQueueItemId}-${row.evidenceResult}`} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[minmax(0,1fr)_110px_110px_90px_minmax(0,1.4fr)] md:items-center">
+                      <div key={`${row.metricoolQueueItemId}-${row.evidenceResult}`} className="grid gap-2 border-b border-white/10 p-2 text-xs last:border-b-0 md:grid-cols-[minmax(0,1fr)_90px_110px_150px_minmax(0,1.4fr)] md:items-center">
                         <p className="truncate font-medium text-white">{row.accountName || row.accountId}</p>
                         <p className="truncate text-zinc-500">{row.platform}</p>
                         <Badge className={cn("w-fit border text-[10px]", metricoolApprovalSessionBadge(row.queueStatus === "missing_queue_item" ? "blocked" : row.queueStatus))}>{row.queueStatus}</Badge>
-                        <p className="text-indigo-100/80">{row.evidenceResult}</p>
+                        <p className="truncate text-indigo-100/80">{row.operatorStatus || row.evidenceResult}</p>
                         <p className="line-clamp-2 text-[11px] leading-4 text-indigo-100/70">{row.nextStep}</p>
                       </div>
                     ))}
@@ -12586,7 +18835,14 @@ export default function ClippersPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard icon={Target} label="Meta semanal" value={`${formatNumber(status?.goals.totalWeeklyGoal || 0)} views`} detail={`${formatNumber(status?.goals.weeklyViewsPerAccount || 0)} por cuenta`} />
           <StatCard icon={Clapperboard} label="Clips diarios" value={String(status?.goals.dailyClipsTarget || 0)} detail="objetivo configurado" />
-          <StatCard icon={Users} label="Cuentas" value={String(status?.accounts.length || 0)} detail={`${status?.goals.connectedAccounts || 0} conectadas`} />
+          <StatCard
+            icon={Users}
+            label="Cuentas"
+            value={String(status?.accounts.length || 0)}
+            detail={status?.metricoolMvpLaunchPack?.directPlatformApisNeeded === false
+              ? `${status?.goals.metricoolReadyForApprovalAccounts || 0} Metricool ready · ${status?.goals.metricoolConnectedLanes || 0}/${status?.goals.metricoolRequiredLanes || 0} lanes`
+              : `${status?.goals.connectedAccounts || 0} directas conectadas`}
+          />
           <StatCard icon={Gauge} label="Modo" value={publishMode === "approval_required" ? "Aprobacion" : publishMode === "draft_only" ? "Drafts" : "Approval gate"} detail="control de publicacion" />
         </div>
 
@@ -12919,8 +19175,8 @@ export default function ClippersPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className={cn("w-fit border", goLiveCompletionAuditBadge(status.goLiveCompletionAudit.status))}>{status.goLiveCompletionAudit.status}</Badge>
-                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
-                      {status.goLiveCompletionAudit.readyToPublish ? "ready_for_manual_approval" : "not_ready"}
+                    <Badge className={cn("w-fit border", status.goLiveCompletionAudit.launchModes?.metricoolMvpReady || status.goLiveCompletionAudit.readyToPublish ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200")}>
+                      {status.goLiveCompletionAudit.readyToPublish ? "full_ready" : status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "metricool_mvp_ready" : "not_ready"}
                     </Badge>
                     <Button
                       size="sm"
@@ -12942,7 +19198,31 @@ export default function ClippersPage() {
                   <p>Needs evidence: {status.goLiveCompletionAudit.totals.needsEvidence}</p>
                   <p>Blocked: {status.goLiveCompletionAudit.totals.blocked}</p>
                   <p>External: {status.goLiveCompletionAudit.totals.externalRequired}</p>
+                  <p>Metricool MVP: {status.goLiveCompletionAudit.launchModes?.metricoolMvpReady ? "ready" : "blocked"}</p>
+                  <p>Direct APIs: {status.goLiveCompletionAudit.launchModes?.directSocialApisRequiredForMvp ? "required" : "not required"}</p>
                 </div>
+                {status.goLiveCompletionAudit.launchModes && (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <div className="rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3">
+                      <p className="text-xs font-semibold uppercase text-emerald-200">Metricool MVP launch mode</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        Metricool queue {status.goLiveCompletionAudit.launchModes.approvalQueueReady ? "ready" : "blocked"}; direct social APIs are {status.goLiveCompletionAudit.launchModes.directSocialApisRequiredForMvp ? "required" : "not required"} for this mode.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers.length > 0 && (
+                        <p className="mt-2 text-xs leading-5 text-amber-100">{status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers[0]}</p>
+                      )}
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-semibold uppercase text-zinc-300">Direct API backlog</p>
+                      <p className="mt-2 text-xs leading-5 text-zinc-500">
+                        Full direct API is {status.goLiveCompletionAudit.launchModes.fullDirectApiReady ? "ready" : "future/backlog"}.
+                      </p>
+                      {status.goLiveCompletionAudit.launchModes.directApiBacklog.slice(0, 2).map((item) => (
+                        <p key={item} className="mt-1 text-xs leading-5 text-zinc-500">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {status.goLiveCompletionAudit.generatedAt && (
                   <p className="mt-2 text-xs text-zinc-600">actualizado: {formatDate(status.goLiveCompletionAudit.generatedAt)}</p>
                 )}
@@ -13393,7 +19673,7 @@ export default function ClippersPage() {
               )}
 
               {status.dropzoneReadyPack && (
-                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-dropzone-ready-pack">
+                <div className={cn("rounded-md border p-3", metricoolMvpReviewReady ? "border-emerald-300/20 bg-emerald-950/10" : "border-cyan-300/20 bg-cyan-950/10")} data-testid="clippers-dropzone-ready-pack">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0">
                       <p className="truncate font-medium text-white">Dropzone Ready Pack: {status.dropzoneReadyPack.markdownPath}</p>
@@ -13410,6 +19690,11 @@ export default function ClippersPage() {
                     <p>Dirs: {status.dropzoneReadyPack.totals.dropDirs}</p>
                     <p>Files: {status.dropzoneReadyPack.totals.expectedFiles}</p>
                   </div>
+                  {metricoolMvpReviewReady && (
+                    <div className="mt-3 rounded-md border border-emerald-300/20 bg-emerald-950/20 p-2 text-xs leading-5 text-emerald-100" data-testid="clippers-metricool-mvp-review-ready-note">
+                      Metricool MVP review is ready: source supply, dropzones and Metricool queue are aligned. Direct social API credentials, app IDs and permission rows are optional backlog for later autopublish.
+                    </div>
+                  )}
                   <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.dropzoneReadyPack.csvPath}</p>
                   <div className={cn(tunnelGridClass, "mt-3 grid gap-3 md:grid-cols-3")}>
                     {status.dropzoneReadyPack.items.map((item) => (
@@ -13421,6 +19706,9 @@ export default function ClippersPage() {
                         <div className="mt-2 flex flex-wrap gap-1">
                           <Badge className="border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">{item.lane}</Badge>
                           <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{item.priority}</Badge>
+                          {metricoolMvpReviewReady && item.priority === "medium" && (
+                            <Badge className="border border-emerald-300/20 bg-emerald-950/30 text-[10px] text-emerald-100">optional backlog</Badge>
+                          )}
                         </div>
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
                         <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{item.dropDirs.join(" | ")}</p>
@@ -13441,7 +19729,7 @@ export default function ClippersPage() {
                             }}
                           >
                             <UploadCloud className="mr-1 h-3 w-3" />
-                            Use template
+                            {metricoolMvpReviewReady && item.priority === "medium" ? "Backlog template" : "Use template"}
                           </Button>
                         )}
                       </div>
@@ -13760,13 +20048,20 @@ export default function ClippersPage() {
                   </div>
                   <p className="mt-2 break-all text-xs text-zinc-600">CSV: {status.robertNextActions.csvPath}</p>
                   {status.robertNextActions.externalCloseout && (
-                    <div className="mt-3 rounded-md border border-rose-300/15 bg-rose-950/10 p-3 text-xs text-zinc-500">
+                    <div className={cn("mt-3 rounded-md border p-3 text-xs text-zinc-500", metricoolMvpReviewReady ? "border-cyan-300/15 bg-cyan-950/10" : "border-rose-300/15 bg-rose-950/10")}>
                       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
-                          <p className="font-medium text-rose-100">External closeout</p>
+                          <p className={cn("font-medium", metricoolMvpReviewReady ? "text-cyan-100" : "text-rose-100")}>
+                            {metricoolMvpReviewReady ? "Direct API backlog" : "External closeout"}
+                          </p>
                           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.externalCloseout.nextStep}</p>
+                          {metricoolMvpReviewReady && (
+                            <p className="mt-1 text-[11px] leading-4 text-cyan-100/80">
+                              Not required before reviewing the current Metricool queue.
+                            </p>
+                          )}
                         </div>
-                        <Badge className={cn("w-fit border text-[10px]", status.robertNextActions.externalCloseout.status === "complete" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-rose-300/20 bg-rose-950/30 text-rose-100")}>
+                        <Badge className={cn("w-fit border text-[10px]", status.robertNextActions.externalCloseout.status === "complete" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : metricoolMvpReviewReady ? "border-cyan-300/20 bg-cyan-950/30 text-cyan-100" : "border-rose-300/20 bg-rose-950/30 text-rose-100")}>
                           {status.robertNextActions.externalCloseout.status}
                         </Badge>
                       </div>
@@ -13793,14 +20088,79 @@ export default function ClippersPage() {
                           {status.robertNextActions.connectNow.sourceAssetsRequired} sources
                         </Badge>
                       </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                        <p className="break-all">Evidence template: {status.robertNextActions.connectNow.evidenceTemplatePath}</p>
-                        <p className="break-all">Import target: {status.robertNextActions.connectNow.evidenceImportPath}</p>
-                        <p className="break-all">Credentials: {status.robertNextActions.connectNow.pendingCredentialEnvVars.join(", ") || "none"}</p>
-                        <p className="break-all">Drop dirs: {status.robertNextActions.connectNow.credentialDropDirs.join(" | ")}</p>
-                      </div>
-                      {status.robertNextActions.connectNow.connectionTunnel && (
-                        <div className="mt-3 rounded-md border border-white/10 bg-zinc-950/40 p-2">
+	                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+	                        <p className="break-all">Evidence template: {status.robertNextActions.connectNow.evidenceTemplatePath}</p>
+	                        <p className="break-all">Import target: {status.robertNextActions.connectNow.evidenceImportPath}</p>
+	                        <p className="break-all">Launch mode: {status.robertNextActions.connectNow.launchMode || "direct_api_full"}</p>
+	                        <p className="break-all">Credential mode: {status.robertNextActions.connectNow.credentialMode || "direct_api_required"}</p>
+	                        <p className="break-all">MVP credentials: {status.robertNextActions.connectNow.pendingCredentialEnvVars.join(", ") || "none"}</p>
+	                        <p className="break-all">Direct API backlog: {(status.robertNextActions.connectNow.directApiBacklogEnvVars || []).join(", ") || "none"}</p>
+	                        <p className="break-all">Drop dirs: {status.robertNextActions.connectNow.credentialDropDirs.join(" | ")}</p>
+	                      </div>
+	                      {status.robertNextActions.connectNow.credentialMvpNote && (
+	                        <p className="mt-2 rounded border border-cyan-300/15 bg-cyan-950/10 p-2 text-[11px] leading-4 text-cyan-100/80">
+	                          {status.robertNextActions.connectNow.credentialMvpNote}
+	                        </p>
+	                      )}
+	                      {status.robertNextActions.connectNow.metricoolMvpTunnel && (
+	                        <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2">
+	                          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+	                            <div className="min-w-0">
+	                              <p className="font-medium text-cyan-100">Metricool MVP tunnel</p>
+	                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{status.robertNextActions.connectNow.metricoolMvpTunnel.nextStep}</p>
+	                            </div>
+	                            <div className="flex flex-wrap gap-1">
+	                              <Badge className={cn("border text-[10px]", goLiveAutopilotBadge(status.robertNextActions.connectNow.metricoolMvpTunnel.status))}>
+	                                {status.robertNextActions.connectNow.metricoolMvpTunnel.status}
+	                              </Badge>
+	                              <Badge className="border border-white/10 bg-white/5 text-[10px] text-zinc-300">{status.robertNextActions.connectNow.metricoolMvpTunnel.progress}%</Badge>
+	                              <Badge className="border border-cyan-300/20 bg-cyan-950/30 text-[10px] text-cyan-100">{status.robertNextActions.connectNow.metricoolMvpTunnel.readyGates} ready</Badge>
+	                            </div>
+	                          </div>
+	                          <div className="mt-3 overflow-x-auto pb-1">
+	                            <div className="flex min-w-max items-stretch gap-2">
+	                              {status.robertNextActions.connectNow.metricoolMvpTunnel.gates.map((gate, gateIndex, gates) => (
+	                                <div key={`metricool-mvp-tunnel-${gate.id}`} className="flex items-center gap-2">
+	                                  <div className={cn(
+	                                    "w-40 rounded-md border p-2",
+	                                    gate.status === "done"
+	                                      ? "border-emerald-300/25 bg-emerald-950/20"
+	                                      : gate.status === "ready_to_execute"
+	                                        ? "border-cyan-300/25 bg-cyan-950/20"
+	                                        : gate.status === "waiting"
+	                                          ? "border-amber-300/25 bg-amber-950/20"
+	                                          : "border-rose-300/25 bg-rose-950/20",
+	                                  )}>
+	                                    <div className="flex items-start justify-between gap-2">
+	                                      <p className="truncate text-[11px] font-medium text-white">{gate.rank}. {gate.label}</p>
+	                                      <Badge className={cn("shrink-0 border px-1 text-[9px]", goLiveAutopilotBadge(gate.status))}>{gate.status}</Badge>
+	                                    </div>
+	                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+	                                      <div
+	                                        className={cn("h-full rounded-full", gate.status === "done" ? "bg-emerald-300" : gate.status === "ready_to_execute" ? "bg-cyan-300" : gate.status === "waiting" ? "bg-amber-300" : "bg-rose-300")}
+	                                        style={{ width: `${Math.min(100, Math.round((gate.done / Math.max(1, gate.total)) * 100))}%` }}
+	                                      />
+	                                    </div>
+	                                    <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+	                                      <span>{gate.done}/{gate.total}</span>
+	                                      <span>{gate.blockers} blockers</span>
+	                                    </div>
+	                                    <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500">{gate.nextStep}</p>
+	                                  </div>
+	                                  {gateIndex < gates.length - 1 && (
+	                                    <div className="flex h-full items-center text-cyan-700">
+	                                      <div className="h-px w-6 bg-cyan-900" />
+	                                      <ArrowRight className="h-3.5 w-3.5" />
+	                                    </div>
+	                                  )}
+	                                </div>
+	                              ))}
+	                            </div>
+	                          </div>
+	                        </div>
+	                      )}
+	                      {status.robertNextActions.connectNow.connectionTunnel && (
+	                        <div className="mt-3 rounded-md border border-white/10 bg-zinc-950/40 p-2">
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0">
                               <p className="font-medium text-white">Connection tunnel</p>
@@ -13983,8 +20343,12 @@ export default function ClippersPage() {
                         <div className="mt-3 rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-2">
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0">
-                              <p className="font-medium text-fuchsia-100">Platform launch bridge</p>
-                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">Per-platform account, app, permission, OAuth and evidence checklist.</p>
+	                              <p className="font-medium text-fuchsia-100">Platform launch bridge{status.robertNextActions.connectNow.launchMode === "metricool_mvp" ? " / Direct API backlog" : ""}</p>
+	                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">
+	                                {status.robertNextActions.connectNow.launchMode === "metricool_mvp"
+	                                  ? "Future full-API account, app, permission, OAuth and evidence checklist; not required for the current Metricool 100 run."
+	                                  : "Per-platform account, app, permission, OAuth and evidence checklist."}
+	                              </p>
                             </div>
                             <Badge className="w-fit border border-fuchsia-300/20 bg-fuchsia-950/30 text-[10px] text-fuchsia-100">
                               {(status.robertNextActions.connectNow.platformLaunchBridge || []).length} platforms
@@ -14002,7 +20366,7 @@ export default function ClippersPage() {
                                 </div>
                                 <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500">
                                   <p className="break-all">Handles: {platform.handles.join(", ") || "none"}</p>
-                                  <p className="break-all">Missing env: {platform.missingEnvVars.join(", ") || "none"}</p>
+	                                  <p className="break-all">{status.robertNextActions.connectNow.launchMode === "metricool_mvp" ? "Direct API env" : "Missing env"}: {platform.missingEnvVars.join(", ") || "none"}</p>
                                   <p className="break-all">Scopes: {platform.scopes.join(", ") || "none"}</p>
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-1">
@@ -14788,21 +21152,24 @@ export default function ClippersPage() {
                           size="sm"
                           variant="outline"
                           className="h-7 border-violet-300/20 bg-transparent px-2 text-[11px] text-violet-100 hover:bg-violet-300/10"
-                          onClick={() => {
-                            const template = (status.robertNextActions.connectNow.credentialTemplate || "").trim()
-                              || status.robertNextActions.connectNow.pendingCredentialEnvVars.map((envVar) => `${envVar}=`).join("\n");
-                            setCredentialBatchPreview(null);
-                            setCredentialBatchText(template);
-                            toast({
-                              title: "Credential template cargado",
-                              description: "Pega valores reales antes de preview/import; valores vacios no desbloquean OAuth.",
-                            });
-                          }}
-                          disabled={!(status.robertNextActions.connectNow.credentialTemplate || "").trim() && status.robertNextActions.connectNow.pendingCredentialEnvVars.length === 0}
-                        >
-                          <KeyRound className="mr-1 h-3 w-3" />
-                          Load keys
-                        </Button>
+	                          onClick={() => {
+	                            const template = (status.robertNextActions.connectNow.credentialTemplate || "").trim()
+	                              || [
+	                                ...status.robertNextActions.connectNow.pendingCredentialEnvVars,
+	                                ...(status.robertNextActions.connectNow.directApiBacklogEnvVars || []),
+	                              ].map((envVar) => `${envVar}=`).join("\n");
+	                            setCredentialBatchPreview(null);
+	                            setCredentialBatchText(template);
+	                            toast({
+	                              title: "Direct API template cargado",
+	                              description: "No es requerido para el MVP Metricool; pega valores reales solo si vas a trabajar full API/OAuth.",
+	                            });
+	                          }}
+	                          disabled={!(status.robertNextActions.connectNow.credentialTemplate || "").trim() && status.robertNextActions.connectNow.pendingCredentialEnvVars.length === 0 && (status.robertNextActions.connectNow.directApiBacklogEnvVars || []).length === 0}
+	                        >
+	                          <KeyRound className="mr-1 h-3 w-3" />
+	                          Direct API keys
+	                        </Button>
                         <Button
                           type="button"
                           size="sm"
@@ -15391,6 +21758,7 @@ export default function ClippersPage() {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Closeout evidence run</p>
                       <p className="mt-1 text-sm font-medium text-white">{status.externalExecutionSession.closeoutRun.actionSheetPath}</p>
+                      <p className="mt-1 truncate text-xs text-amber-100/70">Batch handoff: {status.externalExecutionSession.closeoutRun.batchHandoffPath}</p>
                       <p className="mt-1 text-xs leading-5 text-zinc-500">{status.externalExecutionSession.closeoutRun.nextStep}</p>
                     </div>
                     <Badge className={cn(
@@ -15410,8 +21778,31 @@ export default function ClippersPage() {
                     <p>Proofs: {status.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence}</p>
                     <p>Safety: {status.externalExecutionSession.closeoutRun.artifactSafetyStatus}</p>
                     <p>Metricool: {status.externalExecutionSession.closeoutRun.metricoolPublishMode}</p>
+                    <p>Real publish: {status.externalExecutionSession.closeoutRun.realPublishEnabled ? "on" : "off"}</p>
                     <p>Ready queue: {status.externalExecutionSession.closeoutRun.totals.metricoolReadyToSend}</p>
                   </div>
+                  {(status.externalExecutionSession.closeoutRun.batches || []).length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid="clippers-external-closeout-batches">
+                      {(status.externalExecutionSession.closeoutRun.batches || []).slice(0, 6).map((batch) => (
+                        <div key={batch.id} className="rounded-md border border-white/10 bg-black/25 p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate font-medium text-amber-100">{batch.label}</p>
+                            <Badge className="border border-amber-300/20 bg-amber-950/40 text-[10px] text-amber-100">
+                              rows {batch.startRank}-{batch.endRank}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] leading-4 text-zinc-400">
+                            <p>Total: {batch.total}</p>
+                            <p>Proofs: {batch.proofFilesNeedRealEvidence}</p>
+                            <p>Portals: {batch.portalUrls.length}</p>
+                            <p>Fields: {batch.missingCsvFields.length}</p>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-400">{batch.nextStep}</p>
+                          <p className="mt-2 truncate text-[11px] text-zinc-500">{batch.proofPaths[0] || "proof path pending"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {status.externalExecutionSession.closeoutRun.nextItems.slice(0, 4).map((item) => (
                       <div key={item.id} className="rounded-md border border-white/10 bg-black/30 p-3">
@@ -16207,7 +22598,7 @@ export default function ClippersPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">{operationalReadiness?.paths.markdown || "clippers_workspace/reports/clippers-operational-readiness.md"}</p>
                   <p className="mt-1 text-xs leading-5 text-zinc-500">
-                    {operationalReadiness?.nextStep || "Genera el gate operativo para separar Metricool MVP, Direct API, source readiness, browser QA y blockers reales."}
+                    {operationalReadiness?.nextStep || "Genera el gate operativo para separar Metricool MVP, QA local, Direct API backlog, source readiness y blockers reales."}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -16241,7 +22632,8 @@ export default function ClippersPage() {
                 <>
                   <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
                     <p>Metricool MVP: {operationalReadiness.mvp.metricoolReady ? "yes" : "no"}</p>
-                    <p>Full Direct API: {operationalReadiness.fullDirectApiReady ? "yes" : "no"}</p>
+                    <p>Mode: {operationalReadiness.mvp.launchMode || "metricool_approval_required"}</p>
+                    <p>Direct APIs: {operationalReadiness.mvp.directSocialApisRequired ? "required" : "not required"}</p>
                     <p>Local app: {operationalReadiness.localApp.ready ? "open" : "closed"}</p>
                     <p>Queued: {operationalReadiness.metricool.queuedForApproval}</p>
                     <p>Ready queue: {operationalReadiness.metricool.readyToSend}</p>
@@ -16257,15 +22649,35 @@ export default function ClippersPage() {
                       </div>
                     ))}
                   </div>
-                  {operationalReadiness.blockers.length > 0 && (
+                  {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {operationalReadiness.blockers.slice(0, 5).map((blocker) => (
+                      {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).slice(0, 5).map((blocker) => (
                         <p key={blocker} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">{blocker}</p>
                       ))}
-                      {operationalReadiness.blockers.length > 5 && (
+                      {(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length > 5 && (
                         <p className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-400">
-                          +{operationalReadiness.blockers.length - 5} more blockers in {operationalReadiness.paths.markdown}
+                          +{(operationalReadiness.metricoolMvpBlockers || operationalReadiness.blockers).length - 5} more Metricool MVP blockers in {operationalReadiness.paths.markdown}
                         </p>
+                      )}
+                    </div>
+                  )}
+                  {((operationalReadiness.qaFollowups || []).length > 0 || (operationalReadiness.directApiBacklog || []).length > 0) && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {(operationalReadiness.qaFollowups || []).length > 0 && (
+                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs font-semibold uppercase text-zinc-300">QA followups</p>
+                          {(operationalReadiness.qaFollowups || []).slice(0, 3).map((item) => (
+                            <p key={item} className="mt-2 text-xs leading-5 text-zinc-500">{item}</p>
+                          ))}
+                        </div>
+                      )}
+                      {(operationalReadiness.directApiBacklog || []).length > 0 && (
+                        <div className="rounded-md border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs font-semibold uppercase text-zinc-300">Direct API backlog</p>
+                          {(operationalReadiness.directApiBacklog || []).slice(0, 3).map((item) => (
+                            <p key={item} className="mt-2 text-xs leading-5 text-zinc-500">{item}</p>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
@@ -16650,11 +23062,11 @@ export default function ClippersPage() {
                               <p className="mt-1 text-xs leading-5 text-zinc-500">Rejected CSV rows mapped back to the proof/action to fix.</p>
                             </div>
                             <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
-                              {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.length} repairs
+                              {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).length} repairs
                             </Badge>
                           </div>
                           <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                            {externalCloseoutPack.goLiveAudit.evidenceRepairQueue.slice(0, 8).map((row) => (
+                            {(externalCloseoutPack.goLiveAudit.evidenceRepairQueue || []).slice(0, 8).map((row) => (
                               <div key={`${row.rank}-${row.id}`} className="rounded-md border border-amber-300/10 bg-black/25 p-2">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="min-w-0 truncate text-xs font-medium text-amber-100">Row {row.csvRow || "?"}: {row.id}</p>
@@ -16695,6 +23107,80 @@ export default function ClippersPage() {
                               </Badge>
                             </div>
                             {gate.blocker && <p className="mt-1 text-[11px] leading-4 text-amber-100">{gate.blocker}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {externalCloseoutBatches && (
+                    <div className="mt-3 rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-3" data-testid="clippers-external-closeout-batches-handoff">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-fuchsia-100">Batch Handoff</p>
+                          <p className="mt-1 break-all text-xs text-zinc-500">{externalCloseoutBatches.paths.markdown}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-400">{externalCloseoutBatches.nextStep}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          {externalCloseoutBatches.nextBatch?.evidenceRows?.[0] && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-fuchsia-300/20 bg-transparent px-2 text-xs text-fuchsia-100 hover:bg-fuchsia-300/10"
+                              onClick={() => void copyExternalCloseoutEvidenceCsvTemplate(externalCloseoutBatches.nextBatch?.evidenceRows?.[0] || "")}
+                            >
+                              <Copy className="mr-1 h-3 w-3" />
+                              Copy row
+                            </Button>
+                          )}
+                          <Badge className={cn(
+                            "w-fit border",
+                            externalCloseoutBatches.totals.realPublishEnabled
+                              ? "border-red-300/30 bg-red-300/10 text-red-100"
+                              : "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100"
+                          )}>
+                            {externalCloseoutBatches.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
+                        <p>Batches: {externalCloseoutBatches.totals.batches}</p>
+                        <p>Rows: {externalCloseoutBatches.totals.rows}</p>
+                        <p>Critical: {externalCloseoutBatches.totals.critical}</p>
+                        <p>High: {externalCloseoutBatches.totals.high}</p>
+                        <p>Proofs: {externalCloseoutBatches.totals.proofFilesNeedRealEvidence}</p>
+                        <p>Evidence rows: {externalCloseoutBatches.totals.evidenceRows}</p>
+                        <p>Ready queue: {externalCloseoutBatches.totals.metricoolReadyToSend}</p>
+                        <p>Real publish: {externalCloseoutBatches.totals.realPublishEnabled ? "on" : "off"}</p>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {externalCloseoutBatches.batches.slice(0, 6).map((batch) => (
+                          <div key={batch.id} className="rounded-md border border-fuchsia-300/10 bg-black/25 p-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-fuchsia-100">{batch.rank}. {batch.label}</p>
+                                <p className="mt-1 text-[11px] text-zinc-500">Rows {batch.startRank}-{batch.endRank} · {batch.total} actions</p>
+                              </div>
+                              <Badge className={cn(
+                                "shrink-0 border text-[10px]",
+                                batch.critical > 0
+                                  ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                                  : "border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-100"
+                              )}>
+                                {batch.critical}/{batch.high}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-300">{batch.firstAction}</p>
+                            <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{batch.proofPaths[0] || "proof pending"}</p>
+                            {batch.missingCsvFields.length > 0 && (
+                              <p className="mt-1 text-[11px] leading-4 text-amber-100">Missing: {batch.missingCsvFields.join(", ")}</p>
+                            )}
+                            {batch.portalUrls[0] && (
+                              <a href={batch.portalUrls[0]} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-md border border-fuchsia-300/20 px-2 py-1 text-xs text-fuchsia-100 hover:bg-fuchsia-300/10">
+                                Portal
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -17091,6 +23577,9 @@ export default function ClippersPage() {
                                   <p>By kind: {externalCloseoutEvidenceImport.repairSummary.byKind.map((item) => `${item.kind} ${item.count}`).join(" · ") || "none"}</p>
                                   <p>Missing: {externalCloseoutEvidenceImport.repairSummary.missingFields.map((item) => `${item.field} ${item.count}`).join(" · ") || "none"}</p>
                                   <p className="break-all">Next proof: {externalCloseoutEvidenceImport.repairSummary.nextRepair?.proofPath || "none"}</p>
+                                  <p>Priority: {externalCloseoutEvidenceImport.repairSummary.nextRepair?.priorityLabel || "standard"}</p>
+                                  <p>Active first: {externalCloseoutEvidenceImport.repairSummary.priorityPolicy?.activeFirst.join(", ") || "none"}</p>
+                                  <p>Deferred: {externalCloseoutEvidenceImport.repairSummary.priorityPolicy?.deferred.join(", ") || "none"}</p>
                                 </div>
                                 {externalCloseoutEvidenceImport.paths.repairTemplatesCsv && (
                                   <p className="mt-2 break-all rounded border border-amber-300/10 bg-black/20 px-2 py-1 text-[10px] leading-4 text-amber-100/80">
@@ -17134,9 +23623,21 @@ export default function ClippersPage() {
                                     <p className="min-w-0 text-xs font-medium text-amber-100">
                                       CSV row {row.csvRow || "?"}: {row.closeoutId || row.lane}
                                     </p>
-                                    <Badge className="shrink-0 border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
-                                      {row.requiredStatus || "fix"}
-                                    </Badge>
+                                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                                      {row.priorityLabel && (
+                                        <Badge className={cn(
+                                          "border text-[10px]",
+                                          row.priority === 0
+                                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                            : "border-zinc-700 bg-zinc-900 text-zinc-300"
+                                        )}>
+                                          {row.priorityLabel}
+                                        </Badge>
+                                      )}
+                                      <Badge className="border border-amber-300/25 bg-transparent text-[10px] text-amber-100">
+                                        {row.requiredStatus || "fix"}
+                                      </Badge>
+                                    </div>
                                   </div>
                                   <p className="mt-1 text-[11px] leading-4 text-amber-50/80">{row.reason}</p>
                                   <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">Proof: {row.proofPath || "missing"}</p>
@@ -17199,6 +23700,107 @@ export default function ClippersPage() {
                       </>
                     ) : (
                       <p className="mt-3 text-xs text-zinc-500">Llena el CSV y usa Validate antes de aplicar cualquier evidencia.</p>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="clippers-tiktok-external-closeout-session">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-emerald-100">TikTok External Closeout Session</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">
+                          {tiktokExternalCloseoutSession?.nextStep || "Genera una sesion enfocada solo en tareas TikTok externas pendientes."}
+                        </p>
+                        <p className="mt-1 break-all text-[11px] text-zinc-600">
+                          {tiktokExternalCloseoutSession?.paths.markdown || "clippers_workspace/reports/clippers-tiktok-external-closeout-session.md"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => tiktokExternalCloseoutSessionMutation.mutate()}
+                          disabled={tiktokExternalCloseoutSessionMutation.isPending}
+                          className="border-emerald-300/25 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                          data-testid="prepare-clippers-tiktok-external-closeout-session-button"
+                        >
+                          {tiktokExternalCloseoutSessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                          TikTok session
+                        </Button>
+                        <Badge className="w-fit border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
+                          {tiktokExternalCloseoutSession?.totals.activeTasks ?? tiktokExternalCloseoutSession?.totals.tiktokTasks ?? 0} active now
+                        </Badge>
+                        <Badge className="w-fit border border-zinc-300/20 bg-zinc-300/10 text-zinc-200">
+                          {tiktokExternalCloseoutSession?.totals.deferredTasks ?? 0} deferred
+                        </Badge>
+                        {tiktokExternalCloseoutSession?.source.freshness && (
+                          <Badge className={cn(
+                            "w-fit border",
+                            tiktokExternalCloseoutSession.source.freshness.reportIsFresh
+                              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                              : "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                          )}>
+                            {tiktokExternalCloseoutSession.source.freshness.status}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {tiktokExternalCloseoutSession ? (
+                      <>
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                          <p>Active now: {tiktokExternalCloseoutSession.totals.activeTasks ?? tiktokExternalCloseoutSession.totals.tiktokTasks}</p>
+                          <p>Deferred: {tiktokExternalCloseoutSession.totals.deferredTasks ?? 0}</p>
+                          <p>Accounts: {tiktokExternalCloseoutSession.totals.account}</p>
+                          <p>Apps: {tiktokExternalCloseoutSession.totals.developerApp}</p>
+                          <p>Permissions: {tiktokExternalCloseoutSession.totals.permission}</p>
+                        </div>
+                        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                          {tiktokExternalCloseoutSession.tasks.slice(0, 4).map((task) => (
+                            <div key={task.closeoutId} className={cn(
+                              "rounded-md border bg-black/25 p-2",
+                              task.deferredForMetricoolMvp ? "border-zinc-300/10" : "border-emerald-300/10"
+                            )}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className={cn("truncate text-xs font-medium", task.deferredForMetricoolMvp ? "text-zinc-200" : "text-emerald-100")}>#{task.rank} {task.closeoutId}</p>
+                                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">{task.nextAction}</p>
+                                  {task.deferredForMetricoolMvp && (
+                                    <p className="mt-1 text-[11px] leading-4 text-zinc-500">{task.deferredReason || "deferred_for_metricool_mvp"}</p>
+                                  )}
+                                </div>
+                                <Badge className={cn(
+                                  "shrink-0 border text-[10px]",
+                                  task.deferredForMetricoolMvp ? "border-zinc-300/20 bg-zinc-300/10 text-zinc-200" : "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                                )}>
+                                  {task.deferredForMetricoolMvp ? "deferred" : task.requiredStatus}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">Proof: {task.proofPath || "missing"}</p>
+                              <p className="mt-1 break-all text-[11px] leading-4 text-zinc-500">CSV row: {task.csvRow || "?"}</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {task.portalUrl && (
+                                  <a href={task.portalUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-emerald-300/20 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-300/10">
+                                    Portal
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 border-emerald-300/20 bg-transparent px-2 text-xs text-emerald-100 hover:bg-emerald-300/10"
+                                  onClick={() => void copyExternalCloseoutPacket(task.copyPacket)}
+                                  data-testid="copy-clippers-tiktok-external-task-button"
+                                >
+                                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                  Copy task
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mt-3 text-xs text-zinc-500">Prepara esta sesion despues de Validate para ver las tareas TikTok exactas.</p>
                     )}
                   </div>
                   {externalCloseoutPack.blockers.length > 0 && (
@@ -17265,10 +23867,10 @@ export default function ClippersPage() {
                       accountPermissionReadiness.status === "metricool_mvp_ready"
                         ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
                         : accountPermissionReadiness.status === "metricool_mvp_ready_with_external_blockers"
-                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
                         : "border-amber-300/30 bg-amber-300/10 text-amber-100"
                     )}>
-                      {accountPermissionReadiness.status}
+                      {accountPermissionReadiness.status === "metricool_mvp_ready_with_external_blockers" ? "metricool_mvp_ready + backlog" : accountPermissionReadiness.status}
                     </Badge>
                   )}
                   <Button
@@ -17288,8 +23890,9 @@ export default function ClippersPage() {
                 <>
                   <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-4 xl:grid-cols-8">
                     <p>Accounts: {accountPermissionReadiness.totals.verifiedAccounts}/{accountPermissionReadiness.totals.accountProfiles}</p>
+                    <p>Mode: {accountPermissionReadiness.launchMode || "metricool_approval_required"}</p>
                     <p>Metricool lanes: {accountPermissionReadiness.totals.metricoolReadyLanes}</p>
-                    <p>Direct API: {accountPermissionReadiness.totals.directApiReadyLanes}</p>
+                    <p>Direct APIs: {accountPermissionReadiness.directSocialApisRequired ? "required" : "not required"}</p>
                     <p>Dev apps: {accountPermissionReadiness.totals.developerAppsApproved}/{accountPermissionReadiness.totals.developerApps}</p>
                     <p>Permissions: {accountPermissionReadiness.totals.permissionGroupsApproved}/{accountPermissionReadiness.totals.permissionGroups}</p>
                     <p>Local assets: {accountPermissionReadiness.sourceReadiness.localOwnedSourceAssets}</p>
@@ -17320,6 +23923,89 @@ export default function ClippersPage() {
                             <Progress value={row.percent} className="mt-2 h-1.5 bg-zinc-900" />
                             <p className="mt-2 text-[11px] text-zinc-500">{row.ready}/{row.total} ready · {row.missing} missing</p>
                             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-sky-100/75">{row.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {accountPermissionReadiness.metricoolMvpEvidence && (
+                    <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-metricool-mvp-evidence-only">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-cyan-100">Metricool MVP evidence only</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{accountPermissionReadiness.metricoolMvpEvidence.nextStep}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {accountPermissionReadiness.activeMvp && (
+                            <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100" data-testid="clippers-tiktok-mvp-active-badge">
+                              TikTok MVP {accountPermissionReadiness.activeMvp.readyLanes}/{accountPermissionReadiness.activeMvp.targetLanes}
+                            </Badge>
+                          )}
+                          <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">
+                            {accountPermissionReadiness.metricoolMvpEvidence.accountRows} account rows
+                          </Badge>
+                          <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/40 text-[10px] text-emerald-100">
+                            {accountPermissionReadiness.metricoolMvpEvidence.pendingProfileRows} profile rows
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-[11px] leading-4 text-zinc-500 md:grid-cols-2">
+                        <p className="break-all">Account evidence CSV: {accountPermissionReadiness.metricoolMvpEvidence.accountEvidenceCsvPath}</p>
+                        <p className="break-all">Metricool profile CSV: {accountPermissionReadiness.metricoolMvpEvidence.pendingProfileEvidenceCsvPath}</p>
+                      </div>
+                      {accountPermissionReadiness.metricoolMvpEvidence.previewRows.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {accountPermissionReadiness.metricoolMvpEvidence.previewRows.slice(0, 4).map((row, index) => (
+                            <p key={`metricool-mvp-evidence-${index}-${row.slice(0, 24)}`} className="break-all rounded border border-white/10 bg-black/30 p-2 text-[10px] leading-4 text-zinc-400">{row}</p>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-2 text-[11px] leading-4 text-cyan-100/75">
+                        Este bloque no pide developer apps ni permisos directos; solo cuentas reales y perfiles conectados en Metricool.
+                      </p>
+                      {accountPermissionReadiness.activeMvp && (
+                        <p className="mt-1 text-[11px] leading-4 text-emerald-100/75">
+                          TikTok es el MVP activo: {accountPermissionReadiness.activeMvp.platforms.join(", ")} para {accountPermissionReadiness.activeMvp.accountIds.join(" + ")}.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {accountPermissionReadiness.tiktokMvpAccountCloseout && (
+                    <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3" data-testid="clippers-tiktok-mvp-account-closeout">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-emerald-100">TikTok MVP account closeout</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{accountPermissionReadiness.tiktokMvpAccountCloseout.nextStep}</p>
+                          <p className="mt-1 break-all text-[11px] text-zinc-600">{accountPermissionReadiness.tiktokMvpAccountCloseout.paths.markdown}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/40 text-[10px] text-emerald-100">
+                            {accountPermissionReadiness.tiktokMvpAccountCloseout.totals.ready}/{accountPermissionReadiness.tiktokMvpAccountCloseout.totals.rows} ready
+                          </Badge>
+                          <Badge className="w-fit border border-cyan-300/20 bg-cyan-950/40 text-[10px] text-cyan-100">
+                            no social API keys
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {accountPermissionReadiness.tiktokMvpAccountCloseout.rows.map((row) => (
+                          <div key={row.accountId} className="rounded-md border border-emerald-300/10 bg-black/25 p-2 text-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-white">{row.accountName}</p>
+                                <p className="mt-1 text-[11px] text-zinc-500">{row.handle} · {row.category}</p>
+                              </div>
+                              <Badge className={cn(
+                                "shrink-0 border text-[10px]",
+                                row.status === "ready_for_metricool_tiktok"
+                                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              )}>
+                                {row.status}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-[11px] leading-4 text-emerald-100/75">{row.operatorAction}</p>
+                            <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Proof: {row.evidencePath}</p>
                           </div>
                         ))}
                       </div>
@@ -17425,6 +24111,11 @@ export default function ClippersPage() {
                             </p>
                           )}
                         </div>
+                      )}
+                      {(row.directApiBacklog || []).length > 0 && row.readyForMetricoolApproval && (
+                        <p className="mt-3 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs leading-5 text-zinc-500">
+                          Direct API backlog: {(row.directApiBacklog || []).slice(0, 2).join(" | ")}
+                        </p>
                       )}
                       <p className="mt-3 text-xs leading-5 text-emerald-100/80">{row.nextStep}</p>
                     </div>
@@ -20766,7 +27457,6 @@ export default function ClippersPage() {
                   <SelectContent>
                     <SelectItem value="approval_required">Aprobacion requerida</SelectItem>
                     <SelectItem value="draft_only">Solo drafts</SelectItem>
-                    <SelectItem value="auto_after_connection">Legacy auto disabled; use approval_required</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -22134,7 +28824,7 @@ export default function ClippersPage() {
                       </div>
                       {metricoolBridge && (
                         <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-2 text-xs leading-5 text-emerald-100">
-                          <p className="font-medium">Approval queue bridge verified</p>
+                          <p className="font-medium">Metricool queue bridge submitted</p>
                           <p className="mt-1 text-emerald-100/75">
                             {metricoolBridge.brandName}{metricoolBridge.blogId ? ` · blogId ${metricoolBridge.blogId}` : ""} · {metricoolBridge.publishGate}
                           </p>
@@ -23287,7 +29977,7 @@ export default function ClippersPage() {
                             <p className="mt-2 text-xs leading-5 text-indigo-100/80">{status.weeklyProductionFunnel.bottlenecks[0].nextStep}</p>
                           </div>
                         ) : (
-                          <p className="mt-2 text-xs leading-5 text-emerald-100/80">Approval queue stable; mantener Metricool en approval_required.</p>
+                          <p className="mt-2 text-xs leading-5 text-emerald-100/80">Metricool queue stable; mantener Metricool en approval_required.</p>
                         )}
                         <p className="mt-3 text-xs leading-5 text-zinc-500">{status.weeklyProductionFunnel.dailyReport.tomorrowAction}</p>
                       </div>
@@ -23733,7 +30423,7 @@ export default function ClippersPage() {
                       <p>Channels: {status.metricoolPublishing.totals.channels}</p>
                       <p>Profiles: {status.metricoolPublishing.totals.connectedProfiles}/{status.metricoolPublishing.totals.requiredProfiles}</p>
                       <p>Effective approval: {status.metricoolPublishing.effectiveApprovalGate ? "required" : "off"}</p>
-                      <p>Env preference: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "legacy override"}</p>
+                      <p>Env preference: {status.metricoolPublishing.requireApprovalForPublish ? "required" : "approval forced for MVP"}</p>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {status.metricoolPublishing.channels.map((channel) => (
@@ -23789,7 +30479,7 @@ export default function ClippersPage() {
                   <p>Items: {status.metricoolExecutionQueue.totals.items}</p>
                   <p>Approval: {status.metricoolExecutionQueue.totals.queuedForApproval}</p>
                   <p>Blocked: {status.metricoolExecutionQueue.totals.blocked}</p>
-                  <p>Direct send-ready: {status.metricoolExecutionQueue.totals.readyToSend}</p>
+                  <p>Auto-send blocked: {status.metricoolExecutionQueue.totals.readyToSend}</p>
                   <p>Run: {status.metricoolExecutionQueue.sourceAutomationRunId || "none"}</p>
                 </div>
                 {status.metricoolExecutionQueue.sourceReadiness && (
@@ -23915,7 +30605,7 @@ export default function ClippersPage() {
                   <p>Items: {status.publisherExecutionQueue.totals.items}</p>
                   <p>Blocked: {status.publisherExecutionQueue.totals.blocked}</p>
                   <p>Approval: {status.publisherExecutionQueue.totals.queuedForApproval}</p>
-                  <p>Direct send-ready: {status.publisherExecutionQueue.totals.readyToSend}</p>
+                  <p>Auto-send blocked: {status.publisherExecutionQueue.totals.readyToSend}</p>
                   <p>Real publish: {status.publisherExecutionQueue.realPublishEnabled ? "on" : "off"}</p>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">

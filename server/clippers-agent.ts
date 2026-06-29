@@ -1,5 +1,5 @@
-import { chmod, copyFile, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "fs/promises";
-import { existsSync, readFileSync, statSync } from "fs";
+import { chmod, copyFile, mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from "fs/promises";
+import { createReadStream, existsSync, readFileSync, statSync } from "fs";
 import { spawn } from "child_process";
 import { createCipheriv, createHash, randomBytes } from "crypto";
 import { promises as dns } from "dns";
@@ -83,7 +83,11 @@ export type ClipperMetricoolExecutionStatus = "not_prepared" | "blocked" | "appr
 export type ClipperMetricoolMvpLaunchStatus = "blocked" | "ready_for_review";
 export type ClipperMetricoolApprovalSessionStatus = "not_prepared" | "blocked" | "ready_for_operator";
 export type ClipperMetricoolApprovalSessionItemStatus = "blocked" | "ready_for_review";
+export type ClipperMetricoolApprovalQuickRunStatus = "not_prepared" | "blocked" | "ready_for_operator";
+export type ClipperMetricoolSourceUploadPackStatus = "not_prepared" | "blocked" | "ready_for_operator";
+export type ClipperMetricoolOperatorCloseoutPackStatus = "not_prepared" | "ready_for_operator" | "waiting_evidence";
 export type ClipperMetricoolApprovalReportStatus = "not_prepared" | "blocked" | "needs_operator" | "needs_evidence" | "ready_to_import";
+export type ClipperMetricoolApprovalOperatorStatus = "blocked" | "needs_metricool_review" | "waiting_live_url" | "ready_to_import" | "evidence_rejected" | "evidence_mismatch";
 export type ClipperOAuthGoLiveStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperOAuthConnectionPackStatus = "not_prepared" | "blocked" | "partial" | "ready";
 export type ClipperBlockerResolutionPackStatus = "not_prepared" | "blocked" | "in_progress" | "ready";
@@ -196,6 +200,42 @@ export interface ClipperPipelineItem {
   status: ClipperAgentStatus;
 }
 
+export type ClipperMetricoolArtifactAuditStatus = "current" | "stale" | "missing";
+
+export interface ClipperMetricoolArtifactAuditItem {
+  id: string;
+  label: string;
+  status: ClipperMetricoolArtifactAuditStatus;
+  artifactPath: string;
+  generatedAt: string | null;
+  queueItems: number;
+  artifactItems: number;
+  mismatchedIds: number;
+  staleReason: string | null;
+  nextStep: string;
+}
+
+export interface ClipperMetricoolArtifactAuditSummary {
+  status: "current" | "refresh_needed";
+  generatedAt: string;
+  canonicalQueuePath: string;
+  canonicalQueueGeneratedAt: string | null;
+  canonicalQueueItems: number;
+  canonicalQueuedForApproval: number;
+  canonicalReadyToSend: number;
+  realPublishEnabled: boolean;
+  approvalRequired: true;
+  items: ClipperMetricoolArtifactAuditItem[];
+  totals: {
+    artifacts: number;
+    current: number;
+    stale: number;
+    missing: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 export interface ClipperStatus {
   rootDir: string;
   reportsDir: string;
@@ -263,9 +303,11 @@ export interface ClipperStatus {
   permissionSubmissionDossier: ClipperPermissionSubmissionDossierSummary;
   metricoolPublishing: ClipperMetricoolPublishingSummary;
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
   metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+  metricoolArtifactAudit: ClipperMetricoolArtifactAuditSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -306,6 +348,11 @@ export interface ClipperStatus {
     totalWeeklyGoal: number;
     dailyClipsTarget: number;
     connectedAccounts: number;
+    metricoolConnectedAccounts: number;
+    metricoolConnectedLanes: number;
+    metricoolRequiredLanes: number;
+    metricoolReadyForApprovalAccounts: number;
+    directApiConnectedAccounts: number;
   };
   latestReport: ClipperReport | null;
   guardrails: string[];
@@ -474,6 +521,10 @@ export interface ClipperProductionQueueSummary {
   status: "empty" | "needs_sources" | "needs_rights" | "ready";
   queuePath: string | null;
   generatedAt: string | null;
+  mode?: "standard" | "metricool_ready_only";
+  targetWeeklyClips?: number | null;
+  metricoolReadyOnly?: boolean;
+  eligibleAccountIds?: string[];
   sourceAssets: ClipperSourceAsset[];
   items: ClipperProductionQueueItem[];
   nextStep: string;
@@ -2125,6 +2176,8 @@ export interface ClipperAccountCreationPackItem {
   evidenceCapturePlan: string[];
   operatorVaultChecklist: string[];
   postCreationNextActions: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   blockers: string[];
   nextStep: string;
 }
@@ -2155,6 +2208,8 @@ export interface ClipperAccountCreationSessionItem {
   requiredProof: string[];
   operatorVaultChecklist: string[];
   postCreationNextActions: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   doneCriteria: string[];
 }
 
@@ -2209,6 +2264,8 @@ export interface ClipperAccountCreationPlatformBatch {
   browserSessionChecklist: string[];
   operatorVaultChecklist: string[];
   requiredProof: string[];
+  metricoolConnectionChecklist: string[];
+  directApiBacklog: string[];
   blockers: string[];
   doneCriteria: string[];
   nextStep: string;
@@ -3707,6 +3764,8 @@ export interface ClipperRobertOfficialPermissionCloseoutQueue {
 
 export interface ClipperRobertConnectNowHandoff {
   markdownPath: string;
+  launchMode: "metricool_mvp" | "direct_api_full";
+  credentialMode: "metricool_not_required" | "direct_api_required";
   focusRun: ClipperExternalExecutionFocusRun;
   evidenceCloseout: ClipperRobertEvidenceCloseoutQueue;
   credentialCloseout: ClipperRobertCredentialCloseoutQueue;
@@ -3721,6 +3780,29 @@ export interface ClipperRobertConnectNowHandoff {
     doneGates: number;
     gates: ClipperRobertConnectionTunnelGate[];
     nextGate: ClipperRobertConnectionTunnelGate | null;
+    nextStep: string;
+  };
+  metricoolMvpTunnel: {
+    status: "blocked" | "ready_to_execute" | "waiting" | "done";
+    progress: number;
+    blockedGates: number;
+    readyGates: number;
+    doneGates: number;
+    gates: Array<{
+      id: string;
+      rank: number;
+      label: string;
+      status: "blocked" | "ready_to_execute" | "waiting" | "done";
+      done: number;
+      total: number;
+      blockers: number;
+      actionLabel: string;
+      actionUrl: string | null;
+      artifactPath: string | null;
+      nextStep: string;
+      unlocks: string[];
+    }>;
+    nextGate: string | null;
     nextStep: string;
   };
   ownershipSplit: {
@@ -3865,6 +3947,8 @@ export interface ClipperRobertConnectNowHandoff {
   }>;
   recommendedOrder: string[];
   pendingCredentialEnvVars: string[];
+  directApiBacklogEnvVars: string[];
+  credentialMvpNote: string;
   credentialTemplate: string;
   credentialDropDirs: string[];
   credentialCandidateFiles: string[];
@@ -4488,6 +4572,14 @@ export interface ClipperGoLiveCompletionAuditSummary {
   closeoutQueueMarkdownPath: string;
   closeoutQueueCsvPath: string;
   readyToPublish: boolean;
+  launchModes?: {
+    metricoolMvpReady: boolean;
+    approvalQueueReady: boolean;
+    directSocialApisRequiredForMvp: boolean;
+    fullDirectApiReady: boolean;
+    metricoolMvpBlockers: string[];
+    directApiBacklog: string[];
+  };
   score: number;
   requirements: ClipperGoLiveCompletionRequirement[];
   externalSession: ClipperGoLiveCompletionExternalSessionItem[];
@@ -4985,6 +5077,24 @@ export interface ClipperExternalCloseoutRunItem {
   checklist: string[];
 }
 
+export interface ClipperExternalCloseoutRunBatch {
+  id: string;
+  platform: string;
+  lane: string;
+  label: string;
+  total: number;
+  startRank: number;
+  endRank: number;
+  proofFilesNeedRealEvidence: number;
+  portalUrls: string[];
+  proofPaths: string[];
+  evidenceRows: string[];
+  missingCsvFields: string[];
+  nextStep: string;
+  operatorChecklist: string[];
+  doneCriteria: string[];
+}
+
 export interface ClipperExternalCloseoutRun {
   status: "not_prepared" | "needs_operator" | "complete";
   generatedAt: string | null;
@@ -4992,6 +5102,7 @@ export interface ClipperExternalCloseoutRun {
   actionSheetPath: string;
   proofTodoPath: string;
   operatorQueuePath: string;
+  batchHandoffPath: string;
   evidenceCsvPath: string;
   totals: {
     rows: number;
@@ -5004,7 +5115,9 @@ export interface ClipperExternalCloseoutRun {
   };
   artifactSafetyStatus: string;
   metricoolPublishMode: string;
+  realPublishEnabled: boolean;
   items: ClipperExternalCloseoutRunItem[];
+  batches: ClipperExternalCloseoutRunBatch[];
   nextItems: ClipperExternalCloseoutRunItem[];
   nextStep: string;
 }
@@ -5806,6 +5919,8 @@ export interface ClipperMetricoolExecutionQueueSummary {
   publishMode: ClipperReport["publishMode"];
   realPublishEnabled: boolean;
   sourceReadiness: ClipperMetricoolSourceReadinessSummary;
+  safetyNormalized?: boolean;
+  safetyNormalizationReasons?: string[];
   items: ClipperMetricoolExecutionQueueItem[];
   totals: {
     items: number;
@@ -5817,6 +5932,54 @@ export interface ClipperMetricoolExecutionQueueSummary {
   nextStep: string;
 }
 
+export interface ClipperMetricool100ApprovalRunSummary {
+  generatedAt: string | null;
+  status: "not_prepared" | "ready_for_operator" | "needs_review";
+  mode: "metricool_approval_required_100";
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  targetWeeklyClips: number;
+  approvalQueueTarget: number;
+  batchSize: number;
+  directSocialApisRequired: false;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  eligibleAccountIds: string[];
+  metricoolQueueItemIds: string[];
+  productionByAccount: Record<string, number>;
+  totals: {
+    productionItems: number;
+    draftReady: number;
+    metricoolQueuedForApproval: number;
+    metricoolBlocked: number;
+    readyToSend: number;
+    approvalSessionReadyForReview: number;
+    quickRunItems: number;
+    sourceUploadReady: number;
+    sourceUploadMissing: number;
+    closeoutReadyForReview: number;
+    closeoutEvidenceRows: number;
+    mvpReadyAccounts: number;
+    mvpAccounts: number;
+  };
+  artifacts: {
+    productionQueuePath: string | null;
+    metricoolPublishingPath: string;
+    metricoolExecutionQueuePath: string;
+    metricoolApprovalSessionPath: string;
+    metricoolApprovalQuickRunPath: string;
+    metricoolSourceUploadPackPath: string;
+    metricoolOperatorCloseoutPackPath: string;
+    metricoolOperatorRunSheetCsvPath: string;
+    evidenceImportCsvPath: string;
+    shortRunOperatorRunSheetCsvPath?: string;
+    shortRunEvidenceImportCsvPath?: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 export interface ClipperMetricoolMvpLaunchAccountRow {
   accountId: string;
   accountName: string;
@@ -5824,6 +5987,7 @@ export interface ClipperMetricoolMvpLaunchAccountRow {
   metricoolBrandName: string;
   metricoolBlogId: string | null;
   connectedNetworks: MetricoolNetwork[];
+  pendingMetricoolProfiles: MetricoolNetwork[];
   primaryNetwork: MetricoolNetwork | null;
   dailyClipTarget: number;
   weeklyTargetClips: number;
@@ -5836,12 +6000,28 @@ export interface ClipperMetricoolMvpLaunchAccountRow {
   nextStep: string;
 }
 
+export interface ClipperMetricoolPendingProfileEvidenceRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  expectedProfileUrl: string;
+  evidenceBatchRow: string;
+  checklist: string[];
+  status: "needs_metricool_connection";
+  nextStep: string;
+}
+
 export interface ClipperMetricoolMvpLaunchSummary {
   status: ClipperMetricoolMvpLaunchStatus;
   generatedAt: string;
   manifestPath: string;
   markdownPath: string;
   csvPath: string;
+  pendingProfileEvidenceCsvPath: string;
   mode: "metricool_approval_required_mvp";
   primaryBridge: "metricool";
   directPlatformApisNeeded: false;
@@ -5849,11 +6029,14 @@ export interface ClipperMetricoolMvpLaunchSummary {
   approvalRequired: true;
   targetAccounts: string[];
   rows: ClipperMetricoolMvpLaunchAccountRow[];
+  pendingProfileEvidenceRows: ClipperMetricoolPendingProfileEvidenceRow[];
+  pendingProfileEvidenceTemplate: string;
   totals: {
     accounts: number;
     readyAccounts: number;
     blockedAccounts: number;
     connectedProfiles: number;
+    pendingMetricoolProfiles: number;
     queuedForApproval: number;
     manualReadyPosts: number;
     rightsReadyAssets: number;
@@ -5913,6 +6096,196 @@ export interface ClipperMetricoolApprovalSessionSummary {
   nextStep: string;
 }
 
+export interface ClipperMetricoolApprovalQuickRunAccount {
+  accountId: string;
+  accountName: string;
+  category: ClipperAccountCategory | "uncategorized";
+  items: number;
+  readyForReview: number;
+  firstPublishAt: string | null;
+}
+
+export interface ClipperMetricoolApprovalQuickRunItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourceFileName: string;
+  sourcePath: string | null;
+  hook: string;
+  captionSeed: string;
+  status: ClipperMetricoolApprovalSessionItemStatus;
+  evidenceCaptureRow: string;
+  nextStep: string;
+}
+
+export interface ClipperMetricoolApprovalQuickRunSummary {
+  status: ClipperMetricoolApprovalQuickRunStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  portalUrl: string;
+  approvalSessionPath: string;
+  approvalSessionMarkdownPath: string;
+  approvalSessionCsvPath: string;
+  evidenceImportCsvPath: string;
+  metricoolQueuePath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  batchSize: number;
+  totals: {
+    items: number;
+    readyForReview: number;
+    blocked: number;
+    quickRunItems: number;
+    accounts: number;
+  };
+  accounts: ClipperMetricoolApprovalQuickRunAccount[];
+  items: ClipperMetricoolApprovalQuickRunItem[];
+  operatorSteps: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolSourceUploadPackItem {
+  id: string;
+  rank: number;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourcePath: string | null;
+  sourceFileName: string;
+  sourceExists: boolean;
+  sourceValid: boolean;
+  sourceInvalidReason: string | null;
+  sourceSizeBytes: number;
+  sourceSha256: string | null;
+  captionSeed: string;
+  hook: string;
+  queueStatus: ClipperMetricoolApprovalSessionItemStatus;
+  operatorStatus: ClipperMetricoolApprovalOperatorStatus;
+  uploadStatus: "ready_to_upload" | "missing_source" | "invalid_source" | "blocked" | "evidence_ready";
+  nextStep: string;
+}
+
+export interface ClipperMetricoolSourceUploadPackSummary {
+  status: ClipperMetricoolSourceUploadPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  csvPath: string;
+  approvalSessionPath: string;
+  evidenceImportCsvPath: string;
+  portalUrl: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  totals: {
+    items: number;
+    readyToUpload: number;
+    missingSource: number;
+    blocked: number;
+    accounts: number;
+    totalSourceBytes: number;
+  };
+  accounts: Array<{
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    metricoolBlogId: string | null;
+    items: number;
+    readyToUpload: number;
+    firstPublishAt: string | null;
+  }>;
+  items: ClipperMetricoolSourceUploadPackItem[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+export interface ClipperMetricoolOperatorRunSheetRow {
+  rank: number;
+  metricoolQueueItemId: string;
+  accountId: string;
+  accountName: string;
+  platform: ClipperPlatform;
+  metricoolBrandName: string;
+  metricoolBlogId: string | null;
+  publishAt: string;
+  sourceFileName: string;
+  sourcePath: string | null;
+  sourceSha256: string | null;
+  captionSeed: string;
+  uploadStatus: ClipperMetricoolSourceUploadPackItem["uploadStatus"];
+  operatorStatus: ClipperMetricoolApprovalOperatorStatus;
+  evidenceStatus: string;
+  evidenceAction: string;
+  metricoolAction: string;
+}
+
+export interface ClipperMetricoolOperatorBatch {
+  batchNumber: number;
+  startRank: number;
+  endRank: number;
+  items: number;
+  readyToUpload: number;
+  needsMetricoolReview: number;
+  waitingLiveUrl: number;
+  readyToImport: number;
+  accounts: string[];
+  firstPublishAt: string | null;
+  lastPublishAt: string | null;
+  runSheetCsvPath: string;
+  evidenceImportCsvPath: string;
+  metricoolAction: string;
+  evidenceAction: string;
+  doneCriteria: string[];
+}
+
+export interface ClipperMetricoolOperatorCloseoutPackSummary {
+  status: ClipperMetricoolOperatorCloseoutPackStatus;
+  generatedAt: string | null;
+  manifestPath: string;
+  markdownPath: string;
+  runSheetCsvPath: string;
+  portalUrl: string;
+  approvalSessionPath: string;
+  sourceUploadPackPath: string;
+  sourceUploadCsvPath: string;
+  evidenceImportCsvPath: string;
+  approvalReportPath: string;
+  realPublishEnabled: false;
+  approvalRequired: true;
+  totals: {
+    readyForReview: number;
+    readyToUpload: number;
+    missingSource: number;
+    queuedForApproval: number;
+    readyToSend: number;
+    evidenceRows: number;
+    needsMetricoolReview: number;
+    waitingLiveUrl: number;
+    readyToImport: number;
+    rejected: number;
+    evidenceMismatch: number;
+    publishedRows: number;
+    importedViews: number;
+    accounts: number;
+  };
+  operatorSteps: string[];
+  evidenceRules: string[];
+  doneCriteria: string[];
+  batches: ClipperMetricoolOperatorBatch[];
+  runSheetRows: ClipperMetricoolOperatorRunSheetRow[];
+  blockers: string[];
+  nextStep: string;
+}
+
 export interface ClipperMetricoolApprovalEvidenceImportRow {
   metricoolQueueItemId: string;
   accountId: string;
@@ -5924,18 +6297,27 @@ export interface ClipperMetricoolApprovalEvidenceImportRow {
   likes: number;
   comments: number;
   shares: number;
-  result: "imported" | "skipped" | "rejected";
+  result: "imported" | "importable" | "skipped" | "rejected";
   reason: string;
 }
 
 export interface ClipperMetricoolApprovalEvidenceImportSummary {
-  status: "missing" | "needs_records" | "imported";
+  status: "missing" | "needs_records" | "imported" | "preview_missing" | "preview_needs_records" | "preview_ready";
   generatedAt: string;
   evidenceImportCsvPath: string;
+  evidenceImportCsvPaths: {
+    active: string;
+    shortRun: string;
+    metricool100: string;
+    metricool100BatchDir?: string;
+    metricool100BatchOperatorRows?: number;
+    combined: string;
+  };
   metricsOutputPath: string;
   rows: ClipperMetricoolApprovalEvidenceImportRow[];
   totals: {
     rows: number;
+    importable: number;
     imported: number;
     skipped: number;
     rejected: number;
@@ -5955,7 +6337,8 @@ export interface ClipperMetricoolApprovalReportRow {
   accountName: string;
   platform: ClipperPlatform | "unknown";
   queueStatus: ClipperMetricoolApprovalSessionItemStatus | "missing_queue_item";
-  evidenceResult: "imported" | "skipped" | "rejected" | "missing";
+  evidenceResult: "imported" | "importable" | "skipped" | "rejected" | "missing";
+  operatorStatus: ClipperMetricoolApprovalOperatorStatus;
   finalStatus: string;
   publishedPostUrl: string | null;
   views: number;
@@ -5974,6 +6357,12 @@ export interface ClipperMetricoolApprovalReportSummary {
   csvPath: string;
   approvalSessionPath: string;
   evidenceImportCsvPath: string;
+  evidenceImportCsvPaths: {
+    active: string;
+    shortRun: string;
+    metricool100: string;
+    combined: string;
+  };
   importedMetricsPath: string;
   realPublishEnabled: false;
   approvalRequired: true;
@@ -5998,6 +6387,18 @@ export interface ClipperMetricoolApprovalReportSummary {
   nextStep: string;
 }
 
+export interface ClipperMetricoolApprovalEvidenceRowInput {
+  metricoolQueueItemId: string;
+  metricoolApprovalUrl?: string;
+  publishedPostUrl?: string;
+  finalStatus?: string;
+  views24h?: number | string;
+  likes24h?: number | string;
+  comments24h?: number | string;
+  shares24h?: number | string;
+  operatorNotes?: string;
+}
+
 export interface ClipperMetricoolAccountEvidenceResult {
   generatedAt: string;
   source: "metricool";
@@ -6014,6 +6415,31 @@ export interface ClipperMetricoolAccountEvidenceResult {
     accountId: string;
     accountName: string;
     platform: MetricoolNetwork;
+    reason: string;
+  }>;
+  nextStep: string;
+}
+
+export interface ClipperMetricoolBridgeEvidenceBatchResult {
+  generatedAt: string;
+  source: "metricool_manual_bridge";
+  template: string;
+  totals: {
+    rows: number;
+    recorded: number;
+    skipped: number;
+  };
+  recorded: Array<{
+    accountId: string;
+    platform: ClipperPlatform;
+    metricoolBrandName: string;
+    metricoolBlogId: string | null;
+    evidencePath: string;
+  }>;
+  skipped: Array<{
+    row: number;
+    accountId: string;
+    platform: string;
     reason: string;
   }>;
   nextStep: string;
@@ -6581,12 +7007,31 @@ const METRICOOL_PUBLISHING_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-publis
 const METRICOOL_EXECUTION_QUEUE_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.json");
 const METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.md");
 const METRICOOL_EXECUTION_QUEUE_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-execution-queue.csv");
+const METRICOOL_100_APPROVAL_RUN_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.json");
+const METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.md");
+const METRICOOL_100_APPROVAL_RUN_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.csv");
+const METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-100-operator-run-sheet.csv");
+const METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-100-operator-handoff.md");
+const METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "metricool-100-approval-evidence-import.csv");
+const METRICOOL_100_CURRENT_BATCH_WORKBOOK_PATH = path.join(SCHEDULED_DIR, "metricool-100-current-batch-workbook.json");
+const METRICOOL_100_BATCH_WORKBOOKS_DIR = path.join(SCHEDULED_DIR, "metricool-100-batch-workbooks");
+const METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR = path.join(SCHEDULED_DIR, "metricool-100-batch-evidence-imports");
 const METRICOOL_MVP_LAUNCH_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.json");
 const METRICOOL_MVP_LAUNCH_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.md");
 const METRICOOL_MVP_LAUNCH_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.csv");
+const METRICOOL_PENDING_PROFILE_EVIDENCE_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-pending-profile-evidence.csv");
 const METRICOOL_APPROVAL_SESSION_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.json");
 const METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.md");
 const METRICOOL_APPROVAL_SESSION_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-approval-session.csv");
+const METRICOOL_APPROVAL_QUICK_RUN_PATH = path.join(SCHEDULED_DIR, "metricool-approval-quick-run.json");
+const METRICOOL_APPROVAL_QUICK_RUN_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-approval-quick-run.md");
+const METRICOOL_SOURCE_UPLOAD_PACK_PATH = path.join(SCHEDULED_DIR, "metricool-source-upload-pack.json");
+const METRICOOL_SOURCE_UPLOAD_PACK_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-source-upload-pack.md");
+const METRICOOL_SOURCE_UPLOAD_PACK_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-source-upload-pack.csv");
+const METRICOOL_SOURCE_UPLOAD_HASH_CACHE_PATH = path.join(SCHEDULED_DIR, "metricool-source-upload-hashes.json");
+const METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH = path.join(SCHEDULED_DIR, "metricool-operator-closeout-pack.json");
+const METRICOOL_OPERATOR_CLOSEOUT_PACK_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-operator-closeout-pack.md");
+const METRICOOL_OPERATOR_CLOSEOUT_RUN_SHEET_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-operator-run-sheet.csv");
 const METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "metricool-approval-evidence-import.csv");
 const METRICOOL_APPROVAL_IMPORTED_METRICS_PATH = path.join(METRICS_DIR, "metricool-approval-imported-metrics.csv");
 const METRICOOL_APPROVAL_REPORT_PATH = path.join(REPORTS_DIR, "metricool-approval-report.json");
@@ -6731,6 +7176,7 @@ const EXTERNAL_CLOSEOUT_PACK_PATH = path.join(REPORTS_DIR, "clippers-external-cl
 const EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH = path.join(REPORTS_DIR, "clippers-external-operator-action-sheet.md");
 const EXTERNAL_CLOSEOUT_PROOF_TODO_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-proof-todo.md");
 const EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-operator-queue.md");
+const EXTERNAL_CLOSEOUT_BATCH_HANDOFF_PATH = path.join(REPORTS_DIR, "clippers-external-closeout-batches.md");
 const EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH = path.join(ROOT_DIR, "evidence-drop", "external-closeout-evidence-import.csv");
 const EXTERNAL_CLOSEOUT_PROOF_DROP_DIR = path.join(ROOT_DIR, "evidence-drop", "external-closeout-proofs");
 const LAUNCH_EVIDENCE_FIX_PACK_PATH = path.join(ROOT_DIR, "launch-evidence-fix-pack.json");
@@ -9073,7 +9519,7 @@ function normalizeRunOptions(input: unknown): Required<ClipperRunOptions> {
   return {
     clipsPerAccount: Number.isFinite(clipsPerAccount) ? Math.min(Math.max(Math.round(clipsPerAccount), 1), 50) : 8,
     publishMode:
-      value.publishMode === "auto_after_connection" || value.publishMode === "draft_only" || value.publishMode === "approval_required"
+      value.publishMode === "draft_only" || value.publishMode === "approval_required"
         ? value.publishMode
         : "approval_required",
     riskTolerance:
@@ -9323,7 +9769,37 @@ function completionHintForSourceStatus(status: ClipperSourceHuntItemStatus): str
   return "Cuando subas la fuente, regenera la cola y luego completa permisos si el asset queda en rights_review.";
 }
 
-function buildProductionQueueItems(accounts: ClipperAccount[], assets: ClipperSourceAsset[]): ClipperProductionQueueItem[] {
+function normalizeProductionQueueTarget(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+  return Math.max(1, Math.min(700, Math.trunc(numericValue)));
+}
+
+function productionSlotCountsByAccount(accounts: ClipperAccount[], targetClips: number | null): Map<string, number> {
+  if (!targetClips) {
+    return new Map(accounts.map((account) => [account.id, Math.max(1, Math.min(account.dailyClipTarget, 40))]));
+  }
+  const totalDailyTarget = accounts.reduce((sum, account) => sum + Math.max(0, account.dailyClipTarget), 0);
+  if (totalDailyTarget <= 0) return new Map(accounts.map((account) => [account.id, 0]));
+  const slots = accounts.map((account) => {
+    const exact = targetClips * (Math.max(0, account.dailyClipTarget) / totalDailyTarget);
+    return {
+      accountId: account.id,
+      base: Math.floor(exact),
+      remainder: exact - Math.floor(exact),
+    };
+  });
+  let assigned = slots.reduce((sum, item) => sum + item.base, 0);
+  for (const item of [...slots].sort((left, right) => right.remainder - left.remainder)) {
+    if (assigned >= targetClips) break;
+    item.base += 1;
+    assigned += 1;
+  }
+  return new Map(slots.map((item) => [item.accountId, item.base]));
+}
+
+function buildProductionQueueItems(accounts: ClipperAccount[], assets: ClipperSourceAsset[], options: { targetWeeklyClips?: unknown; eligibleAccountIds?: Iterable<string> } = {}): ClipperProductionQueueItem[] {
   const hooksByCategory: Record<ClipperAccountCategory, string[]> = {
     sports: ["La jugada que nadie esperaba", "Ultimo minuto con contexto", "El momento que cambio el partido"],
     memes: ["POV que se entiende demasiado rapido", "El internet hoy en 7 segundos", "Cuando el dia decide ponerse raro"],
@@ -9357,10 +9833,14 @@ function buildProductionQueueItems(accounts: ClipperAccount[], assets: ClipperSo
       return left.fileName.localeCompare(right.fileName);
     });
   }
+  const eligibleAccountIds = options.eligibleAccountIds ? new Set(Array.from(options.eligibleAccountIds)) : null;
+  const queueAccounts = eligibleAccountIds ? accounts.filter((account) => eligibleAccountIds.has(account.id)) : accounts;
+  const targetWeeklyClips = normalizeProductionQueueTarget(options.targetWeeklyClips);
+  const slotCounts = productionSlotCountsByAccount(queueAccounts, targetWeeklyClips);
 
-  return accounts.flatMap((account, accountIndex) => {
+  return queueAccounts.flatMap((account, accountIndex) => {
     const categoryAssets = assetsByCategory[account.category];
-    const targetSlots = Math.max(1, Math.min(account.dailyClipTarget, 40));
+    const targetSlots = Math.max(0, slotCounts.get(account.id) || 0);
     return Array.from({ length: targetSlots }, (_, slotIndex) => {
       const asset = categoryAssets[slotIndex % Math.max(categoryAssets.length, 1)] || null;
       const hookIndex = (accountIndex + slotIndex) % hooksByCategory[account.category].length;
@@ -9425,7 +9905,9 @@ async function buildProductionQueueSummary(accounts: ClipperAccount[]): Promise<
   const assets = await listSourceAssets();
   const latestQueue = await readLatestProductionQueue();
   const usableAssets = assets.filter((asset) => asset.usable);
-  const items = buildProductionQueueItems(accounts, usableAssets);
+  const items = Array.isArray(latestQueue?.items) && latestQueue.items.length
+    ? latestQueue.items
+    : buildProductionQueueItems(accounts, usableAssets);
   const readyCount = items.filter((item) => item.status === "draft_ready").length;
   const reviewCount = items.filter((item) => item.status === "rights_review").length;
   const status = usableAssets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty";
@@ -9438,6 +9920,10 @@ async function buildProductionQueueSummary(accounts: ClipperAccount[]): Promise<
     status,
     queuePath: latestQueue?.queuePath || null,
     generatedAt: latestQueue?.generatedAt || null,
+    mode: latestQueue?.mode,
+    targetWeeklyClips: latestQueue?.targetWeeklyClips,
+    metricoolReadyOnly: latestQueue?.metricoolReadyOnly,
+    eligibleAccountIds: latestQueue?.eligibleAccountIds,
     sourceAssets: assets,
     items,
     nextStep,
@@ -10709,7 +11195,7 @@ async function buildSourceScoutSummary(input: {
     candidates: deduped,
     totals,
     nextStep: totals.blockedRights > 0
-      ? "Rights Checker activo: resolver permisos/recreacion antes de cargar source-drop o aprobar en Metricool."
+      ? "Rights Checker activo: resolver permisos/recreacion antes de cargar source-drop o programar en Metricool."
       : totals.blockedSourceFile > 0
         ? "Cargar archivos fuente permitidos en source-drop y regenerar cola Metricool."
         : "Source Scout no tiene candidatos; corre Viral Discovery y Source Discovery Handoff.",
@@ -12238,7 +12724,7 @@ async function buildSourceScoutDailySprintSummary(input: {
       ? `Run exact URL intake for ${totals.exactUrlGap} more item(s); use Source Scout Exact URL Kit and paste only exact video/post URLs.`
       : totals.leadGap > 0
         ? `Find ${totals.leadGap} more viral lead(s) today, then run Source Scout and rights intake.`
-        : "Daily Source Scout targets are on pace; focus on rights proof, source files and Metricool approval evidence.",
+        : "Daily Source Scout targets are on pace; focus on rights proof, source files and Metricool scheduled proof.",
   };
 }
 
@@ -12282,7 +12768,7 @@ function renderSourceScoutDailySprintMarkdown(summary: ClipperSourceScoutDailySp
     `- Exact URLs today: ${summary.targets.dailyExactUrls}`,
     `- Rights/recreate decisions today: ${summary.targets.dailyRightsOrRecreate}`,
     `- Source-ready assets today: ${summary.targets.dailySourceReady}`,
-    `- Metricool approval queue: ${summary.targets.metricoolApprovalMin}-${summary.targets.metricoolApprovalMax}`,
+    `- Metricool review queue: ${summary.targets.metricoolApprovalMin}-${summary.targets.metricoolApprovalMax}`,
     "",
     "## Current Gaps",
     "",
@@ -12432,7 +12918,7 @@ async function buildSourceScoutSourceFileItem(workItem: ClipperSourceScoutWorkQu
       "Run source-drop import/local sync so the production queue can see the real file.",
     ],
     nextStep: sourceFileExists
-      ? "Source file is usable; import/sync source-drop and refresh Metricool approval queue."
+      ? "Source file is usable; import/sync source-drop and refresh Metricool review queue."
       : `Create or upload the real source file to ${expectedSourcePath}.`,
   };
   return {
@@ -12471,7 +12957,7 @@ async function buildSourceScoutSourceFileKitSummary(input: {
     nextStep: totals.missingSourceFiles > 0
       ? `Create/upload ${totals.missingSourceFiles} real source file(s) into source-drop; placeholders do not count.`
       : totals.items > 0
-        ? "All Source Scout source files exist; import/sync source-drop and refresh Metricool approval queue."
+        ? "All Source Scout source files exist; import/sync source-drop and refresh Metricool review queue."
         : "No Source Scout source file tasks are queued right now.",
   };
 }
@@ -12619,7 +13105,7 @@ function rightsEvidenceIssueForIntake(item: ClipperSourceScoutIntakeItem): Pick<
     if (!hasSourceFile) {
       return { issue: "missing_source_file", severity: "blocked", nextStep: `Upload or generate the recreated owned source file at ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.` };
     }
-    return { issue: "none", severity: "ready", nextStep: "Recreate plan and owned source file are ready for guarded intake/Metricool approval queue." };
+    return { issue: "none", severity: "ready", nextStep: "Recreate plan and owned source file are ready for guarded intake/Metricool review queue." };
   }
   if (item.sourceUrlKind === "discovery_search") {
     return { issue: "review_required", severity: "blocked", nextStep: "Convert discovery/search URL into an exact video/post URL or approved recreate plan before using it." };
@@ -12636,7 +13122,7 @@ function rightsEvidenceIssueForIntake(item: ClipperSourceScoutIntakeItem): Pick<
   if (!hasSourceFile) {
     return { issue: "missing_source_file", severity: "blocked", nextStep: `Upload or generate the source file at ${item.sourceDropPath || item.targetSourcePath || "source-drop"}.` };
   }
-  return { issue: "none", severity: "ready", nextStep: "Evidence and source file are ready for guarded intake/Metricool approval queue." };
+  return { issue: "none", severity: "ready", nextStep: "Evidence and source file are ready for guarded intake/Metricool review queue." };
 }
 
 function rightsEvidenceIssueForAsset(asset: ClipperSourceAsset): Pick<ClipperRightsEvidenceLedgerItem, "issue" | "severity" | "nextStep"> {
@@ -13015,7 +13501,7 @@ async function buildWeeklyProductionFunnelSummary(input: {
         : currentSourceReady < Math.ceil(targetWeekly * 1.3)
           ? `Faltan source assets con derechos para ${categoryLabelsForBackend(category)}.`
           : categoryMetricoolQueued < Math.floor(targetWeekly / 7)
-            ? "Preparar Draft Specs y Metricool approval queue."
+            ? "Preparar Draft Specs y cola de revision Metricool."
             : "Categoria lista para escalar con approval_required.",
     };
   });
@@ -13037,14 +13523,26 @@ async function buildWeeklyProductionFunnelSummary(input: {
     dailyMetricoolTargetMin: 14,
     dailyMetricoolTargetMax: 16,
   };
+  const sourceSupplyReadyForWeek = totals.sourceFilesReady >= 130;
+  const metricoolQueueReadyForToday = totals.metricoolApprovalQueued >= totals.dailyMetricoolTargetMin;
   const bottlenecks: ClipperWeeklyProductionFunnelBottleneck[] = [
     totals.exactUrls < totals.dailyExactUrlTarget ? {
       id: "exact_urls",
       label: "Exact URL intake",
-      severity: "critical",
+      severity: sourceSupplyReadyForWeek && metricoolQueueReadyForToday ? "watch" : "critical",
       current: totals.exactUrls,
       target: totals.dailyExactUrlTarget,
-      nextStep: "Run exact URL intake; discovery_search does not count as an exact source.",
+      nextStep: sourceSupplyReadyForWeek && metricoolQueueReadyForToday
+        ? "Keep exact URL intake running for next-week scale; today's MVP lane is Metricool approval/evidence."
+        : "Run exact URL intake; discovery_search does not count as an exact source.",
+    } : null,
+    totals.metricoolApprovalQueued >= totals.dailyMetricoolTargetMin && totals.publishedCount === 0 ? {
+      id: "metricool_evidence",
+      label: "Metricool approval/evidence",
+      severity: "critical",
+      current: totals.publishedCount,
+      target: totals.dailyMetricoolTargetMin,
+      nextStep: "Approve the ready Metricool queue, then replace evidence CSV placeholders only after live post URLs and 24h metrics exist.",
     } : null,
     totals.blockedRights > totals.rightsApproved ? {
       id: "rights",
@@ -13064,7 +13562,7 @@ async function buildWeeklyProductionFunnelSummary(input: {
     } : null,
     totals.metricoolApprovalQueued < totals.dailyMetricoolTargetMin && totals.sourceFilesReady > 0 ? {
       id: "metricool",
-      label: "Metricool approval queue",
+      label: "Metricool review queue",
       severity: "high",
       current: totals.metricoolApprovalQueued,
       target: totals.dailyMetricoolTargetMin,
@@ -13153,7 +13651,7 @@ function renderWeeklyProductionFunnelMarkdown(summary: ClipperWeeklyProductionFu
     `- Recreate only: ${summary.totals.recreateOnly}`,
     `- Source files ready: ${summary.totals.sourceFilesReady}`,
     `- Draft ready: ${summary.totals.draftReady}`,
-    `- Metricool approval queued: ${summary.totals.metricoolApprovalQueued}`,
+    `- Metricool review queued: ${summary.totals.metricoolApprovalQueued}`,
     `- Blocked rights: ${summary.totals.blockedRights}`,
     `- Blocked source file: ${summary.totals.blockedSourceFile}`,
     `- Published count: ${summary.totals.publishedCount}`,
@@ -13165,7 +13663,7 @@ function renderWeeklyProductionFunnelMarkdown(summary: ClipperWeeklyProductionFu
     `- Exact URLs: ${summary.dailyReport.exactUrls}`,
     `- Rights approved/recreate_only: ${summary.dailyReport.rightsApprovedOrRecreateOnly}`,
     `- Source files ready: ${summary.dailyReport.sourceFilesReady}`,
-    `- Metricool approval queue: ${summary.dailyReport.metricoolApprovalQueue}`,
+    `- Metricool review queue: ${summary.dailyReport.metricoolApprovalQueue}`,
     `- Published: ${summary.dailyReport.published}`,
     `- Biggest blocker: ${summary.dailyReport.biggestBlocker}`,
     `- Tomorrow action: ${summary.dailyReport.tomorrowAction}`,
@@ -13180,7 +13678,7 @@ function renderWeeklyProductionFunnelMarkdown(summary: ClipperWeeklyProductionFu
       `- Rights approved: ${row.rightsApproved}`,
       `- Recreate only: ${row.recreateOnly}`,
       `- Draft ready: ${row.draftReady}`,
-      `- Metricool approval queued: ${row.metricoolApprovalQueued}`,
+      `- Metricool review queued: ${row.metricoolApprovalQueued}`,
       `- Connected Metricool profiles: ${row.connectedMetricoolProfiles}`,
       `- Next: ${row.nextStep}`,
       "",
@@ -17754,6 +18252,7 @@ function launchEvidenceDropFileIgnored(fileName: string): boolean {
   return fileName === "README.md"
     || fileName === path.basename(LAUNCH_EVIDENCE_TEMPLATE_PATH)
     || fileName === path.basename(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH)
+    || fileName === path.basename(METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH)
     || fileName === path.basename(LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH)
     || fileName === path.basename(EXTERNAL_EVIDENCE_WORKBOOK_IMPORT_CSV_PATH)
     || fileName === "external-closeout-evidence-import.csv";
@@ -20763,7 +21262,8 @@ async function buildAccountIdentityKitSummary(accounts: ClipperAccount[]): Promi
         "Apply display name, handle, bio, profile image and banner.",
         "Add credit/removal policy in bio or link-in-bio where possible.",
         "Post only owned/licensed/permissioned clips after allowlist evidence is saved.",
-        "Record evidence in Account Evidence before OAuth/app review.",
+        "Record evidence in Account Evidence, then connect or confirm the profile in Metricool.",
+        "Keep direct OAuth/app review parked as backlog unless direct platform autopublish is explicitly requested.",
       ],
     })),
   }));
@@ -20853,8 +21353,9 @@ export async function prepareClipperAccountIdentityKit(userId = getSystemUserId(
 }
 
 function launchTaskStatus(platformAccount: ClipperPlatformAccount, evidence?: ClipperAccountEvidenceItem): ClipperAccountLaunchTaskStatus {
+  if (evidence?.status === "verified") return "ready";
   if (platformAccount.status === "ready") return "ready";
-  if (evidence?.status === "verified" || evidence?.status === "submitted") return "pending";
+  if (evidence?.status === "submitted") return "pending";
   if (platformAccount.status === "not_created") return "blocked";
   return "pending";
 }
@@ -20864,24 +21365,30 @@ function isAccountCreationStep(step: string): boolean {
   return normalized.includes("crear cuenta") || normalized.includes("crear canal") || normalized.includes("cuenta profesional");
 }
 
+function isDirectApiLaunchStep(step: string): boolean {
+  return /oauth|app review|content posting api|youtube data api|youtube\.upload|video\.publish|video\.upload|autorizar/i.test(step);
+}
+
 function buildAccountLaunchTasks(accounts: ClipperAccount[], accountEvidence: ClipperAccountEvidenceSummary): ClipperAccountLaunchTask[] {
   return accounts.flatMap((account) =>
     account.platformAccounts.map((platformAccount) => {
       const requirement = PLATFORM_REQUIREMENTS.find((item) => item.platform === platformAccount.platform);
       const evidence = accountEvidence.items.find((item) => item.accountId === account.id && item.platform === platformAccount.platform);
       const status = launchTaskStatus(platformAccount, evidence);
+      const metricoolMvpMissingSteps = platformAccount.missingSteps.filter((step) => !isDirectApiLaunchStep(step));
       const blockers = status === "ready"
         ? []
         : evidence?.status === "verified" || evidence?.status === "submitted"
-          ? platformAccount.missingSteps.filter((step) => !isAccountCreationStep(step))
-          : platformAccount.missingSteps;
+          ? metricoolMvpMissingSteps.filter((step) => !isAccountCreationStep(step))
+          : metricoolMvpMissingSteps;
       const checklist = Array.from(new Set([
-        ...platformAccount.missingSteps,
+        ...metricoolMvpMissingSteps,
         "Crear foto de perfil y banner consistente con la categoria.",
         "Pegar bio y link/credit policy.",
         "Guardar login y 2FA en password manager.",
-        "Conectar OAuth desde Clippers y validar token vault.",
-        "Adjuntar evidencia de app review/permission approval cuando aplique.",
+        "Conectar o confirmar el perfil en Metricool con el brand correcto.",
+        "Guardar evidencia de perfil conectado en Metricool sin secretos.",
+        "Mantener OAuth/app review como backlog para full direct API, no como requisito del MVP Metricool.",
       ]));
       return {
         id: `${account.id}-${platformAccount.platform}`,
@@ -20901,12 +21408,10 @@ function buildAccountLaunchTasks(accounts: ClipperAccount[], accountEvidence: Cl
         blockers,
         checklist,
         nextStep: status === "ready"
-          ? "Cuenta lista en Clippers; mantener QA y metricas antes de subir volumen."
+          ? "Cuenta verificada; conectar o confirmar el perfil en Metricool y mantener approval_required."
           : status === "pending"
-            ? evidence?.status === "verified"
-              ? "Evidencia de cuenta verificada; completar OAuth/app review y token vault."
-              : "Revisar evidencia submitted, marcar verified y completar OAuth/app review."
-            : "Crear/verificar la cuenta externa, aplicar bio/branding y despues conectar OAuth.",
+            ? "Revisar evidencia submitted, marcar verified y conectar o confirmar el perfil en Metricool."
+            : "Crear/verificar la cuenta externa, aplicar bio/branding y despues conectar Metricool.",
       };
     })
   );
@@ -20973,9 +21478,9 @@ async function buildAccountLaunchKitSummary(accounts: ClipperAccount[], accountE
     totals,
     nextStep: generatedAt
       ? totals.blocked > 0
-        ? "Abrir las cuentas externas bloqueadas y completar verificacion/login por plataforma."
+          ? "Abrir las cuentas externas bloqueadas y completar verificacion/login por plataforma."
         : totals.pending > 0
-          ? "Completar OAuth/app review para las cuentas pendientes."
+          ? "Revisar evidencia submitted y conectar perfiles pendientes en Metricool."
           : "Kit listo; mantener monitoreo de permisos, metrics y health de cuentas."
       : "Generar el launch kit para dejar handles, bios, links y checklist por cuenta/plataforma.",
   };
@@ -20993,9 +21498,9 @@ export async function prepareClipperAccountLaunchKit(userId = getSystemUserId())
     ...draftSummary,
     generatedAt,
     nextStep: draftSummary.totals.blocked > 0
-      ? "Usar este kit para crear/verificar cuentas externas y luego conectar OAuth desde Clippers."
+      ? "Usar este kit para crear/verificar cuentas externas y luego conectarlas en Metricool."
       : draftSummary.totals.pending > 0
-        ? "Completar OAuth/app review para desbloquear autopost."
+        ? "Revisar evidencia submitted y conectar perfiles pendientes en Metricool."
         : "Kit listo; mantener monitoreo de permisos, metrics y health de cuentas.",
   };
   await writeFile(ACCOUNT_LAUNCH_KIT_PATH, JSON.stringify(accountLaunchKit, null, 2));
@@ -21032,7 +21537,8 @@ function accountVerificationRequirements(platform: ClipperPlatform): string[] {
 
 function accountCreationStatus(task: ClipperAccountLaunchTask): ClipperAccountCreationPackStatus {
   if (task.status === "ready") return "ready";
-  if (task.evidenceStatus === "verified" || task.evidenceStatus === "submitted" || task.status === "pending") return "partial";
+  if (task.evidenceStatus === "verified") return "ready";
+  if (task.evidenceStatus === "submitted" || task.status === "pending") return "partial";
   return "blocked";
 }
 
@@ -21156,8 +21662,8 @@ function accountCreationPortalFormFields(item: {
     { field: "profile URL expected", value: item.profileLink, note: "Use this only as expected proof target after signup." },
     { field: "fallback handles", value: item.usernameAlternatives.map((handle) => handle.replace(/^@/, "")).join(", "), note: "Try in order if the primary handle is unavailable." },
     ...(item.platform === "instagram" ? [
-      { field: "account type", value: "Professional / Creator or Business", note: "Required before Meta publishing permissions." },
-      { field: "Facebook Page", value: "<matching Page for this account>", note: "Create or connect before App Review." },
+      { field: "account type", value: "Professional / Creator or Business", note: "Required for Metricool Instagram/Reels connection and future Meta permissions." },
+      { field: "Facebook Page", value: "<matching Page for this account>", note: "Create or connect for Metricool profile setup; Meta App Review stays direct API backlog." },
     ] : []),
     ...(item.platform === "youtube" ? [
       { field: "channel handle", value: item.handle.replace(/^@/, ""), note: "Confirm the public channel URL after creation." },
@@ -21180,10 +21686,10 @@ function accountCreationBrowserSessionChecklist(platform: ClipperPlatform): stri
     "Open the signup/login portal in the browser profile that should own this account.",
     "Confirm no personal account is accidentally active before signup.",
     "Use the password manager entry created for this exact account.",
-    "Complete email/phone verification and 2FA before connecting developer apps.",
+    "Complete email/phone verification and 2FA before connecting or confirming this profile in Metricool.",
     ...(platform === "instagram" ? ["Switch to Professional account and connect/create the Facebook Page before evidence import."] : []),
-    ...(platform === "youtube" ? ["Create/claim the YouTube channel and confirm channel URL before OAuth."] : []),
-    ...(platform === "tiktok" ? ["Confirm the account has no initial posting restrictions before Content Posting API review."] : []),
+    ...(platform === "youtube" ? ["Create/claim the YouTube channel and confirm channel URL before Metricool profile setup."] : []),
+    ...(platform === "tiktok" ? ["Confirm the account has no initial posting restrictions before adding it to Metricool; Content Posting API review stays direct API backlog."] : []),
   ];
 }
 
@@ -21217,12 +21723,50 @@ function accountCreationPostCreationNextActions(platform: ClipperPlatform): stri
     "Paste submitted evidence row once profile/security proof exists.",
     "Paste verified evidence row only after profile URL, 2FA and platform-specific proof are confirmed.",
     platform === "instagram"
-      ? "Connect or create the matching Facebook Page before Meta App Review."
+      ? "Connect or create the matching Facebook Page, then connect the Instagram profile inside Metricool."
       : platform === "youtube"
-        ? "Confirm YouTube channel handle and advanced/channel verification state before OAuth."
-        : "Confirm account has no posting restrictions before TikTok Content Posting API review.",
-    "Regenerate Account Creation Pack, External Setup Queue and Platform Portal Checklist.",
+        ? "Confirm YouTube channel handle, then connect the channel inside Metricool."
+        : "Confirm account has no posting restrictions, then connect the profile inside Metricool.",
+    "Regenerate Account Creation Pack, Account Permission Readiness and Metricool Publishing Plan.",
   ];
+}
+
+function accountCreationMetricoolConnectionChecklist(item: Pick<ClipperAccountCreationPackItem, "accountName" | "platform" | "handle">): string[] {
+  return [
+    `Open Metricool and choose the brand for ${item.accountName}.`,
+    `Connect ${item.platform} profile ${item.handle} in Metricool, not through direct social API keys.`,
+    "Accept Metricool scheduling/publishing and analytics permissions in the platform prompt.",
+    "Return to Clippers and run Metricool sync/readiness so connectedNetworks updates from real evidence.",
+    "Keep publish mode approval_required; do not enable real publish from Clippers.",
+  ];
+}
+
+function accountCreationDirectApiBacklog(platform: ClipperPlatform): string[] {
+  if (platform === "tiktok") return [
+    "Backlog only: TikTok OAuth, Content Posting API, video.publish/video.upload approval and direct post audit are not required for this Metricool MVP.",
+  ];
+  if (platform === "instagram") return [
+    "Backlog only: Meta developer app, Instagram publishing scopes, page linkage review and direct API OAuth are not required for this Metricool MVP.",
+  ];
+  return [
+    "Backlog only: YouTube Data API, youtube.upload scope, Google OAuth verification and direct API upload flow are not required for this Metricool MVP.",
+  ];
+}
+
+function isDirectApiAccountBacklogStep(step: string): boolean {
+  const normalized = step.toLowerCase();
+  return normalized.includes("oauth")
+    || normalized.includes("content posting api")
+    || normalized.includes("youtube data api")
+    || normalized.includes("video.publish")
+    || normalized.includes("video.upload")
+    || normalized.includes("youtube.upload")
+    || normalized.includes("aprobar permisos")
+    || normalized.includes("permisos")
+    || normalized.includes("app review")
+    || normalized.includes("meta app")
+    || normalized.includes("developer app")
+    || normalized.includes("direct post");
 }
 
 function accountCreationSessionPriority(item: ClipperAccountCreationPackItem): ClipperAccountCreationSessionPriority {
@@ -21251,7 +21795,8 @@ function accountCreationDoneCriteria(item: ClipperAccountCreationPackItem): stri
     "Email/phone verification is complete and redacted proof is captured.",
     "2FA is enabled or recovery codes are stored with redacted proof.",
     "Launch evidence row is pasted/imported and Account Evidence status is submitted or verified.",
-    "No publishing is enabled until rights, OAuth and permission gates are approved.",
+    "Metricool connection is recorded from real evidence before the profile is counted as approval-queue ready.",
+    "Direct social API/OAuth work stays backlog unless Robert explicitly switches away from Metricool.",
   ];
 }
 
@@ -21282,6 +21827,8 @@ function buildAccountCreationSessionOrder(items: ClipperAccountCreationPackItem[
       requiredProof: item.platformProofRequired,
       operatorVaultChecklist: item.operatorVaultChecklist,
       postCreationNextActions: item.postCreationNextActions,
+      metricoolConnectionChecklist: item.metricoolConnectionChecklist,
+      directApiBacklog: item.directApiBacklog,
       doneCriteria: accountCreationDoneCriteria(item),
     }));
 }
@@ -21311,6 +21858,8 @@ function buildAccountCreationPlatformBatches(items: ClipperAccountCreationPackIt
       const requiredProof = Array.from(new Set(platformItems.flatMap((item) => item.platformProofRequired)));
       const browserSessionChecklist = Array.from(new Set(platformItems.flatMap((item) => item.browserSessionChecklist)));
       const operatorVaultChecklist = Array.from(new Set(platformItems.flatMap((item) => item.operatorVaultChecklist)));
+      const metricoolConnectionChecklist = Array.from(new Set(platformItems.flatMap((item) => item.metricoolConnectionChecklist)));
+      const directApiBacklog = Array.from(new Set(platformItems.flatMap((item) => item.directApiBacklog)));
       const copyBlock = [
         `${first.platform} account creation batch`,
         "",
@@ -21355,15 +21904,18 @@ function buildAccountCreationPlatformBatches(items: ClipperAccountCreationPackIt
         browserSessionChecklist,
         operatorVaultChecklist,
         requiredProof,
+        metricoolConnectionChecklist,
+        directApiBacklog,
         blockers,
         doneCriteria: [
           `All ${platformItems.length} ${platform} accounts open publicly with the final handles.`,
           "Each account has 2FA/recovery saved in the private vault.",
           "Each account has submitted or verified evidence imported in Launch Evidence Batch.",
-          "No OAuth/app review connection is marked ready until credentials, DNS and permissions are valid.",
+          "Each ready profile is connected or queued to connect in Metricool approval_required before publishing.",
+          "Direct API/OAuth work remains backlog until Robert explicitly enables direct autopublish.",
         ],
         nextStep: status === "ready"
-          ? "All accounts for this platform have verified evidence; continue OAuth/app review."
+          ? "All accounts for this platform have verified evidence; connect or confirm profiles in Metricool."
           : status === "partial"
             ? "Review submitted evidence and move accounts to verified when profile/security proof is complete."
             : blockers[0] || `Create/verify all ${platform} accounts and import evidence rows.`,
@@ -21421,7 +21973,7 @@ function buildAccountClaimSheet(items: ClipperAccountCreationPackItem[]): Clippe
         "Import submitted evidence immediately after account creation proof exists.",
         "Only import verified evidence after profile, security and platform-specific proof are checked.",
         "Regenerate Account Creation Pack, External Setup Queue and Command Center.",
-        "Do not connect OAuth or publish until developer app, permissions, rights and DNS gates are ready.",
+        "Connect or confirm the profile in Metricool approval_required; do not publish until account, Metricool profile, rights and source gates are ready.",
       ],
       blockedUntil: [
         "Real external account exists.",
@@ -21524,6 +22076,11 @@ async function buildAccountCreationPackSummary(input: {
     const identity = input.accountIdentityKit.accounts.find((account) => account.accountId === task.accountId);
     const profile = identity?.platforms.find((platform) => platform.platform === task.platform);
     const status = accountCreationStatus(task);
+    const directApiBacklog = Array.from(new Set([
+      ...task.blockers.filter(isDirectApiAccountBacklogStep),
+      ...accountCreationDirectApiBacklog(task.platform),
+    ]));
+    const activeAccountBlockers = task.blockers.filter((blocker) => !isDirectApiAccountBacklogStep(blocker));
     const usernameOptions = profile?.usernameAlternatives || usernameAlternatives(task.handle);
     const evidenceToCapture = [
       "Screenshot del perfil creado con handle visible.",
@@ -21595,14 +22152,20 @@ async function buildAccountCreationPackSummary(input: {
       evidenceCapturePlan: accountCreationEvidenceCapturePlan(task.platform),
       operatorVaultChecklist: accountCreationOperatorVaultChecklist(task.platform),
       postCreationNextActions: accountCreationPostCreationNextActions(task.platform),
+      metricoolConnectionChecklist: accountCreationMetricoolConnectionChecklist({
+        accountName: task.accountName,
+        platform: task.platform,
+        handle: task.handle,
+      }),
+      directApiBacklog,
       blockers: status === "ready" ? [] : [
         ...(task.evidenceStatus === "missing" ? ["Falta evidencia de cuenta creada/verificada."] : []),
-        ...task.blockers,
+        ...activeAccountBlockers,
       ],
       nextStep: status === "ready"
-        ? "Cuenta lista; conectar OAuth y mantener approval_required para primeros posts."
+        ? "Cuenta lista; conectar o confirmar perfil en Metricool y mantener approval_required para primeros posts."
         : status === "partial"
-          ? "Completar verificacion/2FA y marcar evidencia como verified."
+          ? "Completar verificacion/2FA, marcar evidencia como verified y conectar el perfil en Metricool."
           : `Crear/verificar ${task.handle} en ${task.platform} y registrar evidencia.`,
     };
   });
@@ -21636,7 +22199,7 @@ async function buildAccountCreationPackSummary(input: {
     totals,
     nextStep: items.find((item) => item.status === "blocked")?.nextStep
       || items.find((item) => item.status === "partial")?.nextStep
-      || "Todas las cuentas tienen evidencia; seguir con OAuth/app review y primeros posts approval_required.",
+      || "Todas las cuentas tienen evidencia; conectar o confirmar perfiles en Metricool approval_required.",
   };
 }
 
@@ -21678,8 +22241,14 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
       "Operator vault checklist:",
       ...batch.operatorVaultChecklist.map((step) => `- [ ] ${step}`),
       "",
+      "Metricool connection checklist:",
+      ...batch.metricoolConnectionChecklist.map((step) => `- [ ] ${step}`),
+      "",
       "Required proof:",
       ...batch.requiredProof.map((proof) => `- [ ] ${proof}`),
+      "",
+      batch.directApiBacklog.length ? "Direct API backlog:" : "Direct API backlog: none",
+      ...batch.directApiBacklog.map((step) => `- ${step}`),
       "",
       "Done criteria:",
       ...batch.doneCriteria.map((step) => `- [ ] ${step}`),
@@ -21735,8 +22304,14 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
       "Operator vault checklist:",
       ...item.operatorVaultChecklist.map((step) => `- [ ] ${step}`),
       "",
+      "Metricool connection checklist:",
+      ...item.metricoolConnectionChecklist.map((step) => `- [ ] ${step}`),
+      "",
       "Post-creation next actions:",
       ...item.postCreationNextActions.map((step) => `- [ ] ${step}`),
+      "",
+      item.directApiBacklog.length ? "Direct API backlog:" : "Direct API backlog: none",
+      ...item.directApiBacklog.map((step) => `- ${step}`),
       "",
       "Required proof:",
       ...item.requiredProof.map((proof) => `- [ ] ${proof}`),
@@ -21810,11 +22385,17 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
       "Operator vault checklist:",
       ...item.operatorVaultChecklist.map((step) => `- [ ] ${step}`),
       "",
+      "Metricool connection checklist:",
+      ...item.metricoolConnectionChecklist.map((step) => `- [ ] ${step}`),
+      "",
       "Platform proof required:",
       ...item.platformProofRequired.map((step) => `- [ ] ${step}`),
       "",
       "Post-creation next actions:",
       ...item.postCreationNextActions.map((step) => `- [ ] ${step}`),
+      "",
+      item.directApiBacklog.length ? "Direct API backlog:" : "Direct API backlog: none",
+      ...item.directApiBacklog.map((step) => `- ${step}`),
       "",
       "Evidence to capture:",
       ...item.evidenceToCapture.map((step) => `- [ ] ${step}`),
@@ -21831,7 +22412,7 @@ function renderAccountCreationPackMarkdown(summary: ClipperAccountCreationPackSu
 
 function renderAccountCreationPackCsv(summary: ClipperAccountCreationPackSummary): string {
   const batchByPlatform = new Map(summary.platformBatches.map((batch) => [batch.platform, batch]));
-  const header = ["id", "platform_batch_id", "account", "category", "platform", "status", "handle", "display_name", "signup_url", "profile_link", "handle_check_urls", "copy_package", "portal_form_fields", "handle_reservation_plan", "browser_session_checklist", "evidence_capture_plan", "required_inputs", "security_checklist", "recovery_plan", "operator_vault_checklist", "platform_proof_required", "post_creation_next_actions", "completion_hint", "evidence_batch_row", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row", "evidence_path", "next_step"];
+  const header = ["id", "platform_batch_id", "account", "category", "platform", "status", "handle", "display_name", "signup_url", "profile_link", "handle_check_urls", "copy_package", "portal_form_fields", "handle_reservation_plan", "browser_session_checklist", "evidence_capture_plan", "required_inputs", "security_checklist", "recovery_plan", "operator_vault_checklist", "metricool_connection_checklist", "platform_proof_required", "post_creation_next_actions", "direct_api_backlog", "completion_hint", "evidence_batch_row", "submitted_evidence_batch_row", "verified_evidence_batch_row", "evidence_recipe_row", "evidence_path", "next_step"];
   return [
     header.map(csvEscape).join(","),
     ...summary.items.map((item) => [
@@ -21855,8 +22436,10 @@ function renderAccountCreationPackCsv(summary: ClipperAccountCreationPackSummary
       item.securityChecklist.join(" | "),
       item.recoveryPlan.join(" | "),
       item.operatorVaultChecklist.join(" | "),
+      item.metricoolConnectionChecklist.join(" | "),
       item.platformProofRequired.join(" | "),
       item.postCreationNextActions.join(" | "),
+      item.directApiBacklog.join(" | "),
       item.completionHint,
       item.evidenceBatchRow,
       item.submittedEvidenceBatchRow,
@@ -22055,7 +22638,7 @@ async function buildAccountSetupSessionSummary(input: {
         "Owner Connect Pack progress is updated for this account.",
       ],
       nextStep: status === "ready"
-        ? "Account verified; continue OAuth, permissions and publisher checks."
+        ? "Account verified; connect or confirm the profile in Metricool approval_required; keep direct API/OAuth as backlog."
         : status === "in_progress"
           ? "Review submitted proof, finish verification/2FA evidence and import the verified row."
           : status === "ready_to_create"
@@ -22103,7 +22686,7 @@ async function buildAccountSetupSessionSummary(input: {
     nextStep: items.find((item) => item.status === "blocked")?.nextStep
       || items.find((item) => item.status === "ready_to_create")?.nextStep
       || items.find((item) => item.status === "in_progress")?.nextStep
-      || "All external accounts have verified evidence; continue OAuth and app review.",
+      || "All external accounts have verified evidence; connect or confirm Metricool profiles in approval_required and leave direct API/OAuth as backlog.",
   };
 }
 
@@ -22317,7 +22900,7 @@ function renderAccountCreationRunbookMarkdown(items: ClipperAccountCreationRunbo
     "Rules:",
     "- Do not paste passwords, OTPs, recovery codes, cookies, private phone numbers or private emails into evidence rows.",
     "- Use submitted rows after the account exists; use verified rows only after profile, 2FA and ownership proof are captured.",
-    "- Keep publish mode approval_required until Completion Audit verifies account, permission, OAuth and rights gates.",
+    "- Keep publish mode approval_required until Completion Audit verifies account, Metricool profile, rights and source gates; direct API/OAuth stays backlog.",
     "",
     "## Account Runbook",
     "",
@@ -24284,6 +24867,54 @@ function buildExternalExecutionFocusRun(items: ClipperExternalExecutionSessionIt
   };
 }
 
+function buildMetricoolMvpFocusRun(source: ClipperExternalExecutionFocusRun): ClipperExternalExecutionFocusRun {
+  const allowedItems = source.items
+    .filter((item) => item.type === "account")
+    .map<ClipperExternalExecutionFocusRunItem>((item, index) => ({
+      ...item,
+      rank: index + 1,
+      credentialTemplate: "",
+      checklist: item.checklist.filter((entry) => !/\b(env var|oauth|client id|client secret|api|token)\b/i.test(entry)),
+      nextStep: item.nextStep.replace(/\bOAuth\b/gi, "Metricool/account proof"),
+    }));
+  const metricoolReminder: ClipperExternalExecutionFocusRunItem = {
+    id: "focus-metricool-100-operator-handoff",
+    rank: allowedItems.length + 1,
+    sourceItemId: "metricool-100-operator-handoff",
+    platform: "tiktok",
+    type: "account",
+    label: "Process Metricool 100 batch 01",
+    actionMode: "open_portal",
+    estimatedMinutes: 90,
+    portalUrl: "https://app.metricool.com/",
+    executionUrl: "/api/clippers/prepare-metricool-100-operator-handoff",
+    evidenceRow: "",
+    credentialTemplate: "",
+    checklist: [
+      "Open Metricool and process metricool-batch-01 first.",
+      "Keep approval_required; do not enable direct publishing.",
+      "Do not fill published evidence until a public post URL exists.",
+    ],
+    doneCriteria: [
+      "Batch 01 rows were reviewed in Metricool.",
+      "No row is counted as published without final_status=published and a public post URL.",
+      "No token, password, cookie, or private screenshot was stored.",
+    ],
+    nextStep: "Open the Metricool 100 operator handoff, process metricool-batch-01 only, and leave evidence blank until public URLs and 24h metrics exist.",
+  };
+  const items = [...allowedItems, metricoolReminder].slice(0, 7).map((item, index) => ({ ...item, rank: index + 1 }));
+  return {
+    status: items.length > 0 ? "ready" : "empty",
+    label: "Metricool MVP focus run",
+    estimatedMinutes: items.reduce((sum, item) => sum + item.estimatedMinutes, 0),
+    items,
+    evidenceRows: items.map((item) => item.evidenceRow).filter(Boolean),
+    credentialTemplates: [],
+    portalUrls: Array.from(new Set(items.map((item) => item.portalUrl).filter(Boolean))),
+    nextStep: metricoolReminder.nextStep,
+  };
+}
+
 function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
   const lane = String(row.lane || "");
   const platform = String(row.platform || "");
@@ -24340,6 +24971,77 @@ function closeoutChecklistForRow(row: Record<string, unknown>): string[] {
   ];
 }
 
+function closeoutBatchChecklist(lane: string, platform: string): string[] {
+  if (lane === "account") {
+    return [
+      `Open the ${platform} account/profile portal.`,
+      "Create or verify the real account, profile/channel URL and ownership access.",
+      "Capture redacted proof with handle, profile URL and security/2FA note.",
+      "Import only completed evidence rows with status verified.",
+    ];
+  }
+  if (lane === "developer_app") {
+    return [
+      `Open the ${platform} developer portal.`,
+      "Create or submit the app/project and copy only the public app identifier.",
+      "Confirm production callback/public URL is registered.",
+      "Import only completed developer_app evidence with status submitted or approved.",
+    ];
+  }
+  return [
+    `Open the ${platform} developer permission/app-review portal.`,
+    "Request or confirm the exact scope shown in each row.",
+    "Save the real review URL, ticket, email or redacted proof note.",
+    "Import only completed permission evidence with status requested or approved.",
+  ];
+}
+
+function buildExternalCloseoutRunBatches(items: ClipperExternalCloseoutRunItem[]): ClipperExternalCloseoutRunBatch[] {
+  const groups = new Map<string, ClipperExternalCloseoutRunItem[]>();
+  for (const item of items) {
+    const key = `${item.platform || "unknown"}:${item.lane || "unknown"}`;
+    groups.set(key, [...(groups.get(key) || []), item]);
+  }
+  const laneRank: Record<string, number> = { developer_app: 0, permission: 1, account: 2 };
+  return Array.from(groups.entries()).map(([key, group]) => {
+    const [platform, lane] = key.split(":");
+    const sorted = [...group].sort((a, b) => a.rank - b.rank);
+    const missingCsvFields = Array.from(new Set(sorted.flatMap((item) => item.missingCsvFields))).sort();
+    const portalUrls = Array.from(new Set(sorted.map((item) => item.portalUrl).filter(Boolean)));
+    const proofPaths = sorted.map((item) => item.proofPath).filter(Boolean);
+    const evidenceRows = sorted.map((item) => item.evidenceCsvRow).filter(Boolean);
+    const startRank = sorted[0]?.rank || 0;
+    const endRank = sorted[sorted.length - 1]?.rank || startRank;
+    return {
+      id: `external-closeout-${platform}-${lane}`,
+      platform,
+      lane,
+      label: `${platform} ${lane.replace(/_/g, " ")}`,
+      total: sorted.length,
+      startRank,
+      endRank,
+      proofFilesNeedRealEvidence: proofPaths.length,
+      portalUrls,
+      proofPaths,
+      evidenceRows,
+      missingCsvFields,
+      nextStep: sorted[0]?.operatorAction || sorted[0]?.nextStep || `Complete ${platform} ${lane} proof rows.`,
+      operatorChecklist: closeoutBatchChecklist(lane, platform),
+      doneCriteria: [
+        `Rows ${startRank}-${endRank} have real non-placeholder proof files.`,
+        "Evidence CSV rows use only accepted closeout statuses.",
+        "No tokens, cookies, passwords, API keys or private screenshots are pasted.",
+        "Preview external closeout evidence import accepts the rows before apply.",
+      ],
+    };
+  }).sort((a, b) => {
+    const platformRank = { instagram: 0, tiktok: 1, youtube: 2 } as Record<string, number>;
+    return (platformRank[a.platform] ?? 99) - (platformRank[b.platform] ?? 99)
+      || (laneRank[a.lane] ?? 99) - (laneRank[b.lane] ?? 99)
+      || a.startRank - b.startRank;
+  });
+}
+
 async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
   const raw = await readFile(EXTERNAL_CLOSEOUT_PACK_PATH, "utf8").catch(() => null);
   if (!raw) {
@@ -24350,6 +25052,7 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
       actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
       proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
       operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+      batchHandoffPath: EXTERNAL_CLOSEOUT_BATCH_HANDOFF_PATH,
       evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
       totals: {
         rows: 0,
@@ -24362,7 +25065,9 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
       },
       artifactSafetyStatus: "not_scanned",
       metricoolPublishMode: "approval_required",
+      realPublishEnabled: false,
       items: [],
+      batches: [],
       nextItems: [],
       nextStep: "Run External Closeout Pack before starting portal work.",
     };
@@ -24391,6 +25096,7 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
   }));
   const totals = parsed.actionSheet?.totals || {};
   const metricool = parsed.metricool || {};
+  const batches = buildExternalCloseoutRunBatches(items);
   return {
     status: parsed.actionSheet?.status === "complete" ? "complete" : "needs_operator",
     generatedAt: parsed.generatedAt ? String(parsed.generatedAt) : null,
@@ -24398,6 +25104,7 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
     actionSheetPath: EXTERNAL_CLOSEOUT_ACTION_SHEET_PATH,
     proofTodoPath: EXTERNAL_CLOSEOUT_PROOF_TODO_PATH,
     operatorQueuePath: EXTERNAL_CLOSEOUT_OPERATOR_QUEUE_PATH,
+    batchHandoffPath: String(parsed.paths?.batchHandoffMarkdown || EXTERNAL_CLOSEOUT_BATCH_HANDOFF_PATH),
     evidenceCsvPath: EXTERNAL_CLOSEOUT_EVIDENCE_IMPORT_PATH,
     totals: {
       rows: Number(totals.rows || items.length),
@@ -24410,7 +25117,9 @@ async function buildExternalCloseoutRun(): Promise<ClipperExternalCloseoutRun> {
     },
     artifactSafetyStatus: String(parsed.artifactSafety?.status || "unknown"),
     metricoolPublishMode: String(metricool.publishMode || "approval_required"),
+    realPublishEnabled: metricool.realPublishEnabled === true,
     items,
+    batches,
     nextItems: items.slice(0, 8),
     nextStep: items[0]?.operatorAction
       || parsed.actionSheet?.nextAction?.operatorAction
@@ -26016,6 +26725,7 @@ export async function prepareClipperGoLiveExecutionPack(userId = getSystemUserId
   const metricoolPublishing = await buildClipperMetricoolPublishingSummary(accounts);
   const metricoolExecutionQueue = await readMetricoolExecutionQueueSummary();
   const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    accounts,
     metricoolPublishing,
     metricoolExecutionQueue,
     publishingPackage,
@@ -28463,7 +29173,7 @@ function renderMetricoolPublishingMarkdown(summary: ClipperMetricoolPublishingSu
     `MCP URL: ${summary.mcpUrl}`,
     `Primary bridge: ${summary.primaryBridge}`,
     `Recommended plan: ${summary.recommendedPlan}`,
-    `Approval env preference: ${summary.requireApprovalForPublish ? "required" : "legacy override requested"}`,
+    `Approval env preference: ${summary.requireApprovalForPublish ? "required" : "approval forced for MVP"}`,
     `Effective approval gate: ${summary.effectiveApprovalGate ? "required" : "off"}`,
     "",
     "## Next Step",
@@ -28630,7 +29340,7 @@ function buildMetricoolSourceReadinessSummary(input: {
       ? "Conectar al menos una cuenta/red en Metricool antes de calcular source readiness."
       : totals.missingSourceAssets > 0
         ? `Agregar ${totals.missingSourceAssets} source asset(s) rights-ready para cubrir el primer launch Metricool.`
-        : "Source readiness listo para la cola Metricool; preparar drafts y approval queue.",
+        : "Source readiness listo para la cola Metricool; preparar drafts y review queue.",
   };
 }
 
@@ -28649,15 +29359,23 @@ async function metricoolSourceGate(sourcePath: string | null, blockedBySource: b
   }
 }
 
+function normalizeMetricoolApprovalQueueTarget(value: unknown, fallback = 14): number {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  const fallbackValue = Number.isFinite(fallback) ? fallback : 14;
+  const safeValue = Number.isFinite(numericValue) ? numericValue : fallbackValue;
+  return Math.max(1, Math.min(100, Math.trunc(safeValue)));
+}
+
 async function buildMetricoolExecutionQueueSummary(input: {
   automation: ClipperAutomationSummary;
   metricoolPublishing: ClipperMetricoolPublishingSummary;
   sourceAcquisition: ClipperSourceAcquisitionSummary;
   productionQueue: ClipperProductionQueueSummary;
+  approvalQueueTarget?: unknown;
 }): Promise<ClipperMetricoolExecutionQueueSummary> {
   const latestRun = input.automation.lastRun;
   const realPublishEnabled = false;
-  const approvalQueueTarget = 14;
+  const approvalQueueTarget = normalizeMetricoolApprovalQueueTarget(input.approvalQueueTarget);
   const sourceReadiness = buildMetricoolSourceReadinessSummary({
     metricoolPublishing: input.metricoolPublishing,
     sourceAcquisition: input.sourceAcquisition,
@@ -28743,9 +29461,16 @@ async function buildMetricoolExecutionQueueSummary(input: {
     if (!channel || !channel.connectedNetworks.includes(post.platform)) return null;
     return postToMetricoolItem(post, channel);
   }));
-  const items = itemCandidates.filter((item): item is ClipperMetricoolExecutionQueueItem => Boolean(item));
+  const items: ClipperMetricoolExecutionQueueItem[] = [];
+  let queuedForApprovalCount = 0;
+  for (const item of itemCandidates.filter((candidate): candidate is ClipperMetricoolExecutionQueueItem => Boolean(candidate))) {
+    if (item.status === "queued_for_approval") {
+      if (queuedForApprovalCount >= approvalQueueTarget) continue;
+      queuedForApprovalCount += 1;
+    }
+    items.push(item);
+  }
   const queuedKeys = new Set(items.map((item) => `${item.queueItemId}:${item.platform}`));
-  let queuedForApprovalCount = items.filter((item) => item.status === "queued_for_approval").length;
   for (const queueItem of input.productionQueue.items) {
     if (queuedForApprovalCount >= approvalQueueTarget) break;
     if (queueItem.status !== "draft_ready") continue;
@@ -28797,7 +29522,7 @@ async function buildMetricoolExecutionQueueSummary(input: {
     markdownPath: METRICOOL_EXECUTION_QUEUE_MARKDOWN_PATH,
     csvPath: METRICOOL_EXECUTION_QUEUE_CSV_PATH,
     sourceAutomationRunId: latestRun?.id || null,
-    publishMode: latestRun?.publishMode || "approval_required",
+    publishMode: "approval_required",
     realPublishEnabled,
     sourceReadiness,
     items,
@@ -28914,11 +29639,36 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
     try {
       const parsed = JSON.parse(raw) as ClipperMetricoolExecutionQueueSummary;
       const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
-      const items = parsedItems.map((item) => ({
-        ...item,
-        status: item.status === "ready_to_send" ? "queued_for_approval" : item.status,
-        approvalRequired: true,
-        canSendNow: false,
+      const sourceFailuresByAccount = new Map<string, number>();
+      let sourceGateNormalizationCount = 0;
+      const items = await Promise.all(parsedItems.map(async (item) => {
+        const sourceGate = await metricoolSourceGate(item.sourcePath || null, false);
+        if (sourceGate.done) {
+          return {
+            ...item,
+            status: item.status === "ready_to_send" ? "queued_for_approval" : item.status,
+            approvalRequired: true,
+            canSendNow: false,
+          };
+        }
+        sourceGateNormalizationCount += 1;
+        sourceFailuresByAccount.set(item.accountId, (sourceFailuresByAccount.get(item.accountId) || 0) + 1);
+        const sourceBlocker = `Source video usable: ${sourceGate.evidence}`;
+        const gates = Array.isArray(item.gates)
+          ? item.gates.map((gate) => gate.id === "source" ? { ...gate, done: false, evidence: sourceGate.evidence } : gate)
+          : [];
+        if (!gates.some((gate) => gate.id === "source")) {
+          gates.push({ id: "source", label: "Source video usable", done: false, evidence: sourceGate.evidence });
+        }
+        return {
+          ...item,
+          status: "blocked" as const,
+          approvalRequired: true,
+          canSendNow: false,
+          gates,
+          blockers: Array.from(new Set([...(Array.isArray(item.blockers) ? item.blockers : []), sourceBlocker])),
+          nextStep: "Revalidar o reemplazar el archivo fuente local antes de enviar este item a Metricool approval.",
+        };
       }));
       const totals = items.reduce<ClipperMetricoolExecutionQueueSummary["totals"]>((sum, item) => {
         sum.items += 1;
@@ -28927,15 +29677,49 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
         if (item.approvalRequired) sum.approvalRequired += 1;
         return sum;
       }, { items: 0, blocked: 0, queuedForApproval: 0, readyToSend: 0, approvalRequired: 0 });
+      const parsedSourceReadiness = parsed.sourceReadiness || {
+        status: "blocked" as const,
+        categories: [],
+        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        nextStep: "Regenerar cola Metricool para calcular source readiness.",
+      };
+      const sourceReadiness: ClipperMetricoolSourceReadinessSummary = sourceGateNormalizationCount > 0
+        ? {
+          ...parsedSourceReadiness,
+          status: "blocked",
+          categories: parsedSourceReadiness.categories.map((category) => {
+            const missingFromCache = sourceFailuresByAccount.get(category.accountId) || 0;
+            return missingFromCache > 0
+              ? { ...category, missingSourceAssets: category.missingSourceAssets + missingFromCache, nextStep: "Revalidar source files locales antes de usar la cola Metricool cacheada." }
+              : category;
+          }),
+          totals: {
+            ...parsedSourceReadiness.totals,
+            missingSourceAssets: parsedSourceReadiness.totals.missingSourceAssets + sourceGateNormalizationCount,
+          },
+          nextStep: "Revalidar source files locales antes de usar la cola Metricool cacheada.",
+        }
+        : parsedSourceReadiness;
       const needsArtifactNormalization = parsed.status === "ready"
         || parsed.realPublishEnabled !== false
         || parsed.publishMode !== "approval_required"
         || (parsed.totals?.readyToSend || 0) > 0
+        || sourceGateNormalizationCount > 0
         || parsedItems.some((item) =>
           item.status === "ready_to_send"
           || item.approvalRequired !== true
           || item.canSendNow !== false
         );
+      const safetyNormalizationReasons = [
+        parsed.status === "ready" ? "Cached Metricool queue status was ready; normalized to approval_required." : null,
+        parsed.realPublishEnabled !== false ? "Cached Metricool queue realPublishEnabled was not false." : null,
+        parsed.publishMode !== "approval_required" ? "Cached Metricool queue publishMode was non-approval or missing." : null,
+        (parsed.totals?.readyToSend || 0) > 0 ? `Cached Metricool queue had ${parsed.totals?.readyToSend || 0} readyToSend item(s).` : null,
+        sourceGateNormalizationCount > 0 ? `${sourceGateNormalizationCount} cached source gate(s) needed revalidation.` : null,
+        parsedItems.some((item) => item.status === "ready_to_send") ? "At least one cached Metricool item had direct-send status." : null,
+        parsedItems.some((item) => item.approvalRequired !== true) ? "At least one cached Metricool item was not approvalRequired." : null,
+        parsedItems.some((item) => item.canSendNow !== false) ? "At least one cached Metricool item had canSendNow=true." : null,
+      ].filter(Boolean) as string[];
       const summary: ClipperMetricoolExecutionQueueSummary = {
         status: parsed.status === "ready" ? "approval_required" : parsed.status || "not_prepared",
         generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : null,
@@ -28945,16 +29729,15 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
         sourceAutomationRunId: parsed.sourceAutomationRunId || null,
         publishMode: needsArtifactNormalization ? "approval_required" : parsed.publishMode || "approval_required",
         realPublishEnabled: false,
-        sourceReadiness: parsed.sourceReadiness || {
-          status: "blocked",
-          categories: [],
-          totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
-          nextStep: "Regenerar cola Metricool para calcular source readiness.",
-        },
+        sourceReadiness,
+        safetyNormalized: needsArtifactNormalization,
+        safetyNormalizationReasons,
         items,
         totals,
         nextStep: needsArtifactNormalization
-          ? "Cola Metricool normalizada a approval_required; revisar en Metricool antes de publicar."
+          ? sourceGateNormalizationCount > 0
+            ? "Cola Metricool bloqueada por source files no verificables; regenerar cola o reemplazar archivos antes de approval."
+            : "Cola Metricool normalizada a approval_required; revisar en Metricool antes de publicar."
           : typeof parsed.nextStep === "string" ? parsed.nextStep : "Preparar cola Metricool.",
       };
       if (needsArtifactNormalization) {
@@ -28988,7 +29771,7 @@ async function readMetricoolExecutionQueueSummary(): Promise<ClipperMetricoolExe
   };
 }
 
-export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUserId()): Promise<{ metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
+export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUserId(), input: { approvalQueueTarget?: unknown } = {}): Promise<{ metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const statusBefore = await getClipperStatus(userId);
@@ -28997,6 +29780,7 @@ export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUs
     metricoolPublishing: statusBefore.metricoolPublishing,
     sourceAcquisition: statusBefore.sourceAcquisition,
     productionQueue: statusBefore.productionQueue,
+    approvalQueueTarget: input.approvalQueueTarget,
   });
   const metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary = {
     ...draftSummary,
@@ -29009,6 +29793,7 @@ export async function prepareClipperMetricoolExecutionQueue(userId = getSystemUs
 }
 
 function buildMetricoolMvpLaunchPackSummary(input: {
+  accounts: ClipperAccount[];
   metricoolPublishing: ClipperMetricoolPublishingSummary;
   metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
   publishingPackage: ClipperPublishingPackageSummary;
@@ -29017,14 +29802,16 @@ function buildMetricoolMvpLaunchPackSummary(input: {
   permissionTracker: ClipperPermissionTrackerSummary;
 }): ClipperMetricoolMvpLaunchSummary {
   const sourceReadinessByAccount = new Map(input.metricoolExecutionQueue.sourceReadiness.categories.map((category) => [category.accountId, category]));
+  const accountsById = new Map(input.accounts.map((account) => [account.id, account]));
   const rows = input.metricoolPublishing.channels.map<ClipperMetricoolMvpLaunchAccountRow>((channel) => {
     const sourceReadiness = sourceReadinessByAccount.get(channel.accountId) || null;
+    const pendingMetricoolProfiles = channel.networks.filter((network) => !channel.connectedNetworks.includes(network));
     const queuedForApproval = input.metricoolExecutionQueue.items.filter((item) =>
       item.accountId === channel.accountId && item.status === "queued_for_approval"
     ).length;
     const manualPackageReadyPosts = input.publishingPackage.items.filter((item) =>
       item.accountId === channel.accountId
-      && (item.status === "ready_for_manual" || item.status === "scheduled")
+      && item.status === "ready_for_manual"
       && channel.connectedNetworks.includes(item.platform)
     ).length;
     const manualReadyPosts = manualPackageReadyPosts;
@@ -29033,7 +29820,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
       channel.publishGate !== "approval_required_ready" ? `Metricool channel blocked: ${channel.blockers[0] || channel.nextStep}` : null,
       !primaryNetwork ? "No connected Metricool profile for MVP account." : null,
       !sourceReadiness || sourceReadiness.missingSourceAssets > 0 ? `Missing source assets: ${sourceReadiness?.missingSourceAssets ?? "unknown"}.` : null,
-      queuedForApproval === 0 ? "No approval queue items for this Metricool account." : null,
+      queuedForApproval === 0 ? "No review queue items for this Metricool account." : null,
       input.metricoolExecutionQueue.realPublishEnabled ? "realPublishEnabled must remain false for MVP approval mode." : null,
     ].filter((item): item is string => Boolean(item));
     return {
@@ -29043,6 +29830,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
       metricoolBrandName: channel.metricoolBrandName,
       metricoolBlogId: channel.metricoolBlogId,
       connectedNetworks: channel.connectedNetworks,
+      pendingMetricoolProfiles,
       primaryNetwork,
       dailyClipTarget: channel.dailyClipTarget,
       weeklyTargetClips: channel.dailyClipTarget * 7,
@@ -29052,9 +29840,56 @@ function buildMetricoolMvpLaunchPackSummary(input: {
       manualReadyPosts,
       status: blockers.length ? "blocked" : "ready_for_review",
       blockers,
-      nextStep: blockers[0] || `Open Metricool brand "${channel.metricoolBrandName}", review queued ${primaryNetwork} clips, approve/schedule manually, then export metrics after 24h.`,
+      nextStep: blockers[0] || `Open Metricool brand "${channel.metricoolBrandName}", review queued ${primaryNetwork} clips, schedule manually, then export metrics after 24h.`,
     };
   });
+  const pendingProfileEvidenceRows = input.metricoolPublishing.channels.flatMap<ClipperMetricoolPendingProfileEvidenceRow>((channel) => {
+    const account = accountsById.get(channel.accountId);
+    if (!account) return [];
+    return channel.networks.flatMap((network) => {
+      if (channel.connectedNetworks.includes(network)) return [];
+      const platform = metricoolNetworkToClipperPlatform(network);
+      if (!platform) return [];
+      const platformAccount = account.platformAccounts.find((item) => item.platform === platform);
+      if (!platformAccount) return [];
+      const expectedProfileUrl = profileLinkForPlatform(platform, platformAccount.handle);
+      const notes = `Replace with real 20+ character note after ${channel.metricoolBrandName} ${platform} is connected in Metricool and proof is captured.`;
+      const evidenceBatchRow = [
+        channel.accountId,
+        platform,
+        channel.metricoolBrandName,
+        channel.metricoolBlogId || "",
+        expectedProfileUrl,
+        "<paste real Metricool profile connection proof URL>",
+        notes,
+      ].map(csvEscape).join(",");
+      return [{
+        id: `metricool-pending-profile-${channel.accountId}-${platform}`,
+        accountId: channel.accountId,
+        accountName: channel.accountName,
+        category: channel.category,
+        platform,
+        metricoolBrandName: channel.metricoolBrandName,
+        metricoolBlogId: channel.metricoolBlogId,
+        expectedProfileUrl,
+        evidenceBatchRow,
+        checklist: [
+          `Open Metricool brand "${channel.metricoolBrandName}".`,
+          `Connect ${platform} profile ${platformAccount.handle} in Metricool.`,
+          "Do this only when expanding beyond the current TikTok-only MVP.",
+          "Keep Metricool publish mode approval_required; do not enable direct social API posting.",
+          "Capture a real Metricool proof URL or redacted proof file path after the profile is connected.",
+          "Replace the proof placeholder and notes in the pending profile evidence CSV before importing.",
+        ],
+        status: "needs_metricool_connection",
+        nextStep: `${platform} is deferred; connect it in Metricool later when Robert expands beyond TikTok.`,
+      }];
+    });
+  });
+  const pendingProfileEvidenceTemplate = [
+    METRICOOL_BRIDGE_EVIDENCE_TEMPLATE,
+    ...pendingProfileEvidenceRows.map((row) => row.evidenceBatchRow),
+  ].join("\n") + "\n";
   const fullAutomationStillBlockedBy = [
     input.developerAppEvidence.totals.approved < input.developerAppEvidence.totals.expected
       ? `${input.developerAppEvidence.totals.missing} developer app(s) still missing/unfinished for direct API publishing.`
@@ -29066,7 +29901,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
       ? `${input.accountEvidence.totals.missing} account proof item(s) still missing for full multi-platform launch.`
       : null,
     input.metricoolPublishing.totals.connectedProfiles < input.metricoolPublishing.totals.requiredProfiles
-      ? `${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} Metricool profiles connected; IG/YT expansion still pending.`
+      ? `${input.metricoolPublishing.totals.connectedProfiles}/${input.metricoolPublishing.totals.requiredProfiles} Metricool profiles connected; IG/YT expansion is deferred after the TikTok-only MVP.`
       : null,
   ].filter((item): item is string => Boolean(item));
   const totals = rows.reduce<ClipperMetricoolMvpLaunchSummary["totals"]>((sum, row) => {
@@ -29074,6 +29909,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
     if (row.status === "ready_for_review") sum.readyAccounts += 1;
     else sum.blockedAccounts += 1;
     sum.connectedProfiles += row.connectedNetworks.length;
+    sum.pendingMetricoolProfiles += row.pendingMetricoolProfiles.length;
     sum.queuedForApproval += row.queuedForApproval;
     sum.manualReadyPosts += row.manualReadyPosts;
     sum.rightsReadyAssets += row.rightsReadyAssets;
@@ -29084,6 +29920,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
     readyAccounts: 0,
     blockedAccounts: 0,
     connectedProfiles: 0,
+    pendingMetricoolProfiles: 0,
     queuedForApproval: 0,
     manualReadyPosts: 0,
     rightsReadyAssets: 0,
@@ -29099,6 +29936,7 @@ function buildMetricoolMvpLaunchPackSummary(input: {
     manifestPath: METRICOOL_MVP_LAUNCH_PATH,
     markdownPath: METRICOOL_MVP_LAUNCH_MARKDOWN_PATH,
     csvPath: METRICOOL_MVP_LAUNCH_CSV_PATH,
+    pendingProfileEvidenceCsvPath: METRICOOL_PENDING_PROFILE_EVIDENCE_CSV_PATH,
     mode: "metricool_approval_required_mvp",
     primaryBridge: "metricool",
     directPlatformApisNeeded: false,
@@ -29106,11 +29944,14 @@ function buildMetricoolMvpLaunchPackSummary(input: {
     approvalRequired: true,
     targetAccounts: rows.map((row) => row.accountName),
     rows,
+    pendingProfileEvidenceRows,
+    pendingProfileEvidenceTemplate,
     totals,
     fullAutomationStillBlockedBy,
     guardrails: [
       "This pack is for Metricool approval_required review only; it does not auto-publish.",
       "Do not count queued_for_approval as published; import post URLs/metrics only after manual approval/posting.",
+      "TikTok is the only active MVP network; Instagram and YouTube stay deferred until Robert expands the rollout.",
       "Do not enable direct platform publishing until account proof, developer apps, scopes and permissions are verified.",
       "Use only rights-ready local source assets; blocked rights/source items stay out of the MVP queue.",
     ],
@@ -29138,10 +29979,12 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
     "",
     `- Accounts: ${summary.totals.readyAccounts}/${summary.totals.accounts} ready`,
     `- Connected profiles: ${summary.totals.connectedProfiles}`,
+    `- Pending Metricool profiles: ${summary.totals.pendingMetricoolProfiles}`,
     `- Queued for approval: ${summary.totals.queuedForApproval}`,
     `- Manual package-ready posts: ${summary.totals.manualReadyPosts}`,
     `- Rights-ready assets: ${summary.totals.rightsReadyAssets}/${summary.totals.minimumWeeklySourceAssets}`,
     `- Full automation blockers: ${summary.totals.fullAutomationBlockers}`,
+    `- Pending profile evidence CSV: ${summary.pendingProfileEvidenceCsvPath}`,
     "",
     "## Next Step",
     "",
@@ -29157,6 +30000,7 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
       `- Metricool brand: ${row.metricoolBrandName}`,
       `- Metricool blogId: ${row.metricoolBlogId || "pending"}`,
       `- Connected networks: ${row.connectedNetworks.join(", ") || "none"}`,
+      `- Pending Metricool profiles: ${row.pendingMetricoolProfiles.join(", ") || "none"}`,
       `- Primary MVP network: ${row.primaryNetwork || "none"}`,
       `- Daily target: ${row.dailyClipTarget}`,
       `- Weekly target clips: ${row.weeklyTargetClips}`,
@@ -29168,6 +30012,34 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
       ...row.blockers.map((blocker) => `  - ${blocker}`),
       "",
     ]),
+    "## Pending Metricool Profile Evidence",
+    "",
+    ...(summary.pendingProfileEvidenceRows.length
+      ? summary.pendingProfileEvidenceRows.flatMap((row) => [
+        `### ${row.accountName} / ${row.platform}`,
+        "",
+        `- Status: ${row.status}`,
+        `- Brand: ${row.metricoolBrandName}`,
+        `- BlogId: ${row.metricoolBlogId || "pending"}`,
+        `- Expected profile: ${row.expectedProfileUrl}`,
+        `- Next step: ${row.nextStep}`,
+        "- Checklist:",
+        ...row.checklist.map((item) => `  - [ ] ${item}`),
+        "- Evidence row template:",
+        "```csv",
+        row.evidenceBatchRow,
+        "```",
+        "",
+      ])
+      : ["- none"]),
+    "### Batch CSV Template",
+    "",
+    `Path: ${summary.pendingProfileEvidenceCsvPath}`,
+    "",
+    "```csv",
+    summary.pendingProfileEvidenceTemplate.trimEnd(),
+    "```",
+    "",
     "## Full Automation Still Blocked By",
     "",
     ...(summary.fullAutomationStillBlockedBy.length ? summary.fullAutomationStillBlockedBy.map((item) => `- ${item}`) : ["- none"]),
@@ -29180,7 +30052,7 @@ function renderMetricoolMvpLaunchPackMarkdown(summary: ClipperMetricoolMvpLaunch
 }
 
 function renderMetricoolMvpLaunchPackCsv(summary: ClipperMetricoolMvpLaunchSummary): string {
-  const header = ["status", "account_id", "account_name", "category", "metricool_brand", "metricool_blog_id", "connected_networks", "primary_network", "daily_clip_target", "weekly_target_clips", "rights_ready_assets", "minimum_weekly_source_assets", "queued_for_approval", "manual_ready_posts", "blockers", "next_step"];
+  const header = ["status", "account_id", "account_name", "category", "metricool_brand", "metricool_blog_id", "connected_networks", "pending_metricool_profiles", "pending_profile_evidence_rows", "primary_network", "daily_clip_target", "weekly_target_clips", "rights_ready_assets", "minimum_weekly_source_assets", "queued_for_approval", "manual_ready_posts", "blockers", "next_step"];
   return [
     header.map(csvEscape).join(","),
     ...summary.rows.map((row) => [
@@ -29191,6 +30063,8 @@ function renderMetricoolMvpLaunchPackCsv(summary: ClipperMetricoolMvpLaunchSumma
       row.metricoolBrandName,
       row.metricoolBlogId || "",
       row.connectedNetworks.join(" | "),
+      row.pendingMetricoolProfiles.join(" | "),
+      summary.pendingProfileEvidenceRows.filter((pending) => pending.accountId === row.accountId).map((pending) => pending.id).join(" | "),
       row.primaryNetwork || "",
       row.dailyClipTarget,
       row.weeklyTargetClips,
@@ -29204,11 +30078,16 @@ function renderMetricoolMvpLaunchPackCsv(summary: ClipperMetricoolMvpLaunchSumma
   ].join("\n");
 }
 
+function renderMetricoolPendingProfileEvidenceCsv(summary: ClipperMetricoolMvpLaunchSummary): string {
+  return summary.pendingProfileEvidenceTemplate;
+}
+
 export async function prepareClipperMetricoolMvpLaunchPack(userId = getSystemUserId()): Promise<{ metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const statusBefore = await getClipperStatus(userId);
   const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    accounts: statusBefore.accounts,
     metricoolPublishing: statusBefore.metricoolPublishing,
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
     publishingPackage: statusBefore.publishingPackage,
@@ -29219,6 +30098,7 @@ export async function prepareClipperMetricoolMvpLaunchPack(userId = getSystemUse
   await writeFile(METRICOOL_MVP_LAUNCH_PATH, JSON.stringify(metricoolMvpLaunchPack, null, 2));
   await writeFile(METRICOOL_MVP_LAUNCH_MARKDOWN_PATH, renderMetricoolMvpLaunchPackMarkdown(metricoolMvpLaunchPack));
   await writeFile(METRICOOL_MVP_LAUNCH_CSV_PATH, renderMetricoolMvpLaunchPackCsv(metricoolMvpLaunchPack));
+  await writeFile(METRICOOL_PENDING_PROFILE_EVIDENCE_CSV_PATH, renderMetricoolPendingProfileEvidenceCsv(metricoolMvpLaunchPack));
   return { metricoolMvpLaunchPack, status: await getClipperStatus(userId) };
 }
 
@@ -29233,21 +30113,21 @@ function metricoolApprovalEvidenceRow(item: ClipperMetricoolExecutionQueueItem):
     item.publishAt,
     item.sourcePath || "",
     item.captionSeed,
-    "<metricool scheduled/approved/post URL>",
-    "<published post URL after live>",
-    "<approved|scheduled|published|rejected>",
-    "<views after 24h>",
-    "<likes after 24h>",
-    "<comments after 24h>",
-    "<shares after 24h>",
-    "<operator notes without tokens>",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
   ].map(csvEscape).join(",");
 }
 
 function metricoolApprovalEvidenceHasSecretSignal(record: Record<string, unknown>): boolean {
   return Object.values(record)
     .map((value) => typeof value === "string" || typeof value === "number" ? String(value) : "")
-    .some((value) => /(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-\s]?key|x-api-key|password|cookie|secret\s*[:=]|authorization:\s*bearer|bearer\s+[A-Za-z0-9._-]{12,}|sk-[A-Za-z0-9_-]+)/i.test(value));
+    .some((value) => /(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-\s]?key|x-api-key|password|cookie|secret\s*[:=]|authorization:\s*bearer|bearer\s+[A-Za-z0-9._-]{12,}|[?&#](token|auth|session|signature|sig|key)=|sk-[A-Za-z0-9_-]+)/i.test(value));
 }
 
 function metricoolApprovalAccountKey(value: string): string {
@@ -29271,18 +30151,30 @@ function resolveMetricoolApprovalEvidenceAccount(record: Record<string, unknown>
 function metricoolApprovalPublishedUrlMatchesPlatform(rawUrl: string, platform: ClipperPlatform | "unknown"): boolean {
   if (platform === "unknown") return false;
   try {
-    const hostname = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return false;
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const pathname = parsed.pathname.toLowerCase().replace(/\/+$/, "");
     if (hostname.includes("metricool.com")) return false;
-    if (platform === "tiktok") return hostname === "tiktok.com" || hostname.endsWith(".tiktok.com");
-    if (platform === "instagram") return hostname === "instagram.com" || hostname.endsWith(".instagram.com");
-    if (platform === "youtube") return hostname === "youtube.com" || hostname.endsWith(".youtube.com") || hostname === "youtu.be";
+    if (/(\/search|\/explore|\/hashtag|\/results|\/channel\/?$)/i.test(pathname)) return false;
+    if (platform === "tiktok") {
+      return (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com"))
+        && /^\/@[^/]+\/video\/\d+$/.test(pathname);
+    }
+    if (platform === "instagram") return (hostname === "instagram.com" || hostname.endsWith(".instagram.com")) && /^\/(reel|p)\//.test(pathname);
+    if (platform === "youtube") {
+      if (hostname === "youtu.be") return pathname.length > 1 && !pathname.includes("/channel/");
+      return (hostname === "youtube.com" || hostname.endsWith(".youtube.com")) && (pathname.startsWith("/shorts/") || (pathname === "/watch" && Boolean(parsed.searchParams.get("v"))));
+    }
     return false;
   } catch {
     return false;
   }
 }
 
-function metricoolApprovalEvidenceToMetricRow(record: Record<string, unknown>, index: number, accounts: ClipperAccount[]): {
+function metricoolApprovalEvidenceToMetricRow(record: Record<string, unknown>, index: number, accounts: ClipperAccount[], options: {
+  validQueueItemIds?: Set<string>;
+} = {}): {
   auditRow: ClipperMetricoolApprovalEvidenceImportRow;
   metricRow: string[] | null;
 } {
@@ -29304,20 +30196,28 @@ function metricoolApprovalEvidenceToMetricRow(record: Record<string, unknown>, i
   let result: ClipperMetricoolApprovalEvidenceImportRow["result"] = "skipped";
   let reason = "pending_live_post";
   let metricRow: string[] | null = null;
+  const hasSecretSignal = metricoolApprovalEvidenceHasSecretSignal(record);
 
-  if (metricoolApprovalEvidenceHasSecretSignal(record)) {
+  if (options.validQueueItemIds && !options.validQueueItemIds.has(metricoolQueueItemId)) {
+    result = "rejected";
+    reason = "evidence_row_not_in_current_queue";
+  } else if (hasSecretSignal) {
     result = "rejected";
     reason = "secret_like_value_detected";
   } else if (!account) {
     result = "rejected";
     reason = "unknown_account_id";
   } else if (finalStatus === "rejected") {
+    result = "rejected";
     reason = "operator_rejected";
-  } else if (finalStatus === "approved" || finalStatus === "scheduled") {
+  } else if (finalStatus === "approved") {
+    result = "rejected";
+    reason = "final_status_approved_not_allowed_use_scheduled_or_published";
+  } else if (finalStatus === "scheduled") {
     reason = "pending_live_post";
   } else if (finalStatus !== "published") {
     reason = "final_status_must_be_published";
-  } else if (!publishedPostUrl || hasTemplatePlaceholder(publishedPostUrl) || !/^https?:\/\//i.test(publishedPostUrl)) {
+  } else if (!publishedPostUrl || hasTemplatePlaceholder(publishedPostUrl) || !/^https:\/\//i.test(publishedPostUrl)) {
     reason = "missing_real_published_post_url";
   } else if (!metricoolApprovalPublishedUrlMatchesPlatform(publishedPostUrl, platform)) {
     result = "rejected";
@@ -29346,16 +30246,16 @@ function metricoolApprovalEvidenceToMetricRow(record: Record<string, unknown>, i
 
   return {
     auditRow: {
-      metricoolQueueItemId,
-      accountId,
-      accountName,
+      metricoolQueueItemId: hasSecretSignal ? `redacted-sensitive-evidence-${index + 1}` : metricoolQueueItemId,
+      accountId: hasSecretSignal ? account?.id || "redacted" : accountId,
+      accountName: hasSecretSignal ? account?.name || "redacted" : accountName,
       platform,
-      finalStatus: finalStatus || "missing",
-      publishedPostUrl: publishedPostUrl && !hasTemplatePlaceholder(publishedPostUrl) ? publishedPostUrl : null,
-      views,
-      likes,
-      comments,
-      shares,
+      finalStatus: hasSecretSignal ? "rejected" : finalStatus || "missing",
+      publishedPostUrl: !hasSecretSignal && publishedPostUrl && !hasTemplatePlaceholder(publishedPostUrl) ? publishedPostUrl : null,
+      views: hasSecretSignal ? 0 : views,
+      likes: hasSecretSignal ? 0 : likes,
+      comments: hasSecretSignal ? 0 : comments,
+      shares: hasSecretSignal ? 0 : shares,
       result,
       reason,
     },
@@ -29371,21 +30271,160 @@ function renderMetricoolApprovalImportedMetricsCsv(rows: string[][]): string {
   ].join("\n");
 }
 
+function metricoolApprovalEvidenceImportCsvHeader(): string[] {
+  return [
+    "metricool_queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "scheduled_for",
+    "source_path",
+    "caption_seed",
+    "metricool_approval_url",
+    "published_post_url",
+    "final_status",
+    "views_24h",
+    "likes_24h",
+    "comments_24h",
+    "shares_24h",
+    "operator_notes",
+  ];
+}
+
+function renderMetricoolApprovalEvidenceRecordsCsv(records: Record<string, unknown>[]): string {
+  return [
+    metricoolApprovalEvidenceImportCsvHeader().map(csvEscape).join(","),
+    ...records.map((record) => metricoolApprovalEvidenceRecordRow(record)),
+  ].join("\n");
+}
+
+async function readMetricool100ApprovalQueueItemIds(allowedIds?: Set<string>): Promise<Set<string>> {
+  const rawRunSheet = await readFile(METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH, "utf8").catch(() => null);
+  const records = rawRunSheet ? parseCsvRecords(rawRunSheet) : [];
+  return new Set(records
+    .map((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]))
+    .filter((id): id is string => Boolean(id && (!allowedIds || allowedIds.has(id)))));
+}
+
+async function readMetricool100ApprovalEvidenceRecords(): Promise<{ records: Record<string, unknown>[]; batchOperatorRecordCount: number }> {
+  const records: Record<string, unknown>[] = [];
+  let batchOperatorRecordCount = 0;
+  const raw = await readFile(METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
+  if (raw) records.push(...parseCsvRecords(raw));
+  const batchFiles = await readdir(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR).catch(() => []);
+  for (const fileName of batchFiles.filter((fileName) => fileName.endsWith(".csv")).sort()) {
+    const batchRaw = await readFile(path.join(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR, fileName), "utf8").catch(() => null);
+    if (!batchRaw) continue;
+    const batchRecords = parseCsvRecords(batchRaw);
+    batchOperatorRecordCount += batchRecords.filter(metricoolApprovalEvidenceRecordHasOperatorInput).length;
+    records.push(...batchRecords);
+  }
+  const recordsById = new Map<string, Record<string, unknown>>();
+  const recordsWithoutId: Record<string, unknown>[] = [];
+  for (const record of records) {
+    const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+    if (!id) {
+      recordsWithoutId.push(record);
+      continue;
+    }
+    const current = recordsById.get(id);
+    if (!current || metricoolApprovalEvidenceRecordHasOperatorInput(record) || !metricoolApprovalEvidenceRecordHasOperatorInput(current)) {
+      recordsById.set(id, record);
+    }
+  }
+  return { records: [...recordsWithoutId, ...recordsById.values()], batchOperatorRecordCount };
+}
+
+async function buildMetricoolApprovalEvidenceImportInput(input: {
+  metricool100QueueItemIds?: Set<string>;
+} = {}): Promise<{
+  raw: string | null;
+  evidenceImportCsvPath: string;
+  evidenceImportCsvPaths: ClipperMetricoolApprovalEvidenceImportSummary["evidenceImportCsvPaths"];
+  metricool100QueueItemIds: Set<string>;
+}> {
+  const shortRaw = await readFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
+  const shortRecords = shortRaw ? parseCsvRecords(shortRaw) : [];
+  const metricool100QueueItemIds = input.metricool100QueueItemIds
+    ? await readMetricool100ApprovalQueueItemIds(input.metricool100QueueItemIds)
+    : new Set<string>();
+  const metricool100EvidenceInput = await readMetricool100ApprovalEvidenceRecords();
+  const metricool100EvidenceRecords = metricool100EvidenceInput.records;
+  const metricool100OperatorRecords = metricool100EvidenceRecords.filter((record) => {
+    const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+    return Boolean(id && metricool100QueueItemIds.has(id) && metricoolApprovalEvidenceRecordHasOperatorInput(record));
+  });
+  const shortIds = new Set(shortRecords.map((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"])).filter(Boolean));
+  const metricool100OperatorIds = new Set(metricool100OperatorRecords
+    .map((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]))
+    .filter(Boolean));
+  const records = [
+    ...shortRecords.filter((record) => {
+      const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+      return !id || !metricool100QueueItemIds.has(id) || !metricool100OperatorIds.has(id);
+    }),
+    ...metricool100OperatorRecords.filter((record) => {
+      const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+      return !id || !shortIds.has(id) || metricool100QueueItemIds.has(id);
+    }),
+  ];
+  const raw = shortRaw === null && metricool100OperatorRecords.length === 0
+    ? null
+    : renderMetricoolApprovalEvidenceRecordsCsv(records);
+  const metricool100EvidenceSources = [
+    METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    ...(metricool100EvidenceInput.batchOperatorRecordCount > 0 ? [METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR] : []),
+  ];
+  const evidenceImportCsvPath = metricool100OperatorRecords.length > 0
+    ? `${METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH} + ${metricool100EvidenceSources.join(" + ")}`
+    : METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH;
+  const evidenceImportCsvPaths = {
+    active: metricool100QueueItemIds.size > 0 ? METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH : METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    shortRun: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    metricool100: METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    metricool100BatchDir: METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR,
+    metricool100BatchOperatorRows: metricool100EvidenceInput.batchOperatorRecordCount,
+    combined: evidenceImportCsvPath,
+  };
+  return { raw, evidenceImportCsvPath, evidenceImportCsvPaths, metricool100QueueItemIds };
+}
+
 function buildMetricoolApprovalEvidenceImportSummaryFromRaw(input: {
   raw: string | null;
   accounts: ClipperAccount[];
   generatedAt: string;
+  validQueueItemIds?: Set<string>;
+  evidenceImportCsvPath?: string;
+  evidenceImportCsvPaths?: ClipperMetricoolApprovalEvidenceImportSummary["evidenceImportCsvPaths"];
+  mode?: "import" | "preview";
 }): { summary: ClipperMetricoolApprovalEvidenceImportSummary; importedMetricRows: string[][] } {
   const parsedRows = input.raw ? parseCsvRecords(input.raw) : [];
+  const mode = input.mode || "import";
+  const isPreview = mode === "preview";
   const importedMetricRows: string[][] = [];
   const rows = parsedRows.map((record, index) => {
-    const result = metricoolApprovalEvidenceToMetricRow(record, index, input.accounts);
-    if (result.metricRow) importedMetricRows.push(result.metricRow);
+    const result = metricoolApprovalEvidenceToMetricRow(record, index, input.accounts, { validQueueItemIds: input.validQueueItemIds });
+    if (result.metricRow && !isPreview) importedMetricRows.push(result.metricRow);
+    if (isPreview && result.auditRow.result === "imported") {
+      return {
+        ...result.auditRow,
+        result: "importable" as const,
+        reason: "ready_for_import_preview",
+      };
+    }
     return result.auditRow;
   });
   const totals = rows.reduce<ClipperMetricoolApprovalEvidenceImportSummary["totals"]>((sum, row) => {
     sum.rows += 1;
-    if (row.result === "imported") {
+    if (row.result === "importable") {
+      sum.importable += 1;
+      sum.views += row.views;
+      sum.likes += row.likes;
+      sum.comments += row.comments;
+      sum.shares += row.shares;
+    } else if (row.result === "imported") {
       sum.imported += 1;
       sum.publishedRows += 1;
       sum.views += row.views;
@@ -29399,9 +30438,15 @@ function buildMetricoolApprovalEvidenceImportSummaryFromRaw(input: {
       if (row.reason === "pending_live_post") sum.pendingLive += 1;
     }
     return sum;
-  }, { rows: 0, imported: 0, skipped: 0, rejected: 0, pendingLive: 0, publishedRows: 0, views: 0, likes: 0, comments: 0, shares: 0 });
+  }, { rows: 0, importable: 0, imported: 0, skipped: 0, rejected: 0, pendingLive: 0, publishedRows: 0, views: 0, likes: 0, comments: 0, shares: 0 });
 
-  const status: ClipperMetricoolApprovalEvidenceImportSummary["status"] = input.raw === null
+  const status: ClipperMetricoolApprovalEvidenceImportSummary["status"] = isPreview
+    ? input.raw === null
+      ? "preview_missing"
+      : totals.importable > 0
+        ? "preview_ready"
+        : "preview_needs_records"
+    : input.raw === null
     ? "missing"
     : totals.imported > 0
       ? "imported"
@@ -29412,15 +30457,29 @@ function buildMetricoolApprovalEvidenceImportSummaryFromRaw(input: {
     summary: {
       status,
       generatedAt: input.generatedAt,
-      evidenceImportCsvPath: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+      evidenceImportCsvPath: input.evidenceImportCsvPath || METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+      evidenceImportCsvPaths: input.evidenceImportCsvPaths || {
+        active: input.evidenceImportCsvPath || METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+        shortRun: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+        metricool100: METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+        metricool100BatchDir: METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR,
+        metricool100BatchOperatorRows: 0,
+        combined: input.evidenceImportCsvPath || METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+      },
       metricsOutputPath: METRICOOL_APPROVAL_IMPORTED_METRICS_PATH,
       rows,
       totals,
-      nextStep: status === "missing"
-        ? "Prepare Metricool approval session, then fill the evidence import CSV after real posts are live."
-        : totals.imported > 0
-          ? "Analytics updated from Metricool approval evidence; review reports and adjust hooks/windows."
-          : "Fill published rows with real post URLs, final_status=published and 24h metrics before importing again.",
+      nextStep: isPreview
+        ? status === "preview_missing"
+          ? "Prepare Metricool review session, then fill the evidence import CSV after real posts are live."
+          : totals.importable > 0
+            ? `${totals.importable} row(s) look importable. Review them, then use Import Metricool evidence only when you want to write analytics.`
+            : "No importable rows yet. Fill real public post URLs, final_status=published and 24h metrics before importing."
+        : status === "missing"
+          ? "Prepare Metricool review session, then fill the evidence import CSV after real posts are live."
+          : totals.imported > 0
+            ? "Analytics updated from Metricool published evidence; review reports and adjust hooks/windows."
+            : "Fill published rows with real post URLs, final_status=published and 24h metrics before importing again.",
     },
   };
 }
@@ -29436,7 +30495,7 @@ function buildMetricoolApprovalSessionSummary(input: {
       `Open Metricool brand ${item.metricoolBrandName}${item.metricoolBlogId ? ` / blogId ${item.metricoolBlogId}` : ""}.`,
       `Confirm network ${item.platform} is the connected destination.`,
       `Attach or verify source video ${sourceFileName || "<missing source>"}.`,
-      "Review caption, hook, rights gate and scheduled time before approving.",
+      "Review caption, hook, rights gate and scheduled time before scheduling.",
       "Do not mark published until Metricool/platform shows a live post URL.",
       "After posting, paste the Metricool/post URL and 24h metrics into the evidence import CSV.",
     ];
@@ -29458,17 +30517,18 @@ function buildMetricoolApprovalSessionSummary(input: {
       evidenceCaptureRow: metricoolApprovalEvidenceRow(item),
       blockers: item.blockers,
       nextStep: status === "ready_for_review"
-        ? `Review and approve this ${item.platform} slot in Metricool; keep evidence row unfilled until a real URL exists.`
+        ? `Review and schedule this ${item.platform} slot in Metricool; keep evidence row unfilled until a real URL exists.`
         : item.blockers[0] || "Resolve blocked gates before this item enters Metricool approval.",
     };
   });
   const totals = items.reduce<ClipperMetricoolApprovalSessionSummary["totals"]>((sum, item) => {
+    const accountId = item.accountId || "";
     sum.items += 1;
     if (item.status === "ready_for_review") sum.readyForReview += 1;
     if (item.status === "blocked") sum.blocked += 1;
-    if (item.accountId.includes("sports")) sum.sports += 1;
-    if (item.accountId.includes("meme")) sum.memes += 1;
-    if (item.accountId.includes("streamer")) sum.streamers += 1;
+    if (accountId.includes("sports")) sum.sports += 1;
+    if (accountId.includes("meme")) sum.memes += 1;
+    if (accountId.includes("streamer")) sum.streamers += 1;
     if (item.platform === "tiktok") sum.tiktok += 1;
     if (item.platform === "instagram") sum.instagram += 1;
     if (item.platform === "youtube") sum.youtube += 1;
@@ -29495,7 +30555,7 @@ function buildMetricoolApprovalSessionSummary(input: {
     operatorSteps: [
       "Open Metricool and switch to the listed brand before touching each queued item.",
       "Review one row at a time: source video, caption, rights evidence, schedule time and destination network.",
-      "Approve/schedule only rows marked ready_for_review.",
+      "Schedule only rows marked ready_for_review.",
       "Do not use blocked rows; resolve their source/rights/account blockers first.",
       "After a post is live, fill the evidence import CSV with real Metricool/post URLs and 24h metrics.",
       "Regenerate analytics reporting after importing real post metrics.",
@@ -29509,14 +30569,14 @@ function buildMetricoolApprovalSessionSummary(input: {
     nextStep: status === "ready_for_operator"
       ? `Open Metricool and review ${totals.readyForReview} ready item(s); then capture real URLs in ${METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH}.`
       : totals.items === 0
-        ? "Prepare Metricool execution queue before creating an approval session."
+        ? "Prepare Metricool execution queue before creating a review session."
         : `Resolve ${totals.blocked} blocked Metricool approval item(s) before operator review.`,
   };
 }
 
 function renderMetricoolApprovalSessionMarkdown(summary: ClipperMetricoolApprovalSessionSummary): string {
   return [
-    "# Clippers Metricool Approval Session",
+    "# Clippers Metricool Review Session",
     "",
     "Operator checklist for reviewing Metricool queued clips. This does not publish automatically.",
     "",
@@ -29618,7 +30678,56 @@ function renderMetricoolApprovalSessionCsv(summary: ClipperMetricoolApprovalSess
   ].join("\n");
 }
 
-function renderMetricoolApprovalEvidenceImportCsv(summary: ClipperMetricoolApprovalSessionSummary): string {
+function metricoolApprovalEvidenceRecordHasOperatorInput(record: Record<string, unknown>): boolean {
+  const operatorFields = [
+    "metricool_approval_url",
+    "approval_url",
+    "published_post_url",
+    "post_url",
+    "url",
+    "permalink",
+    "final_status",
+    "status",
+    "views_24h",
+    "views",
+    "likes_24h",
+    "likes",
+    "comments_24h",
+    "comments",
+    "shares_24h",
+    "shares",
+    "operator_notes",
+    "notes",
+  ];
+  return operatorFields.some((field) => {
+    const value = firstString(record, [field]);
+    return Boolean(value && !hasTemplatePlaceholder(value));
+  });
+}
+
+function metricoolApprovalEvidenceRecordRow(record: Record<string, unknown>, fallback?: ClipperMetricoolApprovalSessionItem): string {
+  return [
+    firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) || fallback?.id || "",
+    firstString(record, ["account_id", "accountid", "account"]) || fallback?.accountId || "",
+    firstString(record, ["account_name", "profile", "handle"]) || fallback?.accountName || "",
+    normalizePlatformLabel(firstString(record, ["platform", "network", "source"])) || fallback?.platform || "unknown",
+    firstString(record, ["metricool_brand_name", "brand_name", "brand"]) || fallback?.metricoolBrandName || "",
+    firstString(record, ["metricool_blog_id", "blog_id", "blogid"]) || fallback?.metricoolBlogId || "",
+    firstString(record, ["scheduled_for", "published_at", "publish_at", "date"]) || fallback?.publishAt || "",
+    firstString(record, ["source_path", "source_file", "source"]) || fallback?.sourcePath || "",
+    firstString(record, ["caption_seed", "hook", "caption", "title", "description"]) || fallback?.captionSeed || "",
+    firstString(record, ["metricool_approval_url", "approval_url", "planner_url"]) || "",
+    firstString(record, ["published_post_url", "post_url", "url", "permalink"]) || "",
+    firstString(record, ["final_status", "status"]) || "",
+    firstString(record, ["views_24h", "views", "view_count", "plays", "impressions", "vistas"]) || "",
+    firstString(record, ["likes_24h", "likes", "like_count", "me_gusta"]) || "",
+    firstString(record, ["comments_24h", "comments", "comment_count", "comentarios"]) || "",
+    firstString(record, ["shares_24h", "shares", "share_count", "compartidos"]) || "",
+    firstString(record, ["operator_notes", "notes"]) || "",
+  ].map(csvEscape).join(",");
+}
+
+function renderMetricoolApprovalEvidenceImportCsv(summary: ClipperMetricoolApprovalSessionSummary, existingRaw: string | null = null): string {
   const header = [
     "metricool_queue_item_id",
     "account_id",
@@ -29638,18 +30747,62 @@ function renderMetricoolApprovalEvidenceImportCsv(summary: ClipperMetricoolAppro
     "shares_24h",
     "operator_notes",
   ];
+  const existingRecords = (existingRaw ? parseCsvRecords(existingRaw) : []).filter(metricoolApprovalEvidenceRecordHasOperatorInput);
+  const existingById = new Map(existingRecords.map((record) => [
+    firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]),
+    record,
+  ]).filter(([id]) => Boolean(id)) as Array<[string, Record<string, unknown>]>);
+  const usedExistingIds = new Set<string>();
+  const rows = summary.items.map((item) => {
+    const existing = existingById.get(item.id);
+    if (existing) {
+      usedExistingIds.add(item.id);
+      return metricoolApprovalEvidenceRecordRow(existing, item);
+    }
+    return item.evidenceCaptureRow;
+  });
+  for (const record of existingRecords) {
+    const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+    if (!id || usedExistingIds.has(id) || summary.items.some((item) => item.id === id)) continue;
+    rows.push(metricoolApprovalEvidenceRecordRow(record));
+  }
   return [
     header.map(csvEscape).join(","),
-    ...summary.items.map((item) => item.evidenceCaptureRow),
+    ...rows,
   ].join("\n");
 }
 
 async function writeMetricoolApprovalSessionArtifacts(summary: ClipperMetricoolApprovalSessionSummary): Promise<ClipperMetricoolApprovalSessionSummary> {
+  const existingEvidenceImportCsv = await readFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
   await writeFile(METRICOOL_APPROVAL_SESSION_PATH, JSON.stringify(summary, null, 2));
   await writeFile(METRICOOL_APPROVAL_SESSION_MARKDOWN_PATH, renderMetricoolApprovalSessionMarkdown(summary));
   await writeFile(METRICOOL_APPROVAL_SESSION_CSV_PATH, renderMetricoolApprovalSessionCsv(summary));
-  await writeFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, renderMetricoolApprovalEvidenceImportCsv(summary));
+  await writeFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, renderMetricoolApprovalEvidenceImportCsv(summary, existingEvidenceImportCsv));
   return summary;
+}
+
+async function refreshMetricoolApprovalSessionAndReport(input: {
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolMvpLaunchPack: ClipperMetricoolMvpLaunchSummary;
+  metricool100ApprovalRun?: ClipperMetricool100ApprovalRunSummary;
+  generatedAt?: string | null;
+}): Promise<{
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+}> {
+  const metricoolApprovalSession = await writeMetricoolApprovalSessionArtifacts(buildMetricoolApprovalSessionSummary({
+    metricoolExecutionQueue: input.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: input.metricoolMvpLaunchPack,
+  }));
+  const evidenceImport = await buildMetricoolApprovalEvidenceImportPreview({
+    metricool100ApprovalRun: input.metricool100ApprovalRun,
+  });
+  const metricoolApprovalReport = buildMetricoolApprovalReportSummary({
+    metricoolApprovalSession,
+    evidenceImport,
+    generatedAt: input.generatedAt ?? null,
+  });
+  return { metricoolApprovalSession, metricoolApprovalReport };
 }
 
 export async function prepareClipperMetricoolApprovalSession(userId = getSystemUserId()): Promise<{ metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary; status: ClipperStatus }> {
@@ -29663,6 +30816,898 @@ export async function prepareClipperMetricoolApprovalSession(userId = getSystemU
   return { metricoolApprovalSession, status: await getClipperStatus(userId) };
 }
 
+function metricoolApprovalQuickRunCategory(accountId: string): ClipperAccountCategory | "uncategorized" {
+  if (accountId.includes("sports")) return "sports";
+  if (accountId.includes("meme")) return "memes";
+  if (accountId.includes("streamer")) return "streamers";
+  return "uncategorized";
+}
+
+function buildMetricoolApprovalQuickRunSummary(input: {
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  batchSize?: number;
+}): ClipperMetricoolApprovalQuickRunSummary {
+  const batchSize = Math.max(1, Math.min(100, Math.trunc(input.batchSize || 14)));
+  const readyItems = input.metricoolApprovalSession.items.filter((item) => item.status === "ready_for_review");
+  const quickItems = readyItems.slice(0, batchSize).map<ClipperMetricoolApprovalQuickRunItem>((item) => ({
+    id: item.id,
+    rank: item.rank,
+    accountId: item.accountId,
+    accountName: item.accountName,
+    platform: item.platform,
+    metricoolBrandName: item.metricoolBrandName,
+    metricoolBlogId: item.metricoolBlogId,
+    publishAt: item.publishAt,
+    sourceFileName: item.sourceFileName,
+    sourcePath: item.sourcePath,
+    hook: item.hook,
+    captionSeed: item.captionSeed,
+    status: item.status,
+    evidenceCaptureRow: item.evidenceCaptureRow,
+    nextStep: item.nextStep,
+  }));
+  const accountsById = new Map<string, ClipperMetricoolApprovalQuickRunAccount>();
+  for (const item of quickItems) {
+    const existing = accountsById.get(item.accountId);
+    if (existing) {
+      existing.items += 1;
+      existing.readyForReview += item.status === "ready_for_review" ? 1 : 0;
+      if (!existing.firstPublishAt || item.publishAt < existing.firstPublishAt) existing.firstPublishAt = item.publishAt;
+      continue;
+    }
+    accountsById.set(item.accountId, {
+      accountId: item.accountId,
+      accountName: item.accountName,
+      category: metricoolApprovalQuickRunCategory(item.accountId),
+      items: 1,
+      readyForReview: item.status === "ready_for_review" ? 1 : 0,
+      firstPublishAt: item.publishAt || null,
+    });
+  }
+  const status: ClipperMetricoolApprovalQuickRunStatus = input.metricoolApprovalSession.status === "not_prepared"
+    ? "not_prepared"
+    : input.metricoolApprovalSession.status === "blocked" || readyItems.length === 0
+      ? "blocked"
+      : "ready_for_operator";
+
+  return {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_APPROVAL_QUICK_RUN_PATH,
+    markdownPath: METRICOOL_APPROVAL_QUICK_RUN_MARKDOWN_PATH,
+    portalUrl: "https://app.metricool.com/",
+    approvalSessionPath: input.metricoolApprovalSession.manifestPath,
+    approvalSessionMarkdownPath: input.metricoolApprovalSession.markdownPath,
+    approvalSessionCsvPath: input.metricoolApprovalSession.csvPath,
+    evidenceImportCsvPath: input.metricoolApprovalSession.evidenceImportCsvPath,
+    metricoolQueuePath: input.metricoolApprovalSession.metricoolQueuePath,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    batchSize,
+    totals: {
+      items: input.metricoolApprovalSession.totals.items,
+      readyForReview: input.metricoolApprovalSession.totals.readyForReview,
+      blocked: input.metricoolApprovalSession.totals.blocked,
+      quickRunItems: quickItems.length,
+      accounts: accountsById.size,
+    },
+    accounts: [...accountsById.values()],
+    items: quickItems,
+    operatorSteps: [
+      "Open Metricool and switch to the listed brand/account before scheduling each row.",
+      "Review only rows marked ready_for_review in this quick run.",
+      "Confirm destination network, source file, caption, rights gate and scheduled time.",
+      "Schedule inside Metricool; do not treat scheduling as published.",
+      `After the post is live, fill ${input.metricoolApprovalSession.evidenceImportCsvPath} with the real public URL and 24h metrics.`,
+      "Run Import Metricool evidence after the evidence CSV has real published rows.",
+    ],
+    guardrails: [
+      "This quick run is a Metricool operator checklist, not an API publisher.",
+      "queued_for_approval and ready_for_review are not published counts.",
+      "realPublishEnabled remains false.",
+      "Never paste Metricool tokens, cookies, passwords, API keys or private screenshots into evidence rows.",
+    ],
+    nextStep: status === "ready_for_operator"
+      ? `Open Metricool and review the first ${quickItems.length} ready item(s); then capture live-post evidence in ${input.metricoolApprovalSession.evidenceImportCsvPath}.`
+      : input.metricoolApprovalSession.nextStep,
+  };
+}
+
+function renderMetricoolApprovalQuickRunMarkdown(summary: ClipperMetricoolApprovalQuickRunSummary): string {
+  return [
+    "# Clippers Metricool Review Quick Run",
+    "",
+    "Fast operator checklist for the first Metricool review batch. This does not publish automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Portal: ${summary.portalUrl}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    `Review session: ${summary.approvalSessionMarkdownPath}`,
+    `Evidence import CSV: ${summary.evidenceImportCsvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Quick run items: ${summary.totals.quickRunItems}/${summary.totals.readyForReview} ready_for_review`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Accounts in this run: ${summary.totals.accounts}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Operator Steps",
+    "",
+    ...summary.operatorSteps.map((step) => `- [ ] ${step}`),
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Accounts",
+    "",
+    ...(summary.accounts.length ? summary.accounts.map((account) => `- ${account.accountName} (${account.category}): ${account.readyForReview} ready, first ${account.firstPublishAt || "unscheduled"}`) : ["- none"]),
+    "",
+    "## First Batch",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.accountName} / ${item.platform} / ${item.publishAt}`,
+      "",
+      `- Status: ${item.status}`,
+      `- Metricool brand: ${item.metricoolBrandName}`,
+      `- Metricool blogId: ${item.metricoolBlogId || "pending"}`,
+      `- Source: ${item.sourcePath || "missing"}`,
+      `- Hook: ${item.hook}`,
+      `- Caption: ${item.captionSeed}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+      "Evidence capture row:",
+      "```csv",
+      item.evidenceCaptureRow,
+      "```",
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function writeMetricoolApprovalQuickRunArtifacts(summary: ClipperMetricoolApprovalQuickRunSummary): Promise<ClipperMetricoolApprovalQuickRunSummary> {
+  await writeFile(METRICOOL_APPROVAL_QUICK_RUN_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(METRICOOL_APPROVAL_QUICK_RUN_MARKDOWN_PATH, renderMetricoolApprovalQuickRunMarkdown(summary));
+  return summary;
+}
+
+export async function prepareClipperMetricoolApprovalQuickRun(userId = getSystemUserId(), input: { batchSize?: number } = {}): Promise<{ metricoolApprovalQuickRun: ClipperMetricoolApprovalQuickRunSummary; metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const { metricoolApprovalSession } = await refreshMetricoolApprovalSessionAndReport({
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
+    metricool100ApprovalRun: statusBefore.metricool100ApprovalRun,
+  });
+  const metricoolApprovalQuickRun = await writeMetricoolApprovalQuickRunArtifacts(buildMetricoolApprovalQuickRunSummary({
+    metricoolApprovalSession,
+    batchSize: input.batchSize,
+  }));
+  return { metricoolApprovalQuickRun, metricoolApprovalSession, status: await getClipperStatus(userId) };
+}
+
+export async function getClipperMetricoolApprovalQuickRun(userId = getSystemUserId()): Promise<ClipperMetricoolApprovalQuickRunSummary> {
+  const status = await getClipperStatus(userId);
+  return buildMetricoolApprovalQuickRunSummary({
+    metricoolApprovalSession: status.metricoolApprovalSession,
+  });
+}
+
+interface ClipperMetricoolSourceHashCacheEntry {
+  sourcePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  sha256: string;
+}
+
+async function readMetricoolSourceHashCache(): Promise<Record<string, ClipperMetricoolSourceHashCacheEntry>> {
+  const raw = await readFile(METRICOOL_SOURCE_UPLOAD_HASH_CACHE_PATH, "utf8").catch(() => null);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, ClipperMetricoolSourceHashCacheEntry>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeMetricoolSourceHashCache(cache: Record<string, ClipperMetricoolSourceHashCacheEntry>): Promise<void> {
+  await writeFile(METRICOOL_SOURCE_UPLOAD_HASH_CACHE_PATH, JSON.stringify(cache, null, 2));
+}
+
+async function hashFileSha256Streaming(sourcePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(sourcePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", resolve);
+  });
+  return hash.digest("hex");
+}
+
+const METRICOOL_ALLOWED_SOURCE_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm"]);
+const METRICOOL_MIN_SOURCE_BYTES = 16 * 1024;
+
+function validateMetricoolSourceMagic(extension: string, header: Buffer): string | null {
+  if (extension === ".mp4" || extension === ".mov" || extension === ".m4v") {
+    return header.subarray(4, 12).toString("latin1").includes("ftyp") ? null : "Video file is missing MP4/MOV ftyp header.";
+  }
+  if (extension === ".webm") {
+    return header.length >= 4 && header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3
+      ? null
+      : "Video file is missing WEBM header.";
+  }
+  return "Unsupported Metricool source video extension.";
+}
+
+async function readMetricoolSourceHeader(sourcePath: string): Promise<Buffer> {
+  const handle = await open(sourcePath, "r");
+  try {
+    const buffer = Buffer.alloc(32);
+    const result = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, result.bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function metricoolSourceFileMetadata(sourcePath: string | null, hashCache: Record<string, ClipperMetricoolSourceHashCacheEntry>): Promise<{ exists: boolean; valid: boolean; invalidReason: string | null; sizeBytes: number; sha256: string | null }> {
+  if (!sourcePath) return { exists: false, valid: false, invalidReason: "Missing source file path.", sizeBytes: 0, sha256: null };
+  try {
+    const fileStat = await stat(sourcePath);
+    if (!fileStat.isFile()) return { exists: false, valid: false, invalidReason: "Source path is not a file.", sizeBytes: 0, sha256: null };
+    const extension = path.extname(sourcePath).toLowerCase();
+    const invalidReason = !METRICOOL_ALLOWED_SOURCE_EXTENSIONS.has(extension)
+      ? `Unsupported source extension ${extension || "(none)"} for Metricool upload.`
+      : fileStat.size < METRICOOL_MIN_SOURCE_BYTES
+        ? `Source file is too small (${fileStat.size} bytes); replace stub with a real video.`
+        : validateMetricoolSourceMagic(extension, await readMetricoolSourceHeader(sourcePath));
+    if (invalidReason) return { exists: true, valid: false, invalidReason, sizeBytes: fileStat.size, sha256: null };
+    const cached = hashCache[sourcePath];
+    if (cached && cached.sizeBytes === fileStat.size && cached.mtimeMs === fileStat.mtimeMs) {
+      return { exists: true, valid: true, invalidReason: null, sizeBytes: fileStat.size, sha256: cached.sha256 };
+    }
+    const sha256 = await hashFileSha256Streaming(sourcePath);
+    hashCache[sourcePath] = {
+      sourcePath,
+      sizeBytes: fileStat.size,
+      mtimeMs: fileStat.mtimeMs,
+      sha256,
+    };
+    return {
+      exists: true,
+      valid: true,
+      invalidReason: null,
+      sizeBytes: fileStat.size,
+      sha256,
+    };
+  } catch {
+    return { exists: false, valid: false, invalidReason: "Source file could not be read.", sizeBytes: 0, sha256: null };
+  }
+}
+
+async function buildMetricoolSourceUploadPackSummary(input: {
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+  persistHashCache?: boolean;
+}): Promise<ClipperMetricoolSourceUploadPackSummary> {
+  const reportById = new Map(input.metricoolApprovalReport.rows.map((row) => [row.metricoolQueueItemId, row]));
+  const hashCache = await readMetricoolSourceHashCache();
+  const items: ClipperMetricoolSourceUploadPackItem[] = [];
+  for (const item of input.metricoolApprovalSession.items) {
+    const source = await metricoolSourceFileMetadata(item.sourcePath, hashCache);
+    const operatorStatus = reportById.get(item.id)?.operatorStatus || "needs_metricool_review";
+    const uploadStatus: ClipperMetricoolSourceUploadPackItem["uploadStatus"] = operatorStatus === "ready_to_import"
+      ? "evidence_ready"
+      : source.exists && source.valid
+      ? item.status === "blocked" ? "blocked" : "ready_to_upload"
+      : source.exists
+        ? "invalid_source"
+        : "missing_source";
+    items.push({
+      id: item.id,
+      rank: item.rank,
+      accountId: item.accountId,
+      accountName: item.accountName,
+      platform: item.platform,
+      metricoolBrandName: item.metricoolBrandName,
+      metricoolBlogId: item.metricoolBlogId,
+      publishAt: item.publishAt,
+      sourcePath: item.sourcePath,
+      sourceFileName: item.sourceFileName,
+      sourceExists: source.exists,
+      sourceValid: source.valid,
+      sourceInvalidReason: source.invalidReason,
+      sourceSizeBytes: source.sizeBytes,
+      sourceSha256: source.sha256,
+      captionSeed: item.captionSeed,
+      hook: item.hook,
+      queueStatus: item.status,
+      operatorStatus,
+      uploadStatus,
+      nextStep: uploadStatus === "ready_to_upload"
+        ? `Upload ${item.sourceFileName} to Metricool brand ${item.metricoolBrandName}, review caption, then schedule.`
+        : uploadStatus === "evidence_ready"
+          ? "Public evidence already exists for this queue item; run the Metricool evidence import/report instead of uploading again."
+          : uploadStatus === "invalid_source"
+            ? source.invalidReason || "Replace invalid source file with a real video before touching Metricool."
+          : uploadStatus === "missing_source"
+          ? "Restore or regenerate the local source file before touching Metricool."
+          : item.nextStep,
+    });
+  }
+  if (input.persistHashCache) await writeMetricoolSourceHashCache(hashCache);
+  const accountsById = new Map<string, ClipperMetricoolSourceUploadPackSummary["accounts"][number]>();
+  for (const item of items) {
+    const existing = accountsById.get(item.accountId);
+    if (existing) {
+      existing.items += 1;
+      existing.readyToUpload += item.uploadStatus === "ready_to_upload" ? 1 : 0;
+      if (!existing.firstPublishAt || item.publishAt < existing.firstPublishAt) existing.firstPublishAt = item.publishAt;
+      continue;
+    }
+    accountsById.set(item.accountId, {
+      accountId: item.accountId,
+      accountName: item.accountName,
+      metricoolBrandName: item.metricoolBrandName,
+      metricoolBlogId: item.metricoolBlogId,
+      items: 1,
+      readyToUpload: item.uploadStatus === "ready_to_upload" ? 1 : 0,
+      firstPublishAt: item.publishAt || null,
+    });
+  }
+  const totals = items.reduce<ClipperMetricoolSourceUploadPackSummary["totals"]>((sum, item) => {
+    sum.items += 1;
+    if (item.uploadStatus === "ready_to_upload") sum.readyToUpload += 1;
+    if (item.uploadStatus === "missing_source") sum.missingSource += 1;
+    if (item.uploadStatus === "invalid_source") sum.blocked += 1;
+    if (item.uploadStatus === "blocked") sum.blocked += 1;
+    sum.totalSourceBytes += item.sourceSizeBytes;
+    return sum;
+  }, { items: 0, readyToUpload: 0, missingSource: 0, blocked: 0, accounts: 0, totalSourceBytes: 0 });
+  totals.accounts = accountsById.size;
+  const status: ClipperMetricoolSourceUploadPackStatus = totals.items === 0
+    ? "not_prepared"
+    : totals.missingSource > 0 || totals.blocked > 0
+      ? "blocked"
+      : "ready_for_operator";
+  const firstInvalidSource = items.find((item) => item.uploadStatus === "invalid_source");
+  return {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_SOURCE_UPLOAD_PACK_PATH,
+    markdownPath: METRICOOL_SOURCE_UPLOAD_PACK_MARKDOWN_PATH,
+    csvPath: METRICOOL_SOURCE_UPLOAD_PACK_CSV_PATH,
+    approvalSessionPath: input.metricoolApprovalSession.markdownPath,
+    evidenceImportCsvPath: input.metricoolApprovalSession.evidenceImportCsvPath,
+    portalUrl: "https://app.metricool.com/",
+    realPublishEnabled: false,
+    approvalRequired: true,
+    totals,
+    accounts: [...accountsById.values()],
+    items,
+    guardrails: [
+      "This pack verifies local source files for Metricool upload; it does not publish automatically.",
+      "Only use rows marked ready_to_upload.",
+      "Do not count scheduled rows as published until a real public post URL exists.",
+      "Do not paste Metricool credentials, cookies, tokens or private screenshots into evidence.",
+    ],
+    nextStep: status === "ready_for_operator"
+      ? `Upload/review ${totals.readyToUpload} verified source file(s) in Metricool, then capture live URLs in ${input.metricoolApprovalSession.evidenceImportCsvPath}.`
+      : firstInvalidSource
+        ? `Replace invalid Metricool source file ${firstInvalidSource.sourceFileName}: ${firstInvalidSource.sourceInvalidReason || "invalid source file"}.`
+      : totals.missingSource > 0
+        ? `Restore ${totals.missingSource} missing source file(s) before opening Metricool.`
+      : input.metricoolApprovalSession.nextStep,
+  };
+}
+
+function renderMetricoolSourceUploadPackMarkdown(summary: ClipperMetricoolSourceUploadPackSummary): string {
+  return [
+    "# Clippers Metricool Source Upload Pack",
+    "",
+    "Verified local source-file manifest for the current Metricool review queue. This does not publish automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Portal: ${summary.portalUrl}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    `Review session: ${summary.approvalSessionPath}`,
+    `Evidence import CSV: ${summary.evidenceImportCsvPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Items: ${summary.totals.items}`,
+    `- Ready to upload: ${summary.totals.readyToUpload}`,
+    `- Missing source: ${summary.totals.missingSource}`,
+    `- Blocked: ${summary.totals.blocked}`,
+    `- Accounts: ${summary.totals.accounts}`,
+    `- Source bytes: ${summary.totals.totalSourceBytes}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Accounts",
+    "",
+    ...(summary.accounts.length ? summary.accounts.map((account) => `- ${account.accountName} / ${account.metricoolBrandName}: ${account.readyToUpload}/${account.items} ready, first ${account.firstPublishAt || "unscheduled"}`) : ["- none"]),
+    "",
+    "## Upload Rows",
+    "",
+    ...summary.items.flatMap((item) => [
+      `### ${item.rank}. ${item.accountName} / ${item.platform} / ${item.publishAt}`,
+      "",
+      `- Upload status: ${item.uploadStatus}`,
+      `- Operator status: ${item.operatorStatus}`,
+      `- Metricool brand: ${item.metricoolBrandName}`,
+      `- Metricool blogId: ${item.metricoolBlogId || "pending"}`,
+      `- Source: ${item.sourcePath || "missing"}`,
+      `- Source exists: ${item.sourceExists ? "yes" : "no"}`,
+      `- Source bytes: ${item.sourceSizeBytes}`,
+      `- Source sha256: ${item.sourceSha256 || "missing"}`,
+      `- Caption: ${item.captionSeed}`,
+      `- Next step: ${item.nextStep}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+function renderMetricoolSourceUploadPackCsv(summary: ClipperMetricoolSourceUploadPackSummary): string {
+  const header = ["rank", "id", "upload_status", "operator_status", "account_id", "account_name", "platform", "metricool_brand_name", "metricool_blog_id", "publish_at", "source_file_name", "source_path", "source_exists", "source_size_bytes", "source_sha256", "caption_seed", "next_step"];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item) => [
+      item.rank,
+      item.id,
+      item.uploadStatus,
+      item.operatorStatus,
+      item.accountId,
+      item.accountName,
+      item.platform,
+      item.metricoolBrandName,
+      item.metricoolBlogId || "",
+      item.publishAt,
+      item.sourceFileName,
+      item.sourcePath || "",
+      item.sourceExists ? "yes" : "no",
+      item.sourceSizeBytes,
+      item.sourceSha256 || "",
+      item.captionSeed,
+      item.nextStep,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+async function writeMetricoolSourceUploadPackArtifacts(summary: ClipperMetricoolSourceUploadPackSummary): Promise<ClipperMetricoolSourceUploadPackSummary> {
+  await writeFile(METRICOOL_SOURCE_UPLOAD_PACK_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(METRICOOL_SOURCE_UPLOAD_PACK_MARKDOWN_PATH, renderMetricoolSourceUploadPackMarkdown(summary));
+  await writeFile(METRICOOL_SOURCE_UPLOAD_PACK_CSV_PATH, renderMetricoolSourceUploadPackCsv(summary));
+  return summary;
+}
+
+export async function prepareClipperMetricoolSourceUploadPack(userId = getSystemUserId()): Promise<{ metricoolSourceUploadPack: ClipperMetricoolSourceUploadPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const { metricoolApprovalSession, metricoolApprovalReport } = await refreshMetricoolApprovalSessionAndReport({
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
+    metricool100ApprovalRun: statusBefore.metricool100ApprovalRun,
+  });
+  await writeMetricoolApprovalReportArtifacts(metricoolApprovalReport);
+  const metricoolSourceUploadPack = await writeMetricoolSourceUploadPackArtifacts(await buildMetricoolSourceUploadPackSummary({
+    metricoolApprovalSession,
+    metricoolApprovalReport,
+    persistHashCache: true,
+  }));
+  return { metricoolSourceUploadPack, status: await getClipperStatus(userId) };
+}
+
+export async function getClipperMetricoolSourceUploadPack(userId = getSystemUserId()): Promise<ClipperMetricoolSourceUploadPackSummary> {
+  const status = await getClipperStatus(userId);
+  return buildMetricoolSourceUploadPackSummary({
+    metricoolApprovalSession: status.metricoolApprovalSession,
+    metricoolApprovalReport: status.metricoolApprovalReport,
+    persistHashCache: false,
+  });
+}
+
+function buildMetricoolOperatorBatches(rows: ClipperMetricoolOperatorRunSheetRow[], input: {
+  batchSize: number;
+  runSheetCsvPath: string;
+  evidenceImportCsvPath: string;
+}): ClipperMetricoolOperatorBatch[] {
+  const batchSize = Math.max(1, input.batchSize);
+  const batches: ClipperMetricoolOperatorBatch[] = [];
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const batchRows = rows.slice(index, index + batchSize);
+    if (batchRows.length === 0) continue;
+    const readyToUpload = batchRows.filter((row) => row.uploadStatus === "ready_to_upload").length;
+    const needsMetricoolReview = batchRows.filter((row) => row.evidenceStatus === "needs_metricool_review").length;
+    const waitingLiveUrl = batchRows.filter((row) => row.evidenceStatus === "waiting_live_url").length;
+    const readyToImport = batchRows.filter((row) => row.evidenceStatus === "ready_to_import").length;
+    const accounts = Array.from(new Set(batchRows.map((row) => `${row.accountName} / ${row.metricoolBrandName}`))).sort();
+    const publishTimes = batchRows.map((row) => row.publishAt).filter(Boolean).sort();
+    const startRank = batchRows[0]?.rank || index + 1;
+    const endRank = batchRows[batchRows.length - 1]?.rank || startRank;
+    batches.push({
+      batchNumber: batches.length + 1,
+      startRank,
+      endRank,
+      items: batchRows.length,
+      readyToUpload,
+      needsMetricoolReview,
+      waitingLiveUrl,
+      readyToImport,
+      accounts,
+      firstPublishAt: publishTimes[0] || null,
+      lastPublishAt: publishTimes[publishTimes.length - 1] || null,
+      runSheetCsvPath: input.runSheetCsvPath,
+      evidenceImportCsvPath: input.evidenceImportCsvPath,
+      metricoolAction: readyToUpload > 0
+        ? `Review/upload rows ${startRank}-${endRank} in Metricool using the run sheet; stay in approval_required mode.`
+        : `Audit rows ${startRank}-${endRank}; no upload-ready rows should be sent until their blockers clear.`,
+      evidenceAction: readyToImport > 0
+        ? `Import ${readyToImport} published evidence row(s) after verifying public URLs and 24h metrics.`
+        : waitingLiveUrl > 0
+          ? `Wait for public URLs on ${waitingLiveUrl} scheduled row(s), then fill the evidence CSV.`
+          : "Leave evidence placeholders untouched until a real public URL and 24h metrics exist.",
+      doneCriteria: [
+        `Rows ${startRank}-${endRank} were reviewed against the exact run sheet IDs.`,
+        "Every scheduled item has a Metricool planner URL or operator note.",
+        "No row is counted as published without a real platform post URL.",
+        "No tokens, cookies, passwords, API keys or private screenshots were pasted into evidence.",
+      ],
+    });
+  }
+  return batches;
+}
+
+function buildMetricoolOperatorCloseoutPackSummary(input: {
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricoolSourceUploadPack: ClipperMetricoolSourceUploadPackSummary;
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+}): ClipperMetricoolOperatorCloseoutPackSummary {
+  const approvalReportById = new Map(input.metricoolApprovalReport.rows.map((row) => [row.metricoolQueueItemId, row]));
+  const runSheetRows = input.metricoolSourceUploadPack.items.map<ClipperMetricoolOperatorRunSheetRow>((item) => {
+    const reportRow = approvalReportById.get(item.id);
+    const evidenceStatus = reportRow?.operatorStatus || item.operatorStatus;
+    const evidenceAction = reportRow?.nextStep || (item.uploadStatus === "ready_to_upload"
+      ? "After Metricool approval/posting, capture public URL and 24h metrics in the evidence CSV."
+      : item.nextStep);
+    const metricoolAction = item.uploadStatus === "ready_to_upload"
+      ? `Upload ${item.sourceFileName} to Metricool brand ${item.metricoolBrandName}; review caption and schedule ${item.publishAt}.`
+      : item.uploadStatus === "evidence_ready"
+        ? "Skip upload; public evidence already exists for this queue item."
+        : item.nextStep;
+    return {
+      rank: item.rank,
+      metricoolQueueItemId: item.id,
+      accountId: item.accountId,
+      accountName: item.accountName,
+      platform: item.platform,
+      metricoolBrandName: item.metricoolBrandName,
+      metricoolBlogId: item.metricoolBlogId,
+      publishAt: item.publishAt,
+      sourceFileName: item.sourceFileName,
+      sourcePath: item.sourcePath,
+      sourceSha256: item.sourceSha256,
+      captionSeed: item.captionSeed,
+      uploadStatus: item.uploadStatus,
+      operatorStatus: item.operatorStatus,
+      evidenceStatus,
+      evidenceAction,
+      metricoolAction,
+    };
+  });
+  const evidenceOperatorTotals = input.metricoolApprovalReport.rows.reduce((sum, row) => {
+    if (row.operatorStatus === "needs_metricool_review") sum.needsMetricoolReview += 1;
+    if (row.operatorStatus === "waiting_live_url") sum.waitingLiveUrl += 1;
+    if (row.operatorStatus === "ready_to_import") sum.readyToImport += 1;
+    if (row.operatorStatus === "evidence_rejected") sum.rejected += 1;
+    if (row.operatorStatus === "evidence_mismatch") sum.evidenceMismatch += 1;
+    return sum;
+  }, {
+    needsMetricoolReview: 0,
+    waitingLiveUrl: 0,
+    readyToImport: 0,
+    rejected: 0,
+    evidenceMismatch: 0,
+  });
+  const blockers = [
+    input.metricoolSourceUploadPack.totals.missingSource > 0 ? `${input.metricoolSourceUploadPack.totals.missingSource} source file(s) missing before Metricool upload.` : null,
+    input.metricoolSourceUploadPack.totals.blocked > 0 ? `${input.metricoolSourceUploadPack.totals.blocked} source upload row(s) blocked.` : null,
+    input.metricoolExecutionQueue.status !== "approval_required" ? `Metricool queue status is ${input.metricoolExecutionQueue.status}; expected approval_required.` : null,
+    input.metricoolExecutionQueue.publishMode !== "approval_required" ? `Metricool publishMode is ${input.metricoolExecutionQueue.publishMode}; expected approval_required.` : null,
+    input.metricoolExecutionQueue.realPublishEnabled ? "realPublishEnabled is unexpectedly true." : null,
+    input.metricoolExecutionQueue.totals.readyToSend > 0 ? `${input.metricoolExecutionQueue.totals.readyToSend} item(s) are ready_to_send; MVP must stay approval_required.` : null,
+  ].filter((item): item is string => Boolean(item));
+  const status: ClipperMetricoolOperatorCloseoutPackStatus = input.metricoolApprovalSession.totals.items === 0
+    ? "not_prepared"
+    : blockers.length > 0
+      ? "waiting_evidence"
+      : "ready_for_operator";
+  const evidenceImportCsvPath = input.metricoolApprovalSession.evidenceImportCsvPath;
+  const batches = buildMetricoolOperatorBatches(runSheetRows, {
+    batchSize: 15,
+    runSheetCsvPath: METRICOOL_OPERATOR_CLOSEOUT_RUN_SHEET_CSV_PATH,
+    evidenceImportCsvPath,
+  });
+
+  return {
+    status,
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH,
+    markdownPath: METRICOOL_OPERATOR_CLOSEOUT_PACK_MARKDOWN_PATH,
+    runSheetCsvPath: METRICOOL_OPERATOR_CLOSEOUT_RUN_SHEET_CSV_PATH,
+    portalUrl: "https://app.metricool.com/",
+    approvalSessionPath: input.metricoolApprovalSession.markdownPath,
+    sourceUploadPackPath: input.metricoolSourceUploadPack.markdownPath,
+    sourceUploadCsvPath: input.metricoolSourceUploadPack.csvPath,
+    evidenceImportCsvPath,
+    approvalReportPath: input.metricoolApprovalReport.markdownPath,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    totals: {
+      readyForReview: input.metricoolApprovalSession.totals.readyForReview,
+      readyToUpload: input.metricoolSourceUploadPack.totals.readyToUpload,
+      missingSource: input.metricoolSourceUploadPack.totals.missingSource,
+      queuedForApproval: input.metricoolExecutionQueue.totals.queuedForApproval,
+      readyToSend: input.metricoolExecutionQueue.totals.readyToSend,
+      evidenceRows: input.metricoolApprovalReport.totals.evidenceRows,
+      needsMetricoolReview: evidenceOperatorTotals.needsMetricoolReview,
+      waitingLiveUrl: evidenceOperatorTotals.waitingLiveUrl,
+      readyToImport: evidenceOperatorTotals.readyToImport,
+      rejected: evidenceOperatorTotals.rejected,
+      evidenceMismatch: evidenceOperatorTotals.evidenceMismatch,
+      publishedRows: input.metricoolApprovalReport.totals.publishedRows,
+      importedViews: input.metricoolApprovalReport.totals.views,
+      accounts: input.metricoolSourceUploadPack.totals.accounts,
+    },
+    operatorSteps: [
+      "Open Metricool and switch to the row's listed brand before uploading.",
+      `Use ${input.metricoolSourceUploadPack.csvPath} to pick the exact local source_path for each row.`,
+      "Review the caption_seed and scheduled time before scheduling.",
+      "Do not count scheduled rows as published.",
+      `After a public post URL exists, fill ${evidenceImportCsvPath} with final_status=published and 24h metrics.`,
+      "Run Metricool report/import only after real public URLs and metrics exist.",
+    ],
+    evidenceRules: [
+      "published_post_url must be a real platform post URL, not a Metricool planner URL.",
+      "final_status must be published before a row counts as published evidence.",
+      "Old queue item IDs are audit-only and do not count for the current queue.",
+      "At least one 24h metric must be present before analytics import.",
+      "Never paste tokens, cookies, passwords, API keys or private screenshots.",
+    ],
+    doneCriteria: [
+      "All current ready_for_review rows were reviewed in Metricool.",
+      "Every uploaded source came from the verified Source Upload Pack row.",
+      "Published rows have real public URLs and 24h metrics in the evidence CSV.",
+      "Metricool Approval Report shows imported evidence only for current queue IDs.",
+      "realPublishEnabled remains false and readyToSend remains 0.",
+    ],
+    batches,
+    runSheetRows,
+    blockers,
+    nextStep: blockers.length > 0
+      ? blockers[0]
+      : evidenceOperatorTotals.readyToImport > 0
+        ? `Run Import Metricool evidence for ${evidenceOperatorTotals.readyToImport} published row(s), then refresh analytics/reporting.`
+        : status === "ready_for_operator"
+      ? `Open Metricool, upload/review ${input.metricoolSourceUploadPack.totals.readyToUpload} verified source file(s), then fill ${evidenceImportCsvPath} after posts are live.`
+      : input.metricoolApprovalSession.nextStep,
+  };
+}
+
+function renderMetricoolOperatorCloseoutPackMarkdown(summary: ClipperMetricoolOperatorCloseoutPackSummary): string {
+  return [
+    "# Clippers Metricool Operator Closeout Pack",
+    "",
+    "Current operator handoff for the Metricool approval-required MVP lane. This does not publish automatically and does not prove that any post is live.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Portal: ${summary.portalUrl}`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    "",
+    "## Files",
+    "",
+    `- Review session: ${summary.approvalSessionPath}`,
+    `- Source upload pack: ${summary.sourceUploadPackPath}`,
+    `- Source upload CSV: ${summary.sourceUploadCsvPath}`,
+    `- Operator run sheet CSV: ${summary.runSheetCsvPath}`,
+    `- Evidence CSV: ${summary.evidenceImportCsvPath}`,
+    `- Approval report: ${summary.approvalReportPath}`,
+    "",
+    "## Totals",
+    "",
+    `- Ready for review: ${summary.totals.readyForReview}`,
+    `- Ready to upload: ${summary.totals.readyToUpload}`,
+    `- Missing source: ${summary.totals.missingSource}`,
+    `- Queued for approval: ${summary.totals.queuedForApproval}`,
+    `- Ready to send: ${summary.totals.readyToSend}`,
+    `- Evidence rows: ${summary.totals.evidenceRows}`,
+    `- Needs Metricool review: ${summary.totals.needsMetricoolReview}`,
+    `- Waiting live URL: ${summary.totals.waitingLiveUrl}`,
+    `- Ready to import: ${summary.totals.readyToImport}`,
+    `- Rejected evidence: ${summary.totals.rejected}`,
+    `- Evidence mismatch: ${summary.totals.evidenceMismatch}`,
+    `- Published evidence rows: ${summary.totals.publishedRows}`,
+    `- Imported views: ${summary.totals.importedViews}`,
+    `- Accounts: ${summary.totals.accounts}`,
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Operator Steps",
+    "",
+    ...summary.operatorSteps.map((step) => `- [ ] ${step}`),
+    "",
+    "## Evidence Rules",
+    "",
+    ...summary.evidenceRules.map((rule) => `- ${rule}`),
+    "",
+    "## Done Criteria",
+    "",
+    ...summary.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+    "",
+    "## Batch Handoff",
+    "",
+    ...(summary.batches.length ? summary.batches.flatMap((batch) => [
+      `### Batch ${batch.batchNumber}: rows ${batch.startRank}-${batch.endRank}`,
+      "",
+      `- Items: ${batch.items}`,
+      `- Ready to upload: ${batch.readyToUpload}`,
+      `- Needs Metricool review: ${batch.needsMetricoolReview}`,
+      `- Waiting live URL: ${batch.waitingLiveUrl}`,
+      `- Ready to import: ${batch.readyToImport}`,
+      `- Accounts: ${batch.accounts.join(" | ") || "none"}`,
+      `- Window: ${batch.firstPublishAt || "unknown"} -> ${batch.lastPublishAt || "unknown"}`,
+      `- Metricool action: ${batch.metricoolAction}`,
+      `- Evidence action: ${batch.evidenceAction}`,
+      ...batch.doneCriteria.map((criterion) => `- [ ] ${criterion}`),
+      "",
+    ]) : ["- none", ""]),
+    "## Run Sheet Preview",
+    "",
+    ...summary.runSheetRows.slice(0, 8).flatMap((row) => [
+      `### ${row.rank}. ${row.accountName} / ${row.metricoolBrandName} / ${row.publishAt}`,
+      "",
+      `- Source: ${row.sourceFileName}`,
+      `- Upload status: ${row.uploadStatus}`,
+      `- Evidence status: ${row.evidenceStatus}`,
+      `- Metricool action: ${row.metricoolAction}`,
+      `- Evidence action: ${row.evidenceAction}`,
+      "",
+    ]),
+    summary.runSheetRows.length > 8 ? `More rows in ${summary.runSheetCsvPath}` : "",
+    "",
+    "## Blockers",
+    "",
+    ...(summary.blockers.length ? summary.blockers.map((blocker) => `- ${blocker}`) : ["- none"]),
+    "",
+  ].join("\n");
+}
+
+function renderMetricoolOperatorRunSheetCsv(summary: ClipperMetricoolOperatorCloseoutPackSummary): string {
+  const header = [
+    "rank",
+    "metricool_queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "publish_at",
+    "source_file_name",
+    "source_path",
+    "source_sha256",
+    "caption_seed",
+    "upload_status",
+    "operator_status",
+    "evidence_status",
+    "metricool_action",
+    "evidence_action",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.runSheetRows.map((row) => [
+      row.rank,
+      row.metricoolQueueItemId,
+      row.accountId,
+      row.accountName,
+      row.platform,
+      row.metricoolBrandName,
+      row.metricoolBlogId || "",
+      row.publishAt,
+      row.sourceFileName,
+      row.sourcePath || "",
+      row.sourceSha256 || "",
+      row.captionSeed,
+      row.uploadStatus,
+      row.operatorStatus,
+      row.evidenceStatus,
+      row.metricoolAction,
+      row.evidenceAction,
+    ].map(csvEscape).join(",")),
+  ].join("\n");
+}
+
+async function writeMetricoolOperatorCloseoutPackArtifacts(summary: ClipperMetricoolOperatorCloseoutPackSummary): Promise<ClipperMetricoolOperatorCloseoutPackSummary> {
+  await writeFile(METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(METRICOOL_OPERATOR_CLOSEOUT_PACK_MARKDOWN_PATH, renderMetricoolOperatorCloseoutPackMarkdown(summary));
+  await writeFile(METRICOOL_OPERATOR_CLOSEOUT_RUN_SHEET_CSV_PATH, renderMetricoolOperatorRunSheetCsv(summary));
+  return summary;
+}
+
+export async function prepareClipperMetricoolOperatorCloseoutPack(userId = getSystemUserId()): Promise<{ metricoolOperatorCloseoutPack: ClipperMetricoolOperatorCloseoutPackSummary; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const statusBefore = await getClipperStatus(userId);
+  const { metricoolApprovalSession, metricoolApprovalReport } = await refreshMetricoolApprovalSessionAndReport({
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
+    metricool100ApprovalRun: statusBefore.metricool100ApprovalRun,
+  });
+  await writeMetricoolApprovalReportArtifacts(metricoolApprovalReport);
+  const metricoolSourceUploadPack = await writeMetricoolSourceUploadPackArtifacts(await buildMetricoolSourceUploadPackSummary({
+    metricoolApprovalSession,
+    metricoolApprovalReport,
+    persistHashCache: true,
+  }));
+  const metricoolOperatorCloseoutPack = await writeMetricoolOperatorCloseoutPackArtifacts(buildMetricoolOperatorCloseoutPackSummary({
+    metricoolApprovalSession,
+    metricoolSourceUploadPack,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolApprovalReport,
+  }));
+  return { metricoolOperatorCloseoutPack, status: await getClipperStatus(userId) };
+}
+
+export async function getClipperMetricoolOperatorCloseoutPack(userId = getSystemUserId()): Promise<ClipperMetricoolOperatorCloseoutPackSummary> {
+  const status = await getClipperStatus(userId);
+  const metricoolSourceUploadPack = await buildMetricoolSourceUploadPackSummary({
+    metricoolApprovalSession: status.metricoolApprovalSession,
+    metricoolApprovalReport: status.metricoolApprovalReport,
+    persistHashCache: false,
+  });
+  return buildMetricoolOperatorCloseoutPackSummary({
+    metricoolApprovalSession: status.metricoolApprovalSession,
+    metricoolSourceUploadPack,
+    metricoolExecutionQueue: status.metricoolExecutionQueue,
+    metricoolApprovalReport: status.metricoolApprovalReport,
+  });
+}
+
+function metricoolApprovalOperatorStatus(input: {
+  queueStatus: ClipperMetricoolApprovalSessionItemStatus | "missing_queue_item";
+  evidenceResult: "imported" | "importable" | "skipped" | "rejected" | "missing";
+  reason: string;
+}): ClipperMetricoolApprovalOperatorStatus {
+  if (input.queueStatus === "missing_queue_item") return "evidence_mismatch";
+  if (input.queueStatus === "blocked") return "blocked";
+  if (input.evidenceResult === "imported" || input.evidenceResult === "importable") return "ready_to_import";
+  if (input.evidenceResult === "rejected") return "evidence_rejected";
+  if (input.evidenceResult === "skipped" && input.reason === "pending_live_post") return "waiting_live_url";
+  return "needs_metricool_review";
+}
+
 function buildMetricoolApprovalReportSummary(input: {
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   evidenceImport: ClipperMetricoolApprovalEvidenceImportSummary;
@@ -29672,6 +31717,8 @@ function buildMetricoolApprovalReportSummary(input: {
   const rows: ClipperMetricoolApprovalReportRow[] = input.metricoolApprovalSession.items.map((item) => {
     const evidence = evidenceById.get(item.id);
     const evidenceResult = evidence?.result || "missing";
+    const reason = evidence?.reason || (item.status === "blocked" ? "queue_item_blocked" : "evidence_missing");
+    const operatorStatus = metricoolApprovalOperatorStatus({ queueStatus: item.status, evidenceResult, reason });
     const nextStep = item.status === "blocked"
       ? item.nextStep
       : evidenceResult === "imported"
@@ -29680,7 +31727,7 @@ function buildMetricoolApprovalReportSummary(input: {
           ? `Fix rejected evidence: ${evidence?.reason || "invalid evidence row"}.`
           : evidenceResult === "skipped" && evidence?.reason === "pending_live_post"
             ? "Wait until the post is live, then add the public post URL and 24h metrics."
-            : "Approve/schedule in Metricool, then fill the evidence CSV after the public post is live.";
+            : "Schedule in Metricool, then fill the evidence CSV after the public post is live.";
 
     return {
       metricoolQueueItemId: item.id,
@@ -29689,13 +31736,14 @@ function buildMetricoolApprovalReportSummary(input: {
       platform: item.platform,
       queueStatus: item.status,
       evidenceResult,
+      operatorStatus,
       finalStatus: evidence?.finalStatus || "",
       publishedPostUrl: evidence?.publishedPostUrl || null,
       views: evidence?.views || 0,
       likes: evidence?.likes || 0,
       comments: evidence?.comments || 0,
       shares: evidence?.shares || 0,
-      reason: evidence?.reason || (item.status === "blocked" ? "queue_item_blocked" : "evidence_missing"),
+      reason,
       nextStep,
     };
   });
@@ -29709,6 +31757,7 @@ function buildMetricoolApprovalReportSummary(input: {
       platform: evidence.platform,
       queueStatus: "missing_queue_item",
       evidenceResult: evidence.result,
+      operatorStatus: metricoolApprovalOperatorStatus({ queueStatus: "missing_queue_item", evidenceResult: evidence.result, reason: evidence.reason || "evidence_row_not_in_current_queue" }),
       finalStatus: evidence.finalStatus,
       publishedPostUrl: evidence.publishedPostUrl,
       views: evidence.views,
@@ -29720,21 +31769,40 @@ function buildMetricoolApprovalReportSummary(input: {
     });
   }
 
-  const totals: ClipperMetricoolApprovalReportSummary["totals"] = {
+  const currentQueueRows = rows.filter((row) => row.queueStatus !== "missing_queue_item");
+  const totals = currentQueueRows.reduce<ClipperMetricoolApprovalReportSummary["totals"]>((sum, row) => {
+    if (row.evidenceResult !== "missing") sum.evidenceRows += 1;
+    if (row.evidenceResult === "imported") {
+      sum.imported += 1;
+      sum.publishedRows += 1;
+      sum.views += row.views;
+      sum.likes += row.likes;
+      sum.comments += row.comments;
+      sum.shares += row.shares;
+    } else if (row.evidenceResult === "rejected") {
+      sum.rejected += 1;
+    } else if (row.evidenceResult === "skipped") {
+      sum.skipped += 1;
+      if (row.reason === "pending_live_post") sum.pendingLive += 1;
+    }
+    return sum;
+  }, {
     queueItems: input.metricoolApprovalSession.totals.items,
     readyForReview: input.metricoolApprovalSession.totals.readyForReview,
     blocked: input.metricoolApprovalSession.totals.blocked,
-    evidenceRows: input.evidenceImport.totals.rows,
-    imported: input.evidenceImport.totals.imported,
-    skipped: input.evidenceImport.totals.skipped,
-    rejected: input.evidenceImport.totals.rejected,
-    pendingLive: input.evidenceImport.totals.pendingLive,
-    publishedRows: input.evidenceImport.totals.publishedRows,
-    views: input.evidenceImport.totals.views,
-    likes: input.evidenceImport.totals.likes,
-    comments: input.evidenceImport.totals.comments,
-    shares: input.evidenceImport.totals.shares,
-  };
+    evidenceRows: 0,
+    imported: 0,
+    skipped: 0,
+    rejected: 0,
+    pendingLive: 0,
+    publishedRows: 0,
+    views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+  });
+  const preservedMismatchedEvidenceRows = rows.filter((row) => row.queueStatus === "missing_queue_item").length;
+  const activeEvidenceImportCsvPath = input.evidenceImport.evidenceImportCsvPaths.active || input.evidenceImport.evidenceImportCsvPath;
 
   const status: ClipperMetricoolApprovalReportStatus = totals.queueItems === 0
     ? "not_prepared"
@@ -29749,6 +31817,15 @@ function buildMetricoolApprovalReportSummary(input: {
   const nextActions = [
     totals.blocked > 0 ? `Resolve ${totals.blocked} blocked queue item(s) before approval.` : null,
     totals.readyForReview > 0 ? `Review ${totals.readyForReview} Metricool item(s) manually; do not count them as published yet.` : null,
+    totals.evidenceRows > 0 && totals.imported === 0 && totals.rejected === 0
+      ? `Evidence CSV has ${totals.evidenceRows} template row(s); replace placeholders only after scheduled posts are live and never count them as published before live URLs exist.`
+      : null,
+    totals.evidenceRows > 0 && totals.publishedRows === 0
+      ? `Next evidence file to update: ${activeEvidenceImportCsvPath}.`
+      : null,
+    preservedMismatchedEvidenceRows > 0
+      ? `Review ${preservedMismatchedEvidenceRows} preserved evidence row(s) that no longer match the current Metricool queue; they are shown for audit only and do not count as published.`
+      : null,
     totals.pendingLive > 0 ? `Capture public URLs and 24h metrics for ${totals.pendingLive} scheduled/live-pending row(s).` : null,
     totals.rejected > 0 ? `Fix ${totals.rejected} rejected evidence row(s) before importing analytics.` : null,
     totals.imported > 0 ? `Run Import Metricool evidence to update analytics from ${totals.imported} valid published evidence row(s).` : null,
@@ -29762,19 +31839,20 @@ function buildMetricoolApprovalReportSummary(input: {
     csvPath: METRICOOL_APPROVAL_REPORT_CSV_PATH,
     approvalSessionPath: input.metricoolApprovalSession.manifestPath,
     evidenceImportCsvPath: input.evidenceImport.evidenceImportCsvPath,
+    evidenceImportCsvPaths: input.evidenceImport.evidenceImportCsvPaths,
     importedMetricsPath: input.evidenceImport.metricsOutputPath,
     realPublishEnabled: false,
     approvalRequired: true,
     totals,
     rows,
-    nextActions: nextActions.length ? nextActions : ["Prepare Metricool approval session and keep approval_required enabled."],
+    nextActions: nextActions.length ? nextActions : ["Prepare Metricool review session and keep approval_required enabled."],
     guardrails: [
       "queued_for_approval is not published.",
       "Only the Import Metricool evidence action writes analytics; this report only audits evidence rows.",
       "Planner URLs, tokens, cookies, passwords and private screenshots are rejected.",
       "This report is an approval audit; it does not publish automatically.",
     ],
-    nextStep: nextActions[0] || "Prepare Metricool approval session and evidence rows.",
+    nextStep: nextActions[0] || "Prepare Metricool review session and evidence rows.",
   };
 }
 
@@ -29782,14 +31860,17 @@ function renderMetricoolApprovalReportMarkdown(summary: ClipperMetricoolApproval
   return [
     "# Clippers Metricool Approval Report",
     "",
-    "Unified audit of Metricool approval queue and post-live evidence. This report does not publish automatically.",
+    "Unified audit of Metricool review queue and post-live evidence. This report does not publish automatically.",
     "",
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
     `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
-    `Approval session: ${summary.approvalSessionPath}`,
+    `Review session: ${summary.approvalSessionPath}`,
     `Evidence import CSV: ${summary.evidenceImportCsvPath}`,
+    `Active evidence CSV: ${summary.evidenceImportCsvPaths.active}`,
+    `Metricool 100 evidence CSV: ${summary.evidenceImportCsvPaths.metricool100}`,
+    `Short-run evidence CSV: ${summary.evidenceImportCsvPaths.shortRun}`,
     `Imported metrics CSV: ${summary.importedMetricsPath}`,
     "",
     "## Totals",
@@ -29824,6 +31905,7 @@ function renderMetricoolApprovalReportMarkdown(summary: ClipperMetricoolApproval
       `- Platform: ${row.platform}`,
       `- Queue status: ${row.queueStatus}`,
       `- Evidence result: ${row.evidenceResult}`,
+      `- Operator status: ${row.operatorStatus}`,
       `- Final status: ${row.finalStatus || "missing"}`,
       `- Public URL: ${row.publishedPostUrl || "missing"}`,
       `- Views: ${row.views}`,
@@ -29835,7 +31917,7 @@ function renderMetricoolApprovalReportMarkdown(summary: ClipperMetricoolApproval
 }
 
 function renderMetricoolApprovalReportCsv(summary: ClipperMetricoolApprovalReportSummary): string {
-  const header = ["metricool_queue_item_id", "account_id", "account_name", "platform", "queue_status", "evidence_result", "final_status", "published_post_url", "views", "likes", "comments", "shares", "reason", "next_step"];
+  const header = ["metricool_queue_item_id", "account_id", "account_name", "platform", "queue_status", "evidence_result", "operator_status", "final_status", "published_post_url", "views", "likes", "comments", "shares", "reason", "next_step"];
   return [
     header.map(csvEscape).join(","),
     ...summary.rows.map((row) => [
@@ -29845,6 +31927,7 @@ function renderMetricoolApprovalReportCsv(summary: ClipperMetricoolApprovalRepor
       row.platform,
       row.queueStatus,
       row.evidenceResult,
+      row.operatorStatus,
       row.finalStatus,
       row.publishedPostUrl || "",
       row.views,
@@ -29864,51 +31947,361 @@ async function writeMetricoolApprovalReportArtifacts(summary: ClipperMetricoolAp
   return summary;
 }
 
-async function buildMetricoolApprovalEvidenceImportPreview(): Promise<ClipperMetricoolApprovalEvidenceImportSummary> {
+async function buildMetricoolApprovalEvidenceImportPreview(input: {
+  metricool100ApprovalRun?: ClipperMetricool100ApprovalRunSummary;
+  validQueueItemIds?: Set<string>;
+  mode?: "import" | "preview";
+} = {}): Promise<ClipperMetricoolApprovalEvidenceImportSummary> {
   const generatedAt = new Date().toISOString();
-  const raw = await readFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
+  const activeMetricool100Ids = input.metricool100ApprovalRun?.status === "ready_for_operator"
+    ? new Set(input.metricool100ApprovalRun.metricoolQueueItemIds || [])
+    : undefined;
+  const { raw, evidenceImportCsvPath, evidenceImportCsvPaths } = await buildMetricoolApprovalEvidenceImportInput({
+    metricool100QueueItemIds: activeMetricool100Ids,
+  });
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
-  return buildMetricoolApprovalEvidenceImportSummaryFromRaw({ raw, accounts, generatedAt }).summary;
+  return buildMetricoolApprovalEvidenceImportSummaryFromRaw({
+    raw,
+    accounts,
+    generatedAt,
+    validQueueItemIds: input.validQueueItemIds,
+    evidenceImportCsvPath,
+    evidenceImportCsvPaths,
+    mode: input.mode,
+  }).summary;
 }
 
-async function readCachedMetricoolApprovalReportSummary(metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary): Promise<ClipperMetricoolApprovalReportSummary> {
-  const raw = await readFile(METRICOOL_APPROVAL_REPORT_PATH, "utf8").catch(() => null);
-  if (raw) {
+export async function previewClipperMetricoolApprovalEvidence(): Promise<{ metricoolApprovalEvidencePreview: ClipperMetricoolApprovalEvidenceImportSummary }> {
+  const status = await getClipperStatus();
+  const validQueueItemIds = new Set(status.metricoolApprovalSession.items.map((item) => item.id));
+  const metricoolApprovalEvidencePreview = await buildMetricoolApprovalEvidenceImportPreview({
+    metricool100ApprovalRun: status.metricool100ApprovalRun,
+    validQueueItemIds,
+    mode: "preview",
+  });
+  return { metricoolApprovalEvidencePreview };
+}
+
+async function readCachedMetricoolApprovalReportSummary(metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary, metricool100ApprovalRun?: ClipperMetricool100ApprovalRunSummary): Promise<ClipperMetricoolApprovalReportSummary> {
+  const evidenceImport = await buildMetricoolApprovalEvidenceImportPreview({ metricool100ApprovalRun });
+  return buildMetricoolApprovalReportSummary({ metricoolApprovalSession, evidenceImport, generatedAt: null });
+}
+
+async function readMetricoolArtifactJson(pathname: string): Promise<Record<string, unknown> | null> {
+  const raw = await readFile(pathname, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function metricoolArtifactStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+function metricoolArtifactItems(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function metricoolArtifactIdsFromItems(items: Record<string, unknown>[], keys: string[]): string[] {
+  return items.map((item) => {
+    for (const key of keys) {
+      const value = item[key];
+      if (typeof value === "string" && value.length > 0) return value;
+    }
+    return "";
+  }).filter(Boolean);
+}
+
+function countMetricoolIdMismatches(actual: string[], expected: string[]): number {
+  const max = Math.max(actual.length, expected.length);
+  let mismatches = 0;
+  for (let index = 0; index < max; index += 1) {
+    if (actual[index] !== expected[index]) mismatches += 1;
+  }
+  return mismatches;
+}
+
+function buildMetricoolArtifactAuditItem(input: {
+  id: string;
+  label: string;
+  artifactPath: string;
+  parsed: Record<string, unknown> | null;
+  expectedIds: string[];
+  actualIds: string[];
+  generatedAt: string | null;
+  extraChecks?: Array<{ ok: boolean; reason: string }>;
+  refreshAction: string;
+}): ClipperMetricoolArtifactAuditItem {
+  if (!input.parsed) {
+    return {
+      id: input.id,
+      label: input.label,
+      status: "missing",
+      artifactPath: input.artifactPath,
+      generatedAt: null,
+      queueItems: input.expectedIds.length,
+      artifactItems: 0,
+      mismatchedIds: input.expectedIds.length,
+      staleReason: "Artifact is missing or unreadable.",
+      nextStep: input.refreshAction,
+    };
+  }
+  const mismatchedIds = countMetricoolIdMismatches(input.actualIds, input.expectedIds);
+  const failedCheck = input.extraChecks?.find((check) => !check.ok);
+  const status: ClipperMetricoolArtifactAuditStatus = mismatchedIds === 0 && !failedCheck ? "current" : "stale";
+  return {
+    id: input.id,
+    label: input.label,
+    status,
+    artifactPath: input.artifactPath,
+    generatedAt: input.generatedAt,
+    queueItems: input.expectedIds.length,
+    artifactItems: input.actualIds.length,
+    mismatchedIds,
+    staleReason: failedCheck?.reason || (mismatchedIds > 0 ? "Artifact item IDs do not match the current Metricool review queue." : null),
+    nextStep: status === "current" ? "Artifact matches the current Metricool review queue." : input.refreshAction,
+  };
+}
+
+async function buildMetricool100BatchArtifactAuditItem(expectedIds: string[]): Promise<ClipperMetricoolArtifactAuditItem> {
+  const workbookFiles = await readdir(METRICOOL_100_BATCH_WORKBOOKS_DIR).catch(() => []);
+  const evidenceFiles = await readdir(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR).catch(() => []);
+  const workbookJsonFiles = workbookFiles.filter((fileName) => /^metricool-batch-\d{2}-workbook\.json$/.test(fileName)).sort();
+  const workbookMarkdownFiles = workbookFiles.filter((fileName) => /^metricool-batch-\d{2}-workbook\.md$/.test(fileName)).sort();
+  const workbookCsvFiles = workbookFiles.filter((fileName) => /^metricool-batch-\d{2}-workbook\.csv$/.test(fileName)).sort();
+  const evidenceCsvFiles = evidenceFiles.filter((fileName) => /^metricool-batch-\d{2}-evidence-import\.csv$/.test(fileName)).sort();
+  const workbookIds: string[] = [];
+  const evidenceIds: string[] = [];
+  const mtimes: string[] = [];
+  for (const fileName of workbookJsonFiles) {
+    const filePath = path.join(METRICOOL_100_BATCH_WORKBOOKS_DIR, fileName);
+    const raw = await readFile(filePath, "utf8").catch(() => null);
+    const fileStat = await stat(filePath).catch(() => null);
+    if (fileStat) mtimes.push(fileStat.mtime.toISOString());
+    if (!raw) continue;
     try {
-      const parsed = JSON.parse(raw) as ClipperMetricoolApprovalReportSummary;
-      return {
-        ...parsed,
-        manifestPath: METRICOOL_APPROVAL_REPORT_PATH,
-        markdownPath: METRICOOL_APPROVAL_REPORT_MARKDOWN_PATH,
-        csvPath: METRICOOL_APPROVAL_REPORT_CSV_PATH,
-        approvalSessionPath: METRICOOL_APPROVAL_SESSION_PATH,
-        evidenceImportCsvPath: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
-        importedMetricsPath: METRICOOL_APPROVAL_IMPORTED_METRICS_PATH,
-        realPublishEnabled: false,
-        approvalRequired: true,
-        rows: Array.isArray(parsed.rows) ? parsed.rows : [],
-        nextActions: Array.isArray(parsed.nextActions) ? parsed.nextActions : [],
-        guardrails: Array.isArray(parsed.guardrails) ? parsed.guardrails : [],
-      };
+      const parsed = JSON.parse(raw);
+      const rows = Array.isArray(parsed?.rows) ? parsed.rows as Record<string, unknown>[] : [];
+      workbookIds.push(...rows.map((row) => firstString(row, ["metricoolQueueItemId", "metricool_queue_item_id", "id"])).filter((id): id is string => Boolean(id)));
     } catch {
-      // Fall through.
+      // Treat unreadable JSON as stale through the file/row checks below.
     }
   }
-  const evidenceImport = await buildMetricoolApprovalEvidenceImportPreview();
-  return buildMetricoolApprovalReportSummary({ metricoolApprovalSession, evidenceImport, generatedAt: null });
+  for (const fileName of evidenceCsvFiles) {
+    const filePath = path.join(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR, fileName);
+    const raw = await readFile(filePath, "utf8").catch(() => null);
+    const fileStat = await stat(filePath).catch(() => null);
+    if (fileStat) mtimes.push(fileStat.mtime.toISOString());
+    if (!raw) continue;
+    evidenceIds.push(...parseCsvRecords(raw)
+      .map((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]))
+      .filter((id): id is string => Boolean(id)));
+  }
+  const allIds = Array.from(new Set([...workbookIds, ...evidenceIds]));
+  const checks = [
+    { ok: expectedIds.length === 100, reason: `Expected 100 active Metricool 100 ids, found ${expectedIds.length}.` },
+    { ok: workbookJsonFiles.length === 10, reason: `Expected 10 batch workbook JSON files, found ${workbookJsonFiles.length}.` },
+    { ok: workbookMarkdownFiles.length === 10, reason: `Expected 10 batch workbook Markdown files, found ${workbookMarkdownFiles.length}.` },
+    { ok: workbookCsvFiles.length === 10, reason: `Expected 10 batch workbook CSV files, found ${workbookCsvFiles.length}.` },
+    { ok: evidenceCsvFiles.length === 10, reason: `Expected 10 batch evidence CSV files, found ${evidenceCsvFiles.length}.` },
+    { ok: workbookIds.length === expectedIds.length, reason: `Batch workbook rows total ${workbookIds.length}; expected ${expectedIds.length}.` },
+    { ok: evidenceIds.length === expectedIds.length, reason: `Batch evidence rows total ${evidenceIds.length}; expected ${expectedIds.length}.` },
+    { ok: countMetricoolIdMismatches(workbookIds, expectedIds) === 0, reason: "Batch workbook IDs do not match the active Metricool 100 run." },
+    { ok: countMetricoolIdMismatches(evidenceIds, expectedIds) === 0, reason: "Batch evidence CSV IDs do not match the active Metricool 100 run." },
+  ];
+  const failedCheck = checks.find((check) => !check.ok);
+  const mismatchedIds = Math.max(
+    countMetricoolIdMismatches(workbookIds, expectedIds),
+    countMetricoolIdMismatches(evidenceIds, expectedIds),
+  );
+  const missing = workbookJsonFiles.length === 0 && workbookMarkdownFiles.length === 0 && workbookCsvFiles.length === 0 && evidenceCsvFiles.length === 0;
+  const status: ClipperMetricoolArtifactAuditStatus = missing ? "missing" : failedCheck ? "stale" : "current";
+  return {
+    id: "metricool-100-batch-artifacts",
+    label: "100 batch workbooks/evidence",
+    status,
+    artifactPath: `${METRICOOL_100_BATCH_WORKBOOKS_DIR} + ${METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR}`,
+    generatedAt: mtimes.sort().at(-1) || null,
+    queueItems: expectedIds.length,
+    artifactItems: allIds.length,
+    mismatchedIds,
+    staleReason: status === "missing" ? "Batch workbooks and evidence CSVs are missing." : failedCheck?.reason || null,
+    nextStep: status === "current"
+      ? "All 10 Metricool 100 batch workbooks and evidence CSVs match the active run."
+      : "Run 100 handoff to regenerate batch workbooks and evidence CSVs from the active Metricool 100 run.",
+  };
+}
+
+async function buildMetricoolArtifactAuditSummary(input: {
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+}): Promise<ClipperMetricoolArtifactAuditSummary> {
+  const canonicalIds = input.metricoolApprovalSession.items.map((item) => item.id);
+  const queueIds = input.metricoolExecutionQueue.items.map((item) => item.id);
+  const [approvalSessionRaw, run100Raw, sourceUploadRaw, closeoutRaw, reportRaw] = await Promise.all([
+    readMetricoolArtifactJson(METRICOOL_APPROVAL_SESSION_PATH),
+    readMetricoolArtifactJson(METRICOOL_100_APPROVAL_RUN_PATH),
+    readMetricoolArtifactJson(METRICOOL_SOURCE_UPLOAD_PACK_PATH),
+    readMetricoolArtifactJson(METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH),
+    readMetricoolArtifactJson(METRICOOL_APPROVAL_REPORT_PATH),
+  ]);
+  const run100Ids = run100Raw ? metricoolArtifactStringArray(run100Raw.metricoolQueueItemIds) : [];
+  const sourceUploadItems = metricoolArtifactItems(sourceUploadRaw?.items);
+  const closeoutRows = metricoolArtifactItems(closeoutRaw?.runSheetRows);
+  const reportRows = metricoolArtifactItems(reportRaw?.rows)
+    .filter((row) => row.queueStatus !== "missing_queue_item");
+  const approvalSessionItems = metricoolArtifactItems(approvalSessionRaw?.items);
+  const expected100Ids = input.metricool100ApprovalRun.status === "ready_for_operator"
+    ? input.metricool100ApprovalRun.metricoolQueueItemIds
+    : canonicalIds.slice(0, run100Ids.length || canonicalIds.length);
+  const batchArtifactItem = await buildMetricool100BatchArtifactAuditItem(expected100Ids);
+
+  const items: ClipperMetricoolArtifactAuditItem[] = [
+    buildMetricoolArtifactAuditItem({
+      id: "metricool-approval-session",
+      label: "Review session",
+      artifactPath: METRICOOL_APPROVAL_SESSION_PATH,
+      parsed: approvalSessionRaw,
+      expectedIds: canonicalIds,
+      actualIds: metricoolArtifactIdsFromItems(approvalSessionItems, ["id", "metricoolQueueItemId"]),
+      generatedAt: typeof approvalSessionRaw?.generatedAt === "string" ? approvalSessionRaw.generatedAt : null,
+      extraChecks: [
+        { ok: approvalSessionRaw?.realPublishEnabled === false, reason: "Review session realPublishEnabled must remain false." },
+        { ok: approvalSessionRaw?.approvalRequired === true, reason: "Review session must remain approval_required." },
+      ],
+      refreshAction: "Run Metricool review to regenerate the review session from the current queue.",
+    }),
+    buildMetricoolArtifactAuditItem({
+      id: "metricool-100-approval-run",
+      label: "100 schedule run",
+      artifactPath: METRICOOL_100_APPROVAL_RUN_PATH,
+      parsed: run100Raw,
+      expectedIds: expected100Ids,
+      actualIds: run100Ids,
+      generatedAt: typeof run100Raw?.generatedAt === "string" ? run100Raw.generatedAt : null,
+      extraChecks: [
+        { ok: input.metricool100ApprovalRun.status === "ready_for_operator", reason: input.metricool100ApprovalRun.nextStep },
+        { ok: run100Raw?.realPublishEnabled === false, reason: "100 schedule run realPublishEnabled must remain false." },
+        { ok: run100Raw?.approvalRequired === true, reason: "100 schedule run must remain approval_required." },
+      ],
+      refreshAction: "Run Prep 100 schedule to regenerate the 100-run from the current queue.",
+    }),
+    buildMetricoolArtifactAuditItem({
+      id: "metricool-source-upload-pack",
+      label: "Source upload pack",
+      artifactPath: METRICOOL_SOURCE_UPLOAD_PACK_PATH,
+      parsed: sourceUploadRaw,
+      expectedIds: canonicalIds,
+      actualIds: metricoolArtifactIdsFromItems(sourceUploadItems, ["id", "metricoolQueueItemId"]),
+      generatedAt: typeof sourceUploadRaw?.generatedAt === "string" ? sourceUploadRaw.generatedAt : null,
+      extraChecks: [
+        { ok: sourceUploadRaw?.realPublishEnabled === false, reason: "Source upload pack realPublishEnabled must remain false." },
+        { ok: sourceUploadRaw?.approvalRequired === true, reason: "Source upload pack must remain approval_required." },
+      ],
+      refreshAction: "Run Source upload pack to regenerate source checks from the current review session.",
+    }),
+    buildMetricoolArtifactAuditItem({
+      id: "metricool-operator-closeout-pack",
+      label: "Operator closeout pack",
+      artifactPath: METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH,
+      parsed: closeoutRaw,
+      expectedIds: canonicalIds,
+      actualIds: metricoolArtifactIdsFromItems(closeoutRows, ["metricoolQueueItemId", "id"]),
+      generatedAt: typeof closeoutRaw?.generatedAt === "string" ? closeoutRaw.generatedAt : null,
+      extraChecks: [
+        { ok: closeoutRaw?.realPublishEnabled === false, reason: "Operator closeout realPublishEnabled must remain false." },
+        { ok: closeoutRaw?.approvalRequired === true, reason: "Operator closeout must remain approval_required." },
+      ],
+      refreshAction: "Run Closeout Metricool to regenerate the operator run sheet from the current queue.",
+    }),
+    buildMetricoolArtifactAuditItem({
+      id: "metricool-approval-report",
+      label: "Approval report",
+      artifactPath: METRICOOL_APPROVAL_REPORT_PATH,
+      parsed: reportRaw,
+      expectedIds: canonicalIds,
+      actualIds: metricoolArtifactIdsFromItems(reportRows, ["metricoolQueueItemId", "id"]),
+      generatedAt: typeof reportRaw?.generatedAt === "string" ? reportRaw.generatedAt : null,
+      extraChecks: [
+        { ok: reportRaw?.realPublishEnabled === false, reason: "Approval report realPublishEnabled must remain false." },
+        { ok: reportRaw?.approvalRequired === true, reason: "Approval report must remain approval_required." },
+      ],
+      refreshAction: "Run Metricool report to regenerate evidence audit rows from the current queue.",
+    }),
+    batchArtifactItem,
+  ];
+  const queueMismatch = countMetricoolIdMismatches(queueIds, canonicalIds);
+  const unsafeQueueReasons = [
+    ...(input.metricoolExecutionQueue.safetyNormalizationReasons || []),
+    input.metricoolExecutionQueue.publishMode === "approval_required" ? null : `publishMode is ${input.metricoolExecutionQueue.publishMode}; expected approval_required.`,
+    input.metricoolExecutionQueue.realPublishEnabled === false ? null : "realPublishEnabled is true on the canonical Metricool queue.",
+    input.metricoolExecutionQueue.totals.readyToSend === 0 ? null : `${input.metricoolExecutionQueue.totals.readyToSend} item(s) are ready_to_send; Metricool MVP must stay approval-only.`,
+    input.metricoolExecutionQueue.items.every((item) => item.canSendNow === false) ? null : "At least one queue item canSendNow=true; Metricool MVP must stay approval-only.",
+  ].filter(Boolean) as string[];
+  if (queueMismatch > 0 || unsafeQueueReasons.length > 0) {
+    items.unshift({
+      id: "metricool-canonical-queue",
+      label: "Canonical queue consistency",
+      status: "stale",
+      artifactPath: input.metricoolExecutionQueue.manifestPath,
+      generatedAt: input.metricoolExecutionQueue.generatedAt,
+      queueItems: canonicalIds.length,
+      artifactItems: queueIds.length,
+      mismatchedIds: queueMismatch,
+      staleReason: unsafeQueueReasons[0] || "Execution queue item IDs differ from the derived review session.",
+      nextStep: unsafeQueueReasons.length
+        ? "Reset Metricool execution queue to approval_required with realPublishEnabled=false before using operator artifacts."
+        : "Run Metricool review after regenerating the execution queue.",
+    });
+  }
+  const totals = items.reduce<ClipperMetricoolArtifactAuditSummary["totals"]>((sum, item) => {
+    sum.artifacts += 1;
+    if (item.status === "current") sum.current += 1;
+    if (item.status === "stale") sum.stale += 1;
+    if (item.status === "missing") sum.missing += 1;
+    return sum;
+  }, { artifacts: 0, current: 0, stale: 0, missing: 0 });
+  const firstProblem = items.find((item) => item.status !== "current");
+  return {
+    status: totals.stale > 0 || totals.missing > 0 ? "refresh_needed" : "current",
+    generatedAt: new Date().toISOString(),
+    canonicalQueuePath: input.metricoolExecutionQueue.manifestPath,
+    canonicalQueueGeneratedAt: input.metricoolExecutionQueue.generatedAt,
+    canonicalQueueItems: canonicalIds.length,
+    canonicalQueuedForApproval: input.metricoolExecutionQueue.totals.queuedForApproval,
+    canonicalReadyToSend: input.metricoolExecutionQueue.totals.readyToSend,
+    realPublishEnabled: input.metricoolExecutionQueue.realPublishEnabled,
+    approvalRequired: true,
+    items,
+    totals,
+    guardrails: [
+      "The current Metricool execution queue is canonical.",
+      "Stale operator sheets are blocked from being treated as current work.",
+      "queued_for_approval is not published.",
+      "realPublishEnabled must remain false.",
+    ],
+    nextStep: firstProblem?.nextStep || "Metricool operator artifacts match the current Metricool review queue.",
+  };
 }
 
 export async function prepareClipperMetricoolApprovalReport(userId = getSystemUserId()): Promise<{ metricoolApprovalReport: ClipperMetricoolApprovalReportSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const statusBefore = await getClipperStatus(userId);
-  const evidenceImport = await buildMetricoolApprovalEvidenceImportPreview();
-  const metricoolApprovalReport = await writeMetricoolApprovalReportArtifacts(buildMetricoolApprovalReportSummary({
-    metricoolApprovalSession: statusBefore.metricoolApprovalSession,
-    evidenceImport,
+  const { metricoolApprovalReport } = await refreshMetricoolApprovalSessionAndReport({
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
+    metricoolMvpLaunchPack: statusBefore.metricoolMvpLaunchPack,
+    metricool100ApprovalRun: statusBefore.metricool100ApprovalRun,
     generatedAt: new Date().toISOString(),
-  }));
+  });
+  await writeMetricoolApprovalReportArtifacts(metricoolApprovalReport);
   return { metricoolApprovalReport, status: await getClipperStatus(userId) };
 }
 
@@ -29916,10 +32309,26 @@ export async function importClipperMetricoolApprovalEvidence(userId = getSystemU
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const generatedAt = new Date().toISOString();
-  const raw = await readFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
-  const { summary: metricoolApprovalEvidenceImport, importedMetricRows } = buildMetricoolApprovalEvidenceImportSummaryFromRaw({ raw, accounts, generatedAt });
+  const statusBefore = await getClipperStatus(userId);
+  const activeMetricool100Ids = statusBefore.metricool100ApprovalRun.status === "ready_for_operator"
+    ? new Set(statusBefore.metricool100ApprovalRun.metricoolQueueItemIds || [])
+    : undefined;
+  const evidenceInput = await buildMetricoolApprovalEvidenceImportInput({
+    metricool100QueueItemIds: activeMetricool100Ids,
+  });
+  const validQueueItemIds = new Set([
+    ...statusBefore.metricoolApprovalSession.items.map((item) => item.id),
+  ]);
+  const { summary: metricoolApprovalEvidenceImport, importedMetricRows } = buildMetricoolApprovalEvidenceImportSummaryFromRaw({
+    raw: evidenceInput.raw,
+    accounts,
+    generatedAt,
+    validQueueItemIds,
+    evidenceImportCsvPath: evidenceInput.evidenceImportCsvPath,
+    evidenceImportCsvPaths: evidenceInput.evidenceImportCsvPaths,
+  });
 
   if (importedMetricRows.length > 0) {
     await writeFile(METRICOOL_APPROVAL_IMPORTED_METRICS_PATH, renderMetricoolApprovalImportedMetricsCsv(importedMetricRows));
@@ -29931,6 +32340,583 @@ export async function importClipperMetricoolApprovalEvidence(userId = getSystemU
   await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
 
   return { metricoolApprovalEvidenceImport, metrics, status: await getClipperStatus(userId) };
+}
+
+function metricoolApprovalEvidenceInputRecord(input: ClipperMetricoolApprovalEvidenceRowInput, fallback: ClipperMetricoolApprovalSessionItem): Record<string, unknown> {
+  const rawInput = input as unknown as Record<string, unknown>;
+  return {
+    metricool_queue_item_id: fallback.id,
+    account_id: fallback.accountId,
+    account_name: fallback.accountName,
+    platform: fallback.platform,
+    metricool_brand_name: fallback.metricoolBrandName,
+    metricool_blog_id: fallback.metricoolBlogId || "",
+    scheduled_for: fallback.publishAt,
+    source_path: fallback.sourcePath || "",
+    caption_seed: fallback.captionSeed,
+    metricool_approval_url: input.metricoolApprovalUrl || rawInput.metricool_approval_url || "",
+    published_post_url: input.publishedPostUrl || rawInput.published_post_url || "",
+    final_status: input.finalStatus || rawInput.final_status || "",
+    views_24h: input.views24h ?? rawInput.views_24h ?? "",
+    likes_24h: input.likes24h ?? rawInput.likes_24h ?? "",
+    comments_24h: input.comments24h ?? rawInput.comments_24h ?? "",
+    shares_24h: input.shares24h ?? rawInput.shares_24h ?? "",
+    operator_notes: input.operatorNotes || rawInput.operator_notes || "",
+  };
+}
+
+function metricoolApprovalUrlLooksValid(rawUrl: string): boolean {
+  const value = String(rawUrl || "").trim();
+  if (!/^https:\/\//i.test(value)) return false;
+  try {
+    const parsed = new URL(value);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    return hostname === "metricool.com" || hostname.endsWith(".metricool.com");
+  } catch {
+    return false;
+  }
+}
+
+function metricoolApprovalSessionItemFromEvidenceRecord(record: Record<string, unknown>): ClipperMetricoolApprovalSessionItem | null {
+  const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+  const accountId = firstString(record, ["account_id", "accountid", "account"]);
+  const accountName = firstString(record, ["account_name", "profile", "handle"]) || accountId;
+  const platform = normalizePlatformLabel(firstString(record, ["platform", "network", "source"]));
+  if (!id || !accountId || !platform) return null;
+  const publishAt = firstString(record, ["scheduled_for", "published_at", "publish_at", "date"]) || new Date().toISOString();
+  const sourcePath = firstString(record, ["source_path", "source_file", "source"]) || null;
+  const captionSeed = firstString(record, ["caption_seed", "hook", "caption", "title", "description"]) || id;
+  return {
+    id,
+    rank: 0,
+    accountId,
+    accountName,
+    platform,
+    metricoolBrandName: firstString(record, ["metricool_brand_name", "brand_name", "brand"]) || accountName,
+    metricoolBlogId: firstString(record, ["metricool_blog_id", "blog_id", "blogid"]) || null,
+    publishAt,
+    sourcePath,
+    sourceFileName: sourcePath ? path.basename(sourcePath) : "",
+    hook: captionSeed,
+    captionSeed,
+    status: "ready_for_review",
+    reviewChecklist: [],
+    evidenceCaptureRow: metricoolApprovalEvidenceRecordRow(record),
+    blockers: [],
+    nextStep: "Review this Metricool 100 approval row and capture a public post URL only after it is live.",
+  };
+}
+
+export async function recordClipperMetricoolApprovalEvidenceRow(
+  input: ClipperMetricoolApprovalEvidenceRowInput,
+  userId = getSystemUserId(),
+): Promise<{
+  metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
+  metricoolOperatorCloseoutPack: ClipperMetricoolOperatorCloseoutPackSummary;
+  status: ClipperStatus;
+}> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const queueItemId = String(input.metricoolQueueItemId || "").trim();
+  if (!queueItemId) throw new Error("metricoolQueueItemId is required.");
+  const statusBefore = await getClipperStatus(userId);
+  const shortFallback = statusBefore.metricoolApprovalSession.items.find((item) => item.id === queueItemId);
+  const activeMetricool100Ids = statusBefore.metricool100ApprovalRun.status === "ready_for_operator"
+    ? new Set(statusBefore.metricool100ApprovalRun.metricoolQueueItemIds || [])
+    : new Set<string>();
+  const metricool100QueueItemIds = await readMetricool100ApprovalQueueItemIds(activeMetricool100Ids);
+  const targetIsMetricool100 = metricool100QueueItemIds.has(queueItemId);
+  const metricool100EvidenceRecords = (await readMetricool100ApprovalEvidenceRecords()).records;
+  const metricool100EvidenceRecord = metricool100EvidenceRecords.find((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) === queueItemId);
+  const fallback = shortFallback || (targetIsMetricool100 && metricool100EvidenceRecord
+    ? metricoolApprovalSessionItemFromEvidenceRecord(metricool100EvidenceRecord)
+    : null);
+  if (!fallback) throw new Error(`Metricool queue item ${queueItemId} is not in the current review session or Metricool 100 schedule run.`);
+  const nextRecord = metricoolApprovalEvidenceInputRecord(input, fallback);
+  if (metricoolApprovalEvidenceHasSecretSignal(nextRecord)) {
+    throw new Error("Metricool evidence row rejected because it looks like it contains a token, password, cookie or secret.");
+  }
+
+  const targetEvidenceCsvPath = targetIsMetricool100 ? METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH : METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH;
+  const existingRaw = await readFile(targetEvidenceCsvPath, "utf8").catch(() => null);
+  const existingRecords = existingRaw ? parseCsvRecords(existingRaw) : [];
+  const replacementRaw = [
+    metricoolApprovalEvidenceImportCsvHeader().map(csvEscape).join(","),
+    ...existingRecords
+      .filter((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) !== queueItemId)
+      .map((record) => metricoolApprovalEvidenceRecordRow(record)),
+    metricoolApprovalEvidenceRecordRow(nextRecord, fallback),
+  ].join("\n");
+  if (!targetIsMetricool100) {
+    await writeFile(METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, renderMetricoolApprovalEvidenceImportCsv(statusBefore.metricoolApprovalSession, replacementRaw));
+  } else {
+    await writeFile(METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, replacementRaw);
+  }
+  const { metricoolApprovalReport } = await prepareClipperMetricoolApprovalReport(userId);
+  const { metricoolOperatorCloseoutPack, status } = await prepareClipperMetricoolOperatorCloseoutPack(userId);
+  return { metricoolApprovalReport, metricoolOperatorCloseoutPack, status };
+}
+
+export async function recordClipperTikTokBatchEvidenceRow(
+  input: ClipperMetricoolApprovalEvidenceRowInput,
+): Promise<{
+  batchId: string;
+  batchEvidenceCsvPath: string;
+  metricoolQueueItemId: string;
+}> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const preview = await previewClipperTikTokBatchEvidenceRow(input);
+  const nextRecord = preview.record;
+  const batchEvidenceCsvPath = preview.batchEvidenceCsvPath;
+  const queueItemId = preview.metricoolQueueItemId;
+  const releaseLock = await acquireTikTokBatchEvidenceApplyLock();
+  try {
+    const existingRaw = await readFile(batchEvidenceCsvPath, "utf8").catch(() => null);
+    const existingRecords = existingRaw ? parseCsvRecords(existingRaw) : [];
+    const replacementRaw = [
+      metricoolApprovalEvidenceImportCsvHeader().map(csvEscape).join(","),
+      ...existingRecords
+        .filter((record) => firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) !== queueItemId)
+        .map((record) => metricoolApprovalEvidenceRecordRow(record)),
+      metricoolApprovalEvidenceRecordRow(nextRecord, preview.fallback),
+    ].join("\n") + "\n";
+    const tempPath = `${batchEvidenceCsvPath}.tmp-${process.pid}-${Date.now()}`;
+    await writeFile(tempPath, replacementRaw);
+    await rename(tempPath, batchEvidenceCsvPath);
+    return { batchId: preview.batchId, batchEvidenceCsvPath, metricoolQueueItemId: queueItemId };
+  } finally {
+    await releaseLock();
+  }
+}
+
+function parseTikTokBatchEvidenceBatchRows(input: { raw?: unknown }): Array<Record<string, unknown>> {
+  const raw = typeof input.raw === "string" ? input.raw.trim() : "";
+  if (!raw) return [];
+  if (raw.startsWith("[") || raw.startsWith("{")) {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+    if (Array.isArray(parsed.rows)) return parsed.rows as Array<Record<string, unknown>>;
+    return [parsed as Record<string, unknown>];
+  }
+  return parseCsvRecords(raw);
+}
+
+function tiktokBatchEvidenceInputFromRecord(record: Record<string, unknown>): ClipperMetricoolApprovalEvidenceRowInput {
+  return {
+    metricoolQueueItemId: firstString(record, ["metricoolQueueItemId", "metricool_queue_item_id", "queue_item_id", "clip_id", "id"]),
+    metricoolApprovalUrl: firstString(record, ["metricoolApprovalUrl", "metricool_approval_url", "approval_url", "planner_url"]),
+    publishedPostUrl: firstString(record, ["publishedPostUrl", "published_post_url", "post_url", "public_url", "tiktok_url"]),
+    finalStatus: firstString(record, ["finalStatus", "final_status", "status"]),
+    views24h: firstString(record, ["views24h", "views_24h", "views"]),
+    likes24h: firstString(record, ["likes24h", "likes_24h", "likes"]),
+    comments24h: firstString(record, ["comments24h", "comments_24h", "comments"]),
+    shares24h: firstString(record, ["shares24h", "shares_24h", "shares"]),
+    operatorNotes: firstString(record, ["operatorNotes", "operator_notes", "notes"]),
+  };
+}
+
+async function acquireTikTokBatchEvidenceApplyLock(): Promise<() => Promise<void>> {
+  const lockPath = path.join(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR, ".tiktok-batch-evidence-apply.lock");
+  const ownerPath = path.join(lockPath, "owner.json");
+  const ownerId = randomBytes(16).toString("hex");
+  await mkdir(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR, { recursive: true });
+  const removeStaleLockIfNeeded = async () => {
+    const lockStats = await stat(lockPath).catch(() => null);
+    const lockAgeMs = lockStats ? Date.now() - lockStats.mtimeMs : 0;
+    const ownerRaw = await readFile(ownerPath, "utf8").catch(() => "");
+    let acquiredAt = 0;
+    let ownerPid = 0;
+    try {
+      const owner = ownerRaw ? JSON.parse(ownerRaw) as { acquiredAt?: string; pid?: number } : {};
+      acquiredAt = owner.acquiredAt ? Date.parse(owner.acquiredAt) : 0;
+      ownerPid = Number(owner.pid || 0);
+    } catch {
+      acquiredAt = 0;
+    }
+    const hasUsableTimestamp = Number.isFinite(acquiredAt) && acquiredAt > 0;
+    const staleByOwnerTimestamp = hasUsableTimestamp && Date.now() - acquiredAt > 15 * 60 * 1000;
+    let ownerAlive = false;
+    if (ownerPid > 0) {
+      try {
+        process.kill(ownerPid, 0);
+        ownerAlive = true;
+      } catch {
+        ownerAlive = false;
+      }
+    }
+    const lockIsOldEnoughForMissingOwner = lockAgeMs > 15 * 60 * 1000;
+    if (ownerPid > 0) {
+      if (!ownerAlive) {
+        await rm(lockPath, { recursive: true, force: true });
+      }
+      return;
+    }
+    if ((!ownerRaw || !hasUsableTimestamp) && lockIsOldEnoughForMissingOwner) {
+      await rm(lockPath, { recursive: true, force: true });
+      return;
+    }
+    if (staleByOwnerTimestamp) {
+      await rm(lockPath, { recursive: true, force: true });
+    }
+  };
+  try {
+    await mkdir(lockPath);
+  } catch (error: any) {
+    if (error?.code === "EEXIST") {
+      await removeStaleLockIfNeeded();
+      try {
+        await mkdir(lockPath);
+      } catch (retryError: any) {
+        if (retryError?.code === "EEXIST") {
+          throw new Error("TikTok batch evidence apply is already running. Wait for the current apply to finish before trying again.");
+        }
+        throw retryError;
+      }
+    } else {
+      throw error;
+    }
+  }
+  try {
+    await writeFile(ownerPath, JSON.stringify({
+      ownerId,
+      pid: process.pid,
+      acquiredAt: new Date().toISOString(),
+      purpose: "tiktok_batch_evidence_apply",
+    }, null, 2));
+  } catch (error) {
+    await rm(lockPath, { recursive: true, force: true });
+    throw error;
+  }
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    const ownerRaw = await readFile(ownerPath, "utf8").catch(() => "");
+    if (!ownerRaw) return;
+    try {
+      const owner = JSON.parse(ownerRaw) as { ownerId?: string };
+      if (owner.ownerId !== ownerId) return;
+    } catch {
+      return;
+    }
+    await rm(lockPath, { recursive: true, force: true });
+  };
+}
+
+export async function previewClipperTikTokBatchEvidenceBatch(input: { raw?: unknown } = {}): Promise<{
+  status: "empty" | "ready_to_apply" | "blocked_validation";
+  generatedAt: string;
+  wouldWrite: false;
+  totals: {
+    rows: number;
+    accepted: number;
+    rejected: number;
+    scheduled: number;
+    published: number;
+    rejectedStatus: number;
+  };
+  rows: Array<{
+    row: number;
+    metricoolQueueItemId: string;
+    accepted: boolean;
+    classification: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  nextStep: string;
+}> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const records = parseTikTokBatchEvidenceBatchRows(input);
+  const rows = [];
+  const seenQueueItemIds = new Set<string>();
+  let accepted = 0;
+  let scheduled = 0;
+  let published = 0;
+  let rejectedStatus = 0;
+  for (const [index, record] of records.entries()) {
+    const rowNumber = index + 2;
+    const rowInput = tiktokBatchEvidenceInputFromRecord(record);
+    try {
+      const preview = await previewClipperTikTokBatchEvidenceRow(rowInput);
+      if (seenQueueItemIds.has(preview.metricoolQueueItemId)) {
+        rows.push({
+          row: rowNumber,
+          metricoolQueueItemId: preview.metricoolQueueItemId,
+          accepted: false,
+          classification: "rejected",
+          reason: "duplicate_metricool_queue_item_id_in_batch",
+          nextAction: "Keep only one evidence row per Metricool queue item before applying the batch.",
+        });
+        continue;
+      }
+      seenQueueItemIds.add(preview.metricoolQueueItemId);
+      accepted += 1;
+      if (preview.classification === "scheduled") scheduled += 1;
+      if (preview.classification === "published") published += 1;
+      if (preview.classification === "rejected") rejectedStatus += 1;
+      rows.push({
+        row: rowNumber,
+        metricoolQueueItemId: preview.metricoolQueueItemId,
+        accepted: true,
+        classification: preview.classification,
+        reason: "",
+        nextAction: preview.nextAction,
+      });
+    } catch (error: any) {
+      rows.push({
+        row: rowNumber,
+        metricoolQueueItemId: firstString(record, ["metricoolQueueItemId", "metricool_queue_item_id", "queue_item_id", "clip_id", "id"]) || "",
+        accepted: false,
+        classification: "rejected",
+        reason: error?.message || "Invalid TikTok batch evidence row.",
+        nextAction: "Fix this row before applying the batch evidence import.",
+      });
+    }
+  }
+  const rejected = rows.length - accepted;
+  return {
+    status: rows.length === 0 ? "empty" : rejected === 0 ? "ready_to_apply" : "blocked_validation",
+    generatedAt: new Date().toISOString(),
+    wouldWrite: false,
+    totals: {
+      rows: rows.length,
+      accepted,
+      rejected,
+      scheduled,
+      published,
+      rejectedStatus,
+    },
+    rows,
+    nextStep: rows.length === 0
+      ? "Paste CSV or JSON evidence rows from Metricool before previewing."
+      : rejected === 0
+        ? "All pasted rows are valid. Apply batch evidence only after confirming these are real Metricool/TikTok records."
+        : "Fix rejected rows; batch apply will not write partial evidence.",
+  };
+}
+
+export async function recordClipperTikTokBatchEvidenceBatch(input: { raw?: unknown } = {}): Promise<{
+  status: "empty" | "applied" | "blocked_validation";
+  generatedAt: string;
+  preview: Awaited<ReturnType<typeof previewClipperTikTokBatchEvidenceBatch>>;
+  totals: {
+    rows: number;
+    applied: number;
+    rejected: number;
+  };
+  applied: Array<{
+    batchId: string;
+    batchEvidenceCsvPath: string;
+    metricoolQueueItemId: string;
+  }>;
+  nextStep: string;
+}> {
+  const preview = await previewClipperTikTokBatchEvidenceBatch(input);
+  if (preview.status !== "ready_to_apply") {
+    return {
+      status: preview.status,
+      generatedAt: new Date().toISOString(),
+      preview,
+      totals: {
+        rows: preview.totals.rows,
+        applied: 0,
+        rejected: preview.totals.rejected,
+      },
+      applied: [],
+      nextStep: preview.nextStep,
+    };
+  }
+  const records = parseTikTokBatchEvidenceBatchRows(input);
+  const releaseLock = await acquireTikTokBatchEvidenceApplyLock();
+  try {
+    const prepared = [];
+    const queueItemIds = new Set<string>();
+    for (const record of records) {
+      const rowPreview = await previewClipperTikTokBatchEvidenceRow(tiktokBatchEvidenceInputFromRecord(record));
+      if (queueItemIds.has(rowPreview.metricoolQueueItemId)) {
+        throw new Error(`Duplicate Metricool queue item ${rowPreview.metricoolQueueItemId} rejected during atomic batch apply.`);
+      }
+      queueItemIds.add(rowPreview.metricoolQueueItemId);
+      prepared.push(rowPreview);
+    }
+    const batchEvidenceCsvPaths = new Set(prepared.map((item) => item.batchEvidenceCsvPath));
+    if (batchEvidenceCsvPaths.size !== 1) {
+      throw new Error("TikTok batch evidence apply rejected because rows point to multiple batch evidence CSV files.");
+    }
+    const batchEvidenceCsvPath = prepared[0]?.batchEvidenceCsvPath;
+    if (!batchEvidenceCsvPath) throw new Error("TikTok batch evidence apply requires at least one prepared row.");
+    const existingRaw = await readFile(batchEvidenceCsvPath, "utf8").catch(() => null);
+    const existingRecords = existingRaw ? parseCsvRecords(existingRaw) : [];
+    const replacementRaw = [
+      metricoolApprovalEvidenceImportCsvHeader().map(csvEscape).join(","),
+      ...existingRecords
+        .filter((record) => !queueItemIds.has(firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"])))
+        .map((record) => metricoolApprovalEvidenceRecordRow(record)),
+      ...prepared.map((item) => metricoolApprovalEvidenceRecordRow(item.record, item.fallback)),
+    ].join("\n") + "\n";
+    const tempPath = `${batchEvidenceCsvPath}.tmp-${process.pid}-${Date.now()}`;
+    await writeFile(tempPath, replacementRaw);
+    await rename(tempPath, batchEvidenceCsvPath);
+    const applied = prepared.map((item) => ({
+      batchId: item.batchId,
+      batchEvidenceCsvPath: item.batchEvidenceCsvPath,
+      metricoolQueueItemId: item.metricoolQueueItemId,
+    }));
+    return {
+      status: "applied",
+      generatedAt: new Date().toISOString(),
+      preview,
+      totals: {
+        rows: preview.totals.rows,
+        applied: applied.length,
+        rejected: 0,
+      },
+      applied,
+      nextStep: "Refresh/sync TikTok batch evidence, then review tracker states before importing any published metrics.",
+    };
+  } finally {
+    await releaseLock();
+  }
+}
+
+function validateTikTokBatchOperatorNotes(value: unknown, finalStatus: string): string[] {
+  const notes = String(value || "").trim();
+  if (!finalStatus) return [];
+  const normalized = notes.toLowerCase().replace(/\s+/g, " ");
+  const weakNotes = new Set(["ok", "yes", "approved", "scheduled", "published", "rejected", "done", "listo", "aprobado", "publicado"]);
+  const tokens = normalized.match(/[a-záéíóúñ0-9]+/gi) || [];
+  const genericTokenCount = tokens.filter((token) => weakNotes.has(token)).length;
+  const concreteTokenCount = tokens.filter((token) => !weakNotes.has(token) && token.length > 2).length;
+  const issues: string[] = [];
+  if (notes.length < 20) issues.push("operator_notes_must_be_at_least_20_real_characters");
+  if (weakNotes.has(normalized) || (tokens.length > 0 && concreteTokenCount === 0) || genericTokenCount >= 4) issues.push("operator_notes_must_not_be_generic");
+  if (/<[^>]+>/.test(notes) || /\b(placeholder|paste|todo|tbd|example)\b/i.test(notes)) issues.push("operator_notes_must_not_contain_placeholders");
+  return issues;
+}
+
+async function validateTikTokBatchSourceFile(sourcePath: string): Promise<string[]> {
+  const text = String(sourcePath || "").trim();
+  if (!text) return ["source_file_missing"];
+  const sourceStat = await stat(text).catch(() => null);
+  if (!sourceStat?.isFile()) return ["source_file_missing"];
+  const ext = path.extname(text).toLowerCase();
+  if (![".mp4", ".mov", ".m4v"].includes(ext)) return ["source_file_unsupported_extension"];
+  if (sourceStat.size < 1024) return ["source_file_too_small"];
+  const header = await readFile(text).catch(() => Buffer.alloc(0));
+  const signature = header.subarray(0, 4096).toString("latin1");
+  if (!signature.includes("ftyp")) return ["source_file_probe_failed"];
+  return [];
+}
+
+export async function previewClipperTikTokBatchEvidenceRow(
+  input: ClipperMetricoolApprovalEvidenceRowInput,
+): Promise<{
+  accepted: true;
+  wouldWrite: false;
+  batchId: string;
+  batchEvidenceCsvPath: string;
+  metricoolQueueItemId: string;
+  classification: "not_started" | "scheduled" | "published" | "rejected";
+  nextAction: string;
+  record: Record<string, unknown>;
+  fallback: ClipperMetricoolApprovalSessionItem;
+}> {
+  const queueItemId = String(input.metricoolQueueItemId || "").trim();
+  if (!queueItemId) throw new Error("metricoolQueueItemId is required.");
+  const workbookRaw = await readFile(METRICOOL_100_CURRENT_BATCH_WORKBOOK_PATH, "utf8");
+  const workbook = JSON.parse(workbookRaw) as { batchId?: string; rows?: Array<Record<string, unknown>> };
+  const batchId = String(workbook.batchId || "metricool-batch-01");
+  const workbookRows = Array.isArray(workbook.rows) ? workbook.rows : [];
+  const workbookRow = workbookRows.find((row) => String(row.metricoolQueueItemId || "") === queueItemId);
+  if (!workbookRow) throw new Error(`Metricool queue item ${queueItemId} is not in the current TikTok batch.`);
+  const platform = normalizePlatformLabel(firstString(workbookRow, ["platform"]));
+  if (platform !== "tiktok") throw new Error(`Metricool queue item ${queueItemId} is ${platform || "unknown"}, not TikTok.`);
+  const sourceIssues = await validateTikTokBatchSourceFile(firstString(workbookRow, ["sourcePath", "source_path"]));
+  if (sourceIssues.length) {
+    throw new Error(`TikTok batch evidence requires a valid local source file before syncing: ${sourceIssues.join(", ")}.`);
+  }
+  const rawInput = input as unknown as Record<string, unknown>;
+  const finalStatus = String(input.finalStatus || rawInput.final_status || "").trim().toLowerCase();
+  const metricoolApprovalUrl = String(input.metricoolApprovalUrl || rawInput.metricool_approval_url || "").trim();
+  const publishedPostUrl = String(input.publishedPostUrl || rawInput.published_post_url || "").trim();
+  const operatorNotes = String(input.operatorNotes || rawInput.operator_notes || "").trim();
+  const metricsTotal = firstNumber({ value: input.views24h ?? rawInput.views_24h }, ["value"])
+    + firstNumber({ value: input.likes24h ?? rawInput.likes_24h }, ["value"])
+    + firstNumber({ value: input.comments24h ?? rawInput.comments_24h }, ["value"])
+    + firstNumber({ value: input.shares24h ?? rawInput.shares_24h }, ["value"]);
+  const noteIssues = validateTikTokBatchOperatorNotes(operatorNotes, finalStatus);
+  if (noteIssues.length) {
+    throw new Error(`TikTok batch evidence requires real operator notes: ${noteIssues.join(", ")}.`);
+  }
+  if (finalStatus === "published") {
+    if (!metricoolApprovalPublishedUrlMatchesPlatform(publishedPostUrl, "tiktok")) {
+      throw new Error("Published TikTok evidence requires an exact public TikTok video URL.");
+    }
+    if (metricsTotal <= 0) {
+      throw new Error("Published TikTok evidence requires at least one 24h metric.");
+    }
+  } else if (finalStatus === "approved") {
+    throw new Error("TikTok batch evidence uses finalStatus=scheduled before live; approved is not accepted for this flow.");
+  } else if (finalStatus === "scheduled") {
+    if (!metricoolApprovalUrlLooksValid(metricoolApprovalUrl)) {
+      throw new Error("Scheduled TikTok evidence requires a real Metricool HTTPS approval URL.");
+    }
+    if (publishedPostUrl || metricsTotal > 0) {
+      throw new Error("Scheduled TikTok evidence must not include public post URL or 24h metrics; use published after the TikTok is live.");
+    }
+  } else if (finalStatus && finalStatus !== "rejected") {
+    throw new Error("TikTok batch evidence finalStatus must be scheduled, published, rejected, or blank.");
+  }
+  const fallback: ClipperMetricoolApprovalSessionItem = {
+    id: queueItemId,
+    rank: Number(workbookRow.rank || 0),
+    accountId: firstString(workbookRow, ["accountId", "account_id"]),
+    accountName: firstString(workbookRow, ["accountName", "account_name"]),
+    platform: "tiktok",
+    metricoolBrandName: firstString(workbookRow, ["metricoolBrandName", "metricool_brand_name"]),
+    metricoolBlogId: firstString(workbookRow, ["metricoolBlogId", "metricool_blog_id"]) || null,
+    publishAt: firstString(workbookRow, ["publishAt", "publish_at"]),
+    sourcePath: firstString(workbookRow, ["sourcePath", "source_path"]) || null,
+    sourceFileName: firstString(workbookRow, ["sourceFileName", "source_file_name"]) || "",
+    hook: firstString(workbookRow, ["hook", "captionSeed", "caption_seed"]) || queueItemId,
+    captionSeed: firstString(workbookRow, ["captionSeed", "caption_seed"]) || queueItemId,
+    status: "ready_for_review",
+    reviewChecklist: [],
+    evidenceCaptureRow: "",
+    blockers: [],
+    nextStep: "Review this TikTok batch row in Metricool and capture evidence only after it is live.",
+  };
+  const nextRecord = metricoolApprovalEvidenceInputRecord(input, fallback);
+  if (metricoolApprovalEvidenceHasSecretSignal(nextRecord)) {
+    throw new Error("TikTok batch evidence row rejected because it looks like it contains a token, password, cookie or secret.");
+  }
+  const batchEvidenceCsvPath = path.join(METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR, `${batchId}-evidence-import.csv`);
+  const classification = finalStatus === "published"
+    ? "published"
+    : finalStatus === "scheduled"
+      ? "scheduled"
+      : finalStatus === "rejected"
+        ? "rejected"
+        : "not_started";
+  return {
+    accepted: true,
+    wouldWrite: false,
+    batchId,
+    batchEvidenceCsvPath,
+    metricoolQueueItemId: queueItemId,
+    classification,
+    nextAction: classification === "published"
+      ? "This row can be saved, then synced/import-reviewed after final operator review."
+      : classification === "scheduled"
+        ? "This row can be saved as Metricool scheduled. Add public TikTok URL and 24h metrics only after it is live."
+        : classification === "rejected"
+          ? "This row can be saved as rejected; replace or fix the clip before counting it."
+          : "This row is unchanged/not started.",
+    record: nextRecord,
+    fallback,
+  };
 }
 
 export async function recordClipperMetricoolAccountEvidence(userId = getSystemUserId()): Promise<{ metricoolAccountEvidence: ClipperMetricoolAccountEvidenceResult; status: ClipperStatus }> {
@@ -29993,6 +32979,116 @@ export async function recordClipperMetricoolAccountEvidence(userId = getSystemUs
       : "No se detectaron redes Metricool conectadas nuevas para registrar como evidencia.",
   };
   return { metricoolAccountEvidence, status: await getClipperStatus(userId) };
+}
+
+const METRICOOL_BRIDGE_EVIDENCE_TEMPLATE = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
+const metricoolBridgeUnsafePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
+const metricoolBridgeUnsafeParamPattern = /(?:^|[?&#;])(token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i;
+
+function parseClipperPlatformOptional(value: unknown): ClipperPlatform | null {
+  return value === "tiktok" || value === "instagram" || value === "youtube" ? value : null;
+}
+
+function metricoolBridgeString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function isMetricoolBridgeUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !metricoolBridgeUnsafePattern.test(url.hostname) && !metricoolBridgeUnsafeParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+async function readExistingAccountEvidenceStatus(accountId: string, platform: ClipperPlatform): Promise<ClipperAccountEvidenceItemStatus | null> {
+  try {
+    const parsed = JSON.parse(await readFile(accountEvidenceJsonPath(accountId, platform), "utf8")) as { status?: unknown };
+    return parsed.status === "verified" || parsed.status === "submitted" || parsed.status === "rejected" ? parsed.status : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function recordClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown } = {}, userId = getSystemUserId()): Promise<{ metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status: ClipperStatus }> {
+  await writeDefaultConfigIfMissing();
+  await ensureClipperDirs();
+  const raw = typeof input.raw === "string" ? input.raw.trim() : "";
+  const rows = raw ? parseCsvRecords(raw) : [];
+  const config = await readConfig();
+  const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const recorded: ClipperMetricoolBridgeEvidenceBatchResult["recorded"] = [];
+  const skipped: ClipperMetricoolBridgeEvidenceBatchResult["skipped"] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const accountId = metricoolBridgeString(row, ["account_id", "account"]);
+    const platformRaw = metricoolBridgeString(row, ["platform", "network"]);
+    const platform = parseClipperPlatformOptional(platformRaw);
+    const metricoolBrandName = metricoolBridgeString(row, ["metricool_brand_name", "brand", "brand_name"]);
+    const metricoolBlogId = metricoolBridgeString(row, ["metricool_blog_id", "blog_id", "profile_id"]) || null;
+    const profileUrl = metricoolBridgeString(row, ["profile_url", "url"]);
+    const proof = metricoolBridgeString(row, ["proof", "proof_url", "evidence"]);
+    const notesInput = metricoolBridgeString(row, ["notes", "operator_notes"]);
+    const joinedEvidence = [metricoolBrandName, metricoolBlogId || "", profileUrl, proof, notesInput].join(" ");
+    const account = accounts.find((item) => item.id === accountId);
+    const platformAccount = platform ? account?.platformAccounts.find((item) => item.platform === platform) : null;
+
+    if (!account) {
+      skipped.push({ row: rowNumber, accountId, platform: platformRaw, reason: "Unknown Clippers account_id." });
+      continue;
+    }
+    if (!platform || !platformAccount) {
+      skipped.push({ row: rowNumber, accountId, platform: platformRaw, reason: "Unsupported or unconfigured platform." });
+      continue;
+    }
+    if (!metricoolBrandName || !profileUrl || !proof || notesInput.length < 20) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Missing metricool_brand_name, profile_url, proof, or 20+ character notes." });
+      continue;
+    }
+    if (metricoolBridgeUnsafePattern.test(joinedEvidence) || metricoolBridgeUnsafeParamPattern.test(joinedEvidence)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Row contains placeholder, fake proof, or sensitive credential-like text." });
+      continue;
+    }
+    if (!isMetricoolBridgeUrl(profileUrl) || !isMetricoolBridgeUrl(proof)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "profile_url and proof must be real https URLs without token-like query params." });
+      continue;
+    }
+
+    const evidencePath = accountEvidenceJsonPath(account.id, platform);
+    const existingEvidenceStatus = await readExistingAccountEvidenceStatus(account.id, platform);
+    if (existingEvidenceStatus === "verified") {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Existing verified account evidence preserved; bridge batch cannot downgrade it." });
+      continue;
+    }
+    const notes = [
+      `Metricool manual bridge evidence for ${metricoolBrandName}${metricoolBlogId ? ` blogId ${metricoolBlogId}` : ""}.`,
+      `Profile URL: ${profileUrl}.`,
+      `Proof: ${proof}.`,
+      notesInput,
+      "This is Metricool bridge evidence only; account remains submitted until external account/security proof is reviewed.",
+    ].join(" ");
+    await recordClipperAccountEvidence({ accountId, platform, status: "submitted", notes }, userId);
+    recorded.push({ accountId, platform, metricoolBrandName, metricoolBlogId, evidencePath });
+  }
+
+  const metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult = {
+    generatedAt: new Date().toISOString(),
+    source: "metricool_manual_bridge",
+    template: METRICOOL_BRIDGE_EVIDENCE_TEMPLATE,
+    totals: { rows: rows.length, recorded: recorded.length, skipped: skipped.length },
+    recorded,
+    skipped,
+    nextStep: recorded.length
+      ? "Refresh account permission readiness, then keep remaining external proof rows blocked until real account/security evidence exists."
+      : `Paste rows using header: ${METRICOOL_BRIDGE_EVIDENCE_TEMPLATE}`,
+  };
+  return { metricoolBridgeEvidenceBatch, status: await getClipperStatus(userId) };
 }
 
 export async function prepareClipperPublisherConnectors(userId = getSystemUserId()): Promise<{ publisherConnectors: ClipperPublisherConnectorSummary; status: ClipperStatus }> {
@@ -30294,20 +33390,53 @@ export async function prepareClipperPublisherExecutionQueue(userId = getSystemUs
   return { publisherExecutionQueue, status: await getClipperStatus(userId) };
 }
 
+async function readProductionUrlVerificationGate(publicBaseUrl: string): Promise<Pick<ClipperProductionUrlVerificationSummary, "status" | "generatedAt" | "publicBaseUrl" | "totals" | "nextStep"> | null> {
+  try {
+    const raw = await readFile(PRODUCTION_URL_VERIFICATION_PATH, "utf8");
+    const parsed = JSON.parse(raw) as Partial<ClipperProductionUrlVerificationSummary>;
+    if (parsed.publicBaseUrl !== publicBaseUrl) return null;
+    if (!["not_run", "pass", "partial", "fail", "blocked"].includes(String(parsed.status))) return null;
+    const generatedAt = typeof parsed.generatedAt === "string" ? parsed.generatedAt : null;
+    const generatedMs = generatedAt ? Date.parse(generatedAt) : Number.NaN;
+    const maxAgeMs = 24 * 60 * 60 * 1_000;
+    const stalePass = parsed.status === "pass" && (!Number.isFinite(generatedMs) || Date.now() - generatedMs > maxAgeMs);
+    return {
+      status: stalePass ? "blocked" : parsed.status as ClipperProductionUrlVerificationSummary["status"],
+      generatedAt,
+      publicBaseUrl,
+      totals: parsed.totals || { endpoints: 0, pass: 0, fail: 0, skipped: 0 },
+      nextStep: stalePass
+        ? "Production URL Verification pass is stale; rerun Verify URL before registering final redirect URIs."
+        : typeof parsed.nextStep === "string" ? parsed.nextStep : "Run Production URL verification before registering final redirect URIs.",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSetupSummary> {
   const publicBaseUrl = getPublicBaseUrl();
   const productionUrlReady = isProductionPublicBaseUrl(publicBaseUrl);
   const productionUrlStabilityStatus = productionUrlStability(publicBaseUrl);
   const productionUrlStable = productionUrlStabilityStatus === "stable_public";
   const normalizedBaseUrl = publicBaseUrl.replace(/\/$/, "");
+  const verificationGate = productionUrlReady ? await readProductionUrlVerificationGate(publicBaseUrl) : null;
+  const productionUrlVerified = verificationGate?.status === "pass";
   const productionUrlNote = productionUrlReady
     ? productionUrlStable
-      ? "PUBLIC_BASE_URL usa HTTPS estable y no apunta a localhost; apta para registrar redirect URIs y app review."
+      ? productionUrlVerified
+        ? "PUBLIC_BASE_URL usa HTTPS estable y Production URL Verification paso; apta para registrar redirect URIs y app review."
+        : "PUBLIC_BASE_URL usa HTTPS estable, pero todavia necesita Production URL Verification en pass antes de registrar redirect URIs finales o app review."
       : "PUBLIC_BASE_URL usa HTTPS publico pero parece un tunel temporal; sirve para pruebas, no para app review/OAuth final hasta cambiarlo por un dominio/tunel estable."
     : "PUBLIC_BASE_URL debe ser una URL publica HTTPS, no localhost/127.0.0.1, antes de pedir app review o publicar en produccion.";
   const blockers = [
     ...(productionUrlReady ? [] : [productionUrlNote]),
     ...(productionUrlReady && !productionUrlStable ? ["PUBLIC_BASE_URL es un tunel temporal; usa dominio propio, Cloudflare named tunnel, deploy estable o dominio reservado antes de app review/OAuth final."] : []),
+    ...(productionUrlReady && productionUrlStable && !productionUrlVerified ? [
+      verificationGate
+        ? `Production URL Verification esta ${verificationGate.status}; ${verificationGate.nextStep}`
+        : "Production URL Verification todavia no ha pasado; corre Verify URL antes de registrar redirect URIs finales.",
+    ] : []),
   ];
   const platforms: ClipperProductionUrlSetupPlatform[] = PLATFORM_REQUIREMENTS.map((requirement) => ({
     platform: requirement.platform,
@@ -30369,9 +33498,11 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       verificationUrls: endpointChecks.slice(0, 4).map((check) => check.url),
       evidenceRecipeRow: ["developer_app", "", "tiktok", "draft", "", "<strategy: cloudflare/ngrok/deploy>", productionUrlReady ? normalizedBaseUrl : "<public HTTPS base URL>", "<public URL strategy + owner/operator note>"].map(csvEscape).join(","),
       evidenceNeeded: ["Chosen strategy, public HTTPS URL, and owner/operator note."],
-      doneCriteria: ["A stable HTTPS URL is selected and will not rotate during app review/OAuth."],
+      doneCriteria: ["A stable HTTPS URL is selected and will not rotate during app review/OAuth.", "Production URL Verification passes before app review/OAuth go-live."],
       nextStep: productionUrlStable
-        ? "Stable URL strategy already set."
+        ? productionUrlVerified
+          ? "Stable URL strategy already set and verified."
+          : "Stable URL strategy is set; run Production URL Verification and fix DNS/endpoints until it passes."
         : productionUrlReady
           ? "Public quick tunnel works for testing; replace it with Cloudflare named tunnel, reserved domain or managed deploy before app review."
           : "Pick Cloudflare Tunnel, reserved ngrok domain, or managed deploy from HTTPS Tunnel Plan.",
@@ -30399,7 +33530,6 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       rank: index + 3,
       id: `register-${platform.platform}-redirect-uri`,
       label: `Register ${platform.label} redirect URI`,
-      status: productionUrlReady ? "ready" : "blocked",
       owner: "Permission Ops",
       requiredValue: platform.redirectUri,
       copyValue: platform.redirectUri,
@@ -30419,13 +33549,19 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
       doneCriteria: [
         `Developer portal contains exact redirect URI ${platform.redirectUri}.`,
         "Developer App Evidence references this redirect URI and the public base URL.",
+        "Production URL Verification is pass for the public base URL.",
       ],
-      nextStep: productionUrlReady ? `Register ${platform.redirectUri} in ${platform.developerPortalUrl}.` : "Wait for PUBLIC_BASE_URL public HTTPS, then register this redirect URI.",
+      status: productionUrlReady && productionUrlVerified ? "ready" : "blocked",
+      nextStep: productionUrlReady
+        ? productionUrlVerified
+          ? `Register ${platform.redirectUri} in ${platform.developerPortalUrl}.`
+          : "Run Production URL Verification and fix DNS/endpoints before registering this final redirect URI."
+        : "Wait for PUBLIC_BASE_URL public HTTPS, then register this redirect URI.",
     })),
   ];
   const generatedAt = await stat(PRODUCTION_URL_SETUP_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   return {
-    status: !generatedAt ? "not_prepared" : productionUrlStable ? "ready" : productionUrlReady ? "partial" : "blocked",
+    status: !generatedAt ? "not_prepared" : productionUrlStable && productionUrlVerified ? "ready" : productionUrlReady ? "partial" : "blocked",
     generatedAt,
     manifestPath: PRODUCTION_URL_SETUP_PATH,
     markdownPath: PRODUCTION_URL_SETUP_MARKDOWN_PATH,
@@ -30443,7 +33579,9 @@ async function buildProductionUrlSetupSummary(): Promise<ClipperProductionUrlSet
     blockers,
     nextStep: productionUrlReady
       ? productionUrlStable
-        ? "Registrar estos redirect URIs en TikTok, Meta y Google; luego correr OAuth Go-Live."
+        ? productionUrlVerified
+          ? "Registrar estos redirect URIs en TikTok, Meta y Google; luego correr OAuth Go-Live."
+          : "Correr Production URL Verification y arreglar DNS/endpoints antes de registrar redirect URIs finales."
         : "Usar esta URL solo para pruebas; configurar un dominio/tunel estable antes de registrar redirect URIs finales."
       : "Configurar PUBLIC_BASE_URL con una URL publica HTTPS y volver a generar este setup.",
   };
@@ -30542,6 +33680,28 @@ function productionUrlFetchErrorMessage(error: unknown): string {
     return [error.message, code, syscall].filter(Boolean).join(": ");
   }
   return error.message;
+}
+
+function productionDnsLookupTimeoutMs(): number {
+  const raw = process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : 5_000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5_000;
+}
+
+async function lookupProductionDnsRecords(host: string): Promise<Array<{ address: string; family: number }>> {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      dns.lookup(host, { all: true }) as Promise<Array<{ address: string; family: number }>>,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`DNS lookup timed out after ${productionDnsLookupTimeoutMs()}ms`));
+        }, productionDnsLookupTimeoutMs());
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function productionUrlHost(publicBaseUrl: string): string | null {
@@ -30751,7 +33911,7 @@ async function buildProductionDnsDiagnostic(publicBaseUrl: string): Promise<Clip
     };
   }
   try {
-    const records = await dns.lookup(host, { all: true });
+    const records = await lookupProductionDnsRecords(host);
     return {
       host,
       rootDomain,
@@ -31202,9 +34362,15 @@ export async function prepareClipperProductionUrlSetup(userId = getSystemUserId(
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const generatedAt = new Date().toISOString();
+  const draft = await buildProductionUrlSetupSummary();
   const productionUrlSetup: ClipperProductionUrlSetupSummary = {
-    ...await buildProductionUrlSetupSummary(),
+    ...draft,
     generatedAt,
+    status: draft.status === "not_prepared"
+      ? draft.productionUrlStable && draft.blockers.length === 0
+        ? "ready"
+        : draft.productionUrlReady ? "partial" : "blocked"
+      : draft.status,
   };
   await writeFile(PRODUCTION_URL_SETUP_PATH, JSON.stringify(productionUrlSetup, null, 2));
   await writeFile(PRODUCTION_URL_SETUP_MARKDOWN_PATH, renderProductionUrlSetupMarkdown(productionUrlSetup));
@@ -32818,9 +35984,6 @@ function buildScheduledPosts(
           status = "blocked_connection";
           blocker = `Falta token OAuth cifrado para ${platform}.`;
           nextStep = "Conectar OAuth y completar app review antes de publicar.";
-        } else if (publishMode === "auto_after_connection") {
-          status = "scheduled";
-          nextStep = "Listo para publicar automaticamente en la ventana sugerida.";
         }
 
         return {
@@ -32895,7 +36058,7 @@ function buildAutomationRecommendations(
       : "La prioridad sigue siendo convertir sources/rights/conexiones en drafts publicables.",
     blockers.length > 0
       ? "No activar autopost hasta que blocked sea 0."
-      : "El siguiente ciclo puede probar auto_after_connection con volumen controlado.",
+      : "Mantener approval_required y revisar los items en Metricool antes de publicar.",
   ];
 }
 
@@ -32920,8 +36083,8 @@ async function buildAutomationSummary(): Promise<ClipperAutomationSummary> {
     nextRunHint: "Daily 08:30 local despues de revisar fuentes, permisos y tokens.",
     nextStep: lastRun
       ? lastRun.blockers.length > 0
-        ? "Resolver blockers antes de autopost."
-        : "Revisar ready_for_manual o activar auto_after_connection cuando sea apropiado."
+        ? "Resolver blockers antes de preparar la aprobacion Metricool."
+        : "Revisar ready_for_manual y mantener approval_required para Metricool."
       : "Ejecuta el ciclo diario para generar calendario y reporte operativo.",
   };
 }
@@ -34104,7 +37267,7 @@ async function buildLaunchCommandCenterSummary(input: {
     },
     {
       id: "metricool-approval-queue",
-      label: "Metricool Approval Queue",
+      label: "Metricool Review Queue",
       owner: "Publisher",
       status: input.metricoolExecutionQueue.status === "ready" ? "done" : input.metricoolExecutionQueue.status === "approval_required" ? "needs_action" : "blocked",
       evidence: `${input.metricoolExecutionQueue.totals.items} Metricool items; ${input.metricoolExecutionQueue.totals.queuedForApproval} approval; ${input.metricoolExecutionQueue.totals.blocked} blocked; ${input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets} source assets missing; real publish ${input.metricoolExecutionQueue.realPublishEnabled ? "on" : "off"}.`,
@@ -34417,7 +37580,7 @@ function enrichSourceBacklogBlockerAction(
     `${missingSourceAssets} Metricool source asset(s) faltantes tienen archivo en source-drop o sources con evidencia owned_or_permissioned.`,
     "Source Intake Batch no contiene placeholders para esos targets.",
     "Source Rights evidence pasa validacion concreta para cada target antes de renderizar o aprobar Metricool.",
-    "Metricool Approval Queue cambia a approval_required o ready sin source assets missing.",
+    "Metricool Review Queue cambia a approval_required o ready sin source assets missing.",
   ];
 
   return {
@@ -36637,6 +39800,13 @@ function sprintEvidence(values: Array<string | null | undefined>): string[] {
     .slice(0, 8);
 }
 
+async function replaceGeneratedTextFile(filePath: string, content: string): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, content);
+  await rm(filePath, { force: true });
+  await rename(tempPath, filePath);
+}
+
 function sprintPriorityRank(priority: Clipper100ClipsExecutionSprintPriority): number {
   if (priority === "critical") return 0;
   if (priority === "high") return 1;
@@ -36783,7 +39953,7 @@ function buildClipper100ClipsExecutionSprintSummary(input: {
       category: null,
       platform: item.platform,
       ownerAction: item.requestReadiness === "submitted"
-        ? `Monitor ${item.scope} review and import approval evidence.`
+        ? `Monitor ${item.scope} review and import permission evidence.`
         : `Request ${item.scope} in the platform developer portal.`,
       portalUrl: item.developerPortalUrl,
       artifactPath: input.permissionRequestPack.markdownPath,
@@ -37039,9 +40209,9 @@ export async function prepareClipper100ClipsExecutionSprint(userId = getSystemUs
     metricoolPublishing: statusBefore.metricoolPublishing,
     metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
   });
-  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_PATH, JSON.stringify(hundredClipsExecutionSprint, null, 2));
-  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_MARKDOWN_PATH, renderClipper100ClipsExecutionSprintMarkdown(hundredClipsExecutionSprint));
-  await writeFile(HUNDRED_CLIPS_EXECUTION_SPRINT_CSV_PATH, renderClipper100ClipsExecutionSprintCsv(hundredClipsExecutionSprint));
+  await replaceGeneratedTextFile(HUNDRED_CLIPS_EXECUTION_SPRINT_PATH, JSON.stringify(hundredClipsExecutionSprint, null, 2));
+  await replaceGeneratedTextFile(HUNDRED_CLIPS_EXECUTION_SPRINT_MARKDOWN_PATH, renderClipper100ClipsExecutionSprintMarkdown(hundredClipsExecutionSprint));
+  await replaceGeneratedTextFile(HUNDRED_CLIPS_EXECUTION_SPRINT_CSV_PATH, renderClipper100ClipsExecutionSprintCsv(hundredClipsExecutionSprint));
   return {
     hundredClipsExecutionSprint,
     externalAccountPermissionSprint: hundredClipsExecutionSprint,
@@ -37883,6 +41053,7 @@ async function buildDropzoneReadyPackSummary(input: {
   launchEvidenceDropDiagnostic: ClipperLaunchEvidenceDropDiagnosticSummary;
   sourceDropDiagnostic: ClipperSourceDropDiagnosticSummary;
   sourceSupplyDropKit: ClipperSourceSupplyDropKitSummary;
+  metricoolExecutionQueue?: ClipperMetricoolExecutionQueueSummary;
 }): Promise<ClipperDropzoneReadyPackSummary> {
   const generatedAt = await stat(DROPZONE_READY_PACK_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const missingById = new Map(input.localDropSync.missingInputs.map((item) => [item.id, item]));
@@ -37907,12 +41078,17 @@ async function buildDropzoneReadyPackSummary(input: {
     ...(input.sourceDropDiagnostic.totals.missingSourceAssets > 0 ? [`${input.sourceDropDiagnostic.totals.missingSourceAssets} rights-ready source assets missing for weekly coverage.`] : []),
   ];
   const sourceVideosMissingInput = missingById.get("source_videos");
+  const sourceSupplyReady = sourceManifestBlockers.length === 0
+    && input.sourceDropDiagnostic.totals.rightsReadyAssets >= input.sourceDropDiagnostic.totals.minimumWeeklySourceAssets;
   const sourceVideoBlockers = [
     ...sourceManifestBlockers,
-    ...(sourceManifestBlockers.length
-      ? []
-      : ["source assets still need a completed source-drop import with rights evidence."]),
+    ...(!sourceSupplyReady ? ["source assets still need a completed source-drop import with rights evidence."] : []),
   ];
+  const metricoolMvpBridgeActive = input.metricoolExecutionQueue?.status === "approval_required"
+    && (input.metricoolExecutionQueue.totals.queuedForApproval || 0) > 0
+    && (input.metricoolExecutionQueue.totals.readyToSend || 0) === 0
+    && !input.metricoolExecutionQueue.realPublishEnabled;
+  const directApiBacklogNote = "Metricool approval_required is the active publishing bridge; direct social API credentials/evidence stay optional backlog until direct autopublish is needed.";
 
   const items: ClipperDropzoneReadyPackItem[] = [
     {
@@ -37920,8 +41096,10 @@ async function buildDropzoneReadyPackSummary(input: {
       rank: 1,
       lane: "credentials",
       label: "Credential drop intake",
-      status: dropzoneStatusFromMissingInput(missingById.get("credentials"), input.credentialSetup.status === "partial"),
-      priority: "critical",
+      status: metricoolMvpBridgeActive
+        ? "ready"
+        : dropzoneStatusFromMissingInput(missingById.get("credentials"), input.credentialSetup.status === "partial"),
+      priority: metricoolMvpBridgeActive ? "medium" : "critical",
       dropDirs: input.credentialSetup.credentialDropDirs,
       acceptedFormats: ["KEY=value .env text", "Google OAuth client JSON", "Google refresh token JSON", "JSON with allowed env vars or key/value pairs"],
       expectedFiles: input.credentialSetup.credentialTransferKitItems.flatMap((item) => item.localDropFileNames),
@@ -37932,16 +41110,21 @@ async function buildDropzoneReadyPackSummary(input: {
       localActionUrl: "/api/clippers/import-credential-drop-files",
       actionLabel: "Import credential drop files",
       blockers: [
+        ...(metricoolMvpBridgeActive ? [] : [
         ...(credentialTemplateOnly ? ["Solo hay templates de credenciales; falta un archivo real sin .template/example/sample."] : []),
         ...(credentialPendingValues ? [`${input.credentialSetup.credentialDropDiagnostic.totals.pendingEnvVars} credential values pending in starter files.`] : []),
         ...credentialMissing.map((item) => `${item.label}: ${item.missingSuggestedEnvVars.join(", ")}`),
+        ]),
       ],
       unlocks: [
+        ...(metricoolMvpBridgeActive ? [directApiBacklogNote] : []),
         "Credential Doctor ready/partial",
         "OAuth connect URLs can be generated",
         "YouTube/Google Drive keys can be reused for Drive workspace and Shorts upload",
       ],
-      nextStep: credentialMissing.length
+      nextStep: metricoolMvpBridgeActive
+        ? "Metricool bridge is active; skip direct API credential drops for this MVP and keep publication approval-only."
+        : credentialMissing.length
         ? credentialTemplateOnly || credentialPendingValues
           ? input.credentialSetup.credentialDropDiagnostic.nextStep
           : "Place real credential files in credentials/ or secrets/, then Import drop files, Reload keys and run Credential Doctor."
@@ -37952,8 +41135,10 @@ async function buildDropzoneReadyPackSummary(input: {
       rank: 2,
       lane: "launch_evidence",
       label: "Launch evidence drop intake",
-      status: dropzoneStatusFromMissingInput(missingById.get("launch_evidence"), launchEvidenceRows.length > 0),
-      priority: "critical",
+      status: metricoolMvpBridgeActive
+        ? "ready"
+        : dropzoneStatusFromMissingInput(missingById.get("launch_evidence"), launchEvidenceRows.length > 0),
+      priority: metricoolMvpBridgeActive ? "medium" : "critical",
       dropDirs: [LAUNCH_EVIDENCE_DROP_DIR],
       acceptedFormats: ["CSV with launch evidence header", "JSON evidence batch"],
       expectedFiles: [
@@ -37970,17 +41155,22 @@ async function buildDropzoneReadyPackSummary(input: {
       localActionUrl: "/api/clippers/import-launch-evidence-drop-files",
       actionLabel: "Import launch evidence drop",
       blockers: [
+        ...(metricoolMvpBridgeActive ? [] : [
         ...(launchEvidenceDropPendingValues ? [`${input.launchEvidenceDropDiagnostic.totals.pendingRows} launch evidence rows still have blanks/placeholders.`] : []),
         ...(launchEvidenceDropRejected ? [`${input.launchEvidenceDropDiagnostic.totals.rejectedRows + input.launchEvidenceDropDiagnostic.totals.fileErrors} launch evidence rows/files need review.`] : []),
         ...(missingById.get("launch_evidence")?.status === "ready" ? [] : ["No completed launch evidence batch has been imported yet."]),
+        ]),
       ],
       unlocks: [
+        ...(metricoolMvpBridgeActive ? [directApiBacklogNote] : []),
         "Account evidence",
         "Developer app evidence",
         "Permission tracker",
         "Owner Connect done criteria",
       ],
-      nextStep: launchEvidenceDropPendingValues || launchEvidenceDropRejected
+      nextStep: metricoolMvpBridgeActive
+        ? "Metricool MVP does not require direct API launch evidence before approval review; capture Metricool/live post evidence after posts are real."
+        : launchEvidenceDropPendingValues || launchEvidenceDropRejected
         ? input.launchEvidenceDropDiagnostic.nextStep
         : "Use Owner Connect Pack evidence rows, replace blanks/placeholders with real proof, then import through Launch Evidence Batch.",
     },
@@ -37989,7 +41179,7 @@ async function buildDropzoneReadyPackSummary(input: {
       rank: 3,
       lane: "source_videos",
       label: "Rights-cleared source video drop intake",
-      status: dropzoneStatusFromMissingInput(sourceVideosMissingInput, input.sourceSupplyDropKit.totals.rightsReadyAssets > 0),
+      status: sourceSupplyReady ? "ready" : dropzoneStatusFromMissingInput(sourceVideosMissingInput, input.sourceSupplyDropKit.totals.rightsReadyAssets > 0),
       priority: "high",
       dropDirs: sourceDropDirs.length ? sourceDropDirs : [SOURCE_DROP_DIR],
       acceptedFormats: ["mp4", "mov", "m4v", "webm", "CSV/JSON source intake rows"],
@@ -38042,7 +41232,9 @@ async function buildDropzoneReadyPackSummary(input: {
       sourceSupplyDropKitPath: input.sourceSupplyDropKit.markdownPath,
     },
     totals,
-    nextStep: items.find((item) => item.status === "missing")?.nextStep
+    nextStep: metricoolMvpBridgeActive && items.every((item) => item.status === "ready")
+      ? "Metricool MVP review lane is ready; open the 100 schedule run and capture live evidence only after posts are real."
+      : items.find((item) => item.status === "missing")?.nextStep
       || items.find((item) => item.status === "partial")?.nextStep
       || "All dropzones are ready; run Local sync and Prep sweep before OAuth/publishing.",
   };
@@ -38144,6 +41336,7 @@ export async function prepareClipperDropzoneReadyPack(userId = getSystemUserId()
     launchEvidenceDropDiagnostic: statusBefore.launchEvidenceDropDiagnostic,
     sourceDropDiagnostic: statusBefore.sourceDropDiagnostic,
     sourceSupplyDropKit: statusBefore.sourceSupplyDropKit,
+    metricoolExecutionQueue: statusBefore.metricoolExecutionQueue,
   });
   const totals = draftSummary.totals;
   const dropzoneReadyPack: ClipperDropzoneReadyPackSummary = {
@@ -38715,16 +41908,16 @@ function buildRobertConnectionTunnel(input: {
   const blockedGates = gates.filter((gate) => gate.status === "blocked").length;
   const progressUnits = gates.reduce((sum, gate) => sum + Math.min(gate.done, gate.total), 0);
   const totalUnits = gates.reduce((sum, gate) => sum + Math.max(gate.total, 1), 0);
-  const nextGate = gates.find((gate) => gate.status === "ready_to_execute")
-    || gates.find((gate) => gate.status === "blocked")
+  const nextGate = gates.find((gate) => gate.status === "blocked")
+    || gates.find((gate) => gate.status === "ready_to_execute")
     || gates.find((gate) => gate.status === "waiting")
     || null;
   const status: ClipperRobertConnectNowHandoff["connectionTunnel"]["status"] = doneGates === gates.length
     ? "done"
-    : readyGates > 0
-      ? "ready_to_execute"
-      : blockedGates > 0
-        ? "blocked"
+    : blockedGates > 0
+      ? "blocked"
+      : readyGates > 0
+        ? "ready_to_execute"
         : "waiting";
 
   return {
@@ -38736,6 +41929,119 @@ function buildRobertConnectionTunnel(input: {
     gates,
     nextGate,
     nextStep: nextGate?.nextStep || "All connection gates are complete; keep running daily reports and optimizer.",
+  };
+}
+
+function buildRobertMetricoolMvpTunnel(input: {
+  goLiveCompletionAudit: ClipperGoLiveCompletionAuditSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+}): ClipperRobertConnectNowHandoff["metricoolMvpTunnel"] {
+  const run = input.metricool100ApprovalRun;
+  const target = Math.max(run.approvalQueueTarget || run.totals.metricoolQueuedForApproval || input.metricoolApprovalSession.totals.readyForReview || 100, 1);
+  const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady);
+  const queued = run.totals.metricoolQueuedForApproval || input.metricoolApprovalSession.totals.readyForReview;
+  const readyForReview = run.totals.quickRunItems || input.metricoolApprovalSession.totals.readyForReview;
+  const sourceReady = run.totals.sourceUploadReady || 0;
+  const sourceMissing = run.totals.sourceUploadMissing || 0;
+  const blocked = run.totals.metricoolBlocked || 0;
+  const evidenceRows = run.totals.closeoutEvidenceRows || 0;
+  const gateStatus = (done: number, total: number, blockers = 0): "blocked" | "ready_to_execute" | "waiting" | "done" => {
+    if (blockers > 0) return "blocked";
+    if (done >= total && total > 0) return "done";
+    if (done > 0) return "ready_to_execute";
+    return "waiting";
+  };
+  const gates: ClipperRobertConnectNowHandoff["metricoolMvpTunnel"]["gates"] = [
+    {
+      id: "metricool-mvp-bridge",
+      rank: 1,
+      label: "Metricool MVP bridge",
+      status: metricoolMvpReady ? "done" : "blocked",
+      done: metricoolMvpReady ? 1 : 0,
+      total: 1,
+      blockers: metricoolMvpReady ? 0 : 1,
+      actionLabel: "Review Metricool launch pack",
+      actionUrl: "/api/clippers/prepare-metricool-mvp-launch-pack",
+      artifactPath: run.artifacts.metricoolPublishingPath,
+      nextStep: metricoolMvpReady ? "Metricool is the active MVP bridge; direct social APIs are backlog." : input.goLiveCompletionAudit.nextStep,
+      unlocks: ["Metricool 100 schedule run", "Approval-required scheduling"],
+    },
+    {
+      id: "metricool-source-files",
+      rank: 2,
+      label: "Source files ready",
+      status: gateStatus(sourceReady, target, sourceMissing),
+      done: Math.min(sourceReady, target),
+      total: target,
+      blockers: sourceMissing,
+      actionLabel: "Open source upload pack",
+      actionUrl: "/api/clippers/prepare-metricool-source-upload-pack",
+      artifactPath: run.artifacts.metricoolSourceUploadPackPath,
+      nextStep: sourceMissing > 0 ? `Replace or upload ${sourceMissing} missing source file(s).` : "All source files for the Metricool run are ready.",
+      unlocks: ["Operator upload/review", "Metricool review queue"],
+    },
+    {
+      id: "metricool-approval-queue",
+      rank: 3,
+      label: "100 Metricool review queue",
+      status: gateStatus(queued, target, blocked),
+      done: Math.min(queued, target),
+      total: target,
+      blockers: blocked,
+      actionLabel: "Prep 100 approval",
+      actionUrl: "/api/clippers/prepare-metricool-100-approval-run",
+      artifactPath: run.markdownPath,
+      nextStep: blocked > 0 ? `Resolve ${blocked} blocked Metricool queue item(s).` : `Metricool has ${queued} approval item(s) queued for operator review.`,
+      unlocks: ["Metricool operator run sheet", "Evidence capture CSV"],
+    },
+    {
+      id: "metricool-operator-review",
+      rank: 4,
+      label: "Operator review in Metricool",
+      status: readyForReview > 0 ? "ready_to_execute" : "waiting",
+      done: 0,
+      total: Math.max(readyForReview, 1),
+      blockers: 0,
+      actionLabel: "Open Metricool",
+      actionUrl: "https://app.metricool.com/",
+      artifactPath: run.artifacts.metricoolOperatorRunSheetCsvPath,
+      nextStep: `Robert reviews/schedules ${readyForReview} item(s) in Metricool; queued is not published.`,
+      unlocks: ["Live URL evidence", "24h metrics import"],
+    },
+    {
+      id: "metricool-live-evidence",
+      rank: 5,
+      label: "Live URL and 24h metrics",
+      status: "waiting",
+      done: 0,
+      total: Math.max(evidenceRows, target),
+      blockers: 0,
+      actionLabel: "Fill active evidence CSV",
+      actionUrl: null,
+      artifactPath: run.artifacts.evidenceImportCsvPath,
+      nextStep: "After posts are live, paste real public URLs and 24h metrics into the active Metricool evidence CSV.",
+      unlocks: ["Analytics import", "Optimizer reports"],
+    },
+  ];
+  const doneGates = gates.filter((gate) => gate.status === "done").length;
+  const readyGates = gates.filter((gate) => gate.status === "ready_to_execute").length;
+  const blockedGates = gates.filter((gate) => gate.status === "blocked").length;
+  const progressUnits = gates.reduce((sum, gate) => sum + Math.min(gate.done, gate.total), 0);
+  const totalUnits = gates.reduce((sum, gate) => sum + Math.max(gate.total, 1), 0);
+  const nextGate = gates.find((gate) => gate.status === "blocked")
+    || gates.find((gate) => gate.status === "ready_to_execute")
+    || gates.find((gate) => gate.status === "waiting")
+    || null;
+  return {
+    status: doneGates === gates.length ? "done" : blockedGates > 0 ? "blocked" : readyGates > 0 ? "ready_to_execute" : "waiting",
+    progress: Math.round((progressUnits / Math.max(totalUnits, 1)) * 100),
+    blockedGates,
+    readyGates,
+    doneGates,
+    gates,
+    nextGate: nextGate?.label || null,
+    nextStep: nextGate?.nextStep || "Metricool MVP run is complete; import metrics and keep optimizing.",
   };
 }
 
@@ -39166,6 +42472,8 @@ async function buildRobertConnectNowHandoff(input: {
   tokenVault: ClipperTokenVaultSummary;
   publisherConnectors: ClipperPublisherConnectorSummary;
   productionQueue: ClipperProductionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
 }): Promise<ClipperRobertConnectNowHandoff> {
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
@@ -39193,6 +42501,11 @@ async function buildRobertConnectNowHandoff(input: {
     accountCloseout,
     evidenceCloseout,
     goLiveCompletionAudit: input.goLiveCompletionAudit,
+  });
+  const metricoolMvpTunnel = buildRobertMetricoolMvpTunnel({
+    goLiveCompletionAudit: input.goLiveCompletionAudit,
+    metricoolApprovalSession: input.metricoolApprovalSession,
+    metricool100ApprovalRun: input.metricool100ApprovalRun,
   });
   const ownershipSplit = buildRobertOwnershipSplit({
     ownerConnectPack: input.ownerConnectPack,
@@ -39253,23 +42566,90 @@ async function buildRobertConnectNowHandoff(input: {
       "# Full credential reference",
       credentialReferenceTemplate.trim(),
     ].filter(Boolean).join("\n\n");
-
-  return {
-    markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
-    focusRun: input.externalExecutionSession.focusRun,
-    evidenceCloseout,
-    credentialCloseout,
-    sourceCloseout,
-    accountCloseout,
-    officialPermissionCloseout,
-    connectionTunnel,
-    ownershipSplit,
-    weeklyRunway,
-    platformLaunchBridge,
-    externalPortalLauncher,
-    intakeConsole,
-    postConnectActivationBridge,
-    recommendedOrder: [
+  const pendingCredentialEnvVars = extractPendingEnvVarsFromTemplate(credentialTemplate).filter((envVar) => envVar !== "PUBLIC_BASE_URL");
+  const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady);
+  const platformLaunchBridgeForHandoff = metricoolMvpReady
+    ? platformLaunchBridge.map((platform) => ({
+      ...platform,
+      status: "waiting" as const,
+      missingEnvVars: [],
+      scopes: [],
+      evidenceRows: [],
+      portalUrls: [],
+      blockers: ["Metricool MVP is active; direct platform API credentials and OAuth are backlog, not required for this 100-clip Metricool run."],
+      doneCriteria: ["Revisit direct API setup only after Metricool approval workflow proves volume and account quality."],
+      nextStep: "Use Metricool operator handoff first; defer direct API credentials/OAuth until full direct automation is explicitly requested.",
+    }))
+    : platformLaunchBridge;
+  const directApiBacklogEnvVars: string[] = [];
+  const activePendingCredentialEnvVars = metricoolMvpReady ? [] : pendingCredentialEnvVars;
+  const credentialCloseoutForHandoff = metricoolMvpReady
+    ? {
+      ...credentialCloseout,
+      importReady: false,
+      pendingEnvVars: [],
+      acceptedEnvVars: [],
+      rejectedEnvVars: [],
+      files: [],
+      driveCredentialBridge: [],
+      runtimeEnv: {
+        ...credentialCloseout.runtimeEnv,
+        checkedEnvVars: [],
+        configuredEnvVars: [],
+        missingEnvVars: [],
+      },
+      totals: {
+        ...credentialCloseout.totals,
+        files: 0,
+        pendingEnvVars: 0,
+        acceptedEnvVars: 0,
+        rejectedEnvVars: 0,
+        dropCandidates: 0,
+        importEligible: 0,
+      },
+      nextStep: "Metricool bridge is active; direct API credential drops are backlog for full automation.",
+    }
+    : credentialCloseout;
+  const accountCloseoutForHandoff = metricoolMvpReady
+    ? {
+      ...accountCloseout,
+      totals: {
+        ...accountCloseout.totals,
+        items: accountCloseout.accountProofBridge.length,
+        readyToExecute: accountCloseout.accountProofBridge.filter((item) => item.status === "ready_to_execute").length,
+        blocked: accountCloseout.accountProofBridge.filter((item) => item.status === "blocked").length,
+        waiting: accountCloseout.accountProofBridge.filter((item) => item.status === "waiting").length,
+        done: accountCloseout.accountProofBridge.filter((item) => item.status === "done").length,
+        portalUrls: accountCloseout.portalUrls.filter((item) => item.lane === "account").length,
+        evidenceRows: accountCloseout.accountProofBridge.filter((item) => item.evidenceRow).length,
+        accounts: accountCloseout.accountProofBridge.length,
+        developerApps: 0,
+        permissions: 0,
+        oauth: 0,
+        officialRechecks: 0,
+      },
+      portalUrls: accountCloseout.portalUrls.filter((item) => item.lane === "account"),
+      evidenceRows: accountCloseout.accountProofBridge.map((item) => item.evidenceRow).filter(Boolean),
+      appPermissionBridge: [],
+      nextItems: accountCloseout.nextItems.filter((item) => item.lane === "account"),
+      nextStep: accountCloseout.accountProofBridge.length
+        ? "Complete remaining account/profile proof, then use Metricool for approval-only scheduling."
+        : "Account proof is covered for the active Metricool MVP.",
+    }
+    : accountCloseout;
+  const credentialMvpNote = metricoolMvpReady
+    ? "Metricool MVP is active: direct TikTok/Meta/Google API credentials are backlog for full automation and are not required to review/schedule the current 100-clip Metricool run."
+    : "Direct platform API credentials are still required before full direct autopublish/OAuth can be completed.";
+  const recommendedOrder = metricoolMvpReady
+    ? [
+      "Open Metricool and review the 100 approval_required items for SPORT and memes.",
+      "Keep realPublishEnabled=false; queued/scheduled rows are not published counts.",
+      "After posts are live, fill the active Metricool evidence CSV with real post URLs and 24h metrics.",
+      "Import Metricool published evidence and refresh analytics/reporting.",
+      "Treat TikTok/Meta/Google direct API credentials, developer apps, scopes and OAuth as full-automation backlog, not as blockers for this Metricool MVP.",
+      "Continue creating/verifying external accounts and permissions only when you want to expand beyond the current Metricool-ready TikTok lanes.",
+    ]
+    : [
       "Fill real credential values in the credential starter files, then import credential drop files.",
       "Create or verify each external TikTok, Instagram and YouTube account with the configured handles.",
       "Create or complete developer apps in TikTok, Meta and Google Cloud.",
@@ -39280,14 +42660,65 @@ async function buildRobertConnectNowHandoff(input: {
       "Upload rights-cleared source videos plus manifest proof into the source-drop folders.",
       "Run Prep Sweep and Completion Audit; continue until blocked is 0.",
       "Connect OAuth for each platform/account, then enable publishing only after the audit is ready.",
-    ],
-    pendingCredentialEnvVars: extractPendingEnvVarsFromTemplate(credentialTemplate).filter((envVar) => envVar !== "PUBLIC_BASE_URL"),
-    credentialTemplate: connectNowCredentialTemplate,
-    credentialDropDirs: credentialDrop?.dropDirs.length ? credentialDrop.dropDirs : [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
-    credentialCandidateFiles: credentialDrop?.expectedFiles || [],
+    ];
+  const focusRunForHandoff = metricoolMvpReady
+    ? buildMetricoolMvpFocusRun(input.externalExecutionSession.focusRun)
+    : input.externalExecutionSession.focusRun;
+  const connectNowPortalUrls = metricoolMvpReady
+    ? [
+      ...accounts.flatMap((account) => account.platformAccounts
+        .filter((platformAccount) => platformAccount.platform !== "youtube")
+        .map((platformAccount) => ({
+          label: `Crear/verificar ${platformAccount.handle} en ${platformAccount.platform}`,
+          url: PLATFORM_REQUIREMENTS.find((requirement) => requirement.platform === platformAccount.platform)?.accountCreationUrl || "",
+        }))),
+      { label: "Metricool", url: "https://app.metricool.com/" },
+    ].filter((item) => item.url).slice(0, 12)
+    : Array.from(portalUrls.values()).slice(0, 30);
+  const connectNowPublicUrls = metricoolMvpReady
+    ? [
+      { label: "PUBLIC_BASE_URL", url: publicBaseUrl },
+      { label: "Privacy Policy", url: `${publicBaseUrl}/clippers/legal/privacy` },
+      { label: "Terms of Service", url: `${publicBaseUrl}/clippers/legal/terms` },
+    ]
+    : [
+      { label: "PUBLIC_BASE_URL", url: publicBaseUrl },
+      { label: "Privacy Policy", url: `${publicBaseUrl}/clippers/legal/privacy` },
+      { label: "Terms of Service", url: `${publicBaseUrl}/clippers/legal/terms` },
+      { label: "App Review Demo", url: `${publicBaseUrl}/clippers/review-demo` },
+      { label: "TikTok OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/tiktok/callback` },
+      { label: "Instagram OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/instagram/callback` },
+      { label: "YouTube OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/youtube/callback` },
+    ];
+
+  return {
+    markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
+    launchMode: metricoolMvpReady ? "metricool_mvp" : "direct_api_full",
+    credentialMode: metricoolMvpReady ? "metricool_not_required" : "direct_api_required",
+    focusRun: focusRunForHandoff,
+    evidenceCloseout,
+    credentialCloseout: credentialCloseoutForHandoff,
+    sourceCloseout,
+    accountCloseout: accountCloseoutForHandoff,
+    officialPermissionCloseout,
+    connectionTunnel,
+    metricoolMvpTunnel,
+    ownershipSplit,
+    weeklyRunway,
+    platformLaunchBridge: platformLaunchBridgeForHandoff,
+    externalPortalLauncher,
+    intakeConsole,
+    postConnectActivationBridge,
+    recommendedOrder,
+    pendingCredentialEnvVars: activePendingCredentialEnvVars,
+    directApiBacklogEnvVars,
+    credentialMvpNote,
+    credentialTemplate: metricoolMvpReady ? "" : connectNowCredentialTemplate,
+    credentialDropDirs: metricoolMvpReady ? [] : credentialDrop?.dropDirs.length ? credentialDrop.dropDirs : [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
+    credentialCandidateFiles: metricoolMvpReady ? [] : credentialDrop?.expectedFiles || [],
     evidenceTemplatePath: LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH,
     evidenceImportPath: OWNER_CONNECT_EVIDENCE_DROP_PATH,
-    launchEvidenceTemplate: launchEvidenceDrop?.copyReadyTemplate || "",
+    launchEvidenceTemplate: metricoolMvpReady ? "" : launchEvidenceDrop?.copyReadyTemplate || "",
     sourceDropDirs: sourceVideosDrop?.dropDirs.length ? sourceVideosDrop.dropDirs : [path.join(SOURCE_DROP_DIR, "sports"), path.join(SOURCE_DROP_DIR, "memes"), path.join(SOURCE_DROP_DIR, "streamers")],
     sourceIntakeTemplate: input.sourceSupplyDropKit.intakeBatchTemplate || sourceVideosDrop?.copyReadyTemplate || "",
     sourceAssetsRequired: sourceVideosDrop?.expectedFiles.length || input.sourceSupplyDropKit.totals.items || 0,
@@ -39297,16 +42728,8 @@ async function buildRobertConnectNowHandoff(input: {
       platform: platformAccount.platform,
       handle: platformAccount.handle,
     }))),
-    portalUrls: Array.from(portalUrls.values()).slice(0, 30),
-    publicUrls: [
-      { label: "PUBLIC_BASE_URL", url: publicBaseUrl },
-      { label: "Privacy Policy", url: `${publicBaseUrl}/clippers/legal/privacy` },
-      { label: "Terms of Service", url: `${publicBaseUrl}/clippers/legal/terms` },
-      { label: "App Review Demo", url: `${publicBaseUrl}/clippers/review-demo` },
-      { label: "TikTok OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/tiktok/callback` },
-      { label: "Instagram OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/instagram/callback` },
-      { label: "YouTube OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/youtube/callback` },
-    ],
+    portalUrls: connectNowPortalUrls,
+    publicUrls: connectNowPublicUrls,
     blockers: [
       credentialDrop ? { label: credentialDrop.label, count: credentialDrop.blockers.length, nextStep: credentialDrop.nextStep } : null,
       launchEvidenceDrop ? { label: launchEvidenceDrop.label, count: launchEvidenceDrop.blockers.length, nextStep: launchEvidenceDrop.nextStep } : null,
@@ -39335,10 +42758,11 @@ async function buildRobertNextActionsSummary(input: {
   publisherConnectors: ClipperPublisherConnectorSummary;
   productionQueue: ClipperProductionQueueSummary;
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+  metricool100ApprovalRun: ClipperMetricool100ApprovalRunSummary;
 }): Promise<ClipperRobertNextActionsSummary> {
   const generatedAt = await stat(ROBERT_NEXT_ACTIONS_PATH).then((file) => file.mtime.toISOString()).catch(() => null);
   const dropItems = input.dropzoneReadyPack.items
-    .filter((item) => item.status !== "ready" || Boolean(item.sourceArtifactPath?.endsWith("-repair-worksheet.csv")))
+    .filter((item) => item.status !== "ready")
     .map<ClipperRobertNextActionItem>((item, index) => ({
       id: `dropzone-${item.id}`,
       rank: index + 1,
@@ -39485,6 +42909,11 @@ async function buildRobertNextActionsSummary(input: {
   const externalCloseout = input.externalExecutionSession.closeoutRun;
   const externalCloseoutPending = externalCloseout.items.length > 0 || externalCloseout.totals.proofFilesNeedRealEvidence > 0;
   const externalCloseoutNextItem = externalCloseout.items[0] || externalCloseout.nextItems[0] || null;
+  const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady)
+    && input.metricoolApprovalSession.status === "ready_for_operator"
+    && input.metricoolApprovalSession.totals.readyForReview > 0
+    && input.metricoolApprovalSession.approvalRequired
+    && !input.metricoolApprovalSession.realPublishEnabled;
   const externalCloseoutPriorityItems: ClipperRobertNextActionItem[] = externalCloseoutPending
     ? externalCloseoutNextItem ? [{
       id: `external-closeout-${externalCloseoutNextItem.id}`,
@@ -39492,7 +42921,7 @@ async function buildRobertNextActionsSummary(input: {
       lane: "external_portal",
       label: `External closeout: ${externalCloseoutNextItem.platform || "platform"} ${externalCloseoutNextItem.lane || "evidence"}`,
       status: "ready_to_execute",
-      priority: "critical",
+      priority: metricoolMvpReady ? "high" : "critical",
       estimatedMinutes: externalCloseoutNextItem.lane === "account" ? 12 : externalCloseoutNextItem.lane === "permission" ? 20 : 18,
       platform: ["tiktok", "instagram", "youtube"].includes(externalCloseoutNextItem.platform)
         ? externalCloseoutNextItem.platform as ClipperPlatform
@@ -39524,7 +42953,7 @@ async function buildRobertNextActionsSummary(input: {
       lane: "evidence",
       label: "External closeout proof evidence",
       status: "ready_to_execute",
-      priority: "critical",
+      priority: metricoolMvpReady ? "high" : "critical",
       estimatedMinutes: 20,
       platform: "mixed",
       actionUrl: "/api/clippers/run-external-closeout-pack",
@@ -39550,27 +42979,39 @@ async function buildRobertNextActionsSummary(input: {
       nextStep: externalCloseout.nextStep,
     }]
     : [];
+  const metricool100RunPrepared = input.metricool100ApprovalRun.status === "ready_for_operator";
+  const metricoolOperatorItemCount = metricool100RunPrepared
+    ? input.metricool100ApprovalRun.totals.metricoolQueuedForApproval
+    : input.metricoolApprovalSession.totals.readyForReview;
   const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
-    && input.metricoolApprovalSession.totals.readyForReview > 0
+    && metricoolOperatorItemCount > 0
     ? [{
-      id: "metricool-approval-session",
+      id: metricool100RunPrepared ? "metricool-100-operator-handoff" : "metricool-approval-session",
       rank: 0,
       lane: "external_portal",
-      label: "Review Metricool approval session",
+      label: metricool100RunPrepared ? "Process Metricool 100 batch 01" : "Review Metricool review session",
       status: "ready_to_execute",
-      priority: externalCloseoutPending ? "high" : "critical",
-      estimatedMinutes: Math.max(15, Math.min(90, input.metricoolApprovalSession.totals.readyForReview * 4)),
+      priority: "critical",
+      estimatedMinutes: Math.max(15, Math.min(90, metricoolOperatorItemCount * 4)),
       platform: "mixed",
-      actionUrl: "/api/clippers/prepare-metricool-approval-session",
-      artifactPath: input.metricoolApprovalSession.markdownPath,
+      actionUrl: metricool100RunPrepared ? "/api/clippers/prepare-metricool-100-operator-handoff" : "/api/clippers/prepare-metricool-approval-session",
+      artifactPath: metricool100RunPrepared
+        ? METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH
+        : input.metricoolApprovalSession.markdownPath,
       portalUrl: "https://app.metricool.com/",
       dropDirs: [],
       evidenceRows: input.metricoolApprovalSession.items.slice(0, 5).map((item) => item.evidenceCaptureRow),
       operatorSteps: [
+        metricool100RunPrepared
+          ? `Open the operator handoff: ${METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH}.`
+          : `Open the review session: ${input.metricoolApprovalSession.markdownPath}.`,
+        metricool100RunPrepared
+          ? `Start with metricool-batch-01 using: ${path.join(METRICOOL_100_BATCH_WORKBOOKS_DIR, "metricool-batch-01-workbook.csv")}.`
+          : `Use the approval CSV: ${input.metricoolApprovalSession.csvPath}.`,
         "Open Metricool and switch to the listed SPORT or memes brand before reviewing each row.",
-        "Approve/schedule only items marked ready_for_review in the Metricool Approval Session.",
+        "Schedule only items marked ready_for_review in the Metricool review session.",
         "Do not mark anything published until Metricool or the platform shows a real live post URL.",
-        `After posting, fill ${input.metricoolApprovalSession.evidenceImportCsvPath} with real Metricool/post URLs and 24h metrics.`,
+        `After posting, fill ${(metricool100RunPrepared ? input.metricool100ApprovalRun.artifacts.evidenceImportCsvPath : input.metricoolApprovalSession.evidenceImportCsvPath)} with real Metricool/post URLs and 24h metrics.`,
         "Refresh Analytics Reporting and Robert Next Actions after importing real metrics.",
       ],
       blockers: [
@@ -39579,19 +43020,62 @@ async function buildRobertNextActionsSummary(input: {
       ],
       doneCriteria: [
         "Every ready_for_review item was reviewed in Metricool by the operator.",
-        "Approved/scheduled/live rows have real Metricool or platform URLs captured.",
+        "Scheduled/live rows have real Metricool or platform URLs captured.",
         "Evidence import CSV is filled without tokens, cookies, passwords or private screenshots.",
       ],
-      nextStep: input.metricoolApprovalSession.nextStep,
+      nextStep: metricool100RunPrepared
+        ? `Open the Metricool 100 operator handoff, process metricool-batch-01 only, and leave evidence blank until public URLs and 24h metrics exist.`
+        : input.metricoolApprovalSession.nextStep,
     }]
     : [];
 
+  const isDirectSocialApiBacklogAction = (item: ClipperRobertNextActionItem): boolean => {
+    if (item.id === "metricool-100-approval-run" || item.id === "metricool-100-operator-handoff") return false;
+    if (item.id === "metricool-approval-session") return false;
+    if (item.id === "dropzone-credentials") return false;
+    const text = `${item.id} ${item.label} ${item.nextStep} ${item.operatorSteps.join(" ")}`.toLowerCase();
+    return (
+      item.id === "launch-evidence-fixpack" ||
+      text.includes("launch evidence fix pack") ||
+      text.includes("developer_app") ||
+      text.includes("developer app") ||
+      text.includes("app review") ||
+      text.includes("oauth") ||
+      text.includes("graph api") ||
+      text.includes("content api") ||
+      text.includes("direct api") ||
+      text.includes("permission request") ||
+      text.includes("permissions approved") ||
+      text.includes("scope")
+    );
+  };
+  const priorityCandidates = [
+    ...(metricoolMvpReady ? metricoolApprovalItems : externalCloseoutPriorityItems),
+    ...(metricoolMvpReady ? externalCloseoutPriorityItems : metricoolApprovalItems),
+    ...dropItems,
+    ...ownerItems,
+    ...auditItems,
+    ...sourceItems,
+    ...launchEvidenceFixItems,
+  ].filter((item) => !metricoolMvpReady || !isDirectSocialApiBacklogAction(item));
+
   const deduped = new Map<string, ClipperRobertNextActionItem>();
-  [...externalCloseoutPriorityItems, ...metricoolApprovalItems, ...dropItems, ...ownerItems, ...auditItems, ...sourceItems, ...launchEvidenceFixItems].forEach((item) => {
+  priorityCandidates.forEach((item) => {
     const key = `${item.lane}:${item.label}:${item.portalUrl || item.actionUrl || ""}`;
     if (!deduped.has(key)) deduped.set(key, item);
   });
-  const items = Array.from(deduped.values())
+  const prioritizedItems = Array.from(deduped.values()).map((item) => {
+    if (!metricoolMvpReady || item.id === "metricool-100-approval-run" || item.id === "metricool-100-operator-handoff" || item.id === "metricool-approval-session" || item.priority !== "critical") return item;
+    return {
+      ...item,
+      priority: "high" as const,
+      blockers: [
+        ...item.blockers,
+        "Metricool MVP is the active launch lane; this remains full-direct-API/account backlog, not a Metricool MVP blocker.",
+      ],
+    };
+  });
+  const items = prioritizedItems
     .sort((a, b) => {
       const priorityScore = { critical: 0, high: 1, medium: 2 };
       const statusScore = { ready_to_execute: 0, waiting: 1, blocked: 2, done: 3 };
@@ -39615,13 +43099,17 @@ async function buildRobertNextActionsSummary(input: {
 
   const status: ClipperRobertNextActionsStatus = !generatedAt
     ? "not_prepared"
-    : externalCloseoutPending || totals.critical > 0
+    : metricoolMvpReady
+      ? "needs_action"
+      : externalCloseoutPending || totals.critical > 0
       ? "blocked"
       : input.goLiveCompletionAudit.readyToPublish
         ? "ready"
         : "needs_action";
   const connectNow = await buildRobertConnectNowHandoff(input);
-  const nextStep = externalCloseoutPending
+  const nextStep = metricoolMvpReady && metricoolApprovalItems[0]
+    ? metricoolApprovalItems[0].nextStep
+    : externalCloseoutPending
     ? externalCloseout.nextStep
     : items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.";
 
@@ -39700,10 +43188,14 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
     "",
     "## Connect Now Handoff",
     "",
+    `- Launch mode: ${summary.connectNow.launchMode}`,
+    `- Credential mode: ${summary.connectNow.credentialMode}`,
+    `- Credential note: ${summary.connectNow.credentialMvpNote}`,
     `- Evidence template: ${summary.connectNow.evidenceTemplatePath}`,
     `- Evidence import target: ${summary.connectNow.evidenceImportPath}`,
     `- Pending credential env vars: ${summary.connectNow.pendingCredentialEnvVars.join(", ") || "none"}`,
-    `- Credential closeout: ${summary.connectNow.credentialCloseout.status}; ${summary.connectNow.credentialCloseout.pendingEnvVars.length} pending env names; ${summary.connectNow.credentialCloseout.acceptedEnvVars.length} import-ready env names`,
+    `- Direct API backlog env vars: ${summary.connectNow.directApiBacklogEnvVars.join(", ") || "none"}`,
+    `- Credential closeout: ${summary.connectNow.credentialMode === "metricool_not_required" ? "backlog_not_mvp_blocker" : summary.connectNow.credentialCloseout.status}; ${summary.connectNow.credentialCloseout.pendingEnvVars.length} direct-API env names; ${summary.connectNow.credentialCloseout.acceptedEnvVars.length} import-ready env names`,
     `- Account closeout: ${summary.connectNow.accountCloseout.status}; ${summary.connectNow.accountCloseout.totals.items} external items; ${summary.connectNow.accountCloseout.totals.evidenceRows} evidence rows`,
     `- Official permission closeout: ${summary.connectNow.officialPermissionCloseout.status}; ${summary.connectNow.officialPermissionCloseout.totals.scopes} scopes; ${summary.connectNow.officialPermissionCloseout.totals.loginRequired} login-required platforms`,
     `- Source assets required: ${summary.connectNow.sourceAssetsRequired}`,
@@ -39784,6 +43276,9 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     `- High: ${summary.totals.high}`,
     `- Minutos estimados: ${summary.totals.estimatedMinutes}`,
     `- Source assets requeridos: ${handoff.sourceAssetsRequired}`,
+    `- Launch mode: ${handoff.launchMode}`,
+    `- Credential mode: ${handoff.credentialMode}`,
+    `- Credential note: ${handoff.credentialMvpNote}`,
     `- Focus run: ${handoff.focusRun.label} (${handoff.focusRun.status}, ${handoff.focusRun.estimatedMinutes} min)`,
     `- External closeout rows: ${handoff.externalPortalLauncher.closeoutRows}`,
     `- External closeout proofs needed: ${handoff.externalPortalLauncher.closeoutProofsNeeded}`,
@@ -39793,6 +43288,29 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     "## Orden recomendado",
     "",
     ...handoff.recommendedOrder.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "## Metricool MVP Tunnel",
+    "",
+    `- Status: ${handoff.metricoolMvpTunnel.status}`,
+    `- Progress: ${handoff.metricoolMvpTunnel.progress}%`,
+    `- Done gates: ${handoff.metricoolMvpTunnel.doneGates}`,
+    `- Ready gates: ${handoff.metricoolMvpTunnel.readyGates}`,
+    `- Blocked gates: ${handoff.metricoolMvpTunnel.blockedGates}`,
+    `- Next gate: ${handoff.metricoolMvpTunnel.nextGate || "none"}`,
+    `- Next step: ${handoff.metricoolMvpTunnel.nextStep}`,
+    "",
+    ...handoff.metricoolMvpTunnel.gates.flatMap((gate) => [
+      `### ${gate.rank}. ${gate.label}`,
+      "",
+      `- Status: ${gate.status}`,
+      `- Progress: ${gate.done}/${gate.total}`,
+      `- Blockers: ${gate.blockers}`,
+      `- Action: ${gate.actionLabel}${gate.actionUrl ? ` (${gate.actionUrl})` : ""}`,
+      `- Artifact: ${gate.artifactPath || "n/a"}`,
+      `- Next step: ${gate.nextStep}`,
+      gate.unlocks.length ? `- Unlocks: ${gate.unlocks.join(" | ")}` : "- Unlocks: none",
+      "",
+    ]),
     "",
     "## Connection Tunnel",
     "",
@@ -39852,7 +43370,7 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       `  next: ${category.nextStep}`,
     ]),
     "",
-    "## Platform Launch Bridge",
+    `## Platform Launch Bridge${handoff.launchMode === "metricool_mvp" ? " (Direct API backlog)" : ""}`,
     "",
     ...handoff.platformLaunchBridge.flatMap((platform) => [
       `### ${platform.label}`,
@@ -39860,7 +43378,7 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       `- Status: ${platform.status}`,
       `- Account type: ${platform.accountType}`,
       `- Handles: ${platform.handles.join(", ") || "none"}`,
-      `- Missing env vars: ${platform.missingEnvVars.join(", ") || "none"}`,
+      `- ${handoff.launchMode === "metricool_mvp" ? "Direct API missing env vars" : "Missing env vars"}: ${platform.missingEnvVars.join(", ") || "none"}`,
       `- Scopes: ${platform.scopes.join(", ") || "none"}`,
       `- Account proof tasks: ${platform.accountProofCount}`,
       `- App/permission tasks: ${platform.appPermissionCount}`,
@@ -39955,34 +43473,44 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     "",
     handoff.pendingCredentialEnvVars.length ? handoff.pendingCredentialEnvVars.map((envVar) => `- ${envVar}`).join("\n") : "- none",
     "",
+    "## Backlog API directa",
+    "",
+    handoff.directApiBacklogEnvVars.length ? handoff.directApiBacklogEnvVars.map((envVar) => `- ${envVar}`).join("\n") : "- none",
+    "",
+    handoff.credentialMvpNote,
+    "",
     handoff.credentialTemplate ? "Copy-ready credential template is embedded in the JSON/API handoff for the UI loader." : "Copy-ready credential template: none",
     "",
     "## Credential Closeout",
     "",
-    `- Status: ${handoff.credentialCloseout.status}`,
+    `- Status: ${handoff.credentialMode === "metricool_not_required" ? "backlog_not_mvp_blocker" : handoff.credentialCloseout.status}`,
     `- Import ready: ${handoff.credentialCloseout.importReady ? "yes" : "no"}`,
     `- Diagnostic: ${handoff.credentialCloseout.diagnosticPath}`,
     `- Drop files: ${handoff.credentialCloseout.totals.dropCandidates}`,
     `- Import eligible files: ${handoff.credentialCloseout.totals.importEligible}`,
     `- Template files ignored: ${handoff.credentialCloseout.totals.templateFiles}`,
-    `- Pending env names: ${handoff.credentialCloseout.pendingEnvVars.join(", ") || "none"}`,
-    `- Accepted env names: ${handoff.credentialCloseout.acceptedEnvVars.join(", ") || "none"}`,
-    `- Rejected env names: ${handoff.credentialCloseout.rejectedEnvVars.join(", ") || "none"}`,
+    `- Pending env names: ${handoff.credentialMode === "metricool_not_required" ? "none - direct API backlog hidden for Metricool MVP" : handoff.credentialCloseout.pendingEnvVars.join(", ") || "none"}`,
+    `- Accepted env names: ${handoff.credentialMode === "metricool_not_required" ? "none" : handoff.credentialCloseout.acceptedEnvVars.join(", ") || "none"}`,
+    `- Rejected env names: ${handoff.credentialMode === "metricool_not_required" ? "none" : handoff.credentialCloseout.rejectedEnvVars.join(", ") || "none"}`,
     `- Next step: ${handoff.credentialCloseout.nextStep}`,
     "",
     handoff.credentialCloseout.files.length ? "Credential files:" : "Credential files: none",
-    ...handoff.credentialCloseout.files.flatMap((file) => [
+    ...(handoff.credentialMode === "metricool_not_required" ? [
+      "- hidden: direct API credential files are backlog for full automation and are not needed for the active Metricool MVP.",
+    ] : handoff.credentialCloseout.files.flatMap((file) => [
       `- ${file.relativePath} (${file.kind}/${file.location}${file.importEligible ? ", eligible" : ""})`,
       `  detected: ${file.detectedEnvVars.join(", ") || "none"}; pending: ${file.pendingEnvVars.join(", ") || "none"}; issue: ${file.issue || "none"}`,
-    ]),
+    ])),
     "",
     handoff.credentialCloseout.driveCredentialBridge.length ? "Drive credential bridge:" : "Drive credential bridge: none",
-    ...handoff.credentialCloseout.driveCredentialBridge.flatMap((item) => [
+    ...(handoff.credentialMode === "metricool_not_required" ? [
+      "- hidden: direct TikTok/Meta/Google API key search is intentionally deferred while Metricool handles this run.",
+    ] : handoff.credentialCloseout.driveCredentialBridge.flatMap((item) => [
       `- ${item.label} (${item.platform}/${item.status})`,
       `  missing: ${item.missingSuggestedEnvVars.join(", ") || "none"}`,
       `  local targets: ${item.localDropFileNames.join(" | ") || "none"}`,
       `  drive search: ${item.driveSearchQueries.join(" | ") || "none"}`,
-    ]),
+    ])),
     "",
     "## Official Permission Closeout",
     "",
@@ -40046,9 +43574,9 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     ...handoff.accountCloseout.appPermissionBridge.flatMap((item) => [
       `- ${item.label} (${item.lane}/${item.platform}/${item.status})`,
       `  portal: ${item.portalUrl || "n/a"}`,
-      `  scopes: ${item.scopes.join(", ") || "none"}`,
+      `  scopes: ${handoff.credentialMode === "metricool_not_required" ? "hidden - direct API backlog" : item.scopes.join(", ") || "none"}`,
       `  app ids: ${item.appIdentifiers.join(", ") || "none"}`,
-      `  blockers: ${item.blockers.join(" | ") || "none"}`,
+      `  blockers: ${handoff.credentialMode === "metricool_not_required" ? "Direct API credentials/OAuth are deferred while Metricool handles this run." : item.blockers.join(" | ") || "none"}`,
       `  proof: ${item.requiredProof.join(" | ")}`,
     ]),
     "",
@@ -40056,7 +43584,9 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     ...handoff.accountCloseout.nextItems.flatMap((item) => [
       `- ${item.rank}. ${item.label} (${item.platform}/${item.lane}/${item.status})`,
       `  portal: ${item.portalUrl || "n/a"}`,
-      `  next: ${item.nextStep}`,
+      `  next: ${handoff.credentialMode === "metricool_not_required" && (item.lane === "credential" || item.lane === "oauth" || item.lane === "permission" || item.lane === "developer_app")
+        ? "Deferred: use Metricool operator handoff first; direct API credential/OAuth work is backlog for full automation."
+        : item.nextStep}`,
     ]),
     "",
     "## Focus Run",
@@ -41737,13 +45267,21 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     publisherConnectors: statusBefore.publisherConnectors,
     productionQueue: statusBefore.productionQueue,
     metricoolApprovalSession: statusBefore.metricoolApprovalSession,
+    metricool100ApprovalRun: statusBefore.metricool100ApprovalRun,
   });
   const externalCloseoutPending = statusBefore.externalExecutionSession.closeoutRun.items.length > 0
     || statusBefore.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence > 0;
+  const metricoolMvpReady = Boolean(statusBefore.goLiveCompletionAudit.launchModes?.metricoolMvpReady)
+    && statusBefore.metricoolApprovalSession.status === "ready_for_operator"
+    && statusBefore.metricoolApprovalSession.totals.readyForReview > 0
+    && statusBefore.metricoolApprovalSession.approvalRequired
+    && !statusBefore.metricoolApprovalSession.realPublishEnabled;
   const robertNextActions: ClipperRobertNextActionsSummary = {
     ...draftSummary,
     generatedAt: new Date().toISOString(),
-    status: externalCloseoutPending || draftSummary.totals.critical > 0
+    status: metricoolMvpReady
+      ? "needs_action"
+      : externalCloseoutPending || draftSummary.totals.critical > 0
       ? "blocked"
       : statusBefore.goLiveCompletionAudit.readyToPublish
         ? "ready"
@@ -42832,6 +46370,10 @@ async function buildGoLiveCompletionAuditSummary(input: {
   externalExecutionSession: ClipperExternalExecutionSessionSummary;
   evidenceIntegrityAudit: ClipperEvidenceIntegrityAuditSummary;
 }): Promise<ClipperGoLiveCompletionAuditSummary> {
+  const activeMetricoolMvpLanes = [
+    { accountId: "sports-daily", platform: "tiktok" },
+    { accountId: "meme-radar", platform: "tiktok" },
+  ] as const;
   const totalPlatformAccounts = input.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
   const dailyClipTarget = input.accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
   const weeklyTargetClips = dailyClipTarget * 7;
@@ -42844,12 +46386,34 @@ async function buildGoLiveCompletionAuditSummary(input: {
     && input.productionUrlVerification.status === "pass";
   const scheduledReady = input.automationSchedule.status === "prepared" && input.automationSchedule.weeklyTargetClips >= 100;
   const automationRanClean = input.automation.status === "ready" || (input.automation.lastRun?.totals.blocked === 0 && (input.automation.lastRun?.totals.posts || 0) > 0);
-  const metricoolApprovalQueueReady = input.metricoolPublishing.status === "ready_for_approval_queue"
-    && input.metricoolPublishing.totals.readyForApprovalQueue > 0
-    && input.metricoolExecutionQueue.status === "approval_required"
+  const metricoolMvpSourceLanes = activeMetricoolMvpLanes.filter((lane) => {
+    const category = input.metricoolExecutionQueue.sourceReadiness.categories.find((item) => item.accountId === lane.accountId);
+    return category
+    && category.connectedNetworks.includes(lane.platform)
+    && category.rightsReadyAssets > 0
+    && category.missingSourceAssets === 0;
+  });
+  const metricoolApprovalQueueSafe = input.metricoolExecutionQueue.status === "approval_required"
+    && input.metricoolExecutionQueue.publishMode === "approval_required"
     && input.metricoolExecutionQueue.totals.queuedForApproval > 0
     && input.metricoolExecutionQueue.totals.readyToSend === 0
-    && !input.metricoolExecutionQueue.realPublishEnabled;
+    && !input.metricoolExecutionQueue.realPublishEnabled
+    && input.metricoolExecutionQueue.items.every((item) => item.status !== "ready_to_send" && item.canSendNow === false);
+  const metricoolMvpSourceReady = input.metricoolExecutionQueue.sourceReadiness.status === "ready"
+    && input.metricoolExecutionQueue.sourceReadiness.totals.rightsReadyAssets > 0
+    && input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets === 0
+    && metricoolMvpSourceLanes.length === activeMetricoolMvpLanes.length;
+  const missingMetricoolMvpLanes = activeMetricoolMvpLanes.filter((lane) =>
+    !metricoolMvpSourceLanes.some((readyLane) => readyLane.accountId === lane.accountId && readyLane.platform === lane.platform)
+  );
+  const metricoolMvpGateBlockers = [
+    !metricoolApprovalQueueSafe ? "Metricool review queue is not safely approval_required with zero ready_to_send items." : null,
+    input.metricoolExecutionQueue.sourceReadiness.status !== "ready" ? `Metricool source readiness is ${input.metricoolExecutionQueue.sourceReadiness.status}.` : null,
+    input.metricoolExecutionQueue.sourceReadiness.totals.rightsReadyAssets <= 0 ? "Metricool source readiness has no rights-ready assets." : null,
+    input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets > 0 ? `Metricool source readiness is missing ${input.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets} source asset(s).` : null,
+    missingMetricoolMvpLanes.length > 0 ? `Missing active TikTok MVP lane(s): ${missingMetricoolMvpLanes.map((lane) => `${lane.accountId}:${lane.platform}`).join(", ")}.` : null,
+  ].filter((item): item is string => Boolean(item));
+  const metricoolApprovalQueueReady = metricoolApprovalQueueSafe && metricoolMvpSourceReady;
   const metricoolBridgeProgress = metricoolApprovalQueueReady
     || input.metricoolPublishing.status === "ready_to_connect"
     || input.metricoolPublishing.totals.connectedProfiles > 0
@@ -42876,6 +46440,20 @@ async function buildGoLiveCompletionAuditSummary(input: {
   const directOAuthProgress = input.oauthConnectionPack.totals.partial > 0 || input.oauthConnectionPack.totals.authUrlsReady > 0 || tokenRecords > 0;
   const directPublisherReady = input.publisherConnectors.status === "ready" && input.goLiveExecutionPack.status === "ready";
   const directPublisherProgress = input.publisherConnectors.status === "partial" || input.goLiveExecutionPack.status === "in_progress";
+  const fullDirectApiReady = directOAuthReady
+    && directPublisherReady
+    && input.developerAppEvidence.totals.approved >= input.developerAppEvidence.totals.expected
+    && input.permissionTracker.totals.approved >= input.permissionTracker.totals.permissions
+    && input.permissionTracker.totals.permissions > 0;
+  const metricoolMvpBlockers = metricoolApprovalQueueReady ? [] : [...metricoolMvpGateBlockers, ...metricoolBridgeBlockers].filter((item, index, all) => all.indexOf(item) === index);
+  const metricoolMvpReady = metricoolApprovalQueueReady && metricoolMvpBlockers.length === 0;
+  const metricoolMvpBacklogNote = "Metricool MVP is the active launch path; keep this as direct API backlog until Robert asks for full autopublish.";
+  const directApiBacklog = [
+    ...input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
+    ...input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
+    ...input.oauthConnectionPack.items.filter((item) => item.status !== "ready").slice(0, 6).flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.accountName}/${item.platform}: ${blocker}`) : [`${item.accountName}/${item.platform}: ${item.nextStep}`]),
+    ...input.publisherConnectors.items.filter((item) => item.status !== "ready").flatMap((item) => item.blockers.length ? item.blockers.map((blocker) => `${item.platform}: ${blocker}`) : [`${item.platform}: ${item.nextStep}`]),
+  ].filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 12);
   const requirements: ClipperGoLiveCompletionRequirement[] = [
     {
       id: "accounts-created-verified",
@@ -42900,9 +46478,9 @@ async function buildGoLiveCompletionAuditSummary(input: {
     },
     {
       id: "developer-apps-approved",
-      label: "Developer apps created and approved",
+      label: metricoolMvpReady ? "Developer apps created and approved (direct API backlog)" : "Developer apps created and approved",
       phase: "developer_apps",
-      status: completionStatusFromReady(
+      status: metricoolMvpReady ? "needs_evidence" : completionStatusFromReady(
         input.developerAppEvidence.totals.approved >= input.developerAppEvidence.totals.expected,
         input.developerAppEvidence.totals.submitted > 0 || input.developerAppEvidence.totals.approved > 0,
       ),
@@ -42916,14 +46494,16 @@ async function buildGoLiveCompletionAuditSummary(input: {
       proofSource: input.developerAppEvidence.evidenceDir,
       actionUrl: "/api/clippers/prepare-developer-app-evidence-vault",
       portalUrl: null,
-      blockers: input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
-      nextStep: input.developerAppEvidence.nextStep,
+      blockers: metricoolMvpReady
+        ? []
+        : input.developerAppEvidence.items.filter((item) => item.status !== "approved").map((item) => `${item.platform}: ${item.nextStep}`),
+      nextStep: metricoolMvpReady ? metricoolMvpBacklogNote : input.developerAppEvidence.nextStep,
     },
     {
       id: "permissions-approved",
-      label: "Publishing permissions and scopes approved",
+      label: metricoolMvpReady ? "Publishing permissions and scopes approved (direct API backlog)" : "Publishing permissions and scopes approved",
       phase: "permissions",
-      status: completionStatusFromReady(
+      status: metricoolMvpReady ? "needs_evidence" : completionStatusFromReady(
         input.permissionTracker.totals.approved >= input.permissionTracker.totals.permissions && input.permissionTracker.totals.permissions > 0,
         input.permissionTracker.totals.requested > 0 || input.permissionTracker.totals.approved > 0,
       ),
@@ -42937,14 +46517,18 @@ async function buildGoLiveCompletionAuditSummary(input: {
       proofSource: input.permissionTracker.markdownPath,
       actionUrl: "/api/clippers/prepare-permission-tracker",
       portalUrl: null,
-      blockers: input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
-      nextStep: input.permissionTracker.nextStep,
+      blockers: metricoolMvpReady
+        ? []
+        : input.permissionTracker.items.filter((item) => item.status !== "approved").slice(0, 6).map((item) => `${item.platform}/${item.scope}: ${item.nextStep}`),
+      nextStep: metricoolMvpReady ? metricoolMvpBacklogNote : input.permissionTracker.nextStep,
     },
     {
       id: "official-permission-sources-verified",
-      label: "Official permission sources verified for submission",
+      label: metricoolMvpReady ? "Official permission sources verified for submission (direct API backlog)" : "Official permission sources verified for submission",
       phase: "permissions",
-      status: input.officialPermissionMatrix.status === "verified"
+      status: metricoolMvpReady
+        ? "needs_evidence"
+        : input.officialPermissionMatrix.status === "verified"
         ? "verified"
         : input.officialPermissionMatrix.status === "not_prepared"
           ? "needs_evidence"
@@ -42959,19 +46543,19 @@ async function buildGoLiveCompletionAuditSummary(input: {
       proofSource: input.officialPermissionMatrix.markdownPath,
       actionUrl: "/api/clippers/prepare-official-permission-source-audit",
       portalUrl: null,
-      blockers: [
+      blockers: metricoolMvpReady ? [] : [
         ...(input.officialPermissionMatrix.status === "not_prepared" ? ["Official permission matrix has not been generated yet."] : []),
         ...input.officialPermissionMatrix.sourceBatches
           .filter((batch) => batch.accessMode === "login_required" || batch.submitDecision === "human_login_recheck")
           .map((batch) => `${batch.platform}: ${batch.blocker || batch.nextStep}`),
       ].slice(0, 8),
-      nextStep: input.officialPermissionMatrix.nextStep,
+      nextStep: metricoolMvpReady ? metricoolMvpBacklogNote : input.officialPermissionMatrix.nextStep,
     },
     {
       id: "credentials-loaded",
-      label: "OAuth credentials loaded safely",
+      label: metricoolMvpReady ? "OAuth credentials loaded safely (direct API backlog)" : "OAuth credentials loaded safely",
       phase: "credentials",
-      status: completionStatusFromReady(
+      status: metricoolMvpReady ? "needs_evidence" : completionStatusFromReady(
         credentialReady >= credentialTotal && input.tokenVault.status !== "missing_key",
         credentialReady > 0 || input.tokenVault.status !== "missing_key",
       ),
@@ -42985,8 +46569,10 @@ async function buildGoLiveCompletionAuditSummary(input: {
       proofSource: input.tokenVault.vaultPath,
       actionUrl: "/api/clippers/prepare-credential-doctor",
       portalUrl: null,
-      blockers: input.credentialChecks.filter((check) => check.status !== "ready").map((check) => `${check.label}: ${check.missingEnvVars.join(", ") || check.nextStep}`),
-      nextStep: input.credentialChecks.find((check) => check.status !== "ready")?.nextStep || input.tokenVault.nextStep,
+      blockers: metricoolMvpReady
+        ? []
+        : input.credentialChecks.filter((check) => check.status !== "ready").map((check) => `${check.label}: ${check.missingEnvVars.join(", ") || check.nextStep}`),
+      nextStep: metricoolMvpReady ? metricoolMvpBacklogNote : input.credentialChecks.find((check) => check.status !== "ready")?.nextStep || input.tokenVault.nextStep,
     },
     {
       id: "production-url-compliance",
@@ -43098,8 +46684,9 @@ async function buildGoLiveCompletionAuditSummary(input: {
       label: "Posting packages ready for review or scheduling",
       phase: "publishing",
       status: completionStatusFromReady(
-        input.manualPostingPack.totals.readyToPost >= dailyClipTarget && input.publishingPackage.totals.readyForManual >= dailyClipTarget,
-        input.manualPostingPack.totals.readyToPost > 0 || input.publishingPackage.totals.readyForManual > 0,
+        (input.manualPostingPack.totals.readyToPost >= dailyClipTarget && input.publishingPackage.totals.readyForManual >= dailyClipTarget)
+          || (metricoolApprovalQueueReady && input.metricoolExecutionQueue.totals.queuedForApproval >= dailyClipTarget),
+        input.manualPostingPack.totals.readyToPost > 0 || input.publishingPackage.totals.readyForManual > 0 || input.metricoolExecutionQueue.totals.queuedForApproval > 0,
       ),
       owner: "Publisher",
       requiredEvidence: [
@@ -43107,12 +46694,12 @@ async function buildGoLiveCompletionAuditSummary(input: {
         "Rendered clip publishing package includes captions, hooks and checklist.",
         "Any account/source/rights blockers are resolved before scheduling.",
       ],
-      currentEvidence: `${input.manualPostingPack.totals.readyToPost}/${dailyClipTarget} manual posts ready; ${input.publishingPackage.totals.readyForManual}/${dailyClipTarget} publishing package items ready.`,
-      proofSource: input.manualPostingPack.markdownPath,
-      actionUrl: "/api/clippers/prepare-manual-posting-pack",
+      currentEvidence: `${input.manualPostingPack.totals.readyToPost}/${dailyClipTarget} manual posts ready; ${input.publishingPackage.totals.readyForManual}/${dailyClipTarget} publishing package items ready; ${input.metricoolExecutionQueue.totals.queuedForApproval}/${dailyClipTarget} Metricool approval items queued.`,
+      proofSource: metricoolApprovalQueueReady ? input.metricoolExecutionQueue.markdownPath : input.manualPostingPack.markdownPath,
+      actionUrl: metricoolApprovalQueueReady ? "/api/clippers/prepare-metricool-100-approval-run" : "/api/clippers/prepare-manual-posting-pack",
       portalUrl: null,
-      blockers: input.manualPostingPack.unblockSession.slice(0, 6).map((item) => `${item.accountName}/${item.platform}: ${item.nextStep}`),
-      nextStep: input.manualPostingPack.nextStep || input.publishingPackage.nextStep,
+      blockers: metricoolApprovalQueueReady ? [] : input.manualPostingPack.unblockSession.slice(0, 6).map((item) => `${item.accountName}/${item.platform}: ${item.nextStep}`),
+      nextStep: metricoolApprovalQueueReady ? "Metricool review queue has enough guarded items for the daily target; schedule inside Metricool and import live evidence after publishing." : input.manualPostingPack.nextStep || input.publishingPackage.nextStep,
     },
     {
       id: "evidence-integrity-clean",
@@ -43152,10 +46739,12 @@ async function buildGoLiveCompletionAuditSummary(input: {
       portalUrl: null,
       blockers: [
         scheduledReady ? "" : "Automation schedule is not prepared for the 100 clips/week baseline.",
-        automationRanClean ? "" : input.automation.nextStep,
+        automationRanClean || metricoolMvpReady ? "" : input.automation.nextStep,
         input.metrics.status === "ready" ? "" : input.metrics.nextStep,
       ].filter(Boolean),
-      nextStep: scheduledReady && automationRanClean ? input.metrics.nextStep : input.automation.nextStep,
+      nextStep: metricoolMvpReady
+        ? "Metricool is the active publisher; prepare/import post-live metrics after approvals go live, then optimize hooks and schedule."
+        : scheduledReady && automationRanClean ? input.metrics.nextStep : input.automation.nextStep,
     },
   ];
   const externalSession = buildGoLiveCompletionExternalSession({ requirements, externalExecutionSession: input.externalExecutionSession });
@@ -43190,12 +46779,22 @@ async function buildGoLiveCompletionAuditSummary(input: {
     closeoutQueueMarkdownPath: GO_LIVE_COMPLETION_CLOSEOUT_QUEUE_MARKDOWN_PATH,
     closeoutQueueCsvPath: GO_LIVE_COMPLETION_CLOSEOUT_QUEUE_CSV_PATH,
     readyToPublish,
+    launchModes: {
+      metricoolMvpReady,
+      approvalQueueReady: metricoolApprovalQueueReady,
+      directSocialApisRequiredForMvp: false,
+      fullDirectApiReady,
+      metricoolMvpBlockers,
+      directApiBacklog,
+    },
     score,
     requirements,
     externalSession,
     closeoutQueue,
     totals,
-    nextStep: requirements.find((item) => item.status === "blocked")?.nextStep
+    nextStep: metricoolMvpReady
+      ? "Metricool MVP is ready as the active launch path: open the 100 schedule run, schedule in Metricool, then import live URLs and metrics after posts are real."
+      : requirements.find((item) => item.status === "blocked")?.nextStep
       || requirements.find((item) => item.status === "needs_evidence")?.nextStep
       || "Go-live completion audit is fully verified; publish remains gated by manual approval controls.",
   };
@@ -43207,6 +46806,10 @@ function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAud
     "",
     `Status: ${summary.status}`,
     `Ready for approval-gated launch: ${summary.readyToPublish ? "yes" : "no"}`,
+    `Metricool MVP ready: ${summary.launchModes?.metricoolMvpReady ? "yes" : "no"}`,
+    `Metricool review queue ready: ${summary.launchModes?.approvalQueueReady ? "yes" : "no"}`,
+    `Direct social APIs required for Metricool MVP: ${summary.launchModes?.directSocialApisRequiredForMvp ? "yes" : "no"}`,
+    `Full direct API ready: ${summary.launchModes?.fullDirectApiReady ? "yes" : "no"}`,
     `Score: ${summary.score}`,
     `Generated: ${summary.generatedAt || new Date().toISOString()}`,
     `Totals: ${summary.totals.verified}/${summary.totals.requirements} verified, ${summary.totals.needsEvidence} needs_evidence, ${summary.totals.blocked} blocked`,
@@ -43219,6 +46822,16 @@ function renderGoLiveCompletionAuditMarkdown(summary: ClipperGoLiveCompletionAud
     "## Next Step",
     "",
     summary.nextStep,
+    "",
+    "## Launch Modes",
+    "",
+    `- Metricool MVP: ${summary.launchModes?.metricoolMvpReady ? "ready" : "blocked"}`,
+    `- Direct social APIs required for Metricool MVP: ${summary.launchModes?.directSocialApisRequiredForMvp ? "yes" : "no"}`,
+    `- Full direct API: ${summary.launchModes?.fullDirectApiReady ? "ready" : "backlog"}`,
+    "Metricool MVP blockers:",
+    ...(summary.launchModes?.metricoolMvpBlockers.length ? summary.launchModes.metricoolMvpBlockers.map((blocker) => `- ${blocker}`) : ["- none"]),
+    "Direct API backlog:",
+    ...(summary.launchModes?.directApiBacklog.length ? summary.launchModes.directApiBacklog.map((item) => `- ${item}`) : ["- none"]),
     "",
     "## Closeout Queue Preview",
     "",
@@ -43745,6 +47358,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
   const externalLaunchDossier = await buildExternalLaunchDossierSummary({ accountLaunchKit, developerAppEvidence, permissionTracker, credentialSetup, externalSetupQueue, oauthGoLive, publisherConnectors, officialPermissionMatrix });
   const publishingPackage = await buildPublishingPackageSummary(accounts);
   const metricoolMvpLaunchPack = buildMetricoolMvpLaunchPackSummary({
+    accounts,
     metricoolPublishing,
     metricoolExecutionQueue,
     publishingPackage,
@@ -43756,7 +47370,17 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     metricoolExecutionQueue,
     metricoolMvpLaunchPack,
   });
-  const metricoolApprovalReport = await readCachedMetricoolApprovalReportSummary(metricoolApprovalSession);
+  const metricool100ApprovalRun = await getClipperMetricool100ApprovalRun({
+    metricoolExecutionQueue,
+    metricoolApprovalSession,
+  });
+  const metricoolApprovalReport = await readCachedMetricoolApprovalReportSummary(metricoolApprovalSession, metricool100ApprovalRun);
+  const metricoolArtifactAudit = await buildMetricoolArtifactAuditSummary({
+    metricoolExecutionQueue,
+    metricoolApprovalSession,
+    metricool100ApprovalRun,
+    metricoolApprovalReport,
+  });
   const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack, metricoolMvpLaunchPack, metricoolApprovalSession });
   const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, analyticsReportingPack, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
@@ -43823,6 +47447,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     launchEvidenceDropDiagnostic,
     sourceDropDiagnostic,
     sourceSupplyDropKit,
+    metricoolExecutionQueue,
   });
   const goLiveCompletionAudit = await buildGoLiveCompletionAuditSummary({
     accounts,
@@ -43880,6 +47505,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     publisherConnectors,
     productionQueue,
     metricoolApprovalSession,
+    metricool100ApprovalRun,
   });
   const launchLaneMatrix = await buildLaunchLaneMatrixSummary({
     accounts,
@@ -43976,9 +47602,11 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     permissionSubmissionDossier,
     metricoolPublishing,
     metricoolExecutionQueue,
+    metricool100ApprovalRun,
     metricoolMvpLaunchPack,
     metricoolApprovalSession,
     metricoolApprovalReport,
+    metricoolArtifactAudit,
     publisherConnectors,
     publisherExecutionQueue,
     productionUrlSetup,
@@ -44019,6 +47647,11 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
       totalWeeklyGoal: accounts.length * weeklyViewsPerAccount,
       dailyClipsTarget,
       connectedAccounts: accounts.filter((account) => account.status === "ready").length,
+      metricoolConnectedAccounts: metricoolPublishing.channels.filter((channel) => channel.connectedProfiles > 0).length,
+      metricoolConnectedLanes: metricoolPublishing.totals.connectedProfiles,
+      metricoolRequiredLanes: metricoolPublishing.totals.requiredProfiles,
+      metricoolReadyForApprovalAccounts: metricoolPublishing.totals.readyForApprovalQueue,
+      directApiConnectedAccounts: new Set(tokenVault.records.map((record) => record.platform)).size,
     },
     latestReport: await getLatestReport(),
     guardrails: [
@@ -44027,6 +47660,563 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
       "El optimizador puede cambiar hooks, horarios y volumen; no debe evadir derechos, marcas de agua o reglas de plataforma.",
       "La app puede preparar cuentas internas y checklists, pero crear cuentas reales requiere login, verificacion y aceptacion de terminos en cada plataforma.",
     ],
+  };
+}
+
+export async function getClipperMetricoolLaunchSummary(userId = getSystemUserId()) {
+  const status = await getClipperStatus(userId);
+  const launchModes = status.goLiveCompletionAudit.launchModes ?? {
+    metricoolMvpReady: false,
+    approvalQueueReady: false,
+    directSocialApisRequiredForMvp: false,
+    fullDirectApiReady: false,
+    metricoolMvpBlockers: ["Falta generar el audit de go-live con launch modes; Metricool sigue siendo el MVP bridge."],
+    directApiBacklog: [],
+  };
+  const queueTotals = status.metricoolExecutionQueue.totals;
+  const weeklyTotals = status.weeklyProductionFunnel.totals;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    launchMode: "metricool_approval_required" as const,
+    status: launchModes.metricoolMvpReady ? "metricool_mvp_ready" as const : "blocked" as const,
+    metricoolMvpReady: launchModes.metricoolMvpReady,
+    approvalQueueReady: launchModes.approvalQueueReady,
+    directSocialApisRequiredForMvp: launchModes.directSocialApisRequiredForMvp,
+    fullDirectApiReady: launchModes.fullDirectApiReady,
+    publishMode: status.metricoolExecutionQueue.publishMode,
+    realPublishEnabled: status.metricoolExecutionQueue.realPublishEnabled,
+    metricoolQueueStatus: status.metricoolExecutionQueue.status,
+    queuedForApproval: queueTotals.queuedForApproval,
+    readyToSend: queueTotals.readyToSend,
+    readyAccounts: status.metricoolMvpLaunchPack.totals.readyAccounts,
+    totalAccounts: status.metricoolMvpLaunchPack.totals.accounts,
+    sourceScoutStatus: status.sourceScout.status,
+    weeklyFunnelStatus: status.weeklyProductionFunnel.status,
+    targetWeeklyClips: status.weeklyProductionFunnel.targetWeeklyClips,
+    sourceFilesReady: weeklyTotals.sourceFilesReady,
+    draftReady: weeklyTotals.draftReady,
+    metricoolApprovalQueued: weeklyTotals.metricoolApprovalQueued,
+    approvalEvidenceStatus: status.metricoolApprovalReport.status,
+    approvalEvidenceRows: status.metricoolApprovalReport.totals.evidenceRows,
+    importedPublishedRows: status.metricoolApprovalReport.totals.publishedRows,
+    importedViews: status.metricoolApprovalReport.totals.views,
+    evidenceImportCsvPath: status.metricoolApprovalReport.evidenceImportCsvPath,
+    artifactAuditStatus: status.metricoolArtifactAudit.status,
+    artifactAuditStale: status.metricoolArtifactAudit.totals.stale,
+    artifactAuditMissing: status.metricoolArtifactAudit.totals.missing,
+    artifactAuditNextStep: status.metricoolArtifactAudit.nextStep,
+    metricoolMvpBlockers: launchModes.metricoolMvpBlockers,
+    directApiBacklogCount: launchModes.directApiBacklog.length,
+    nextStep: launchModes.metricoolMvpReady
+      ? status.metricoolArtifactAudit.status !== "current"
+        ? status.metricoolArtifactAudit.nextStep
+        : status.metricoolApprovalReport.totals.publishedRows > 0
+        ? "Metricool MVP listo: revisar performance importada y seguir optimizando hooks/horarios."
+        : "Metricool MVP listo: revisar la cola Metricool, programar en Metricool y luego importar evidencia/publicaciones."
+      : status.goLiveCompletionAudit.nextStep,
+    reportPath: status.goLiveCompletionAudit.markdownPath,
+  };
+}
+
+function renderMetricool100ApprovalRunMarkdown(summary: ClipperMetricool100ApprovalRunSummary): string {
+  return [
+    "# Clippers Metricool 100 Schedule Run",
+    "",
+    "One-click operator pack for preparing 100 Clippers items through Metricool approval_required review. This does not publish automatically.",
+    "",
+    `Status: ${summary.status}`,
+    `Generated: ${summary.generatedAt || new Date().toISOString()}`,
+    `Mode: ${summary.mode}`,
+    `Target weekly clips: ${summary.targetWeeklyClips}`,
+    `Review queue target: ${summary.approvalQueueTarget}`,
+    `Batch size: ${summary.batchSize}`,
+    `Direct social APIs required: ${summary.directSocialApisRequired ? "yes" : "no"}`,
+    `MVP bridge: Metricool approval_required; direct TikTok/Instagram/YouTube APIs are backlog for this run.`,
+    `Real publish enabled: ${summary.realPublishEnabled ? "yes" : "no"}`,
+    `Approval required: ${summary.approvalRequired ? "yes" : "no"}`,
+    "",
+    "## Totals",
+    "",
+    `- Production items: ${summary.totals.productionItems}`,
+    `- Draft ready: ${summary.totals.draftReady}`,
+    `- Metricool queued for review: ${summary.totals.metricoolQueuedForApproval}`,
+    `- Metricool blocked: ${summary.totals.metricoolBlocked}`,
+    `- Auto-send blocked: ${summary.totals.readyToSend}`,
+    `- Review session ready for review: ${summary.totals.approvalSessionReadyForReview}`,
+    `- Quick run items: ${summary.totals.quickRunItems}`,
+    `- Source upload ready: ${summary.totals.sourceUploadReady}`,
+    `- Source upload missing: ${summary.totals.sourceUploadMissing}`,
+    `- Closeout ready for review: ${summary.totals.closeoutReadyForReview}`,
+    `- Closeout evidence rows: ${summary.totals.closeoutEvidenceRows}`,
+    `- MVP accounts ready: ${summary.totals.mvpReadyAccounts}/${summary.totals.mvpAccounts}`,
+    "",
+    "## Accounts",
+    "",
+    ...(Object.entries(summary.productionByAccount).length
+      ? Object.entries(summary.productionByAccount).map(([accountId, count]) => `- ${accountId}: ${count}`)
+      : ["- none"]),
+    "",
+    "## Artifacts",
+    "",
+    ...Object.entries(summary.artifacts).map(([key, value]) => `- ${key}: ${value || "none"}`),
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+  ].join("\n");
+}
+
+function renderMetricool100ApprovalRunCsv(summary: ClipperMetricool100ApprovalRunSummary): string {
+  const header = [
+    "generated_at",
+    "status",
+    "mode",
+    "target_weekly_clips",
+    "approval_queue_target",
+    "batch_size",
+    "eligible_account_ids",
+    "production_by_account",
+    "production_items",
+    "draft_ready",
+    "metricool_queued_for_approval",
+    "metricool_blocked",
+    "ready_to_send",
+    "approval_session_ready_for_review",
+    "quick_run_items",
+    "source_upload_ready",
+    "source_upload_missing",
+    "closeout_ready_for_review",
+    "closeout_evidence_rows",
+    "mvp_ready_accounts",
+    "mvp_accounts",
+    "real_publish_enabled",
+    "approval_required",
+    "evidence_import_csv_path",
+    "next_step",
+  ];
+  const row = [
+    summary.generatedAt || "",
+    summary.status,
+    summary.mode,
+    summary.targetWeeklyClips,
+    summary.approvalQueueTarget,
+    summary.batchSize,
+    summary.eligibleAccountIds.join(" | "),
+    Object.entries(summary.productionByAccount).map(([accountId, count]) => `${accountId}:${count}`).join(" | "),
+    summary.totals.productionItems,
+    summary.totals.draftReady,
+    summary.totals.metricoolQueuedForApproval,
+    summary.totals.metricoolBlocked,
+    summary.totals.readyToSend,
+    summary.totals.approvalSessionReadyForReview,
+    summary.totals.quickRunItems,
+    summary.totals.sourceUploadReady,
+    summary.totals.sourceUploadMissing,
+    summary.totals.closeoutReadyForReview,
+    summary.totals.closeoutEvidenceRows,
+    summary.totals.mvpReadyAccounts,
+    summary.totals.mvpAccounts,
+    summary.realPublishEnabled ? "yes" : "no",
+    summary.approvalRequired ? "yes" : "no",
+    summary.artifacts.evidenceImportCsvPath,
+    summary.nextStep,
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    row.map(csvEscape).join(","),
+  ].join("\n");
+}
+
+function renderMetricool100OperatorRunSheetCsv(summary: ClipperMetricoolApprovalQuickRunSummary): string {
+  const header = [
+    "rank",
+    "metricool_queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "publish_at",
+    "source_file_name",
+    "source_path",
+    "caption_seed",
+    "queue_status",
+    "metricool_action",
+    "evidence_action",
+  ];
+  return [
+    header.map(csvEscape).join(","),
+    ...summary.items.map((item, index) => [
+      index + 1,
+      item.id,
+      item.accountId,
+      item.accountName,
+      item.platform,
+      item.metricoolBrandName,
+      item.metricoolBlogId || "",
+      item.publishAt,
+      item.sourceFileName,
+      item.sourcePath || "",
+      item.captionSeed,
+      item.status,
+      `Upload/review ${item.sourceFileName} in Metricool brand ${item.metricoolBrandName}; schedule for ${item.publishAt}.`,
+      "After a public post URL exists, fill the matching evidence row with final_status=published and 24h metrics.",
+    ].map(csvEscape).join(",")),
+  ].join("\n") + "\n";
+}
+
+function renderMetricool100ApprovalEvidenceImportCsv(summary: ClipperMetricoolApprovalQuickRunSummary, existingRaw: string | null = null): string {
+  const header = [
+    "metricool_queue_item_id",
+    "account_id",
+    "account_name",
+    "platform",
+    "metricool_brand_name",
+    "metricool_blog_id",
+    "scheduled_for",
+    "source_path",
+    "caption_seed",
+    "metricool_approval_url",
+    "published_post_url",
+    "final_status",
+    "views_24h",
+    "likes_24h",
+    "comments_24h",
+    "shares_24h",
+    "operator_notes",
+  ];
+  const existingRecords = (existingRaw ? parseCsvRecords(existingRaw) : []).filter(metricoolApprovalEvidenceRecordHasOperatorInput);
+  const existingById = new Map(existingRecords.map((record) => [
+    firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]),
+    record,
+  ]).filter(([id]) => Boolean(id)) as Array<[string, Record<string, unknown>]>);
+  const usedExistingIds = new Set<string>();
+  const rows = summary.items.map((item) => {
+    const fallback = {
+      id: item.id,
+      accountId: item.accountId,
+      accountName: item.accountName,
+      platform: item.platform,
+      metricoolBrandName: item.metricoolBrandName,
+      metricoolBlogId: item.metricoolBlogId,
+      publishAt: item.publishAt,
+      sourcePath: item.sourcePath,
+      captionSeed: item.captionSeed,
+    } as ClipperMetricoolApprovalSessionItem;
+    const existing = existingById.get(item.id);
+    if (existing) {
+      usedExistingIds.add(item.id);
+      return metricoolApprovalEvidenceRecordRow(existing, fallback);
+    }
+    return metricoolApprovalEvidenceRecordRow({
+      metricool_queue_item_id: item.id,
+      account_id: item.accountId,
+      account_name: item.accountName,
+      platform: item.platform,
+      metricool_brand_name: item.metricoolBrandName,
+      metricool_blog_id: item.metricoolBlogId || "",
+      scheduled_for: item.publishAt,
+      source_path: item.sourcePath || "",
+      caption_seed: item.captionSeed,
+      metricool_approval_url: "",
+      published_post_url: "",
+      final_status: "",
+      views_24h: "",
+      likes_24h: "",
+      comments_24h: "",
+      shares_24h: "",
+      operator_notes: "",
+    }, fallback);
+  });
+  for (const record of existingRecords) {
+    const id = firstString(record, ["metricool_queue_item_id", "queue_item_id", "clip_id", "id"]);
+    if (!id || usedExistingIds.has(id) || summary.items.some((item) => item.id === id)) continue;
+    rows.push(metricoolApprovalEvidenceRecordRow(record));
+  }
+  return [
+    header.map(csvEscape).join(","),
+    ...rows,
+  ].join("\n") + "\n";
+}
+
+async function writeMetricool100ApprovalRunArtifacts(summary: ClipperMetricool100ApprovalRunSummary, quickRun?: ClipperMetricoolApprovalQuickRunSummary): Promise<ClipperMetricool100ApprovalRunSummary> {
+  const existing100EvidenceImportCsv = await readFile(METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, "utf8").catch(() => null);
+  await writeFile(METRICOOL_100_APPROVAL_RUN_PATH, JSON.stringify(summary, null, 2));
+  await writeFile(METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH, renderMetricool100ApprovalRunMarkdown(summary));
+  await writeFile(METRICOOL_100_APPROVAL_RUN_CSV_PATH, renderMetricool100ApprovalRunCsv(summary));
+  if (quickRun) {
+    await writeFile(METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH, renderMetricool100OperatorRunSheetCsv(quickRun));
+    await writeFile(METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH, renderMetricool100ApprovalEvidenceImportCsv(quickRun, existing100EvidenceImportCsv));
+  }
+  return summary;
+}
+
+function buildEmptyMetricool100ApprovalRun(nextStep = "Run Prep 100 approval to generate the Metricool approval pack."): ClipperMetricool100ApprovalRunSummary {
+  return {
+    generatedAt: null,
+    status: "not_prepared",
+    mode: "metricool_approval_required_100",
+    manifestPath: METRICOOL_100_APPROVAL_RUN_PATH,
+    markdownPath: METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH,
+    csvPath: METRICOOL_100_APPROVAL_RUN_CSV_PATH,
+    targetWeeklyClips: 100,
+    approvalQueueTarget: 100,
+    batchSize: 100,
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    eligibleAccountIds: [],
+    metricoolQueueItemIds: [],
+    productionByAccount: {},
+    totals: {
+      productionItems: 0,
+      draftReady: 0,
+      metricoolQueuedForApproval: 0,
+      metricoolBlocked: 0,
+      readyToSend: 0,
+      approvalSessionReadyForReview: 0,
+      quickRunItems: 0,
+      sourceUploadReady: 0,
+      sourceUploadMissing: 0,
+      closeoutReadyForReview: 0,
+      closeoutEvidenceRows: 0,
+      mvpReadyAccounts: 0,
+      mvpAccounts: 0,
+    },
+    artifacts: {
+      productionQueuePath: null,
+      metricoolPublishingPath: METRICOOL_PUBLISHING_PATH,
+      metricoolExecutionQueuePath: METRICOOL_EXECUTION_QUEUE_PATH,
+      metricoolApprovalSessionPath: METRICOOL_APPROVAL_SESSION_PATH,
+      metricoolApprovalQuickRunPath: METRICOOL_APPROVAL_QUICK_RUN_PATH,
+      metricoolSourceUploadPackPath: METRICOOL_SOURCE_UPLOAD_PACK_PATH,
+      metricoolOperatorCloseoutPackPath: METRICOOL_OPERATOR_CLOSEOUT_PACK_PATH,
+      metricoolOperatorRunSheetCsvPath: METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH,
+      evidenceImportCsvPath: METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+      shortRunOperatorRunSheetCsvPath: METRICOOL_OPERATOR_CLOSEOUT_RUN_SHEET_CSV_PATH,
+      shortRunEvidenceImportCsvPath: METRICOOL_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+    },
+    guardrails: [
+      "Metricool is the MVP bridge; direct social APIs are not required for this run.",
+      "This run prepares approval_required operator work only; it does not auto-publish.",
+      "queued_for_approval is not a published count.",
+    ],
+    nextStep,
+  };
+}
+
+function isMetricool100ApprovalRunCurrent(summary: ClipperMetricool100ApprovalRunSummary, current: {
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+}): boolean {
+  const currentIds = current.metricoolApprovalSession.items.slice(0, Math.max(summary.approvalQueueTarget || 0, 1)).map((item) => item.id);
+  const summaryIds = summary.metricoolQueueItemIds || [];
+  return summary.realPublishEnabled === false
+    && summary.approvalRequired === true
+    && summary.status === "ready_for_operator"
+    && summaryIds.length > 0
+    && summaryIds.length === currentIds.length
+    && summaryIds.every((id, index) => id === currentIds[index])
+    && summary.totals.metricoolQueuedForApproval === current.metricoolExecutionQueue.totals.queuedForApproval
+    && summary.totals.metricoolBlocked === current.metricoolExecutionQueue.totals.blocked
+    && summary.totals.readyToSend === current.metricoolExecutionQueue.totals.readyToSend
+    && summary.totals.approvalSessionReadyForReview === current.metricoolApprovalSession.totals.readyForReview
+    && summary.totals.metricoolQueuedForApproval <= current.metricoolApprovalSession.totals.readyForReview;
+}
+
+function buildMetricool100ValidationMvpPack(): ClipperMetricoolMvpLaunchSummary {
+  return {
+    status: "blocked",
+    generatedAt: new Date().toISOString(),
+    manifestPath: METRICOOL_MVP_LAUNCH_PATH,
+    markdownPath: METRICOOL_MVP_LAUNCH_MARKDOWN_PATH,
+    csvPath: METRICOOL_MVP_LAUNCH_CSV_PATH,
+    pendingProfileEvidenceCsvPath: METRICOOL_PENDING_PROFILE_EVIDENCE_CSV_PATH,
+    mode: "metricool_approval_required_mvp",
+    primaryBridge: "metricool",
+    directPlatformApisNeeded: false,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    targetAccounts: [],
+    rows: [],
+    pendingProfileEvidenceRows: [],
+    pendingProfileEvidenceTemplate: `${METRICOOL_BRIDGE_EVIDENCE_TEMPLATE}\n`,
+    totals: {
+      accounts: 0,
+      readyAccounts: 0,
+      blockedAccounts: 0,
+      connectedProfiles: 0,
+      pendingMetricoolProfiles: 0,
+      queuedForApproval: 0,
+      manualReadyPosts: 0,
+      rightsReadyAssets: 0,
+      minimumWeeklySourceAssets: 0,
+      fullAutomationBlockers: 0,
+    },
+    fullAutomationStillBlockedBy: [],
+    guardrails: [
+      "Validation-only MVP shell; direct social APIs are not required for Metricool approval checks.",
+    ],
+    nextStep: "Validate the Metricool 100 schedule run against the current execution queue.",
+  };
+}
+
+async function buildMetricool100ValidationContext(): Promise<{
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+}> {
+  const metricoolExecutionQueue = await readMetricoolExecutionQueueSummary();
+  return {
+    metricoolExecutionQueue,
+    metricoolApprovalSession: buildMetricoolApprovalSessionSummary({
+      metricoolExecutionQueue,
+      metricoolMvpLaunchPack: buildMetricool100ValidationMvpPack(),
+    }),
+  };
+}
+
+export async function getClipperMetricool100ApprovalRun(current?: {
+  metricoolExecutionQueue: ClipperMetricoolExecutionQueueSummary;
+  metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
+}): Promise<ClipperMetricool100ApprovalRunSummary> {
+  const validationContext = current || await buildMetricool100ValidationContext();
+  const raw = await readFile(METRICOOL_100_APPROVAL_RUN_PATH, "utf8").catch(() => null);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as ClipperMetricool100ApprovalRunSummary;
+      if (parsed.realPublishEnabled !== false || parsed.approvalRequired !== true) {
+        return buildEmptyMetricool100ApprovalRun("The saved Metricool 100 schedule run has unsafe publish flags; refresh Prep 100 schedule before using it.");
+      }
+      const normalized: ClipperMetricool100ApprovalRunSummary = {
+        ...parsed,
+        manifestPath: METRICOOL_100_APPROVAL_RUN_PATH,
+        markdownPath: METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH,
+        csvPath: METRICOOL_100_APPROVAL_RUN_CSV_PATH,
+        directSocialApisRequired: false,
+        realPublishEnabled: false,
+        approvalRequired: true,
+        metricoolQueueItemIds: Array.isArray(parsed.metricoolQueueItemIds) ? parsed.metricoolQueueItemIds.filter((id): id is string => typeof id === "string" && id.length > 0) : [],
+      };
+      if (!isMetricool100ApprovalRunCurrent(normalized, validationContext)) {
+        return buildEmptyMetricool100ApprovalRun("The saved Metricool 100 schedule run is stale against the current queue; refresh Prep 100 schedule before using it.");
+      }
+      return normalized;
+    } catch {
+      // Fall through.
+    }
+  }
+  return buildEmptyMetricool100ApprovalRun();
+}
+
+export async function prepareClipperMetricool100ApprovalRun(userId = getSystemUserId(), input: {
+  targetWeeklyClips?: unknown;
+  approvalQueueTarget?: unknown;
+  batchSize?: number;
+} = {}) {
+  const targetWeeklyClips = normalizeProductionQueueTarget(input.targetWeeklyClips) || 100;
+  const approvalQueueTarget = normalizeMetricoolApprovalQueueTarget(input.approvalQueueTarget, targetWeeklyClips);
+  const batchSize = Math.max(1, Math.min(approvalQueueTarget, Math.trunc(input.batchSize || approvalQueueTarget)));
+
+  const { metricoolPublishing } = await prepareClipperMetricoolPublishingPlan(userId);
+  const { queue } = await prepareClipperProductionQueue(userId, {
+    targetWeeklyClips,
+    metricoolReadyOnly: true,
+  });
+  const { metricoolExecutionQueue } = await prepareClipperMetricoolExecutionQueue(userId, {
+    approvalQueueTarget,
+  });
+  const { metricoolMvpLaunchPack } = await prepareClipperMetricoolMvpLaunchPack(userId);
+  const { metricoolApprovalSession } = await prepareClipperMetricoolApprovalSession(userId);
+  const { metricoolApprovalQuickRun } = await prepareClipperMetricoolApprovalQuickRun(userId, { batchSize });
+  const { metricoolSourceUploadPack } = await prepareClipperMetricoolSourceUploadPack(userId);
+  const { metricoolOperatorCloseoutPack } = await prepareClipperMetricoolOperatorCloseoutPack(userId);
+  const metricool100QueueSafe = metricoolExecutionQueue.status === "approval_required"
+    && metricoolExecutionQueue.publishMode === "approval_required"
+    && metricoolExecutionQueue.totals.queuedForApproval >= approvalQueueTarget
+    && metricoolExecutionQueue.totals.blocked === 0
+    && metricoolExecutionQueue.totals.readyToSend === 0
+    && metricoolExecutionQueue.realPublishEnabled === false
+    && metricoolExecutionQueue.items.every((item) => item.status === "queued_for_approval" && item.approvalRequired === true && item.canSendNow === false);
+  const productionByAccount = queue.items.reduce<Record<string, number>>((sum, item) => {
+    sum[item.accountId] = (sum[item.accountId] || 0) + 1;
+    return sum;
+  }, {});
+  const metricool100ApprovalRun = await writeMetricool100ApprovalRunArtifacts({
+    generatedAt: new Date().toISOString(),
+    status: metricool100QueueSafe
+      ? "ready_for_operator" as const
+      : "needs_review" as const,
+    mode: "metricool_approval_required_100",
+    manifestPath: METRICOOL_100_APPROVAL_RUN_PATH,
+    markdownPath: METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH,
+    csvPath: METRICOOL_100_APPROVAL_RUN_CSV_PATH,
+    targetWeeklyClips,
+    approvalQueueTarget,
+    batchSize,
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    approvalRequired: true,
+    eligibleAccountIds: queue.eligibleAccountIds || [],
+    metricoolQueueItemIds: metricoolApprovalSession.items.slice(0, approvalQueueTarget).map((item) => item.id),
+    productionByAccount,
+    totals: {
+      productionItems: queue.items.length,
+      draftReady: queue.items.filter((item) => item.status === "draft_ready").length,
+      metricoolQueuedForApproval: metricoolExecutionQueue.totals.queuedForApproval,
+      metricoolBlocked: metricoolExecutionQueue.totals.blocked,
+      readyToSend: metricoolExecutionQueue.totals.readyToSend,
+      approvalSessionReadyForReview: metricoolApprovalSession.totals.readyForReview,
+      quickRunItems: metricoolApprovalQuickRun.totals.quickRunItems,
+      sourceUploadReady: metricoolSourceUploadPack.totals.readyToUpload,
+      sourceUploadMissing: metricoolSourceUploadPack.totals.missingSource,
+      closeoutReadyForReview: metricoolOperatorCloseoutPack.totals.readyForReview,
+      closeoutEvidenceRows: metricoolOperatorCloseoutPack.totals.evidenceRows,
+      mvpReadyAccounts: metricoolMvpLaunchPack.totals.readyAccounts,
+      mvpAccounts: metricoolMvpLaunchPack.totals.accounts,
+    },
+    artifacts: {
+      productionQueuePath: queue.queuePath,
+      metricoolPublishingPath: metricoolPublishing.manifestPath,
+      metricoolExecutionQueuePath: metricoolExecutionQueue.manifestPath,
+      metricoolApprovalSessionPath: metricoolApprovalSession.manifestPath,
+      metricoolApprovalQuickRunPath: metricoolApprovalQuickRun.manifestPath,
+      metricoolSourceUploadPackPath: metricoolSourceUploadPack.manifestPath,
+      metricoolOperatorCloseoutPackPath: metricoolOperatorCloseoutPack.manifestPath,
+      metricoolOperatorRunSheetCsvPath: METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH,
+      evidenceImportCsvPath: METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH,
+      shortRunOperatorRunSheetCsvPath: metricoolOperatorCloseoutPack.runSheetCsvPath,
+      shortRunEvidenceImportCsvPath: metricoolApprovalSession.evidenceImportCsvPath,
+    },
+    guardrails: [
+      "Metricool is the MVP bridge; direct social APIs are not required for this run.",
+      "This run prepares approval_required operator work only; it does not auto-publish.",
+      "queued_for_approval is not a published count.",
+      "Published URLs and views must come from Metricool/live platform evidence after scheduled posts are live.",
+      "Only Metricool-ready accounts are included; disconnected lanes stay out.",
+    ],
+    nextStep: metricoolExecutionQueue.totals.queuedForApproval >= approvalQueueTarget
+      ? `Open the operator handoff ${METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH}, process the current Metricool batch, then fill the matching CSV under ${METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR} after scheduled posts are live. The master evidence CSV is a sync target; do not edit it directly.`
+      : metricoolExecutionQueue.nextStep,
+  }, metricoolApprovalQuickRun);
+  const status = await getClipperStatus(userId);
+  const launchSummary = await getClipperMetricoolLaunchSummary(userId);
+
+  return {
+    metricool100ApprovalRun: { ...metricool100ApprovalRun, launchSummary },
+    metricoolPublishing,
+    queue,
+    metricoolExecutionQueue,
+    metricoolMvpLaunchPack,
+    metricoolApprovalSession,
+    metricoolApprovalQuickRun,
+    metricoolSourceUploadPack,
+    metricoolOperatorCloseoutPack,
+    status,
   };
 }
 
@@ -44119,14 +48309,24 @@ export async function prepareClipperPermissionPack(userId = getSystemUserId()): 
   };
 }
 
-export async function prepareClipperProductionQueue(userId = getSystemUserId()): Promise<{ queue: ClipperProductionQueueSummary; status: ClipperStatus }> {
+export async function prepareClipperProductionQueue(userId = getSystemUserId(), input: { targetWeeklyClips?: unknown; metricoolReadyOnly?: unknown } = {}): Promise<{ queue: ClipperProductionQueueSummary; status: ClipperStatus }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
+  const metricoolReadyOnly = input.metricoolReadyOnly === true || input.metricoolReadyOnly === "true";
+  const targetWeeklyClips = normalizeProductionQueueTarget(input.targetWeeklyClips);
+  const metricoolPublishing = metricoolReadyOnly
+    ? await buildClipperMetricoolPublishingSummary(accounts)
+    : null;
+  const eligibleAccountIds = metricoolReadyOnly
+    ? metricoolPublishing!.channels
+      .filter((channel) => channel.publishGate === "approval_required_ready" && channel.connectedNetworks.length > 0)
+      .map((channel) => channel.accountId)
+    : accounts.map((account) => account.id);
   const assets = await listSourceAssets();
   const usableAssets = assets.filter((asset) => asset.usable);
-  const items = buildProductionQueueItems(accounts, usableAssets);
+  const items = buildProductionQueueItems(accounts, usableAssets, { targetWeeklyClips: input.targetWeeklyClips, eligibleAccountIds });
   const readyCount = items.filter((item) => item.status === "draft_ready").length;
   const reviewCount = items.filter((item) => item.status === "rights_review").length;
   const id = new Date().toISOString().replace(/[:.]/g, "-");
@@ -44135,13 +48335,21 @@ export async function prepareClipperProductionQueue(userId = getSystemUserId()):
     status: usableAssets.length === 0 ? "needs_sources" : readyCount > 0 ? "ready" : reviewCount > 0 ? "needs_rights" : "empty",
     queuePath,
     generatedAt: new Date().toISOString(),
+    mode: metricoolReadyOnly ? "metricool_ready_only" : "standard",
+    targetWeeklyClips,
+    metricoolReadyOnly,
+    eligibleAccountIds,
     sourceAssets: assets,
     items,
-    nextStep: readyCount > 0
-      ? "Revisar drafts listos, renderizar videos verticales y mantener approval_required hasta conectar cuentas."
-      : usableAssets.length > 0
-        ? "Agregar evidencia en allowlist para desbloquear derechos antes de producir drafts."
-        : "Agregar videos fuente por categoria para producir drafts reales.",
+    nextStep: metricoolReadyOnly && eligibleAccountIds.length === 0
+      ? "No hay cuentas listas en Metricool; conecta SPORT/memes en Metricool y regenera la cola."
+      : readyCount > 0
+        ? metricoolReadyOnly
+          ? "Revisar drafts de cuentas Metricool-ready y mantener approval_required hasta programar en Metricool."
+          : "Revisar drafts listos, renderizar videos verticales y mantener approval_required hasta conectar cuentas."
+        : usableAssets.length > 0
+          ? "Agregar evidencia en allowlist para desbloquear derechos antes de producir drafts."
+          : "Agregar videos fuente por categoria para producir drafts reales.",
   };
   await writeFile(queuePath, JSON.stringify(queue, null, 2));
   return { queue, status: await getClipperStatus(userId) };
@@ -45696,11 +49904,12 @@ export async function runClipperDailyPlan(input: unknown = {}, userId = getSyste
     plannedClips,
     accountRecommendations: buildRecommendations(status.accounts),
     nextActions: [
-      `Agregar ${TOKEN_ENCRYPTION_ENV_VAR} con 32+ caracteres antes de conectar cuentas reales.`,
-      "Conectar credenciales oficiales de TikTok, Instagram y YouTube por cuenta.",
-      "Completar creacion/verificacion humana de las 9 cuentas plataforma preparadas en Setup.",
+      "Abrir Metricool, revisar la cola approval_required y aprobar/schedulear manualmente los items de SPORT y memes.",
+      "Despues de que existan posts publicos, importar evidencia real de Metricool/live URLs antes de contar published/views.",
       "Crear allowlist de fuentes/creadores con permiso explicito.",
       "Definir carpetas locales por categoria para que Clip Factory pueda generar archivos reales.",
+      "Dejar credenciales/API directas de TikTok, Instagram y YouTube como backlog para autopublish futuro; no bloquean el MVP Metricool.",
+      `Guardar ${TOKEN_ENCRYPTION_ENV_VAR} solo cuando se vaya a activar el backlog de OAuth/API directa.`,
       "Activar reportes diarios por Telegram cuando existan metricas reales de plataforma.",
     ],
     reportPath,
@@ -45747,5 +49956,6 @@ export const __clipperInternals = {
   sourceScoutUniqueExactUrlCount,
   weeklyFunnelDailyTargets,
   weeklyFunnelStatus,
+  buildRobertMetricoolMvpTunnel,
   permissionStatusRecordsPath: PERMISSION_STATUS_RECORDS_PATH,
 };

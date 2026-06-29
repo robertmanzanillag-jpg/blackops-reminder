@@ -35,7 +35,8 @@ import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode
 import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getShopifyOAuthStatus } from "./shopify-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
-import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
+import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, previewClipperMetricoolApprovalEvidence, previewClipperTikTokBatchEvidenceBatch, previewClipperTikTokBatchEvidenceRow, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperMetricoolApprovalEvidenceRow, recordClipperMetricoolBridgeEvidenceBatch, recordClipperTikTokBatchEvidenceBatch, recordClipperTikTokBatchEvidenceRow, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
+import { getClipperMetricool100ApprovalRun, getClipperMetricoolApprovalQuickRun, getClipperMetricoolLaunchSummary, getClipperMetricoolOperatorCloseoutPack, getClipperMetricoolSourceUploadPack, prepareClipperMetricool100ApprovalRun, prepareClipperMetricoolApprovalQuickRun, prepareClipperMetricoolOperatorCloseoutPack, prepareClipperMetricoolSourceUploadPack } from "./clippers-agent";
 import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
@@ -346,6 +347,7 @@ export async function registerRoutes(
     if (applyReady) args.push("--apply-ready");
     return runClipperNodeJson(args, "External closeout evidence import");
   };
+  const runClipperTikTokExternalCloseoutSession = () => runClipperJsonScript("script/clippers-tiktok-external-closeout-session.mjs", "TikTok external closeout session");
   const readClipperAccountPermissionReadiness = async () => {
     const raw = await readNodeFile("clippers_workspace/account-permission-readiness.json", "utf8");
     return JSON.parse(raw);
@@ -390,6 +392,10 @@ export async function registerRoutes(
       evidenceCsvTemplate: buildClipperExternalCloseoutEvidenceCsvTemplate(rows),
     };
   };
+  const readClipperExternalCloseoutBatches = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-batches.json", "utf8");
+    return JSON.parse(raw);
+  };
   const readClipperExternalCloseoutNextAction = async () => {
     const operatorQueue = await readClipperExternalCloseoutOperatorQueue();
     const nextAction = operatorQueue.rows?.[0] || null;
@@ -412,8 +418,80 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-evidence-import-report.json", "utf8");
     return JSON.parse(raw);
   };
+  const readClipperMetricool100OperatorHandoff = async () => {
+    const raw = await readNodeFile("clippers_workspace/scheduled/metricool-100-operator-handoff.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokLaunchControl = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-launch-control.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperGoalCompletionAudit = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-goal-completion-audit.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokBatchTracker = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-batch-tracker.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokBatchEvidenceSync = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-batch-evidence-sync.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokBatchRunbook = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-batch-runbook.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokEvidenceChecklist = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-evidence-checklist.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokPostScheduleVerifier = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-post-schedule-verifier.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokBatchCloseoutVerifier = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-batch-closeout-verifier.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokNextAction = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-next-action.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokOperatorCockpit = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-operator-cockpit.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokOperatorCockpitPreflight = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-operator-cockpit-preflight.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpGoLivePacket = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-mvp-go-live-packet.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpReadinessVerifier = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-mvp-readiness-verifier.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperMetricoolMcpPreflight = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-metricool-mcp-preflight.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperMetricoolCurrentBatchUploadPack = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-metricool-current-batch-upload-pack.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperMetricoolCurrentBatchSessionPacket = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-metricool-current-batch-session-packet.json", "utf8");
+    return JSON.parse(raw);
+  };
   const readClipperExternalCloseoutRepairWorkPacket = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-repair-work-packet.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokExternalCloseoutSession = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-external-closeout-session.json", "utf8");
     return JSON.parse(raw);
   };
   const readTextWithTimeout = async (filePath: string, timeoutMs: number) => Promise.race([
@@ -2175,6 +2253,254 @@ export async function registerRoutes(
     return next();
   });
 
+  app.get("/api/clippers/launch-summary", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const launchSummary = await getClipperMetricoolLaunchSummary(getCurrentUserId(req));
+      res.json({ launchSummary });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers launch summary" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-100-approval-run", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricool100ApprovalRun = await getClipperMetricool100ApprovalRun();
+      res.json({ metricool100ApprovalRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool 100 approval run" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-100-operator-handoff", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricool100OperatorHandoff = await readClipperMetricool100OperatorHandoff();
+      res.json({ metricool100OperatorHandoff });
+    } catch (error: any) {
+      res.status(404).json({ error: error.message || "Failed to inspect clippers Metricool 100 operator handoff" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-launch-control", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokLaunchControl = await readClipperTikTokLaunchControl();
+      res.json({ tiktokLaunchControl });
+    } catch (error: any) {
+      res.status(404).json({ error: error.message || "Failed to inspect clippers TikTok launch control" });
+    }
+  });
+
+  app.get("/api/clippers/goal-completion-audit", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const goalCompletionAudit = await readClipperGoalCompletionAudit();
+      res.json({ goalCompletionAudit });
+    } catch (error: any) {
+      res.status(404).json({ error: error.message || "Failed to inspect clippers goal completion audit" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-batch-tracker", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      res.json({ tiktokBatchTracker });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok batch tracker" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-batch-evidence-sync", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokBatchEvidenceSync = await readClipperTikTokBatchEvidenceSync();
+      res.json({ tiktokBatchEvidenceSync });
+    } catch (error: any) {
+      res.status(404).json({ error: error.message || "Failed to inspect clippers TikTok batch evidence sync" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-batch-runbook", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const tiktokBatchRunbook = await readClipperTikTokBatchRunbook();
+      res.json({ tiktokBatchRunbook });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok batch runbook" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-evidence-checklist", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      res.json({ tiktokEvidenceChecklist });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok evidence checklist" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-post-schedule-verifier", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
+      res.json({ tiktokPostScheduleVerifier });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok post-schedule verifier" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-batch-closeout-verifier", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
+      res.json({ tiktokBatchCloseoutVerifier });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok batch closeout verifier" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-next-action", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      const tiktokNextAction = await readClipperTikTokNextAction();
+      res.json({ tiktokNextAction });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok next action" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-operator-cockpit", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokOperatorCockpit = await readClipperTikTokOperatorCockpit();
+      res.json({ tiktokOperatorCockpit });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok operator cockpit" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-operator-cockpit-preflight", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokOperatorCockpitPreflight = await readClipperTikTokOperatorCockpitPreflight();
+      res.json({ tiktokOperatorCockpitPreflight });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok operator cockpit preflight" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-go-live-packet", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokMvpGoLivePacket = await readClipperTikTokMvpGoLivePacket();
+      res.json({ tiktokMvpGoLivePacket });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok MVP go-live packet" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-readiness-verifier", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const tiktokMvpReadinessVerifier = await readClipperTikTokMvpReadinessVerifier();
+      res.json({ tiktokMvpReadinessVerifier });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers TikTok MVP readiness verifier" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-mcp-preflight", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricoolMcpPreflight = await readClipperMetricoolMcpPreflight();
+      res.json({ metricoolMcpPreflight });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool MCP preflight" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-current-batch-upload-pack", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricoolCurrentBatchUploadPack = await readClipperMetricoolCurrentBatchUploadPack();
+      res.json({ metricoolCurrentBatchUploadPack });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool current batch upload pack" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-current-batch-session-packet", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+      const metricoolCurrentBatchSessionPacket = await readClipperMetricoolCurrentBatchSessionPacket();
+      res.json({ metricoolCurrentBatchSessionPacket });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool current batch session packet" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-approval-quick-run", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricoolApprovalQuickRun = await getClipperMetricoolApprovalQuickRun(getCurrentUserId(req));
+      res.json({ metricoolApprovalQuickRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool approval quick run" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-source-upload-pack", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricoolSourceUploadPack = await getClipperMetricoolSourceUploadPack(getCurrentUserId(req));
+      res.json({ metricoolSourceUploadPack });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool source upload pack" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-operator-closeout-pack", async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      const metricoolOperatorCloseoutPack = await getClipperMetricoolOperatorCloseoutPack(getCurrentUserId(req));
+      res.json({ metricoolOperatorCloseoutPack });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to inspect clippers Metricool operator closeout pack" });
+    }
+  });
+
   app.get("/api/clippers/status", async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
@@ -2318,6 +2644,7 @@ export async function registerRoutes(
         externalCloseoutPack: await readClipperExternalCloseoutPack(),
         externalCloseoutProofTodo: await readClipperExternalCloseoutProofTodo(),
         externalCloseoutOperatorQueue: await readClipperExternalCloseoutOperatorQueue(),
+        externalCloseoutBatches: await readClipperExternalCloseoutBatches(),
         externalCloseoutNextAction: await readClipperExternalCloseoutNextAction(),
         externalCloseoutNextWorkRun: await readClipperExternalCloseoutNextWorkRun(),
       });
@@ -2341,6 +2668,15 @@ export async function registerRoutes(
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 500;
       res.status(status).json({ error: error.message || (status === 404 ? "External closeout operator queue has not been prepared" : "External closeout operator queue could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/external-closeout-batches", async (_req, res) => {
+    try {
+      res.json({ externalCloseoutBatches: await readClipperExternalCloseoutBatches() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "External closeout batches have not been prepared" : "External closeout batches could not be read") });
     }
   });
 
@@ -2389,6 +2725,28 @@ export async function registerRoutes(
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 500;
       res.status(status).json({ error: error.message || (status === 404 ? "External closeout repair work packet has not been prepared" : "External closeout repair work packet could not be read") });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-external-closeout-session", async (_req, res) => {
+    try {
+      res.json({ tiktokExternalCloseoutSession: await readClipperTikTokExternalCloseoutSession() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok external closeout session has not been prepared" : "TikTok external closeout session could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-external-closeout-session", async (_req, res) => {
+    try {
+      await runClipperExternalCloseoutEvidenceImport(false);
+      await runClipperTikTokExternalCloseoutSession();
+      res.json({
+        externalCloseoutEvidenceImport: await readClipperExternalCloseoutEvidenceImport(),
+        tiktokExternalCloseoutSession: await readClipperTikTokExternalCloseoutSession(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare TikTok external closeout session" });
     }
   });
 
@@ -2775,10 +3133,422 @@ export async function registerRoutes(
 
   app.post("/api/clippers/prepare-metricool-execution-queue", async (req, res) => {
     try {
-      const result = await prepareClipperMetricoolExecutionQueue(getCurrentUserId(req));
+      const result = await prepareClipperMetricoolExecutionQueue(getCurrentUserId(req), {
+        approvalQueueTarget: req.body?.approvalQueueTarget ?? req.body?.target,
+      });
       res.json({ metricoolExecutionQueue: result.metricoolExecutionQueue });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool execution queue" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-100-approval-run", async (req, res) => {
+    try {
+      const result = await prepareClipperMetricool100ApprovalRun(getCurrentUserId(req), {
+        targetWeeklyClips: req.body?.targetWeeklyClips,
+        approvalQueueTarget: req.body?.approvalQueueTarget ?? req.body?.target,
+        batchSize: typeof req.body?.batchSize === "number" ? req.body.batchSize : undefined,
+      });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool 100 approval run" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-100-operator-handoff", async (req, res) => {
+    try {
+      const run = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      const metricool100OperatorHandoff = await readClipperMetricool100OperatorHandoff();
+      res.json({ metricool100OperatorHandoff, run });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool 100 operator handoff" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-launch-control", async (req, res) => {
+    try {
+      const run = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      const tiktokLaunchControl = await readClipperTikTokLaunchControl();
+      res.json({ tiktokLaunchControl, run });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok launch control" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-goal-completion-audit", async (req, res) => {
+    try {
+      const run = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const goalCompletionAudit = await readClipperGoalCompletionAudit();
+      res.json({ goalCompletionAudit, run });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers goal completion audit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-batch-tracker", async (req, res) => {
+    try {
+      const run = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      res.json({ tiktokBatchTracker, run });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok batch tracker" });
+    }
+  });
+
+  app.post("/api/clippers/sync-tiktok-batch-evidence", async (req, res) => {
+    try {
+      const run = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const preview = await previewClipperMetricoolApprovalEvidence();
+      const tiktokBatchEvidenceSync = await readClipperTikTokBatchEvidenceSync();
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      res.json({
+        tiktokBatchEvidenceSync,
+        tiktokBatchTracker,
+        metricoolApprovalEvidencePreview: preview.metricoolApprovalEvidencePreview,
+        run,
+        trackerRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to sync clippers TikTok batch evidence" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-batch-runbook", async (req, res) => {
+    try {
+      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const run = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const tiktokBatchRunbook = await readClipperTikTokBatchRunbook();
+      res.json({ tiktokBatchRunbook, run, trackerRun, syncRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok batch runbook" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-evidence-checklist", async (req, res) => {
+    try {
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const run = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      res.json({ tiktokEvidenceChecklist, run, trackerRun, runbookRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok evidence checklist" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-post-schedule-verifier", async (req, res) => {
+    try {
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const run = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      res.json({ tiktokPostScheduleVerifier, tiktokBatchTracker, tiktokEvidenceChecklist, run, trackerRun, checklistRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok post-schedule verifier" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-batch-closeout-verifier", async (req, res) => {
+    try {
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      const run = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
+      const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      res.json({ tiktokBatchCloseoutVerifier, tiktokPostScheduleVerifier, tiktokBatchTracker, tiktokEvidenceChecklist, run, trackerRun, checklistRun, postScheduleVerifierRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok batch closeout verifier" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-next-action", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      const closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      const goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const run = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      const tiktokNextAction = await readClipperTikTokNextAction();
+      const accountPermissionReadiness = await readClipperAccountPermissionReadiness();
+      const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
+      const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
+      const goalCompletionAudit = await readClipperGoalCompletionAudit();
+      res.json({ tiktokNextAction, accountPermissionReadiness, tiktokPostScheduleVerifier, tiktokBatchCloseoutVerifier, goalCompletionAudit, run, accountRun, trackerRun, checklistRun, postScheduleVerifierRun, closeoutRun, goalAuditRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok next action" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-operator-cockpit", async (req, res) => {
+    try {
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      let uploadPackRun: any;
+      try {
+        uploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+      } catch (uploadError: any) {
+        uploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+      }
+      const run = await runClipperJsonScript("script/clippers-tiktok-operator-cockpit.mjs", "TikTok operator cockpit");
+      const tiktokOperatorCockpit = await readClipperTikTokOperatorCockpit();
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      const tiktokBatchRunbook = await readClipperTikTokBatchRunbook();
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      const metricoolCurrentBatchUploadPack = await readClipperMetricoolCurrentBatchUploadPack();
+      res.json({ tiktokOperatorCockpit, tiktokBatchTracker, tiktokBatchRunbook, tiktokEvidenceChecklist, metricoolCurrentBatchUploadPack, run, trackerRun, runbookRun, evidenceChecklistRun, uploadPackRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok operator cockpit" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-operator-cockpit-preflight", async (req, res) => {
+    try {
+      const preflightRefreshStartedAt = new Date().toISOString();
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      let uploadPackRun: any;
+      try {
+        uploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+      } catch (uploadError: any) {
+        uploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+      }
+      const cockpitRun = await runClipperJsonScript("script/clippers-tiktok-operator-cockpit.mjs", "TikTok operator cockpit");
+      const run = await runClipperNodeJson(["script/clippers-tiktok-operator-cockpit-preflight.mjs", "--min-upload-generated-at", preflightRefreshStartedAt], "TikTok operator cockpit preflight");
+      const tiktokOperatorCockpit = await readClipperTikTokOperatorCockpit();
+      const tiktokOperatorCockpitPreflight = await readClipperTikTokOperatorCockpitPreflight();
+      const tiktokBatchTracker = await readClipperTikTokBatchTracker();
+      const tiktokBatchRunbook = await readClipperTikTokBatchRunbook();
+      const tiktokEvidenceChecklist = await readClipperTikTokEvidenceChecklist();
+      const metricoolCurrentBatchUploadPack = await readClipperMetricoolCurrentBatchUploadPack();
+      res.json({ tiktokOperatorCockpitPreflight, tiktokOperatorCockpit, tiktokBatchTracker, tiktokBatchRunbook, tiktokEvidenceChecklist, metricoolCurrentBatchUploadPack, run, trackerRun, runbookRun, evidenceChecklistRun, uploadPackRun, cockpitRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok operator cockpit preflight" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-go-live-packet", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const run = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      const tiktokMvpGoLivePacket = await readClipperTikTokMvpGoLivePacket();
+      res.json({ tiktokMvpGoLivePacket, run, accountRun, syncRun, trackerRun, runbookRun, evidenceChecklistRun, auditRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok MVP go-live packet" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-readiness-verifier", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      const launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      const auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const packetRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      const run = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      const tiktokMvpReadinessVerifier = await readClipperTikTokMvpReadinessVerifier();
+      res.json({ tiktokMvpReadinessVerifier, run, accountRun, syncRun, trackerRun, runbookRun, checklistRun, handoffRun, launchRun, auditRun, packetRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok MVP readiness verifier" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-mcp-preflight", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      const launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      const auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const packetRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      const verifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      const run = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+      const metricoolMcpPreflight = await readClipperMetricoolMcpPreflight();
+      res.json({ metricoolMcpPreflight, run, accountRun, syncRun, handoffRun, launchRun, auditRun, packetRun, verifierRun });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool MCP preflight" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-current-batch-upload-pack", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      const handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      const launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      const auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const packetRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      const verifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      const preflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+      const run = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+      const metricoolCurrentBatchUploadPack = await readClipperMetricoolCurrentBatchUploadPack();
+      res.json({ metricoolCurrentBatchUploadPack, run, accountRun, syncRun, handoffRun, launchRun, auditRun, packetRun, verifierRun, preflightRun });
+    } catch (error: any) {
+      if (String(error.message || "").includes("already have operator evidence")) {
+        const metricoolCurrentBatchUploadPack = await readClipperMetricoolCurrentBatchUploadPack();
+        res.status(202).json({
+          metricoolCurrentBatchUploadPack,
+          run: { status: "blocked", error: error.message },
+        });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool current batch upload pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-current-batch-session-packet", async (req, res) => {
+    try {
+      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      const postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      const closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      const goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      const run = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+      const metricoolCurrentBatchSessionPacket = await readClipperMetricoolCurrentBatchSessionPacket();
+      const tiktokNextAction = await readClipperTikTokNextAction();
+      const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
+      const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
+      const goalCompletionAudit = await readClipperGoalCompletionAudit();
+      res.json({
+        metricoolCurrentBatchSessionPacket,
+        tiktokNextAction,
+        tiktokPostScheduleVerifier,
+        tiktokBatchCloseoutVerifier,
+        goalCompletionAudit,
+        run,
+        accountRun,
+        trackerRun,
+        checklistRun,
+        postScheduleVerifierRun,
+        closeoutRun,
+        goalAuditRun,
+        tiktokNextActionRun,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool current batch session packet" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-now-refresh", async (req, res) => {
+    try {
+      const refreshStartedAt = new Date().toISOString();
+      const runs: Record<string, any> = {};
+      const metricool100ApprovalRunResult = await prepareClipperMetricool100ApprovalRun(getCurrentUserId(req), {
+        targetWeeklyClips: 100,
+        approvalQueueTarget: 100,
+        batchSize: 100,
+      });
+      runs.accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      runs.syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      runs.handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      runs.launchControlRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      runs.trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      runs.runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      runs.evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      runs.postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+      runs.batchCloseoutVerifierRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      try {
+        runs.uploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+      } catch (uploadError: any) {
+        runs.uploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+      }
+      runs.cockpitRun = await runClipperJsonScript("script/clippers-tiktok-operator-cockpit.mjs", "TikTok operator cockpit");
+      runs.preflightRun = await runClipperNodeJson(["script/clippers-tiktok-operator-cockpit-preflight.mjs", "--min-upload-generated-at", refreshStartedAt], "TikTok operator cockpit preflight");
+      runs.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      runs.goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      runs.verifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      runs.metricoolMcpPreflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+      runs.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      runs.metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+
+      const [
+        metricool100OperatorHandoff,
+        tiktokLaunchControl,
+        tiktokBatchEvidenceSync,
+        tiktokBatchTracker,
+        tiktokBatchRunbook,
+        tiktokEvidenceChecklist,
+        tiktokPostScheduleVerifier,
+        tiktokBatchCloseoutVerifier,
+        tiktokNextAction,
+        metricoolCurrentBatchUploadPack,
+        metricoolCurrentBatchSessionPacket,
+        tiktokOperatorCockpit,
+        tiktokOperatorCockpitPreflight,
+        tiktokMvpGoLivePacket,
+        goalCompletionAudit,
+        tiktokMvpReadinessVerifier,
+        metricoolMcpPreflight,
+      ] = await Promise.all([
+        readClipperMetricool100OperatorHandoff(),
+        readClipperTikTokLaunchControl(),
+        readClipperTikTokBatchEvidenceSync(),
+        readClipperTikTokBatchTracker(),
+        readClipperTikTokBatchRunbook(),
+        readClipperTikTokEvidenceChecklist(),
+        readClipperTikTokPostScheduleVerifier(),
+        readClipperTikTokBatchCloseoutVerifier(),
+        readClipperTikTokNextAction(),
+        readClipperMetricoolCurrentBatchUploadPack(),
+        readClipperMetricoolCurrentBatchSessionPacket(),
+        readClipperTikTokOperatorCockpit(),
+        readClipperTikTokOperatorCockpitPreflight(),
+        readClipperTikTokMvpGoLivePacket(),
+        readClipperGoalCompletionAudit(),
+        readClipperTikTokMvpReadinessVerifier(),
+        readClipperMetricoolMcpPreflight(),
+      ]);
+
+      res.json({
+        mode: "tiktok_metricool_mvp_now_refresh",
+        realPublishEnabled: false,
+        directSocialApisRequired: false,
+        metricool100ApprovalRun: metricool100ApprovalRunResult.metricool100ApprovalRun,
+        metricoolPublishing: metricool100ApprovalRunResult.metricoolPublishing,
+        metricoolExecutionQueue: metricool100ApprovalRunResult.metricoolExecutionQueue,
+        status: metricool100ApprovalRunResult.status,
+        metricool100OperatorHandoff,
+        tiktokLaunchControl,
+        tiktokBatchEvidenceSync,
+        tiktokBatchTracker,
+        tiktokBatchRunbook,
+        tiktokEvidenceChecklist,
+        tiktokPostScheduleVerifier,
+        tiktokBatchCloseoutVerifier,
+        tiktokNextAction,
+        metricoolCurrentBatchUploadPack,
+        metricoolCurrentBatchSessionPacket,
+        tiktokOperatorCockpit,
+        tiktokOperatorCockpitPreflight,
+        tiktokMvpGoLivePacket,
+        goalCompletionAudit,
+        tiktokMvpReadinessVerifier,
+        metricoolMcpPreflight,
+        runs,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to refresh clippers TikTok MVP now artifacts" });
     }
   });
 
@@ -2800,12 +3570,319 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/prepare-metricool-approval-quick-run", async (req, res) => {
+    try {
+      const batchSize = typeof req.body?.batchSize === "number" ? req.body.batchSize : undefined;
+      const result = await prepareClipperMetricoolApprovalQuickRun(getCurrentUserId(req), { batchSize });
+      res.json({
+        metricoolApprovalQuickRun: result.metricoolApprovalQuickRun,
+        metricoolApprovalSession: result.metricoolApprovalSession,
+        status: result.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool approval quick run" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-source-upload-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperMetricoolSourceUploadPack(getCurrentUserId(req));
+      res.json({
+        metricoolSourceUploadPack: result.metricoolSourceUploadPack,
+        status: result.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool source upload pack" });
+    }
+  });
+
+  app.post("/api/clippers/prepare-metricool-operator-closeout-pack", async (req, res) => {
+    try {
+      const result = await prepareClipperMetricoolOperatorCloseoutPack(getCurrentUserId(req));
+      res.json({
+        metricoolOperatorCloseoutPack: result.metricoolOperatorCloseoutPack,
+        status: result.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool operator closeout pack" });
+    }
+  });
+
   app.post("/api/clippers/prepare-metricool-approval-report", async (req, res) => {
     try {
       const result = await prepareClipperMetricoolApprovalReport(getCurrentUserId(req));
       res.json({ metricoolApprovalReport: result.metricoolApprovalReport, status: result.status });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers Metricool approval report" });
+    }
+  });
+
+  app.post("/api/clippers/record-metricool-approval-evidence-row", async (req, res) => {
+    try {
+      const result = await recordClipperMetricoolApprovalEvidenceRow(req.body || {}, getCurrentUserId(req));
+      res.json({
+        metricoolApprovalReport: result.metricoolApprovalReport,
+        metricoolOperatorCloseoutPack: result.metricoolOperatorCloseoutPack,
+        status: result.status,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers Metricool approval evidence row" });
+    }
+  });
+
+  app.post("/api/clippers/preview-tiktok-batch-evidence-row", async (req, res) => {
+    try {
+      const preview = await previewClipperTikTokBatchEvidenceRow(req.body || {});
+      res.json({ preview });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview clippers TikTok batch evidence row" });
+    }
+  });
+
+  app.post("/api/clippers/preview-tiktok-batch-evidence-batch", async (req, res) => {
+    try {
+      const tiktokBatchEvidenceBatch = await previewClipperTikTokBatchEvidenceBatch(req.body || {});
+      res.json({ tiktokBatchEvidenceBatch });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview clippers TikTok batch evidence batch" });
+    }
+  });
+
+  app.post("/api/clippers/record-tiktok-batch-evidence-row", async (req, res) => {
+    try {
+      const record = await recordClipperTikTokBatchEvidenceRow(req.body || {});
+      let refreshStatus: "complete" | "partial_refresh_failed" = "complete";
+      let refreshError: string | null = null;
+      let syncRun: any = null;
+      let handoffRun: any = null;
+      let trackerRun: any = null;
+      let runbookRun: any = null;
+      let evidenceChecklistRun: any = null;
+      let postScheduleVerifierRun: any = null;
+      let closeoutRun: any = null;
+      let launchControlRun: any = null;
+      let goLiveRun: any = null;
+      let auditRun: any = null;
+      let verifierRun: any = null;
+      let metricoolMcpPreflightRun: any = null;
+      let uploadPackRun: any = null;
+      let tiktokNextActionRun: any = null;
+      let metricoolCurrentBatchSessionPacketRun: any = null;
+
+      try {
+        syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+        handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+        trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+        runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+        evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+        postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+        closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+        launchControlRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+        goLiveRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+        auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+        verifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+        metricoolMcpPreflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+        try {
+          uploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+        } catch (uploadError: any) {
+          if (!String(uploadError?.message || "").includes("already have operator evidence")) {
+            throw uploadError;
+          }
+          uploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+        }
+        tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+        metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+      } catch (refreshFailure: any) {
+        refreshStatus = "partial_refresh_failed";
+        refreshError = refreshFailure?.message || "TikTok evidence was recorded, but one or more refresh scripts failed";
+      }
+
+      const readFreshArtifact = async <T>(reader: () => Promise<T>) => {
+        try {
+          return await reader();
+        } catch {
+          return null;
+        }
+      };
+      const tiktokBatchEvidenceSync = await readFreshArtifact(readClipperTikTokBatchEvidenceSync);
+      const metricool100OperatorHandoff = await readFreshArtifact(readClipperMetricool100OperatorHandoff);
+      const tiktokBatchTracker = await readFreshArtifact(readClipperTikTokBatchTracker);
+      const tiktokBatchRunbook = await readFreshArtifact(readClipperTikTokBatchRunbook);
+      const tiktokEvidenceChecklist = await readFreshArtifact(readClipperTikTokEvidenceChecklist);
+      const tiktokPostScheduleVerifier = await readFreshArtifact(readClipperTikTokPostScheduleVerifier);
+      const tiktokBatchCloseoutVerifier = await readFreshArtifact(readClipperTikTokBatchCloseoutVerifier);
+      const tiktokLaunchControl = await readFreshArtifact(readClipperTikTokLaunchControl);
+      const tiktokMvpGoLivePacket = await readFreshArtifact(readClipperTikTokMvpGoLivePacket);
+      const goalCompletionAudit = await readFreshArtifact(readClipperGoalCompletionAudit);
+      const tiktokMvpReadinessVerifier = await readFreshArtifact(readClipperTikTokMvpReadinessVerifier);
+      const metricoolMcpPreflight = await readFreshArtifact(readClipperMetricoolMcpPreflight);
+      const metricoolCurrentBatchUploadPack = await readFreshArtifact(readClipperMetricoolCurrentBatchUploadPack);
+      const tiktokNextAction = await readFreshArtifact(readClipperTikTokNextAction);
+      const metricoolCurrentBatchSessionPacket = await readFreshArtifact(readClipperMetricoolCurrentBatchSessionPacket);
+      const preview = await readFreshArtifact(previewClipperMetricoolApprovalEvidence);
+      res.status(refreshStatus === "complete" ? 200 : 202).json({
+        record,
+        refreshStatus,
+        refreshError,
+        tiktokBatchEvidenceSync,
+        metricool100OperatorHandoff,
+        tiktokBatchTracker,
+        tiktokBatchRunbook,
+        tiktokEvidenceChecklist,
+        tiktokPostScheduleVerifier,
+        tiktokBatchCloseoutVerifier,
+        tiktokLaunchControl,
+        tiktokMvpGoLivePacket,
+        goalCompletionAudit,
+        tiktokMvpReadinessVerifier,
+        metricoolMcpPreflight,
+        metricoolCurrentBatchUploadPack,
+        tiktokNextAction,
+        metricoolCurrentBatchSessionPacket,
+        metricoolApprovalEvidencePreview: preview?.metricoolApprovalEvidencePreview || null,
+        syncRun,
+        handoffRun,
+        trackerRun,
+        runbookRun,
+        evidenceChecklistRun,
+        postScheduleVerifierRun,
+        closeoutRun,
+        launchControlRun,
+        goLiveRun,
+        auditRun,
+        verifierRun,
+        metricoolMcpPreflightRun,
+        uploadPackRun,
+        tiktokNextActionRun,
+        metricoolCurrentBatchSessionPacketRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers TikTok batch evidence row" });
+    }
+  });
+
+  app.post("/api/clippers/record-tiktok-batch-evidence-batch", async (req, res) => {
+    try {
+      const tiktokBatchEvidenceBatch = await recordClipperTikTokBatchEvidenceBatch(req.body || {});
+      if (tiktokBatchEvidenceBatch.status !== "applied") {
+        res.status(400).json({ tiktokBatchEvidenceBatch, error: tiktokBatchEvidenceBatch.nextStep });
+        return;
+      }
+      let refreshStatus: "complete" | "partial_refresh_failed" = "complete";
+      let refreshError: string | null = null;
+      let syncRun: any = null;
+      let handoffRun: any = null;
+      let trackerRun: any = null;
+      let runbookRun: any = null;
+      let evidenceChecklistRun: any = null;
+      let postScheduleVerifierRun: any = null;
+      let closeoutRun: any = null;
+      let launchControlRun: any = null;
+      let goLiveRun: any = null;
+      let auditRun: any = null;
+      let verifierRun: any = null;
+      let metricoolMcpPreflightRun: any = null;
+      let uploadPackRun: any = null;
+      let tiktokNextActionRun: any = null;
+      let metricoolCurrentBatchSessionPacketRun: any = null;
+      try {
+        syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+        handoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+        trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+        runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+        evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+        postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
+        closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+        launchControlRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+        goLiveRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+        auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+        verifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+        metricoolMcpPreflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+        try {
+          uploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+        } catch (uploadError: any) {
+          if (!String(uploadError?.message || "").includes("already have operator evidence")) {
+            throw uploadError;
+          }
+          uploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+        }
+        tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+        metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+      } catch (refreshFailure: any) {
+        refreshStatus = "partial_refresh_failed";
+        refreshError = refreshFailure?.message || "TikTok batch evidence was applied, but one or more refresh scripts failed.";
+      }
+      const readFreshArtifact = async <T>(reader: () => Promise<T>) => {
+        try {
+          return await reader();
+        } catch {
+          return null;
+        }
+      };
+      const tiktokBatchEvidenceSync = await readFreshArtifact(readClipperTikTokBatchEvidenceSync);
+      const metricool100OperatorHandoff = await readFreshArtifact(readClipperMetricool100OperatorHandoff);
+      const tiktokBatchTracker = await readFreshArtifact(readClipperTikTokBatchTracker);
+      const tiktokBatchRunbook = await readFreshArtifact(readClipperTikTokBatchRunbook);
+      const tiktokEvidenceChecklist = await readFreshArtifact(readClipperTikTokEvidenceChecklist);
+      const tiktokPostScheduleVerifier = await readFreshArtifact(readClipperTikTokPostScheduleVerifier);
+      const tiktokBatchCloseoutVerifier = await readFreshArtifact(readClipperTikTokBatchCloseoutVerifier);
+      const tiktokLaunchControl = await readFreshArtifact(readClipperTikTokLaunchControl);
+      const tiktokMvpGoLivePacket = await readFreshArtifact(readClipperTikTokMvpGoLivePacket);
+      const goalCompletionAudit = await readFreshArtifact(readClipperGoalCompletionAudit);
+      const tiktokMvpReadinessVerifier = await readFreshArtifact(readClipperTikTokMvpReadinessVerifier);
+      const metricoolMcpPreflight = await readFreshArtifact(readClipperMetricoolMcpPreflight);
+      const metricoolCurrentBatchUploadPack = await readFreshArtifact(readClipperMetricoolCurrentBatchUploadPack);
+      const tiktokNextAction = await readFreshArtifact(readClipperTikTokNextAction);
+      const metricoolCurrentBatchSessionPacket = await readFreshArtifact(readClipperMetricoolCurrentBatchSessionPacket);
+      const preview = await readFreshArtifact(previewClipperMetricoolApprovalEvidence);
+      const refreshComplete = refreshStatus === "complete";
+      res.status(refreshStatus === "complete" ? 200 : 202).json({
+        tiktokBatchEvidenceBatch,
+        refreshStatus,
+        refreshError,
+        tiktokBatchEvidenceSync: refreshComplete ? tiktokBatchEvidenceSync : null,
+        metricool100OperatorHandoff: refreshComplete ? metricool100OperatorHandoff : null,
+        tiktokBatchTracker: refreshComplete ? tiktokBatchTracker : null,
+        tiktokBatchRunbook: refreshComplete ? tiktokBatchRunbook : null,
+        tiktokEvidenceChecklist: refreshComplete ? tiktokEvidenceChecklist : null,
+        tiktokPostScheduleVerifier: refreshComplete ? tiktokPostScheduleVerifier : null,
+        tiktokBatchCloseoutVerifier: refreshComplete ? tiktokBatchCloseoutVerifier : null,
+        tiktokLaunchControl: refreshComplete ? tiktokLaunchControl : null,
+        tiktokMvpGoLivePacket: refreshComplete ? tiktokMvpGoLivePacket : null,
+        goalCompletionAudit: refreshComplete ? goalCompletionAudit : null,
+        tiktokMvpReadinessVerifier: refreshComplete ? tiktokMvpReadinessVerifier : null,
+        metricoolMcpPreflight: refreshComplete ? metricoolMcpPreflight : null,
+        metricoolCurrentBatchUploadPack: refreshComplete ? metricoolCurrentBatchUploadPack : null,
+        tiktokNextAction: refreshComplete ? tiktokNextAction : null,
+        metricoolCurrentBatchSessionPacket: refreshComplete ? metricoolCurrentBatchSessionPacket : null,
+        metricoolApprovalEvidencePreview: refreshComplete ? preview?.metricoolApprovalEvidencePreview || null : null,
+        syncRun,
+        handoffRun,
+        trackerRun,
+        runbookRun,
+        evidenceChecklistRun,
+        postScheduleVerifierRun,
+        closeoutRun,
+        launchControlRun,
+        goLiveRun,
+        auditRun,
+        verifierRun,
+        metricoolMcpPreflightRun,
+        uploadPackRun,
+        tiktokNextActionRun,
+        metricoolCurrentBatchSessionPacketRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to record clippers TikTok batch evidence batch" });
+    }
+  });
+
+  app.post("/api/clippers/preview-metricool-approval-evidence", async (req, res) => {
+    try {
+      const result = await previewClipperMetricoolApprovalEvidence();
+      res.json({ metricoolApprovalEvidencePreview: result.metricoolApprovalEvidencePreview });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to preview Clippers Metricool approval evidence" });
     }
   });
 
@@ -2824,6 +3901,15 @@ export async function registerRoutes(
       res.json({ metricoolAccountEvidence: result.metricoolAccountEvidence, status: result.status });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to record Clippers Metricool account evidence" });
+    }
+  });
+
+  app.post("/api/clippers/record-metricool-bridge-evidence-batch", async (req, res) => {
+    try {
+      const result = await recordClipperMetricoolBridgeEvidenceBatch(req.body || {}, getCurrentUserId(req));
+      res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, status: result.status });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to record Clippers Metricool bridge evidence batch" });
     }
   });
 
@@ -3176,8 +4262,11 @@ export async function registerRoutes(
 
   app.post("/api/clippers/prepare-production-queue", async (req, res) => {
     try {
-      const result = await prepareClipperProductionQueue(getCurrentUserId(req));
-      res.json({ queue: result.queue });
+      const result = await prepareClipperProductionQueue(getCurrentUserId(req), {
+        targetWeeklyClips: req.body?.targetWeeklyClips,
+        metricoolReadyOnly: req.body?.metricoolReadyOnly,
+      });
+      res.json({ queue: result.queue, status: result.status });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers production queue" });
     }

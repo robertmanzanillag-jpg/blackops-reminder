@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 import { promises as dns } from "node:dns";
 import path from "node:path";
-import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
+import { __clipperInternals, bootstrapClipperAccounts, bootstrapClipperWorkspace, buildClipperConnectActions, getClipperMetricool100ApprovalRun, getClipperMetricoolLaunchSummary, getClipperMetricoolOperatorCloseoutPack, getClipperMetricoolSourceUploadPack, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricool100ApprovalRun, prepareClipperMetricoolApprovalQuickRun, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolOperatorCloseoutPack, prepareClipperMetricoolPublishingPlan, prepareClipperMetricoolSourceUploadPack, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, previewClipperMetricoolApprovalEvidence, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperMetricoolApprovalEvidenceRow, recordClipperMetricoolBridgeEvidenceBatch, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperDraftVideos, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, saveClipperTokenPayload, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "../server/clippers-agent";
 import { buildClipperExternalCloseoutBatchCopyPacket, buildClipperExternalCloseoutEvidenceCsvTemplate, buildClipperExternalCloseoutNextActionCopyPacket, buildClipperExternalCloseoutSprintSummary, enrichClipperExternalCloseoutOperatorRows } from "../server/routes";
 
 const GOOGLE_OAUTH_ALIAS_ENV_VARS = [
@@ -84,6 +84,11 @@ test("normalizeRunOptions clamps clips and defaults publish mode", () => {
   assert.equal(result.clipsPerAccount, 50);
   assert.equal(result.publishMode, "approval_required");
   assert.equal(result.riskTolerance, "growth");
+
+  const legacyAuto = __clipperInternals.normalizeRunOptions({
+    publishMode: "auto_after_connection",
+  });
+  assert.equal(legacyAuto.publishMode, "approval_required");
 });
 
 test("external closeout next action copy packet guides proof without requesting secrets", () => {
@@ -370,10 +375,11 @@ test("external closeout evidence importer blocks copied CSV template before appl
     assert.ok(report.totals.rejected > 0);
     assert.match(JSON.stringify(report.rejected), /app_identifier|placeholder|proof/i);
     assert.ok(report.repairQueue.length > 0);
-    assert.equal(report.repairQueue[0].closeoutId, "developer_app:tiktok");
-    assert.match(report.repairQueue[0].proofPath, /developer_app-tiktok\.md$/);
-    assert.match(report.repairQueue[0].nextStep, /preview again/i);
-    assert.match(report.repairQueue[0].safeProofStarter, /never client secret/i);
+    const developerAppRepair = report.repairQueue.find((item: { closeoutId?: string }) => item.closeoutId === "developer_app:tiktok");
+    assert.ok(developerAppRepair);
+    assert.match(developerAppRepair.proofPath, /developer_app-tiktok\.md$/);
+    assert.match(developerAppRepair.nextStep, /preview again/i);
+    assert.match(developerAppRepair.safeProofStarter, /never client secret/i);
     assert.doesNotMatch(JSON.stringify(report.repairQueue), /access_token=|refresh_token=|client_secret=|password=|cookie=|sk-[A-Za-z0-9_-]{12,}/i);
     const rawMarkdown = await readFile(reportMarkdownPath, "utf8");
     const rawCsv = await readFile(reportCsvPath, "utf8");
@@ -403,13 +409,35 @@ test("runClipperDailyPlan creates drafts for each configured account", async () 
   assert.equal(report.publishMode, "draft_only");
   assert.equal(report.riskTolerance, "safe");
   assert.equal(report.plannedClips.length, status.accounts.length * 2);
-  assert.ok(report.nextActions.some((action) => action.includes("TikTok")));
+  assert.ok(report.nextActions.some((action) => action.includes("Metricool")));
+  assert.ok(report.nextActions.some((action) => action.includes("backlog") && action.includes("TikTok")));
+  assert.ok(report.nextActions.some((action) => action.includes("no bloquean el MVP Metricool")));
+});
+
+test("runClipperDailyPlan treats legacy auto publish as Metricool approval_required", async () => {
+  const { report } = await runClipperDailyPlan({
+    clipsPerAccount: 1,
+    publishMode: "auto_after_connection",
+    riskTolerance: "growth",
+  }, "clipper-legacy-auto-mode");
+
+  assert.equal(report.publishMode, "approval_required");
+  assert.ok(report.nextActions[0].includes("Metricool"));
+  assert.ok(report.nextActions.some((action) => action.includes("backlog") && action.includes("no bloquean el MVP Metricool")));
 });
 
 test("getClipperStatus exposes guarded growth goals", async () => {
   const status = await getClipperStatus();
 
   assert.ok(status.goals.totalWeeklyGoal >= 3_000_000);
+  assert.equal(status.goals.directApiConnectedAccounts, new Set(status.tokenVault.records.map((record) => record.platform)).size);
+  assert.ok(status.goals.metricoolConnectedAccounts >= 0);
+  assert.ok(status.goals.metricoolConnectedLanes >= 0);
+  assert.ok(status.goals.metricoolRequiredLanes >= status.goals.metricoolConnectedLanes);
+  if (status.metricoolMvpLaunchPack.directPlatformApisNeeded === false) {
+    assert.equal(status.goals.metricoolConnectedLanes, status.metricoolPublishing.totals.connectedProfiles);
+    assert.equal(status.goals.metricoolReadyForApprovalAccounts, status.metricoolPublishing.totals.readyForApprovalQueue);
+  }
   assert.ok(status.guardrails.some((rule) => rule.includes("licenciado")));
   assert.ok(status.agents.some((agent) => agent.id === "rights-gate"));
   assert.ok(status.growthAudit.score >= 0 && status.growthAudit.score <= 100);
@@ -573,6 +601,36 @@ test("getClipperStatus blocks fake values in operational launch evidence", async
   } finally {
     if (previousOwnerConnectEvidenceDrop === null) await unlink(ownerConnectEvidenceDropPath).catch(() => undefined);
     else await writeFile(ownerConnectEvidenceDropPath, previousOwnerConnectEvidenceDrop);
+    if (previousAuditManifest === null) await unlink(beforeStatus.evidenceIntegrityAudit.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.evidenceIntegrityAudit.manifestPath, previousAuditManifest);
+    if (previousAuditMarkdown === null) await unlink(beforeStatus.evidenceIntegrityAudit.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.evidenceIntegrityAudit.markdownPath, previousAuditMarkdown);
+    if (previousAuditCsv === null) await unlink(beforeStatus.evidenceIntegrityAudit.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.evidenceIntegrityAudit.csvPath, previousAuditCsv);
+  }
+});
+
+test("getClipperStatus does not treat Metricool 100 evidence template rows as submitted proof", async () => {
+  const beforeStatus = await getClipperStatus();
+  const metricool100EvidencePath = path.join(beforeStatus.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const previousMetricool100Evidence = await readFile(metricool100EvidencePath, "utf8").catch(() => null);
+  const previousAuditManifest = await readFile(beforeStatus.evidenceIntegrityAudit.manifestPath, "utf8").catch(() => null);
+  const previousAuditMarkdown = await readFile(beforeStatus.evidenceIntegrityAudit.markdownPath, "utf8").catch(() => null);
+  const previousAuditCsv = await readFile(beforeStatus.evidenceIntegrityAudit.csvPath, "utf8").catch(() => null);
+
+  await mkdir(path.dirname(metricool100EvidencePath), { recursive: true });
+  await writeFile(metricool100EvidencePath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    "metricool-100-template-row,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-25T12:00:00.000Z,/tmp/owned-sports.mp4,Template row,<metricool scheduled/approved/post URL>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
+  ].join("\n"));
+
+  try {
+    const status = await getClipperStatus();
+    assert.equal(status.evidenceIntegrityAudit.scannedPaths.some((item) => item.endsWith("metricool-100-approval-evidence-import.csv")), false);
+    assert.equal(status.evidenceIntegrityAudit.items.some((item) => item.relativePath.endsWith("metricool-100-approval-evidence-import.csv")), false);
+  } finally {
+    if (previousMetricool100Evidence === null) await unlink(metricool100EvidencePath).catch(() => undefined);
+    else await writeFile(metricool100EvidencePath, previousMetricool100Evidence);
     if (previousAuditManifest === null) await unlink(beforeStatus.evidenceIntegrityAudit.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.evidenceIntegrityAudit.manifestPath, previousAuditManifest);
     if (previousAuditMarkdown === null) await unlink(beforeStatus.evidenceIntegrityAudit.markdownPath).catch(() => undefined);
@@ -1757,7 +1815,9 @@ test("prepareClipperAccountLaunchKit writes account creation manifest", async ()
     assert.ok(accountLaunchKit.markdownPath.endsWith("account-launch-kit.md"));
     assert.ok(accountLaunchKit.tasks.some((task) => task.platform === "tiktok" && task.profileLink.includes("tiktok.com")));
     assert.ok(accountLaunchKit.tasks.every((task) => task.bio.length > 20));
-    assert.ok(accountLaunchKit.tasks.every((task) => task.checklist.some((step) => step.includes("OAuth"))));
+    assert.ok(accountLaunchKit.tasks.every((task) => task.checklist.some((step) => step.includes("Metricool"))));
+    assert.ok(accountLaunchKit.tasks.every((task) => task.blockers.every((blocker) => !/OAuth|app review|Content Posting API|youtube\.upload|YouTube Data API/i.test(blocker))));
+    assert.ok(accountLaunchKit.tasks.every((task) => !/OAuth|app review|autopost/i.test(task.nextStep)));
 
     const kitStat = await stat(accountLaunchKit.kitPath);
     const markdownStat = await stat(accountLaunchKit.markdownPath);
@@ -1767,6 +1827,7 @@ test("prepareClipperAccountLaunchKit writes account creation manifest", async ()
     const markdown = await readFile(accountLaunchKit.markdownPath, "utf8");
     assert.ok(markdown.includes("Clippers Account Launch Kit"));
     assert.ok(markdown.includes("Create account"));
+    assert.ok(markdown.includes("Metricool"));
   } finally {
     await unlink(accountLaunchKit.kitPath).catch(() => undefined);
     await unlink(accountLaunchKit.markdownPath).catch(() => undefined);
@@ -1807,6 +1868,11 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(accountCreationPack.items.every((item) => item.evidenceCapturePlan.length >= 5));
     assert.ok(accountCreationPack.items.every((item) => item.operatorVaultChecklist.length >= 4));
     assert.ok(accountCreationPack.items.every((item) => item.postCreationNextActions.length >= 4));
+    assert.ok(accountCreationPack.items.every((item) => item.metricoolConnectionChecklist.some((step) => step.includes("Metricool"))));
+    assert.ok(accountCreationPack.items.some((item) => item.directApiBacklog.some((step) => /OAuth|Content Posting API|youtube\\.upload|YouTube Data API/i.test(step))));
+    assert.ok(accountCreationPack.items.every((item) => item.blockers.every((blocker) => !/OAuth|Content Posting API|youtube\\.upload|YouTube Data API/i.test(blocker))));
+    assert.ok(accountCreationPack.items.filter((item) => item.evidencePath).every((item) => item.status !== "blocked"));
+    assert.ok(accountCreationPack.items.every((item) => !/OAuth|app review|autopost/i.test(item.nextStep)));
     assert.equal(accountCreationPack.sessionOrder.length, accountCreationPack.items.length);
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.requiredProof.length >= 4));
     assert.ok(accountCreationPack.sessionOrder.every((item) => item.copyPackage.some((field) => field.label === "bio")));
@@ -1830,6 +1896,8 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.verifiedEvidenceRows.every((row) => row.includes(",\"verified\","))));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.browserSessionChecklist.length >= 4));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.operatorVaultChecklist.length >= 4));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => batch.metricoolConnectionChecklist.some((step) => step.includes("Metricool"))));
+    assert.ok(accountCreationPack.platformBatches.every((batch) => !/OAuth|app review|autopost/i.test(batch.nextStep)));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.doneCriteria.length >= 4));
     assert.ok(accountCreationPack.claimSheetPath.endsWith("account-claim-sheet.md"));
     assert.ok(accountCreationPack.claimSheetCsvPath.endsWith("account-claim-sheet.csv"));
@@ -1865,6 +1933,8 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(rawMarkdown.includes("Browser session checklist"));
     assert.ok(rawMarkdown.includes("Evidence capture plan"));
     assert.ok(rawMarkdown.includes("Operator vault checklist"));
+    assert.ok(rawMarkdown.includes("Metricool connection checklist"));
+    assert.ok(rawMarkdown.includes("Direct API backlog"));
     assert.ok(rawMarkdown.includes("Platform proof required"));
     assert.ok(rawMarkdown.includes("Submitted evidence row"));
     assert.ok(rawMarkdown.includes("Evidence batch row"));
@@ -1879,6 +1949,8 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.ok(rawCsv.includes("required_inputs"));
     assert.ok(rawCsv.includes("security_checklist"));
     assert.ok(rawCsv.includes("operator_vault_checklist"));
+    assert.ok(rawCsv.includes("metricool_connection_checklist"));
+    assert.ok(rawCsv.includes("direct_api_backlog"));
     assert.ok(rawCsv.includes("platform_batch_id"));
     assert.ok(rawCsv.includes("platform_proof_required"));
     assert.ok(rawCsv.includes("submitted_evidence_batch_row"));
@@ -1914,6 +1986,12 @@ test("prepareClipperAccountSetupSession writes executable external account setup
   const previousManifest = await readFile(beforeStatus.accountSetupSession.manifestPath, "utf8").catch(() => null);
   const previousMarkdown = await readFile(beforeStatus.accountSetupSession.markdownPath, "utf8").catch(() => null);
   const previousCsv = await readFile(beforeStatus.accountSetupSession.csvPath, "utf8").catch(() => null);
+  const previousQueue = await readFile(beforeStatus.accountSetupSession.accountSetupQueuePath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.accountSetupSession.accountSetupQueueMarkdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.accountSetupSession.accountSetupQueueCsvPath, "utf8").catch(() => null);
+  const previousRunbook = await readFile(beforeStatus.accountSetupSession.accountCreationRunbookPath, "utf8").catch(() => null);
+  const previousRunbookMarkdown = await readFile(beforeStatus.accountSetupSession.accountCreationRunbookMarkdownPath, "utf8").catch(() => null);
+  const previousRunbookCsv = await readFile(beforeStatus.accountSetupSession.accountCreationRunbookCsvPath, "utf8").catch(() => null);
   const previousAccountSetupEvidenceTemplate = await readFile(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, "utf8").catch(() => null);
 
   try {
@@ -1932,6 +2010,9 @@ test("prepareClipperAccountSetupSession writes executable external account setup
     assert.ok(accountSetupSession.items.every((item) => item.vaultItemName.startsWith("Clippers/")));
     assert.ok(accountSetupSession.items.every((item) => item.submittedEvidenceBatchRow.includes(",\"submitted\",")));
     assert.ok(accountSetupSession.items.every((item) => item.verifiedEvidenceBatchRow.includes(",\"verified\",")));
+    assert.ok(accountSetupSession.items.filter((item) => item.status === "ready").every((item) => item.nextStep.includes("Metricool")));
+    assert.equal(accountSetupSession.items.some((item) => item.nextStep.includes("continue OAuth")), false);
+    assert.equal(accountSetupSession.items.some((item) => item.nextStep.includes("OAuth/app review")), false);
     assert.ok(accountSetupSession.items.some((item) => item.platform === "instagram" && item.claimSteps.some((step) => step.includes("Professional") || step.includes("handle"))));
     assert.ok(accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath.endsWith("account-setup-evidence.csv"));
     assert.equal(status.accountSetupSession.manifestPath, accountSetupSession.manifestPath);
@@ -1939,6 +2020,12 @@ test("prepareClipperAccountSetupSession writes executable external account setup
     const rawManifest = await readFile(accountSetupSession.manifestPath, "utf8");
     const rawMarkdown = await readFile(accountSetupSession.markdownPath, "utf8");
     const rawCsv = await readFile(accountSetupSession.csvPath, "utf8");
+    const rawQueue = await readFile(accountSetupSession.accountSetupQueuePath, "utf8");
+    const rawQueueMarkdown = await readFile(accountSetupSession.accountSetupQueueMarkdownPath, "utf8");
+    const rawQueueCsv = await readFile(accountSetupSession.accountSetupQueueCsvPath, "utf8");
+    const rawRunbook = await readFile(accountSetupSession.accountCreationRunbookPath, "utf8");
+    const rawRunbookMarkdown = await readFile(accountSetupSession.accountCreationRunbookMarkdownPath, "utf8");
+    const rawRunbookCsv = await readFile(accountSetupSession.accountCreationRunbookCsvPath, "utf8");
     const rawAccountSetupEvidenceTemplate = await readFile(accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, "utf8");
     assert.ok(rawMarkdown.includes("Clippers Account Setup Session"));
     assert.ok(rawMarkdown.includes("Account Queue"));
@@ -1948,6 +2035,9 @@ test("prepareClipperAccountSetupSession writes executable external account setup
     assert.ok(rawCsv.includes("vault_item_name"));
     assert.ok(rawCsv.includes("handle_check_urls"));
     assert.ok(rawCsv.includes("submitted_evidence_batch_row"));
+    assert.ok(rawQueueMarkdown.includes("Metricool"));
+    assert.ok(rawRunbookMarkdown.includes("Metricool profile"));
+    assert.ok(rawRunbookMarkdown.includes("direct API/OAuth stays backlog"));
     assert.ok(rawManifest.includes("sourceArtifacts"));
     assert.ok(rawManifest.includes("accountSetupEvidenceTemplatePath"));
     assert.ok(rawAccountSetupEvidenceTemplate.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
@@ -1957,6 +2047,15 @@ test("prepareClipperAccountSetupSession writes executable external account setup
     assert.equal(rawManifest.includes("access_token"), false);
     assert.equal(rawMarkdown.includes("client_secret"), false);
     assert.equal(rawCsv.includes("refresh_token"), false);
+    for (const artifact of [rawManifest, rawMarkdown, rawCsv, rawQueue, rawQueueMarkdown, rawQueueCsv, rawRunbook, rawRunbookMarkdown, rawRunbookCsv]) {
+      assert.equal(artifact.includes("continue OAuth"), false);
+      assert.equal(artifact.includes("OAuth/app review"), false);
+      assert.equal(artifact.includes("continue OAuth and app review"), false);
+      assert.equal(artifact.includes("before OAuth"), false);
+      assert.equal(artifact.includes("before connecting developer apps"), false);
+      assert.equal(artifact.includes("before App Review"), false);
+      assert.equal(artifact.includes("until developer app, permissions"), false);
+    }
     assert.equal(rawAccountSetupEvidenceTemplate.includes("client_secret"), false);
   } finally {
     if (previousManifest === null) await unlink(beforeStatus.accountSetupSession.manifestPath).catch(() => undefined);
@@ -1965,6 +2064,18 @@ test("prepareClipperAccountSetupSession writes executable external account setup
     else await writeFile(beforeStatus.accountSetupSession.markdownPath, previousMarkdown);
     if (previousCsv === null) await unlink(beforeStatus.accountSetupSession.csvPath).catch(() => undefined);
     else await writeFile(beforeStatus.accountSetupSession.csvPath, previousCsv);
+    if (previousQueue === null) await unlink(beforeStatus.accountSetupSession.accountSetupQueuePath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountSetupQueuePath, previousQueue);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.accountSetupSession.accountSetupQueueMarkdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountSetupQueueMarkdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.accountSetupSession.accountSetupQueueCsvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountSetupQueueCsvPath, previousQueueCsv);
+    if (previousRunbook === null) await unlink(beforeStatus.accountSetupSession.accountCreationRunbookPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountCreationRunbookPath, previousRunbook);
+    if (previousRunbookMarkdown === null) await unlink(beforeStatus.accountSetupSession.accountCreationRunbookMarkdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountCreationRunbookMarkdownPath, previousRunbookMarkdown);
+    if (previousRunbookCsv === null) await unlink(beforeStatus.accountSetupSession.accountCreationRunbookCsvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.accountSetupSession.accountCreationRunbookCsvPath, previousRunbookCsv);
     if (previousAccountSetupEvidenceTemplate === null) await unlink(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath).catch(() => undefined);
     else await writeFile(beforeStatus.accountSetupSession.sourceArtifacts.accountSetupEvidenceTemplatePath, previousAccountSetupEvidenceTemplate);
   }
@@ -2972,10 +3083,22 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(["not_prepared", "needs_operator", "complete"].includes(externalExecutionSession.closeoutRun.status));
     assert.ok(externalExecutionSession.closeoutRun.packPath.endsWith("clippers-external-closeout-pack.json"));
     assert.ok(externalExecutionSession.closeoutRun.evidenceCsvPath.endsWith("external-closeout-evidence-import.csv"));
+    assert.ok(externalExecutionSession.closeoutRun.batchHandoffPath.endsWith("clippers-external-closeout-batches.md"));
     assert.equal(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend, 0);
     assert.equal(externalExecutionSession.closeoutRun.metricoolPublishMode, "approval_required");
     if (externalExecutionSession.closeoutRun.status !== "not_prepared") {
       assert.equal(externalExecutionSession.closeoutRun.totals.rows, 16);
+      assert.ok(externalExecutionSession.closeoutRun.batches.length > 0);
+      assert.equal(externalExecutionSession.closeoutRun.batches.reduce((sum, batch) => sum + batch.total, 0), externalExecutionSession.closeoutRun.items.length);
+      assert.ok(externalExecutionSession.closeoutRun.batches.some((batch) => batch.lane === "developer_app" && batch.platform === "instagram"));
+      assert.ok(externalExecutionSession.closeoutRun.batches.some((batch) => batch.lane === "permission" && batch.evidenceRows.length > 0));
+      assert.ok(externalExecutionSession.closeoutRun.batches.every((batch) =>
+        batch.id.startsWith("external-closeout-")
+        && batch.operatorChecklist.length >= 4
+        && batch.doneCriteria.some((criterion) => criterion.includes("No tokens"))
+        && batch.proofPaths.every((proofPath) => proofPath.includes("external-closeout-proofs"))
+        && batch.evidenceRows.every((row) => row.startsWith("\"") && !row.includes("<"))
+      ));
       assert.equal(externalExecutionSession.closeoutRun.nextItems.length, 8);
       assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.proofPath.includes("external-closeout-proofs")));
       assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.startsWith("\"")));
@@ -3253,13 +3376,35 @@ test("prepareClipperGoLiveCompletionAudit verifies full go-live requirements con
     assert.equal(goLiveCompletionAudit.requirements.length, 12);
     assert.equal(goLiveCompletionAudit.totals.requirements, goLiveCompletionAudit.requirements.length);
     assert.equal(goLiveCompletionAudit.readyToPublish, false);
+    assert.equal(typeof goLiveCompletionAudit.launchModes?.metricoolMvpReady, "boolean");
+    assert.equal(typeof goLiveCompletionAudit.launchModes?.approvalQueueReady, "boolean");
+    assert.equal(goLiveCompletionAudit.launchModes?.directSocialApisRequiredForMvp, false);
+    assert.equal(goLiveCompletionAudit.launchModes?.fullDirectApiReady, false);
+    assert.ok(Array.isArray(goLiveCompletionAudit.launchModes?.metricoolMvpBlockers));
+    assert.ok((goLiveCompletionAudit.launchModes?.directApiBacklog || []).length > 0);
     assert.equal(goLiveCompletionAudit.status === "blocked" || goLiveCompletionAudit.status === "partial", true);
-    assert.ok(goLiveCompletionAudit.totals.blocked > 0);
+    if (goLiveCompletionAudit.launchModes?.metricoolMvpReady) {
+      assert.equal(goLiveCompletionAudit.totals.blocked, 0);
+      assert.match(goLiveCompletionAudit.nextStep, /Metricool MVP is ready/);
+      assert.ok(goLiveCompletionAudit.requirements.some((item) =>
+        item.id === "developer-apps-approved"
+        && item.status === "needs_evidence"
+        && item.nextStep.includes("direct API backlog")
+        && item.blockers.length === 0
+      ));
+      assert.ok(goLiveCompletionAudit.requirements.some((item) =>
+        item.id === "posting-packages-ready"
+        && item.status === "verified"
+        && item.currentEvidence.includes("Metricool approval items queued")
+      ));
+    } else {
+      assert.ok(goLiveCompletionAudit.totals.blocked > 0);
+    }
     assert.ok(goLiveCompletionAudit.totals.externalRequired > 0);
     assert.ok(goLiveCompletionAudit.score >= 0 && goLiveCompletionAudit.score <= 100);
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "accounts-created-verified" && item.phase === "accounts"));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "permissions-approved" && item.requiredEvidence.some((evidence) => evidence.includes("scope"))));
-    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "official-permission-sources-verified" && item.status === "blocked" && item.blockers.some((blocker) => blocker.includes("instagram"))));
+    assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "official-permission-sources-verified" && ["blocked", "needs_evidence", "verified"].includes(item.status)));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "publishing-bridge-connected" && item.requiredEvidence.some((evidence) => evidence.includes("queued_for_approval"))));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "evidence-integrity-clean" && item.proofSource.endsWith("evidence-integrity-audit.md")));
     assert.ok(goLiveCompletionAudit.requirements.some((item) => item.id === "automation-reporting-ready" && item.phase === "optimization"));
@@ -3304,6 +3449,9 @@ test("prepareClipperGoLiveCompletionAudit verifies full go-live requirements con
     assert.ok(rawMarkdown.includes("Evidence capture template"));
     assert.ok(rawMarkdown.includes("Evidence drop file"));
     assert.ok(rawMarkdown.includes("Ready for approval-gated launch: no"));
+    assert.ok(rawMarkdown.includes("Metricool MVP ready:"));
+    assert.ok(rawMarkdown.includes("Direct social APIs required for Metricool MVP: no"));
+    assert.ok(rawMarkdown.includes("Direct API backlog"));
     assert.ok(rawExternalCsv.includes("requirement_id"));
     assert.ok(rawExternalCsv.includes("accounts-created-verified"));
     assert.ok(rawExternalCsv.includes("evidence_capture_template"));
@@ -3626,7 +3774,7 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     const rawCsv = await readFile(metricoolPublishing.csvPath, "utf8");
     assert.match(rawManifest, /SPORT/);
     assert.match(rawMarkdown, /memes/);
-    assert.match(rawMarkdown, /Approval env preference: legacy override requested/);
+    assert.match(rawMarkdown, /Approval env preference: approval forced for MVP/);
     assert.match(rawMarkdown, /Effective approval gate: required/);
     assert.match(rawCsv, /sports-daily/);
     assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
@@ -3656,6 +3804,7 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
   const previousCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
   const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
   const previousCache = await readFile(cachePath, "utf8").catch(() => null);
+  let metricoolReadyQueuePath: string | null = null;
   const previousToken = process.env.METRICOOL_USER_TOKEN;
   const previousUserId = process.env.METRICOOL_USER_ID;
   const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
@@ -3677,9 +3826,11 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
     const { metricoolExecutionQueue, status } = await prepareClipperMetricoolExecutionQueue();
 
     assert.ok(metricoolExecutionQueue.items.length > 0);
+    assert.ok(metricoolExecutionQueue.totals.queuedForApproval <= 14);
     assert.ok(metricoolExecutionQueue.items.every((item) => item.platform === "tiktok"));
     assert.ok(metricoolExecutionQueue.items.every((item) => item.metricoolBlogId === "6431687" || item.metricoolBlogId === "6431685"));
     assert.ok(metricoolExecutionQueue.items.every((item) => item.requestSpec.bridge === "metricool"));
+    assert.equal(metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(metricoolExecutionQueue.totals.readyToSend, 0);
     assert.ok(metricoolExecutionQueue.items.every((item) => item.status !== "ready_to_send" && item.canSendNow === false));
@@ -3700,6 +3851,30 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
     assert.match(rawMarkdown, /Source Readiness/);
     assert.match(rawCsv, /tiktok/);
     assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
+
+    const tinyQueueResult = await prepareClipperMetricoolExecutionQueue(undefined, { approvalQueueTarget: 1 });
+    assert.ok(tinyQueueResult.metricoolExecutionQueue.totals.queuedForApproval <= 1);
+    assert.equal(tinyQueueResult.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(tinyQueueResult.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const invalidTargetQueueResult = await prepareClipperMetricoolExecutionQueue(undefined, { approvalQueueTarget: Number.NaN });
+    assert.ok(invalidTargetQueueResult.metricoolExecutionQueue.totals.queuedForApproval <= 14);
+    assert.equal(invalidTargetQueueResult.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(invalidTargetQueueResult.metricoolExecutionQueue.totals.readyToSend, 0);
+
+    const metricoolReadyProductionQueue = await prepareClipperProductionQueue(undefined, { targetWeeklyClips: 100, metricoolReadyOnly: true });
+    metricoolReadyQueuePath = metricoolReadyProductionQueue.queue.queuePath;
+    assert.equal(metricoolReadyProductionQueue.queue.items.length, 100);
+    assert.equal(metricoolReadyProductionQueue.queue.metricoolReadyOnly, true);
+    assert.deepEqual(new Set(metricoolReadyProductionQueue.queue.items.map((item) => item.accountId)), new Set(["sports-daily", "meme-radar"]));
+    assert.equal(metricoolReadyProductionQueue.queue.items.some((item) => item.accountId === "streamer-pulse"), false);
+
+    const weeklyQueueResult = await prepareClipperMetricoolExecutionQueue(undefined, { approvalQueueTarget: 100 });
+    assert.equal(weeklyQueueResult.metricoolExecutionQueue.totals.queuedForApproval, 100);
+    assert.equal(weeklyQueueResult.metricoolExecutionQueue.realPublishEnabled, false);
+    assert.equal(weeklyQueueResult.metricoolExecutionQueue.totals.readyToSend, 0);
+    assert.ok(weeklyQueueResult.metricoolExecutionQueue.items.every((item) => item.approvalRequired === true && item.canSendNow === false));
+    assert.equal(weeklyQueueResult.metricoolExecutionQueue.items.some((item) => item.accountId === "streamer-pulse"), false);
   } finally {
     fetchMock.mock.restore();
     if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
@@ -3718,6 +3893,140 @@ test("prepareClipperMetricoolExecutionQueue maps automation posts to connected M
     else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousCsv);
     if (previousCache === null) await unlink(cachePath).catch(() => undefined);
     else await writeFile(cachePath, previousCache);
+    if (metricoolReadyQueuePath) await unlink(metricoolReadyQueuePath).catch(() => undefined);
+  }
+});
+
+test("prepareClipperMetricool100ApprovalRun prepares 100 approval-only Metricool items for ready lanes", async () => {
+  const beforeStatus = await getClipperStatus();
+  const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
+  const artifactPaths = [
+    beforeStatus.metricoolPublishing.manifestPath,
+    beforeStatus.metricoolPublishing.markdownPath,
+    beforeStatus.metricoolPublishing.csvPath,
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-100-approval-run.json"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-100-approval-run.md"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-100-approval-run.csv"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-100-operator-run-sheet.csv"),
+    path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-100-approval-evidence-import.csv"),
+    beforeStatus.metricoolExecutionQueue.manifestPath,
+    beforeStatus.metricoolExecutionQueue.markdownPath,
+    beforeStatus.metricoolExecutionQueue.csvPath,
+    beforeStatus.metricoolMvpLaunchPack.manifestPath,
+    beforeStatus.metricoolMvpLaunchPack.markdownPath,
+    beforeStatus.metricoolMvpLaunchPack.csvPath,
+    beforeStatus.metricoolApprovalSession.manifestPath,
+    beforeStatus.metricoolApprovalSession.markdownPath,
+    beforeStatus.metricoolApprovalSession.csvPath,
+    beforeStatus.metricoolApprovalSession.evidenceImportCsvPath,
+    beforeStatus.metricoolApprovalReport.manifestPath,
+    beforeStatus.metricoolApprovalReport.markdownPath,
+    beforeStatus.metricoolApprovalReport.csvPath,
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-quick-run.json"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-quick-run.md"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.json"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.md"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.csv"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.json"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.md"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-run-sheet.csv"),
+    cachePath,
+  ];
+  const previousArtifacts = await Promise.all(artifactPaths.map(async (filePath) => [filePath, await readFile(filePath, "utf8").catch(() => null)] as const));
+  const previousToken = process.env.METRICOOL_USER_TOKEN;
+  const previousUserId = process.env.METRICOOL_USER_ID;
+  const previousRealPublish = process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+  const previousRequireApproval = process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+  process.env.METRICOOL_USER_TOKEN = "token_live";
+  process.env.METRICOOL_USER_ID = "12345";
+  process.env.CLIPPERS_ENABLE_REAL_PUBLISH = "true";
+  process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    data: [
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+  let generatedQueuePath: string | null = null;
+
+  try {
+    const result = await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
+    generatedQueuePath = result.queue.queuePath;
+
+    assert.equal(result.metricool100ApprovalRun.mode, "metricool_approval_required_100");
+    assert.equal(result.metricool100ApprovalRun.status, "ready_for_operator");
+    assert.equal(result.metricool100ApprovalRun.directSocialApisRequired, false);
+    assert.equal(result.metricool100ApprovalRun.realPublishEnabled, false);
+    assert.equal(result.metricool100ApprovalRun.totals.productionItems, 100);
+    assert.equal(result.metricool100ApprovalRun.totals.metricoolQueuedForApproval, 100);
+    assert.equal(result.metricool100ApprovalRun.totals.metricoolBlocked, 0);
+    assert.equal(result.metricool100ApprovalRun.totals.readyToSend, 0);
+    assert.deepEqual(new Set(result.metricool100ApprovalRun.eligibleAccountIds), new Set(["sports-daily", "meme-radar"]));
+    assert.equal(result.queue.items.some((item) => item.accountId === "streamer-pulse"), false);
+    assert.equal(result.metricoolExecutionQueue.items.some((item) => item.accountId === "streamer-pulse"), false);
+    assert.equal(result.metricoolExecutionQueue.items.every((item) => item.approvalRequired && item.canSendNow === false), true);
+    assert.equal(result.metricoolApprovalQuickRun.totals.quickRunItems, 100);
+    assert.match(result.metricool100ApprovalRun.nextStep, /Open Metricool/);
+    assert.match(result.metricool100ApprovalRun.manifestPath, /metricool-100-approval-run\.json/);
+    assert.match(result.metricool100ApprovalRun.markdownPath, /metricool-100-approval-run\.md/);
+    assert.match(result.metricool100ApprovalRun.csvPath, /metricool-100-approval-run\.csv/);
+	    assert.match(result.metricool100ApprovalRun.artifacts.metricoolOperatorRunSheetCsvPath, /metricool-100-operator-run-sheet\.csv/);
+	    assert.match(result.metricool100ApprovalRun.artifacts.evidenceImportCsvPath, /metricool-100-approval-evidence-import\.csv/);
+	    assert.equal(result.status.metricool100ApprovalRun.status, "ready_for_operator");
+	    assert.equal(result.status.metricool100ApprovalRun.totals.metricoolQueuedForApproval, 100);
+	    assert.equal(result.status.metricoolApprovalReport.evidenceImportCsvPaths.active, result.metricool100ApprovalRun.artifacts.evidenceImportCsvPath);
+
+	    const persistedRun = await getClipperMetricool100ApprovalRun();
+    assert.equal(persistedRun.status, "ready_for_operator");
+    assert.equal(persistedRun.totals.metricoolQueuedForApproval, 100);
+    assert.equal(persistedRun.totals.readyToSend, 0);
+    const statusAfterRun = await getClipperStatus();
+    assert.equal(statusAfterRun.metricool100ApprovalRun.status, "ready_for_operator");
+    assert.equal(statusAfterRun.metricool100ApprovalRun.totals.metricoolQueuedForApproval, 100);
+    assert.equal(statusAfterRun.metricool100ApprovalRun.totals.readyToSend, 0);
+    assert.equal(statusAfterRun.metricoolApprovalReport.evidenceImportCsvPaths.active, result.metricool100ApprovalRun.artifacts.evidenceImportCsvPath);
+    assert.equal(statusAfterRun.metricoolApprovalReport.evidenceImportCsvPaths.metricool100, result.metricool100ApprovalRun.artifacts.evidenceImportCsvPath);
+    assert.equal(statusAfterRun.metricoolApprovalReport.evidenceImportCsvPaths.shortRun, result.metricoolApprovalSession.evidenceImportCsvPath);
+    assert.match(statusAfterRun.metricoolApprovalReport.nextStep, /Review 100 Metricool item/);
+
+    const rawQueue = await readFile(result.metricoolExecutionQueue.manifestPath, "utf8");
+    const rawCloseout = await readFile(result.metricoolOperatorCloseoutPack.manifestPath, "utf8");
+    const rawReportMarkdown = await readFile(statusAfterRun.metricoolApprovalReport.markdownPath, "utf8");
+    const rawRun = await readFile(result.metricool100ApprovalRun.manifestPath, "utf8");
+    const rawRunMarkdown = await readFile(result.metricool100ApprovalRun.markdownPath, "utf8");
+    const rawRunCsv = await readFile(result.metricool100ApprovalRun.csvPath, "utf8");
+    const raw100RunSheet = await readFile(result.metricool100ApprovalRun.artifacts.metricoolOperatorRunSheetCsvPath, "utf8");
+    const raw100EvidenceImport = await readFile(result.metricool100ApprovalRun.artifacts.evidenceImportCsvPath, "utf8");
+    assert.equal(raw100RunSheet.trim().split(/\r?\n/).length, 101);
+    assert.equal(raw100EvidenceImport.trim().split(/\r?\n/).length, 101);
+    assert.match(raw100RunSheet, /metricool_queue_item_id/);
+    assert.match(raw100EvidenceImport, /published_post_url/);
+    assert.match(rawReportMarkdown, /Active evidence CSV/);
+    assert.match(rawReportMarkdown, /metricool-100-approval-evidence-import\.csv/);
+    assert.doesNotMatch(raw100RunSheet, /ready_to_import/);
+    assert.match(rawRunMarkdown, /Metricool 100 Approval Run/);
+    assert.match(rawRunMarkdown, /direct TikTok\/Instagram\/YouTube APIs are backlog/);
+    assert.match(rawRunCsv, /metricool_queued_for_approval/);
+    assert.doesNotMatch(`${rawQueue}\n${rawCloseout}\n${rawRun}\n${rawRunMarkdown}\n${rawRunCsv}`, /token_live|METRICOOL_USER_TOKEN|METRICOOL_USER_ID|access_token|client_secret/i);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
+    else process.env.METRICOOL_USER_TOKEN = previousToken;
+    if (previousUserId === undefined) delete process.env.METRICOOL_USER_ID;
+    else process.env.METRICOOL_USER_ID = previousUserId;
+    if (previousRealPublish === undefined) delete process.env.CLIPPERS_ENABLE_REAL_PUBLISH;
+    else process.env.CLIPPERS_ENABLE_REAL_PUBLISH = previousRealPublish;
+    if (previousRequireApproval === undefined) delete process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH;
+    else process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = previousRequireApproval;
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+    if (generatedQueuePath) await unlink(generatedQueuePath).catch(() => undefined);
   }
 });
 
@@ -3732,9 +4041,11 @@ test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from ful
   const mvpManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.json");
   const mvpMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.md");
   const mvpCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.csv");
+  const pendingProfileEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-pending-profile-evidence.csv");
   const previousMvpManifest = await readFile(mvpManifestPath, "utf8").catch(() => null);
   const previousMvpMarkdown = await readFile(mvpMarkdownPath, "utf8").catch(() => null);
   const previousMvpCsv = await readFile(mvpCsvPath, "utf8").catch(() => null);
+  const previousPendingProfileEvidenceCsv = await readFile(pendingProfileEvidenceCsvPath, "utf8").catch(() => null);
   const cachePath = path.join(process.cwd(), "marketing_command_center_data", "metricool-brands.json");
   const previousCache = await readFile(cachePath, "utf8").catch(() => null);
   const previousToken = process.env.METRICOOL_USER_TOKEN;
@@ -3767,13 +4078,26 @@ test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from ful
     assert.equal(metricoolMvpLaunchPack.totals.accounts, 2);
     assert.equal(metricoolMvpLaunchPack.totals.readyAccounts, 2);
     assert.equal(metricoolMvpLaunchPack.totals.blockedAccounts, 0);
+    assert.equal(metricoolMvpLaunchPack.totals.connectedProfiles, 2);
+    assert.equal(metricoolMvpLaunchPack.totals.pendingMetricoolProfiles, 4);
+    assert.equal(metricoolMvpLaunchPack.pendingProfileEvidenceRows.length, 4);
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceCsvPath.endsWith("metricool-pending-profile-evidence.csv"));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceTemplate.startsWith("account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes"));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceRows.every((row) => row.status === "needs_metricool_connection"));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceRows.every((row) => row.evidenceBatchRow.includes("Metricool")));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceRows.every((row) => /deferred|beyond TikTok/i.test(`${row.nextStep} ${row.checklist.join(" ")}`)));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceRows.some((row) => row.accountId === "sports-daily" && row.platform === "instagram"));
+    assert.ok(metricoolMvpLaunchPack.pendingProfileEvidenceRows.some((row) => row.accountId === "meme-radar" && row.platform === "youtube"));
     assert.ok(metricoolMvpLaunchPack.totals.queuedForApproval > 0);
     assert.equal(metricoolMvpLaunchPack.totals.manualReadyPosts, 0);
     assert.ok(metricoolMvpLaunchPack.totals.rightsReadyAssets >= metricoolMvpLaunchPack.totals.minimumWeeklySourceAssets);
     assert.ok(metricoolMvpLaunchPack.targetAccounts.includes("Sports Daily Clips"));
     assert.ok(metricoolMvpLaunchPack.targetAccounts.includes("Meme Radar"));
     assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.primaryNetwork === "tiktok"));
+    assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.pendingMetricoolProfiles.includes("instagram")));
+    assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.pendingMetricoolProfiles.includes("youtube")));
     assert.ok(metricoolMvpLaunchPack.rows.every((row) => row.status === "ready_for_review"));
+    assert.ok(metricoolMvpLaunchPack.guardrails.some((guardrail) => guardrail.includes("TikTok is the only active MVP network")));
     assert.ok(metricoolMvpLaunchPack.fullAutomationStillBlockedBy.some((item) => item.includes("developer app")));
     assert.ok(metricoolMvpLaunchPack.fullAutomationStillBlockedBy.some((item) => item.includes("account proof")));
     assert.ok(metricoolMvpLaunchPack.guardrails.some((guardrail) => guardrail.includes("does not auto-publish")));
@@ -3783,11 +4107,23 @@ test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from ful
     const rawManifest = await readFile(metricoolMvpLaunchPack.manifestPath, "utf8");
     const rawMarkdown = await readFile(metricoolMvpLaunchPack.markdownPath, "utf8");
     const rawCsv = await readFile(metricoolMvpLaunchPack.csvPath, "utf8");
+    const rawPendingProfileEvidenceCsv = await readFile(metricoolMvpLaunchPack.pendingProfileEvidenceCsvPath, "utf8");
     assert.match(rawMarkdown, /Metricool MVP Launch Pack/);
+    assert.match(rawMarkdown, /Pending Metricool profiles: 4/);
+    assert.match(rawMarkdown, /Pending Metricool profiles: instagram, youtube/);
+    assert.match(rawMarkdown, /Pending Metricool Profile Evidence/);
     assert.match(rawMarkdown, /approval_required/);
+    assert.match(rawCsv, /pending_metricool_profiles/);
+    assert.match(rawCsv, /pending_profile_evidence_rows/);
+    assert.match(rawCsv, /instagram \\| youtube/);
     assert.match(rawCsv, /sports-daily/);
+    assert.match(rawPendingProfileEvidenceCsv, /account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes/);
+    assert.match(rawPendingProfileEvidenceCsv, /"sports-daily","instagram"/);
+    assert.match(rawPendingProfileEvidenceCsv, /"meme-radar","youtube"/);
+    assert.match(rawPendingProfileEvidenceCsv, /paste real Metricool profile connection proof URL/);
     assert.doesNotMatch(rawManifest, /token_live|METRICOOL_USER_TOKEN=/);
     assert.doesNotMatch(rawMarkdown, /token_live|METRICOOL_USER_TOKEN=/);
+    assert.doesNotMatch(rawPendingProfileEvidenceCsv, /token_live|METRICOOL_USER_TOKEN=/);
   } finally {
     fetchMock.mock.restore();
     if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
@@ -3816,8 +4152,762 @@ test("prepareClipperMetricoolMvpLaunchPack separates approval queue MVP from ful
     else await writeFile(mvpMarkdownPath, previousMvpMarkdown);
     if (previousMvpCsv === null) await unlink(mvpCsvPath).catch(() => undefined);
     else await writeFile(mvpCsvPath, previousMvpCsv);
+    if (previousPendingProfileEvidenceCsv === null) await unlink(pendingProfileEvidenceCsvPath).catch(() => undefined);
+    else await writeFile(pendingProfileEvidenceCsvPath, previousPendingProfileEvidenceCsv);
     if (previousCache === null) await unlink(cachePath).catch(() => undefined);
     else await writeFile(cachePath, previousCache);
+  }
+});
+
+test("getClipperMetricoolLaunchSummary returns compact Metricool-only MVP gate", async () => {
+  const summary = await getClipperMetricoolLaunchSummary();
+
+  assert.equal(summary.launchMode, "metricool_approval_required");
+  assert.equal(summary.metricoolMvpReady, true);
+  assert.equal(summary.approvalQueueReady, true);
+  assert.equal(summary.directSocialApisRequiredForMvp, false);
+  assert.equal(summary.publishMode, "approval_required");
+  assert.equal(summary.realPublishEnabled, false);
+  assert.equal(summary.readyToSend, 0);
+  assert.ok(summary.queuedForApproval > 0);
+  assert.ok(summary.readyAccounts >= 2);
+  assert.ok(summary.targetWeeklyClips >= 100);
+  assert.ok(summary.sourceFilesReady >= 0);
+  assert.ok(summary.metricoolApprovalQueued >= 0);
+  assert.match(summary.approvalEvidenceStatus, /needs_evidence|needs_operator|ready_to_import|blocked|not_prepared/);
+  assert.ok(summary.approvalEvidenceRows >= 0);
+  assert.ok(summary.importedPublishedRows >= 0);
+  assert.ok(summary.importedViews >= 0);
+  assert.match(summary.evidenceImportCsvPath, /metricool-approval-evidence-import\.csv/);
+  assert.equal(Array.isArray(summary.metricoolMvpBlockers), true);
+  assert.ok(summary.directApiBacklogCount >= 0);
+  assert.match(summary.nextStep, /Metricool MVP listo|Crear evidencia|Run Metricool review/);
+});
+
+test("prepareClipperMetricoolApprovalQuickRun creates a first-batch Metricool operator checklist", async () => {
+  const quickRunPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-quick-run.json");
+  const quickRunMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-quick-run.md");
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const previousQuickRun = await readFile(quickRunPath, "utf8").catch(() => null);
+  const previousQuickRunMarkdown = await readFile(quickRunMarkdownPath, "utf8").catch(() => null);
+  const previousApprovalEvidenceCsv = await readFile(approvalEvidenceCsvPath, "utf8").catch(() => null);
+
+  try {
+    const { metricoolApprovalQuickRun, metricoolApprovalSession, status } = await prepareClipperMetricoolApprovalQuickRun(undefined, { batchSize: 5 });
+
+    assert.equal(metricoolApprovalQuickRun.status, "ready_for_operator");
+    assert.equal(metricoolApprovalQuickRun.portalUrl, "https://app.metricool.com/");
+    assert.equal(metricoolApprovalQuickRun.realPublishEnabled, false);
+    assert.equal(metricoolApprovalQuickRun.approvalRequired, true);
+    assert.ok(metricoolApprovalQuickRun.totals.readyForReview > 0);
+    assert.ok(metricoolApprovalQuickRun.totals.quickRunItems > 0);
+    assert.ok(metricoolApprovalQuickRun.totals.quickRunItems <= 5);
+    assert.equal(metricoolApprovalQuickRun.totals.readyForReview, metricoolApprovalSession.totals.readyForReview);
+    assert.equal(metricoolApprovalQuickRun.items.every((item) => item.status === "ready_for_review"), true);
+    assert.equal(metricoolApprovalQuickRun.items.every((item) => item.evidenceCaptureRow.includes("<published post URL after live>")), true);
+    assert.match(metricoolApprovalQuickRun.nextStep, /Open Metricool/);
+    assert.match(metricoolApprovalQuickRun.guardrails.join("\n"), /not published counts/);
+    assert.equal(status.metricoolApprovalSession.totals.readyForReview, metricoolApprovalSession.totals.readyForReview);
+
+    const rawQuickRun = await readFile(metricoolApprovalQuickRun.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolApprovalQuickRun.markdownPath, "utf8");
+    assert.match(rawMarkdown, /Metricool Approval Quick Run/);
+    assert.doesNotMatch(`${rawQuickRun}\n${rawMarkdown}`, /METRICOOL_USER_TOKEN|METRICOOL_USER_ID|access_token|client_secret/i);
+
+	    const firstItem = metricoolApprovalQuickRun.items[0];
+	    assert.ok(firstItem);
+	    await writeFile(approvalEvidenceCsvPath, [
+	      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+	      `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},1999-01-01T00:00:00.000Z,${firstItem.sourcePath || ""},${firstItem.captionSeed},<metricool scheduled/approved/post URL>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>`,
+	    ].join("\n"));
+
+	    await prepareClipperMetricoolApprovalQuickRun(undefined, { batchSize: 5 });
+	    const refreshedPlaceholderCsv = await readFile(approvalEvidenceCsvPath, "utf8");
+	    assert.doesNotMatch(refreshedPlaceholderCsv, /1999-01-01T00:00:00\.000Z/);
+	    assert.match(refreshedPlaceholderCsv, new RegExp(firstItem.publishAt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+	    await writeFile(approvalEvidenceCsvPath, [
+	      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+	      `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@meme/video/preserved,published,111,22,3,4,Do not overwrite this live evidence row`,
+	    ].join("\n"));
+
+    await prepareClipperMetricoolApprovalQuickRun(undefined, { batchSize: 5 });
+    const preservedEvidenceCsv = await readFile(approvalEvidenceCsvPath, "utf8");
+    assert.match(preservedEvidenceCsv, /https:\/\/www\.tiktok\.com\/@meme\/video\/preserved/);
+    assert.match(preservedEvidenceCsv, /Do not overwrite this live evidence row/);
+  } finally {
+    if (previousQuickRun === null) await unlink(quickRunPath).catch(() => undefined);
+    else await writeFile(quickRunPath, previousQuickRun);
+    if (previousQuickRunMarkdown === null) await unlink(quickRunMarkdownPath).catch(() => undefined);
+    else await writeFile(quickRunMarkdownPath, previousQuickRunMarkdown);
+    if (previousApprovalEvidenceCsv === null) await unlink(approvalEvidenceCsvPath).catch(() => undefined);
+    else await writeFile(approvalEvidenceCsvPath, previousApprovalEvidenceCsv);
+  }
+});
+
+test("prepareClipperMetricoolSourceUploadPack verifies local sources for Metricool upload", async () => {
+  const packPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.json");
+  const packMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.md");
+  const packCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.csv");
+  const hashCachePath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-hashes.json");
+  const previousPack = await readFile(packPath, "utf8").catch(() => null);
+  const previousPackMarkdown = await readFile(packMarkdownPath, "utf8").catch(() => null);
+  const previousPackCsv = await readFile(packCsvPath, "utf8").catch(() => null);
+  const previousHashCache = await readFile(hashCachePath, "utf8").catch(() => null);
+
+  try {
+    const { metricoolSourceUploadPack, status } = await prepareClipperMetricoolSourceUploadPack();
+
+    assert.equal(metricoolSourceUploadPack.realPublishEnabled, false);
+    assert.equal(metricoolSourceUploadPack.approvalRequired, true);
+    assert.ok(["ready_for_operator", "blocked", "not_prepared"].includes(metricoolSourceUploadPack.status));
+    assert.equal(metricoolSourceUploadPack.totals.items, status.metricoolApprovalSession.totals.items);
+    const evidenceReadyCount = metricoolSourceUploadPack.items.filter((item) => item.uploadStatus === "evidence_ready").length;
+    assert.equal(metricoolSourceUploadPack.totals.readyToUpload + metricoolSourceUploadPack.totals.missingSource + metricoolSourceUploadPack.totals.blocked + evidenceReadyCount, metricoolSourceUploadPack.totals.items);
+    assert.ok(metricoolSourceUploadPack.items.every((item) => item.queueStatus === "blocked" || item.sourceSha256 || !item.sourceExists));
+    assert.ok(metricoolSourceUploadPack.guardrails.some((guardrail) => guardrail.includes("does not publish automatically")));
+    if (metricoolSourceUploadPack.totals.items > 0 && metricoolSourceUploadPack.totals.missingSource === 0 && metricoolSourceUploadPack.totals.blocked === 0) {
+      assert.equal(metricoolSourceUploadPack.status, "ready_for_operator");
+      assert.ok(metricoolSourceUploadPack.items.every((item) => item.uploadStatus === "ready_to_upload" || item.uploadStatus === "evidence_ready"));
+    }
+
+    const rawPack = await readFile(metricoolSourceUploadPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolSourceUploadPack.markdownPath, "utf8");
+    const rawCsv = await readFile(metricoolSourceUploadPack.csvPath, "utf8");
+    const rawHashCache = await readFile(hashCachePath, "utf8");
+    assert.match(rawMarkdown, /Metricool Source Upload Pack/);
+    assert.match(rawCsv, /source_sha256/);
+    assert.match(rawHashCache, /sha256/);
+    assert.doesNotMatch(`${rawPack}\n${rawMarkdown}\n${rawCsv}\n${rawHashCache}`, /METRICOOL_USER_TOKEN|METRICOOL_USER_ID|access_token|client_secret|password=/i);
+
+    await unlink(hashCachePath);
+    const inspectedPack = await getClipperMetricoolSourceUploadPack();
+    assert.equal(inspectedPack.items.length, metricoolSourceUploadPack.items.length);
+    assert.equal(await readFile(hashCachePath, "utf8").catch(() => null), null);
+    await prepareClipperMetricoolSourceUploadPack();
+    assert.match(await readFile(hashCachePath, "utf8"), /sha256/);
+  } finally {
+    if (previousPack === null) await unlink(packPath).catch(() => undefined);
+    else await writeFile(packPath, previousPack);
+    if (previousPackMarkdown === null) await unlink(packMarkdownPath).catch(() => undefined);
+    else await writeFile(packMarkdownPath, previousPackMarkdown);
+    if (previousPackCsv === null) await unlink(packCsvPath).catch(() => undefined);
+    else await writeFile(packCsvPath, previousPackCsv);
+    if (previousHashCache === null) await unlink(hashCachePath).catch(() => undefined);
+    else await writeFile(hashCachePath, previousHashCache);
+  }
+});
+
+test("prepareClipperMetricoolSourceUploadPack blocks invalid stub source files", async () => {
+  const beforeStatus = await getClipperStatus();
+  const packPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.json");
+  const packMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.md");
+  const packCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.csv");
+  const queuePath = beforeStatus.metricoolExecutionQueue.manifestPath;
+  const queueMarkdownPath = beforeStatus.metricoolExecutionQueue.markdownPath;
+  const queueCsvPath = beforeStatus.metricoolExecutionQueue.csvPath;
+  const previousPack = await readFile(packPath, "utf8").catch(() => null);
+  const previousPackMarkdown = await readFile(packMarkdownPath, "utf8").catch(() => null);
+  const previousPackCsv = await readFile(packCsvPath, "utf8").catch(() => null);
+  const previousQueue = await readFile(queuePath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(queueMarkdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(queueCsvPath, "utf8").catch(() => null);
+  const target = beforeStatus.metricoolApprovalSession.items.find((item) => item.status === "ready_for_review" && item.sourcePath);
+  assert.ok(target?.sourcePath);
+  const previousSource = await readFile(target.sourcePath);
+  try {
+    await writeFile(target.sourcePath, "not a real video");
+
+    const { metricoolSourceUploadPack } = await prepareClipperMetricoolSourceUploadPack();
+    const row = metricoolSourceUploadPack.items.find((item) => item.id === target.id);
+
+    assert.ok(row);
+    assert.equal(row.uploadStatus, "invalid_source");
+    assert.equal(row.sourceExists, true);
+    assert.equal(row.sourceValid, false);
+    assert.match(row.sourceInvalidReason || "", /too small|missing|Unsupported|header/i);
+    assert.equal(metricoolSourceUploadPack.status, "blocked");
+    assert.ok(metricoolSourceUploadPack.totals.blocked > 0);
+    assert.match(metricoolSourceUploadPack.nextStep, /Replace invalid Metricool source file/);
+  } finally {
+    await writeFile(target.sourcePath, previousSource);
+    if (previousPack === null) await unlink(packPath).catch(() => undefined);
+    else await writeFile(packPath, previousPack);
+    if (previousPackMarkdown === null) await unlink(packMarkdownPath).catch(() => undefined);
+    else await writeFile(packMarkdownPath, previousPackMarkdown);
+    if (previousPackCsv === null) await unlink(packCsvPath).catch(() => undefined);
+    else await writeFile(packCsvPath, previousPackCsv);
+    if (previousQueue === null) await unlink(queuePath).catch(() => undefined);
+    else await writeFile(queuePath, previousQueue);
+    if (previousQueueMarkdown === null) await unlink(queueMarkdownPath).catch(() => undefined);
+    else await writeFile(queueMarkdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(queueCsvPath).catch(() => undefined);
+    else await writeFile(queueCsvPath, previousQueueCsv);
+  }
+});
+
+test("prepareClipperMetricoolSourceUploadPack skips upload for rows with publish evidence ready", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sourcePackPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.json");
+  const sourcePackMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.md");
+  const sourcePackCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-source-upload-pack.csv");
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const artifactPaths = [
+    beforeStatus.metricoolApprovalSession.manifestPath,
+    beforeStatus.metricoolApprovalSession.markdownPath,
+    beforeStatus.metricoolApprovalSession.csvPath,
+    approvalEvidenceCsvPath,
+    beforeStatus.metricoolApprovalReport.manifestPath,
+    beforeStatus.metricoolApprovalReport.markdownPath,
+    beforeStatus.metricoolApprovalReport.csvPath,
+    sourcePackPath,
+    sourcePackMarkdownPath,
+    sourcePackCsvPath,
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    const { metricoolApprovalSession } = await prepareClipperMetricoolApprovalSession();
+    const firstItem = metricoolApprovalSession.items[0];
+    assert.ok(firstItem);
+
+    await mkdir(path.dirname(approvalEvidenceCsvPath), { recursive: true });
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@sportsdaily/video/evidence-ready,published,1200,44,8,3,Public URL and 24h metrics captured after Metricool approval`,
+      ...metricoolApprovalSession.items.slice(1).map((item) => item.evidenceCaptureRow),
+    ].join("\n"));
+    await prepareClipperMetricoolApprovalReport();
+
+    const { metricoolSourceUploadPack } = await prepareClipperMetricoolSourceUploadPack();
+    const evidenceReadyItem = metricoolSourceUploadPack.items.find((item) => item.id === firstItem.id);
+    assert.ok(evidenceReadyItem);
+    assert.equal(evidenceReadyItem.operatorStatus, "ready_to_import");
+    assert.equal(evidenceReadyItem.uploadStatus, "evidence_ready");
+    assert.ok(evidenceReadyItem.nextStep.includes("instead of uploading again"));
+    assert.equal(metricoolSourceUploadPack.totals.readyToUpload, metricoolSourceUploadPack.items.filter((item) => item.uploadStatus === "ready_to_upload").length);
+    assert.equal(metricoolSourceUploadPack.totals.readyToUpload + metricoolSourceUploadPack.totals.missingSource + metricoolSourceUploadPack.totals.blocked + metricoolSourceUploadPack.items.filter((item) => item.uploadStatus === "evidence_ready").length, metricoolSourceUploadPack.totals.items);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("prepareClipperMetricoolOperatorCloseoutPack keeps Metricool operator flow approval-only", async () => {
+  const packPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.json");
+  const packMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.md");
+  const runSheetCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-run-sheet.csv");
+  const approvalReportPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.json");
+  const approvalReportMarkdownPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.md");
+  const approvalReportCsvPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.csv");
+  const beforeStatus = await getClipperStatus();
+  const previousPack = await readFile(packPath, "utf8").catch(() => null);
+  const previousPackMarkdown = await readFile(packMarkdownPath, "utf8").catch(() => null);
+  const previousRunSheetCsv = await readFile(runSheetCsvPath, "utf8").catch(() => null);
+  const previousApprovalReport = await readFile(approvalReportPath, "utf8").catch(() => null);
+  const previousApprovalReportMarkdown = await readFile(approvalReportMarkdownPath, "utf8").catch(() => null);
+  const previousApprovalReportCsv = await readFile(approvalReportCsvPath, "utf8").catch(() => null);
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+
+  try {
+    const { metricoolOperatorCloseoutPack, status } = await prepareClipperMetricoolOperatorCloseoutPack();
+
+    assert.equal(metricoolOperatorCloseoutPack.realPublishEnabled, false);
+    assert.equal(metricoolOperatorCloseoutPack.approvalRequired, true);
+    assert.ok(["ready_for_operator", "waiting_evidence", "not_prepared"].includes(metricoolOperatorCloseoutPack.status));
+    assert.equal(metricoolOperatorCloseoutPack.totals.readyForReview, status.metricoolApprovalSession.totals.readyForReview);
+    assert.equal(metricoolOperatorCloseoutPack.totals.queuedForApproval, status.metricoolExecutionQueue.totals.queuedForApproval);
+    assert.equal(metricoolOperatorCloseoutPack.totals.readyToSend, 0);
+    assert.equal(metricoolOperatorCloseoutPack.totals.evidenceRows, status.metricoolApprovalReport.totals.evidenceRows);
+    assert.equal(metricoolOperatorCloseoutPack.totals.readyToImport, status.metricoolApprovalReport.rows.filter((row) => row.operatorStatus === "ready_to_import").length);
+    assert.equal(metricoolOperatorCloseoutPack.totals.needsMetricoolReview, status.metricoolApprovalReport.rows.filter((row) => row.operatorStatus === "needs_metricool_review").length);
+    assert.equal(metricoolOperatorCloseoutPack.totals.waitingLiveUrl, status.metricoolApprovalReport.rows.filter((row) => row.operatorStatus === "waiting_live_url").length);
+    assert.equal(metricoolOperatorCloseoutPack.totals.rejected, status.metricoolApprovalReport.rows.filter((row) => row.operatorStatus === "evidence_rejected").length);
+    assert.equal(metricoolOperatorCloseoutPack.totals.evidenceMismatch, status.metricoolApprovalReport.rows.filter((row) => row.operatorStatus === "evidence_mismatch").length);
+    assert.ok(metricoolOperatorCloseoutPack.operatorSteps.some((step) => step.includes("Metricool")));
+    assert.ok(metricoolOperatorCloseoutPack.evidenceRules.some((rule) => rule.includes("published")));
+    assert.ok(metricoolOperatorCloseoutPack.doneCriteria.some((criterion) => criterion.includes("realPublishEnabled")));
+    assert.equal(metricoolOperatorCloseoutPack.runSheetCsvPath, runSheetCsvPath);
+    assert.equal(metricoolOperatorCloseoutPack.runSheetRows.length, metricoolOperatorCloseoutPack.totals.readyForReview);
+    assert.ok(metricoolOperatorCloseoutPack.runSheetRows.every((row) => row.metricoolAction.includes("Metricool") || row.uploadStatus !== "ready_to_upload"));
+    assert.ok(metricoolOperatorCloseoutPack.batches.length > 0);
+    assert.equal(metricoolOperatorCloseoutPack.batches.reduce((sum, batch) => sum + batch.items, 0), metricoolOperatorCloseoutPack.runSheetRows.length);
+    assert.ok(metricoolOperatorCloseoutPack.batches.every((batch) =>
+      batch.batchNumber > 0
+      && batch.startRank <= batch.endRank
+      && batch.items <= 15
+      && batch.runSheetCsvPath === metricoolOperatorCloseoutPack.runSheetCsvPath
+      && batch.evidenceImportCsvPath === metricoolOperatorCloseoutPack.evidenceImportCsvPath
+      && batch.metricoolAction.includes("Metricool")
+      && batch.evidenceAction.length > 0
+      && batch.doneCriteria.some((criterion) => criterion.includes("No row is counted as published"))
+    ));
+    if (metricoolOperatorCloseoutPack.totals.readyForReview > 0 && metricoolOperatorCloseoutPack.blockers.length === 0) {
+      assert.equal(metricoolOperatorCloseoutPack.status, "ready_for_operator");
+    }
+
+    const rawPack = await readFile(metricoolOperatorCloseoutPack.manifestPath, "utf8");
+    const rawMarkdown = await readFile(metricoolOperatorCloseoutPack.markdownPath, "utf8");
+    const rawRunSheetCsv = await readFile(metricoolOperatorCloseoutPack.runSheetCsvPath, "utf8");
+    const rawApprovalReport = await readFile(status.metricoolApprovalReport.manifestPath, "utf8");
+    const rawApprovalReportMarkdown = await readFile(status.metricoolApprovalReport.markdownPath, "utf8");
+    assert.match(rawMarkdown, /Metricool Operator Closeout Pack/);
+    assert.match(rawMarkdown, /Ready to import/);
+    assert.match(rawMarkdown, /Batch Handoff/);
+    assert.match(rawMarkdown, /Run Sheet Preview/);
+    assert.match(rawRunSheetCsv, /metricool_queue_item_id/);
+    assert.match(rawRunSheetCsv, /metricool_action/);
+    assert.match(rawRunSheetCsv, /evidence_action/);
+    assert.match(rawApprovalReport, /"queueItems"/);
+    assert.match(rawApprovalReportMarkdown, /Metricool Approval Report/);
+    assert.match(rawMarkdown, /does not publish automatically/);
+    assert.doesNotMatch(`${rawPack}\n${rawMarkdown}\n${rawRunSheetCsv}\n${rawApprovalReport}\n${rawApprovalReportMarkdown}`, /METRICOOL_USER_TOKEN|METRICOOL_USER_ID|access_token|client_secret|password=/i);
+
+    await unlink(runSheetCsvPath);
+    const materializedFromGet = await getClipperMetricoolOperatorCloseoutPack();
+    assert.equal(materializedFromGet.runSheetRows.length, materializedFromGet.totals.readyForReview);
+    assert.equal(await readFile(materializedFromGet.runSheetCsvPath, "utf8").catch(() => null), null);
+
+    const rematerializedFromPost = await prepareClipperMetricoolOperatorCloseoutPack();
+    assert.match(await readFile(rematerializedFromPost.metricoolOperatorCloseoutPack.runSheetCsvPath, "utf8"), /metricool_action/);
+
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      ...status.metricoolExecutionQueue,
+      status: "ready",
+      publishMode: "auto_after_connection",
+      realPublishEnabled: false,
+      totals: {
+        ...status.metricoolExecutionQueue.totals,
+        readyToSend: 0,
+      },
+    }, null, 2));
+    const staleQueueResult = await prepareClipperMetricoolOperatorCloseoutPack();
+    assert.equal(staleQueueResult.status.metricoolExecutionQueue.status, "approval_required");
+    assert.equal(staleQueueResult.status.metricoolExecutionQueue.publishMode, "approval_required");
+    assert.equal(staleQueueResult.metricoolOperatorCloseoutPack.realPublishEnabled, false);
+    assert.equal(staleQueueResult.metricoolOperatorCloseoutPack.totals.readyToSend, 0);
+    assert.ok(!staleQueueResult.metricoolOperatorCloseoutPack.blockers.some((blocker) => blocker.includes("realPublishEnabled is unexpectedly true")));
+  } finally {
+    if (previousPack === null) await unlink(packPath).catch(() => undefined);
+    else await writeFile(packPath, previousPack);
+    if (previousPackMarkdown === null) await unlink(packMarkdownPath).catch(() => undefined);
+    else await writeFile(packMarkdownPath, previousPackMarkdown);
+    if (previousRunSheetCsv === null) await unlink(runSheetCsvPath).catch(() => undefined);
+    else await writeFile(runSheetCsvPath, previousRunSheetCsv);
+    if (previousApprovalReport === null) await unlink(approvalReportPath).catch(() => undefined);
+    else await writeFile(approvalReportPath, previousApprovalReport);
+    if (previousApprovalReportMarkdown === null) await unlink(approvalReportMarkdownPath).catch(() => undefined);
+    else await writeFile(approvalReportMarkdownPath, previousApprovalReportMarkdown);
+    if (previousApprovalReportCsv === null) await unlink(approvalReportCsvPath).catch(() => undefined);
+    else await writeFile(approvalReportCsvPath, previousApprovalReportCsv);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+  }
+});
+
+test("recordClipperMetricoolApprovalEvidenceRow updates one row without importing false metrics", async () => {
+  const beforeStatus = await getClipperStatus();
+  const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100EvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const artifactPaths = [
+    beforeStatus.metricoolApprovalSession.manifestPath,
+    beforeStatus.metricoolApprovalSession.markdownPath,
+    beforeStatus.metricoolApprovalSession.csvPath,
+    approvalEvidenceCsvPath,
+    metricool100EvidenceCsvPath,
+    beforeStatus.metricoolApprovalReport.manifestPath,
+    beforeStatus.metricoolApprovalReport.markdownPath,
+    beforeStatus.metricoolApprovalReport.csvPath,
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.json"),
+    path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-operator-closeout-pack.md"),
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    const { metricoolApprovalSession } = await prepareClipperMetricoolApprovalSession();
+    const firstItem = metricoolApprovalSession.items[0];
+    assert.ok(firstItem);
+
+    const scheduledResult = await recordClipperMetricoolApprovalEvidenceRow({
+      metricoolQueueItemId: firstItem.id,
+      metricoolApprovalUrl: `https://app.metricool.com/planner/post/${firstItem.id}`,
+      finalStatus: "scheduled",
+      operatorNotes: "Scheduled in Metricool; public post URL is not live yet.",
+    });
+    assert.equal(scheduledResult.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.ok(scheduledResult.metricoolApprovalReport.rows.some((row) =>
+      row.metricoolQueueItemId === firstItem.id
+      && row.operatorStatus === "waiting_live_url"
+    ));
+    assert.equal(scheduledResult.metricoolOperatorCloseoutPack.totals.waitingLiveUrl, 1);
+    assert.equal(scheduledResult.metricoolOperatorCloseoutPack.totals.readyToImport, 0);
+
+    await assert.rejects(
+      () => recordClipperMetricoolApprovalEvidenceRow({
+        metricoolQueueItemId: firstItem.id,
+        metricoolApprovalUrl: "https://app.metricool.com/planner/post/unsafe",
+        finalStatus: "scheduled",
+        operatorNotes: "access_token=never-store-this",
+      }),
+      /token, password, cookie or secret/i,
+    );
+    await assert.rejects(
+      () => recordClipperMetricoolApprovalEvidenceRow({
+        metricoolQueueItemId: firstItem.id,
+        metricoolApprovalUrl: "https://app.metricool.com/planner/post/unsafe?token=never-store-this",
+        finalStatus: "scheduled",
+        operatorNotes: "Do not store URL query secrets.",
+      }),
+      /token, password, cookie or secret/i,
+    );
+
+    const profileUrlResult = await recordClipperMetricoolApprovalEvidenceRow({
+      metricoolQueueItemId: firstItem.id,
+      metricoolApprovalUrl: `https://app.metricool.com/planner/post/${firstItem.id}`,
+      publishedPostUrl: "https://www.tiktok.com/@sportsdaily",
+      finalStatus: "published",
+      views24h: 1234,
+      likes24h: 55,
+      comments24h: 7,
+      shares24h: 3,
+      operatorNotes: "Profile URL should not count as a published post.",
+    });
+    assert.equal(profileUrlResult.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.ok(profileUrlResult.metricoolApprovalReport.rows.some((row) =>
+      row.metricoolQueueItemId === firstItem.id
+      && row.evidenceResult === "rejected"
+      && row.reason === "published_post_url_not_platform_post"
+    ));
+
+    const publishedResult = await recordClipperMetricoolApprovalEvidenceRow({
+      metricoolQueueItemId: firstItem.id,
+      metricoolApprovalUrl: `https://app.metricool.com/planner/post/${firstItem.id}`,
+      publishedPostUrl: `https://www.tiktok.com/@sportsdaily/video/${firstItem.id}`,
+      finalStatus: "published",
+      views24h: 1234,
+      likes24h: 55,
+      comments24h: 7,
+      shares24h: 3,
+      operatorNotes: "Public URL and 24h metrics captured from Metricool.",
+    });
+    assert.equal(publishedResult.metricoolApprovalReport.totals.publishedRows, 1);
+    assert.equal(publishedResult.metricoolApprovalReport.totals.views, 1234);
+    assert.equal(publishedResult.metricoolOperatorCloseoutPack.totals.readyToImport, 1);
+    assert.equal(publishedResult.metricoolOperatorCloseoutPack.totals.publishedRows, 1);
+    assert.ok(publishedResult.metricoolOperatorCloseoutPack.nextStep.includes("Import Metricool evidence"));
+
+    const rawEvidenceCsv = await readFile(publishedResult.metricoolApprovalReport.evidenceImportCsvPaths.active, "utf8");
+    assert.match(rawEvidenceCsv, /sportsdaily\/video\//);
+    assert.doesNotMatch(rawEvidenceCsv, /access_token=never-store-this/);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("recordClipperMetricoolApprovalEvidenceRow updates Metricool 100 evidence rows", async () => {
+  const statusBefore = await getClipperStatus();
+  const shortEvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100RunSheetPath = path.join(statusBefore.rootDir, "scheduled", "metricool-100-operator-run-sheet.csv");
+  const metricool100EvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const artifactPaths = [
+    shortEvidenceCsvPath,
+    metricool100RunSheetPath,
+    metricool100EvidenceCsvPath,
+    statusBefore.metricool100ApprovalRun.manifestPath,
+    statusBefore.metricoolApprovalReport.manifestPath,
+    statusBefore.metricoolApprovalReport.markdownPath,
+    statusBefore.metricoolApprovalReport.csvPath,
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-closeout-pack.json"),
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-closeout-pack.md"),
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-run-sheet.csv"),
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+  await mkdir(path.dirname(shortEvidenceCsvPath), { recursive: true });
+  await mkdir(path.dirname(metricool100RunSheetPath), { recursive: true });
+  await writeFile(shortEvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+  ].join("\n"));
+  await writeFile(metricool100RunSheetPath, [
+    "rank,metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,publish_at,source_file_name,source_path,caption_seed,queue_status,metricool_action,evidence_action",
+    "1,metricool-100-record-row,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,owned-sports.mp4,/tmp/owned-sports.mp4,Metricool 100 record hook,ready_for_review,Review in Metricool,Capture live evidence",
+  ].join("\n"));
+  await writeFile(metricool100EvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    "metricool-100-record-row,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/owned-sports.mp4,Metricool 100 record hook,<metricool scheduled/approved/post URL>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
+  ].join("\n"));
+
+  try {
+    const { metricool100ApprovalRun, status } = await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
+    const targetItem = status.metricoolApprovalSession.items.find((item) =>
+      metricool100ApprovalRun.metricoolQueueItemIds.includes(item.id)
+    );
+    assert.ok(targetItem);
+    await recordClipperMetricoolApprovalEvidenceRow({
+      metricoolQueueItemId: targetItem.id,
+      metricoolApprovalUrl: `https://app.metricool.com/planner/post/${targetItem.id}`,
+      publishedPostUrl: "https://www.tiktok.com/@sportsdaily/video/metricool100recordrow",
+      finalStatus: "published",
+      views24h: 3456,
+      likes24h: 220,
+      comments24h: 31,
+      shares24h: 18,
+      operatorNotes: "Metricool 100 live post evidence captured after public URL was available.",
+    });
+
+    const raw100Evidence = await readFile(metricool100EvidenceCsvPath, "utf8");
+    const rawShortEvidence = await readFile(shortEvidenceCsvPath, "utf8");
+    assert.match(raw100Evidence, /metricool100recordrow/);
+    assert.match(raw100Evidence, /3456/);
+    assert.doesNotMatch(rawShortEvidence, /metricool100recordrow/);
+    await assert.rejects(
+      () => recordClipperMetricoolApprovalEvidenceRow({
+        metricoolQueueItemId: targetItem.id,
+        metricoolApprovalUrl: "https://app.metricool.com/planner/post/unsafe?token=never-store-this",
+        finalStatus: "scheduled",
+        operatorNotes: "Should reject secrets before writing the 100 CSV.",
+      }),
+      /token, password, cookie or secret/i,
+    );
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("recordClipperMetricoolApprovalEvidenceRow prefers active Metricool 100 CSV when ids overlap current session", async () => {
+  const statusBefore = await getClipperStatus();
+  const shortEvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100RunSheetPath = path.join(statusBefore.rootDir, "scheduled", "metricool-100-operator-run-sheet.csv");
+  const metricool100EvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const artifactPaths = [
+    shortEvidenceCsvPath,
+    metricool100RunSheetPath,
+    metricool100EvidenceCsvPath,
+    statusBefore.metricoolApprovalReport.manifestPath,
+    statusBefore.metricoolApprovalReport.markdownPath,
+    statusBefore.metricoolApprovalReport.csvPath,
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-closeout-pack.json"),
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-closeout-pack.md"),
+    path.join(statusBefore.rootDir, "scheduled", "metricool-operator-run-sheet.csv"),
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    const { metricool100ApprovalRun, status } = await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
+    const overlapItem = status.metricoolApprovalSession.items.find((item) =>
+      metricool100ApprovalRun.eligibleAccountIds.includes(item.accountId)
+    );
+    assert.ok(overlapItem);
+    assert.ok((await readFile(metricool100RunSheetPath, "utf8")).includes(overlapItem.id));
+
+    await recordClipperMetricoolApprovalEvidenceRow({
+      metricoolQueueItemId: overlapItem.id,
+      metricoolApprovalUrl: `https://app.metricool.com/planner/post/${overlapItem.id}`,
+      finalStatus: "scheduled",
+      operatorNotes: "Scheduled in Metricool from the active 100 run; public URL pending.",
+    });
+
+    const raw100Evidence = await readFile(metricool100EvidenceCsvPath, "utf8");
+    const rawShortEvidence = await readFile(shortEvidenceCsvPath, "utf8");
+    assert.match(raw100Evidence, new RegExp(overlapItem.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(raw100Evidence, /Scheduled in Metricool from the active 100 run/);
+    assert.doesNotMatch(rawShortEvidence, /Scheduled in Metricool from the active 100 run/);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("getClipperStatus surfaces stale Metricool operator artifacts before use", async () => {
+  const beforeStatus = await getClipperStatus();
+  const runPath = beforeStatus.metricool100ApprovalRun.manifestPath;
+  const previousRun = await readFile(runPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(runPath), { recursive: true });
+    await writeFile(runPath, JSON.stringify({
+      generatedAt: new Date().toISOString(),
+      status: "ready_for_operator",
+      mode: "metricool_approval_required_100",
+      manifestPath: runPath,
+      markdownPath: beforeStatus.metricool100ApprovalRun.markdownPath,
+      csvPath: beforeStatus.metricool100ApprovalRun.csvPath,
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 1,
+      batchSize: 1,
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      approvalRequired: true,
+      eligibleAccountIds: ["sports-daily"],
+      metricoolQueueItemIds: ["stale-metricool-item"],
+      productionByAccount: { "sports-daily": 1 },
+      totals: {
+        productionItems: 1,
+        draftReady: 1,
+        metricoolQueuedForApproval: beforeStatus.metricoolExecutionQueue.totals.queuedForApproval,
+        metricoolBlocked: beforeStatus.metricoolExecutionQueue.totals.blocked,
+        readyToSend: 0,
+        approvalSessionReadyForReview: beforeStatus.metricoolApprovalSession.totals.readyForReview,
+        quickRunItems: 1,
+        sourceUploadReady: 0,
+        sourceUploadMissing: 0,
+        closeoutReadyForReview: 0,
+        closeoutEvidenceRows: 0,
+        mvpReadyAccounts: 1,
+        mvpAccounts: 2,
+      },
+      artifacts: beforeStatus.metricool100ApprovalRun.artifacts,
+      guardrails: ["approval_required only"],
+      nextStep: "stale fixture",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricool100ApprovalRun.status, "not_prepared");
+    assert.equal(status.metricoolArtifactAudit.status, "refresh_needed");
+    const runAudit = status.metricoolArtifactAudit.items.find((item) => item.id === "metricool-100-approval-run");
+    assert.ok(runAudit);
+    assert.equal(runAudit.status, "stale");
+    assert.ok(runAudit.mismatchedIds > 0 || runAudit.staleReason?.includes("stale"));
+    assert.match(status.metricoolArtifactAudit.nextStep, /Prep 100 approval|Metricool/i);
+    assert.equal(status.metricoolArtifactAudit.realPublishEnabled, false);
+    assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
+  } finally {
+    if (previousRun === null) await unlink(runPath).catch(() => undefined);
+    else await writeFile(runPath, previousRun);
+  }
+});
+
+test("getClipperStatus rejects unsafe persisted Metricool 100 publish flags", async () => {
+  const beforeStatus = await getClipperStatus();
+  const runPath = beforeStatus.metricool100ApprovalRun.manifestPath;
+  const previousRun = await readFile(runPath, "utf8").catch(() => null);
+  try {
+    const currentIds = beforeStatus.metricoolApprovalSession.items.slice(0, Math.max(beforeStatus.metricool100ApprovalRun.approvalQueueTarget || 1, 1)).map((item) => item.id);
+    await mkdir(path.dirname(runPath), { recursive: true });
+    await writeFile(runPath, JSON.stringify({
+      ...beforeStatus.metricool100ApprovalRun,
+      status: "ready_for_operator",
+      generatedAt: new Date().toISOString(),
+      realPublishEnabled: true,
+      approvalRequired: true,
+      metricoolQueueItemIds: currentIds,
+      totals: {
+        ...beforeStatus.metricool100ApprovalRun.totals,
+        metricoolQueuedForApproval: beforeStatus.metricoolExecutionQueue.totals.queuedForApproval,
+        metricoolBlocked: beforeStatus.metricoolExecutionQueue.totals.blocked,
+        readyToSend: beforeStatus.metricoolExecutionQueue.totals.readyToSend,
+        approvalSessionReadyForReview: beforeStatus.metricoolApprovalSession.totals.readyForReview,
+      },
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricool100ApprovalRun.status, "not_prepared");
+    assert.match(status.metricool100ApprovalRun.nextStep, /unsafe publish flags/i);
+    assert.equal(status.robertNextActions.metricoolMvpTunnel?.nextGate === "metricool-100-approval-run", false);
+    const runAudit = status.metricoolArtifactAudit.items.find((item) => item.id === "metricool-100-approval-run");
+    assert.ok(runAudit);
+    assert.equal(runAudit.status, "stale");
+    assert.match(runAudit.staleReason || runAudit.nextStep, /realPublishEnabled|unsafe publish flags/i);
+  } finally {
+    if (previousRun === null) await unlink(runPath).catch(() => undefined);
+    else await writeFile(runPath, previousRun);
+  }
+});
+
+test("Metricool artifact audit blocks unsafe canonical queue state", async () => {
+  const beforeStatus = await getClipperStatus();
+  const queuePath = beforeStatus.metricoolExecutionQueue.manifestPath;
+  const previousQueue = await readFile(queuePath, "utf8").catch(() => null);
+  try {
+    const unsafeQueue = {
+      ...beforeStatus.metricoolExecutionQueue,
+      publishMode: "auto_after_connection",
+      realPublishEnabled: true,
+      totals: {
+        ...beforeStatus.metricoolExecutionQueue.totals,
+        readyToSend: 1,
+      },
+      items: beforeStatus.metricoolExecutionQueue.items.map((item, index) => index === 0
+        ? { ...item, status: "ready_to_send", canSendNow: true }
+        : item),
+    };
+    await writeFile(queuePath, JSON.stringify(unsafeQueue, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricoolArtifactAudit.status, "refresh_needed");
+    const queueAudit = status.metricoolArtifactAudit.items.find((item) => item.id === "metricool-canonical-queue");
+    assert.ok(queueAudit);
+    assert.equal(queueAudit.status, "stale");
+    assert.match(queueAudit.staleReason || "", /publishMode|realPublishEnabled|ready_to_send|canSendNow/i);
+    assert.equal(status.metricoolExecutionQueue.safetyNormalized, true);
+    assert.ok(status.metricoolExecutionQueue.safetyNormalizationReasons?.some((reason) => /realPublishEnabled|readyToSend|canSendNow/i.test(reason)));
+    assert.equal(status.metricoolArtifactAudit.realPublishEnabled, false);
+    assert.equal(status.metricoolArtifactAudit.canonicalReadyToSend, 0);
+  } finally {
+    if (previousQueue === null) await unlink(queuePath).catch(() => undefined);
+    else await writeFile(queuePath, previousQueue);
+  }
+});
+
+test("Metricool artifact audit validates 100 batch workbooks and evidence CSVs", async () => {
+  const handoffResult = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(handoffResult.status, 0, handoffResult.stderr || handoffResult.stdout);
+  const status = await getClipperStatus();
+  const batchAudit = status.metricoolArtifactAudit.items.find((item) => item.id === "metricool-100-batch-artifacts");
+  assert.ok(batchAudit);
+  assert.equal(batchAudit.status, "current");
+  assert.equal(batchAudit.queueItems, 100);
+  assert.equal(batchAudit.artifactItems, 100);
+  assert.equal(batchAudit.mismatchedIds, 0);
+  assert.match(batchAudit.artifactPath, /metricool-100-batch-workbooks/);
+  assert.match(batchAudit.artifactPath, /metricool-100-batch-evidence-imports/);
+});
+
+test("Metricool artifact audit marks 100 batch artifacts stale when evidence CSV is missing", async () => {
+  const beforeStatus = await getClipperStatus();
+  const evidencePath = path.join(beforeStatus.rootDir, "scheduled/metricool-100-batch-evidence-imports/metricool-batch-10-evidence-import.csv");
+  const previousEvidence = await readFile(evidencePath, "utf8").catch(() => null);
+  try {
+    await unlink(evidencePath).catch(() => undefined);
+    const status = await getClipperStatus();
+    const batchAudit = status.metricoolArtifactAudit.items.find((item) => item.id === "metricool-100-batch-artifacts");
+    assert.ok(batchAudit);
+    assert.equal(batchAudit.status, "stale");
+    assert.match(batchAudit.staleReason || "", /Expected 10 batch evidence CSV files/);
+    assert.match(batchAudit.nextStep, /Run 100 handoff/);
+  } finally {
+    if (previousEvidence !== null) await writeFile(evidencePath, previousEvidence);
   }
 });
 
@@ -3827,6 +4917,7 @@ test("prepareClipperMetricoolApprovalSession prepares operator evidence for queu
   const approvalMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.md");
   const approvalCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-approval-session.csv");
   const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100EvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-100-approval-evidence-import.csv");
   const mvpManifestPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.json");
   const mvpMarkdownPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.md");
   const mvpCsvPath = path.join(process.cwd(), "clippers_workspace", "scheduled", "metricool-mvp-launch-pack.csv");
@@ -3924,6 +5015,7 @@ test("prepareClipperMetricoolApprovalSession prepares operator evidence for queu
 test("prepareClipperMetricoolApprovalReport audits queue evidence without counting queued as published", async () => {
   const beforeStatus = await getClipperStatus();
   const approvalEvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100EvidenceCsvPath = path.join(process.cwd(), "clippers_workspace", "evidence-drop", "metricool-100-approval-evidence-import.csv");
   const approvalReportPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.json");
   const approvalReportMarkdownPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.md");
   const approvalReportCsvPath = path.join(process.cwd(), "clippers_workspace", "reports", "metricool-approval-report.csv");
@@ -3940,6 +5032,7 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
     beforeStatus.metricoolApprovalSession.markdownPath,
     beforeStatus.metricoolApprovalSession.csvPath,
     approvalEvidenceCsvPath,
+    metricool100EvidenceCsvPath,
     approvalReportPath,
     approvalReportMarkdownPath,
     approvalReportCsvPath,
@@ -3976,6 +5069,106 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
     assert.ok(firstItem);
 
     await mkdir(path.dirname(approvalEvidenceCsvPath), { recursive: true });
+    await writeFile(metricool100EvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    ].join("\n"));
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `old-queue-item,${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},Old clip,https://app.metricool.com/planner/post/old-queue-item,https://www.tiktok.com/@sportsdaily/video/oldpublished,published,9999,100,10,5,Old evidence row preserved for audit only`,
+    ].join("\n"));
+    const staleEvidenceReportResult = await prepareClipperMetricoolApprovalReport();
+    assert.notEqual(staleEvidenceReportResult.metricoolApprovalReport.status, "ready_to_import");
+    assert.equal(staleEvidenceReportResult.metricoolApprovalReport.totals.imported, 0);
+    assert.equal(staleEvidenceReportResult.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.ok(staleEvidenceReportResult.metricoolApprovalReport.rows.some((row) =>
+      row.metricoolQueueItemId === "old-queue-item"
+      && row.queueStatus === "missing_queue_item"
+      && row.operatorStatus === "evidence_mismatch"
+    ));
+    assert.ok(staleEvidenceReportResult.metricoolApprovalReport.nextActions.some((action) => action.includes("do not count as published")));
+
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      ...metricoolApprovalSession.items.map((item) => item.evidenceCaptureRow),
+    ].join("\n"));
+    const placeholderReportResult = await prepareClipperMetricoolApprovalReport();
+    assert.equal(placeholderReportResult.metricoolApprovalReport.status, "needs_evidence");
+    assert.equal(placeholderReportResult.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.ok(placeholderReportResult.metricoolApprovalReport.rows.every((row) => row.operatorStatus === "needs_metricool_review"));
+    assert.ok(placeholderReportResult.metricoolApprovalReport.nextActions.some((action) => action.includes("template row")));
+    assert.ok(placeholderReportResult.metricoolApprovalReport.nextActions.some((action) => action.includes("Next evidence file to update")));
+
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${firstItem.id}?token=secret-row,${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@sportsdaily/video/reportbad?token=secret,published,4200,210,31,18,Secret-like URL must be rejected and redacted`,
+    ].join("\n"));
+    const secretEvidenceReportResult = await prepareClipperMetricoolApprovalReport();
+    assert.equal(secretEvidenceReportResult.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.ok(secretEvidenceReportResult.metricoolApprovalReport.rows.some((row) =>
+      row.metricoolQueueItemId.startsWith("redacted-sensitive-evidence-")
+      && row.evidenceResult === "rejected"
+      && row.reason === "secret_like_value_detected"
+      && row.publishedPostUrl === null
+    ));
+    const secretReportArtifacts = [
+      await readFile(secretEvidenceReportResult.metricoolApprovalReport.manifestPath, "utf8"),
+      await readFile(secretEvidenceReportResult.metricoolApprovalReport.markdownPath, "utf8"),
+      await readFile(secretEvidenceReportResult.metricoolApprovalReport.csvPath, "utf8"),
+    ].join("\n");
+    assert.doesNotMatch(secretReportArtifacts, /reportbad\?token=secret|secret-row/);
+
+    await writeFile(approvalReportPath, JSON.stringify({
+      status: "ready_to_import",
+      generatedAt: new Date().toISOString(),
+      manifestPath: approvalReportPath,
+      markdownPath: approvalReportMarkdownPath,
+      csvPath: approvalReportCsvPath,
+      approvalSessionPath: metricoolApprovalSession.manifestPath,
+      evidenceImportCsvPath: approvalEvidenceCsvPath,
+      importedMetricsPath,
+      realPublishEnabled: false,
+      approvalRequired: true,
+      totals: {
+        queueItems: metricoolApprovalSession.totals.items,
+        readyForReview: metricoolApprovalSession.totals.readyForReview,
+        blocked: 0,
+        evidenceRows: 1,
+        imported: 1,
+        skipped: 0,
+        rejected: 0,
+        pendingLive: 0,
+        publishedRows: 1,
+        views: 999999,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+      },
+      rows: [{
+        metricoolQueueItemId: "stale-cache-row",
+        accountId: firstItem.accountId,
+        accountName: firstItem.accountName,
+        platform: firstItem.platform,
+        queueStatus: "missing_queue_item",
+        evidenceResult: "imported",
+        operatorStatus: "evidence_mismatch",
+        finalStatus: "published",
+        publishedPostUrl: "https://www.tiktok.com/@sportsdaily/video/stalecache",
+        views: 999999,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        reason: "stale_cache",
+        nextStep: "Do not trust this stale cache row.",
+      }],
+      nextActions: ["stale cache should be ignored"],
+      guardrails: [],
+      nextStep: "stale cache should be ignored",
+    }, null, 2));
+    const statusAfterStaleReportCache = await getClipperStatus();
+    assert.equal(statusAfterStaleReportCache.metricoolApprovalReport.status, "needs_evidence");
+    assert.equal(statusAfterStaleReportCache.metricoolApprovalReport.totals.publishedRows, 0);
+    assert.equal(statusAfterStaleReportCache.metricoolApprovalReport.totals.views, 0);
+
     await writeFile(approvalEvidenceCsvPath, [
       "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
       `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@sportsdaily/video/reportgood,published,4200,210,31,18,Public URL and 24h metrics captured from Metricool export`,
@@ -3988,6 +5181,12 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
     assert.equal(metricoolApprovalReport.status, "ready_to_import");
     assert.equal(metricoolApprovalReport.realPublishEnabled, false);
     assert.equal(metricoolApprovalReport.approvalRequired, true);
+    assert.ok([
+      approvalEvidenceCsvPath,
+      metricoolApprovalReport.evidenceImportCsvPaths.metricool100,
+    ].includes(metricoolApprovalReport.evidenceImportCsvPaths.active));
+    assert.equal(metricoolApprovalReport.evidenceImportCsvPaths.shortRun, approvalEvidenceCsvPath);
+    assert.ok(metricoolApprovalReport.evidenceImportCsvPaths.metricool100.endsWith("metricool-100-approval-evidence-import.csv"));
     assert.equal(metricoolApprovalReport.totals.queueItems, metricoolApprovalSession.totals.items);
     assert.equal(metricoolApprovalReport.totals.readyForReview, metricoolApprovalSession.totals.readyForReview);
     assert.equal(metricoolApprovalReport.totals.imported, 1);
@@ -3997,6 +5196,7 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
     assert.ok(metricoolApprovalReport.guardrails.some((guardrail) => guardrail.includes("queued_for_approval is not published")));
     assert.ok(metricoolApprovalReport.guardrails.some((guardrail) => guardrail.includes("Only the Import Metricool evidence action writes analytics")));
     assert.ok(metricoolApprovalReport.rows.some((row) => row.metricoolQueueItemId === firstItem.id && row.evidenceResult === "imported"));
+    assert.ok(metricoolApprovalReport.rows.some((row) => row.metricoolQueueItemId === firstItem.id && row.operatorStatus === "ready_to_import"));
     assert.ok(metricoolApprovalReport.rows.some((row) => row.metricoolQueueItemId === firstItem.id && row.nextStep.includes("run Import Metricool evidence")));
     assert.equal(status.metricoolApprovalReport.totals.imported, 1);
     assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
@@ -4006,10 +5206,29 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
     const rawMarkdown = await readFile(metricoolApprovalReport.markdownPath, "utf8");
     const rawCsv = await readFile(metricoolApprovalReport.csvPath, "utf8");
     assert.match(rawMarkdown, /Metricool Approval Report/);
+    assert.match(rawMarkdown, /Active evidence CSV/);
+    assert.match(rawMarkdown, /Operator status/);
     assert.match(rawMarkdown, /Valid published evidence rows/);
+    assert.match(rawCsv, /operator_status/);
     assert.doesNotMatch(rawMarkdown, /Imported into analytics/);
     assert.match(rawCsv, /reportgood/);
     assert.doesNotMatch([rawReport, rawMarkdown, rawCsv].join("\n"), /token_live_report|METRICOOL_USER_TOKEN|METRICOOL_USER_ID|client_secret|access_token_value/);
+
+    const rejectedItem = metricoolApprovalSession.items.find((item) => item.id !== firstItem.id);
+    assert.ok(rejectedItem);
+    await writeFile(approvalEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${firstItem.id},${firstItem.accountId},${firstItem.accountName},${firstItem.platform},${firstItem.metricoolBrandName},${firstItem.metricoolBlogId || ""},${firstItem.publishAt},${firstItem.sourcePath || ""},${firstItem.captionSeed},https://app.metricool.com/planner/post/${firstItem.id},https://www.tiktok.com/@sportsdaily/video/reportgood,published,4200,210,31,18,Public URL and 24h metrics captured from Metricool export`,
+      `${rejectedItem.id},${rejectedItem.accountId},${rejectedItem.accountName},${rejectedItem.platform},${rejectedItem.metricoolBrandName},${rejectedItem.metricoolBlogId || ""},${rejectedItem.publishAt},${rejectedItem.sourcePath || ""},${rejectedItem.captionSeed},https://app.metricool.com/planner/post/${rejectedItem.id},,rejected,0,0,0,0,Operator rejected this slot inside Metricool`,
+    ].join("\n"));
+    const rejectedReportResult = await prepareClipperMetricoolApprovalReport();
+    assert.equal(rejectedReportResult.metricoolApprovalReport.totals.rejected, 1);
+    assert.ok(rejectedReportResult.metricoolApprovalReport.rows.some((row) =>
+      row.metricoolQueueItemId === rejectedItem.id
+      && row.evidenceResult === "rejected"
+      && row.operatorStatus === "evidence_rejected"
+      && row.reason === "operator_rejected"
+    ));
   } finally {
     fetchMock.mock.restore();
     if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
@@ -4029,41 +5248,60 @@ test("prepareClipperMetricoolApprovalReport audits queue evidence without counti
 
 test("importClipperMetricoolApprovalEvidence converts published evidence into analytics metrics safely", async () => {
   const statusBefore = await getClipperStatus();
+  const approvalItems = statusBefore.metricoolApprovalSession.items;
+  assert.ok(approvalItems.length >= 5);
+  const goodItem = approvalItems.find((item) => item.accountId === "sports-daily") || approvalItems[0];
+  const pendingItem = approvalItems.find((item) => item.accountId === "meme-radar" && item.id !== goodItem.id) || approvalItems[1];
+  const plannerItem = approvalItems.find((item) => item.id !== goodItem.id && item.id !== pendingItem.id) || approvalItems[2];
+  const unknownAccountItem = approvalItems.find((item) => ![goodItem.id, pendingItem.id, plannerItem.id].includes(item.id)) || approvalItems[3];
+  const secretItem = approvalItems.find((item) => ![goodItem.id, pendingItem.id, plannerItem.id, unknownAccountItem.id].includes(item.id)) || approvalItems[0];
+  const insecureUrlItem = approvalItems.find((item) => ![goodItem.id, pendingItem.id, plannerItem.id, unknownAccountItem.id, secretItem.id].includes(item.id)) || approvalItems[4];
   const evidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100EvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
   const importedMetricsPath = path.join(statusBefore.rootDir, "metrics", "metricool-approval-imported-metrics.csv");
   const metricsSummaryPath = path.join(statusBefore.rootDir, "metrics", "metrics-summary.json");
   const previousEvidence = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousMetricool100Evidence = await readFile(metricool100EvidenceCsvPath, "utf8").catch(() => null);
   const previousImportedMetrics = await readFile(importedMetricsPath, "utf8").catch(() => null);
   const previousMetricsSummary = await readFile(metricsSummaryPath, "utf8").catch(() => null);
   await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
   await mkdir(path.dirname(importedMetricsPath), { recursive: true });
+  await writeFile(metricool100EvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+  ].join("\n"));
   await writeFile(evidenceCsvPath, [
     "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
-    "metricool-import-good,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/owned-sports.mp4,Great final-minute hook,https://app.metricool.com/planner/post/metricool-import-good,https://www.tiktok.com/@sportsdaily/video/metricoolimportgood,published,12500,700,82,44,Live post URL and 24h metrics captured from Metricool export",
-    "metricool-import-pending,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T13:00:00.000Z,/tmp/owned-meme.mp4,Pending meme hook,https://app.metricool.com/planner/post/metricool-import-pending,,scheduled,0,0,0,0,Scheduled but not live yet",
-    "metricool-import-planner-url,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T14:00:00.000Z,/tmp/owned-planner.mp4,Planner URL hook,https://app.metricool.com/planner/post/metricool-import-planner-url,https://app.metricool.com/planner/post/metricool-import-planner-url,published,999,9,9,9,Metricool planner URL is not a public post",
-    "metricool-import-unknown-account,unknown-account,Unknown Account,tiktok,memes,6431685,2026-06-21T15:00:00.000Z,/tmp/owned-unknown.mp4,Unknown account hook,https://app.metricool.com/planner/post/metricool-import-unknown-account,https://www.tiktok.com/@memeradar/video/metricoolunknown,published,888,8,8,8,Unknown account must not fall back to first account",
-    "metricool-import-secret,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T16:00:00.000Z,/tmp/owned-secret.mp4,Secret row hook,https://app.metricool.com/planner/post/metricool-import-secret,https://www.tiktok.com/@memeradar/video/metricoolsecret,published,999,9,9,9,api_key=should-not-be-stored",
+    `${goodItem.id},sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:00:00.000Z,/tmp/owned-sports.mp4,Great final-minute hook,https://app.metricool.com/planner/post/${goodItem.id},https://www.tiktok.com/@sportsdaily/video/7400000000000000001,published,12500,700,82,44,Live post URL and 24h metrics captured from Metricool export`,
+    `${pendingItem.id},meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T13:00:00.000Z,/tmp/owned-meme.mp4,Pending meme hook,https://app.metricool.com/planner/post/${pendingItem.id},,scheduled,0,0,0,0,Scheduled but not live yet`,
+    `${plannerItem.id},meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T14:00:00.000Z,/tmp/owned-planner.mp4,Planner URL hook,https://app.metricool.com/planner/post/${plannerItem.id},https://app.metricool.com/planner/post/${plannerItem.id},published,999,9,9,9,Metricool planner URL is not a public post`,
+    `${unknownAccountItem.id},unknown-account,Unknown Account,tiktok,memes,6431685,2026-06-21T15:00:00.000Z,/tmp/owned-unknown.mp4,Unknown account hook,https://app.metricool.com/planner/post/${unknownAccountItem.id},https://www.tiktok.com/@memeradar/video/7400000000000000002,published,888,8,8,8,Unknown account must not fall back to first account`,
+    `${secretItem.id},meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T16:00:00.000Z,/tmp/owned-secret.mp4,Secret row hook,https://app.metricool.com/planner/post/${secretItem.id},https://www.tiktok.com/@memeradar/video/7400000000000000003,published,999,9,9,9,api_key=should-not-be-stored`,
+    `${insecureUrlItem.id},meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T16:30:00.000Z,/tmp/owned-http.mp4,HTTP URL hook,https://app.metricool.com/planner/post/${insecureUrlItem.id},http://www.tiktok.com/@memeradar/video/7400000000000000004,published,999,9,9,9,HTTP TikTok URLs must not import`,
+    "metricool-old-queue-item,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T17:00:00.000Z,/tmp/owned-old.mp4,Old queue hook,https://app.metricool.com/planner/post/metricool-old-queue-item,https://www.tiktok.com/@sportsdaily/video/7400000000000000005,published,777,7,7,7,Old queue item must not import into current analytics",
   ].join("\n"));
 
   try {
     const { metricoolApprovalEvidenceImport, metrics, status } = await importClipperMetricoolApprovalEvidence();
     assert.equal(metricoolApprovalEvidenceImport.status, "imported");
-    assert.equal(metricoolApprovalEvidenceImport.totals.rows, 5);
+    assert.equal(metricoolApprovalEvidenceImport.totals.rows, 7);
     assert.equal(metricoolApprovalEvidenceImport.totals.imported, 1);
     assert.equal(metricoolApprovalEvidenceImport.totals.pendingLive, 1);
-    assert.equal(metricoolApprovalEvidenceImport.totals.rejected, 3);
+    assert.equal(metricoolApprovalEvidenceImport.totals.rejected, 4);
     assert.equal(metricoolApprovalEvidenceImport.totals.views, 12500);
-    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-secret" && row.result === "rejected"));
-    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-planner-url" && row.result === "rejected" && row.reason === "published_post_url_not_platform_post"));
-    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-import-unknown-account" && row.result === "rejected" && row.reason === "unknown_account_id"));
-    assert.ok(metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood" && record.views === 12500));
-    assert.ok(status.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.result === "rejected" && row.reason === "secret_like_value_detected"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === plannerItem.id && row.result === "rejected" && row.reason === "published_post_url_not_platform_post"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === insecureUrlItem.id && row.result === "skipped" && row.reason === "missing_real_published_post_url"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === unknownAccountItem.id && row.result === "rejected" && row.reason === "unknown_account_id"));
+    assert.ok(metricoolApprovalEvidenceImport.rows.some((row) => row.metricoolQueueItemId === "metricool-old-queue-item" && row.result === "rejected" && row.reason === "evidence_row_not_in_current_queue"));
+    assert.ok(metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/7400000000000000001" && record.views === 12500));
+    assert.ok(status.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/7400000000000000001"));
 
     const rawImportedMetrics = await readFile(importedMetricsPath, "utf8");
-    assert.ok(rawImportedMetrics.includes("metricoolimportgood"));
+    assert.ok(rawImportedMetrics.includes("7400000000000000001"));
     assert.equal(rawImportedMetrics.includes("api_key"), false);
-    assert.equal(rawImportedMetrics.includes("metricoolsecret"), false);
+    assert.equal(rawImportedMetrics.includes("7400000000000000003"), false);
+    assert.equal(rawImportedMetrics.includes("7400000000000000004"), false);
+    assert.equal(rawImportedMetrics.includes("7400000000000000005"), false);
     assert.equal(rawImportedMetrics.includes("metricool-import-planner-url"), false);
 
     await writeFile(evidenceCsvPath, [
@@ -4074,10 +5312,145 @@ test("importClipperMetricoolApprovalEvidence converts published evidence into an
     assert.equal(secondImport.metricoolApprovalEvidenceImport.status, "needs_records");
     assert.equal(secondImport.metricoolApprovalEvidenceImport.totals.imported, 0);
     assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
-    assert.equal(secondImport.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricoolimportgood"), false);
+    assert.equal(secondImport.metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/7400000000000000001"), false);
   } finally {
     if (previousEvidence === null) await unlink(evidenceCsvPath).catch(() => undefined);
     else await writeFile(evidenceCsvPath, previousEvidence);
+    if (previousMetricool100Evidence === null) await unlink(metricool100EvidenceCsvPath).catch(() => undefined);
+    else await writeFile(metricool100EvidenceCsvPath, previousMetricool100Evidence);
+    if (previousImportedMetrics === null) await unlink(importedMetricsPath).catch(() => undefined);
+    else await writeFile(importedMetricsPath, previousImportedMetrics);
+    if (previousMetricsSummary === null) await unlink(metricsSummaryPath).catch(() => undefined);
+    else await writeFile(metricsSummaryPath, previousMetricsSummary);
+  }
+});
+
+test("previewClipperMetricoolApprovalEvidence validates rows without importing metrics", async () => {
+  const statusBefore = await getClipperStatus();
+  const evidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100EvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const importedMetricsPath = path.join(statusBefore.rootDir, "metrics", "metricool-approval-imported-metrics.csv");
+  const previousEvidence = await readFile(evidenceCsvPath, "utf8").catch(() => null);
+  const previousMetricool100Evidence = await readFile(metricool100EvidenceCsvPath, "utf8").catch(() => null);
+  const previousImportedMetrics = await readFile(importedMetricsPath, "utf8").catch(() => null);
+  const goodItem = statusBefore.metricoolApprovalSession.items.find((item) => item.accountId === "sports-daily") || statusBefore.metricoolApprovalSession.items[0];
+  assert.ok(goodItem);
+  try {
+    await mkdir(path.dirname(evidenceCsvPath), { recursive: true });
+    await mkdir(path.dirname(metricool100EvidenceCsvPath), { recursive: true });
+    await unlink(importedMetricsPath).catch(() => undefined);
+    await writeFile(metricool100EvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    ].join("\n"));
+    await writeFile(evidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${goodItem.id},${goodItem.accountId},${goodItem.accountName},${goodItem.platform},${goodItem.metricoolBrandName},${goodItem.metricoolBlogId || ""},${goodItem.publishAt},${goodItem.sourcePath || ""},Preview valid row,https://app.metricool.com/planner/post/${goodItem.id},https://www.tiktok.com/@sportsdaily/video/7400000000000000010,published,3210,120,15,9,Live post URL and 24h metrics captured for preview only`,
+      "metricool-preview-stale-row,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T12:30:00.000Z,/tmp/owned-stale.mp4,Preview stale row,https://app.metricool.com/planner/post/metricool-preview-stale-row,https://www.tiktok.com/@sportsdaily/video/7400000000000000011,published,9999,99,9,4,Stale row should be rejected by preview",
+      "metricool-preview-placeholder,meme-radar,Meme Radar,tiktok,memes,6431685,2026-06-21T13:00:00.000Z,/tmp/owned-meme.mp4,Placeholder row,<metricool scheduled/approved/post URL>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>",
+    ].join("\n"));
+
+    const result = await previewClipperMetricoolApprovalEvidence();
+    assert.equal(Object.prototype.hasOwnProperty.call(result, "status"), false);
+    const { metricoolApprovalEvidencePreview } = result;
+    assert.equal(metricoolApprovalEvidencePreview.status, "preview_ready");
+    assert.equal(metricoolApprovalEvidencePreview.totals.rows, 3);
+    assert.equal(metricoolApprovalEvidencePreview.totals.importable, 1);
+    assert.equal(metricoolApprovalEvidencePreview.totals.imported, 0);
+    assert.equal(metricoolApprovalEvidencePreview.totals.publishedRows, 0);
+    assert.equal(metricoolApprovalEvidencePreview.totals.rejected + metricoolApprovalEvidencePreview.totals.skipped, 2);
+    assert.equal(metricoolApprovalEvidencePreview.totals.views, 3210);
+    assert.ok(metricoolApprovalEvidencePreview.rows.some((row) => row.metricoolQueueItemId === goodItem.id && row.result === "importable"));
+    assert.ok(metricoolApprovalEvidencePreview.rows.some((row) => row.metricoolQueueItemId === "metricool-preview-stale-row" && row.result === "rejected" && row.reason === "evidence_row_not_in_current_queue"));
+    assert.ok(metricoolApprovalEvidencePreview.rows.some((row) => row.metricoolQueueItemId === "metricool-preview-placeholder" && row.result !== "importable"));
+    assert.equal(await readFile(importedMetricsPath, "utf8").catch(() => null), null);
+  } finally {
+    if (previousEvidence === null) await unlink(evidenceCsvPath).catch(() => undefined);
+    else await writeFile(evidenceCsvPath, previousEvidence);
+    if (previousMetricool100Evidence === null) await unlink(metricool100EvidenceCsvPath).catch(() => undefined);
+    else await writeFile(metricool100EvidenceCsvPath, previousMetricool100Evidence);
+    if (previousImportedMetrics === null) await unlink(importedMetricsPath).catch(() => undefined);
+    else await writeFile(importedMetricsPath, previousImportedMetrics);
+  }
+});
+
+test("importClipperMetricoolApprovalEvidence imports valid Metricool 100 evidence without counting placeholders", async () => {
+  const statusBefore = await getClipperStatus();
+  const shortEvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100RunSheetPath = path.join(statusBefore.rootDir, "scheduled", "metricool-100-operator-run-sheet.csv");
+  const metricool100EvidenceCsvPath = path.join(statusBefore.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const metricool100BatchEvidenceDir = path.join(statusBefore.rootDir, "scheduled", "metricool-100-batch-evidence-imports");
+  const metricool100BatchEvidenceCsvPath = path.join(metricool100BatchEvidenceDir, "metricool-batch-01-evidence-import.csv");
+  const importedMetricsPath = path.join(statusBefore.rootDir, "metrics", "metricool-approval-imported-metrics.csv");
+  const metricsSummaryPath = path.join(statusBefore.rootDir, "metrics", "metrics-summary.json");
+  const previous100Run = await readFile(statusBefore.metricool100ApprovalRun.manifestPath, "utf8").catch(() => null);
+  const previousShortEvidence = await readFile(shortEvidenceCsvPath, "utf8").catch(() => null);
+  const previous100RunSheet = await readFile(metricool100RunSheetPath, "utf8").catch(() => null);
+  const previous100Evidence = await readFile(metricool100EvidenceCsvPath, "utf8").catch(() => null);
+  const previous100BatchEvidence = await readFile(metricool100BatchEvidenceCsvPath, "utf8").catch(() => null);
+  const previousImportedMetrics = await readFile(importedMetricsPath, "utf8").catch(() => null);
+  const previousMetricsSummary = await readFile(metricsSummaryPath, "utf8").catch(() => null);
+  await mkdir(path.dirname(shortEvidenceCsvPath), { recursive: true });
+  await mkdir(path.dirname(metricool100RunSheetPath), { recursive: true });
+  await mkdir(metricool100BatchEvidenceDir, { recursive: true });
+  await mkdir(path.dirname(importedMetricsPath), { recursive: true });
+
+  await writeFile(shortEvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+  ].join("\n"));
+  const { status } = await prepareClipperMetricool100ApprovalRun(undefined, {
+    targetWeeklyClips: 100,
+    approvalQueueTarget: 100,
+    batchSize: 100,
+  });
+  const goodItem = status.metricoolApprovalSession.items[0];
+  const placeholderItem = status.metricoolApprovalSession.items[1];
+  assert.ok(goodItem);
+  assert.ok(placeholderItem);
+  await writeFile(shortEvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+  ].join("\n"));
+  await writeFile(metricool100EvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+  ].join("\n"));
+  await writeFile(metricool100BatchEvidenceCsvPath, [
+    "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    `${goodItem.id},${goodItem.accountId},${goodItem.accountName},${goodItem.platform},${goodItem.metricoolBrandName},${goodItem.metricoolBlogId || ""},${goodItem.publishAt},${goodItem.sourcePath || ""},${goodItem.captionSeed},https://app.metricool.com/planner/post/${goodItem.id},https://www.tiktok.com/@sportsdaily/video/metricool100good,published,22000,1100,130,75,Real public URL and 24h metrics captured from Metricool`,
+    `${placeholderItem.id},${placeholderItem.accountId},${placeholderItem.accountName},${placeholderItem.platform},${placeholderItem.metricoolBrandName},${placeholderItem.metricoolBlogId || ""},${placeholderItem.publishAt},${placeholderItem.sourcePath || ""},${placeholderItem.captionSeed},<metricool scheduled/approved/post URL>,<published post URL after live>,<approved|scheduled|published|rejected>,<views after 24h>,<likes after 24h>,<comments after 24h>,<shares after 24h>,<operator notes without tokens>`,
+    "metricool-100-old-row,sports-daily,Sports Daily Clips,tiktok,SPORT,6431687,2026-06-21T14:00:00.000Z,/tmp/owned-old.mp4,Old 100 hook,https://app.metricool.com/planner/post/metricool-100-old-row,https://www.tiktok.com/@sportsdaily/video/metricool100old,published,999,9,9,9,Old row must not import because it is not in the 100 run sheet",
+  ].join("\n"));
+
+  try {
+    const preview = await previewClipperMetricoolApprovalEvidence();
+    assert.equal(preview.metricoolApprovalEvidencePreview.status, "preview_ready");
+    assert.equal(preview.metricoolApprovalEvidencePreview.totals.importable, 1);
+    assert.match(preview.metricoolApprovalEvidencePreview.evidenceImportCsvPath, /metricool-100-batch-evidence-imports/);
+    assert.match(preview.metricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchDir || "", /metricool-100-batch-evidence-imports$/);
+    assert.ok((preview.metricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchOperatorRows || 0) >= 1);
+    assert.ok(preview.metricoolApprovalEvidencePreview.rows.some((row) => row.metricoolQueueItemId === goodItem.id && row.result === "importable"));
+
+    const { metricoolApprovalEvidenceImport, metrics } = await importClipperMetricoolApprovalEvidence();
+    assert.equal(metricoolApprovalEvidenceImport.status, "imported");
+    assert.equal(metricoolApprovalEvidenceImport.totals.rows, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.imported, 1);
+    assert.equal(metricoolApprovalEvidenceImport.totals.views, 22000);
+    assert.match(metricoolApprovalEvidenceImport.evidenceImportCsvPath, /metricool-100-approval-evidence-import\.csv/);
+    assert.ok(metrics.records.some((record) => record.clipId === "https://www.tiktok.com/@sportsdaily/video/metricool100good" && record.views === 22000));
+
+    const rawImportedMetrics = await readFile(importedMetricsPath, "utf8");
+    assert.match(rawImportedMetrics, /metricool100good/);
+    assert.doesNotMatch(rawImportedMetrics, /metricool100old/);
+    assert.doesNotMatch(rawImportedMetrics, /published post URL after live/);
+  } finally {
+    if (previous100Run === null) await unlink(statusBefore.metricool100ApprovalRun.manifestPath).catch(() => undefined);
+    else await writeFile(statusBefore.metricool100ApprovalRun.manifestPath, previous100Run);
+    if (previousShortEvidence === null) await unlink(shortEvidenceCsvPath).catch(() => undefined);
+    else await writeFile(shortEvidenceCsvPath, previousShortEvidence);
+    if (previous100RunSheet === null) await unlink(metricool100RunSheetPath).catch(() => undefined);
+    else await writeFile(metricool100RunSheetPath, previous100RunSheet);
+    if (previous100Evidence === null) await unlink(metricool100EvidenceCsvPath).catch(() => undefined);
+    else await writeFile(metricool100EvidenceCsvPath, previous100Evidence);
+    if (previous100BatchEvidence === null) await unlink(metricool100BatchEvidenceCsvPath).catch(() => undefined);
+    else await writeFile(metricool100BatchEvidenceCsvPath, previous100BatchEvidence);
     if (previousImportedMetrics === null) await unlink(importedMetricsPath).catch(() => undefined);
     else await writeFile(importedMetricsPath, previousImportedMetrics);
     if (previousMetricsSummary === null) await unlink(metricsSummaryPath).catch(() => undefined);
@@ -4235,7 +5608,9 @@ test("getClipperStatus normalizes stale Metricool cache to approval-only", async
     assert.equal(status.metricoolExecutionQueue.status, "approval_required");
     assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
-    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.blocked, 1);
+    assert.equal(status.metricoolExecutionQueue.sourceReadiness.status, "blocked");
     assert.ok(status.metricoolExecutionQueue.items.every((item) =>
       item.status !== "ready_to_send" && item.approvalRequired === true && item.canSendNow === false
     ));
@@ -4248,7 +5623,7 @@ test("getClipperStatus normalizes stale Metricool cache to approval-only", async
     assert.doesNotMatch(normalizedCsv, /ready_to_send/);
     assert.match(normalizedManifest, /"realPublishEnabled": false/);
     assert.match(normalizedMarkdown, /Real publish enabled: no/);
-    assert.match(normalizedCsv, /queued_for_approval/);
+    assert.match(normalizedCsv, /blocked/);
   } finally {
     if (previousManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousManifest);
@@ -4259,7 +5634,7 @@ test("getClipperStatus normalizes stale Metricool cache to approval-only", async
   }
 });
 
-test("go-live completion audit receives normalized Metricool approval-only queue", async () => {
+test("go-live completion audit normalizes Metricool approval-only queue without trusting missing cached sources", async () => {
   const beforeStatus = await getClipperStatus();
   const previousPublishingManifest = await readFile(beforeStatus.metricoolPublishing.manifestPath, "utf8").catch(() => null);
   const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
@@ -4286,8 +5661,11 @@ test("go-live completion audit receives normalized Metricool approval-only queue
       realPublishEnabled: true,
       sourceReadiness: {
         status: "ready",
-        categories: [],
-        totals: { accounts: 0, connectedNetworks: 0, dailyClipTarget: 0, weeklyTargetClips: 0, minimumWeeklySourceAssets: 0, rightsReadyAssets: 0, missingSourceAssets: 0 },
+        categories: [
+          { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", connectedNetworks: ["tiktok"], dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/sports", nextStep: "ready" },
+          { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", connectedNetworks: ["tiktok"], dailyClipTarget: 6, weeklyTargetClips: 42, minimumWeeklySourceAssets: 21, rightsReadyAssets: 35, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/memes", nextStep: "ready" },
+        ],
+        totals: { accounts: 2, connectedNetworks: 2, dailyClipTarget: 14, weeklyTargetClips: 98, minimumWeeklySourceAssets: 49, rightsReadyAssets: 77, missingSourceAssets: 0 },
         nextStep: "unsafe cache",
       },
       items: [{
@@ -4321,14 +5699,19 @@ test("go-live completion audit receives normalized Metricool approval-only queue
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
-    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.blocked, 1);
+    assert.equal(status.metricoolExecutionQueue.sourceReadiness.status, "blocked");
+    assert.ok(status.metricoolExecutionQueue.sourceReadiness.totals.missingSourceAssets > 0);
     assert.ok(status.metricoolExecutionQueue.items.every((item) =>
-      item.status === "queued_for_approval" && item.approvalRequired === true && item.canSendNow === false
+      item.status === "blocked" && item.approvalRequired === true && item.canSendNow === false
     ));
-    assert.equal(bridgeRequirement?.status, "verified");
-    assert.equal(publisherRequirement?.status, "verified");
+    assert.equal(status.goLiveCompletionAudit.launchModes.metricoolMvpReady, false);
+    assert.equal(bridgeRequirement?.status, "needs_evidence");
+    assert.equal(publisherRequirement?.status, "needs_evidence");
     assert.equal(bridgeRequirement?.blockers.some((blocker) => blocker.includes("ready_to_send")), false);
     assert.equal(publisherRequirement?.blockers.some((blocker) => blocker.includes("ready_to_send")), false);
+    assert.ok(status.goLiveCompletionAudit.launchModes.metricoolMvpBlockers.some((blocker) => blocker.includes("source readiness")));
   } finally {
     fetchMock.mock.restore();
     if (previousToken === undefined) delete process.env.METRICOOL_USER_TOKEN;
@@ -4337,6 +5720,154 @@ test("go-live completion audit receives normalized Metricool approval-only queue
     else process.env.METRICOOL_USER_ID = previousUserId;
     if (previousPublishingManifest === null) await unlink(beforeStatus.metricoolPublishing.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolPublishing.manifestPath, previousPublishingManifest);
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+  }
+});
+
+test("go-live completion audit blocks Metricool MVP when source lanes are not ready", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "blocked-source-readiness-cache",
+      publishMode: "approval_required",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "blocked",
+        categories: [
+          { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", connectedNetworks: ["tiktok"], dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/sports", nextStep: "ready" },
+        ],
+        totals: { accounts: 1, connectedNetworks: 1, dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 7 },
+        nextStep: "Add memes source assets before claiming Metricool MVP.",
+      },
+      items: [{
+        id: "approval-only-but-source-blocked",
+        postId: "post-1",
+        queueItemId: "queue-1",
+        accountId: "sports-daily",
+        accountName: "Sports Daily",
+        platform: "tiktok",
+        status: "queued_for_approval",
+        approvalRequired: true,
+        canSendNow: false,
+        metricoolBrandName: "SPORT",
+        metricoolBlogId: "6431687",
+        publishAt: new Date().toISOString(),
+        sourcePath: "/tmp/source.mp4",
+        hook: "safe",
+        captionSeed: "safe",
+        requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+        gates: [],
+        blockers: [],
+        nextStep: "review first",
+      }],
+      totals: { items: 1, blocked: 0, queuedForApproval: 1, readyToSend: 0, approvalRequired: 1 },
+      nextStep: "Queue exists but source readiness is blocked.",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.goLiveCompletionAudit.launchModes?.metricoolMvpReady, false);
+    assert.equal(status.goLiveCompletionAudit.launchModes?.approvalQueueReady, false);
+    assert.ok(status.goLiveCompletionAudit.launchModes?.metricoolMvpBlockers.some((blocker) =>
+      blocker.includes("source readiness") || blocker.includes("Fewer than two Metricool MVP lanes")
+    ));
+  } finally {
+    if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
+    if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.markdownPath, previousQueueMarkdown);
+    if (previousQueueCsv === null) await unlink(beforeStatus.metricoolExecutionQueue.csvPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricoolExecutionQueue.csvPath, previousQueueCsv);
+  }
+});
+
+test("go-live completion audit rejects connected non-TikTok lanes for TikTok-only MVP", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousQueueManifest = await readFile(beforeStatus.metricoolExecutionQueue.manifestPath, "utf8").catch(() => null);
+  const previousQueueMarkdown = await readFile(beforeStatus.metricoolExecutionQueue.markdownPath, "utf8").catch(() => null);
+  const previousQueueCsv = await readFile(beforeStatus.metricoolExecutionQueue.csvPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, JSON.stringify({
+      status: "approval_required",
+      generatedAt: new Date().toISOString(),
+      sourceAutomationRunId: "wrong-network-readiness-cache",
+      publishMode: "approval_required",
+      realPublishEnabled: false,
+      sourceReadiness: {
+        status: "ready",
+        categories: [
+          { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", connectedNetworks: ["instagram"], dailyClipTarget: 8, weeklyTargetClips: 56, minimumWeeklySourceAssets: 28, rightsReadyAssets: 42, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/sports", nextStep: "instagram ready only" },
+          { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", connectedNetworks: ["youtube"], dailyClipTarget: 6, weeklyTargetClips: 42, minimumWeeklySourceAssets: 21, rightsReadyAssets: 35, missingSourceAssets: 0, sourceDropDir: "clippers_workspace/source-drop/memes", nextStep: "youtube ready only" },
+        ],
+        totals: { accounts: 2, connectedNetworks: 2, dailyClipTarget: 14, weeklyTargetClips: 98, minimumWeeklySourceAssets: 49, rightsReadyAssets: 77, missingSourceAssets: 0 },
+        nextStep: "Wrong networks should not unlock TikTok MVP.",
+      },
+      items: [
+        {
+          id: "wrong-network-approval-1",
+          postId: "post-1",
+          queueItemId: "queue-1",
+          accountId: "sports-daily",
+          accountName: "Sports Daily",
+          platform: "instagram",
+          status: "queued_for_approval",
+          approvalRequired: true,
+          canSendNow: false,
+          metricoolBrandName: "SPORT",
+          metricoolBlogId: "6431687",
+          publishAt: new Date().toISOString(),
+          sourcePath: "/tmp/source.mp4",
+          hook: "safe",
+          captionSeed: "safe",
+          requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+          gates: [],
+          blockers: [],
+          nextStep: "review first",
+        },
+        {
+          id: "wrong-network-approval-2",
+          postId: "post-2",
+          queueItemId: "queue-2",
+          accountId: "meme-radar",
+          accountName: "Meme Radar",
+          platform: "youtube",
+          status: "queued_for_approval",
+          approvalRequired: true,
+          canSendNow: false,
+          metricoolBrandName: "memes",
+          metricoolBlogId: "6431685",
+          publishAt: new Date().toISOString(),
+          sourcePath: "/tmp/source.mp4",
+          hook: "safe",
+          captionSeed: "safe",
+          requestSpec: { bridge: "metricool", endpoint: "approval", method: "approval_required", payloadFields: [], mediaSource: "/tmp/source.mp4" },
+          gates: [],
+          blockers: [],
+          nextStep: "review first",
+        },
+      ],
+      totals: { items: 2, blocked: 0, queuedForApproval: 2, readyToSend: 0, approvalRequired: 2 },
+      nextStep: "Queue exists, but not for active TikTok MVP lanes.",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.goLiveCompletionAudit.launchModes?.metricoolMvpReady, false);
+    assert.equal(status.goLiveCompletionAudit.launchModes?.approvalQueueReady, false);
+    assert.ok(status.goLiveCompletionAudit.launchModes?.metricoolMvpBlockers.some((blocker) =>
+      blocker.includes("sports-daily:tiktok") && blocker.includes("meme-radar:tiktok")
+    ));
+  } finally {
     if (previousQueueManifest === null) await unlink(beforeStatus.metricoolExecutionQueue.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
     if (previousQueueMarkdown === null) await unlink(beforeStatus.metricoolExecutionQueue.markdownPath).catch(() => undefined);
@@ -4395,7 +5926,9 @@ test("getClipperStatus rewrites Metricool publishMode-only stale artifacts", asy
     assert.equal(status.metricoolExecutionQueue.publishMode, "approval_required");
     assert.equal(status.metricoolExecutionQueue.realPublishEnabled, false);
     assert.equal(status.metricoolExecutionQueue.totals.readyToSend, 0);
-    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 1);
+    assert.equal(status.metricoolExecutionQueue.totals.queuedForApproval, 0);
+    assert.equal(status.metricoolExecutionQueue.totals.blocked, 1);
+    assert.equal(status.metricoolExecutionQueue.sourceReadiness.status, "blocked");
 
     const normalizedManifest = await readFile(status.metricoolExecutionQueue.manifestPath, "utf8");
     const normalizedMarkdown = await readFile(status.metricoolExecutionQueue.markdownPath, "utf8");
@@ -4517,6 +6050,59 @@ test("recordClipperMetricoolAccountEvidence records Metricool bridge evidence wi
     else await writeFile(beforeStatus.metricoolExecutionQueue.manifestPath, previousQueueManifest);
     if (previousCache === null) await unlink(cachePath).catch(() => undefined);
     else await writeFile(cachePath, previousCache);
+  }
+});
+
+test("recordClipperMetricoolBridgeEvidenceBatch imports manual Metricool bridge rows safely", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");
+  const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");
+  const previousSports = await readFile(sportsPath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesPath, "utf8").catch(() => null);
+  const previousOwnerProgress = await readFile(beforeStatus.ownerConnectPack.progressRecordsPath, "utf8").catch(() => null);
+
+  try {
+    await writeFile(sportsPath, JSON.stringify({
+      status: "verified",
+      notes: "Profile URL https://www.tiktok.com/@sportsdaily verified with redacted screenshot proof and 2FA security confirmation.",
+      accountId: "sports-daily",
+      accountName: "Sports Daily",
+      platform: "tiktok",
+      handle: "@sportsdaily",
+      displayName: "Sports Daily",
+      recordedAt: new Date().toISOString(),
+      source: "existing-proof-fixture",
+    }, null, 2));
+    await unlink(memesPath).catch(() => undefined);
+
+    const raw = [
+      "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge connected in Metricool with redacted proof reference.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://app.metricool.com/brands/6431685,Memes TikTok bridge connected in Metricool with redacted proof reference.",
+      "streamer-pulse,tiktok,<paste brand>,,https://www.tiktok.com/@streamerpulse,https://app.metricool.com/,placeholder should be rejected safely.",
+      "sports-daily,instagram,SPORT,secret,https://www.instagram.com/sportsdaily,access_token=abc123,This row contains sensitive text and must be rejected.",
+      "meme-radar,instagram,memes,6431685,https://www.instagram.com/memeradar,https://example.com/proof,Fake proof URL should be rejected even when it is formatted as https.",
+      "sports-daily,facebook,SPORT,6431687,https://www.facebook.com/sportsdaily,https://app.metricool.com/brands/6431687,Unsupported platform should skip this row without aborting the batch.",
+    ].join("\n");
+
+    const { metricoolBridgeEvidenceBatch, status } = await recordClipperMetricoolBridgeEvidenceBatch({ raw });
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 6);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 5);
+    assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "sports-daily" && item.platform === "tiktok" && item.reason.includes("cannot downgrade")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("placeholder") || item.reason.includes("sensitive")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("fake proof")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "facebook" && item.reason.includes("Unsupported")));
+    assert.ok(status.accountEvidence.items.some((item) => item.id === "sports-daily-tiktok" && item.status === "verified"));
+    assert.ok(status.accountEvidence.items.some((item) => item.id === "meme-radar-tiktok" && item.status === "submitted"));
+  } finally {
+    if (previousSports === null) await unlink(sportsPath).catch(() => undefined);
+    else await writeFile(sportsPath, previousSports);
+    if (previousMemes === null) await unlink(memesPath).catch(() => undefined);
+    else await writeFile(memesPath, previousMemes);
+    if (previousOwnerProgress === null) await unlink(beforeStatus.ownerConnectPack.progressRecordsPath).catch(() => undefined);
+    else await writeFile(beforeStatus.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
   }
 });
 
@@ -4744,14 +6330,70 @@ test("verifyClipperProductionUrl writes endpoint evidence without secrets", asyn
   }
 });
 
+test("verifyClipperProductionUrl times out stuck DNS lookups", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousManifest = await readFile(beforeStatus.productionUrlVerification.manifestPath, "utf8").catch(() => null);
+  const previousMarkdown = await readFile(beforeStatus.productionUrlVerification.markdownPath, "utf8").catch(() => null);
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousDnsTimeout = process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+  const originalFetch = globalThis.fetch;
+  const lookupMock = mock.method(dns, "lookup", async () => new Promise(() => undefined));
+
+  try {
+    process.env.PUBLIC_BASE_URL = "https://app.clipprreview.com";
+    process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS = "20";
+    globalThis.fetch = (async () => {
+      throw new Error("DNS unavailable");
+    }) as typeof fetch;
+
+    const startedAt = Date.now();
+    const { productionUrlVerification } = await verifyClipperProductionUrl();
+
+    assert.ok(Date.now() - startedAt < 2_000);
+    assert.equal(productionUrlVerification.dnsDiagnostic.status, "unresolved");
+    assert.ok(productionUrlVerification.dnsDiagnostic.error?.includes("DNS lookup timed out after 20ms"));
+    assert.equal(productionUrlVerification.status, "fail");
+    assert.equal(productionUrlVerification.totals.fail, productionUrlVerification.totals.endpoints);
+    assert.ok(productionUrlVerification.nextStep.includes("Add or fix DNS records"));
+    const { productionUrlSetup } = await prepareClipperProductionUrlSetup();
+    assert.equal(productionUrlSetup.status, "partial");
+    assert.ok(productionUrlSetup.nextStep.includes("Production URL Verification"));
+    assert.ok(productionUrlSetup.setupSession
+      .filter((item) => item.id.startsWith("register-"))
+      .every((item) => item.status === "blocked" && item.nextStep.includes("fix DNS/endpoints")));
+
+    const rawManifest = await readFile(productionUrlVerification.manifestPath, "utf8");
+    const rawMarkdown = await readFile(productionUrlVerification.markdownPath, "utf8");
+    assert.ok(rawManifest.includes("DNS lookup timed out"));
+    assert.ok(rawMarkdown.includes("DNS lookup timed out"));
+    assert.equal(rawManifest.includes("access_token"), false);
+    assert.equal(rawMarkdown.includes("client_secret"), false);
+  } finally {
+    lookupMock.mock.restore();
+    globalThis.fetch = originalFetch;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousDnsTimeout === undefined) delete process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS;
+    else process.env.CLIPPERS_PRODUCTION_DNS_TIMEOUT_MS = previousDnsTimeout;
+    if (previousManifest === null) await unlink(beforeStatus.productionUrlVerification.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlVerification.manifestPath, previousManifest);
+    if (previousMarkdown === null) await unlink(beforeStatus.productionUrlVerification.markdownPath).catch(() => undefined);
+    else await writeFile(beforeStatus.productionUrlVerification.markdownPath, previousMarkdown);
+  }
+});
+
 test("prepareClipperProductionUrlSetup treats quick tunnels as temporary", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(beforeStatus.productionUrlSetup.manifestPath, "utf8").catch(() => null);
   const previousMarkdown = await readFile(beforeStatus.productionUrlSetup.markdownPath, "utf8").catch(() => null);
+  const previousAppBaseUrl = process.env.APP_BASE_URL;
   const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
+  const previousIgnoreStoredPublicBaseUrl = process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
 
   try {
+    delete process.env.APP_BASE_URL;
     process.env.PUBLIC_BASE_URL = "https://demo.trycloudflare.com";
+    process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL = "true";
     const { productionUrlSetup } = await prepareClipperProductionUrlSetup();
 
     assert.equal(productionUrlSetup.productionUrlReady, true);
@@ -4764,8 +6406,12 @@ test("prepareClipperProductionUrlSetup treats quick tunnels as temporary", async
     const rawMarkdown = await readFile(productionUrlSetup.markdownPath, "utf8");
     assert.ok(rawMarkdown.includes("Production URL stable: no (temporary_tunnel)"));
   } finally {
+    if (previousAppBaseUrl === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = previousAppBaseUrl;
     if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
     else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousIgnoreStoredPublicBaseUrl === undefined) delete process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL;
+    else process.env.CLIPPERS_IGNORE_STORED_PUBLIC_BASE_URL = previousIgnoreStoredPublicBaseUrl;
     if (previousManifest === null) await unlink(beforeStatus.productionUrlSetup.manifestPath).catch(() => undefined);
     else await writeFile(beforeStatus.productionUrlSetup.manifestPath, previousManifest);
     if (previousMarkdown === null) await unlink(beforeStatus.productionUrlSetup.markdownPath).catch(() => undefined);
@@ -5727,7 +7373,16 @@ test("prepareClipperDropzoneReadyPack writes safe intake board for missing go-li
     assert.ok(sourceDropzoneItem);
     assert.equal(sourceDropzoneItem.nextStep, status.sourceDropDiagnostic.nextStep);
     assert.equal(sourceDropzoneItem.sourceArtifactPath, status.sourceDropDiagnostic.repairWorksheetCsvPath);
-    assert.ok(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("source assets") || blocker.includes("source manifest rows") || blocker.includes("invalid/stub media")));
+    const sourceDropNeedsAction = status.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0
+      || status.sourceDropDiagnostic.totals.manifestMissingFiles > 0
+      || status.sourceDropDiagnostic.totals.invalidSourceAssets > 0
+      || status.sourceDropDiagnostic.totals.missingSourceAssets > 0;
+    if (sourceDropNeedsAction) {
+      assert.ok(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("source assets") || blocker.includes("source manifest rows") || blocker.includes("invalid/stub media")));
+    } else {
+      assert.equal(sourceDropzoneItem.status, "ready");
+      assert.deepEqual(sourceDropzoneItem.blockers, []);
+    }
     assert.equal(sourceDropzoneItem.blockers.some((blocker) => blocker.includes("weekly source slots")), false);
     assert.ok(status.launchEvidenceDropDiagnostic.manifestPath.endsWith("launch-evidence-drop-diagnostic.json"));
     assert.ok(status.launchEvidenceDropDiagnostic.markdownPath.endsWith("launch-evidence-drop-diagnostic.md"));
@@ -5737,9 +7392,24 @@ test("prepareClipperDropzoneReadyPack writes safe intake board for missing go-li
     assert.ok(status.launchEvidenceDropDiagnostic.rows.some((row) => row.sourceFile.endsWith("launch-evidence-diagnostic.test.csv") && row.status === "pending_values" && row.pendingFields.includes("notes_proof")));
     const launchEvidenceDropzoneItem = dropzoneReadyPack.items.find((item) => item.lane === "launch_evidence");
     assert.ok(launchEvidenceDropzoneItem);
-    assert.equal(launchEvidenceDropzoneItem.nextStep, status.launchEvidenceDropDiagnostic.nextStep);
+    if (status.metricoolExecutionQueue.status === "approval_required") {
+      assert.equal(launchEvidenceDropzoneItem.status, "ready");
+      assert.equal(launchEvidenceDropzoneItem.priority, "medium");
+      assert.deepEqual(launchEvidenceDropzoneItem.blockers, []);
+      assert.match(launchEvidenceDropzoneItem.nextStep, /Metricool MVP does not require direct API launch evidence/);
+    } else {
+      assert.equal(launchEvidenceDropzoneItem.nextStep, status.launchEvidenceDropDiagnostic.nextStep);
+      assert.ok(launchEvidenceDropzoneItem.blockers.some((blocker) => blocker.includes("launch evidence rows")));
+    }
     assert.equal(launchEvidenceDropzoneItem.sourceArtifactPath, status.launchEvidenceDropDiagnostic.repairWorksheetCsvPath);
-    assert.ok(launchEvidenceDropzoneItem.blockers.some((blocker) => blocker.includes("launch evidence rows")));
+    const credentialDropzoneItem = dropzoneReadyPack.items.find((item) => item.lane === "credentials");
+    assert.ok(credentialDropzoneItem);
+    if (status.metricoolExecutionQueue.status === "approval_required") {
+      assert.equal(credentialDropzoneItem.status, "ready");
+      assert.equal(credentialDropzoneItem.priority, "medium");
+      assert.deepEqual(credentialDropzoneItem.blockers, []);
+      assert.match(credentialDropzoneItem.nextStep, /Metricool bridge is active/);
+    }
     assert.ok(dropzoneReadyPack.totals.dropDirs >= 3);
     assert.ok(dropzoneReadyPack.totals.expectedFiles > 0);
     assert.equal(status.dropzoneReadyPack.manifestPath, dropzoneReadyPack.manifestPath);
@@ -5871,8 +7541,14 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
   const previousConnectNow = await readFile(connectNowPath, "utf8").catch(() => null);
   const externalPortalLauncherPath = path.join(process.cwd(), "clippers_workspace", "external-portal-launcher.html");
   const previousExternalPortalLauncher = await readFile(externalPortalLauncherPath, "utf8").catch(() => null);
+  const previousMetricool100Run = await readFile(beforeStatus.metricool100ApprovalRun.manifestPath, "utf8").catch(() => null);
 
   try {
+    await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
     const { robertNextActions, status } = await prepareClipperRobertNextActions();
     const generatedDay = robertNextActions.generatedAt.slice(0, 10);
     assert.ok(robertNextActions.manifestPath.endsWith("ROBERT_NEXT_ACTIONS.json"));
@@ -5889,54 +7565,56 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.requiredStatus, "submitted");
     assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
     assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
-    assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
-    assert.equal(robertNextActions.status, "blocked");
-    assert.doesNotMatch(robertNextActions.nextStep, /Open Metricool/i);
-    assert.notEqual(robertNextActions.items[0]?.id, "metricool-approval-session");
-    assert.ok(robertNextActions.items[0]?.id.startsWith("external-closeout-"));
-    assert.equal(robertNextActions.items[0]?.nextStep, robertNextActions.externalCloseout.nextStep);
+    assert.equal(status.goLiveCompletionAudit.launchModes.metricoolMvpReady, true);
+    assert.match(robertNextActions.nextStep, /Open the Metricool/);
+    assert.equal(robertNextActions.status, "needs_action");
+    assert.equal(robertNextActions.items[0]?.id, "metricool-100-operator-handoff");
+    assert.match(robertNextActions.items[0]?.nextStep || "", /Open the Metricool/);
+    assert.match(robertNextActions.items[0]?.nextStep || "", /metricool-batch-01/);
+    assert.doesNotMatch(robertNextActions.items[0]?.nextStep || "", /14 ready item/);
     assert.equal(robertNextActions.items[0]?.priority, "critical");
     assert.equal(robertNextActions.items[0]?.lane, "external_portal");
-    assert.match(robertNextActions.items[0]?.artifactPath || "", /clippers-external-closeout-operator-queue\.md|clippers-external-closeout-proof-todo\.md/);
-    assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("\"developer_app\",\"\",\"instagram\",\"submitted\"")));
-    assert.equal(robertNextActions.connectNow.focusRun.status, status.externalExecutionSession.focusRun.status);
-    assert.equal(robertNextActions.connectNow.focusRun.items.length, status.externalExecutionSession.focusRun.items.length);
-    assert.ok(robertNextActions.connectNow.focusRun.label.length > 0);
+    assert.match(robertNextActions.items[0]?.artifactPath || "", /metricool-100-operator-handoff\.md/);
+    assert.equal(robertNextActions.items[0]?.actionUrl, "/api/clippers/prepare-metricool-100-operator-handoff");
+    assert.ok(robertNextActions.items[0]?.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv")));
+    assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("<published post URL after live>")));
+    assert.equal(
+      robertNextActions.items.some((item) => item.id.startsWith("external-closeout-") && item.id.includes("developer_app")),
+      false
+    );
+    assert.equal(robertNextActions.connectNow.focusRun.status, "ready");
+    assert.equal(robertNextActions.connectNow.focusRun.label, "Metricool MVP focus run");
+    assert.ok(robertNextActions.connectNow.focusRun.items.some((item) => item.id === "focus-metricool-100-operator-handoff"));
+    assert.ok(robertNextActions.connectNow.focusRun.items.every((item) => item.type === "account"));
+    assert.equal(robertNextActions.connectNow.focusRun.credentialTemplates.length, 0);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("TIKTOK_CLIENT_KEY"), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("META_APP_SECRET"), false);
+    assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("GOOGLE_CLIENT_SECRET"), false);
     assert.ok(robertNextActions.connectNow.focusRun.items.length <= 7);
     assert.ok(robertNextActions.connectNow.focusRun.estimatedMinutes >= 0);
-    assert.ok(robertNextActions.connectNow.pendingCredentialEnvVars.every((envVar) =>
-      robertNextActions.connectNow.credentialTemplate.includes(`${envVar}=`)
-    ));
-    assert.ok(robertNextActions.connectNow.credentialTemplate.includes("TIKTOK_CLIENT_KEY="));
-    assert.ok(robertNextActions.connectNow.credentialTemplate.includes("GOOGLE_DRIVE_REFRESH_TOKEN="));
+    assert.equal(robertNextActions.connectNow.launchMode, "metricool_mvp");
+    assert.equal(robertNextActions.connectNow.credentialMode, "metricool_not_required");
+    assert.match(robertNextActions.connectNow.credentialMvpNote, /Metricool MVP is active/);
+    assert.equal(robertNextActions.connectNow.metricoolMvpTunnel.status, "ready_to_execute");
+    assert.equal(robertNextActions.connectNow.metricoolMvpTunnel.blockedGates, 0);
+    assert.match(robertNextActions.connectNow.metricoolMvpTunnel.nextStep, /Robert reviews\/schedules|Metricool/);
+    assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-approval-queue" && gate.done === 100));
+    assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-live-evidence" && gate.status === "waiting"));
+    assert.equal(robertNextActions.connectNow.pendingCredentialEnvVars.length, 0);
+    assert.equal(robertNextActions.connectNow.directApiBacklogEnvVars.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialTemplate, "");
     assert.ok(["ready_to_import", "needs_review", "move_candidates_to_drop_dir", "no_candidates"].includes(robertNextActions.connectNow.credentialCloseout.status));
     assert.ok(robertNextActions.connectNow.credentialCloseout.diagnosticPath.endsWith("credential-drop-diagnostic.md"));
     assert.equal(robertNextActions.connectNow.credentialCloseout.importReady, robertNextActions.connectNow.credentialCloseout.status === "ready_to_import" && robertNextActions.connectNow.credentialCloseout.acceptedEnvVars.length > 0);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.dropDirs.length >= 2);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes("GOOGLE_CLIENT_ID"));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.missingEnvVars.every((envVar) =>
-      robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes(envVar)
-    ));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.runtimeEnv.configuredEnvVars.every((envVar) =>
-      robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.includes(envVar)
-    ));
-    if (robertNextActions.connectNow.credentialCloseout.runtimeEnv.missingEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN")) {
-      assert.ok(robertNextActions.connectNow.pendingCredentialEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
-      assert.ok(robertNextActions.connectNow.credentialCloseout.pendingEnvVars.includes("GOOGLE_DRIVE_REFRESH_TOKEN"));
-    }
-    assert.ok(robertNextActions.connectNow.credentialCloseout.totals.files >= 0);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.totals.pendingEnvVars >= robertNextActions.connectNow.credentialCloseout.pendingEnvVars.length);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.files.length <= 10);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.files.every((file) => file.relativePath && file.nextStep.length > 0));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.length > 0);
-    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) =>
-      item.driveSearchUrls.some((url) => url.startsWith("https://drive.google.com/drive/search?q="))
-    ));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) =>
-      item.localDropFileNames.some((fileName) => fileName.startsWith("credentials/") || fileName.startsWith("secrets/"))
-    ));
-    assert.ok(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.some((item) => item.missingSuggestedEnvVars.includes("GOOGLE_CLIENT_ID")));
+    assert.equal(robertNextActions.connectNow.credentialDropDirs.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCandidateFiles.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.runtimeEnv.checkedEnvVars.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.runtimeEnv.missingEnvVars.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.runtimeEnv.configuredEnvVars.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.totals.files, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.totals.pendingEnvVars, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.files.length, 0);
+    assert.equal(robertNextActions.connectNow.credentialCloseout.driveCredentialBridge.length, 0);
     assert.equal(robertNextActions.connectNow.officialPermissionCloseout.status, status.officialPermissionMatrix.status);
     assert.ok(robertNextActions.connectNow.officialPermissionCloseout.matrixPath.endsWith("official-permission-matrix.md"));
     assert.ok(robertNextActions.connectNow.officialPermissionCloseout.csvPath.endsWith("official-permission-matrix.csv"));
@@ -5954,18 +7632,17 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.accountCloseout.evidenceDropPath.endsWith("owner-connect-evidence.csv"));
     assert.ok(robertNextActions.connectNow.accountCloseout.totals.items > 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.totals.accounts > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.totals.developerApps > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.totals.permissions > 0);
+    assert.equal(robertNextActions.connectNow.accountCloseout.totals.developerApps, 0);
+    assert.equal(robertNextActions.connectNow.accountCloseout.totals.permissions, 0);
+    assert.equal(robertNextActions.connectNow.accountCloseout.totals.oauth, 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.portalUrls.length > 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.evidenceRows.length > 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.length > 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.evidenceRow.includes("\"account\"")));
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.some((item) => item.portalUrl?.startsWith("https://")));
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.requiredProof.length >= 3));
-    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.length > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.some((item) => item.lane === "permission" && item.scopes.length > 0));
-    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.some((item) => item.lane === "developer_app" || item.lane === "official_recheck"));
-    assert.ok(robertNextActions.connectNow.accountCloseout.appPermissionBridge.every((item) => item.requiredProof.length >= 3));
+    assert.equal(robertNextActions.connectNow.accountCloseout.appPermissionBridge.length, 0);
+    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.every((item) => item.lane === "account"));
     assert.ok(robertNextActions.connectNow.ownershipSplit.robertReady.length > 0);
     assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.length > 0);
     assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.some((item) => item.label.includes("accounts") || item.label.includes("permissions")));
@@ -5986,14 +7663,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
       ["instagram", "tiktok", "youtube"],
     );
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.handles.length > 0));
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.scopes.length > 0));
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.portalUrls.length >= 2));
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) =>
-      item.platform === "tiktok" &&
-      (item.missingEnvVars.includes("TIKTOK_CLIENT_KEY") || item.missingEnvVars.length === 0)
-    ));
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "instagram" && item.scopes.includes("instagram_content_publish")));
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.some((item) => item.platform === "youtube" && item.scopes.includes("https://www.googleapis.com/auth/youtube.upload")));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.scopes.length === 0));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.portalUrls.length === 0));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.missingEnvVars.length === 0));
+    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.nextStep.includes("Metricool operator handoff")));
     assert.ok(robertNextActions.connectNow.externalPortalLauncher.htmlPath.endsWith("external-portal-launcher.html"));
     assert.equal(robertNextActions.connectNow.externalPortalLauncher.url, "/clippers/external-portal-launcher");
     assert.ok(status.accountCreationPack.generatedAt && status.accountCreationPack.generatedAt >= generatedDay);
@@ -6050,7 +7723,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.blockers.length > 0));
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.length <= 12);
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
-    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "developer_app" || item.lane === "permission"));
+    assert.equal(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "developer_app" || item.lane === "permission" || item.lane === "oauth"), false);
     assert.ok(robertNextActions.connectNow.evidenceTemplatePath.endsWith("owner-connect-evidence.fixpack.csv"));
     assert.ok(robertNextActions.connectNow.evidenceImportPath.endsWith("owner-connect-evidence.csv"));
     assert.ok(robertNextActions.connectNow.evidenceCloseout.total >= 0);
@@ -6102,7 +7775,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.connectionTunnel.gates.every((gate) => gate.unlocks.length > 0));
     assert.ok(robertNextActions.connectNow.connectionTunnel.nextGate);
     assert.equal(robertNextActions.connectNow.connectionTunnel.nextStep, robertNextActions.connectNow.connectionTunnel.nextGate.nextStep);
-    assert.ok(robertNextActions.connectNow.launchEvidenceTemplate.startsWith("kind,account_id,platform,status,scope,app_identifier,public_base_url,notes"));
+    assert.equal(robertNextActions.connectNow.launchEvidenceTemplate, "");
     assert.ok(robertNextActions.connectNow.sourceIntakeTemplate.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes"));
     const configuredHandles = beforeStatus.accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => platformAccount.handle));
     assert.ok(configuredHandles.length > 0);
@@ -6114,12 +7787,26 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.totals.actions >= robertNextActions.items.length);
     assert.ok(robertNextActions.totals.estimatedMinutes > 0);
     assert.ok(robertNextActions.items.some((item) => item.lane === "local_drop" || item.lane === "external_portal" || item.lane === "source_supply"));
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.equal(robertNextActions.totals.critical, 1);
+      assert.ok(robertNextActions.items.filter((item) => item.priority === "critical").every((item) => item.id === "metricool-100-operator-handoff"));
+      assert.equal(
+        robertNextActions.items.some((item) =>
+          /developer_app|developer app|oauth|graph api|content api|permission request/i.test(`${item.id} ${item.label} ${item.nextStep}`)
+        ),
+        false
+      );
+    }
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
-      const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-approval-session");
+      const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-100-operator-handoff");
       assert.ok(metricoolAction);
       const externalCloseoutPending = robertNextActions.externalCloseout.operatorQueueItems > 0
         || robertNextActions.externalCloseout.proofFilesNeedRealEvidence > 0;
-      if (externalCloseoutPending) {
+      if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+        assert.equal(metricoolAction.rank, 1);
+        assert.equal(metricoolAction.priority, "critical");
+        assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+      } else if (externalCloseoutPending) {
         assert.ok(metricoolAction.rank > 1);
         assert.equal(metricoolAction.priority, "high");
         assert.equal(robertNextActions.nextStep, robertNextActions.externalCloseout.nextStep);
@@ -6129,20 +7816,39 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
         assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
       }
       assert.equal(metricoolAction.status, "ready_to_execute");
-      assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-approval-session");
+      assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-100-operator-handoff");
       assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
-      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
+      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-100-operator-handoff.md"));
       assert.ok(metricoolAction.evidenceRows.length > 0);
+      assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv")));
       assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
       assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
     }
-    assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")));
+    const hasCredentialRepairAction = robertNextActions.items.some((item) =>
+      item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")
+    );
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.equal(hasCredentialRepairAction, false);
+    } else {
+      assert.ok(hasCredentialRepairAction);
+    }
     const hasLaunchEvidenceAction = robertNextActions.items.some((item) =>
       item.artifactPath?.endsWith("launch-evidence-drop-repair-worksheet.csv") ||
       item.artifactPath?.endsWith("go-live-evidence-bundle.md")
     );
-    assert.ok(hasLaunchEvidenceAction || status.launchEvidenceFixPack.totals.items === 0);
-    assert.ok(robertNextActions.items.some((item) => item.artifactPath?.endsWith("source-drop-repair-worksheet.csv")));
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.equal(hasLaunchEvidenceAction, false);
+    } else {
+      assert.ok(hasLaunchEvidenceAction || status.launchEvidenceFixPack.totals.items === 0);
+    }
+    const sourceDropNeedsAction = status.sourceDropDiagnostic.totals.manifestPlaceholderRows > 0
+      || status.sourceDropDiagnostic.totals.manifestMissingFiles > 0
+      || status.sourceDropDiagnostic.totals.invalidSourceAssets > 0
+      || status.sourceDropDiagnostic.totals.missingSourceAssets > 0;
+    assert.equal(
+      robertNextActions.items.some((item) => item.artifactPath?.endsWith("source-drop-repair-worksheet.csv")),
+      sourceDropNeedsAction
+    );
     assert.ok(robertNextActions.items.every((item) => item.operatorSteps.length > 0));
     assert.equal(status.robertNextActions.manifestPath, robertNextActions.manifestPath);
     assert.equal(status.robertNextActions.markdownPath, robertNextActions.markdownPath);
@@ -6165,9 +7871,9 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawMarkdown.includes("Priority Actions"));
     assert.ok(rawMarkdown.includes("Operator steps"));
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
-      assert.ok(rawMarkdown.includes("Review Metricool approval session"));
-      assert.ok(rawCsv.includes("metricool-approval-session"));
-      assert.ok(rawCsv.includes("metricool-approval-session.md"));
+      assert.ok(rawMarkdown.includes("Process Metricool 100 batch 01"));
+      assert.ok(rawCsv.includes("metricool-100-operator-handoff"));
+      assert.ok(rawCsv.includes("metricool-100-operator-handoff.md"));
     }
     assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
     assert.ok(rawConnectNow.includes("Connection Tunnel"));
@@ -6189,6 +7895,9 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("TikTok"));
     assert.ok(rawConnectNow.includes("Instagram Reels"));
     assert.ok(rawConnectNow.includes("YouTube Shorts"));
+    assert.doesNotMatch(rawConnectNow, /TIKTOK_CLIENT_KEY|META_APP_SECRET|GOOGLE_CLIENT_SECRET|GOOGLE_DRIVE_REFRESH_TOKEN/);
+    assert.ok(rawConnectNow.includes("direct API credential files are backlog"));
+    assert.ok(rawConnectNow.includes("direct TikTok/Meta/Google API key search is intentionally deferred"));
     assert.ok(rawConnectNow.includes("External Portal Launcher"));
     assert.ok(rawConnectNow.includes("Go-Live Intake Console"));
     assert.ok(rawConnectNow.includes("Refresh sequence"));
@@ -6204,10 +7913,16 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("Local Drop Sync lo ignora"));
     assert.ok(rawCsv.includes("estimated_minutes"));
     assert.ok(rawCsv.includes("operator_steps"));
-    assert.ok(rawCsv.includes("credential-doctor-repair-worksheet.csv"));
-    assert.ok(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv") || rawCsv.includes("go-live-evidence-bundle.md"));
-    assert.ok(rawCsv.includes("source-drop-repair-worksheet.csv"));
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.equal(rawCsv.includes("credential-doctor-repair-worksheet.csv"), false);
+      assert.equal(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv") || rawCsv.includes("go-live-evidence-bundle.md"), false);
+    } else {
+      assert.ok(rawCsv.includes("credential-doctor-repair-worksheet.csv"));
+      assert.ok(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv") || rawCsv.includes("go-live-evidence-bundle.md"));
+    }
+    assert.equal(rawCsv.includes("source-drop-repair-worksheet.csv"), sourceDropNeedsAction);
     assert.equal(rawManifest.includes("access_token"), false);
+    assert.doesNotMatch(rawManifest, /TIKTOK_CLIENT_KEY|META_APP_SECRET|GOOGLE_CLIENT_SECRET|GOOGLE_DRIVE_REFRESH_TOKEN/);
     assert.equal(robertNextActions.connectNow.credentialTemplate.includes("client_secret="), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.credentialCloseout).includes("client_secret="), false);
     assert.equal(JSON.stringify(robertNextActions.connectNow.credentialCloseout).includes("refresh_token="), false);
@@ -6271,6 +7986,158 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     else await writeFile(connectNowPath, previousConnectNow);
     if (previousExternalPortalLauncher === null) await unlink(externalPortalLauncherPath).catch(() => undefined);
     else await writeFile(externalPortalLauncherPath, previousExternalPortalLauncher);
+    if (previousMetricool100Run === null) await unlink(beforeStatus.metricool100ApprovalRun.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricool100ApprovalRun.manifestPath, previousMetricool100Run);
+  }
+});
+
+test("Metricool MVP tunnel stays blocked when the bridge gate is blocked", async () => {
+  const status = await getClipperStatus();
+  const tunnel = __clipperInternals.buildRobertMetricoolMvpTunnel({
+    goLiveCompletionAudit: {
+      ...status.goLiveCompletionAudit,
+      launchModes: {
+        ...status.goLiveCompletionAudit.launchModes,
+        metricoolMvpReady: false,
+      },
+      nextStep: "Fix Metricool MVP bridge before operator work.",
+    },
+    metricool100ApprovalRun: {
+      ...status.metricool100ApprovalRun,
+      status: "ready_for_operator",
+      totals: {
+        ...status.metricool100ApprovalRun.totals,
+        metricoolQueuedForApproval: 100,
+        metricoolBlocked: 0,
+        sourceUploadReady: 100,
+        sourceUploadMissing: 0,
+        quickRunItems: 100,
+      },
+    },
+    metricoolApprovalSession: {
+      ...status.metricoolApprovalSession,
+      totals: {
+        ...status.metricoolApprovalSession.totals,
+        readyForReview: 100,
+        blocked: 0,
+      },
+    },
+  });
+
+  assert.equal(tunnel.status, "blocked");
+  assert.equal(tunnel.blockedGates, 1);
+  assert.equal(tunnel.nextGate, "Metricool MVP bridge");
+  assert.match(tunnel.nextStep, /Fix Metricool MVP bridge/);
+});
+
+test("getClipperStatus invalidates stale Metricool 100 approval run data", async () => {
+  const beforeStatus = await getClipperStatus();
+  const previousRun = await readFile(beforeStatus.metricool100ApprovalRun.manifestPath, "utf8").catch(() => null);
+
+  try {
+    const { metricool100ApprovalRun } = await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
+    await writeFile(metricool100ApprovalRun.manifestPath, JSON.stringify({
+      ...metricool100ApprovalRun,
+      totals: {
+        ...metricool100ApprovalRun.totals,
+        metricoolQueuedForApproval: metricool100ApprovalRun.totals.metricoolQueuedForApproval + 1,
+      },
+      nextStep: "stale package should not be shown to Robert",
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    assert.equal(status.metricool100ApprovalRun.status, "not_prepared");
+    assert.equal(status.metricool100ApprovalRun.totals.metricoolQueuedForApproval, 0);
+    assert.match(status.metricool100ApprovalRun.nextStep, /stale/i);
+    const publicGetterRun = await getClipperMetricool100ApprovalRun();
+    assert.equal(publicGetterRun.status, "not_prepared");
+    assert.equal(publicGetterRun.totals.metricoolQueuedForApproval, 0);
+    assert.match(publicGetterRun.nextStep, /stale/i);
+
+    const { robertNextActions } = await prepareClipperRobertNextActions();
+    assert.doesNotMatch(robertNextActions.items[0]?.nextStep || "", /stale package should not be shown/);
+    assert.doesNotMatch(robertNextActions.items[0]?.nextStep || "", /101 queued item/);
+  } finally {
+    if (previousRun === null) await unlink(beforeStatus.metricool100ApprovalRun.manifestPath).catch(() => undefined);
+    else await writeFile(beforeStatus.metricool100ApprovalRun.manifestPath, previousRun);
+  }
+});
+
+test("Metricool 100 evidence import ignores stale run sheet and evidence CSV", async () => {
+  const beforeStatus = await getClipperStatus();
+  const shortEvidenceCsvPath = path.join(beforeStatus.rootDir, "evidence-drop", "metricool-approval-evidence-import.csv");
+  const metricool100RunSheetPath = path.join(beforeStatus.rootDir, "scheduled", "metricool-100-operator-run-sheet.csv");
+  const metricool100EvidenceCsvPath = path.join(beforeStatus.rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+  const metricool100BatchEvidenceDir = path.join(beforeStatus.rootDir, "scheduled", "metricool-100-batch-evidence-imports");
+  const metricool100BatchEvidenceCsvPath = path.join(metricool100BatchEvidenceDir, "metricool-batch-01-evidence-import.csv");
+  const artifactPaths = [
+    shortEvidenceCsvPath,
+    metricool100RunSheetPath,
+    metricool100EvidenceCsvPath,
+    metricool100BatchEvidenceCsvPath,
+    beforeStatus.metricool100ApprovalRun.manifestPath,
+    beforeStatus.metricoolApprovalReport.manifestPath,
+    beforeStatus.metricoolApprovalReport.markdownPath,
+    beforeStatus.metricoolApprovalReport.csvPath,
+  ];
+  const previousArtifacts = new Map<string, string | null>();
+  for (const filePath of artifactPaths) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    await mkdir(metricool100BatchEvidenceDir, { recursive: true });
+    const { metricool100ApprovalRun, status } = await prepareClipperMetricool100ApprovalRun(undefined, {
+      targetWeeklyClips: 100,
+      approvalQueueTarget: 100,
+      batchSize: 100,
+    });
+    const currentItem = status.metricoolApprovalSession.items[0];
+    assert.ok(currentItem);
+    await writeFile(metricool100ApprovalRun.manifestPath, JSON.stringify({
+      ...metricool100ApprovalRun,
+      metricoolQueueItemIds: ["stale-metricool-100-id"],
+      totals: {
+        ...metricool100ApprovalRun.totals,
+        metricoolQueuedForApproval: metricool100ApprovalRun.totals.metricoolQueuedForApproval,
+      },
+    }, null, 2));
+    await writeFile(shortEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    ].join("\n"));
+    await writeFile(metricool100RunSheetPath, [
+      "rank,metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,publish_at,source_file_name,source_path,caption_seed,queue_status,metricool_action,evidence_action",
+      `1,${currentItem.id},${currentItem.accountId},${currentItem.accountName},${currentItem.platform},${currentItem.metricoolBrandName},${currentItem.metricoolBlogId || ""},${currentItem.publishAt},${currentItem.sourceFileName},${currentItem.sourcePath || ""},${currentItem.captionSeed},ready_for_review,Review in Metricool,Capture live evidence`,
+    ].join("\n"));
+    await writeFile(metricool100EvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+    ].join("\n"));
+    await writeFile(metricool100BatchEvidenceCsvPath, [
+      "metricool_queue_item_id,account_id,account_name,platform,metricool_brand_name,metricool_blog_id,scheduled_for,source_path,caption_seed,metricool_approval_url,published_post_url,final_status,views_24h,likes_24h,comments_24h,shares_24h,operator_notes",
+      `${currentItem.id},${currentItem.accountId},${currentItem.accountName},${currentItem.platform},${currentItem.metricoolBrandName},${currentItem.metricoolBlogId || ""},${currentItem.publishAt},${currentItem.sourcePath || ""},${currentItem.captionSeed},https://app.metricool.com/planner/post/${currentItem.id},https://www.tiktok.com/@sportsdaily/video/stale100evidence,published,999999,99,9,4,Stale evidence should not import.`,
+    ].join("\n"));
+
+    const preview = await previewClipperMetricoolApprovalEvidence();
+    assert.equal(preview.metricoolApprovalEvidencePreview.totals.importable, 0);
+    assert.equal(preview.metricoolApprovalEvidencePreview.totals.views, 0);
+    assert.equal(preview.metricoolApprovalEvidencePreview.evidenceImportCsvPaths.active, shortEvidenceCsvPath);
+    assert.ok((preview.metricoolApprovalEvidencePreview.evidenceImportCsvPaths.metricool100BatchOperatorRows || 0) >= 1);
+    assert.equal(preview.metricoolApprovalEvidencePreview.rows.some((row) => row.metricoolQueueItemId === currentItem.id), false);
+
+    const imported = await importClipperMetricoolApprovalEvidence();
+    assert.equal(imported.metricoolApprovalEvidenceImport.totals.imported, 0);
+    assert.equal(imported.metricoolApprovalEvidenceImport.totals.views, 0);
+    assert.equal(imported.metricoolApprovalEvidenceImport.evidenceImportCsvPaths.active, shortEvidenceCsvPath);
+    assert.equal(imported.status.metricool100ApprovalRun.status, "not_prepared");
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
   }
 });
 
@@ -6709,6 +8576,14 @@ test("prepareClipperProductionQueue scans assets and respects allowlist evidence
     assert.ok(queue.items.every((item) => item.slotNumber >= 1));
     assert.ok(queue.items.every((item) => item.variantAngle.length > 0 && item.clipObjective.length > 0));
     assert.equal(nextStatus.productionQueue.queuePath?.endsWith(".json"), true);
+
+    const weeklyQueueResult = await prepareClipperProductionQueue(undefined, { targetWeeklyClips: 100 });
+    assert.equal(weeklyQueueResult.queue.items.length, 100);
+    assert.equal(weeklyQueueResult.queue.items.filter((item) => item.status === "draft_ready").length, 100);
+    assert.ok(weeklyQueueResult.queue.items.some((item) => item.accountId === "sports-daily"));
+    assert.ok(weeklyQueueResult.queue.items.some((item) => item.accountId === "meme-radar"));
+    assert.ok(weeklyQueueResult.queue.items.some((item) => item.accountId === "streamer-pulse"));
+    if (weeklyQueueResult.queue.queuePath) await unlink(weeklyQueueResult.queue.queuePath).catch(() => undefined);
   } finally {
     await unlink(sourcePath).catch(() => undefined);
     await unlink(evidencePath).catch(() => undefined);
@@ -7987,6 +9862,10 @@ test("prepareClipperWeeklyProductionFunnel writes guarded 100 clips funnel", asy
     assert.ok(weeklyProductionFunnel.totals.metricoolApprovalQueued >= 0);
     assert.ok(weeklyProductionFunnel.categoryRows.some((row) => row.category === "sports" && row.targetWeeklyClips >= 50));
     assert.ok(weeklyProductionFunnel.categoryRows.some((row) => row.category === "memes" && row.targetWeeklyClips >= 35));
+    if (weeklyProductionFunnel.totals.sourceFilesReady >= 130 && weeklyProductionFunnel.totals.metricoolApprovalQueued >= weeklyProductionFunnel.totals.dailyMetricoolTargetMin && weeklyProductionFunnel.totals.publishedCount === 0) {
+      assert.equal(weeklyProductionFunnel.bottlenecks[0]?.id, "metricool_evidence");
+      assert.match(weeklyProductionFunnel.nextStep, /Metricool.*evidence|evidence CSV/i);
+    }
     assert.equal(status.weeklyProductionFunnel.manifestPath, weeklyProductionFunnel.manifestPath);
     assert.equal(status.weeklyProductionFunnel.totals.publishedCount, status.metrics.totals.clips);
 
