@@ -6314,6 +6314,7 @@ test("TikTok batch evidence row recording updates current batch and keeps publis
 });
 
 test("TikTok MVP readiness verifier gates Metricool operator start without fake publishing", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
   for (const script of [
     "script/clippers-account-permission-readiness.mjs",
     "script/clippers-tiktok-batch-evidence-sync.mjs",
@@ -6384,6 +6385,7 @@ test("TikTok MVP readiness verifier gates Metricool operator start without fake 
   assert.match(page, /currentBatchEvidenceCsv/);
   assert.match(page, /ready_for_metricool_operator/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-readiness-verifier"\]/);
+  });
 });
 
 test("TikTok MVP readiness verifier blocks non approval-required artifacts", async () => {
@@ -6415,6 +6417,7 @@ test("TikTok MVP readiness verifier blocks non approval-required artifacts", asy
     assert.equal(output.status, "fail");
     assert.equal(output.launchDecision, "blocked_before_metricool");
     assert.ok(output.failed >= 1);
+    assert.match(output.nextStep, /Disable real publishing and keep Metricool in approval_required mode/);
 
     const verifier = JSON.parse(await readFile(verifierPath, "utf8"));
     const approvalCheck = verifier.checks.find((check) => check.id === "approval_required_no_autopublish");
@@ -6430,6 +6433,52 @@ test("TikTok MVP readiness verifier blocks non approval-required artifacts", asy
       cwd: process.cwd(),
       encoding: "utf8",
     });
+  }
+});
+
+test("TikTok MVP readiness verifier prioritizes Metricool bridge proof when lanes are blocked", async () => {
+  const readinessPath = path.join(rootDir, "account-permission-readiness.json");
+  const verifierPath = path.join(rootDir, "reports/clippers-tiktok-mvp-readiness-verifier.json");
+  const originalReadiness = await readFile(readinessPath, "utf8");
+  const originalVerifier = await readFile(verifierPath, "utf8").catch(() => null);
+  try {
+    const readiness = JSON.parse(originalReadiness);
+    readiness.activeMvp = {
+      ...(readiness.activeMvp || {}),
+      status: "blocked",
+      readyLanes: 0,
+      targetLanes: 2,
+      platforms: ["tiktok"],
+      accountIds: ["sports-daily", "meme-radar"],
+    };
+    readiness.tiktokMvpAccountCloseout = {
+      ...(readiness.tiktokMvpAccountCloseout || {}),
+      status: "needs_tiktok_account_evidence",
+    };
+    readiness.metricoolMvpEvidence = {
+      ...(readiness.metricoolMvpEvidence || {}),
+      bridgeEvidenceCsvPath: path.join(rootDir, "scheduled/metricool-tiktok-bridge-evidence.csv"),
+    };
+    await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-readiness-verifier.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "fail");
+    assert.equal(output.launchDecision, "blocked_before_metricool");
+    assert.match(output.nextStep, /Preview\/import real non-secret Metricool bridge evidence/);
+    assert.match(output.nextStep, /metricool-tiktok-bridge-evidence\.csv/);
+    assert.doesNotMatch(output.nextStep, /^Keep only SPORT and memes TikTok/i);
+
+    const verifier = JSON.parse(await readFile(verifierPath, "utf8"));
+    assert.match(verifier.nextStep, /Required fields: public TikTok profile URL/);
+    assert.ok(verifier.externalWorkRemaining.some((item) => item.includes("metricool-tiktok-bridge-evidence.csv")));
+  } finally {
+    await writeFile(readinessPath, originalReadiness);
+    if (originalVerifier) await writeFile(verifierPath, originalVerifier);
   }
 });
 

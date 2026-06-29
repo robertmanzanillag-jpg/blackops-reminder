@@ -104,6 +104,26 @@ function renderCsv(summary) {
   ].join("\n") + "\n";
 }
 
+function nextStepForFailedChecks(failed, accountReadiness) {
+  const safetyFailure = failed.find((row) => [
+    "approval_required_no_autopublish",
+    "launch_control_no_fake_publish",
+  ].includes(row.id));
+  if (safetyFailure) return safetyFailure.nextAction;
+  const activeMvp = accountReadiness.activeMvp || {};
+  const readyLanes = Number(activeMvp.readyLanes || 0);
+  const targetLanes = Number(activeMvp.targetLanes || 0);
+  const bridgeCsvPath = accountReadiness.metricoolMvpEvidence?.bridgeEvidenceCsvPath || "";
+  if (targetLanes > 0 && readyLanes < targetLanes) {
+    return [
+      "Preview/import real non-secret Metricool bridge evidence for SPORT and memes TikTok.",
+      bridgeCsvPath ? `Use bridge CSV: ${bridgeCsvPath}.` : "",
+      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL, and 20+ character notes. Do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+    ].filter(Boolean).join(" ");
+  }
+  return failed[0]?.nextAction || "Open Metricool and process metricool-batch-01; keep evidence blank until real scheduling proof exists.";
+}
+
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   const [
@@ -276,13 +296,16 @@ async function main() {
       "Published/importable requires a public TikTok URL and real 24h metrics.",
     ],
     externalWorkRemaining: [
-      "Open Metricool and process metricool-batch-01 manually.",
+      accountReadiness.metricoolMvpEvidence?.bridgeEvidenceCsvPath
+        ? `If lanes are blocked, preview/import bridge evidence from ${accountReadiness.metricoolMvpEvidence.bridgeEvidenceCsvPath}.`
+        : "If lanes are blocked, preview/import SPORT and memes TikTok bridge evidence first.",
+      "Open Metricool and process metricool-batch-01 manually only after SPORT and memes TikTok lanes are ready.",
       "Fill the current batch evidence CSV only after Metricool scheduling/review.",
       "Add public TikTok URLs only after posts are live.",
       "Add 24h metrics only after the real 24h window.",
     ],
     nextStep: failed.length
-      ? failed[0].nextAction
+      ? nextStepForFailedChecks(failed, accountReadiness)
       : "Open Metricool and process metricool-batch-01; keep evidence blank until real scheduling proof exists.",
   };
 
