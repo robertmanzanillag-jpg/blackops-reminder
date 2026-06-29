@@ -24,6 +24,42 @@ const REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS = envFlag("DROPSHIPPING_REQUIRE_APP
 const REQUIRE_SAMPLE_BEFORE_SCALE = envFlag("DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE", true);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
+const liveProductSignalSourceSchema = z.enum([
+  "tiktok_creative_center",
+  "tiktok_search",
+  "aliexpress_search",
+  "google_trends",
+  "amazon_search",
+  "competitor_scan",
+  "shopify_trends",
+  "manual",
+]);
+
+const liveProductSignalStatusSchema = z.enum(["verified", "needs_review", "stale", "error"]);
+
+const liveProductSignalSchema = z.object({
+  candidateName: z.string().trim().min(2).max(160),
+  source: liveProductSignalSourceSchema,
+  label: z.string().trim().max(180).optional().default(""),
+  url: z.string().trim().max(500).optional().default(""),
+  status: liveProductSignalStatusSchema.default("verified"),
+  confidence: z.enum(["low", "medium", "high"]).default("medium"),
+  observedAt: z.string().trim().max(80).optional().default(""),
+  signal: z.string().trim().min(2).max(500),
+  evidenceScore: z.coerce.number().min(0).max(30).default(10),
+  demandSignal: z.enum(["weak", "medium", "strong", "breakout"]).optional(),
+  estimatedMonthlyDemand: z.coerce.number().int().min(0).max(100000).optional(),
+  supplierRating: z.coerce.number().min(0).max(5).optional(),
+  reviewCount: z.coerce.number().int().min(0).max(1000000).optional(),
+  shippingDaysMax: z.coerce.number().int().min(1).max(180).optional(),
+  competitorPriceUsd: z.coerce.number().min(0).max(100000).optional(),
+  legalRisk: z.enum(["low", "medium", "high"]).optional(),
+  qualityRisk: z.enum(["low", "medium", "high"]).optional(),
+});
+
+type DropshippingLiveProductSignal = z.infer<typeof liveProductSignalSchema>;
+type DropshippingLiveProductSignalSource = z.infer<typeof liveProductSignalSourceSchema>;
+
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -363,13 +399,24 @@ type DropshippingProductScoutCandidate = DropshippingProductScoutCandidateInput 
     confidence: "low" | "medium" | "high";
     evidenceScore: number;
     evidence: Array<{
-      source: "tiktok_creative_center" | "tiktok_search" | "aliexpress_search" | "google_trends" | "shopify_trends" | "manual";
+      source: DropshippingLiveProductSignalSource;
       label: string;
       url: string;
-      status: "seed_reference" | "needs_review" | "verified";
+      status: "seed_reference" | "needs_review" | "verified" | "stale" | "error";
       signal: string;
     }>;
     missingProof: string[];
+    liveValidation: {
+      status: "not_connected" | "partial" | "connected";
+      connectedSources: DropshippingLiveProductSignalSource[];
+      verifiedSources: DropshippingLiveProductSignalSource[];
+      liveScore: number;
+      scoreBonus: number;
+      scorePenalty: number;
+      signals: DropshippingLiveProductSignal[];
+      blockers: string[];
+      updatedAt: string;
+    };
   };
   scorecard: {
     total: number;
@@ -380,6 +427,7 @@ type DropshippingProductScoutCandidate = DropshippingProductScoutCandidateInput 
       contentScore: number;
       supplierScore: number;
       riskScore: number;
+      liveSignalScore: number;
     };
     pass: boolean;
   };
@@ -1189,19 +1237,51 @@ const productScoutCandidatePersistedSchema: z.ZodType<DropshippingProductScoutCa
     confidence: z.enum(["low", "medium", "high"]),
     evidenceScore: z.number(),
     evidence: z.array(z.object({
-      source: z.enum(["tiktok_creative_center", "tiktok_search", "aliexpress_search", "google_trends", "shopify_trends", "manual"]),
+      source: liveProductSignalSourceSchema,
       label: z.string(),
       url: z.string(),
-      status: z.enum(["seed_reference", "needs_review", "verified"]),
+      status: z.enum(["seed_reference", "needs_review", "verified", "stale", "error"]),
       signal: z.string(),
     })),
     missingProof: z.array(z.string()),
+    liveValidation: z.object({
+      status: z.enum(["not_connected", "partial", "connected"]),
+      connectedSources: z.array(liveProductSignalSourceSchema),
+      verifiedSources: z.array(liveProductSignalSourceSchema),
+      liveScore: z.number(),
+      scoreBonus: z.number(),
+      scorePenalty: z.number(),
+      signals: z.array(liveProductSignalSchema),
+      blockers: z.array(z.string()),
+      updatedAt: z.string(),
+    }).default({
+      status: "not_connected",
+      connectedSources: [],
+      verifiedSources: [],
+      liveScore: 0,
+      scoreBonus: 0,
+      scorePenalty: 12,
+      signals: [],
+      blockers: ["Live product signal feed is not connected."],
+      updatedAt: "",
+    }),
   }).default({
     status: "needs_external_validation",
     confidence: "low",
     evidenceScore: 0,
     evidence: [],
     missingProof: ["validar videos reales en TikTok", "validar supplier real", "validar competidores/precio"],
+    liveValidation: {
+      status: "not_connected",
+      connectedSources: [],
+      verifiedSources: [],
+      liveScore: 0,
+      scoreBonus: 0,
+      scorePenalty: 12,
+      signals: [],
+      blockers: ["Live product signal feed is not connected."],
+      updatedAt: "",
+    },
   }),
   scorecard: z.object({
     total: z.number(),
@@ -1212,6 +1292,7 @@ const productScoutCandidatePersistedSchema: z.ZodType<DropshippingProductScoutCa
       contentScore: z.number(),
       supplierScore: z.number(),
       riskScore: z.number(),
+      liveSignalScore: z.number().default(0),
     }),
     pass: z.boolean(),
   }),
@@ -2178,17 +2259,174 @@ function calculateScoutEconomics(input: DropshippingProductScoutCandidateInput) 
   };
 }
 
-function buildScoutScorecard(input: DropshippingProductScoutCandidateInput, economics = calculateScoutEconomics(input).economics) {
+function productSignalKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function readLiveProductSignalFeed() {
+  const sources: string[] = [];
+  const warnings: string[] = [];
+  const rawSignals: unknown[] = [];
+  const json = (process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON || "").trim();
+  const filePath = (process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH || "").trim();
+
+  if (json) {
+    sources.push("DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON");
+    try {
+      const parsed = JSON.parse(json) as unknown;
+      rawSignals.push(...(Array.isArray(parsed) ? parsed : Array.isArray((parsed as { signals?: unknown[] })?.signals) ? (parsed as { signals: unknown[] }).signals : []));
+    } catch (_error) {
+      warnings.push("live_signals_json_invalid");
+    }
+  }
+
+  if (filePath) {
+    sources.push("DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH");
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+      rawSignals.push(...(Array.isArray(parsed) ? parsed : Array.isArray((parsed as { signals?: unknown[] })?.signals) ? (parsed as { signals: unknown[] }).signals : []));
+    } catch (_error) {
+      warnings.push("live_signals_path_unreadable_or_invalid");
+    }
+  }
+
+  const signals = rawSignals.flatMap((item) => {
+    const parsed = liveProductSignalSchema.safeParse(item);
+    if (!parsed.success) {
+      warnings.push("live_signal_record_invalid");
+      return [];
+    }
+    return [parsed.data];
+  });
+
+  return {
+    status: signals.some((signal) => signal.status === "verified") ? "connected" as const : sources.length ? "partial" as const : "not_connected" as const,
+    sources,
+    warnings,
+    signals,
+  };
+}
+
+function liveSignalsForCandidate(input: Pick<DropshippingProductScoutCandidateInput, "candidateName">) {
+  const feed = readLiveProductSignalFeed();
+  const candidateKey = productSignalKey(input.candidateName);
+  const signals = feed.signals.filter((signal) => {
+    const signalKey = productSignalKey(signal.candidateName);
+    return signalKey === candidateKey || signalKey.includes(candidateKey) || candidateKey.includes(signalKey);
+  });
+  return { ...feed, signals };
+}
+
+function buildScoutLiveValidation(input: DropshippingProductScoutCandidateInput) {
+  const feed = liveSignalsForCandidate(input);
+  const connectedSources = Array.from(new Set(feed.signals.map((signal) => signal.source)));
+  const verifiedSources = Array.from(new Set(feed.signals.filter((signal) => signal.status === "verified").map((signal) => signal.source)));
+  const liveScore = Math.min(100, Math.round(feed.signals.reduce((sum, signal) => {
+    const statusScore = signal.status === "verified" ? signal.evidenceScore : signal.status === "needs_review" ? Math.round(signal.evidenceScore * 0.4) : -8;
+    const confidenceBonus = signal.confidence === "high" ? 6 : signal.confidence === "medium" ? 3 : 0;
+    return sum + statusScore + confidenceBonus;
+  }, 0)));
+  const requiredSources: DropshippingLiveProductSignalSource[] = ["tiktok_search", "aliexpress_search"];
+  const demandProofSources: DropshippingLiveProductSignalSource[] = ["google_trends", "competitor_scan"];
+  const missingCore = [
+    ...requiredSources.filter((source) => !verifiedSources.includes(source)),
+    ...(!demandProofSources.some((source) => verifiedSources.includes(source)) ? ["google_trends_or_competitor_scan"] : []),
+  ];
+  const scoreBonus = Math.min(20, Math.max(0, Math.round(liveScore / 5)));
+  const scorePenalty = feed.status === "not_connected" ? 12 : missingCore.length * 4 + feed.warnings.length * 2;
+  const blockers = [
+    ...missingCore.map((source) => `Falta senal verificada de ${source}.`),
+    ...feed.warnings,
+  ];
+
+  return {
+    status: feed.status === "connected" && missingCore.length === 0 ? "connected" as const : feed.status === "not_connected" ? "not_connected" as const : "partial" as const,
+    connectedSources,
+    verifiedSources,
+    liveScore,
+    scoreBonus,
+    scorePenalty,
+    signals: feed.signals,
+    blockers,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function demandSignalRank(value: DropshippingProductScoutCandidateInput["demandSignal"]) {
+  return value === "breakout" ? 4 : value === "strong" ? 3 : value === "medium" ? 2 : 1;
+}
+
+function strongerDemandSignal(current: DropshippingProductScoutCandidateInput["demandSignal"], next?: DropshippingProductScoutCandidateInput["demandSignal"]) {
+  if (!next) return current;
+  return demandSignalRank(next) > demandSignalRank(current) ? next : current;
+}
+
+function weakerRisk(current: "low" | "medium" | "high", next?: "low" | "medium" | "high") {
+  if (!next) return current;
+  const rank = { low: 1, medium: 2, high: 3 };
+  return rank[next] > rank[current] ? next : current;
+}
+
+function enrichScoutInputWithLiveSignals(input: DropshippingProductScoutCandidateInput, liveValidation: ReturnType<typeof buildScoutLiveValidation>) {
+  const verifiedSignals = liveValidation.signals.filter((signal) => signal.status === "verified");
+  return verifiedSignals.reduce<DropshippingProductScoutCandidateInput>((next, signal) => ({
+    ...next,
+    demandSignal: strongerDemandSignal(next.demandSignal, signal.demandSignal),
+    estimatedMonthlyDemand: Math.max(next.estimatedMonthlyDemand, signal.estimatedMonthlyDemand || 0),
+    supplierRating: signal.supplierRating !== undefined ? Math.max(next.supplierRating, signal.supplierRating) : next.supplierRating,
+    reviewCount: signal.reviewCount !== undefined ? Math.max(next.reviewCount, signal.reviewCount) : next.reviewCount,
+    shippingDaysMax: signal.shippingDaysMax !== undefined ? Math.min(next.shippingDaysMax, signal.shippingDaysMax) : next.shippingDaysMax,
+    competitorPriceUsd: signal.competitorPriceUsd !== undefined ? signal.competitorPriceUsd : next.competitorPriceUsd,
+    legalRisk: weakerRisk(next.legalRisk, signal.legalRisk),
+    qualityRisk: weakerRisk(next.qualityRisk, signal.qualityRisk),
+  }), input);
+}
+
+export function getDropshippingLiveSignalReadiness() {
+  const feed = readLiveProductSignalFeed();
+  const sourceCounts = feed.signals.reduce<Record<string, number>>((counts, signal) => {
+    counts[signal.source] = (counts[signal.source] || 0) + 1;
+    return counts;
+  }, {});
+  const verifiedSignals = feed.signals.filter((signal) => signal.status === "verified").length;
+  const verifiedSources = Array.from(new Set(feed.signals.filter((signal) => signal.status === "verified").map((signal) => signal.source)));
+  const coreReady = verifiedSources.includes("tiktok_search")
+    && verifiedSources.includes("aliexpress_search")
+    && (verifiedSources.includes("google_trends") || verifiedSources.includes("competitor_scan"));
+  const status = coreReady ? "connected" as const : feed.sources.length > 0 ? "partial" as const : "not_connected" as const;
+  return {
+    status,
+    configured: feed.sources.length > 0,
+    sources: feed.sources,
+    totalSignals: feed.signals.length,
+    verifiedSignals,
+    verifiedSources,
+    sourceCounts,
+    warnings: feed.warnings,
+    requiredEnv: [
+      "DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON",
+      "or DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH",
+    ],
+    recommendedSources: ["tiktok_search", "aliexpress_search", "google_trends", "competitor_scan"],
+  };
+}
+
+function buildScoutScorecard(
+  input: DropshippingProductScoutCandidateInput,
+  economics = calculateScoutEconomics(input).economics,
+  liveValidation?: ReturnType<typeof buildScoutLiveValidation>,
+) {
   const marginScore = economics.grossMarginPercent >= 60 ? 30 : economics.grossMarginPercent >= 45 ? 22 : economics.grossMarginPercent >= 30 ? 12 : 0;
   const demandScore = input.demandSignal === "breakout" ? 25 : input.demandSignal === "strong" ? 20 : input.demandSignal === "medium" ? 12 : 4;
   const contentScore = input.contentAngle.length >= 20 && input.problemSolved.length >= 20 ? 20 : 10;
   const supplierScore = input.supplierRating >= 4.5 && input.reviewCount >= 300 ? 15 : input.supplierRating >= 4 && input.reviewCount >= 100 ? 10 : 4;
   const riskScore = input.legalRisk === "low" && input.qualityRisk === "low" ? 10 : input.legalRisk === "high" || input.qualityRisk === "high" ? 0 : 5;
-  const total = marginScore + demandScore + contentScore + supplierScore + riskScore;
+  const liveSignalScore = liveValidation ? Math.max(-20, Math.min(20, liveValidation.scoreBonus - liveValidation.scorePenalty)) : 0;
+  const total = marginScore + demandScore + contentScore + supplierScore + riskScore + liveSignalScore;
   return {
     total,
     grade: total >= 85 ? "A" as const : total >= 70 ? "B" as const : total >= 55 ? "C" as const : "D" as const,
-    components: { marginScore, demandScore, contentScore, supplierScore, riskScore },
+    components: { marginScore, demandScore, contentScore, supplierScore, riskScore, liveSignalScore },
     pass: total >= 70 && economics.grossProfitUsd > 0 && input.legalRisk !== "high" && input.qualityRisk !== "high",
   };
 }
@@ -2197,7 +2435,11 @@ function encodedQuery(value: string) {
   return encodeURIComponent(value.trim().replace(/\s+/g, " "));
 }
 
-function buildScoutValidation(input: DropshippingProductScoutCandidateInput, scorecard: ReturnType<typeof buildScoutScorecard>) {
+function buildScoutValidation(
+  input: DropshippingProductScoutCandidateInput,
+  scorecard: ReturnType<typeof buildScoutScorecard>,
+  liveValidation: ReturnType<typeof buildScoutLiveValidation>,
+) {
   const query = encodedQuery(input.candidateName);
   const evidence: DropshippingProductScoutCandidate["validation"]["evidence"] = [
     {
@@ -2238,6 +2480,18 @@ function buildScoutValidation(input: DropshippingProductScoutCandidateInput, sco
       signal: "Referencia inicial, no prueba suficiente para gastar ads.",
     });
   }
+  const liveBySource = new Map(liveValidation.signals.map((signal) => [signal.source, signal]));
+  const hydratedEvidence = evidence.map((item) => {
+    const liveSignal = liveBySource.get(item.source);
+    if (!liveSignal) return item;
+    return {
+      ...item,
+      label: liveSignal.label || item.label,
+      url: liveSignal.url || item.url,
+      status: liveSignal.status === "verified" ? "verified" as const : liveSignal.status,
+      signal: liveSignal.signal || item.signal,
+    };
+  });
 
   const evidenceScore = [
     input.sourceUrl ? 12 : 0,
@@ -2245,20 +2499,25 @@ function buildScoutValidation(input: DropshippingProductScoutCandidateInput, sco
     input.supplierRating >= 4.5 && input.reviewCount >= 300 ? 16 : input.supplierRating >= 4 && input.reviewCount >= 100 ? 10 : 3,
     input.shippingDaysMax <= 18 ? 10 : input.shippingDaysMax <= 25 ? 6 : 2,
     scorecard.total >= 85 ? 12 : scorecard.total >= 70 ? 8 : 3,
+    Math.max(0, Math.min(30, liveValidation.liveScore)),
   ].reduce((sum, item) => sum + item, 0);
-  const confidence: DropshippingProductScoutCandidate["validation"]["confidence"] = evidenceScore >= 70 ? "high" : evidenceScore >= 45 ? "medium" : "low";
-  const externallyValidated = evidence.every((item) => item.status === "verified");
+  const confidence: DropshippingProductScoutCandidate["validation"]["confidence"] = evidenceScore >= 85 ? "high" : evidenceScore >= 55 ? "medium" : "low";
+  const externallyValidated = liveValidation.verifiedSources.includes("tiktok_search")
+    && liveValidation.verifiedSources.includes("aliexpress_search")
+    && (liveValidation.verifiedSources.includes("google_trends") || liveValidation.verifiedSources.includes("competitor_scan"));
   return {
     status: externallyValidated ? "externally_validated" as const : input.sourceUrl ? "needs_external_validation" as const : "seed_only" as const,
     confidence,
     evidenceScore,
-    evidence,
+    evidence: hydratedEvidence,
     missingProof: [
+      ...liveValidation.blockers,
       "captura o link de 3-5 videos TikTok/Creative Center con senal real",
       "supplier principal y backup verificados con shipping/returns",
       "comparacion de 3 competidores y precio final",
       "primer contenido organico medido antes de ads",
     ],
+    liveValidation,
   };
 }
 
@@ -2272,23 +2531,31 @@ function buildScoutCandidateStatus(input: DropshippingProductScoutCandidateInput
 export function createDropshippingProductScoutCandidate(input: DropshippingProductScoutCandidateInput) {
   loadAll();
   const parsed = dropshippingProductScoutCandidateSchema.parse(input);
-  const { economics, researchInput } = calculateScoutEconomics(parsed);
-  const scorecard = buildScoutScorecard(parsed, economics);
-  const status = buildScoutCandidateStatus(parsed, scorecard);
+  const rawLiveValidation = buildScoutLiveValidation(parsed);
+  const enriched = enrichScoutInputWithLiveSignals(parsed, rawLiveValidation);
+  const liveValidation = buildScoutLiveValidation(enriched);
+  const { economics, researchInput } = calculateScoutEconomics(enriched);
+  const scorecard = buildScoutScorecard(enriched, economics, liveValidation);
+  const status = buildScoutCandidateStatus(enriched, scorecard);
   const now = new Date().toISOString();
   const candidate: DropshippingProductScoutCandidate = {
-    ...parsed,
+    ...enriched,
     id: `drop-scout-${Date.now()}-${productScoutCandidates.length + 1}`,
     createdAt: now,
     updatedAt: now,
     status,
-    validation: buildScoutValidation(parsed, scorecard),
+    validation: buildScoutValidation(enriched, scorecard, liveValidation),
     scorecard,
     economics,
     researchInput,
     nextActions:
       status === "needs_tiktok_validation"
-        ? ["validar en TikTok/Creative Center", "buscar supplier backup", "crear hooks organicos"]
+        ? [
+          liveValidation.status === "not_connected" ? "conectar live signal feed antes de gastar" : "revisar fuentes live verificadas",
+          "validar en TikTok/Creative Center",
+          "buscar supplier backup",
+          "crear hooks organicos",
+        ]
         : status === "needs_supplier"
           ? ["buscar proveedor con rating/reviews mejores", "confirmar shipping y tracking", "no gastar todavia"]
           : status === "seed_candidate"
@@ -2371,7 +2638,7 @@ function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidat
       const shippingPenalty = candidate.shippingDaysMax > 21 ? 10 : candidate.shippingDaysMax > 18 ? 4 : 0;
       const qualityPenalty = candidate.qualityRisk === "medium" ? 4 : candidate.qualityRisk === "high" ? 30 : 0;
       const legalPenalty = candidate.legalRisk === "medium" ? 6 : candidate.legalRisk === "high" ? 40 : 0;
-      const sourceBonus = candidate.validation.evidence.some((item) => item.source === "tiktok_creative_center" || item.source === "tiktok_search") ? 6 : 0;
+      const sourceBonus = candidate.validation.evidence.some((item) => (item.source === "tiktok_creative_center" || item.source === "tiktok_search") && item.status === "verified") ? 6 : 0;
       const score = candidate.scorecard.total + candidate.validation.evidenceScore + sourceBonus - samplePenalty - shippingPenalty - qualityPenalty - legalPenalty;
       return {
         candidate,
@@ -2380,6 +2647,7 @@ function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidat
           `${candidate.scorecard.grade}${candidate.scorecard.total} product score`,
           `${candidate.economics.grossMarginPercent}% margin`,
           `${candidate.validation.confidence} confidence`,
+          `live ${candidate.validation.liveValidation.status} ${candidate.validation.liveValidation.liveScore}/100`,
           candidate.requiresSample ? "sample recommended before scale" : "no sample required for first organic prep",
         ].join(" / "),
       };
@@ -5968,6 +6236,7 @@ export function getDropshippingCeoSnapshot() {
   const latestSocialAnalysis = socialAnalyses[0];
   const shopifyConfig = getShopifyConfig();
   const socialPublisherConfig = getSocialPublisherConfig();
+  const liveSignalReadiness = getDropshippingLiveSignalReadiness();
   const shopifyReady = Boolean(shopifyConfig.shopDomain && shopifyConfig.accessToken);
   const socialPublisherReady = socialPublisherConfig.mode !== "manual";
   const executionSetup = buildDropshippingExecutionSetupCenter();
@@ -6096,6 +6365,7 @@ export function getDropshippingCeoSnapshot() {
     growthBoard,
     marketingDepartment,
     executionSetup,
+    liveSignalReadiness,
     launchReadiness,
     operatingContract: {
       ceoAgent: "Dropshipping CEO",
@@ -6146,6 +6416,14 @@ export function getDropshippingCeoSnapshot() {
             ? "Metricool MCP listo para cola social aprobada."
             : "Webhook social configurado para posts aprobados."
           : "Sin webhook social/Metricool; usar cola/manual hasta conectar redes.",
+      },
+      {
+        id: "live_product_signals",
+        label: "Live product signals",
+        status: liveSignalReadiness.status === "connected" ? "ready" as const : liveSignalReadiness.status === "partial" ? "needs_setup" as const : "needs_setup" as const,
+        detail: liveSignalReadiness.configured
+          ? `${liveSignalReadiness.verifiedSignals}/${liveSignalReadiness.totalSignals} senales verificadas desde ${liveSignalReadiness.sources.join(", ")}.`
+          : "Conecta DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON o DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH para usar TikTok/AliExpress/Trends reales.",
       },
       {
         id: "budget_guard",

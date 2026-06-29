@@ -16,6 +16,7 @@ import {
   getDropshippingCeoSnapshot,
   getDropshippingExecutionSetup,
   getDropshippingLaunchReadiness,
+  getDropshippingLiveSignalReadiness,
   markDropshippingApprovalOutboxQueued,
   prepareDropshippingFulfillment,
   prepareDropshippingApprovalOutboxMigration,
@@ -76,6 +77,8 @@ const originalPrivacyPolicyUrl = process.env.DROPSHIPPING_PRIVACY_POLICY_URL;
 const originalPublicAppUrl = process.env.PUBLIC_APP_URL;
 const originalExpoPublicDomain = process.env.EXPO_PUBLIC_DOMAIN;
 const originalDatabaseUrl = process.env.DATABASE_URL;
+const originalLiveProductSignalsJson = process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON;
+const originalLiveProductSignalsPath = process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH;
 
 test.beforeEach(() => {
   setDropshippingProductsPathForTests(path.join(testDir, "products.json"));
@@ -115,6 +118,8 @@ test.beforeEach(() => {
   delete process.env.PUBLIC_APP_URL;
   delete process.env.EXPO_PUBLIC_DOMAIN;
   delete process.env.DATABASE_URL;
+  delete process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON;
+  delete process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH;
   resetDropshippingEngineForTests();
 });
 
@@ -153,6 +158,10 @@ test.after(() => {
   else process.env.EXPO_PUBLIC_DOMAIN = originalExpoPublicDomain;
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
   else process.env.DATABASE_URL = originalDatabaseUrl;
+  if (originalLiveProductSignalsJson === undefined) delete process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON;
+  else process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON = originalLiveProductSignalsJson;
+  if (originalLiveProductSignalsPath === undefined) delete process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH;
+  else process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH = originalLiveProductSignalsPath;
 });
 
 function createProductAndCampaign() {
@@ -224,6 +233,104 @@ test("product scout builds a starter shortlist without spending budget", () => {
   assert.equal(result.topCandidate?.scorecard.pass, true);
   assert.equal(result.snapshot.metrics.productScoutCandidates, 4);
   assert.equal(result.snapshot.metrics.scoutReadyCandidates > 0, true);
+});
+
+test("product scout uses live product signals when connected", () => {
+  process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON = JSON.stringify({
+    signals: [
+      {
+        candidateName: "Kitchen sink organizer rack",
+        source: "tiktok_search",
+        status: "verified",
+        confidence: "high",
+        signal: "Multiple current TikTok demos show problem/solution hooks and purchase comments.",
+        evidenceScore: 24,
+        demandSignal: "breakout",
+        estimatedMonthlyDemand: 1200,
+      },
+      {
+        candidateName: "Kitchen sink organizer rack",
+        source: "aliexpress_search",
+        status: "verified",
+        confidence: "high",
+        signal: "Supplier candidates show high reviews, tracking, and faster estimated shipping.",
+        evidenceScore: 22,
+        supplierRating: 4.8,
+        reviewCount: 1800,
+        shippingDaysMax: 9,
+      },
+      {
+        candidateName: "Kitchen sink organizer rack",
+        source: "google_trends",
+        status: "verified",
+        confidence: "medium",
+        signal: "Search interest is stable enough for organic validation.",
+        evidenceScore: 14,
+      },
+    ],
+  });
+
+  const readiness = getDropshippingLiveSignalReadiness();
+  assert.equal(readiness.status, "connected");
+  assert.equal(readiness.verifiedSignals, 3);
+
+  const result = runDropshippingProductScoutBatch({
+    focusNiche: "kitchen_organization",
+    maxCandidates: 3,
+    budgetUsd: 0,
+  });
+  const candidate = result.topCandidate;
+
+  assert.equal(candidate?.candidateName, "Kitchen sink organizer rack");
+  assert.equal(candidate?.validation.liveValidation.status, "connected");
+  assert.equal(candidate?.validation.status, "externally_validated");
+  assert.equal(candidate?.validation.evidence.some((item) => item.source === "tiktok_search" && item.status === "verified"), true);
+  assert.equal(candidate?.demandSignal, "breakout");
+  assert.equal(candidate?.supplierRating, 4.8);
+  assert.equal(candidate?.shippingDaysMax, 9);
+});
+
+test("live signal readiness stays partial without core proof and sanitizes warnings", () => {
+  process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON = JSON.stringify({
+    signals: [
+      {
+        candidateName: "Kitchen sink organizer rack",
+        source: "manual",
+        status: "verified",
+        confidence: "high",
+        signal: "Manual note alone is not enough to unlock live validation readiness.",
+        evidenceScore: 30,
+      },
+      {
+        candidateName: "Kitchen sink organizer rack",
+        source: "tiktok_search",
+        status: "stale",
+        confidence: "high",
+        signal: "Old TikTok signal should not count as verified proof.",
+        evidenceScore: 24,
+      },
+    ],
+  });
+  process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH = "/private/very-sensitive/live-signals.json";
+
+  const readiness = getDropshippingLiveSignalReadiness();
+
+  assert.equal(readiness.status, "partial");
+  assert.equal(readiness.configured, true);
+  assert.equal(readiness.verifiedSignals, 1);
+  assert.equal(readiness.verifiedSources.includes("manual"), true);
+  assert.equal(readiness.warnings.includes("live_signals_path_unreadable_or_invalid"), true);
+  assert.equal(readiness.warnings.some((warning) => warning.includes("/private/very-sensitive")), false);
+
+  const result = runDropshippingProductScoutBatch({
+    focusNiche: "kitchen_organization",
+    maxCandidates: 3,
+    budgetUsd: 0,
+  });
+
+  assert.equal(result.topCandidate?.validation.liveValidation.status, "partial");
+  assert.notEqual(result.topCandidate?.validation.status, "externally_validated");
+  assert.equal(result.topCandidate?.validation.liveValidation.blockers.some((blocker) => blocker.includes("aliexpress_search")), true);
 });
 
 test("product scout candidate can be promoted into formal product research", () => {
