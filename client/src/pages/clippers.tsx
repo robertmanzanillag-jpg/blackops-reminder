@@ -12104,6 +12104,9 @@ export default function ClippersPage() {
         title: "Bridge Metricool batch registrado",
         description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. No verifica cuentas ni publica.`,
       });
+      if (data.metricoolBridgeEvidenceBatch.totals.recorded > 0) {
+        tiktokMvpNowRefreshMutation.mutate();
+      }
       refreshMetricoolCaches();
     },
     onError: (error: Error) => {
