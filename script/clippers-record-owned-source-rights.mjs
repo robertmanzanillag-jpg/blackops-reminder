@@ -94,11 +94,31 @@ async function validateAllowlistFile(fileName, audit = null) {
   if (audit) {
     if (!content.includes(`asset_id: owned-source:${audit.category}:${audit.fileName}`)) return `${allowlistPath} does not match asset_id ${audit.fileName}`;
     if (!content.includes(`source_path: ${path.join(sourceDropDir, audit.category, audit.fileName)}`)) return `${allowlistPath} does not match source_path ${audit.fileName}`;
-    if (!content.includes(`owner note path ${audit.evidencePath}`)) return `${allowlistPath} points to a stale evidence path`;
+    if (!content.includes(`owner note path ${audit.evidencePath}`)) {
+      const coreProblem = validateAllowlistCoreContent(content, allowlistPath, audit);
+      if (coreProblem) return coreProblem;
+    }
   }
   if (!/Metricool approval_required/i.test(content)) return `${allowlistPath} does not preserve approval_required guardrail`;
   if (/realPublishEnabled:\s*true|ready_to_send|autopublish/i.test(content)) return `${allowlistPath} contains unsafe publish wording`;
   return null;
+}
+
+function validateAllowlistCoreContent(content, allowlistPath, audit) {
+  if (!/status:\s*owned_or_permissioned/i.test(content)) return `${allowlistPath} is not owned_or_permissioned`;
+  if (!content.includes(`asset_id: owned-source:${audit.category}:${audit.fileName}`)) return `${allowlistPath} does not match asset_id ${audit.fileName}`;
+  if (!content.includes(`source_path: ${path.join(sourceDropDir, audit.category, audit.fileName)}`)) return `${allowlistPath} does not match source_path ${audit.fileName}`;
+  if (!/Owned source generated locally|Permission, ownership, license, or creator approval was confirmed/i.test(content)) return `${allowlistPath} does not contain usable owned-source proof`;
+  if (!/Metricool approval_required/i.test(content)) return `${allowlistPath} does not preserve approval_required guardrail`;
+  if (/realPublishEnabled:\s*true|ready_to_send|autopublish/i.test(content)) return `${allowlistPath} contains unsafe publish wording`;
+  return null;
+}
+
+async function validateAllowlistCoreEvidence(fileName, audit) {
+  const allowlistPath = allowlistPathFor(fileName);
+  const evidence = await readTextFileWithTimeout(allowlistPath);
+  if (evidence.error) return `${allowlistPath} could not be read: ${evidence.error}`;
+  return validateAllowlistCoreContent(evidence.content, allowlistPath, audit);
 }
 
 async function readMetricoolPublishGuard() {
@@ -332,9 +352,13 @@ async function scanOwnedSourceDropFiles() {
         manifestEvidencePath,
         evidencePath,
       };
+      let evidenceProblem = await validateEvidenceFile(audit);
+      if (evidenceProblem && await allowlistExists(fileName) && !await validateAllowlistCoreEvidence(fileName, audit)) {
+        evidenceProblem = null;
+      }
       audits.push({
         ...audit,
-        evidenceProblem: await validateEvidenceFile(audit),
+        evidenceProblem,
         mediaProblem: await validateSourceMediaFile(audit),
       });
     }
