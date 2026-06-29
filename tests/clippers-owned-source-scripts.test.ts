@@ -4601,6 +4601,17 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /clippers-tiktok-next-action-panel/);
   assert.match(page, /copy-clippers-tiktok-next-action-operator-packet/);
   assert.match(page, /Metricool operator packet/);
+  assert.match(page, /getMetricoolBridgeEvidenceClientCheck/);
+  assert.match(page, /parseMetricoolBridgeCsvLine/);
+  assert.match(page, /sk-\[A-Za-z0-9_-\]\{12,\}/);
+  assert.match(page, /private\[_ -\]\?key/);
+  assert.match(page, /passcode/);
+  assert.match(page, /signature/);
+  assert.match(page, /0\\.0\\.0\\.0/);
+  assert.match(page, /local check blocked/);
+  assert.match(page, /reset-clippers-metricool-bridge-evidence-template-button/);
+  assert.match(page, /!metricoolBridgeEvidenceClientCheck\.canSubmit/);
+  assert.match(page, /real https proof URLs before import/);
   assert.match(page, /\/api\/clippers\/prepare-tiktok-next-action/);
   assert.match(page, /\["\/api\/clippers\/tiktok-next-action"\], data\.tiktokNextAction/);
   assert.match(page, /prepare-clippers-metricool-current-batch-session-packet-button/);

@@ -9284,6 +9284,12 @@ const launchEvidenceBatchHeader = "kind,account_id,platform,status,scope,app_ide
 const trendCandidatesBatchHeader = "category,platform,title,url,source,posted_at,views,likes,comments,shares,rights,angle";
 const sourceIntakeBatchHeader = "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes";
 const sourceScoutIntakeBatchHeader = "candidate_id,title,category,platform,url,source,status,evidence_type,proof,notes,target_file_name,source_drop_path,recreate_plan,views,likes,comments,shares";
+const metricoolBridgeEvidenceTemplate = [
+  "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
+  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
+].join("\n");
+const metricoolBridgeUnsafeClientPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
 const googleCredentialEnvTemplate = [
   "# Google / YouTube / Drive OAuth",
   "GOOGLE_CLIENT_ID=",
@@ -9325,6 +9331,84 @@ const credentialSecretEnvVarOptions = [
   "CLIPPERS_TOKEN_ENCRYPTION_KEY",
   "PUBLIC_BASE_URL",
 ];
+
+function isSafeHttpsUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && !metricoolBridgeUnsafeClientPattern.test(url.hostname) && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function parseMetricoolBridgeCsvLine(line: string) {
+  const cells: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    const nextCharacter = line[index + 1];
+    if (character === '"' && inQuotes && nextCharacter === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (character === "," && !inQuotes) {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += character;
+  }
+  cells.push(cell.trim());
+  return { cells, malformed: inQuotes };
+}
+
+function getMetricoolBridgeEvidenceClientCheck(raw: string) {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const header = ["account_id", "platform", "metricool_brand_name", "metricool_blog_id", "profile_url", "proof", "notes"];
+  const issues: string[] = [];
+  const parsedRows = lines.map(parseMetricoolBridgeCsvLine);
+  if (parsedRows.some((row) => row.malformed)) issues.push("Fix unclosed quotes before importing CSV rows.");
+  const headerCells = parsedRows[0]?.cells || [];
+  if (!lines.length || headerCells.join(",") !== header.join(",")) issues.push("Header must match the Metricool bridge template.");
+  const dataRows = parsedRows.slice(1);
+  if (!dataRows.length) issues.push("Add at least one SPORT or memes TikTok evidence row.");
+  let validRows = 0;
+  dataRows.forEach((parsedRow, index) => {
+    const rowNumber = index + 2;
+    const [accountId = "", platform = "", brand = "", blogId = "", profileUrl = "", proof = "", ...notesParts] = parsedRow.cells;
+    const notes = notesParts.join(",").trim();
+    const rowText = [accountId, platform, brand, blogId, profileUrl, proof, notes].join(" ");
+    if (!accountId || !platform || !brand || !profileUrl || !proof || notes.length < 20) {
+      issues.push(`Row ${rowNumber}: missing account, platform, brand, profile/proof URL, or 20+ character notes.`);
+      return;
+    }
+    if (platform !== "tiktok") {
+      issues.push(`Row ${rowNumber}: this MVP accepts TikTok rows only.`);
+      return;
+    }
+    if (metricoolBridgeUnsafeClientPattern.test(rowText)) {
+      issues.push(`Row ${rowNumber}: remove placeholders or credential-like text.`);
+      return;
+    }
+    if (!isSafeHttpsUrl(profileUrl) || !isSafeHttpsUrl(proof)) {
+      issues.push(`Row ${rowNumber}: profile_url and proof must be safe https URLs.`);
+      return;
+    }
+    validRows += 1;
+  });
+  return {
+    rows: dataRows.length,
+    validRows,
+    issues,
+    canSubmit: issues.length === 0 && validRows > 0,
+  };
+}
 
 function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Target; label: string; value: string; detail: string }) {
   return (
@@ -9422,12 +9506,12 @@ export default function ClippersPage() {
   const [tiktokBatchEvidenceRowPreview, setTikTokBatchEvidenceRowPreview] = useState<ClipperTikTokBatchEvidenceRowPreview | null>(null);
   const [tiktokBatchEvidenceBatchText, setTikTokBatchEvidenceBatchText] = useState("");
   const [tiktokBatchEvidenceBatchPreview, setTikTokBatchEvidenceBatchPreview] = useState<ClipperTikTokBatchEvidenceBatchSummary | null>(null);
-  const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState([
-    "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
-    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
-  ].join("\n"));
+  const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState(metricoolBridgeEvidenceTemplate);
   const [metricoolBridgeEvidenceBatch, setMetricoolBridgeEvidenceBatch] = useState<ClipperMetricoolBridgeEvidenceBatchResult | null>(null);
+  const metricoolBridgeEvidenceClientCheck = useMemo(
+    () => getMetricoolBridgeEvidenceClientCheck(metricoolBridgeEvidenceBatchText),
+    [metricoolBridgeEvidenceBatchText]
+  );
 
   const { data: status, isLoading, refetch } = useQuery<ClipperStatus>({
     queryKey: ["/api/clippers/status"],
@@ -11996,6 +12080,9 @@ export default function ClippersPage() {
 
   const metricoolBridgeEvidenceBatchMutation = useMutation({
     mutationFn: async () => {
+      if (!metricoolBridgeEvidenceClientCheck.canSubmit) {
+        throw new Error(metricoolBridgeEvidenceClientCheck.issues[0] || "Metricool bridge rows need real https proof URLs before import.");
+      }
       const response = await fetch("/api/clippers/record-metricool-bridge-evidence-batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -15583,6 +15670,37 @@ export default function ClippersPage() {
               MVP TikTok bloqueado por {tiktokMetricoolBlockedRows.length} lane(s): registra evidencia bridge no secreta para desbloquear scheduling.
             </p>
           )}
+          <div className="mt-3 flex flex-col gap-2 rounded-md border border-white/10 bg-black/20 p-3 text-xs leading-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={cn(
+                  "border text-[10px]",
+                  metricoolBridgeEvidenceClientCheck.canSubmit
+                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                )}>
+                  {metricoolBridgeEvidenceClientCheck.canSubmit ? "local check passed" : "local check blocked"}
+                </Badge>
+                <span className="text-zinc-500">
+                  {metricoolBridgeEvidenceClientCheck.validRows}/{metricoolBridgeEvidenceClientCheck.rows} valid rows
+                </span>
+              </div>
+              <p className={cn("mt-1 truncate", metricoolBridgeEvidenceClientCheck.canSubmit ? "text-emerald-100/80" : "text-amber-100")}>
+                {metricoolBridgeEvidenceClientCheck.issues[0] || "Ready to submit bridge evidence for review; this still does not publish."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setMetricoolBridgeEvidenceBatchText(metricoolBridgeEvidenceTemplate)}
+              className="shrink-0 border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+              data-testid="reset-clippers-metricool-bridge-evidence-template-button"
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Reset template
+            </Button>
+          </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Textarea
               value={metricoolBridgeEvidenceBatchText}
@@ -15594,7 +15712,7 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
-                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading}
+                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit}
                 className="w-full bg-teal-200 text-zinc-950 hover:bg-teal-100"
                 data-testid="submit-clippers-metricool-bridge-evidence-batch-button"
               >
