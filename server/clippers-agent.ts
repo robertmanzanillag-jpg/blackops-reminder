@@ -6431,6 +6431,7 @@ export interface ClipperMetricoolBridgeEvidenceBatchResult {
   generatedAt: string;
   source: "metricool_manual_bridge";
   template: string;
+  wouldWrite?: boolean;
   totals: {
     rows: number;
     recorded: number;
@@ -33089,7 +33090,7 @@ async function readExistingAccountEvidenceStatus(accountId: string, platform: Cl
   }
 }
 
-export async function recordClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown } = {}, userId = getSystemUserId()): Promise<{ metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status: ClipperStatus }> {
+async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown } = {}, userId = getSystemUserId(), options: { write: boolean }): Promise<{ metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status: ClipperStatus | null }> {
   await writeDefaultConfigIfMissing();
   await ensureClipperDirs();
   const raw = typeof input.raw === "string" ? input.raw.trim() : "";
@@ -33147,7 +33148,9 @@ export async function recordClipperMetricoolBridgeEvidenceBatch(input: { raw?: u
       notesInput,
       "This is Metricool bridge evidence only; account remains submitted until external account/security proof is reviewed.",
     ].join(" ");
-    await recordClipperAccountEvidence({ accountId, platform, status: "submitted", notes }, userId);
+    if (options.write) {
+      await recordClipperAccountEvidence({ accountId, platform, status: "submitted", notes }, userId);
+    }
     recorded.push({ accountId, platform, metricoolBrandName, metricoolBlogId, evidencePath });
   }
 
@@ -33155,14 +33158,27 @@ export async function recordClipperMetricoolBridgeEvidenceBatch(input: { raw?: u
     generatedAt: new Date().toISOString(),
     source: "metricool_manual_bridge",
     template: METRICOOL_BRIDGE_EVIDENCE_TEMPLATE,
+    wouldWrite: options.write,
     totals: { rows: rows.length, recorded: recorded.length, skipped: skipped.length },
     recorded,
     skipped,
     nextStep: recorded.length
-      ? "Refresh account permission readiness, then keep remaining external proof rows blocked until real account/security evidence exists."
+      ? options.write
+        ? "Refresh account permission readiness, then keep remaining external proof rows blocked until real account/security evidence exists."
+        : "Preview accepted these rows. Import only if the proof URLs are real, public, non-secret Metricool/TikTok evidence."
       : `Paste rows using header: ${METRICOOL_BRIDGE_EVIDENCE_TEMPLATE}`,
   };
-  return { metricoolBridgeEvidenceBatch, status: await getClipperStatus(userId) };
+  return { metricoolBridgeEvidenceBatch, status: options.write ? await getClipperStatus(userId) : null };
+}
+
+export async function previewClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown } = {}): Promise<{ metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult }> {
+  const { metricoolBridgeEvidenceBatch } = await buildClipperMetricoolBridgeEvidenceBatch(input, getSystemUserId(), { write: false });
+  return { metricoolBridgeEvidenceBatch };
+}
+
+export async function recordClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown } = {}, userId = getSystemUserId()): Promise<{ metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; status: ClipperStatus }> {
+  const { metricoolBridgeEvidenceBatch, status } = await buildClipperMetricoolBridgeEvidenceBatch(input, userId, { write: true });
+  return { metricoolBridgeEvidenceBatch, status: status || await getClipperStatus(userId) };
 }
 
 export async function prepareClipperPublisherConnectors(userId = getSystemUserId()): Promise<{ publisherConnectors: ClipperPublisherConnectorSummary; status: ClipperStatus }> {

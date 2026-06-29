@@ -4794,6 +4794,14 @@ test("Metricool bridge evidence batch returns refreshed TikTok next action paylo
   assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokNextAction/);
 
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+  assert.match(routes, /preview-metricool-bridge-evidence-batch/);
+  assert.match(routes, /previewClipperMetricoolBridgeEvidenceBatch/);
+  assert.match(page, /preview-clippers-metricool-bridge-evidence-batch-button/);
+  assert.match(page, /metricoolBridgeEvidenceBatchPreviewMutation/);
+  assert.match(page, /metricoolBridgeEvidenceCurrentPreview/);
+  assert.match(page, /metricoolBridgeEvidenceBatchPreview\?\.raw === metricoolBridgeEvidenceBatchText/);
+  assert.match(page, /Preview bridge rows/);
+  assert.match(page, /No escribe evidencia/);
   assert.match(page, /bridgeRefreshStatus\?: "skipped_no_recorded_rows" \| "refreshed_next_action"/);
   assert.match(page, /refreshStatus\?: "complete" \| "partial_refresh_failed"/);
   assert.match(page, /const refreshComplete = data\.refreshStatus !== "partial_refresh_failed"/);

@@ -6517,6 +6517,7 @@ interface ClipperMetricoolBridgeEvidenceBatchResult {
   generatedAt: string;
   source: "metricool_manual_bridge";
   template: string;
+  wouldWrite?: boolean;
   totals: {
     rows: number;
     recorded: number;
@@ -9512,6 +9513,7 @@ export default function ClippersPage() {
   const [tiktokBatchEvidenceBatchPreview, setTikTokBatchEvidenceBatchPreview] = useState<ClipperTikTokBatchEvidenceBatchSummary | null>(null);
   const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState(metricoolBridgeEvidenceTemplate);
   const [metricoolBridgeEvidenceBatch, setMetricoolBridgeEvidenceBatch] = useState<ClipperMetricoolBridgeEvidenceBatchResult | null>(null);
+  const [metricoolBridgeEvidenceBatchPreview, setMetricoolBridgeEvidenceBatchPreview] = useState<{ raw: string; result: ClipperMetricoolBridgeEvidenceBatchResult } | null>(null);
   const metricoolBridgeEvidenceClientCheck = useMemo(
     () => getMetricoolBridgeEvidenceClientCheck(metricoolBridgeEvidenceBatchText),
     [metricoolBridgeEvidenceBatchText]
@@ -12170,6 +12172,34 @@ export default function ClippersPage() {
     },
   });
 
+  const metricoolBridgeEvidenceBatchPreviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!metricoolBridgeEvidenceClientCheck.canSubmit) {
+        throw new Error(metricoolBridgeEvidenceClientCheck.issues[0] || "Metricool bridge rows need real https proof URLs before preview.");
+      }
+      const response = await fetch("/api/clippers/preview-metricool-bridge-evidence-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ raw: metricoolBridgeEvidenceBatchText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar batch Metricool bridge");
+      return { ...(data as { metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult }), raw: metricoolBridgeEvidenceBatchText };
+    },
+    onSuccess: (data) => {
+      setMetricoolBridgeEvidenceBatchPreview({ raw: data.raw, result: data.metricoolBridgeEvidenceBatch });
+      toast({
+        title: "Preview bridge Metricool listo",
+        description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} filas aceptadas; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. No escribe evidencia.`,
+        variant: data.metricoolBridgeEvidenceBatch.totals.recorded > 0 ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      setMetricoolBridgeEvidenceBatchPreview(null);
+      toast({ title: "Preview bridge Metricool rechazado", description: error.message, variant: "destructive" });
+    },
+  });
+
   const publisherExecutionQueueMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-publisher-execution-queue", { method: "POST" });
@@ -14553,6 +14583,9 @@ export default function ClippersPage() {
     { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
   ];
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
+  const metricoolBridgeEvidenceCurrentPreview = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
+    ? metricoolBridgeEvidenceBatchPreview.result
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6 text-white md:px-8" data-testid="clippers-page">
@@ -15770,6 +15803,17 @@ export default function ClippersPage() {
             <div className="rounded-md border border-teal-300/10 bg-black/25 p-3">
               <Button
                 type="button"
+                variant="outline"
+                onClick={() => metricoolBridgeEvidenceBatchPreviewMutation.mutate()}
+                disabled={metricoolBridgeEvidenceBatchPreviewMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit}
+                className="mb-2 w-full border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
+                data-testid="preview-clippers-metricool-bridge-evidence-batch-button"
+              >
+                {metricoolBridgeEvidenceBatchPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                Preview bridge rows
+              </Button>
+              <Button
+                type="button"
                 onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
                 disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit}
                 className="w-full bg-teal-200 text-zinc-950 hover:bg-teal-100"
@@ -15779,10 +15823,17 @@ export default function ClippersPage() {
                 Import bridge rows
               </Button>
               <div className="mt-3 grid gap-1 text-xs text-zinc-500">
+                <p>Preview accepted: {metricoolBridgeEvidenceCurrentPreview?.totals.recorded ?? 0}</p>
+                <p>Preview skipped: {metricoolBridgeEvidenceCurrentPreview?.totals.skipped ?? 0}</p>
                 <p>Recorded: {metricoolBridgeEvidenceBatch?.totals.recorded ?? 0}</p>
                 <p>Skipped: {metricoolBridgeEvidenceBatch?.totals.skipped ?? 0}</p>
                 <p>Rows: {metricoolBridgeEvidenceBatch?.totals.rows ?? 0}</p>
               </div>
+              {metricoolBridgeEvidenceCurrentPreview?.skipped.length ? (
+                <p className="mt-2 text-xs leading-5 text-amber-100">
+                  Preview skip: row {metricoolBridgeEvidenceCurrentPreview.skipped[0].row} - {metricoolBridgeEvidenceCurrentPreview.skipped[0].reason}
+                </p>
+              ) : null}
               {metricoolBridgeEvidenceBatch?.skipped.length ? (
                 <p className="mt-2 text-xs leading-5 text-amber-100">
                   First skip: row {metricoolBridgeEvidenceBatch.skipped[0].row} - {metricoolBridgeEvidenceBatch.skipped[0].reason}
