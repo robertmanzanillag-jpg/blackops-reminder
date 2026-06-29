@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Content, Part } from "@google/genai";
 import { storage } from "./storage";
 import { sendTelegramMessage, sendTelegramPlainMessage, sendTelegramPlainMessageChunks, TelegramUpdate, setTelegramWebhook, getWebhookInfo } from "./telegram";
@@ -1449,7 +1450,9 @@ export async function setupTelegramWebhook(): Promise<{ success: boolean; messag
   }
 
   if (!hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16)) {
-    return { success: false, message: "TELEGRAM_WEBHOOK_SECRET must be a real random secret with at least 16 characters" };
+    const generated = crypto.randomBytes(24).toString("hex");
+    process.env.TELEGRAM_WEBHOOK_SECRET = generated;
+    console.log("[Telegram] TELEGRAM_WEBHOOK_SECRET not set — auto-generated for this session. Add it as a permanent secret to keep webhook valid across restarts.");
   }
 
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;

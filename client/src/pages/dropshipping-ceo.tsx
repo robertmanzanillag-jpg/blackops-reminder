@@ -1134,6 +1134,7 @@ export default function DropshippingCeoPage() {
   });
   const [reportCadence, setReportCadence] = useState<"morning" | "evening">("morning");
   const [lastReport, setLastReport] = useState<string>("");
+  const [startResult, setStartResult] = useState<{ telegramSent: boolean; shopifyBlocker: string | null; summary: string } | null>(null);
   const [approvalQueueResult, setApprovalQueueResult] = useState<string>("");
   const [outboxMigrationResult, setOutboxMigrationResult] = useState<string>("");
 
@@ -1350,6 +1351,14 @@ export default function DropshippingCeoPage() {
     onSuccess: (data) => setLastReport(data.message),
   });
 
+  const startCeoMutation = useMutation({
+    mutationFn: () => postJson<{ telegramSent: boolean; shopifyBlocker: string | null; summary: string }>("/api/dropshipping-ceo/start", {}),
+    onSuccess: (data) => {
+      setStartResult(data);
+      refresh();
+    },
+  });
+
   const selectedProductOptions = snapshot?.recentProducts || [];
   const bestProduct = useMemo(() => {
     return selectedProductOptions.find((product) => product.status !== "blocked") || selectedProductOptions[0];
@@ -1396,9 +1405,14 @@ export default function DropshippingCeoPage() {
               </div>
             </div>
           </div>
-          <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
-            <p className="font-medium">Sin inventario propio</p>
-            <p className="mt-1 text-emerald-50/75">{snapshot.strategy.inventoryPolicy}</p>
+          <div className="flex flex-col gap-2">
+            <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+              <p className="font-medium">Sin inventario propio</p>
+              <p className="mt-1 text-emerald-50/75">{snapshot.strategy.inventoryPolicy}</p>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+              <span className="font-semibold">⚡ 24/7:</span> Activa <strong>Reserved VM</strong> en Replit UI → Publish → Machine type → Reserved VM para que los reportes AM/PM corran siempre.
+            </div>
           </div>
         </div>
 
@@ -1467,6 +1481,42 @@ export default function DropshippingCeoPage() {
           </TabsList>
 
           <TabsContent value="console" className="mt-0">
+            <Card className="mb-4 border-emerald-500/40 bg-emerald-950/40">
+              <CardContent className="p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-emerald-300">🚀 Start Dropshipping CEO</p>
+                    <p className="mt-1 text-xs text-zinc-400">Corre el ciclo operativo, genera Product Scout/Launch Pack/Posts y envía un resumen completo por Telegram — incluyendo blockers de Shopify si faltan credenciales.</p>
+                  </div>
+                  <Button
+                    data-testid="button-start-dropshipping-ceo"
+                    onClick={() => startCeoMutation.mutate()}
+                    disabled={startCeoMutation.isPending}
+                    className="shrink-0 bg-emerald-500 text-zinc-950 font-semibold hover:bg-emerald-400"
+                  >
+                    {startCeoMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                    {startCeoMutation.isPending ? "Iniciando..." : "Start Dropshipping CEO"}
+                  </Button>
+                </div>
+                {startResult && (
+                  <div className="mt-3 space-y-2">
+                    <div className={cn("rounded-md border px-3 py-2 text-xs", startResult.telegramSent ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-zinc-700 bg-zinc-900 text-zinc-400")}>
+                      {startResult.telegramSent ? "✅ Resumen enviado por Telegram a Robert" : "⚠️ Telegram no pudo enviar — verifica chatId y bot token"}
+                    </div>
+                    {startResult.shopifyBlocker && (
+                      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        <strong>⚠️ BLOCKER Shopify:</strong> {startResult.shopifyBlocker}
+                      </div>
+                    )}
+                    <details className="rounded-md border border-zinc-800 bg-black">
+                      <summary className="cursor-pointer px-3 py-2 text-xs text-zinc-400 hover:text-white">Ver resumen completo enviado</summary>
+                      <pre className="whitespace-pre-wrap px-3 pb-3 pt-1 text-xs leading-5 text-zinc-300">{startResult.summary}</pre>
+                    </details>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
               <div className="space-y-4">
                 <Card className="border-zinc-800 bg-zinc-900/80">

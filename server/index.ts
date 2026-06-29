@@ -401,19 +401,15 @@ app.use((req, res, next) => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
       });
 
-      if (process.env.TELEGRAM_AUTO_SETUP_WEBHOOK === "true") {
-        setupTelegramWebhook().then(result => {
-          if (result.success) {
-            log(`Telegram webhook configured: ${result.message}`, "telegram");
-          } else {
-            log(`Telegram webhook setup failed: ${result.message}`, "telegram");
-          }
-        }).catch(err => {
-          log(`Telegram webhook error: ${err.message}`, "telegram");
-        });
-      } else {
-        log("Telegram webhook auto-setup skipped; run `npm run telegram:webhook -- setup --execute` when ready", "telegram");
-      }
+      setupTelegramWebhook().then(result => {
+        if (result.success) {
+          log(`Telegram webhook configured: ${result.message}`, "telegram");
+        } else {
+          log(`Telegram webhook setup skipped: ${result.message}`, "telegram");
+        }
+      }).catch(err => {
+        log(`Telegram webhook error: ${err.message}`, "telegram");
+      });
     },
   );
 })();

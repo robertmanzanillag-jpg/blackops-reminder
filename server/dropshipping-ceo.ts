@@ -6371,6 +6371,82 @@ export async function sendDropshippingDailyReport(userId: string, cadence: "morn
   };
 }
 
+export async function startDropshippingCeoAndNotify(userId: string): Promise<{
+  success: boolean;
+  operatingCycle: ReturnType<typeof runDropshippingDailyOperatingCycle>;
+  telegramSent: boolean;
+  telegramReason: string;
+  shopifyBlocker: string | null;
+  summary: string;
+}> {
+  const operatingCycle = runDropshippingDailyOperatingCycle({});
+  const snapshot = getDropshippingCeoSnapshot();
+  const shopifyMissing = !process.env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
+  const shopifyBlocker = shopifyMissing
+    ? "SHOPIFY_ADMIN_ACCESS_TOKEN no configurado — agrega este token en Replit Secrets para poder crear drafts de producto en Shopify. Ve a: Secrets → + Add secret → SHOPIFY_ADMIN_ACCESS_TOKEN → valor de tu Shopify Admin API token (write_products scope)."
+    : null;
+
+  const topProduct = snapshot.recentProducts[0];
+  const topCandidate = snapshot.recentProductScoutCandidates?.[0] as any;
+  const lines: string[] = [
+    "🚀 DROPSHIPPING CEO — INICIO DE CICLO",
+    `📅 ${new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`,
+    "",
+    `📊 Estado: ${snapshot.executiveSummary.headline}`,
+    `💡 Próxima acción: ${snapshot.executiveSummary.nextCommand}`,
+    "",
+    `💰 Métricas: Revenue ${money.format(snapshot.metrics.totalRevenueUsd)} / ${money.format(snapshot.strategy.targetMonthlyRevenueUsd)} meta`,
+    `   Gasto: ${money.format(snapshot.metrics.totalSpendUsd)} | Órdenes: ${snapshot.metrics.paidOrders}/${snapshot.metrics.orders}`,
+    `   Profit Guard: ${snapshot.profitGuard.status} — ${snapshot.profitGuard.reason}`,
+    "",
+  ];
+
+  if (topProduct) {
+    lines.push(`🛒 Producto principal: ${topProduct.productName} (${topProduct.status})`);
+    lines.push(`   Margen: ${money.format(topProduct.marginUsd)} | ${topProduct.niche}`);
+    lines.push("");
+  }
+
+  if (topCandidate) {
+    lines.push(`🔍 Scout candidato: ${topCandidate.candidateName || topCandidate.id}`);
+    lines.push(`   Demanda: ${topCandidate.demandSignal || "?"} | Precio objetivo: ${money.format(topCandidate.targetSellPriceUsd || 0)}`);
+    lines.push("");
+  }
+
+  lines.push(`📱 Posts sociales: ${snapshot.metrics.socialPosts} total / ${snapshot.metrics.publishedSocialPosts} publicados`);
+  lines.push(`📦 Shopify drafts: ${snapshot.metrics.shopifyDrafts}`);
+  lines.push(`✅ Aprobaciones pendientes: ${snapshot.metrics.approvalQueue}`);
+  lines.push("");
+
+  if (shopifyBlocker) {
+    lines.push("⚠️ BLOCKER — SHOPIFY ADMIN TOKEN:");
+    lines.push(shopifyBlocker);
+    lines.push("");
+  }
+
+  lines.push(`🖥️ Scheduler 24/7: ${process.env.REPLIT_DEPLOYMENT ? "Deployment activo" : "Dev — activa Reserved VM en Replit UI para reportes AM/PM automáticos"}`);
+
+  const message = lines.join("\n");
+
+  const telegramConfig = await storage.getTelegramConfig(userId);
+  let telegramSent = false;
+  let telegramReason = "Telegram no configurado para este usuario.";
+
+  if (TELEGRAM_BOT_TOKEN && telegramConfig?.enabled && telegramConfig.chatId) {
+    telegramSent = await sendTelegramPlainMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
+    telegramReason = telegramSent ? "Resumen enviado por Telegram." : "Telegram rechazó el envío.";
+  }
+
+  return {
+    success: true,
+    operatingCycle,
+    telegramSent,
+    telegramReason,
+    shopifyBlocker,
+    summary: message,
+  };
+}
+
 export function setDropshippingProductsPathForTests(value: string | null) {
   productsPathOverride = value;
 }
