@@ -16,6 +16,7 @@ import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { formatLocalYoutubeWorkerQueuedMessage, queueRadioYoutubeForLocalWorker, shouldQueueYoutubeForLocalWorker } from "./local-youtube-worker-queue";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -434,6 +435,19 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
   if (directRadioYoutubeCommand) {
     if (directRadioYoutubeCommandNeedsDriveFolder(directRadioYoutubeCommand) || directRadioYoutubeCommand.needsMusicUrl) {
       return directRadioYoutubeCommand.content;
+    }
+
+    if (shouldQueueYoutubeForLocalWorker()) {
+      try {
+        const pendingAction = await queueRadioYoutubeForLocalWorker({
+          userId,
+          command: directRadioYoutubeCommand,
+          origin: "telegram",
+        });
+        return formatLocalYoutubeWorkerQueuedMessage(pendingAction.id);
+      } catch (error) {
+        return `No pude dejar ese YouTube en cola para la Mac: ${error instanceof Error ? error.message : "error desconocido"}`;
+      }
     }
 
     try {
