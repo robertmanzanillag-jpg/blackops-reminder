@@ -518,6 +518,52 @@ function tiktokMetricoolBridgeEvidenceRows(closeout) {
   return `${[header, ...rows].join("\n")}\n`;
 }
 
+function tiktokMetricoolBridgeOperatorCards(closeout) {
+  return closeout.rows.map((row) => {
+    const defaultBrandName = row.accountId === "sports-daily" ? "SPORT" : row.accountId === "meme-radar" ? "memes" : "";
+    const metricoolBrandName = row.metricoolBrandOrProfile && row.metricoolBrandOrProfile !== row.platform
+      ? row.metricoolBrandOrProfile
+      : defaultBrandName;
+    const profileUrl = `https://www.tiktok.com/${row.handle.startsWith("@") ? row.handle : `@${row.handle}`}`;
+    const csvRowTemplate = [
+      row.accountId,
+      "tiktok",
+      metricoolBrandName,
+      "",
+      profileUrl,
+      "<paste real public Metricool proof URL>",
+      `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+    ].map(csvCell).join(",");
+    const copyPacket = [
+      `Account: ${row.accountName}`,
+      `Account ID: ${row.accountId}`,
+      "Platform: tiktok",
+      `Metricool brand: ${metricoolBrandName}`,
+      `Public TikTok profile URL: ${profileUrl}`,
+      "Required proof: real HTTPS Metricool planner/profile proof URL",
+      "Required notes: 20+ characters describing the real Metricool connection evidence",
+      "Do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+      "CSV row template:",
+      csvRowTemplate,
+    ].join("\n");
+    return {
+      accountId: row.accountId,
+      accountName: row.accountName,
+      platform: "tiktok",
+      metricoolBrandName,
+      profileUrl,
+      proofPlaceholder: "<paste real public Metricool proof URL>",
+      notesPlaceholder: `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+      csvRowTemplate,
+      copyPacket,
+      status: row.status,
+      nextStep: row.status === "ready_for_metricool_tiktok"
+        ? "Already ready; keep this proof current and do not import duplicate rows."
+        : "Replace placeholders with real non-secret Metricool proof, preview, then import bridge evidence.",
+    };
+  });
+}
+
 function renderMarkdown(summary) {
   const accountLines = summary.accountRows.map((row) => [
     `### ${row.accountName} / ${row.platform}`,
@@ -638,6 +684,8 @@ function renderMarkdown(summary) {
     "",
     `- Account evidence CSV: ${summary.metricoolMvpEvidence.accountEvidenceCsvPath}`,
     `- Account rows: ${summary.metricoolMvpEvidence.accountRows}`,
+    `- Metricool bridge CSV: ${summary.metricoolMvpEvidence.bridgeEvidenceCsvPath}`,
+    `- Metricool bridge rows: ${summary.metricoolMvpEvidence.bridgeEvidenceRows}`,
     `- Metricool profile evidence CSV: ${summary.metricoolMvpEvidence.pendingProfileEvidenceCsvPath}`,
     `- Metricool profile rows: ${summary.metricoolMvpEvidence.pendingProfileRows}`,
     `- Direct API evidence required for MVP: ${summary.directSocialApisRequired ? "yes" : "no"}`,
@@ -648,6 +696,21 @@ function renderMarkdown(summary) {
     ...summary.metricoolMvpEvidence.previewRows,
     "```",
     "",
+    "Metricool bridge operator cards:",
+    "",
+    ...summary.metricoolMvpEvidence.bridgeOperatorCards.map((card) => [
+      `### ${card.accountName}`,
+      `- Account ID: ${card.accountId}`,
+      `- Brand: ${card.metricoolBrandName}`,
+      `- Profile URL: ${card.profileUrl}`,
+      `- Status: ${card.status}`,
+      `- Next step: ${card.nextStep}`,
+      "",
+      "```csv",
+      card.csvRowTemplate,
+      "```",
+      "",
+    ].join("\n")),
     "## TikTok MVP Account Closeout",
     "",
     `- Status: ${summary.tiktokMvpAccountCloseout.status}`,
@@ -830,6 +893,7 @@ async function main() {
   const metricoolTiktokBridgeEvidenceCsv = tiktokMetricoolBridgeEvidenceRows(tiktokMvpAccountCloseout);
   const metricoolTiktokBridgeEvidenceLines = metricoolTiktokBridgeEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
   const metricoolTiktokBridgeEvidenceDataRows = metricoolTiktokBridgeEvidenceLines.slice(1);
+  const metricoolTiktokBridgeOperatorCards = tiktokMetricoolBridgeOperatorCards(tiktokMvpAccountCloseout);
   const pendingMetricoolProfileRows = Array.isArray(metricoolMvpLaunchPack?.pendingProfileEvidenceRows)
     ? metricoolMvpLaunchPack.pendingProfileEvidenceRows.length
     : 0;
@@ -940,6 +1004,7 @@ async function main() {
       bridgeEvidenceRows: metricoolTiktokBridgeEvidenceDataRows.length,
       bridgeEvidenceTemplate: metricoolTiktokBridgeEvidenceCsv,
       bridgeEvidencePreviewRows: metricoolTiktokBridgeEvidenceDataRows.slice(0, 5),
+      bridgeOperatorCards: metricoolTiktokBridgeOperatorCards,
       pendingProfileEvidenceCsvPath: metricoolPendingProfileEvidencePath,
       pendingProfileRows: pendingMetricoolProfileRows,
       previewRows: mvpAccountEvidenceDataRows.slice(0, 5),

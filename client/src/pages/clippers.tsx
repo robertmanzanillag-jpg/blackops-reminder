@@ -1702,6 +1702,19 @@ interface ClipperAccountPermissionReadinessSummary {
     bridgeEvidenceRows?: number;
     bridgeEvidenceTemplate?: string;
     bridgeEvidencePreviewRows?: string[];
+    bridgeOperatorCards?: Array<{
+      accountId: string;
+      accountName: string;
+      platform: "tiktok";
+      metricoolBrandName: string;
+      profileUrl: string;
+      proofPlaceholder: string;
+      notesPlaceholder: string;
+      csvRowTemplate: string;
+      copyPacket: string;
+      status: string;
+      nextStep: string;
+    }>;
     pendingProfileEvidenceCsvPath: string;
     pendingProfileRows: number;
     previewRows: string[];
@@ -14123,6 +14136,23 @@ export default function ClippersPage() {
     }
   };
 
+  const copyMetricoolBridgeOperatorPacket = async (packet: string) => {
+    const cleanPacket = packet.trim();
+    if (!cleanPacket) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanPacket}\n`);
+      toast({
+        title: "Bridge packet copiado",
+        description: "Reemplaza placeholders con evidencia real/no secreta antes de Preview o Import.",
+      });
+    } catch {
+      toast({
+        title: "Bridge packet listo",
+        description: "No pude copiar al clipboard; copia la tarjeta visible manualmente.",
+      });
+    }
+  };
+
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
     const uniqueEnvVars = Array.from(new Set(envVars.map((envVar) => envVar.trim()).filter(Boolean)));
     if (!uniqueEnvVars.length) return;
@@ -24379,6 +24409,33 @@ export default function ClippersPage() {
                         <div className="mt-2 space-y-2" data-testid="clippers-tiktok-metricool-bridge-preview">
                           {(accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidencePreviewRows || []).slice(0, 2).map((row, index) => (
                             <p key={`metricool-tiktok-bridge-${index}-${row.slice(0, 24)}`} className="break-all rounded border border-teal-300/15 bg-black/30 p-2 text-[10px] leading-4 text-teal-100/80">{row}</p>
+                          ))}
+                        </div>
+                      )}
+                      {(accountPermissionReadiness.metricoolMvpEvidence.bridgeOperatorCards || []).length > 0 && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="clippers-tiktok-metricool-bridge-operator-cards">
+                          {(accountPermissionReadiness.metricoolMvpEvidence.bridgeOperatorCards || []).map((card) => (
+                            <div key={`${card.accountId}-${card.metricoolBrandName}`} className="rounded-md border border-teal-300/15 bg-black/30 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-white">{card.accountName}</p>
+                                  <p className="mt-1 text-[11px] text-zinc-500">{card.metricoolBrandName} / {card.platform}</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 shrink-0 border-teal-300/20 bg-transparent px-2 text-[11px] text-teal-100 hover:bg-teal-300/10"
+                                  onClick={() => copyMetricoolBridgeOperatorPacket(card.copyPacket)}
+                                  data-testid="copy-clippers-tiktok-metricool-bridge-operator-card-button"
+                                >
+                                  <Copy className="mr-1 h-3 w-3" />
+                                  Copy
+                                </Button>
+                              </div>
+                              <p className="mt-2 break-all text-[10px] leading-4 text-teal-100/75">{card.csvRowTemplate}</p>
+                              <p className="mt-2 text-[11px] leading-4 text-zinc-500">{card.nextStep}</p>
+                            </div>
                           ))}
                         </div>
                       )}

@@ -322,6 +322,19 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.doesNotMatch(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /instagram|youtube/i);
   assert.doesNotMatch(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /METRICOOL_USER_TOKEN|client_secret|access_token/i);
   assert.equal(readiness.metricoolMvpEvidence.bridgeEvidencePreviewRows.length, 2);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeOperatorCards.length, 2);
+  assert.ok(readiness.metricoolMvpEvidence.bridgeOperatorCards.some((card) =>
+    card.accountId === "sports-daily"
+    && card.metricoolBrandName === "SPORT"
+    && card.csvRowTemplate.includes('"sports-daily","tiktok","SPORT"')
+    && card.copyPacket.includes("Required proof: real HTTPS Metricool planner/profile proof URL")
+  ));
+  assert.ok(readiness.metricoolMvpEvidence.bridgeOperatorCards.some((card) =>
+    card.accountId === "meme-radar"
+    && card.metricoolBrandName === "memes"
+    && card.csvRowTemplate.includes('"meme-radar","tiktok","memes"')
+  ));
+  assert.doesNotMatch(JSON.stringify(readiness.metricoolMvpEvidence.bridgeOperatorCards), /client_secret|access_token|refresh_token|password=|cookie=/i);
   assert.match(readiness.metricoolMvpEvidence.nextStep, /TikTok MVP|Instagram\/YouTube profile evidence stays deferred/i);
   assert.equal(readiness.tiktokMvpAccountCloseout.status, "ready_for_metricool_tiktok");
   assert.equal(readiness.tiktokMvpAccountCloseout.directSocialApisRequired, false);
@@ -354,6 +367,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(readinessMarkdown, /Preview rows:/);
   assert.match(readinessMarkdown, /Preview cards:/);
   assert.match(readinessMarkdown, /Metricool MVP Evidence Only/);
+  assert.match(readinessMarkdown, /Metricool bridge operator cards/);
+  assert.match(readinessMarkdown, /Required proof: real HTTPS Metricool planner\/profile proof URL|sports-daily","tiktok","SPORT/);
   assert.match(readinessMarkdown, /TikTok MVP Account Closeout/);
   assert.equal(readiness.totals.developerAppsApproved, 0);
   assert.equal(readiness.totals.permissionGroupsApproved, 0);
@@ -1933,6 +1948,11 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("bridgeEvidenceCsvPath"));
   assert.ok(page.includes("bridgeEvidenceTemplate"));
   assert.ok(page.includes("bridgeEvidencePreviewRows"));
+  assert.ok(page.includes("bridgeOperatorCards"));
+  assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-operator-cards"'));
+  assert.ok(page.includes('data-testid="copy-clippers-tiktok-metricool-bridge-operator-card-button"'));
+  assert.ok(page.includes("copyMetricoolBridgeOperatorPacket"));
+  assert.ok(page.includes("Bridge packet copiado"));
   assert.ok(page.includes('data-testid="clippers-tiktok-mvp-account-closeout"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
