@@ -324,6 +324,15 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.doesNotMatch(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /METRICOOL_USER_TOKEN|client_secret|access_token/i);
   assert.equal(readiness.metricoolMvpEvidence.bridgeEvidencePreviewRows.length, 2);
   assert.equal(readiness.metricoolMvpEvidence.bridgeOperatorCards.length, 2);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.rows, 2);
+  assert.match(readiness.metricoolMvpEvidence.bridgeProofPack.status, /needs_real_metricool_bridge_proof|ready_for_metricool_operator/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeProofPack.markdownPath, /metricool-tiktok-bridge-proof-pack\.md$/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeProofPack.csvPath, /metricool-tiktok-bridge-proof-pack\.csv$/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeProofPack.nextStep, /Metricool|approval_required|proof/i);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.approvalRequired, true);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.realPublishEnabled, false);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.readyToSend, 0);
+  assert.deepEqual(readiness.metricoolMvpEvidence.bridgeProofPack.safetyBlockers, []);
   assert.ok(readiness.metricoolMvpEvidence.bridgeOperatorCards.some((card) =>
     card.accountId === "sports-daily"
     && card.metricoolBrandName === "SPORT"
@@ -354,6 +363,24 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(bridgeEvidenceCsv, /sports-daily","tiktok","SPORT/);
   assert.match(bridgeEvidenceCsv, /meme-radar","tiktok","memes/);
   assert.doesNotMatch(bridgeEvidenceCsv, /instagram|youtube|client_secret|access_token/i);
+  const bridgeProofPack = JSON.parse(await readFile(path.join(rootDir, "scheduled", "metricool-tiktok-bridge-proof-pack.json"), "utf8"));
+  assert.equal(bridgeProofPack.mode, "tiktok_metricool_bridge_proof_pack");
+  assert.equal(bridgeProofPack.directSocialApisRequired, false);
+  assert.equal(bridgeProofPack.realPublishEnabled, false);
+  assert.equal(bridgeProofPack.approvalRequired, true);
+  assert.equal(bridgeProofPack.readyToSend, 0);
+  assert.deepEqual(bridgeProofPack.safetyBlockers, []);
+  assert.equal(bridgeProofPack.totals.rows, 2);
+  assert.ok(bridgeProofPack.rows.every((row) => row.platform === "tiktok"));
+  assert.ok(bridgeProofPack.rows.every((row) => row.requiredProof.includes("real HTTPS Metricool proof URL")));
+  assert.ok(bridgeProofPack.guardrails.some((guardrail) => guardrail.includes("does not create external accounts")));
+  assert.doesNotMatch(JSON.stringify(bridgeProofPack), /client_secret|access_token|refresh_token|password=|cookie=/i);
+  const bridgeProofMarkdown = await readFile(path.join(rootDir, "scheduled", "metricool-tiktok-bridge-proof-pack.md"), "utf8");
+  assert.match(bridgeProofMarkdown, /TikTok Metricool Bridge Proof Pack/);
+  assert.match(bridgeProofMarkdown, /SPORT/);
+  assert.match(bridgeProofMarkdown, /memes/);
+  assert.match(bridgeProofMarkdown, /Direct TikTok\/Instagram\/YouTube APIs are not required/);
+  assert.doesNotMatch(bridgeProofMarkdown, /client_secret|access_token|refresh_token|password=|cookie=/i);
   assert.equal(readiness.nextEvidenceDrop.previewCards[0].platform, "instagram");
   assert.match(readiness.nextEvidenceDrop.previewCards[0].proofPath, /external-closeout-proofs\/developer_app-instagram\.md$/);
   assert.match(readiness.nextEvidenceDrop.previewCards[0].nextStep, /real non-secret evidence/i);
@@ -368,6 +395,7 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(readinessMarkdown, /Preview rows:/);
   assert.match(readinessMarkdown, /Preview cards:/);
   assert.match(readinessMarkdown, /Metricool MVP Evidence Only/);
+  assert.match(readinessMarkdown, /Metricool bridge proof pack/);
   assert.match(readinessMarkdown, /Metricool bridge operator cards/);
   assert.match(readinessMarkdown, /Required proof: real HTTPS Metricool planner\/profile proof URL|sports-daily","tiktok","SPORT/);
   assert.match(readinessMarkdown, /TikTok MVP Account Closeout/);
@@ -1693,6 +1721,11 @@ test("account permission readiness rejects unsafe Metricool queue state", async 
     assert.match(readiness.activeMvp.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
     assert.match(readiness.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
     assert.doesNotMatch(readiness.nextStep, /^Preview\/import real non-secret Metricool bridge evidence/);
+    assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.status, "blocked_metricool_safety");
+    assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.approvalRequired, false);
+    assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.readyToSend, 1);
+    assert.ok(readiness.metricoolMvpEvidence.bridgeProofPack.safetyBlockers.some((blocker) => blocker.includes("publishMode") || blocker.includes("readyToSend") || blocker.includes("can send now")));
+    assert.match(readiness.metricoolMvpEvidence.bridgeProofPack.nextStep, /Fix Metricool safety before collecting bridge proof/);
   } finally {
     await writeFile(queuePath, originalQueue);
     if (originalAccount !== null) await writeFile(accountPath, originalAccount);
@@ -1949,6 +1982,12 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("bridgeEvidenceCsvPath"));
   assert.ok(page.includes("bridgeEvidenceTemplate"));
   assert.ok(page.includes("bridgeEvidencePreviewRows"));
+  assert.ok(page.includes("bridgeProofPack"));
+  assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-proof-pack"'));
+  assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-proof-pack-badge"'));
+  assert.ok(page.includes("TikTok Metricool bridge proof pack"));
+  assert.ok(page.includes("Safety: approvalRequired="));
+  assert.ok(page.includes("Safety blockers:"));
   assert.ok(page.includes("bridgeOperatorCards"));
   assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-operator-cards"'));
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-metricool-bridge-operator-card-button"'));

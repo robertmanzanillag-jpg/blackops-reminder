@@ -1702,6 +1702,20 @@ interface ClipperAccountPermissionReadinessSummary {
     bridgeEvidenceRows?: number;
     bridgeEvidenceTemplate?: string;
     bridgeEvidencePreviewRows?: string[];
+    bridgeProofPack?: {
+      status: string;
+      jsonPath: string;
+      markdownPath: string;
+      csvPath: string;
+      rows: number;
+      ready: number;
+      needsProof: number;
+      approvalRequired: boolean;
+      realPublishEnabled: boolean;
+      readyToSend: number;
+      safetyBlockers: string[];
+      nextStep: string;
+    };
     bridgeOperatorCards?: Array<{
       accountId: string;
       accountName: string;
@@ -24400,6 +24414,18 @@ export default function ClippersPage() {
                           <Badge className="w-fit border border-teal-300/20 bg-teal-950/40 text-[10px] text-teal-100">
                             {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceRows || 0} TikTok bridge rows
                           </Badge>
+                          {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack && (
+                            <Badge className={cn(
+                              "w-fit border text-[10px]",
+                              accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.safetyBlockers.length > 0 || accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.realPublishEnabled
+                                ? "border-red-300/30 bg-red-300/10 text-red-100"
+                                : accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.needsProof > 0
+                                ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                                : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            )} data-testid="clippers-tiktok-metricool-bridge-proof-pack-badge">
+                              proof {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.ready}/{accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.rows}
+                            </Badge>
+                          )}
                           {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceTemplate && (
                             <Button
                               type="button"
@@ -24419,6 +24445,18 @@ export default function ClippersPage() {
                         <p className="break-all">Account evidence CSV: {accountPermissionReadiness.metricoolMvpEvidence.accountEvidenceCsvPath}</p>
                         {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceCsvPath && (
                           <p className="break-all text-teal-100/75">TikTok bridge CSV: {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceCsvPath}</p>
+                        )}
+                        {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack && (
+                          <div className="rounded-md border border-amber-300/15 bg-amber-950/10 p-2 text-amber-100/80 md:col-span-2" data-testid="clippers-tiktok-metricool-bridge-proof-pack">
+                            <p className="text-[11px] font-medium text-amber-100">TikTok Metricool bridge proof pack</p>
+                            <p className="mt-1 break-all">Markdown: {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.markdownPath}</p>
+                            <p className="mt-1 break-all">CSV: {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.csvPath}</p>
+                            <p className="mt-1">Safety: approvalRequired={String(accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.approvalRequired)}, realPublishEnabled={String(accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.realPublishEnabled)}, readyToSend={accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.readyToSend}</p>
+                            {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.safetyBlockers.length > 0 && (
+                              <p className="mt-1 text-red-100">Safety blockers: {accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.safetyBlockers.join("; ")}</p>
+                            )}
+                            <p className="mt-1 text-amber-100/70">{accountPermissionReadiness.metricoolMvpEvidence.bridgeProofPack.nextStep}</p>
+                          </div>
                         )}
                         <p className="break-all">Metricool profile CSV: {accountPermissionReadiness.metricoolMvpEvidence.pendingProfileEvidenceCsvPath}</p>
                       </div>
