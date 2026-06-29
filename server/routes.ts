@@ -1221,6 +1221,8 @@ export async function registerRoutes(
   </div>
   <div id="start-result"></div>
 
+  <p style="margin-top:24px;font-size:11px;color:#52525b;">Contacto / Owner: <a href="mailto:robert.manzanillag@gmail.com" style="color:#71717a;">robert.manzanillag@gmail.com</a></p>
+
   <script>
     async function startCeo() {
       const btn = document.getElementById('start-btn');

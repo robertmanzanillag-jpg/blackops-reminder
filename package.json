@@ -67,7 +67,7 @@
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
     "radio:ensure-tiktok-drive-folder": "tsx script/ensure-radio-tiktok-drive-folder.ts",
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
-    "radio:local-worker": "node --import tsx script/radio-local-worker.ts",
+    "radio:local-worker": "node --import tsx script/radio-local-youtube-worker.ts",
     "clippers:generate-owned-gap-sources": "node script/clippers-generate-owned-gap-sources.mjs",
     "clippers:account-permission-readiness": "node script/clippers-account-permission-readiness.mjs",
     "clippers:external-closeout-pack": "node script/clippers-external-closeout-pack.mjs",

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { Content, Part } from "@google/genai";
 import { storage } from "./storage";
 import { sendTelegramMessage, sendTelegramPlainMessage, sendTelegramPlainMessageChunks, TelegramUpdate, setTelegramWebhook, getWebhookInfo } from "./telegram";
@@ -17,7 +16,7 @@ import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
-import { enqueueLocalYoutubeAction, formatQueuedMessage } from "./local-youtube-queue";
+import { formatLocalYoutubeWorkerQueuedMessage, queueRadioYoutubeForLocalWorker, shouldQueueYoutubeForLocalWorker } from "./local-youtube-worker-queue";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -285,7 +284,7 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [CREAR_RECORDATORIO: {"message": "...", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday"]}]
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
-- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [RADIO_DRIVE_VIDEO_CLIPS: {"sourceDriveFileId": "GOOGLE_DRIVE_FILE_ID", "sourceDriveUrl": "https://drive.google.com/file/d/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
@@ -311,7 +310,7 @@ INFORMACIÓN SOBRE RADIO:
 METRICOOL / SOCIAL PUBLISHING:
 - Si el usuario pide postear, publicar, programar, correr campanas, preparar cola o automatizar clips/redes con Metricool, usa METRICOOL_AUTOMATION.
 - Usa publishMode:"approval_required" por defecto.
-- Usa publishMode:"auto_after_connection" solo si pide automatico/live explicitamente. Aun asi quedara pendiente de aprobacion.
+- Si pide automatico/live, usa igualmente publishMode:"approval_required"; Metricool MVP queda pendiente de revision manual.
 - Nunca digas que ya publicaste en redes. Di que queda cola preparada o pendiente de aprobacion.
 
 TIPOS DE INVERSIÓN: stock, etf, crypto, bond, fund`;
@@ -438,11 +437,24 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
       return directRadioYoutubeCommand.content;
     }
 
+    if (shouldQueueYoutubeForLocalWorker()) {
+      try {
+        const pendingAction = await queueRadioYoutubeForLocalWorker({
+          userId,
+          command: directRadioYoutubeCommand,
+          origin: "telegram",
+        });
+        return formatLocalYoutubeWorkerQueuedMessage(pendingAction.id);
+      } catch (error) {
+        return `No pude dejar ese YouTube en cola para la Mac: ${error instanceof Error ? error.message : "error desconocido"}`;
+      }
+    }
+
     try {
-      const entry = enqueueLocalYoutubeAction(directRadioYoutubeCommand, userId);
-      return formatQueuedMessage(entry);
+      const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
+      return formatRadioYoutubeResult(result);
     } catch (error) {
-      return `No pude encolar ese YouTube para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
+      return `No pude procesar ese YouTube para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
     }
   }
 
@@ -477,7 +489,7 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,
@@ -1011,7 +1023,7 @@ async function processAssistantResponse(userId: string, response: string): Promi
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,
@@ -1451,9 +1463,7 @@ export async function setupTelegramWebhook(): Promise<{ success: boolean; messag
   }
 
   if (!hasStrongSecret(process.env.TELEGRAM_WEBHOOK_SECRET, 16)) {
-    const generated = crypto.randomBytes(24).toString("hex");
-    process.env.TELEGRAM_WEBHOOK_SECRET = generated;
-    console.log("[Telegram] TELEGRAM_WEBHOOK_SECRET not set — auto-generated for this session. Add it as a permanent secret to keep webhook valid across restarts.");
+    return { success: false, message: "TELEGRAM_WEBHOOK_SECRET must be a real random secret with at least 16 characters" };
   }
 
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;

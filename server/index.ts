@@ -177,7 +177,7 @@ function renderDropshippingPublicLegalHtml(title: string, body: string[]): strin
     "<body>",
     `<h1>${escapedTitle}</h1>`,
     '<p class="meta">Draft operating policy for Dropshipping CEO. Last updated: June 18, 2026.</p>',
-    '<p class="notice">This policy is a starter template for a no-inventory dropshipping store. Final store name, legal entity, contact email, supplier terms, payment processor, and jurisdiction should be reviewed before public launch.</p>',
+    '<p class="notice">This policy is a starter template for a no-inventory dropshipping store. Store owner / contact: <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>. Final store name, legal entity, supplier terms, payment processor, and jurisdiction should be reviewed before public launch.</p>',
     ...body,
     "</body>",
     "</html>",
@@ -198,7 +198,7 @@ app.get("/dropshipping/legal/privacy", (_req, res) => {
     "<h2>Retention And Security</h2>",
     "<p>Order and support records should be retained only as long as needed for accounting, fraud prevention, legal compliance, customer support, and platform requirements. Tokens and secrets must not be exposed in public reports.</p>",
     "<h2>Customer Requests</h2>",
-    "<p>Customers can request access, correction, deletion, or opt-out support through the store contact channel once configured.</p>",
+    '<p>Customers can request access, correction, deletion, or opt-out support by contacting <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>.</p>',
   ]));
 });
 
