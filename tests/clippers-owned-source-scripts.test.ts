@@ -4500,6 +4500,8 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(mvpNowRefreshPostRoute, /clippers-metricool-current-batch-session-packet\.mjs/);
   assert.match(mvpNowRefreshPostRoute, /clippers-tiktok-operator-cockpit-preflight\.mjs/);
   assert.match(mvpNowRefreshPostRoute, /clippers-tiktok-mvp-readiness-verifier\.mjs/);
+  assert.match(mvpNowRefreshPostRoute, /readClipperAccountPermissionReadiness/);
+  assert.match(mvpNowRefreshPostRoute, /accountPermissionReadiness/);
   assert.ok(mvpNowRefreshPostRoute.indexOf("clippers-goal-completion-audit.mjs") < mvpNowRefreshPostRoute.indexOf("clippers-tiktok-next-action.mjs"));
   assert.ok(mvpNowRefreshPostRoute.indexOf("clippers-tiktok-next-action.mjs") < mvpNowRefreshPostRoute.indexOf("clippers-metricool-current-batch-session-packet.mjs"));
   assert.doesNotMatch(mvpNowRefreshPostRoute, /recordClipperTikTokBatchEvidenceRow|recordClipperTikTokBatchEvidenceBatch|ready_to_send|auto publish/i);
@@ -4601,6 +4603,8 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /clippers-tiktok-next-action-panel/);
   assert.match(page, /copy-clippers-tiktok-next-action-operator-packet/);
   assert.match(page, /Metricool operator packet/);
+  assert.match(page, /accountPermissionReadiness: ClipperAccountPermissionReadinessSummary/);
+  assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
   assert.match(page, /getMetricoolBridgeEvidenceClientCheck/);
   assert.match(page, /parseMetricoolBridgeCsvLine/);
   assert.match(page, /sk-\[A-Za-z0-9_-\]\{12,\}/);
@@ -4659,6 +4663,23 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /\["\/api\/clippers\/tiktok-batch-tracker"\], data\.tiktokBatchTracker/);
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-upload-pack"\], data\.metricoolCurrentBatchUploadPack/);
   });
+});
+
+test("TikTok MVP refresh returns account readiness and updates UI cache", async () => {
+  const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const mvpNowRefreshPostRoute = routes.slice(
+    routes.indexOf('app.post("/api/clippers/prepare-tiktok-mvp-now-refresh"'),
+    routes.indexOf('app.post("/api/clippers/prepare-metricool-mvp-launch-pack"'),
+  );
+  assert.match(mvpNowRefreshPostRoute, /mode: "tiktok_metricool_mvp_now_refresh"/);
+  assert.match(mvpNowRefreshPostRoute, /realPublishEnabled: false/);
+  assert.match(mvpNowRefreshPostRoute, /directSocialApisRequired: false/);
+  assert.match(mvpNowRefreshPostRoute, /readClipperAccountPermissionReadiness/);
+  assert.match(mvpNowRefreshPostRoute, /accountPermissionReadiness/);
+
+  const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+  assert.match(page, /accountPermissionReadiness: ClipperAccountPermissionReadinessSummary/);
+  assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
 });
 
 test("TikTok post-schedule verifier exposes public URL and 24h metric capture timeline", async () => {

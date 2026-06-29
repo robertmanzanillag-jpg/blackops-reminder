@@ -11339,6 +11339,7 @@ export default function ClippersPage() {
         goalCompletionAudit: ClipperGoalCompletionAuditSummary;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary;
         metricoolMcpPreflight: ClipperMetricoolMcpPreflightSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
         runs: Record<string, unknown>;
       };
     },
@@ -11367,6 +11368,7 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
       queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
       toast({
         title: data.tiktokMvpReadinessVerifier.status === "pass" ? "TikTok MVP refrescado" : "TikTok MVP refrescado con blocker",
         description: `${data.tiktokOperatorCockpit.batchId}: ${data.metricoolCurrentBatchUploadPack.totals.copied}/${data.metricoolCurrentBatchUploadPack.totals.rows} MP4; verifier ${data.tiktokMvpReadinessVerifier.totals.passed}/${data.tiktokMvpReadinessVerifier.totals.checks}.`,

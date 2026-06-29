@@ -3511,6 +3511,7 @@ export async function registerRoutes(
         goalCompletionAudit,
         tiktokMvpReadinessVerifier,
         metricoolMcpPreflight,
+        accountPermissionReadiness,
       ] = await Promise.all([
         readClipperMetricool100OperatorHandoff(),
         readClipperTikTokLaunchControl(),
@@ -3529,6 +3530,7 @@ export async function registerRoutes(
         readClipperGoalCompletionAudit(),
         readClipperTikTokMvpReadinessVerifier(),
         readClipperMetricoolMcpPreflight(),
+        readClipperAccountPermissionReadiness(),
       ]);
 
       res.json({
@@ -3556,6 +3558,7 @@ export async function registerRoutes(
         goalCompletionAudit,
         tiktokMvpReadinessVerifier,
         metricoolMcpPreflight,
+        accountPermissionReadiness,
         runs,
       });
     } catch (error: any) {
