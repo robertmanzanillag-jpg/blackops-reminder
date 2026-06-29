@@ -17,6 +17,7 @@ import { executeMultipleActions } from "./agent-actions";
 import { parseDjNameResolutionCommand } from "./radio-video-edit-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
+import { enqueueLocalYoutubeAction, formatQueuedMessage } from "./local-youtube-queue";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit } from "./ai-cost-policy";
@@ -438,10 +439,10 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
     }
 
     try {
-      const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId);
-      return formatRadioYoutubeResult(result);
+      const entry = enqueueLocalYoutubeAction(directRadioYoutubeCommand, userId);
+      return formatQueuedMessage(entry);
     } catch (error) {
-      return `No pude procesar ese YouTube para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
+      return `No pude encolar ese YouTube para radio: ${error instanceof Error ? error.message : "error desconocido"}`;
     }
   }
 

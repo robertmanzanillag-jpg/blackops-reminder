@@ -1073,25 +1073,185 @@ export async function registerRoutes(
 
     try {
       const result = await exchangeShopifyAuthorizationCode({ code, state, shop, query: req.query });
-      res.send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1 style="color:#22c55e;">Shopify conectado</h1>
-          <p>El Admin API token quedó guardado para Dropshipping CEO sin mostrarlo en pantalla.</p>
-          <p style="color:#94a3b8;">Store: ${escapeHtml(result.shop)}</p>
-          <p style="color:#94a3b8;">Scopes: ${escapeHtml(result.scope || "guardados")}</p>
-          <p style="color:#94a3b8;">Env local: ${escapeHtml(result.envFilePath)}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Ir a Dropshipping CEO</a>
-        </body></html>
-      `);
+      // Redirect to the embedded page so the user stays inside Shopify Admin iframe context
+      res.redirect(`/api/shopify/embedded?shop=${encodeURIComponent(result.shop)}&connected=1`);
     } catch (callbackError: any) {
       res.status(400).send(`
         <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
           <h1>Error conectando Shopify</h1>
           <p>${escapeHtml(callbackError.message || "No se pudo guardar la conexión de Shopify.")}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
+          <a href="/api/shopify/embedded" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
         </body></html>
       `);
     }
+  });
+
+  // GET /api/shopify/ceo-snapshot — public JSON for embedded app AJAX, no session required
+  app.get("/api/shopify/ceo-snapshot", (_req, res) => {
+    try {
+      const snapshot = getDropshippingCeoSnapshot();
+      const shopifyAdminReady = Boolean(process.env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim());
+      const telegramReady = Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim());
+      const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN?.trim() || null;
+      res.json({
+        headline: snapshot.executiveSummary.headline,
+        nextCommand: snapshot.executiveSummary.nextCommand,
+        metrics: {
+          revenue: snapshot.metrics.totalRevenueUsd,
+          spend: snapshot.metrics.totalSpendUsd,
+          orders: snapshot.metrics.orders,
+          paidOrders: snapshot.metrics.paidOrders,
+          shopifyDrafts: snapshot.metrics.shopifyDrafts,
+          socialPosts: snapshot.metrics.socialPosts,
+          approvalQueue: snapshot.metrics.approvalQueue,
+        },
+        profitGuard: { status: snapshot.profitGuard.status, reason: snapshot.profitGuard.reason },
+        blockers: {
+          shopifyAdminToken: shopifyAdminReady ? null : "SHOPIFY_ADMIN_ACCESS_TOKEN no configurado. Ve a Replit Secrets y agrega el token con scope write_products.",
+          telegram: telegramReady ? null : "TELEGRAM_BOT_TOKEN no configurado. Sin esto no llegan reportes AM/PM.",
+        },
+        shopDomain,
+        shopifyAdminReady,
+        telegramReady,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Error obteniendo snapshot" });
+    }
+  });
+
+  // GET /api/shopify/embedded — standalone HTML page for Shopify Admin iframe, no session required
+  app.get("/api/shopify/embedded", (_req, res) => {
+    // Allow framing inside Shopify Admin; remove any DENY/SAMEORIGIN set elsewhere
+    res.removeHeader("X-Frame-Options");
+    res.setHeader(
+      "Content-Security-Policy",
+      "frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com",
+    );
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+    const apiKey = escapeHtml(process.env.SHOPIFY_APP_CLIENT_ID?.trim() || "");
+    const shopifyAdminReady = Boolean(process.env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim());
+    const telegramReady = Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim());
+    const shopDomain = escapeHtml(process.env.SHOPIFY_SHOP_DOMAIN?.trim() || "");
+
+    let snapshot: ReturnType<typeof getDropshippingCeoSnapshot> | null = null;
+    try { snapshot = getDropshippingCeoSnapshot(); } catch { snapshot = null; }
+
+    const headline = escapeHtml(snapshot?.executiveSummary.headline ?? "Dropshipping CEO listo");
+    const nextCommand = escapeHtml(snapshot?.executiveSummary.nextCommand ?? "Configura los secrets y presiona Start.");
+    const metrics = snapshot?.metrics;
+
+    const blockerHtml = [
+      shopifyAdminReady ? "" : `<div class="blocker">⚠️ <strong>SHOPIFY_ADMIN_ACCESS_TOKEN falta</strong> — agrega el token en <a href="https://replit.com" target="_blank">Replit Secrets</a> con scope <code>write_products</code> para crear drafts.</div>`,
+      telegramReady ? "" : `<div class="blocker warn">⚠️ <strong>TELEGRAM_BOT_TOKEN falta</strong> — sin este token no llegan reportes AM/PM al chat de Robert.</div>`,
+    ].filter(Boolean).join("\n");
+
+    const metricsHtml = metrics ? `
+      <div class="metrics">
+        <div class="metric"><span class="label">Revenue</span><span class="val">$${metrics.totalRevenueUsd.toFixed(2)}</span></div>
+        <div class="metric"><span class="label">Gasto</span><span class="val">$${metrics.totalSpendUsd.toFixed(2)}</span></div>
+        <div class="metric"><span class="label">Órdenes</span><span class="val">${metrics.paidOrders}/${metrics.orders} pagadas</span></div>
+        <div class="metric"><span class="label">Shopify drafts</span><span class="val">${metrics.shopifyDrafts}</span></div>
+        <div class="metric"><span class="label">Social posts</span><span class="val">${metrics.socialPosts} / ${metrics.publishedSocialPosts ?? 0} live</span></div>
+        <div class="metric"><span class="label">Approvals</span><span class="val">${metrics.approvalQueue} pendientes</span></div>
+      </div>` : "";
+
+    res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlackOps Dropshipping CEO</title>
+  ${apiKey ? `<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" data-api-key="${apiKey}"></script>` : ""}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #09090b; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; padding: 24px; font-size: 14px; line-height: 1.5; }
+    h1 { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .sub { color: #71717a; font-size: 13px; margin-bottom: 20px; }
+    .blocker { background: #431407; border: 1px solid #9a3412; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #fed7aa; font-size: 13px; }
+    .blocker.warn { background: #1c1400; border-color: #854d0e; color: #fde68a; }
+    .blocker a { color: #93c5fd; }
+    .blocker code { background: #27272a; border-radius: 3px; padding: 1px 5px; font-size: 12px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #52525b; margin-bottom: 10px; }
+    .command-box { background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 12px 16px; color: #bbf7d0; font-size: 13px; margin-bottom: 16px; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+    .metric { background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; }
+    .label { display: block; font-size: 11px; color: #52525b; text-transform: uppercase; letter-spacing: .06em; }
+    .val { display: block; font-size: 16px; font-weight: 600; color: #fff; margin-top: 2px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: #22c55e; color: #052e16; }
+    .btn-secondary { background: #27272a; color: #d4d4d8; border: 1px solid #3f3f46; }
+    .status-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #18181b; font-size: 13px; }
+    .status-row:last-child { border-bottom: none; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok { background: #22c55e; }
+    .dot.warn { background: #f59e0b; }
+    .dot.err { background: #ef4444; }
+    #start-result { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px; display: none; }
+    #start-result.ok { background: #052e16; border: 1px solid #166534; color: #bbf7d0; }
+    #start-result.err { background: #300; border: 1px solid #7f1d1d; color: #fca5a5; }
+    #start-btn:disabled { opacity: .5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>🚀 BlackOps Dropshipping CEO</h1>
+  <p class="sub">${shopDomain ? `Store: ${shopDomain}` : "Panel de operación"}</p>
+
+  ${blockerHtml}
+
+  ${metricsHtml ? `<div class="section"><p class="section-title">Métricas</p>${metricsHtml}</div>` : ""}
+
+  <div class="section">
+    <p class="section-title">Próxima acción</p>
+    <div class="command-box">${nextCommand}</div>
+  </div>
+
+  <div class="section">
+    <p class="section-title">Estado del sistema</p>
+    <div class="status-row"><span class="dot ${shopifyAdminReady ? "ok" : "err"}"></span><span>Shopify Admin Token: ${shopifyAdminReady ? "✓ Configurado" : "✗ Falta SHOPIFY_ADMIN_ACCESS_TOKEN"}</span></div>
+    <div class="status-row"><span class="dot ${telegramReady ? "ok" : "warn"}"></span><span>Telegram: ${telegramReady ? "✓ Configurado" : "⚠ Falta TELEGRAM_BOT_TOKEN"}</span></div>
+  </div>
+
+  <div class="actions">
+    <button id="start-btn" class="btn btn-primary" onclick="startCeo()">▶ Start Dropshipping CEO</button>
+    <a class="btn btn-secondary" href="/dropshipping-ceo" target="_top">Abrir panel completo →</a>
+  </div>
+  <div id="start-result"></div>
+
+  <script>
+    async function startCeo() {
+      const btn = document.getElementById('start-btn');
+      const result = document.getElementById('start-result');
+      btn.disabled = true;
+      btn.textContent = 'Iniciando...';
+      result.style.display = 'none';
+      try {
+        const r = await fetch('/api/dropshipping-ceo/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' });
+        const data = await r.json();
+        result.className = r.ok ? 'ok' : 'err';
+        result.style.display = 'block';
+        if (r.ok) {
+          result.textContent = data.telegramSent
+            ? '✅ Ciclo iniciado. Resumen enviado por Telegram.'
+            : '✅ Ciclo iniciado. ' + (data.telegramReason || 'Telegram no configurado.');
+        } else {
+          result.textContent = '✗ Error: ' + (data.error || 'no se pudo iniciar');
+        }
+      } catch (e) {
+        result.className = 'err';
+        result.style.display = 'block';
+        result.textContent = '✗ Error de red: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Start Dropshipping CEO';
+      }
+    }
+  </script>
+</body>
+</html>`);
   });
 
   app.post("/api/google-drive/organize", requireOwnerApi, async (req, res) => {
