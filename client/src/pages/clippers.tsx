@@ -9442,6 +9442,14 @@ function getMetricoolBridgeEvidenceClientCheck(raw: string) {
   };
 }
 
+function tiktokMvpBlockedLaneSummary(closeout?: ClipperAccountPermissionReadinessSummary["tiktokMvpAccountCloseout"] | null) {
+  const blockedRows = (closeout?.rows || []).filter((row) => row.status !== "ready_for_metricool_tiktok");
+  if (!blockedRows.length) return "";
+  const labels = blockedRows.slice(0, 3).map((row) => `${row.accountId}=${row.status}`);
+  const suffix = blockedRows.length > labels.length ? ` +${blockedRows.length - labels.length} more` : "";
+  return `Still blocked: ${labels.join(", ")}${suffix}.`;
+}
+
 function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Target; label: string; value: string; detail: string }) {
   return (
     <Card className="border-zinc-800 bg-zinc-950/70">
@@ -12182,14 +12190,17 @@ export default function ClippersPage() {
           ["/api/clippers/tiktok-next-action"],
         ].forEach((queryKey) => queryClient.removeQueries({ queryKey, exact: true }));
       }
+      const refreshedTikTokCloseout = data.accountPermissionReadiness?.tiktokMvpAccountCloseout || null;
+      const blockedLaneSummary = tiktokMvpBlockedLaneSummary(refreshedTikTokCloseout);
       toast({
         title: refreshComplete ? "Bridge Metricool batch registrado" : "Bridge guardado; refresco pendiente",
         description: refreshComplete
           ? [
               `${data.metricoolBridgeEvidenceBatch.totals.recorded} submitted; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas.`,
-              data.accountPermissionReadiness?.tiktokMvpAccountCloseout
-                ? `TikTok lanes ready ${data.accountPermissionReadiness.tiktokMvpAccountCloseout.totals.ready}/${data.accountPermissionReadiness.tiktokMvpAccountCloseout.totals.rows}.`
+              refreshedTikTokCloseout
+                ? `TikTok lanes ready ${refreshedTikTokCloseout.totals.ready}/${refreshedTikTokCloseout.totals.rows}.`
                 : "",
+              blockedLaneSummary,
               data.bridgeRefreshStatus === "refreshed_next_action" ? "Next action refrescado." : "No publica.",
             ].filter(Boolean).join(" ")
           : data.refreshError || "La evidencia se guardo, pero hay que refrescar los reportes antes de confiar en el next action.",
