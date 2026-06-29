@@ -364,8 +364,13 @@ function mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack = {}) {
     .map((row) => `${row.accountId}:${row.platform}`));
   const rows = [externalEvidenceHeader];
   for (const row of accountRows.filter((item) =>
-    pendingAccountPlatforms.has(`${item.accountId}:${item.platform}`) && item.accountStatus !== "verified"
+    activeMetricoolMvpAccountIds.has(item.accountId)
+    && activeMetricoolMvpPlatforms.has(item.platform)
+    && item.accountStatus !== "verified"
   )) {
+    const sourceHint = pendingAccountPlatforms.has(`${row.accountId}:${row.platform}`)
+      ? "pending Metricool profile evidence"
+      : "active TikTok MVP account proof";
     rows.push([
       "account",
       row.accountId,
@@ -378,7 +383,7 @@ function mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack = {}) {
       platforms.find((platform) => platform.platform === row.platform)?.accountUrl || "",
       "",
       "",
-      `<real ${row.handle} profile URL + ownership/security proof + Metricool-ready account proof>`,
+      `<real ${row.handle} profile URL + ownership/security proof + Metricool-ready account proof from ${sourceHint}>`,
     ].map(csvCell).join(","));
   }
   return `${rows.join("\n")}\n`;

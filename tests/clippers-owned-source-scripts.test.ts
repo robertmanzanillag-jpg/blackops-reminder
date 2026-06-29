@@ -449,6 +449,46 @@ test("account permission readiness reports Metricool MVP without claiming direct
   });
 });
 
+test("account permission readiness writes active TikTok MVP account evidence rows when proof is missing", async () => {
+  const sportsEvidencePath = path.join(rootDir, "account-evidence/sports-daily-tiktok.json");
+  const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
+  const originalSportsEvidence = await readFile(sportsEvidencePath, "utf8").catch(() => null);
+  const originalMemesEvidence = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  try {
+    await unlink(sportsEvidencePath).catch(() => undefined);
+    await unlink(memesEvidencePath).catch(() => undefined);
+
+    const result = spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked");
+    assert.equal(output.metricoolMvpAccountEvidenceRows, 2);
+    assert.equal(output.tiktokMvpCloseoutStatus, "needs_tiktok_account_evidence");
+
+    const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
+    assert.equal(readiness.metricoolMvpEvidence.accountRows, 2);
+    assert.match(readiness.metricoolMvpEvidence.accountEvidenceCsvPath, /account-permission-mvp-account-evidence\.csv$/);
+
+    const mvpAccountEvidenceCsv = await readFile(path.join(rootDir, "account-permission-mvp-account-evidence.csv"), "utf8");
+    assert.match(mvpAccountEvidenceCsv, /"account","sports-daily","tiktok","verified"/);
+    assert.match(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","verified"/);
+    assert.match(mvpAccountEvidenceCsv, /active TikTok MVP account proof/);
+    assert.doesNotMatch(mvpAccountEvidenceCsv, /"instagram"|"youtube"|developer_app|permission|client_secret|refresh_token|access_token|password=/);
+  } finally {
+    if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
+    else await writeFile(sportsEvidencePath, originalSportsEvidence);
+    if (originalMemesEvidence === null) await unlink(memesEvidencePath).catch(() => undefined);
+    else await writeFile(memesEvidencePath, originalMemesEvidence);
+    spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
 test("operational readiness keeps MVP separate from full external readiness", async () => {
   const result = spawnSync(process.execPath, ["script/clippers-operational-readiness.mjs"], {
     cwd: process.cwd(),
