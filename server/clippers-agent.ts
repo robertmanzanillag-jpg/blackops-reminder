@@ -28977,6 +28977,9 @@ function renderPublisherConnectorMarkdown(summary: ClipperPublisherConnectorSumm
 }
 
 const CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS = ["sports-daily", "meme-radar"];
+const CLIPPER_METRICOOL_TIKTOK_MVP_LANES = new Set(
+  CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS.map((accountId) => `${accountId}:tiktok`)
+);
 
 interface MetricoolConnectedBrand {
   metricoolBrandId: string;
@@ -33081,6 +33084,31 @@ function isMetricoolBridgeUrl(value: string): boolean {
   }
 }
 
+function isTikTokProfileUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:"
+      && (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com"))
+      && /^\/@[A-Za-z0-9._-]+\/?$/.test(url.pathname)
+      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolProofUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:"
+      && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
+      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
 async function readExistingAccountEvidenceStatus(accountId: string, platform: ClipperPlatform): Promise<ClipperAccountEvidenceItemStatus | null> {
   try {
     const parsed = JSON.parse(await readFile(accountEvidenceJsonPath(accountId, platform), "utf8")) as { status?: unknown };
@@ -33122,6 +33150,10 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
       skipped.push({ row: rowNumber, accountId, platform: platformRaw, reason: "Unsupported or unconfigured platform." });
       continue;
     }
+    if (!CLIPPER_METRICOOL_TIKTOK_MVP_LANES.has(`${account.id}:${platform}`)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Only active TikTok MVP lanes are accepted for Metricool bridge evidence right now." });
+      continue;
+    }
     if (!metricoolBrandName || !profileUrl || !proof || notesInput.length < 20) {
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Missing metricool_brand_name, profile_url, proof, or 20+ character notes." });
       continue;
@@ -33132,6 +33164,14 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
     }
     if (!isMetricoolBridgeUrl(profileUrl) || !isMetricoolBridgeUrl(proof)) {
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "profile_url and proof must be real https URLs without token-like query params." });
+      continue;
+    }
+    if (!isTikTokProfileUrl(profileUrl)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a public TikTok profile_url for the active lane." });
+      continue;
+    }
+    if (!isMetricoolProofUrl(proof)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a real Metricool proof URL." });
       continue;
     }
 

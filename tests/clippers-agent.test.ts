@@ -6186,6 +6186,7 @@ test("recordClipperMetricoolBridgeEvidenceBatch imports manual Metricool bridge 
       "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
       "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge connected in Metricool with redacted proof reference.",
       "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://app.metricool.com/brands/6431685,Memes TikTok bridge connected in Metricool with redacted proof reference.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://example.com/proof,Fake proof URL should be rejected even when it is on an active MVP lane.",
       "streamer-pulse,tiktok,<paste brand>,,https://www.tiktok.com/@streamerpulse,https://app.metricool.com/,placeholder should be rejected safely.",
       "sports-daily,instagram,SPORT,secret,https://www.instagram.com/sportsdaily,access_token=abc123,This row contains sensitive text and must be rejected.",
       "meme-radar,instagram,memes,6431685,https://www.instagram.com/memeradar,https://example.com/proof,Fake proof URL should be rejected even when it is formatted as https.",
@@ -6193,12 +6194,13 @@ test("recordClipperMetricoolBridgeEvidenceBatch imports manual Metricool bridge 
     ].join("\n");
 
     const { metricoolBridgeEvidenceBatch, status } = await recordClipperMetricoolBridgeEvidenceBatch({ raw });
-    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 6);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 7);
     assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
-    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 5);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 6);
     assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "sports-daily" && item.platform === "tiktok" && item.reason.includes("cannot downgrade")));
-    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("placeholder") || item.reason.includes("sensitive")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "streamer-pulse" && item.platform === "tiktok" && item.reason.includes("Only active TikTok MVP lanes")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "sports-daily" && item.platform === "instagram" && item.reason.includes("Only active TikTok MVP lanes")));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("fake proof")));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "facebook" && item.reason.includes("Unsupported")));
     assert.ok(status.accountEvidence.items.some((item) => item.id === "sports-daily-tiktok" && item.status === "verified"));
@@ -6210,6 +6212,51 @@ test("recordClipperMetricoolBridgeEvidenceBatch imports manual Metricool bridge 
     else await writeFile(memesPath, previousMemes);
     if (previousOwnerProgress === null) await unlink(beforeStatus.ownerConnectPack.progressRecordsPath).catch(() => undefined);
     else await writeFile(beforeStatus.ownerConnectPack.progressRecordsPath, previousOwnerProgress);
+  }
+});
+
+test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");
+  const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");
+  const previousSports = await readFile(sportsPath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesPath, "utf8").catch(() => null);
+
+  try {
+    await unlink(sportsPath).catch(() => undefined);
+    await unlink(memesPath).catch(() => undefined);
+    const raw = [
+      "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge connected in Metricool with redacted proof reference.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://app.metricool.com/brands/6431685,Memes TikTok bridge connected in Metricool with redacted proof reference.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.instagram.com/sportsdaily,https://app.metricool.com/brands/6431687,Declared TikTok lane must not accept an Instagram profile URL.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/metricool-proof/view,Declared TikTok lane must still require Metricool proof URL.",
+      "sports-daily,youtube,SPORT,6431687,https://www.youtube.com/@sportsdaily,https://app.metricool.com/brands/6431687,YouTube bridge proof is formatted but deferred outside the TikTok MVP.",
+      "meme-radar,instagram,memes,6431685,https://www.instagram.com/memeradar,https://app.metricool.com/brands/6431685,Instagram bridge proof is formatted but deferred outside the TikTok MVP.",
+      "streamer-pulse,tiktok,Streamers,6431688,https://www.tiktok.com/@streamerpulse,https://app.metricool.com/brands/6431688,Streamer TikTok proof is formatted but not in the initial SPORT memes MVP.",
+    ].join("\n");
+
+    const { metricoolBridgeEvidenceBatch } = await previewClipperMetricoolBridgeEvidenceBatch({ raw });
+    assert.equal(metricoolBridgeEvidenceBatch.wouldWrite, false);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 7);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 2);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 5);
+    assert.deepEqual(
+      metricoolBridgeEvidenceBatch.recorded.map((item) => `${item.accountId}:${item.platform}`).sort(),
+      ["meme-radar:tiktok", "sports-daily:tiktok"],
+    );
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("public TikTok profile_url")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("real Metricool proof URL")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "youtube"));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "instagram"));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "streamer-pulse" && item.platform === "tiktok"));
+    assert.equal(await readFile(sportsPath, "utf8").catch(() => null), null);
+    assert.equal(await readFile(memesPath, "utf8").catch(() => null), null);
+  } finally {
+    if (previousSports === null) await unlink(sportsPath).catch(() => undefined);
+    else await writeFile(sportsPath, previousSports);
+    if (previousMemes === null) await unlink(memesPath).catch(() => undefined);
+    else await writeFile(memesPath, previousMemes);
   }
 });
 
