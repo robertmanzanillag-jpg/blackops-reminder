@@ -35,7 +35,7 @@ function renderMarkdown(summary: any) {
     `Generated: ${summary.generatedAt}`,
     `Next step: ${summary.nextStep}`,
     "",
-    "This report checks whether Metricool credentials are configured for the TikTok MVP while keeping automatic posting disabled.",
+    "This report checks whether the TikTok MVP can proceed through the Metricool operator workflow while keeping automatic posting disabled. Metricool MCP credentials are optional unless API automation is explicitly enabled.",
     "",
     "## Mode",
     "",
@@ -106,17 +106,17 @@ async function main() {
   const checks = [
     check(
       "metricool_credentials_present",
-      "Metricool user token and user id are configured",
-      metricoolConfig.readyForMcp ? "pass" : "fail",
+      "Metricool user token and user id are configured for optional MCP automation",
+      metricoolConfig.readyForMcp ? "pass" : "warn",
       `userTokenConfigured=${metricoolConfig.userTokenConfigured}; userIdConfigured=${metricoolConfig.userIdConfigured}; missing=${metricoolConfig.missingEnv.join("|") || "none"}`,
-      metricoolConfig.readyForMcp ? "No action needed." : "Add Metricool credentials through the secret manager, not in tracked files.",
+      metricoolConfig.readyForMcp ? "No action needed for optional MCP automation." : "Optional only: add Metricool credentials through the secret manager if Robert later enables API/MCP automation.",
     ),
     check(
       "mcp_config_template_ready",
       "Metricool MCP client config can be generated without exposing secrets",
-      metricoolConfig.readyForMcp && mcpClientConfigTemplate.mcpServers["mcp-metricool"].env.METRICOOL_USER_TOKEN === "<configured>" ? "pass" : "fail",
+      metricoolConfig.readyForMcp && mcpClientConfigTemplate.mcpServers["mcp-metricool"].env.METRICOOL_USER_TOKEN === "<configured>" ? "pass" : "warn",
       `mcpUrl=${metricoolConfig.mcpUrl}; tokenMask=${mcpClientConfigTemplate.mcpServers["mcp-metricool"].env.METRICOOL_USER_TOKEN}; userIdMask=${mcpClientConfigTemplate.mcpServers["mcp-metricool"].env.METRICOOL_USER_ID}`,
-      "Use the generated MCP client config template only where Metricool MCP is installed.",
+      "Use the generated MCP client config template only if Metricool MCP/API automation is explicitly enabled.",
     ),
     check(
       "clippers_tiktok_brands_ready_in_plan",
@@ -147,7 +147,7 @@ async function main() {
       "automatic_metricool_execution_not_enabled",
       "Automatic Metricool scheduling is not enabled from this app",
       "warn",
-      "Metricool credentials are configured, but no callable Metricool MCP scheduling tool is available in this Codex session and the app remains approval/operator mode.",
+      "No callable Metricool MCP scheduling tool is required for the current TikTok MVP; the app remains approval/operator mode.",
       "Use the current Metricool operator workflow, or install/connect the Metricool MCP tool before attempting API scheduling.",
     ),
   ];
@@ -157,7 +157,7 @@ async function main() {
   const summary = {
     status: failed > 0 ? "blocked" : "ready_for_operator",
     generatedAt: new Date().toISOString(),
-    mode: "metricool_mcp_preflight_tiktok_only",
+    mode: "metricool_operator_preflight_tiktok_only",
     metricoolConfig,
     metricoolPlan: {
       brandCount: metricoolPlan.brandCount,
@@ -195,12 +195,13 @@ async function main() {
       "Credentials present are not proof that posts were scheduled.",
       "Do not print, store, or paste Metricool tokens into reports, CSVs, screenshots, or prompts.",
       "This preflight does not enable automatic publishing.",
+      "Missing Metricool MCP/API credentials do not block the manual Metricool operator workflow.",
       "Continue with TikTok-only SPORT/memes until Robert explicitly expands networks.",
       "Current batch evidence CSV is the operator file; the master evidence CSV is sync output.",
     ],
     nextStep: failed > 0
       ? checks.find((row) => row.status === "fail")?.nextAction
-      : "Metricool credentials and TikTok MVP checks are ready; process metricool-batch-01 manually or connect a callable Metricool MCP scheduling tool before API automation.",
+      : "TikTok MVP operator checks are ready; process metricool-batch-01 manually in Metricool approval_required mode. Connect a callable Metricool MCP scheduling tool only before API automation.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));

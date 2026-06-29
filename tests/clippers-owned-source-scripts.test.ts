@@ -81,6 +81,7 @@ async function withFutureCurrentBatchSchedule(callback: () => Promise<void>) {
       ["script/clippers-tiktok-mvp-go-live-packet.mjs"],
       ["script/clippers-goal-completion-audit.mjs"],
       ["script/clippers-tiktok-mvp-readiness-verifier.mjs"],
+      ["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"],
     ]) {
       runFixtureScript(args);
     }
@@ -4527,9 +4528,20 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.equal(nextAction.batch.nextBatchId, "metricool-batch-02");
   assert.equal(nextAction.account.ready, true);
   assert.equal(nextAction.uploadPack.ready, true);
+  assert.equal(nextAction.operatorGate.status, "operator_can_schedule_in_metricool_review");
+  assert.equal(nextAction.operatorGate.actionAllowed, true);
+  assert.equal(nextAction.operatorGate.allowedAction, "schedule_current_batch_in_metricool_approval_required");
+  assert.equal(nextAction.operatorGate.approvalRequired, true);
+  assert.equal(nextAction.operatorGate.realPublishEnabled, false);
+  assert.equal(nextAction.operatorGate.readyToSend, 0);
+  assert.equal(nextAction.operatorGate.directSocialApisRequired, false);
+  assert.equal(nextAction.operatorGate.scheduledIsPublished, false);
+  assert.deepEqual(nextAction.operatorGate.blockedBy, []);
+  assert.match(nextAction.operatorGate.nextProofRequired, /final_status=scheduled/);
   assert.match(nextAction.operator.uploadHtml, /metricool-current-batch-upload-pack\/index\.html$/);
   assert.match(nextAction.operator.batchEvidenceCsv, /metricool-batch-01-evidence-import\.csv$/);
   assert.match(nextAction.operator.copyPacket, /TikTok Metricool operator packet/);
+  assert.match(nextAction.operator.copyPacket, /Allowed action: schedule_current_batch_in_metricool_approval_required/);
   assert.match(nextAction.operator.copyPacket, /final_status=scheduled/);
   assert.doesNotMatch(nextAction.operator.copyPacket, /client_secret=|access_token=|refresh_token=|bearer\s+[a-z0-9._-]+/i);
   assert.ok(nextAction.tasks.some((task) => task.id === "metricool_schedule" && task.status === "next"));
@@ -4537,6 +4549,8 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.ok(nextAction.guardrails.some((guardrail) => guardrail.includes("realPublishEnabled remains false")));
   const nextActionMarkdown = await readFile(nextAction.paths.markdown, "utf8");
   assert.match(nextActionMarkdown, /Operator Packet/);
+  assert.match(nextActionMarkdown, /Operator gate: operator_can_schedule_in_metricool_review/);
+  assert.match(nextActionMarkdown, /Allowed action: schedule_current_batch_in_metricool_approval_required/);
   assert.match(nextActionMarkdown, /Upload HTML:/);
   assert.match(nextActionMarkdown, /Evidence CSV:/);
   assert.equal(sessionPacket.status, "ready_for_metricool_session");
@@ -4810,6 +4824,59 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /Operator cockpit/);
   assert.match(page, /\["\/api\/clippers\/tiktok-batch-tracker"\], data\.tiktokBatchTracker/);
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-upload-pack"\], data\.metricoolCurrentBatchUploadPack/);
+  });
+});
+
+test("TikTok next action blocks Metricool operator gate when publish safety is unsafe", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
+    for (const script of [
+      "script/clippers-tiktok-post-schedule-verifier.mjs",
+      "script/clippers-tiktok-batch-closeout-verifier.mjs",
+      "script/clippers-metricool-current-batch-upload-pack.mjs",
+    ]) {
+      const result = spawnSync(process.execPath, [script], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    }
+    const approvalRunPath = path.join(rootDir, "scheduled/metricool-100-approval-run.json");
+    const originalApprovalRun = await readFile(approvalRunPath, "utf8");
+    try {
+      const approvalRun = JSON.parse(originalApprovalRun);
+      approvalRun.realPublishEnabled = true;
+      approvalRun.totals = {
+        ...(approvalRun.totals || {}),
+        readyToSend: 1,
+      };
+      await writeFile(approvalRunPath, JSON.stringify(approvalRun, null, 2));
+
+      const nextActionResult = spawnSync(process.execPath, ["script/clippers-tiktok-next-action.mjs"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(nextActionResult.status, 0, nextActionResult.stderr || nextActionResult.stdout);
+      const nextAction = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-next-action.json"), "utf8"));
+      assert.equal(nextAction.status, "ready_for_metricool_scheduling");
+      assert.equal(nextAction.operatorGate.status, "operator_blocked");
+      assert.equal(nextAction.operatorGate.actionAllowed, false);
+      assert.equal(nextAction.operatorGate.allowedAction, "none");
+      assert.equal(nextAction.operatorGate.realPublishEnabled, true);
+      assert.equal(nextAction.operatorGate.readyToSend, 1);
+      assert.ok(nextAction.operatorGate.blockedBy.includes("real_publish_enabled"));
+      assert.ok(nextAction.operatorGate.blockedBy.includes("ready_to_send_not_zero"));
+      assert.match(nextAction.nextStep, /Do not open Metricool scheduling/);
+      assert.match(nextAction.nextStep, /real_publish_enabled/);
+      assert.ok(nextAction.tasks.some((task) => (
+        task.id === "metricool_schedule"
+        && task.status === "blocked"
+        && task.nextAction.includes("real_publish_enabled")
+      )));
+      assert.match(nextAction.operator.copyPacket, /Do not open Metricool scheduling/);
+      assert.doesNotMatch(nextAction.operator.copyPacket, /Upload\/schedule each row/);
+    } finally {
+      await writeFile(approvalRunPath, originalApprovalRun);
+    }
   });
 });
 
@@ -6551,6 +6618,7 @@ test("TikTok MVP readiness verifier prioritizes Metricool bridge proof when lane
 });
 
 test("Metricool MCP preflight confirms configured keys without enabling automatic posting", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
   const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], {
     cwd: process.cwd(),
     encoding: "utf8",
@@ -6569,7 +6637,7 @@ test("Metricool MCP preflight confirms configured keys without enabling automati
 
   const preflight = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-metricool-mcp-preflight.json"), "utf8"));
   assert.equal(preflight.status, "ready_for_operator");
-  assert.equal(preflight.mode, "metricool_mcp_preflight_tiktok_only");
+  assert.equal(preflight.mode, "metricool_operator_preflight_tiktok_only");
   assert.equal(preflight.metricoolConfig.userTokenConfigured, true);
   assert.equal(preflight.metricoolConfig.userIdConfigured, true);
   assert.equal(preflight.metricoolConfig.readyForMcp, true);
@@ -6578,6 +6646,7 @@ test("Metricool MCP preflight confirms configured keys without enabling automati
   assert.match(preflight.paths.currentBatchEvidenceCsv, /metricool-batch-01-evidence-import\.csv$/);
   assert.ok(preflight.checks.some((check) => check.id === "automatic_metricool_execution_not_enabled" && check.status === "warn"));
   assert.ok(preflight.guardrails.some((guardrail) => guardrail.includes("Credentials present are not proof")));
+  assert.ok(preflight.guardrails.some((guardrail) => guardrail.includes("Missing Metricool MCP/API credentials do not block")));
   assert.doesNotMatch(JSON.stringify(preflight), /test-metricool-token|test-metricool-user/);
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-metricool-mcp-preflight.md"), "utf8");
@@ -6610,9 +6679,11 @@ test("Metricool MCP preflight confirms configured keys without enabling automati
   assert.match(page, /Metricool MCP Preflight/);
   assert.match(page, /\["\/api\/clippers\/metricool-mcp-preflight"\]/);
   assert.match(page, /metricoolMcpPreflight\?: ClipperMetricoolMcpPreflightSummary/);
+  });
 });
 
 test("Metricool current batch upload pack stages the 10 TikTok source files", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
   const stalePath = path.join(rootDir, "scheduled/metricool-current-batch-upload-pack/99_stale_old_batch.mp4");
   await writeFile(stalePath, Buffer.from("stale"));
   const result = spawnSync(process.execPath, ["script/clippers-metricool-current-batch-upload-pack.mjs"], {
@@ -6694,6 +6765,7 @@ test("Metricool current batch upload pack stages the 10 TikTok source files", as
   assert.match(page, /Console:/);
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-upload-pack"\]/);
   assert.match(page, /metricoolCurrentBatchUploadPack\?: ClipperMetricoolCurrentBatchUploadPackSummary/);
+  });
 });
 
 test("Metricool current batch upload pack blocks rerun after operator evidence exists", async () => {

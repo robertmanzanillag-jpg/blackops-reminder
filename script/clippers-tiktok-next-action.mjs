@@ -2,12 +2,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
+const scheduledDir = path.join(rootDir, "scheduled");
 const reportsDir = path.join(rootDir, "reports");
 const accountReadinessPath = path.join(rootDir, "account-permission-readiness.json");
+const approvalRunPath = path.join(scheduledDir, "metricool-100-approval-run.json");
 const uploadPackPath = path.join(reportsDir, "clippers-metricool-current-batch-upload-pack.json");
 const postSchedulePath = path.join(reportsDir, "clippers-tiktok-post-schedule-verifier.json");
 const closeoutPath = path.join(reportsDir, "clippers-tiktok-batch-closeout-verifier.json");
 const goalAuditPath = path.join(reportsDir, "clippers-goal-completion-audit.json");
+const launchControlPath = path.join(reportsDir, "clippers-tiktok-launch-control.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-next-action.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-next-action.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-next-action.csv");
@@ -48,6 +51,10 @@ function statusFor(input) {
 }
 
 function nextStepFor(summary) {
+  if (summary.operatorGate?.actionAllowed === false
+    && ["ready_for_metricool_scheduling", "ready_for_import_preview"].includes(summary.status)) {
+    return `Do not open Metricool scheduling for this batch yet. Clear blocked gates first: ${summary.operatorGate.blockedBy.join(", ")}.`;
+  }
   if (summary.status === "blocked_account_or_metricool_connection") {
     const blockedRows = (summary.account.rows || []).filter((row) => row.status !== "ready_for_metricool_tiktok");
     const blockedLabels = blockedRows.map((row) => `${row.accountId || "unknown"}:${row.platform || "tiktok"}=${row.status || "blocked"}`).join(", ");
@@ -99,9 +106,11 @@ function taskRowsFor(summary) {
     {
       id: "metricool_schedule",
       label: "Schedule current batch in Metricool",
-      status: summary.batch.notStarted > 0 ? "next" : "done",
+      status: summary.operatorGate?.actionAllowed === false && summary.batch.notStarted > 0 ? "blocked" : summary.batch.notStarted > 0 ? "next" : "done",
       evidence: `${summary.batch.scheduled}/${summary.batch.rows} scheduled; ${summary.batch.notStarted} not started`,
-      nextAction: summary.batch.notStarted > 0 ? "Schedule every row and record scheduled evidence." : "Wait for public TikTok URLs.",
+      nextAction: summary.operatorGate?.actionAllowed === false && summary.batch.notStarted > 0
+        ? `Clear operator gate blockers first: ${summary.operatorGate.blockedBy.join(", ")}.`
+        : summary.batch.notStarted > 0 ? "Schedule every row and record scheduled evidence." : "Wait for public TikTok URLs.",
     },
     {
       id: "public_urls",
@@ -120,11 +129,80 @@ function taskRowsFor(summary) {
   ];
 }
 
+function operatorGateFor(summary) {
+  const safetyBlockers = [];
+  if (!summary.safety.approvalRequired) safetyBlockers.push("metricool_not_approval_required");
+  if (summary.safety.realPublishEnabled) safetyBlockers.push("real_publish_enabled");
+  if (summary.safety.readyToSend > 0) safetyBlockers.push("ready_to_send_not_zero");
+  if (summary.safety.directSocialApisRequired) safetyBlockers.push("direct_social_apis_required");
+  const base = {
+    mode: "metricool_approval_required",
+    scope: "tiktok_only_metricool_mvp",
+    approvalRequired: summary.safety.approvalRequired,
+    directSocialApisRequired: summary.safety.directSocialApisRequired,
+    realPublishEnabled: summary.safety.realPublishEnabled,
+    readyToSend: summary.safety.readyToSend,
+    accountLanesReady: `${summary.account.readyLanes}/${summary.account.totalLanes}`,
+    uploadPackReady: `${summary.uploadPack.copied}/${summary.uploadPack.rows}`,
+    batchId: summary.batch.id,
+    scheduledIsPublished: false,
+    publishedCountingRule: "Count published only after exact public TikTok URL plus real 24h metrics.",
+  };
+  if (summary.status === "ready_for_metricool_scheduling" && safetyBlockers.length === 0) {
+    return {
+      ...base,
+      status: "operator_can_schedule_in_metricool_review",
+      actionAllowed: true,
+      allowedAction: "schedule_current_batch_in_metricool_approval_required",
+      blockedBy: [],
+      nextProofRequired: "Record final_status=scheduled plus the non-secret Metricool approval URL in the batch evidence CSV.",
+    };
+  }
+  if (summary.status === "ready_for_import_preview" && safetyBlockers.length === 0) {
+    return {
+      ...base,
+      status: "operator_can_run_import_preview_review",
+      actionAllowed: true,
+      allowedAction: "preview_public_tiktok_urls_and_24h_metrics",
+      blockedBy: [],
+      nextProofRequired: "Verify exact public TikTok URLs and nonzero 24h metrics before import review.",
+    };
+  }
+  const blockedBy = [];
+  if (!summary.account.ready) blockedBy.push("account_or_metricool_bridge_evidence");
+  if (!summary.uploadPack.ready) blockedBy.push("upload_pack_or_source_files");
+  if (summary.batch.waitingPublicPosts > 0) blockedBy.push("public_tiktok_urls");
+  if (summary.batch.waitingMetrics > 0) blockedBy.push("24h_metrics");
+  if (summary.batch.needsFix > 0 || summary.status === "blocked_evidence_fix") blockedBy.push("evidence_rows_need_fix");
+  blockedBy.push(...safetyBlockers);
+  return {
+    ...base,
+    status: "operator_blocked",
+    actionAllowed: false,
+    allowedAction: "none",
+    blockedBy: blockedBy.length ? Array.from(new Set(blockedBy)) : [summary.status],
+    nextProofRequired: "Clear the blocked gate before opening Metricool operator work.",
+  };
+}
+
 function operatorPacketFor(summary) {
+  const actionAllowed = summary.operatorGate?.actionAllowed === true;
+  const actionLines = actionAllowed ? [
+    "1. Open the upload HTML and Metricool in the browser.",
+    "2. Upload/schedule each row in rank order using only SPORT and memes TikTok profiles.",
+    "3. Record Metricool approval URL and final_status=scheduled in the batch evidence CSV.",
+    "4. After posts are public, add exact TikTok video URLs, wait 24h, then add real metrics.",
+  ] : [
+    "1. Do not open Metricool scheduling for this batch yet.",
+    `2. Clear blocked gates first: ${(summary.operatorGate?.blockedBy || ["unknown"]).join(", ")}.`,
+    "3. Regenerate this next-action packet after the blockers are cleared.",
+  ];
   const lines = [
     "TikTok Metricool operator packet",
     `Batch: ${summary.batch.id}`,
     `Status: ${summary.status}`,
+    `Operator gate: ${summary.operatorGate?.status || "missing"}`,
+    `Allowed action: ${summary.operatorGate?.allowedAction || "none"}`,
     `Upload HTML: ${summary.operator.uploadHtml || "missing"}`,
     `Upload folder: ${summary.operator.uploadDir || "missing"}`,
     `Workbook: ${summary.operator.workbook || "missing"}`,
@@ -135,10 +213,7 @@ function operatorPacketFor(summary) {
     `Ready to import review: ${summary.batch.readyToImport}`,
     "",
     "Next steps:",
-    "1. Open the upload HTML and Metricool in the browser.",
-    "2. Upload/schedule each row in rank order using only SPORT and memes TikTok profiles.",
-    "3. Record Metricool approval URL and final_status=scheduled in the batch evidence CSV.",
-    "4. After posts are public, add exact TikTok video URLs, wait 24h, then add real metrics.",
+    ...actionLines,
     "",
     "Guardrails:",
     "Do not mark published without a real public TikTok video URL.",
@@ -168,6 +243,9 @@ function renderMarkdown(summary) {
     `- Scheduled: ${summary.batch.scheduled}/${summary.batch.rows}`,
     `- Ready to import review: ${summary.batch.readyToImport}/${summary.batch.rows}`,
     `- Goal audit: ${summary.goalAudit.status}`,
+    `- Operator gate: ${summary.operatorGate.status}`,
+    `- Allowed action: ${summary.operatorGate.allowedAction}`,
+    `- Blocked by: ${summary.operatorGate.blockedBy.join(", ") || "none"}`,
     `- Upload HTML: ${summary.operator.uploadHtml || "missing"}`,
     `- Batch evidence CSV: ${summary.operator.batchEvidenceCsv || "missing"}`,
     "",
@@ -211,12 +289,14 @@ function renderCsv(summary) {
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, uploadPack, postSchedule, closeout, goalAudit] = await Promise.all([
+  const [accountReadiness, approvalRun, uploadPack, postSchedule, closeout, goalAudit, launchControl] = await Promise.all([
     readJson(accountReadinessPath, {}),
+    readJson(approvalRunPath, {}),
     readJson(uploadPackPath, {}),
     readJson(postSchedulePath, {}),
     readJson(closeoutPath, {}),
     readJson(goalAuditPath, {}),
+    readJson(launchControlPath, {}),
   ]);
   const accountCloseout = accountReadiness.tiktokMvpAccountCloseout || {};
   const accountReadyLanes = accountCloseout.totals?.ready || 0;
@@ -233,10 +313,12 @@ async function main() {
       markdown: outMarkdownPath,
       csv: outCsvPath,
       accountReadiness: accountReadinessPath,
+      approvalRun: approvalRunPath,
       uploadPack: uploadPackPath,
       postScheduleVerifier: postSchedulePath,
       batchCloseout: closeoutPath,
       goalAudit: goalAuditPath,
+      launchControl: launchControlPath,
     },
     account: {
       ready: accountCloseout.status === "ready_for_metricool_tiktok" && accountReadyLanes === accountTotalLanes && accountTotalLanes > 0,
@@ -270,6 +352,15 @@ async function main() {
       status: goalAudit.status || "missing",
       nextStep: goalAudit.nextStep || "",
     },
+    safety: {
+      approvalRequired: approvalRun.approvalRequired === true,
+      realPublishEnabled: approvalRun.realPublishEnabled === true,
+      readyToSend: Number(approvalRun.totals?.readyToSend || 0),
+      directSocialApisRequired: approvalRun.directSocialApisRequired === true,
+      launchReadyToImport: Number(launchControl.totals?.readyToImport || 0),
+      launchStatus: launchControl.status || "missing",
+      approvalRunStatus: approvalRun.status || "missing",
+    },
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",
@@ -287,6 +378,7 @@ async function main() {
     ],
   };
   summary.status = statusFor({ accountReadiness, uploadPack, postSchedule, closeout, goalAudit });
+  summary.operatorGate = operatorGateFor(summary);
   summary.nextStep = nextStepFor(summary);
   summary.tasks = taskRowsFor(summary);
   summary.operator.copyPacket = operatorPacketFor(summary);
