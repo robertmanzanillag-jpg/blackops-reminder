@@ -1684,6 +1684,10 @@ interface ClipperAccountPermissionReadinessSummary {
   metricoolMvpEvidence?: {
     accountEvidenceCsvPath: string;
     accountRows: number;
+    bridgeEvidenceCsvPath?: string;
+    bridgeEvidenceRows?: number;
+    bridgeEvidenceTemplate?: string;
+    bridgeEvidencePreviewRows?: string[];
     pendingProfileEvidenceCsvPath: string;
     pendingProfileRows: number;
     previewRows: string[];
@@ -24197,12 +24201,38 @@ export default function ClippersPage() {
                           <Badge className="w-fit border border-emerald-300/20 bg-emerald-950/40 text-[10px] text-emerald-100">
                             {accountPermissionReadiness.metricoolMvpEvidence.pendingProfileRows} profile rows
                           </Badge>
+                          <Badge className="w-fit border border-teal-300/20 bg-teal-950/40 text-[10px] text-teal-100">
+                            {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceRows || 0} TikTok bridge rows
+                          </Badge>
+                          {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceTemplate && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-teal-300/20 bg-transparent px-2 text-xs text-teal-100 hover:bg-teal-300/10"
+                              onClick={() => setMetricoolBridgeEvidenceBatchText(accountPermissionReadiness.metricoolMvpEvidence?.bridgeEvidenceTemplate || metricoolBridgeEvidenceTemplate)}
+                              data-testid="load-clippers-tiktok-metricool-bridge-template-button"
+                            >
+                              <FileCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                              Load TikTok bridge CSV
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2 text-[11px] leading-4 text-zinc-500 md:grid-cols-2">
                         <p className="break-all">Account evidence CSV: {accountPermissionReadiness.metricoolMvpEvidence.accountEvidenceCsvPath}</p>
+                        {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceCsvPath && (
+                          <p className="break-all text-teal-100/75">TikTok bridge CSV: {accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidenceCsvPath}</p>
+                        )}
                         <p className="break-all">Metricool profile CSV: {accountPermissionReadiness.metricoolMvpEvidence.pendingProfileEvidenceCsvPath}</p>
                       </div>
+                      {(accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidencePreviewRows || []).length > 0 && (
+                        <div className="mt-2 space-y-2" data-testid="clippers-tiktok-metricool-bridge-preview">
+                          {(accountPermissionReadiness.metricoolMvpEvidence.bridgeEvidencePreviewRows || []).slice(0, 2).map((row, index) => (
+                            <p key={`metricool-tiktok-bridge-${index}-${row.slice(0, 24)}`} className="break-all rounded border border-teal-300/15 bg-black/30 p-2 text-[10px] leading-4 text-teal-100/80">{row}</p>
+                          ))}
+                        </div>
+                      )}
                       {accountPermissionReadiness.metricoolMvpEvidence.previewRows.length > 0 && (
                         <div className="mt-2 space-y-2">
                           {accountPermissionReadiness.metricoolMvpEvidence.previewRows.slice(0, 4).map((row, index) => (

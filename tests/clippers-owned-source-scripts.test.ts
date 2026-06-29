@@ -251,6 +251,7 @@ test("owned source rights dry-run feeds Metricool source readiness sync without 
 });
 
 test("account permission readiness reports Metricool MVP without claiming direct API approval", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
   const result = spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
     cwd: process.cwd(),
     encoding: "utf8",
@@ -297,9 +298,16 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.ok(readiness.nextEvidenceDrop.rows > 0);
   assert.equal(readiness.nextEvidenceDrop.source, "external_closeout");
   assert.equal(readiness.metricoolMvpEvidence.accountRows, 0);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeEvidenceRows, 2);
   assert.equal(readiness.metricoolMvpEvidence.pendingProfileRows, 4);
   assert.match(readiness.metricoolMvpEvidence.accountEvidenceCsvPath, /account-permission-mvp-account-evidence\.csv$/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeEvidenceCsvPath, /metricool-tiktok-bridge-evidence\.csv$/);
   assert.match(readiness.metricoolMvpEvidence.pendingProfileEvidenceCsvPath, /metricool-pending-profile-evidence\.csv$/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /sports-daily","tiktok","SPORT/);
+  assert.match(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /meme-radar","tiktok","memes/);
+  assert.doesNotMatch(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /instagram|youtube/i);
+  assert.doesNotMatch(readiness.metricoolMvpEvidence.bridgeEvidenceTemplate, /METRICOOL_USER_TOKEN|client_secret|access_token/i);
+  assert.equal(readiness.metricoolMvpEvidence.bridgeEvidencePreviewRows.length, 2);
   assert.match(readiness.metricoolMvpEvidence.nextStep, /TikTok MVP|Instagram\/YouTube profile evidence stays deferred/i);
   assert.equal(readiness.tiktokMvpAccountCloseout.status, "ready_for_metricool_tiktok");
   assert.equal(readiness.tiktokMvpAccountCloseout.directSocialApisRequired, false);
@@ -313,6 +321,11 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.ok(readiness.nextEvidenceDrop.previewRows[0].includes("developer_app"));
   assert.ok(readiness.nextEvidenceDrop.previewCards.length > 0);
   assert.equal(readiness.nextEvidenceDrop.previewCards[0].kind, "developer_app");
+  const bridgeEvidenceCsv = await readFile(path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv"), "utf8");
+  assert.match(bridgeEvidenceCsv, /^account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes/m);
+  assert.match(bridgeEvidenceCsv, /sports-daily","tiktok","SPORT/);
+  assert.match(bridgeEvidenceCsv, /meme-radar","tiktok","memes/);
+  assert.doesNotMatch(bridgeEvidenceCsv, /instagram|youtube|client_secret|access_token/i);
   assert.equal(readiness.nextEvidenceDrop.previewCards[0].platform, "instagram");
   assert.match(readiness.nextEvidenceDrop.previewCards[0].proofPath, /external-closeout-proofs\/developer_app-instagram\.md$/);
   assert.match(readiness.nextEvidenceDrop.previewCards[0].nextStep, /real non-secret evidence/i);
@@ -371,6 +384,7 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.match(tiktokCloseoutCsv, /"account_id","account_name","category","platform","handle","status"/);
   assert.match(tiktokCloseoutCsv, /sports-daily/);
   assert.match(tiktokCloseoutCsv, /meme-radar/);
+  });
 });
 
 test("operational readiness keeps MVP separate from full external readiness", async () => {
@@ -1882,6 +1896,11 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("row.priority === 0"));
   assert.ok(page.includes('data-testid="clippers-full-readiness-gap"'));
   assert.ok(page.includes('data-testid="clippers-metricool-mvp-evidence-only"'));
+  assert.ok(page.includes('data-testid="load-clippers-tiktok-metricool-bridge-template-button"'));
+  assert.ok(page.includes('data-testid="clippers-tiktok-metricool-bridge-preview"'));
+  assert.ok(page.includes("bridgeEvidenceCsvPath"));
+  assert.ok(page.includes("bridgeEvidenceTemplate"));
+  assert.ok(page.includes("bridgeEvidencePreviewRows"));
   assert.ok(page.includes('data-testid="clippers-tiktok-mvp-account-closeout"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));

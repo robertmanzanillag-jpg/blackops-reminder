@@ -11,6 +11,7 @@ const mvpAccountEvidenceDropPath = path.join(rootDir, "account-permission-mvp-ac
 const tiktokMvpAccountCloseoutJsonPath = path.join(rootDir, "tiktok-mvp-account-closeout.json");
 const tiktokMvpAccountCloseoutMarkdownPath = path.join(rootDir, "tiktok-mvp-account-closeout.md");
 const tiktokMvpAccountCloseoutCsvPath = path.join(rootDir, "tiktok-mvp-account-closeout.csv");
+const metricoolTiktokBridgeEvidencePath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv");
 const metricoolPendingProfileEvidencePath = path.join(rootDir, "scheduled", "metricool-pending-profile-evidence.csv");
 const metricoolMvpLaunchPackPath = path.join(rootDir, "scheduled", "metricool-mvp-launch-pack.json");
 const externalCloseoutProofTodoPath = path.join(rootDir, "reports", "clippers-external-closeout-proof-todo.json");
@@ -471,6 +472,27 @@ function renderTikTokMvpCloseoutCsv(closeout) {
   ].join("\n") + "\n";
 }
 
+function tiktokMetricoolBridgeEvidenceRows(closeout) {
+  const header = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
+  const rows = closeout.rows.map((row) => {
+    const defaultBrandName = row.accountId === "sports-daily" ? "SPORT" : row.accountId === "meme-radar" ? "memes" : "";
+    const metricoolBrandName = row.metricoolBrandOrProfile && row.metricoolBrandOrProfile !== row.platform
+      ? row.metricoolBrandOrProfile
+      : defaultBrandName;
+    const profileUrl = `https://www.tiktok.com/${row.handle.startsWith("@") ? row.handle : `@${row.handle}`}`;
+    return [
+      row.accountId,
+      "tiktok",
+      metricoolBrandName,
+      "",
+      profileUrl,
+      "<paste real public Metricool proof URL>",
+      `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+    ].map(csvCell).join(",");
+  });
+  return `${[header, ...rows].join("\n")}\n`;
+}
+
 function renderMarkdown(summary) {
   const accountLines = summary.accountRows.map((row) => [
     `### ${row.accountName} / ${row.platform}`,
@@ -768,6 +790,9 @@ async function main() {
       ? "Use the TikTok Batch Runbook and process SPORT/memes clips in Metricool approval_required mode."
       : "Add real non-secret TikTok account and Metricool connection evidence for the blocked MVP row.",
   };
+  const metricoolTiktokBridgeEvidenceCsv = tiktokMetricoolBridgeEvidenceRows(tiktokMvpAccountCloseout);
+  const metricoolTiktokBridgeEvidenceLines = metricoolTiktokBridgeEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
+  const metricoolTiktokBridgeEvidenceDataRows = metricoolTiktokBridgeEvidenceLines.slice(1);
   const pendingMetricoolProfileRows = Array.isArray(metricoolMvpLaunchPack?.pendingProfileEvidenceRows)
     ? metricoolMvpLaunchPack.pendingProfileEvidenceRows.length
     : 0;
@@ -851,6 +876,10 @@ async function main() {
     metricoolMvpEvidence: {
       accountEvidenceCsvPath: mvpAccountEvidenceDropPath,
       accountRows: mvpAccountEvidenceDataRows.length,
+      bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+      bridgeEvidenceRows: metricoolTiktokBridgeEvidenceDataRows.length,
+      bridgeEvidenceTemplate: metricoolTiktokBridgeEvidenceCsv,
+      bridgeEvidencePreviewRows: metricoolTiktokBridgeEvidenceDataRows.slice(0, 5),
       pendingProfileEvidenceCsvPath: metricoolPendingProfileEvidencePath,
       pendingProfileRows: pendingMetricoolProfileRows,
       previewRows: mvpAccountEvidenceDataRows.slice(0, 5),
@@ -874,6 +903,7 @@ async function main() {
   await writeFile(outCsvPath, renderCsv(summary));
   await writeFile(evidenceDropPath, nextEvidenceCsv);
   await writeFile(mvpAccountEvidenceDropPath, mvpAccountEvidenceCsv);
+  await writeFile(metricoolTiktokBridgeEvidencePath, metricoolTiktokBridgeEvidenceCsv);
   await writeFile(tiktokMvpAccountCloseoutJsonPath, JSON.stringify(tiktokMvpAccountCloseout, null, 2));
   await writeFile(tiktokMvpAccountCloseoutMarkdownPath, renderTikTokMvpCloseoutMarkdown(tiktokMvpAccountCloseout));
   await writeFile(tiktokMvpAccountCloseoutCsvPath, renderTikTokMvpCloseoutCsv(tiktokMvpAccountCloseout));
