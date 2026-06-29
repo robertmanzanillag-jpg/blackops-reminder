@@ -308,6 +308,13 @@ export interface ClipperStatus {
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
   metricoolArtifactAudit: ClipperMetricoolArtifactAuditSummary;
+  metricool100OperatorHandoff: Record<string, unknown> | null;
+  metricoolCurrentBatchUploadPack: Record<string, unknown> | null;
+  metricoolCurrentBatchSessionPacket: Record<string, unknown> | null;
+  tiktokBatchTracker: Record<string, unknown> | null;
+  tiktokBatchCloseoutVerifier: Record<string, unknown> | null;
+  tiktokNextAction: Record<string, unknown> | null;
+  tiktokMvpGoLivePacket: Record<string, unknown> | null;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
@@ -7010,12 +7017,19 @@ const METRICOOL_EXECUTION_QUEUE_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-e
 const METRICOOL_100_APPROVAL_RUN_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.json");
 const METRICOOL_100_APPROVAL_RUN_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.md");
 const METRICOOL_100_APPROVAL_RUN_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-100-approval-run.csv");
+const METRICOOL_100_OPERATOR_HANDOFF_PATH = path.join(SCHEDULED_DIR, "metricool-100-operator-handoff.json");
 const METRICOOL_100_OPERATOR_RUN_SHEET_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-100-operator-run-sheet.csv");
 const METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-100-operator-handoff.md");
 const METRICOOL_100_APPROVAL_EVIDENCE_IMPORT_CSV_PATH = path.join(LAUNCH_EVIDENCE_DROP_DIR, "metricool-100-approval-evidence-import.csv");
 const METRICOOL_100_CURRENT_BATCH_WORKBOOK_PATH = path.join(SCHEDULED_DIR, "metricool-100-current-batch-workbook.json");
 const METRICOOL_100_BATCH_WORKBOOKS_DIR = path.join(SCHEDULED_DIR, "metricool-100-batch-workbooks");
 const METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR = path.join(SCHEDULED_DIR, "metricool-100-batch-evidence-imports");
+const METRICOOL_CURRENT_BATCH_UPLOAD_PACK_PATH = path.join(REPORTS_DIR, "clippers-metricool-current-batch-upload-pack.json");
+const METRICOOL_CURRENT_BATCH_SESSION_PACKET_PATH = path.join(REPORTS_DIR, "clippers-metricool-current-batch-session-packet.json");
+const TIKTOK_BATCH_TRACKER_PATH = path.join(REPORTS_DIR, "clippers-tiktok-batch-tracker.json");
+const TIKTOK_BATCH_CLOSEOUT_VERIFIER_PATH = path.join(REPORTS_DIR, "clippers-tiktok-batch-closeout-verifier.json");
+const TIKTOK_NEXT_ACTION_PATH = path.join(REPORTS_DIR, "clippers-tiktok-next-action.json");
+const TIKTOK_MVP_GO_LIVE_PACKET_PATH = path.join(REPORTS_DIR, "clippers-tiktok-mvp-go-live-packet.json");
 const METRICOOL_MVP_LAUNCH_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.json");
 const METRICOOL_MVP_LAUNCH_MARKDOWN_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.md");
 const METRICOOL_MVP_LAUNCH_CSV_PATH = path.join(SCHEDULED_DIR, "metricool-mvp-launch-pack.csv");
@@ -15468,6 +15482,66 @@ function dedupeTrendCandidates(candidates: ClipperTrendCandidate[]): ClipperTren
     }
   }
   return Array.from(byKey.values());
+}
+
+function sanitizeMetricoolOperatorArtifact(value: unknown, reasons: string[], pathLabel = "root"): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeMetricoolOperatorArtifact(item, reasons, `${pathLabel}[${index}]`));
+  }
+  if (!value || typeof value !== "object") return value;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (key === "realPublishEnabled" && nestedValue === true) {
+      sanitized[key] = false;
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    if (key === "approvalRequired" && nestedValue === false) {
+      sanitized[key] = true;
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    if (key === "publishMode" && typeof nestedValue === "string" && nestedValue !== "approval_required") {
+      sanitized[key] = "approval_required";
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    if (key === "readyToSend" && typeof nestedValue === "number" && nestedValue > 0) {
+      sanitized[key] = 0;
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    if (key === "canSendNow" && nestedValue === true) {
+      sanitized[key] = false;
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    if (key === "status" && nestedValue === "ready_to_send") {
+      sanitized[key] = "queued_for_approval";
+      reasons.push(`${pathLabel}.${key}`);
+      continue;
+    }
+    sanitized[key] = sanitizeMetricoolOperatorArtifact(nestedValue, reasons, `${pathLabel}.${key}`);
+  }
+  return sanitized;
+}
+
+async function readOptionalJsonArtifact(filePath: string): Promise<Record<string, unknown> | null> {
+  const raw = await readFile(filePath, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const safetyNormalizationReasons: string[] = [];
+    const sanitized = sanitizeMetricoolOperatorArtifact(parsed, safetyNormalizationReasons) as Record<string, unknown>;
+    if (safetyNormalizationReasons.length > 0) {
+      sanitized.safetyNormalized = true;
+      sanitized.safetyNormalizationReasons = safetyNormalizationReasons;
+    }
+    return sanitized;
+  } catch {
+    return null;
+  }
 }
 
 async function readCachedTrendRadarSummary(): Promise<ClipperTrendRadarSummary | null> {
@@ -47381,6 +47455,23 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     metricool100ApprovalRun,
     metricoolApprovalReport,
   });
+  const [
+    metricool100OperatorHandoff,
+    metricoolCurrentBatchUploadPack,
+    metricoolCurrentBatchSessionPacket,
+    tiktokBatchTracker,
+    tiktokBatchCloseoutVerifier,
+    tiktokNextAction,
+    tiktokMvpGoLivePacket,
+  ] = await Promise.all([
+    readOptionalJsonArtifact(METRICOOL_100_OPERATOR_HANDOFF_PATH),
+    readOptionalJsonArtifact(METRICOOL_CURRENT_BATCH_UPLOAD_PACK_PATH),
+    readOptionalJsonArtifact(METRICOOL_CURRENT_BATCH_SESSION_PACKET_PATH),
+    readOptionalJsonArtifact(TIKTOK_BATCH_TRACKER_PATH),
+    readOptionalJsonArtifact(TIKTOK_BATCH_CLOSEOUT_VERIFIER_PATH),
+    readOptionalJsonArtifact(TIKTOK_NEXT_ACTION_PATH),
+    readOptionalJsonArtifact(TIKTOK_MVP_GO_LIVE_PACKET_PATH),
+  ]);
   const goLiveExecutionPack = await buildGoLiveExecutionPackSummary({ accountLaunchKit, developerAppEvidence, credentialSetup, permissionTracker, productionUrlSetup, oauthGoLive, publisherConnectors, appReviewSubmissionPack, manualPostingPack, metricoolMvpLaunchPack, metricoolApprovalSession });
   const platformPortalChecklist = await buildPlatformPortalChecklistSummary({ externalSetupQueue, externalLaunchDossier, goLiveExecutionPack, officialPermissionMatrix, publisherConnectors });
   const growthAudit = buildGrowthAudit({ accounts, credentialChecks, tokenVault, permissionPack, productionQueue, sourceAcquisition, automation, automationSchedule, manualPostingPack, publishingPackage, goLiveExecutionPack, httpsTunnelPlan, legalPolicyPack, appReviewDemoPack, developerApplicationDrafts, accountCreationPack, permissionRequestPack, oauthConnectionPack, driveWorkspace, metrics, analyticsReportingPack, trendRadar, accountEvidence, developerAppEvidence, accountIdentityKit, accountLaunchKit, permissionTracker });
@@ -47607,6 +47698,13 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     metricoolApprovalSession,
     metricoolApprovalReport,
     metricoolArtifactAudit,
+    metricool100OperatorHandoff,
+    metricoolCurrentBatchUploadPack,
+    metricoolCurrentBatchSessionPacket,
+    tiktokBatchTracker,
+    tiktokBatchCloseoutVerifier,
+    tiktokNextAction,
+    tiktokMvpGoLivePacket,
     publisherConnectors,
     publisherExecutionQueue,
     productionUrlSetup,

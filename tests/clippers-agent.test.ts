@@ -4842,6 +4842,113 @@ test("getClipperStatus rejects unsafe persisted Metricool 100 publish flags", as
   }
 });
 
+test("getClipperStatus exposes TikTok Metricool operator artifacts when present", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifacts = [
+    [path.join(beforeStatus.rootDir, "scheduled", "metricool-100-operator-handoff.json"), {
+      status: "ready_for_operator",
+      generatedAt: "2026-06-29T00:00:00.000Z",
+      realPublishEnabled: false,
+      batches: [{ id: "metricool-batch-01", rows: 10, platforms: ["tiktok"] }],
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-metricool-current-batch-upload-pack.json"), {
+      status: "ready_for_metricool_upload",
+      batchId: "metricool-batch-01",
+      totals: { rows: 10, copied: 10, blockedUploadFiles: 0 },
+      paths: { html: path.join(beforeStatus.rootDir, "scheduled", "metricool-current-batch-upload-pack", "index.html") },
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-metricool-current-batch-session-packet.json"), {
+      status: "ready_for_metricool_session",
+      mode: "metricool_current_batch_session_packet",
+      batch: { id: "metricool-batch-01", rows: 10 },
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-tiktok-batch-tracker.json"), {
+      status: "ready_for_metricool_review",
+      batch: { id: "metricool-batch-01", rows: 10, platforms: ["tiktok"] },
+      totals: { rows: 10, notStarted: 10, scheduled: 0, readyToImport: 0 },
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-tiktok-batch-closeout-verifier.json"), {
+      status: "blocked_not_scheduled",
+      batch: { id: "metricool-batch-01", rows: 10, platforms: ["tiktok"] },
+      nextBatchUnlock: { status: "blocked_current_batch" },
+      totals: { rows: 10, notStarted: 10, scheduled: 0, readyToImport: 0 },
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-tiktok-next-action.json"), {
+      status: "ready_for_metricool_scheduling",
+      mode: "tiktok_metricool_next_action",
+      batch: { id: "metricool-batch-01", rows: 10 },
+      nextStep: "Schedule every TikTok row in Metricool approval_required mode.",
+    }],
+    [path.join(beforeStatus.reportsDir, "clippers-tiktok-mvp-go-live-packet.json"), {
+      status: "ready_for_metricool_operator",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      operatingMode: { activePlatforms: ["tiktok"], activeMetricoolBrands: ["SPORT", "memes"] },
+    }],
+  ] as const;
+  const previousArtifacts = new Map<string, string | null>();
+  for (const [filePath] of artifacts) {
+    previousArtifacts.set(filePath, await readFile(filePath, "utf8").catch(() => null));
+  }
+
+  try {
+    for (const [filePath, payload] of artifacts) {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, JSON.stringify(payload, null, 2));
+    }
+
+    const status = await getClipperStatus();
+    assert.equal((status.metricool100OperatorHandoff as any)?.status, "ready_for_operator");
+    assert.equal((status.metricoolCurrentBatchUploadPack as any)?.batchId, "metricool-batch-01");
+    assert.equal((status.metricoolCurrentBatchSessionPacket as any)?.status, "ready_for_metricool_session");
+    assert.equal((status.tiktokBatchTracker as any)?.status, "ready_for_metricool_review");
+    assert.equal((status.tiktokBatchCloseoutVerifier as any)?.nextBatchUnlock?.status, "blocked_current_batch");
+    assert.equal((status.tiktokNextAction as any)?.status, "ready_for_metricool_scheduling");
+    assert.equal((status.tiktokMvpGoLivePacket as any)?.realPublishEnabled, false);
+    assert.deepEqual((status.tiktokMvpGoLivePacket as any)?.operatingMode?.activePlatforms, ["tiktok"]);
+  } finally {
+    for (const [filePath, previous] of previousArtifacts) {
+      if (previous === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, previous);
+    }
+  }
+});
+
+test("getClipperStatus safety-normalizes unsafe TikTok Metricool operator artifacts", async () => {
+  const beforeStatus = await getClipperStatus();
+  const artifactPath = path.join(beforeStatus.reportsDir, "clippers-tiktok-mvp-go-live-packet.json");
+  const previousArtifact = await readFile(artifactPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(artifactPath, JSON.stringify({
+      status: "ready_for_metricool_operator",
+      launchMode: "metricool_approval_required",
+      publishMode: "auto_after_connection",
+      approvalRequired: false,
+      realPublishEnabled: true,
+      totals: { readyToSend: 7 },
+      rows: [
+        { id: "unsafe-row", status: "ready_to_send", canSendNow: true },
+      ],
+    }, null, 2));
+
+    const status = await getClipperStatus();
+    const packet = status.tiktokMvpGoLivePacket as any;
+    assert.equal(packet.realPublishEnabled, false);
+    assert.equal(packet.approvalRequired, true);
+    assert.equal(packet.publishMode, "approval_required");
+    assert.equal(packet.totals.readyToSend, 0);
+    assert.equal(packet.rows[0].status, "queued_for_approval");
+    assert.equal(packet.rows[0].canSendNow, false);
+    assert.equal(packet.safetyNormalized, true);
+    assert.ok(packet.safetyNormalizationReasons.some((reason: string) => reason.includes("realPublishEnabled")));
+  } finally {
+    if (previousArtifact === null) await unlink(artifactPath).catch(() => undefined);
+    else await writeFile(artifactPath, previousArtifact);
+  }
+});
+
 test("Metricool artifact audit blocks unsafe canonical queue state", async () => {
   const beforeStatus = await getClipperStatus();
   const queuePath = beforeStatus.metricoolExecutionQueue.manifestPath;

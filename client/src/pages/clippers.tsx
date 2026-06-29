@@ -8694,6 +8694,13 @@ interface ClipperStatus {
   metricoolApprovalSession: ClipperMetricoolApprovalSessionSummary;
   metricoolApprovalReport: ClipperMetricoolApprovalReportSummary;
   metricoolArtifactAudit: ClipperMetricoolArtifactAuditSummary;
+  metricool100OperatorHandoff: ClipperMetricool100OperatorHandoffSummary | null;
+  metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary | null;
+  metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary | null;
+  tiktokBatchTracker: ClipperTikTokBatchTrackerSummary | null;
+  tiktokBatchCloseoutVerifier: ClipperTikTokBatchCloseoutVerifierSummary | null;
+  tiktokNextAction: ClipperTikTokNextActionSummary | null;
+  tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
   publisherConnectors: ClipperPublisherConnectorSummary;
   publisherExecutionQueue: ClipperPublisherExecutionQueueSummary;
   productionUrlSetup: ClipperProductionUrlSetupSummary;
