@@ -66,6 +66,15 @@ test("Br Website carries the verified Black Room public URL", () => {
   assert.deepEqual((brWebsite.tags as string[]).includes("needs-health-url"), true);
 });
 
+test("DropKit carries the verified Replit public URL", () => {
+  const dropkit = knownDeveloperHealthApps().find((app) => app.githubRepo === "robertmanzanillag-jpg/DROPKIT")!;
+
+  assert.equal(dropkit.publicUrl, "https://dropkit.replit.app");
+  assert.equal(dropkit.deploymentProvider, "replit");
+  assert.deepEqual((dropkit.tags as string[]).includes("verified-public-url"), true);
+  assert.deepEqual((dropkit.tags as string[]).includes("needs-health-url"), true);
+});
+
 test("upsertKnownDeveloperHealthInventory creates missing apps and is idempotent", async () => {
   const rows: AppProject[] = [];
   const deps = {
