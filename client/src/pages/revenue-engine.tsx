@@ -38,6 +38,9 @@ type RevenueDailyScoutSprintSnapshot = {
   id: string;
   createdAt: string;
   status: "open" | "completed" | "blocked";
+  dispatchMode?: "manual_subagent_dispatch";
+  dispatchedAt?: string;
+  dispatchSummary?: string;
   source: "latest_scouting_mission" | "manual_override" | "default_market";
   area: string;
   niche: string;
@@ -863,6 +866,32 @@ type RevenueScoutingMissionResult = {
 type RevenueDailyScoutSprintResult = {
   status: "started";
   sprint: RevenueDailyScoutSprintSnapshot;
+  safety: RevenueDailyScoutSprintSnapshot["safety"];
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueScoutDispatchResult = {
+  status: "dispatch_ready";
+  reason: string;
+  sprint: RevenueDailyScoutSprintSnapshot;
+  dispatch: {
+    mode: "manual_subagent_dispatch";
+    readyToAssign: boolean;
+    agentCount: number;
+    taskCount: number;
+    slotCount: number;
+    agentAssignments: Array<{
+      ownerAgent: string;
+      taskIds: string[];
+      taskCount: number;
+      slotCount: number;
+      searchUrls: string[];
+      copyableBrief: string;
+    }>;
+    copyableDispatchBrief: string;
+    safety: RevenueDailyScoutSprintSnapshot["safety"];
+  };
   safety: RevenueDailyScoutSprintSnapshot["safety"];
   nextAction: string;
   snapshot: RevenueSnapshot;
@@ -1937,6 +1966,10 @@ export default function RevenueEnginePage() {
   const activeScoutNiche = snapshot?.latestDailyScoutSprint?.niche || snapshot?.businessScoutQueue.niche || scoutingNiche;
   const activeScoutOfferFocus = snapshot?.latestDailyScoutSprint?.offerFocus || snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
   const activeScoutTarget = snapshot?.latestDailyScoutSprint?.targetRows || snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
+  const dispatchScoutArea = snapshot?.businessScoutQueue.area || scoutingArea;
+  const dispatchScoutNiche = snapshot?.businessScoutQueue.niche || scoutingNiche;
+  const dispatchScoutOfferFocus = snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
+  const dispatchScoutTarget = snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
   const activeScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open"))
     || snapshot?.latestDailyScoutSprint?.tasks[0]
     || null;
@@ -2002,10 +2035,10 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: activeScoutArea,
-          niche: activeScoutNiche,
-          offerFocus: activeScoutOfferFocus,
-          targetLeadCount: activeScoutTarget,
+          area: dispatchScoutArea,
+          niche: dispatchScoutNiche,
+          offerFocus: dispatchScoutOfferFocus,
+          targetLeadCount: dispatchScoutTarget,
           maxTasks: 5,
           resultSlotsPerTask: 2,
           maxPaidDataSpendUsd: 0,
@@ -2015,6 +2048,32 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo iniciar daily scout sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const scoutDispatchMutation = useMutation<RevenueScoutDispatchResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/scout-dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: dispatchScoutArea,
+          niche: dispatchScoutNiche,
+          offerFocus: dispatchScoutOfferFocus,
+          targetLeadCount: dispatchScoutTarget,
+          maxTasks: 5,
+          resultSlotsPerTask: 2,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          notes: "Scout dispatch created from Revenue Engine UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo despachar scout agents");
       return data;
     },
     onSuccess: () => {
@@ -4686,6 +4745,21 @@ export default function RevenueEnginePage() {
                       <Button
                         type="button"
                         size="sm"
+                        className="bg-cyan-600 text-white hover:bg-cyan-500"
+                        onClick={() => scoutDispatchMutation.mutate()}
+                        disabled={scoutDispatchMutation.isPending}
+                        data-testid="button-dispatch-scout-agents"
+                      >
+                        {scoutDispatchMutation.isPending ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Bot className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Dispatch scouts
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
                         variant="outline"
                         className="border-zinc-700 bg-zinc-950"
                         onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.copyableBatchTemplate || "")}
@@ -4709,6 +4783,49 @@ export default function RevenueEnginePage() {
                     {dailyScoutSprintMutation.error && (
                       <p className="mt-2 text-xs text-red-300">{dailyScoutSprintMutation.error.message}</p>
                     )}
+                    {scoutDispatchMutation.error && (
+                      <p className="mt-2 text-xs text-red-300">{scoutDispatchMutation.error.message}</p>
+                    )}
+                    {scoutDispatchMutation.data && (
+                      <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3" data-testid="panel-scout-dispatch">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-cyan-200">Scout dispatch</p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {scoutDispatchMutation.data.dispatch.agentCount} agentes · {scoutDispatchMutation.data.dispatch.taskCount} tareas · {scoutDispatchMutation.data.dispatch.slotCount} slots
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-100">
+                            listo
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-cyan-100/80">{scoutDispatchMutation.data.nextAction}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.copyableDispatchBrief || "")}
+                            data-testid="button-copy-scout-dispatch"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy dispatch
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.agentAssignments.map((agent) => agent.copyableBrief).join("\n\n") || "")}
+                            data-testid="button-copy-scout-dispatch-agents"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy agent briefs
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {snapshot?.latestDailyScoutSprint && (
                       <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-latest-daily-scout-sprint">
                         <div className="flex items-start justify-between gap-3">
@@ -4717,6 +4834,11 @@ export default function RevenueEnginePage() {
                             <p className="mt-1 text-sm font-semibold text-white">
                               {snapshot.latestDailyScoutSprint.area} · {snapshot.latestDailyScoutSprint.niche} · {snapshot.latestDailyScoutSprint.targetRows} slots
                             </p>
+                            {snapshot.latestDailyScoutSprint.dispatchMode && (
+                              <p className="mt-1 text-xs text-emerald-100/80">
+                                Dispatch: {snapshot.latestDailyScoutSprint.dispatchSummary || snapshot.latestDailyScoutSprint.dispatchMode}
+                              </p>
+                            )}
                           </div>
                           <Badge variant="outline" className={cn(statusTone(snapshot.latestDailyScoutSprint.status), "shrink-0")}>
                             {snapshot.latestDailyScoutSprint.status}

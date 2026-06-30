@@ -709,6 +709,9 @@ type RevenueDailyScoutSprint = {
   createdAt: string;
   updatedAt: string;
   status: "open" | "completed" | "blocked";
+  dispatchMode?: "manual_subagent_dispatch";
+  dispatchedAt?: string;
+  dispatchSummary?: string;
   source: "latest_scouting_mission" | "manual_override" | "default_market";
   area: string;
   niche: string;
@@ -1349,6 +1352,9 @@ const persistedRevenueDailyScoutSprintSchema: z.ZodType<RevenueDailyScoutSprint>
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
   status: z.enum(["open", "completed", "blocked"]),
+  dispatchMode: z.enum(["manual_subagent_dispatch"]).optional(),
+  dispatchedAt: z.string().optional(),
+  dispatchSummary: z.string().optional(),
   source: z.enum(["latest_scouting_mission", "manual_override", "default_market"]),
   area: z.string().trim().min(1),
   niche: z.string().trim().min(1),
@@ -4534,6 +4540,76 @@ export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailySco
     sprint,
     safety: sprint.safety,
     nextAction: sprint.nextAction,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
+  const agentAssignments = sprint.agentBriefs.map((brief) => {
+    const tasks = sprint.tasks.filter((task) => brief.taskIds.includes(task.taskId));
+    return {
+      ownerAgent: brief.ownerAgent,
+      taskIds: brief.taskIds,
+      taskCount: tasks.length,
+      slotCount: tasks.reduce((total, task) => total + task.resultSlots.length, 0),
+      searchUrls: tasks.map((task) => task.url),
+      copyableBrief: brief.copyableBrief,
+    };
+  });
+  const copyableDispatchBrief = [
+    "Revenue Engine scout dispatch",
+    "",
+    `Sprint: ${sprint.id}`,
+    `Market: ${sprint.area} / ${sprint.niche}`,
+    `Offer focus: ${sprint.offerFocus}`,
+    `Target public evidence rows: ${sprint.targetRows}`,
+    "",
+    "Assignments:",
+    ...agentAssignments.map((agent) => `- ${agent.ownerAgent}: ${agent.taskCount} tasks / ${agent.slotCount} evidence slots`),
+    "",
+    "Rules:",
+    "- Use only public search/profile/listing pages.",
+    "- Return real evidence blocks; do not invent businesses.",
+    "- Do not contact businesses, buy data, scrape at scale, send outreach, publish previews or deploy websites.",
+    "- Paste completed blocks into Public scout evidence and import only after Robert verifies public evidence.",
+  ].join("\n");
+
+  return {
+    mode: "manual_subagent_dispatch" as const,
+    readyToAssign: agentAssignments.length > 0,
+    agentCount: agentAssignments.length,
+    taskCount: sprint.tasks.length,
+    slotCount: sprint.tasks.reduce((total, task) => total + task.resultSlots.length, 0),
+    agentAssignments,
+    copyableDispatchBrief,
+    safety: sprint.safety,
+  };
+}
+
+export function runRevenueScoutDispatch(input: z.input<typeof revenueDailyScoutSprintSchema> = {}) {
+  const result = runRevenueDailyScoutSprint({
+    ...input,
+    notes: input.notes || "Scout dispatch created from Revenue Engine UI.",
+  });
+  const dispatch = buildRevenueScoutDispatchSummary(result.sprint);
+  const dispatchedAt = new Date().toISOString();
+  result.sprint.dispatchMode = dispatch.mode;
+  result.sprint.dispatchedAt = dispatchedAt;
+  result.sprint.dispatchSummary = `${dispatch.agentCount} agents / ${dispatch.taskCount} tasks / ${dispatch.slotCount} public evidence slots`;
+  result.sprint.updatedAt = dispatchedAt;
+  const sprintIndex = revenueDailyScoutSprints.findIndex((sprint) => sprint.id === result.sprint.id);
+  if (sprintIndex >= 0) {
+    revenueDailyScoutSprints.splice(sprintIndex, 1, result.sprint);
+    persistRevenueDailyScoutSprints();
+  }
+
+  return {
+    status: "dispatch_ready" as const,
+    reason: "Scout dispatch listo: asigna briefs a subagentes y pega evidencia publica verificada antes de crear candidatos.",
+    sprint: result.sprint,
+    dispatch,
+    safety: result.safety,
+    nextAction: "Copiar dispatch/briefs, completar slots con evidencia publica real y luego importar candidatos verificados.",
     snapshot: getRevenueEngineSnapshot(),
   };
 }
