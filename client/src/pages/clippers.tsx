@@ -2328,6 +2328,22 @@ interface ClipperTikTokMvpProofLinksPreviewSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksPastePreviewSummary {
+  status: "needs_review" | "ready_for_proof_links_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  extractedUrls: number;
+  issues: string[];
+  proofLinks: ClipperTikTokMvpProofLinksSummary["parsed"];
+  proofLinksText: string;
+  proofLinksPreview: ClipperTikTokMvpProofLinksPreviewSummary;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -10047,8 +10063,10 @@ export default function ClippersPage() {
   const [launchEvidenceStrictImport, setLaunchEvidenceStrictImport] = useState(true);
   const [tiktokMvpProofQuickFillText, setTiktokMvpProofQuickFillText] = useState(tiktokMvpProofQuickFillTemplate);
   const [tiktokMvpProofLinksText, setTiktokMvpProofLinksText] = useState("");
+  const [tiktokMvpProofLinksPasteText, setTiktokMvpProofLinksPasteText] = useState("");
   const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
   const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
+  const [tiktokMvpProofLinksPastePreview, setTiktokMvpProofLinksPastePreview] = useState<ClipperTikTokMvpProofLinksPastePreviewSummary | null>(null);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -11083,6 +11101,32 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude revisar proof links", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofLinksPasteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/parse-tiktok-mvp-proof-links-paste", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pasteText: tiktokMvpProofLinksPasteText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude convertir el proof packet");
+      return data.tiktokMvpProofLinksPastePreview as ClipperTikTokMvpProofLinksPastePreviewSummary;
+    },
+    onSuccess: (data) => {
+      setTiktokMvpProofLinksPastePreview(data);
+      setTiktokMvpProofLinksText(data.proofLinksText);
+      setTiktokMvpProofLinksPreview(data.proofLinksPreview);
+      toast({
+        title: data.status === "ready_for_proof_links_preview" ? "Proof packet convertido" : "Proof packet necesita revision",
+        description: data.nextStep,
+        variant: data.status === "ready_for_proof_links_preview" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude convertir proof packet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15805,6 +15849,7 @@ export default function ClippersPage() {
   ];
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
+    || tiktokMvpProofLinksPasteMutation.isPending
     || tiktokMvpProofLinksPreviewMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofHandoffMutation.isPending
@@ -17196,6 +17241,54 @@ export default function ClippersPage() {
                       <p className="mt-1 text-sky-100/70">Files: {lane.detectedAccountFiles.length + lane.detectedMetricoolFiles.length}</p>
                     </div>
                   ))}
+                </div>
+                <div className="mt-2 rounded-md border border-cyan-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-proof-links-paste-assistant">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-cyan-100">Paste proof packet</p>
+                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes, each with TikTok ownership proof plus Metricool URL.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => tiktokMvpProofLinksPasteMutation.mutate()}
+                      disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksPasteText.trim()}
+                      className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                      data-testid="parse-clippers-tiktok-mvp-proof-links-paste-button"
+                    >
+                      {tiktokMvpProofLinksPasteMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-2 h-3.5 w-3.5" />}
+                      Build JSON
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={tiktokMvpProofLinksPasteText}
+                    onChange={(event) => setTiktokMvpProofLinksPasteText(event.target.value)}
+                    placeholder={"SPORT ownership: https://...\nSPORT Metricool: https://app.metricool.com/...\nmemes ownership: https://...\nmemes Metricool: https://app.metricool.com/..."}
+                    className="mt-2 min-h-28 border-cyan-300/20 bg-black/40 font-mono text-xs text-cyan-50"
+                    data-testid="clippers-tiktok-mvp-proof-links-paste-textarea"
+                  />
+                  {tiktokMvpProofLinksPastePreview && (
+                    <div className={cn(
+                      "mt-2 rounded-md border bg-black/20 p-2",
+                      tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview"
+                        ? "border-emerald-300/15 text-emerald-100/80"
+                        : "border-amber-300/15 text-amber-100/80"
+                    )} data-testid="clippers-tiktok-mvp-proof-links-paste-preview">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>paste {tiktokMvpProofLinksPastePreview.status}</Badge>
+                        <span>{tiktokMvpProofLinksPastePreview.extractedUrls} URLs</span>
+                        <span>{tiktokMvpProofLinksPastePreview.issues.length + tiktokMvpProofLinksPastePreview.proofLinksPreview.issues.length} issues</span>
+                        <span>real publish {tiktokMvpProofLinksPastePreview.realPublishEnabled ? "enabled" : "disabled"}</span>
+                      </div>
+                      <p className="mt-1">{tiktokMvpProofLinksPastePreview.issues[0] || tiktokMvpProofLinksPastePreview.proofLinksPreview.issues[0] || tiktokMvpProofLinksPastePreview.nextStep}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 rounded-md border border-sky-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-proof-links-editor">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
