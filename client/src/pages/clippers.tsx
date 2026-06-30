@@ -11094,6 +11094,7 @@ export default function ClippersPage() {
         tiktokMvpProofLinks: ClipperTikTokMvpProofLinksSummary;
         tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
       };
@@ -11103,6 +11104,7 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links"], data.tiktokMvpProofLinks);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
       if (data.tiktokMvpProofQuickFill) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
       }

@@ -2949,14 +2949,17 @@ export async function registerRoutes(
       );
       const proofDropRun = await runClipperTikTokMvpProofDropKit();
       const wizardRun = await runClipperTikTokMvpCloseoutWizard();
+      const proofHandoffRun = await runClipperTikTokMvpProofHandoff();
       res.json({
         tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks(),
         tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
         tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard(),
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
         proofDropRun,
         wizardRun,
+        proofHandoffRun,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to save TikTok MVP proof links" });
