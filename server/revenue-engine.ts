@@ -332,6 +332,7 @@ export const revenueMoneySprintSchema = z.object({
   requireRobertApprovalToContact: z.coerce.boolean().default(true),
   writePreviewFiles: z.coerce.boolean().default(true),
   seedLeads: z.array(revenueMoneySprintSeedLeadSchema).max(25).optional().default([]),
+  seedLeadBatchText: z.string().trim().max(20000).optional().default(""),
 });
 
 export type RevenueMoneySprintInput = z.infer<typeof revenueMoneySprintSchema>;
@@ -5142,6 +5143,158 @@ function summarizeSeedLead(seed: RevenueMoneySprintSeedLeadInput) {
   ].join(" ");
 }
 
+function detectRevenueSeedBatchDelimiter(line: string): string {
+  let quoted = false;
+  const counts = { "|": 0, "\t": 0, ",": 0 };
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && (char === "|" || char === "\t" || char === ",")) {
+      counts[char] += 1;
+    }
+  }
+
+  if (counts["|"] > 0) return "|";
+  if (counts["\t"] > 0) return "\t";
+  return ",";
+}
+
+function splitRevenueSeedBatchLine(line: string): string[] {
+  const delimiter = detectRevenueSeedBatchDelimiter(line);
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function normalizeSeedBatchKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isRevenueSeedBatchHeader(fields: string[]): boolean {
+  const keys = fields.map(normalizeSeedBatchKey);
+  return keys.some((key) => ["business", "businessname", "negocio", "name"].includes(key))
+    && keys.some((key) => ["evidence", "evidencia"].includes(key));
+}
+
+function revenueSeedBatchValue(fields: string[], header: string[] | null, aliases: string[], fallbackIndex: number): string {
+  if (header) {
+    const index = header.findIndex((key) => aliases.includes(key));
+    if (index >= 0) return fields[index] || "";
+  }
+  return fields[fallbackIndex] || "";
+}
+
+function normalizeRevenueSeedWebsiteStatus(value: string): RevenueLeadInput["websiteStatus"] {
+  const normalized = normalizeSeedBatchKey(value);
+  if (["nowebsite", "none", "missing", "sinwebsite", "no"].includes(normalized)) return "no_website";
+  if (["weakwebsite", "weak", "old", "broken", "debil"].includes(normalized)) return "weak_website";
+  if (["haswebsite", "has", "yes", "tienewebsite"].includes(normalized)) return "has_website";
+  return "unknown";
+}
+
+function normalizeRevenueSeedContactChannel(value: string): RevenueLeadInput["contactChannel"] {
+  const normalized = normalizeSeedBatchKey(value);
+  if (normalized.includes("email") || normalized.includes("mail")) return "email";
+  if (normalized.includes("phone") || normalized.includes("telefono") || normalized.includes("whatsapp")) return "phone";
+  if (normalized.includes("instagram") || normalized.includes("ig")) return "instagram";
+  if (normalized.includes("form")) return "contact_form";
+  return "unknown";
+}
+
+function parseRevenueSeedOfferUsd(value: string): number {
+  const parsed = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2500;
+}
+
+export function parseRevenueMoneySprintSeedLeadBatch(
+  batchText: string,
+  defaults: Pick<RevenueMoneySprintInput, "area" | "niche">,
+): { seedLeads: RevenueMoneySprintSeedLeadInput[]; blockedSeeds: Array<{ businessName: string; reason: string }> } {
+  const lines = batchText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+    .slice(0, 50);
+  if (!lines.length) return { seedLeads: [], blockedSeeds: [] };
+
+  let rows = lines.map(splitRevenueSeedBatchLine);
+  let header: string[] | null = null;
+  if (rows.length > 0 && isRevenueSeedBatchHeader(rows[0])) {
+    header = rows[0].map(normalizeSeedBatchKey);
+    rows = rows.slice(1);
+  }
+
+  const seedLeads: RevenueMoneySprintSeedLeadInput[] = [];
+  const blockedSeeds: Array<{ businessName: string; reason: string }> = [];
+
+  for (const fields of rows) {
+    if (seedLeads.length >= 25) {
+      blockedSeeds.push({ businessName: fields[0] || "batch row", reason: "batch limit 25" });
+      continue;
+    }
+
+    const candidate = {
+      businessName: revenueSeedBatchValue(fields, header, ["business", "businessname", "negocio", "name"], 0),
+      area: revenueSeedBatchValue(fields, header, ["area", "city", "ciudad"], 1) || defaults.area,
+      niche: revenueSeedBatchValue(fields, header, ["niche", "nicho", "industry", "categoria"], 2) || defaults.niche,
+      websiteStatus: normalizeRevenueSeedWebsiteStatus(revenueSeedBatchValue(fields, header, ["website", "websitestatus", "site"], 3)),
+      contactChannel: normalizeRevenueSeedContactChannel(revenueSeedBatchValue(fields, header, ["contactchannel", "channel", "canal"], 4)),
+      contactValue: revenueSeedBatchValue(fields, header, ["contactvalue", "contact", "contacto"], 5),
+      sourceUrl: revenueSeedBatchValue(fields, header, ["sourceurl", "source", "url", "fuente"], 6),
+      recipientEmail: revenueSeedBatchValue(fields, header, ["recipientemail", "email", "to"], 7),
+      evidence: revenueSeedBatchValue(fields, header, ["evidence", "evidencia"], 8),
+      painPoint: revenueSeedBatchValue(fields, header, ["painpoint", "pain", "dolor", "opportunity"], 9),
+      estimatedOfferUsd: parseRevenueSeedOfferUsd(revenueSeedBatchValue(fields, header, ["estimatedofferusd", "offer", "price", "oferta"], 10)),
+      contactName: revenueSeedBatchValue(fields, header, ["contactname", "nombre"], 11) || "Owner",
+      businessSummary: revenueSeedBatchValue(fields, header, ["businesssummary", "summary", "resumen"], 12),
+      status: "research",
+    };
+    const parsed = revenueMoneySprintSeedLeadSchema.safeParse(candidate);
+    if (parsed.success) {
+      seedLeads.push(parsed.data);
+      continue;
+    }
+    blockedSeeds.push({
+      businessName: candidate.businessName || "batch row",
+      reason: parsed.error.issues.map((issue) => issue.message).join("; "),
+    });
+  }
+
+  return { seedLeads, blockedSeeds };
+}
+
 function revenueOutreachChannelFromLead(channel: RevenueLeadInput["contactChannel"]): RevenueOutreachDraftInput["channel"] {
   if (channel === "email") return "email";
   if (channel === "instagram") return "instagram";
@@ -5183,9 +5336,21 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
   const recordedLeads: Array<ReturnType<typeof recordRevenueLead>> = [];
   const previews: Array<ReturnType<typeof buildRevenueMockupPreview>> = [];
   const outreachDrafts: Array<ReturnType<typeof recordRevenueOutreachDraft>> = [];
-  const blockedSeeds: Array<{ businessName: string; reason: string }> = [];
+  const parsedBatch = parseRevenueMoneySprintSeedLeadBatch(parsed.seedLeadBatchText, { area: parsed.area, niche: parsed.niche });
+  const availableBatchSlots = Math.max(0, 25 - parsed.seedLeads.length);
+  const sprintSeedLeads = [
+    ...parsed.seedLeads,
+    ...parsedBatch.seedLeads.slice(0, availableBatchSlots),
+  ];
+  const blockedSeeds: Array<{ businessName: string; reason: string }> = [
+    ...parsedBatch.blockedSeeds,
+    ...parsedBatch.seedLeads.slice(availableBatchSlots).map((seed) => ({
+      businessName: seed.businessName,
+      reason: "batch limit 25",
+    })),
+  ];
 
-  for (const seed of parsed.seedLeads) {
+  for (const seed of sprintSeedLeads) {
     const leadResult = recordRevenueLead({
       businessName: seed.businessName,
       area: seed.area,
@@ -5246,7 +5411,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
   }
 
   const paidSpendBlocked = parsed.maxPaidDataSpendUsd > 0;
-  const canStartSelling = !paidSpendBlocked && (parsed.seedLeads.length === 0 || recordedLeads.some((result) => ["A", "B"].includes(result.qualification.grade)));
+  const canStartSelling = !paidSpendBlocked && (sprintSeedLeads.length === 0 || recordedLeads.some((result) => ["A", "B"].includes(result.qualification.grade)));
 
   return {
     status: paidSpendBlocked ? "needs_spend_approval" as const : canStartSelling ? "ready_to_start" as const : "needs_lead_evidence" as const,
