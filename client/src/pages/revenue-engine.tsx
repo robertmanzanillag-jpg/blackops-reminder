@@ -1771,19 +1771,29 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const deliveryWorkspaceQaMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, string>({
-    mutationFn: async (workspaceId) => {
+  const deliveryWorkspaceQaMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const depositVerified = workspace.input.depositPaid || reviewChecks.depositPaid;
+      const rollbackVerified = reviewChecks.rollbackPlanReady || workspace.input.clientHandoffReady;
+      const automationQaPassed = workspace.input.automationQaPassed || (reviewChecks.automationTested && rollbackVerified);
       const response = await fetch("/api/revenue-engine/delivery-workspaces/qa", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workspaceId,
-          publicDataVerified: true,
-          visualQaPassed: true,
-          technicalQaPassed: true,
-          automationQaPassed: true,
-          clientHandoffReady: true,
-          notes: "Subagentes marcaron correcciones resueltas y handoff listo para revalidacion.",
+          workspaceId: workspace.id,
+          publicDataVerified: workspace.input.publicDataVerified || reviewChecks.publicDataVerified,
+          visualQaPassed: workspace.input.visualQaPassed || reviewChecks.responsiveChecked,
+          technicalQaPassed: workspace.input.technicalQaPassed || reviewChecks.linksChecked,
+          automationQaPassed,
+          clientHandoffReady: workspace.input.clientHandoffReady || (depositVerified && rollbackVerified),
+          notes: [
+            "Revalidacion con evidencia marcada en el panel QA.",
+            `data=${workspace.input.publicDataVerified || reviewChecks.publicDataVerified ? "ok" : "pending"}`,
+            `responsive=${workspace.input.visualQaPassed || reviewChecks.responsiveChecked ? "ok" : "pending"}`,
+            `technical=${workspace.input.technicalQaPassed || reviewChecks.linksChecked ? "ok" : "pending"}`,
+            `automation=${automationQaPassed ? "ok" : "pending"}`,
+            `handoff=${workspace.input.clientHandoffReady || (depositVerified && rollbackVerified) ? "ok" : "pending"}`,
+          ].join(" "),
         }),
       });
       const data = await response.json();
@@ -5538,12 +5548,12 @@ export default function RevenueEnginePage() {
                                 size="sm"
                                 variant="outline"
                                 disabled={deliveryWorkspaceQaMutation.isPending}
-                                onClick={() => deliveryWorkspaceQaMutation.mutate(workspace.id)}
+                                onClick={() => deliveryWorkspaceQaMutation.mutate(workspace)}
                                 className="mt-3 w-full border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
                                 data-testid={`button-revalidate-delivery-workspace-${workspace.id}`}
                               >
                                 {deliveryWorkspaceQaMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                Revalidar QA resuelto
+                                Revalidar con checks marcados
                               </Button>
                               <Button
                                 type="button"
