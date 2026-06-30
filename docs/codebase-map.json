@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T22:19:48.453Z",
+  "generatedAt": "2026-06-30T22:35:48.441Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -97,7 +97,7 @@
     "filesIndexed": 366,
     "imports": 1385,
     "routes": 101,
-    "symbols": 9081
+    "symbols": 9088
   },
   "directories": {
     ".agents/skills": {
@@ -4658,6 +4658,7 @@
         "accountProfiles",
         "accountRows",
         "activeMvp",
+        "activeMvpProofReady",
         "activeMvpReady",
         "allAccountsVerified",
         "allDirectApiPermissionsReady",
@@ -4672,6 +4673,7 @@
         "currentBatch",
         "currentBatchEvidenceCsv",
         "currentBatchId",
+        "currentBatchOperatorReady",
         "currentBatchReady",
         "developerApps",
         "developerAppsApproved",
@@ -4688,6 +4690,7 @@
         "header",
         "hostname",
         "isPlaceholder",
+        "isProofGateReady",
         "isTikTokPostUrl",
         "launchControlReady",
         "lines",
@@ -4704,6 +4707,8 @@
         "pendingProfiles",
         "permissionGroups",
         "permissionGroupsApproved",
+        "proofGate",
+        "proofGateReady",
         "proofHandoffDir",
         "proofRows",
         "publishedPostUrl",
@@ -4713,6 +4718,7 @@
         "renderMarkdown",
         "renderNextActionsCsv",
         "reportsDir",
+        "requiredLanes",
         "requirement",
         "requirements",
         "rightsReadyAssets",
@@ -4726,6 +4732,7 @@
         "tiktokExternalCloseoutComplete",
         "tiktokExternalCloseoutTasks",
         "tiktokExternalDeferredTasks",
+        "tiktokMvpOperatorReady",
         "totals",
         "verifiedAccounts"
       ],

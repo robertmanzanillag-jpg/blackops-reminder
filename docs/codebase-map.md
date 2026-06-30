@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T22:19:48.453Z
+Generated: 2026-06-30T22:35:48.441Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 434 | 366 | 1385 | 101 | 9081 |
+| 434 | 366 | 1385 | 101 | 9088 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -154,7 +154,7 @@ Package: `rest-express`
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
-- `script/clippers-goal-completion-audit.mjs` (script; 74 symbols, 2 imports)
+- `script/clippers-goal-completion-audit.mjs` (script; 81 symbols, 2 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 120 symbols, 3 imports)
 - `script/clippers-metricool-current-batch-session-packet.mjs` (script; 50 symbols, 2 imports)
 - `script/clippers-metricool-current-batch-upload-pack.mjs` (script; 77 symbols, 2 imports)
