@@ -117,6 +117,16 @@ export const revenueOutreachSendSchema = z.object({
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
 
+export const revenueOutreachOutcomeSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]),
+  outcomeRecordedByRobert: z.coerce.boolean().default(false),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueOutreachOutcomeInput = z.infer<typeof revenueOutreachOutcomeSchema>;
+
 export const improvementReviewSchema = z.object({
   campaignName: z.string().trim().min(2).max(160),
   periodLabel: z.string().trim().min(2).max(80).default("esta semana"),
@@ -527,6 +537,10 @@ type RevenueOutreachDraft = RevenueOutreachDraftInput & {
     externalMessageId?: string;
     sentAt?: string;
     lastAttemptAt?: string;
+    outcome?: RevenueOutreachOutcomeInput["outcome"];
+    outcomeAt?: string;
+    outcomeNotes?: string;
+    outcomeCashCollectedUsd?: number;
   };
   links: ReturnType<typeof buildProposalEmail>["links"];
   qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
@@ -924,6 +938,10 @@ const persistedRevenueOutreachDraftSchema = revenueOutreachDraftSchema.extend({
     externalMessageId: z.string().optional(),
     sentAt: z.string().optional(),
     lastAttemptAt: z.string().optional(),
+    outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]).optional(),
+    outcomeAt: z.string().optional(),
+    outcomeNotes: z.string().optional(),
+    outcomeCashCollectedUsd: z.number().optional(),
   }),
   links: z.object({
     mailto: z.string(),
@@ -5443,6 +5461,87 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
       snapshot: getRevenueEngineSnapshot(),
     };
   }
+}
+
+export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput) {
+  loadRevenueOutreach();
+  loadRevenueLeads();
+
+  const parsed = revenueOutreachOutcomeSchema.parse(input);
+  const now = new Date().toISOString();
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId) || null;
+  const gates = [
+    { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
+    { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de registrar contacto externo." },
+    { gate: "human_recorded", passed: parsed.outcomeRecordedByRobert, fix: "Robert debe confirmar que este resultado ocurrio fuera del sistema." },
+    { gate: "deposit_amount", passed: parsed.outcome !== "deposit_collected" || parsed.cashCollectedUsd > 0, fix: "Registrar cashCollectedUsd mayor a 0 para deposito cobrado." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!draft || failedGate) {
+    return {
+      status: "blocked" as const,
+      reason: failedGate?.fix || "No se pudo registrar outcome.",
+      gates,
+      draft,
+      lead: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const nextStatusByOutcome: Record<RevenueOutreachOutcomeInput["outcome"], RevenueLead["status"]> = {
+    contacted: "contacted",
+    reply: "contacted",
+    call_booked: "proposal_sent",
+    deposit_collected: "closed",
+    lost: "disqualified",
+  };
+  const nextActionByOutcome: Record<RevenueOutreachOutcomeInput["outcome"], string> = {
+    contacted: "Esperar reply o registrar follow-up; no marcar venta hasta deposito.",
+    reply: "Responder manualmente, buscar llamada y registrar outcome si agenda.",
+    call_booked: "Preparar llamada, confirmar scope/deposito y registrar deposito si cierra.",
+    deposit_collected: "Crear delivery workspace desde Website handoff queue con deposito/scope verificados; ledger se registra alli para evitar doble conteo.",
+    lost: "Marcar aprendizaje en improvement review antes de contactar mas leads similares.",
+  };
+
+  draft.delivery.mode = "manual";
+  draft.delivery.sendStatus = "sent";
+  draft.delivery.reason = `Resultado manual registrado: ${parsed.outcome}.`;
+  draft.delivery.sentAt = draft.delivery.sentAt || now;
+  draft.delivery.lastAttemptAt = now;
+  draft.delivery.outcome = parsed.outcome;
+  draft.delivery.outcomeAt = now;
+  draft.delivery.outcomeNotes = parsed.notes || nextActionByOutcome[parsed.outcome];
+  draft.delivery.outcomeCashCollectedUsd = parsed.cashCollectedUsd;
+  draft.nextAction = nextActionByOutcome[parsed.outcome];
+  draft.updatedAt = now;
+
+  let lead: RevenueLead | null = draft.leadId
+    ? revenueLeads.find((item) => item.id === draft.leadId) || null
+    : null;
+  if (!lead) {
+    lead = revenueLeads.find((item) => item.businessName.toLowerCase() === draft.businessName.toLowerCase()) || null;
+  }
+  if (lead) {
+    lead.status = parsed.outcome === "lost"
+      ? "disqualified"
+      : strongerRevenueLeadStatus(lead.status, nextStatusByOutcome[parsed.outcome]);
+    lead.updatedAt = now;
+    persistRevenueLeads();
+  }
+
+  persistRevenueOutreach();
+
+  return {
+    status: "recorded" as const,
+    reason: parsed.outcome === "deposit_collected"
+      ? "Deposito registrado como outcome manual; crea delivery workspace para contabilizar venta sin doble conteo."
+      : "Outcome manual registrado en draft y lead.",
+    gates,
+    draft,
+    lead,
+    snapshot: getRevenueEngineSnapshot(),
+  };
 }
 
 export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {

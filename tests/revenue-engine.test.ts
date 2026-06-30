@@ -35,6 +35,7 @@ import {
   recordRevenueLead,
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
+  recordRevenueOutreachOutcome,
   recordRevenuePublicLeadCandidate,
   recordRevenuePublicLeadCandidateBatch,
   recordRevenueSalesAutopilot,
@@ -2463,6 +2464,141 @@ test("sends approved outreach with configured provider and updates matching lead
   assert.equal(sendResult.draft.delivery.sendStatus, "sent");
   assert.equal(sendResult.draft.delivery.externalMessageId, "email_123");
   assert.equal(sendResult.snapshot.recentLeads[0].status, "proposal_sent");
+});
+
+test("blocks outreach outcome until Robert confirms the manual result", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "owner@manualoutcome.example",
+    contactName: "Owner",
+    businessName: "Manual Outcome Cafe",
+    sourceUrl: "https://example.com/manual-outcome-cafe",
+    businessSummary: "Manual Outcome Cafe has public evidence of no dedicated website and a visible owner contact.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const outcome = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "reply",
+    outcomeRecordedByRobert: false,
+  });
+
+  assert.equal(outcome.status, "blocked");
+  assert.match(outcome.reason, /Robert/);
+  assert.equal(outcome.gates.some((gate) => gate.gate === "human_recorded" && gate.passed === false), true);
+  assert.equal(outcome.snapshot.recentOutreach[0].delivery.outcome, undefined);
+});
+
+test("records reply and call outcomes on approved outreach drafts", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Booked Reply Studio",
+    area: "Miami",
+    niche: "fitness",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@bookedreply.example",
+    evidence: "Public site has weak conversion and visible email.",
+    painPoint: "Needs stronger lead capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "owner@bookedreply.example",
+    contactName: "Owner",
+    businessName: "Booked Reply Studio",
+    sourceUrl: "https://example.com/booked-reply",
+    businessSummary: "Booked Reply Studio has public evidence of a weak website and needs lead capture.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const reply = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "reply",
+    outcomeRecordedByRobert: true,
+    notes: "Owner replied asking for examples.",
+  });
+
+  assert.equal(reply.status, "recorded");
+  assert.equal(reply.draft?.delivery.sendStatus, "sent");
+  assert.equal(reply.draft?.delivery.outcome, "reply");
+  assert.equal(reply.draft?.delivery.outcomeNotes, "Owner replied asking for examples.");
+  assert.equal(reply.lead?.status, "contacted");
+
+  const call = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "call_booked",
+    outcomeRecordedByRobert: true,
+  });
+
+  assert.equal(call.status, "recorded");
+  assert.equal(call.draft?.delivery.outcome, "call_booked");
+  assert.equal(call.lead?.status, "proposal_sent");
+});
+
+test("records deposit outreach outcome without double-counting ledger cash", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Deposit Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@depositready.example",
+    evidence: "Public listing has no website, active menu posts and visible owner email.",
+    painPoint: "Needs online menu and catering capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "owner@depositready.example",
+    contactName: "Owner",
+    businessName: "Deposit Ready Cafe",
+    sourceUrl: "https://example.com/deposit-ready-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/deposit-ready-cafe",
+    businessSummary: "Deposit Ready Cafe has no dedicated website and needs online menu, catering capture and follow-up.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const blocked = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: 0,
+  });
+  assert.equal(blocked.status, "blocked");
+  assert.match(blocked.reason, /cashCollectedUsd/);
+
+  const outcome = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    notes: "Deposit received by Robert outside the app.",
+  });
+
+  assert.equal(outcome.status, "recorded");
+  assert.equal(outcome.lead?.status, "closed");
+  assert.equal(outcome.draft?.delivery.outcome, "deposit_collected");
+  assert.equal(outcome.draft?.delivery.outcomeCashCollectedUsd, draftResult.draft.pricing.depositUsd);
+  assert.equal(outcome.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(outcome.snapshot.recentLedger.length, 0);
+  assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, leadResult.lead.id);
 });
 
 test("runs main revenue agent with subagent reviews and approvals", () => {

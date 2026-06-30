@@ -486,6 +486,10 @@ type RevenueSnapshot = {
       externalMessageId?: string;
       sentAt?: string;
       lastAttemptAt?: string;
+      outcome?: RevenueOutreachOutcome;
+      outcomeAt?: string;
+      outcomeNotes?: string;
+      outcomeCashCollectedUsd?: number;
     };
     links: ProposalEmail["links"];
     qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
@@ -891,6 +895,17 @@ type OutreachSendResult = {
   reason?: string;
   sendResult?: { id: string };
   draft: RevenueSnapshot["recentOutreach"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueOutreachOutcome = "contacted" | "reply" | "call_booked" | "deposit_collected" | "lost";
+
+type OutreachOutcomeResult = {
+  status: "recorded" | "blocked";
+  reason: string;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
   snapshot: RevenueSnapshot;
 };
 
@@ -2364,6 +2379,32 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo enviar el outreach");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const outreachOutcomeMutation = useMutation<
+    OutreachOutcomeResult,
+    Error,
+    { draftId: string; outcome: RevenueOutreachOutcome; cashCollectedUsd?: number; notes?: string }
+  >({
+    mutationFn: async ({ draftId, outcome, cashCollectedUsd = 0, notes = "" }) => {
+      const response = await fetch("/api/revenue-engine/outreach-outcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId,
+          outcome,
+          outcomeRecordedByRobert: true,
+          cashCollectedUsd,
+          notes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo registrar el outcome");
       return data;
     },
     onSuccess: () => {
@@ -7191,6 +7232,17 @@ export default function RevenueEnginePage() {
                           </p>
                         </div>
                       )}
+                      {outreachOutcomeMutation.data && (
+                        <div className="mt-3 rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-white">Ultimo outcome</p>
+                            <Badge variant="outline" className={cn(statusTone(outreachOutcomeMutation.data.status), "shrink-0")}>
+                              {outreachOutcomeMutation.data.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-zinc-500">{outreachOutcomeMutation.data.reason}</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -7218,8 +7270,14 @@ export default function RevenueEnginePage() {
                             <div className="mt-3 grid gap-2 text-sm text-zinc-400 md:grid-cols-3">
                               <p>{draft.channel}</p>
                               <p>{money.format(draft.pricing.totalSetupUsd)}</p>
-                              <p>{draft.delivery.sendStatus}</p>
+                              <p>{draft.delivery.outcome || draft.delivery.sendStatus}</p>
                             </div>
+                            {draft.delivery.outcomeNotes && (
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                                {draft.delivery.outcomeNotes}
+                                {draft.delivery.outcomeCashCollectedUsd ? ` · ${money.format(draft.delivery.outcomeCashCollectedUsd)} cash` : ""}
+                              </p>
+                            )}
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Button
                                 type="button"
@@ -7248,6 +7306,67 @@ export default function RevenueEnginePage() {
                                   </Button>
                                 </a>
                               ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-sky-700 text-sky-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "reply",
+                                  notes: "Robert registro reply manual del negocio.",
+                                })}
+                                data-testid="button-record-outreach-reply"
+                              >
+                                Reply
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-violet-700 text-violet-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "call_booked",
+                                  notes: "Robert registro llamada agendada.",
+                                })}
+                                data-testid="button-record-outreach-call"
+                              >
+                                Call
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-700 text-emerald-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved" || draft.pricing.depositUsd <= 0}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "deposit_collected",
+                                  cashCollectedUsd: draft.pricing.depositUsd,
+                                  notes: "Robert confirmo deposito manual; crear delivery workspace para contabilizar venta.",
+                                })}
+                                data-testid="button-record-outreach-deposit"
+                              >
+                                Deposit
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-red-900 text-red-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "lost",
+                                  notes: "Robert marco el lead como perdido.",
+                                })}
+                                data-testid="button-record-outreach-lost"
+                              >
+                                Lost
+                              </Button>
                             </div>
                           </div>
                         ))

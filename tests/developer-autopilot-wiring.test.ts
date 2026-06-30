@@ -63,6 +63,20 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
 });
 
+test("Revenue Engine exposes manual outreach outcome recording", () => {
+  const routeSource = readFileSync("server/routes.ts", "utf8");
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
+
+  assert.match(engineSource, /recordRevenueOutreachOutcome/);
+  assert.match(routeSource, /\/api\/revenue-engine\/outreach-outcome/);
+  assert.match(routeSource, /revenueOutreachOutcomeSchema\.parse/);
+  assert.match(uiSource, /outreachOutcomeMutation/);
+  assert.match(uiSource, /button-record-outreach-reply/);
+  assert.match(uiSource, /button-record-outreach-call/);
+  assert.match(uiSource, /button-record-outreach-deposit/);
+});
+
 test("Dashboard chat exposes a subscription handoff prompt", () => {
   const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
 
