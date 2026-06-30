@@ -134,10 +134,14 @@ function proofTemplate() {
   };
 }
 
+function proofTemplateText() {
+  return `${JSON.stringify(proofTemplate(), null, 2)}\n`;
+}
+
 async function ensureDropKitFiles() {
   await mkdir(dropDir, { recursive: true });
   await mkdir(reportsDir, { recursive: true });
-  await writeFile(proofLinksStarterPath, JSON.stringify(proofTemplate(), null, 2));
+  await writeFile(proofLinksStarterPath, proofTemplateText());
   const existing = await readJson(proofLinksPath, null);
   if (!existing) {
     await writeFile(proofLinksPath, JSON.stringify(proofTemplate(), null, 2));
@@ -324,6 +328,7 @@ async function main() {
     dropDir,
     proofLinksPath,
     readyForQuickFill: validation.readyForQuickFill,
+    proofLinksStarterText: proofTemplateText(),
     lanes: validation.lanesSummary,
     issues: validation.issues,
     warnings: validation.warnings,

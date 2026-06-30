@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Eye,
   FileCheck2,
+  FileText,
   Flame,
   Gauge,
   HardDrive,
@@ -2268,6 +2269,7 @@ interface ClipperTikTokMvpProofDropKitSummary {
   dropDir: string;
   proofLinksPath: string;
   readyForQuickFill: boolean;
+  proofLinksStarterText: string;
   lanes: Array<{
     key: string;
     accountId: string;
@@ -17400,6 +17402,21 @@ export default function ClippersPage() {
                       >
                         <RefreshCw className="mr-2 h-3.5 w-3.5" />
                         Reset links
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTiktokMvpProofLinksText(tiktokMvpProofDropKit.proofLinksStarterText || "");
+                          setTiktokMvpProofLinksPreview(null);
+                        }}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofDropKit.proofLinksStarterText}
+                        className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                        data-testid="load-clippers-tiktok-mvp-proof-links-starter-button"
+                      >
+                        <FileText className="mr-2 h-3.5 w-3.5" />
+                        Load starter
                       </Button>
                       <Button
                         type="button"

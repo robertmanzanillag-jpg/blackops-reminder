@@ -473,6 +473,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /Preview must be clean before Save links turns on/);
   assert.match(page, /signed\/temporary URLs/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
+  assert.match(page, /load-clippers-tiktok-mvp-proof-links-starter-button/);
+  assert.match(page, /tiktokMvpProofDropKit\.proofLinksStarterText/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-refresh-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-panel/);
@@ -1341,6 +1343,8 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
     assert.equal(report.paths.proofLinksStarterJson, proofLinksStarterPath);
+    assert.match(report.proofLinksStarterText, /"sports-daily:tiktok"/);
+    assert.match(report.proofLinksStarterText, /"meme-radar:tiktok"/);
     assert.equal(report.quickFillStatus, "not_run");
     assert.equal(report.realPublishEnabled, false);
     assert.equal(report.directSocialApisRequired, false);
