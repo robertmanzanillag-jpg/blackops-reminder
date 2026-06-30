@@ -3552,10 +3552,13 @@ export default function RevenueEnginePage() {
                       {snapshot?.launchReadiness.todayExecutionPack?.mission || "Buscar negocios publicos con evidencia verificable."}
                     </p>
                   </div>
-                  <Badge variant="outline" className={cn(statusTone("pass"), "shrink-0")}>
-                    {snapshot?.launchReadiness.todayExecutionPack?.ownerAgent || "lead-scout"}
+                  <Badge variant="outline" className={cn(statusTone(snapshot?.launchReadiness.todayExecutionPack?.status || "review"), "shrink-0")}>
+                    {snapshot?.launchReadiness.todayExecutionPack?.status || "review"}
                   </Badge>
                 </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Owner {snapshot?.launchReadiness.todayExecutionPack?.ownerAgent || "lead-scout"}
+                </p>
                 <p className="mt-3 rounded-md border border-black/30 bg-black/40 px-3 py-2 text-xs leading-5 text-zinc-300">
                   {snapshot?.launchReadiness.todayExecutionPack?.copyableAgentCommand || "Find public no-website leads. Do not contact or spend."}
                 </p>
