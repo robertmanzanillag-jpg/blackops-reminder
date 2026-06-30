@@ -542,6 +542,25 @@ type RevenueManualOutreachQueue = {
   };
 };
 
+type RevenueBusinessScoutQueue = {
+  status: "ready" | "needs_context";
+  source: "latest_scouting_mission" | "default_market";
+  area: string;
+  niche: string;
+  offerFocus: RevenueMoneySprintInput["offerFocus"];
+  dailyResearchTarget: number;
+  tasks: ReturnType<typeof buildRevenueScoutQueue>;
+  workPack: ReturnType<typeof buildRevenueScoutWorkPack>;
+  nextAction: string;
+  safety: {
+    researchesPublicSources: true;
+    persistsCandidates: false;
+    sendsOutreach: false;
+    spendsMoney: false;
+    blockedActions: string[];
+  };
+};
+
 type RevenueWebsiteDeliveryHandoffQueue = {
   status: "ready" | "needs_context" | "empty";
   readyCount: number;
@@ -3188,6 +3207,50 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
   };
 }
 
+function buildRevenueBusinessScoutQueue(): RevenueBusinessScoutQueue {
+  const latestMission = revenueScoutingMissions.at(-1);
+  const area = latestMission?.mission.area || "Miami";
+  const niche = latestMission?.mission.niche || "restaurants";
+  const offerFocus = latestMission?.mission.offerFocus || "both";
+  const requestedResearchTarget = latestMission?.mission.targetLeadCount || 25;
+  const dailyResearchTarget = Math.min(Math.max(requestedResearchTarget, 10), 500);
+  const input: RevenueMoneySprintInput = {
+    area,
+    niche,
+    offerFocus,
+    dailyResearchTarget,
+    dailyQualifiedLeadLimit: Math.min(Math.max(dailyResearchTarget, 5), 100),
+    dailyMockupLimit: 5,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [],
+    seedLeadBatchText: "",
+  };
+  const tasks = buildRevenueScoutQueue(input);
+  const workPack = buildRevenueScoutWorkPack(input, tasks);
+
+  return {
+    status: tasks.length > 0 ? "ready" : "needs_context",
+    source: latestMission ? "latest_scouting_mission" : "default_market",
+    area,
+    niche,
+    offerFocus,
+    dailyResearchTarget,
+    tasks,
+    workPack,
+    nextAction: "Abrir tareas de busqueda y capturar evidencia publica; despues usar Guardar batch publico para persistir candidatos.",
+    safety: {
+      researchesPublicSources: true,
+      persistsCandidates: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      blockedActions: workPack.safety.blockedActions,
+    },
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -3334,6 +3397,7 @@ export function getRevenueEngineSnapshot() {
     systemReadiness,
     launchReadiness,
     agentOperatingContract,
+    businessScoutQueue: buildRevenueBusinessScoutQueue(),
     manualOutreachQueue: buildRevenueManualOutreachQueue(10),
     publicLeadImportQueue: buildRevenuePublicLeadImportQueue(10),
     websiteDeliveryHandoffQueue: buildRevenueWebsiteDeliveryHandoffQueue(8),

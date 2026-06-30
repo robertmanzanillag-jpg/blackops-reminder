@@ -134,6 +134,47 @@ type RevenueSnapshot = {
     blockedActions: string[];
     currentInstruction: string;
   };
+  businessScoutQueue: {
+    status: "ready" | "needs_context";
+    source: "latest_scouting_mission" | "default_market";
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations" | "both";
+    dailyResearchTarget: number;
+    tasks: Array<{
+      id: string;
+      source: string;
+      query: string;
+      url: string;
+      ownerAgent: string;
+      allowedAction: string;
+      evidenceToCapture: string[];
+      blockedActions: string[];
+    }>;
+    workPack: {
+      targetRows: number;
+      batchHeader: string;
+      copyableBatchTemplate: string;
+      subagentBrief: string;
+      importInstructions: string[];
+      qualityGate: string[];
+      safety: {
+        allowedAction: string;
+        blockedActions: string[];
+        paidDataSpendUsd: number;
+        sendsOutreach: boolean;
+        writesPreviewFiles: boolean;
+      };
+    };
+    nextAction: string;
+    safety: {
+      researchesPublicSources: true;
+      persistsCandidates: false;
+      sendsOutreach: false;
+      spendsMoney: false;
+      blockedActions: string[];
+    };
+  };
   manualOutreachQueue: {
     status: "ready" | "needs_approval" | "empty";
     dailyContactLimit: number;
@@ -3488,6 +3529,83 @@ export default function RevenueEnginePage() {
                   </CardContent>
                 </Card>
               </div>
+
+              <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Cola de busqueda publica</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.businessScoutQueue.nextAction || "Cargando cola de busqueda."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.businessScoutQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.businessScoutQueue.source === "latest_scouting_mission" ? "mision activa" : "default"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-4 xl:grid-cols-[1fr_360px]">
+                  <div className="space-y-3">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.businessScoutQueue.tasks || []).slice(0, 6).map((task) => (
+                        <a
+                          key={task.id}
+                          href={task.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-lg border border-zinc-800 bg-black p-3 transition hover:border-emerald-500/40"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{task.query}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{task.ownerAgent} · {task.source}</p>
+                            </div>
+                            <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">{task.evidenceToCapture.join(" · ")}</p>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Work pack</p>
+                    <p className="mt-2 text-sm text-zinc-300">
+                      {snapshot?.businessScoutQueue.area || "Miami"} · {snapshot?.businessScoutQueue.niche || "restaurants"} · {snapshot?.businessScoutQueue.workPack.targetRows ?? 0} filas
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 bg-zinc-950"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.copyableBatchTemplate || "")}
+                        data-testid="button-copy-live-scout-batch-template"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy rows
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 bg-zinc-950"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.subagentBrief || "")}
+                        data-testid="button-copy-live-scout-brief"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy brief
+                      </Button>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {(snapshot?.businessScoutQueue.workPack.importInstructions || []).map((item) => (
+                        <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {leadRadarMutation.data && (
                 <Card className="mb-4 border-fuchsia-500/20 bg-zinc-950/80">

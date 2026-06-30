@@ -216,6 +216,54 @@ test("records and persists scouting missions as batch memory", () => {
   assert.equal(snapshot.recentScoutingMissions[0].mission.niche, "med spas");
 });
 
+test("snapshot exposes a public business scout queue before money sprint runs", () => {
+  const initial = getRevenueEngineSnapshot();
+
+  assert.equal(initial.businessScoutQueue.status, "ready");
+  assert.equal(initial.businessScoutQueue.source, "default_market");
+  assert.equal(initial.businessScoutQueue.tasks.length > 0, true);
+  assert.equal(initial.businessScoutQueue.safety.sendsOutreach, false);
+  assert.equal(initial.businessScoutQueue.safety.persistsCandidates, false);
+  assert.match(initial.businessScoutQueue.workPack.copyableBatchTemplate, /business\|area\|niche/);
+
+  recordRevenueScoutingMission({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    targetLeadCount: 18,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+  const updated = getRevenueEngineSnapshot();
+
+  assert.equal(updated.businessScoutQueue.source, "latest_scouting_mission");
+  assert.equal(updated.businessScoutQueue.area, "Orlando");
+  assert.equal(updated.businessScoutQueue.niche, "roofers");
+  assert.equal(updated.businessScoutQueue.offerFocus, "websites");
+  assert.equal(updated.businessScoutQueue.tasks.some((task) => task.query.includes("roofers")), true);
+});
+
+test("business scout queue handles minimum-size scouting missions without snapshot crash", () => {
+  recordRevenueScoutingMission({
+    area: "Tampa",
+    niche: "med spas",
+    offerFocus: "both",
+    targetLeadCount: 5,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.businessScoutQueue.area, "Tampa");
+  assert.equal(snapshot.businessScoutQueue.dailyResearchTarget, 10);
+  assert.equal(snapshot.businessScoutQueue.tasks.length >= 3, true);
+  assert.equal(snapshot.businessScoutQueue.safety.persistsCandidates, false);
+  assert.match(snapshot.businessScoutQueue.nextAction, /Guardar batch publico/);
+});
+
 test("builds an always-on lead radar with contact and mockup limits", () => {
   const radar = buildRevenueLeadRadar({
     area: "Miami",
