@@ -143,6 +143,30 @@ function clipperUniqueStrings(values: unknown[]): string[] {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
 
+const clipperTikTokMvpProofLinksDropPastePaths = [
+  "clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt",
+  "clippers_workspace/proof-drop/tiktok-mvp/proof-links-drop.txt",
+  "clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet.txt",
+] as const;
+
+async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: string; pasteText: string; bytes: number }> {
+  for (const sourcePath of clipperTikTokMvpProofLinksDropPastePaths) {
+    try {
+      const pasteText = await readNodeFile(sourcePath, "utf8");
+      if (!pasteText.trim()) {
+        throw new Error(`${sourcePath} is empty; paste the four non-secret TikTok/Metricool proof links first.`);
+      }
+      return { sourcePath, pasteText, bytes: Buffer.byteLength(pasteText, "utf8") };
+    } catch (error: any) {
+      if (error?.code === "ENOENT") continue;
+      throw error;
+    }
+  }
+  const error = new Error(`No TikTok MVP proof links drop file found. Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with the four non-secret proof URLs.`);
+  (error as NodeJS.ErrnoException).code = "ENOENT";
+  throw error;
+}
+
 export function buildClipperExternalCloseoutEvidenceCsvTemplate(rows: unknown): string {
   const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
   if (!enrichedRows.length) return "";
@@ -2758,6 +2782,39 @@ export async function registerRoutes(
       res.json({ tiktokMvpProofLinksPastePreview: extractClipperTikTokMvpProofLinksPaste(req.body?.pasteText) });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to parse TikTok MVP proof links paste" });
+    }
+  });
+
+  app.post("/api/clippers/import-tiktok-mvp-proof-links-drop", async (_req, res) => {
+    try {
+      const drop = await readClipperTikTokMvpProofLinksDropPaste();
+      const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
+      res.json({
+        tiktokMvpProofLinksDropImport: {
+          status: parsedPreview.status,
+          generatedAt: parsedPreview.generatedAt,
+          scope: parsedPreview.scope,
+          launchMode: parsedPreview.launchMode,
+          directSocialApisRequired: parsedPreview.directSocialApisRequired,
+          realPublishEnabled: false,
+          sourcePath: drop.sourcePath,
+          bytes: drop.bytes,
+          extractedUrls: parsedPreview.extractedUrls,
+          issues: parsedPreview.issues,
+          proofLinksText: parsedPreview.proofLinksText,
+          proofLinksPreview: parsedPreview.proofLinksPreview,
+          guardrails: [
+            "Reads only local non-secret proof URL drop files.",
+            "Does not save proof-links.json until the operator presses Save proof links.",
+            "Does not apply account evidence, queue Metricool, create calendar rows, or send posts.",
+          ],
+          nextStep: parsedPreview.nextStep,
+        },
+        tiktokMvpProofLinksPastePreview: parsedPreview,
+      });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 400;
+      res.status(status).json({ error: error.message || "Failed to import TikTok MVP proof links drop file" });
     }
   });
 

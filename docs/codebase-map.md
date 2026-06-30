@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T11:26:02.368Z
+Generated: 2026-06-30T11:32:37.127Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 87 | 8841 |
+| 431 | 363 | 1368 | 88 | 8842 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -53,7 +53,7 @@ Package: `rest-express`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
 - `server/shopify-routes.ts`: `/api/shopify/install`, `/api/shopify/oauth/callback`, `/api/shopify/oauth/start`, `/api/shopify/oauth/status`
 - `server/telegram-routes.ts`: `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/go-live/evidence`, `/api/ceo/readiness`, `/api/telegram/configure`, `/api/telegram/disconnect`, `/api/telegram/health`, `/api/telegram/setup-webhook`, `/api/telegram/status`, `/api/telegram/test`, `/api/telegram/test-ceo-brief`, `/api/telegram/toggle`, `/api/telegram/webhook`, `/api/telegram/webhook-status`
-- `tests/clippers-tiktok-mvp-evidence-closeout.test.mjs`: `/api/clippers/apply-tiktok-mvp-evidence-closeout`, `/api/clippers/apply-tiktok-mvp-proof-intake-import`, `/api/clippers/apply-tiktok-mvp-proof-quick-fill`, `/api/clippers/operational-readiness`, `/api/clippers/parse-tiktok-mvp-proof-links-paste`, `/api/clippers/prepare-tiktok-mvp-closeout-wizard`, `/api/clippers/prepare-tiktok-mvp-local-verification`, `/api/clippers/prepare-tiktok-mvp-proof-doctor`, `/api/clippers/prepare-tiktok-mvp-proof-drop-kit`, `/api/clippers/prepare-tiktok-mvp-proof-handoff`, `/api/clippers/prepare-tiktok-mvp-proof-intake-pack`, `/api/clippers/prepare-tiktok-mvp-proof-refresh`, `/api/clippers/prepare-tiktok-mvp-proof-unblocker`, `/api/clippers/preview-tiktok-mvp-evidence-closeout`, `/api/clippers/preview-tiktok-mvp-proof-intake-import`, `/api/clippers/preview-tiktok-mvp-proof-links`, `/api/clippers/save-tiktok-mvp-proof-links`, `/api/clippers/tiktok-mvp-closeout-wizard`, `/api/clippers/tiktok-mvp-evidence-closeout`, `/api/clippers/tiktok-mvp-local-verification`, `/api/clippers/tiktok-mvp-proof-doctor`, `/api/clippers/tiktok-mvp-proof-drop-kit`, `/api/clippers/tiktok-mvp-proof-handoff`, `/api/clippers/tiktok-mvp-proof-intake-import`, `/api/clippers/tiktok-mvp-proof-quick-fill`, `/api/clippers/tiktok-mvp-proof-refresh`, `/api/clippers/tiktok-mvp-proof-unblocker`
+- `tests/clippers-tiktok-mvp-evidence-closeout.test.mjs`: `/api/clippers/apply-tiktok-mvp-evidence-closeout`, `/api/clippers/apply-tiktok-mvp-proof-intake-import`, `/api/clippers/apply-tiktok-mvp-proof-quick-fill`, `/api/clippers/import-tiktok-mvp-proof-links-drop`, `/api/clippers/operational-readiness`, `/api/clippers/parse-tiktok-mvp-proof-links-paste`, `/api/clippers/prepare-tiktok-mvp-closeout-wizard`, `/api/clippers/prepare-tiktok-mvp-local-verification`, `/api/clippers/prepare-tiktok-mvp-proof-doctor`, `/api/clippers/prepare-tiktok-mvp-proof-drop-kit`, `/api/clippers/prepare-tiktok-mvp-proof-handoff`, `/api/clippers/prepare-tiktok-mvp-proof-intake-pack`, `/api/clippers/prepare-tiktok-mvp-proof-refresh`, `/api/clippers/prepare-tiktok-mvp-proof-unblocker`, `/api/clippers/preview-tiktok-mvp-evidence-closeout`, `/api/clippers/preview-tiktok-mvp-proof-intake-import`, `/api/clippers/preview-tiktok-mvp-proof-links`, `/api/clippers/save-tiktok-mvp-proof-links`, `/api/clippers/tiktok-mvp-closeout-wizard`, `/api/clippers/tiktok-mvp-evidence-closeout`, `/api/clippers/tiktok-mvp-local-verification`, `/api/clippers/tiktok-mvp-proof-doctor`, `/api/clippers/tiktok-mvp-proof-drop-kit`, `/api/clippers/tiktok-mvp-proof-handoff`, `/api/clippers/tiktok-mvp-proof-intake-import`, `/api/clippers/tiktok-mvp-proof-quick-fill`, `/api/clippers/tiktok-mvp-proof-refresh`, `/api/clippers/tiktok-mvp-proof-unblocker`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`

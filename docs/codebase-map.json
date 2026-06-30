@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T11:26:02.368Z",
+  "generatedAt": "2026-06-30T11:32:37.127Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -94,8 +94,8 @@
     "filesVisible": 431,
     "filesIndexed": 363,
     "imports": 1368,
-    "routes": 87,
-    "symbols": 8841
+    "routes": 88,
+    "symbols": 8842
   },
   "directories": {
     ".agents/skills": {
@@ -14476,6 +14476,7 @@
         "proofHandoffPath",
         "proofImportPath",
         "proofIntakePath",
+        "proofLinksDropImportRoute",
         "proofLinksModule",
         "proofLinksModulePath",
         "proofLinksPasteRoute",
@@ -14516,6 +14517,7 @@
         "/api/clippers/apply-tiktok-mvp-evidence-closeout",
         "/api/clippers/apply-tiktok-mvp-proof-intake-import",
         "/api/clippers/apply-tiktok-mvp-proof-quick-fill",
+        "/api/clippers/import-tiktok-mvp-proof-links-drop",
         "/api/clippers/operational-readiness",
         "/api/clippers/parse-tiktok-mvp-proof-links-paste",
         "/api/clippers/prepare-tiktok-mvp-closeout-wizard",

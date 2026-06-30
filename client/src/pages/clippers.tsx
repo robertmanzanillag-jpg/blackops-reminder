@@ -2382,6 +2382,23 @@ interface ClipperTikTokMvpProofLinksPastePreviewSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksDropImportSummary {
+  status: "needs_review" | "ready_for_proof_links_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  sourcePath: string;
+  bytes: number;
+  extractedUrls: number;
+  issues: string[];
+  proofLinksText: string;
+  proofLinksPreview: ClipperTikTokMvpProofLinksPreviewSummary;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -11231,6 +11248,31 @@ export default function ClippersPage() {
     },
   });
 
+  const tiktokMvpProofLinksDropImportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/import-tiktok-mvp-proof-links-drop", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude importar el proof drop local");
+      return data as {
+        tiktokMvpProofLinksDropImport: ClipperTikTokMvpProofLinksDropImportSummary;
+        tiktokMvpProofLinksPastePreview: ClipperTikTokMvpProofLinksPastePreviewSummary;
+      };
+    },
+    onSuccess: (data) => {
+      setTiktokMvpProofLinksPastePreview(data.tiktokMvpProofLinksPastePreview);
+      setTiktokMvpProofLinksText(data.tiktokMvpProofLinksDropImport.proofLinksText);
+      setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksDropImport.proofLinksPreview);
+      toast({
+        title: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "Proof drop importado" : "Proof drop necesita revision",
+        description: `${data.tiktokMvpProofLinksDropImport.sourcePath}: ${data.tiktokMvpProofLinksDropImport.nextStep}`,
+        variant: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude importar proof drop", description: error.message, variant: "destructive" });
+    },
+  });
+
   const tiktokMvpProofHandoffMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-handoff", { method: "POST" });
@@ -15973,6 +16015,7 @@ export default function ClippersPage() {
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofLinksPasteMutation.isPending
+    || tiktokMvpProofLinksDropImportMutation.isPending
     || tiktokMvpProofLinksPreviewMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofHandoffMutation.isPending
@@ -17455,6 +17498,18 @@ export default function ClippersPage() {
                     >
                       <FileText className="mr-2 h-3.5 w-3.5" />
                       Load packet
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => tiktokMvpProofLinksDropImportMutation.mutate()}
+                      disabled={tiktokProofFlowBusy || isLoading}
+                      className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                      data-testid="import-clippers-tiktok-mvp-proof-links-drop-button"
+                    >
+                      {tiktokMvpProofLinksDropImportMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-2 h-3.5 w-3.5" />}
+                      Import drop file
                     </Button>
                     <Button
                       type="button"
