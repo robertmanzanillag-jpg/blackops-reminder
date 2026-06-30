@@ -213,9 +213,31 @@ function renderNextActionsCsv(summary) {
   ].join("\n") + "\n";
 }
 
+function proofGateControlFieldsPresent(proofGate = {}) {
+  return [
+    "status",
+    "requiredLanes",
+    "minimumProofUrlsNeeded",
+    "failedPreflightChecks",
+    "failedVerifierChecks",
+    "missingRequiredReports",
+    "boundaryNotReady",
+    "blockedBy",
+    "preflightNotReady",
+  ].every((field) => Object.hasOwn(proofGate, field))
+    && Array.isArray(proofGate.requiredLanes)
+    && typeof proofGate.minimumProofUrlsNeeded === "number"
+    && Array.isArray(proofGate.failedPreflightChecks)
+    && Array.isArray(proofGate.failedVerifierChecks)
+    && Array.isArray(proofGate.missingRequiredReports)
+    && Array.isArray(proofGate.boundaryNotReady)
+    && Array.isArray(proofGate.blockedBy);
+}
+
 function isProofGateReady(proofGate) {
   const requiredLanes = proofGate.requiredLanes || [];
   return proofGate.status === "ready_for_operator_review"
+    && proofGateControlFieldsPresent(proofGate)
     && requiredLanes.includes("sports-daily:tiktok")
     && requiredLanes.includes("meme-radar:tiktok")
     && Number(proofGate.minimumProofUrlsNeeded || 0) === 0
@@ -229,7 +251,6 @@ function isProofGateReady(proofGate) {
     && proofGate.boundaryNotReady.length === 0
     && Array.isArray(proofGate.blockedBy)
     && proofGate.blockedBy.length === 0
-    && Object.hasOwn(proofGate, "preflightNotReady")
     && !proofGate.preflightNotReady;
 }
 
@@ -251,7 +272,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
     rows.push({
       priority: priority++,
       title: "Fast path Metricool TikTok proof gate",
-      status: proofGate.status || "blocked_needs_real_metricool_tiktok_proof",
+      status: "blocked_needs_valid_metricool_tiktok_proof_gate",
       owner: "Robert",
       buttonOrFile: proofGate.paths?.oneScreenGuide || oneScreenProofPath,
       proofLine: (proofGate.requiredLanes || []).join(" + "),
@@ -390,6 +411,7 @@ async function main() {
   const externalProofFilesReady = fullReadinessTracked && externalProofRows === 0 && fullMissing === 0;
   const pendingProfiles = Number(accountReadiness.metricoolMvpEvidence?.pendingProfileRows || mvpLaunchPack.totals?.pendingMetricoolProfiles || 0);
   const proofGate = operatingRefresh.proofGate || {};
+  const proofGateControlsPresent = proofGateControlFieldsPresent(proofGate);
   const proofGateReady = isProofGateReady(proofGate);
   const tiktokMvpOperatorReady = proofGateReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession;
   const currentBatchOperatorReady = tiktokMvpOperatorReady && currentBatchReady;
@@ -399,7 +421,7 @@ async function main() {
       "tiktok_metricool_proof_gate",
       "TikTok Metricool proof gate",
       proofGateReady ? "ready" : "needs_external_action",
-      `proofGate ${proofGate.status || "missing"}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
+      `proofGate ${proofGate.status || "missing"}; controlFieldsPresent ${proofGateControlsPresent}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
       proofGate.nextStep || "Run Operating Refresh and paste real non-secret SPORT/memes Metricool proof URLs.",
     ),
     requirement(
@@ -547,6 +569,7 @@ async function main() {
     },
     tiktokMvpProofGate: {
       status: proofGate.status || "missing",
+      controlFieldsPresent: proofGateControlsPresent,
       requiredLanes: proofGate.requiredLanes || [],
       minimumProofUrlsNeeded: Number(proofGate.minimumProofUrlsNeeded || 0),
       proofPacketsNeeded: Number(proofGate.proofPacketsNeeded || 0),

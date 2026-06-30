@@ -71,7 +71,7 @@ function nextStepFor(summary) {
     return `Do not open Metricool scheduling for this batch yet. Clear blocked gates first: ${summary.operatorGate.blockedBy.join(", ")}.`;
   }
   if (summary.status === "blocked_account_or_metricool_connection") {
-    if (summary.proofGate?.status && summary.proofGate.status !== "ready_for_operator_review") {
+    if (summary.proofGate?.status && !isProofGateReady(summary.proofGate)) {
       return [
         summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence, preview links, then save only if the preview is clean.",
         summary.proofGate.paths?.oneScreenGuide ? `One-screen guide: ${summary.proofGate.paths.oneScreenGuide}.` : "",
@@ -173,7 +173,7 @@ function taskRowsFor(summary) {
     rows.splice(1, 0, {
       id: "proof_gate",
       label: "TikTok Metricool proof gate",
-      status: summary.proofGate.status === "ready_for_operator_review" ? "done" : "blocked",
+      status: isProofGateReady(summary.proofGate) ? "done" : "blocked",
       evidence: `${summary.proofGate.minimumProofUrlsNeeded} proof URLs needed; ${summary.proofGate.blockedBy.length} blockers`,
       nextAction: summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence.",
     });
@@ -319,8 +319,27 @@ function operatingRefreshFor(report = {}) {
 
 function proofGateFor(report = {}) {
   const gate = report.proofGate || {};
+  const controlFieldsPresent = [
+    "status",
+    "requiredLanes",
+    "minimumProofUrlsNeeded",
+    "failedPreflightChecks",
+    "failedVerifierChecks",
+    "missingRequiredReports",
+    "boundaryNotReady",
+    "blockedBy",
+    "preflightNotReady",
+  ].every((field) => Object.hasOwn(gate, field))
+    && Array.isArray(gate.requiredLanes)
+    && typeof gate.minimumProofUrlsNeeded === "number"
+    && Array.isArray(gate.failedPreflightChecks)
+    && Array.isArray(gate.failedVerifierChecks)
+    && Array.isArray(gate.missingRequiredReports)
+    && Array.isArray(gate.boundaryNotReady)
+    && Array.isArray(gate.blockedBy);
   return {
     status: gate.status || "missing",
+    controlFieldsPresent,
     requiredLanes: Array.isArray(gate.requiredLanes) ? gate.requiredLanes : [],
     minimumProofUrlsNeeded: Number(gate.minimumProofUrlsNeeded || 0),
     proofPacketsNeeded: Number(gate.proofPacketsNeeded || 0),
@@ -341,6 +360,7 @@ function proofGateFor(report = {}) {
 
 function isProofGateReady(proofGate = {}) {
   return proofGate.status === "ready_for_operator_review"
+    && proofGate.controlFieldsPresent === true
     && proofGate.requiredLanes.includes("sports-daily:tiktok")
     && proofGate.requiredLanes.includes("meme-radar:tiktok")
     && proofGate.minimumProofUrlsNeeded === 0
@@ -354,7 +374,6 @@ function isProofGateReady(proofGate = {}) {
     && proofGate.boundaryNotReady.length === 0
     && Array.isArray(proofGate.blockedBy)
     && proofGate.blockedBy.length === 0
-    && Object.hasOwn(proofGate, "preflightNotReady")
     && !proofGate.preflightNotReady;
 }
 
@@ -473,6 +492,7 @@ function renderMarkdown(summary) {
     "## Operating Proof Gate",
     "",
     `- Status: ${summary.proofGate.status}`,
+    `- Control fields present: ${summary.proofGate.controlFieldsPresent}`,
     `- Required lanes: ${summary.proofGate.requiredLanes.join(", ") || "missing"}`,
     `- Minimum proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}`,
     `- Fast path available: ${summary.proofGate.fastPathAvailable}`,

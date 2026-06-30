@@ -5442,6 +5442,83 @@ test("TikTok next action blocks ready account/upload work when operating proof g
   });
 });
 
+test("TikTok next action fails closed on malformed ready operating proof gate", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
+    for (const script of [
+      "script/clippers-tiktok-post-schedule-verifier.mjs",
+      "script/clippers-tiktok-batch-closeout-verifier.mjs",
+      "script/clippers-metricool-current-batch-upload-pack.mjs",
+    ]) {
+      const result = spawnSync(process.execPath, [script], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    }
+
+    const readinessPath = path.join(rootDir, "account-permission-readiness.json");
+    const readiness = JSON.parse(await readFile(readinessPath, "utf8"));
+    readiness.tiktokMvpAccountCloseout = {
+      ...(readiness.tiktokMvpAccountCloseout || {}),
+      status: "ready_for_metricool_tiktok",
+      totals: { rows: 2, ready: 2 },
+      rows: [
+        { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", handle: "@sportsdaily", status: "ready_for_metricool_tiktok" },
+        { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", handle: "@memeradar", status: "ready_for_metricool_tiktok" },
+      ],
+    };
+    await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const uploadPackPath = path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json");
+    const uploadPack = JSON.parse(await readFile(uploadPackPath, "utf8"));
+    const readyUploadRows = Number(uploadPack.totals?.rows || uploadPack.rows?.length || 10);
+    uploadPack.status = "ready_for_metricool_upload";
+    uploadPack.totals = {
+      ...(uploadPack.totals || {}),
+      rows: readyUploadRows,
+      copied: readyUploadRows,
+      blocked: 0,
+      blockedUploadFiles: 0,
+    };
+    if (Array.isArray(uploadPack.rows)) {
+      uploadPack.rows = uploadPack.rows.map((row: Record<string, unknown>) => ({
+        ...row,
+        status: "ready_for_upload",
+        blocker: "",
+      }));
+    }
+    await writeFile(uploadPackPath, JSON.stringify(uploadPack, null, 2));
+
+    const operatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
+    const operatingRefresh = JSON.parse(await readFile(operatingRefreshPath, "utf8"));
+    operatingRefresh.proofGate = {
+      status: "ready_for_operator_review",
+      requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+      nextStep: "Malformed proof gate must be refreshed before operating Metricool.",
+      paths: operatingRefresh.proofGate?.paths || {},
+    };
+    await writeFile(operatingRefreshPath, JSON.stringify(operatingRefresh, null, 2));
+
+    const nextActionResult = spawnSync(process.execPath, ["script/clippers-tiktok-next-action.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(nextActionResult.status, 0, nextActionResult.stderr || nextActionResult.stdout);
+    const nextAction = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-next-action.json"), "utf8"));
+
+    assert.equal(nextAction.account.ready, true);
+    assert.equal(nextAction.uploadPack.ready, true);
+    assert.equal(nextAction.proofGate.status, "ready_for_operator_review");
+    assert.equal(nextAction.proofGate.controlFieldsPresent, false);
+    assert.equal(nextAction.status, "blocked_account_or_metricool_connection");
+    assert.equal(nextAction.operatorGate.actionAllowed, false);
+    assert.ok(nextAction.operatorGate.blockedBy.includes("tiktok_metricool_proof_gate"));
+    assert.ok(nextAction.tasks.some((task) => task.id === "proof_gate" && task.status === "blocked"));
+    assert.match(nextAction.nextStep, /Malformed proof gate/);
+    assert.doesNotMatch(nextAction.operator.copyPacket, /Upload\/schedule each row/);
+  });
+});
+
 test("TikTok MVP refresh returns account readiness and updates UI cache", async () => {
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
   const mvpNowRefreshPostRoute = routes.slice(
@@ -7880,11 +7957,16 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     const malformedAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
     assert.equal(malformedAudit.fullGoal.tiktokMvpProofGateReady, false);
     assert.equal(malformedAudit.fullGoal.metricoolMvpReady, false);
+    assert.equal(malformedAudit.tiktokMvpProofGate.controlFieldsPresent, false);
+    assert.equal(malformedAudit.operatorNextActions[0].status, "blocked_needs_valid_metricool_tiktok_proof_gate");
     assert.equal(malformedAudit.requirements.find((row) => row.id === "tiktok_batch_01_ready_for_metricool")?.status, "needs_external_action");
+    assert.match(malformedAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "", /controlFieldsPresent false/);
     assert.match(malformedAudit.nextStep, /Malformed proof gate/);
 
     const scriptSource = await readFile(path.join(process.cwd(), "script/clippers-goal-completion-audit.mjs"), "utf8");
+    assert.match(scriptSource, /function proofGateControlFieldsPresent\(proofGate = \{\}\)/);
     assert.match(scriptSource, /function isProofGateReady\(proofGate\)/);
+    assert.match(scriptSource, /proofGateControlFieldsPresent\(proofGate\)/);
     assert.match(scriptSource, /requiredLanes\.includes\("sports-daily:tiktok"\)/);
     assert.match(scriptSource, /requiredLanes\.includes\("meme-radar:tiktok"\)/);
     assert.match(scriptSource, /proofGate\.missingRequiredReports/);
