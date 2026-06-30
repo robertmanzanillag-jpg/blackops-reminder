@@ -486,6 +486,12 @@ function tiktokMvpCloseoutRows(accountRows, queue = {}, metricoolMvpLaunchPack =
         handle: row.handle,
         status,
         accountStatus: row.accountStatus,
+        evidenceQuality: row.evidenceQuality || {
+          status: row.accountStatus === "verified" ? "accepted" : "missing",
+          issues: row.accountStatus === "verified" ? [] : ["account evidence not verified"],
+          requiresAccountProofUrl: true,
+          requiresMetricoolProofUrl: true,
+        },
         metricoolConnected: row.metricoolConnected,
         metricoolBrandOrProfile: pending.metricoolBrandName || pending.metricoolProfile || row.metricoolConnectedNetworks.join("|") || "",
         rightsReadyAssets: row.metricoolRightsReadyAssets,
@@ -534,6 +540,8 @@ function renderTikTokMvpCloseoutMarkdown(closeout) {
       "",
       `- Status: ${row.status}`,
       `- Handle: ${row.handle}`,
+      `- Evidence quality: ${row.evidenceQuality?.status || "unknown"}`,
+      ...((row.evidenceQuality?.issues || []).length ? [`- Evidence issues: ${row.evidenceQuality.issues.join("; ")}`] : ["- Evidence issues: none"]),
       `- Metricool connected: ${row.metricoolConnected ? "yes" : "no"}`,
       `- Rights-ready assets: ${row.rightsReadyAssets}`,
       `- Evidence path: ${row.evidencePath}`,
@@ -557,7 +565,7 @@ function renderTikTokMvpCloseoutMarkdown(closeout) {
 }
 
 function renderTikTokMvpCloseoutCsv(closeout) {
-  const header = ["account_id", "account_name", "category", "platform", "handle", "status", "account_status", "metricool_connected", "rights_ready_assets", "evidence_path", "operator_action"];
+  const header = ["account_id", "account_name", "category", "platform", "handle", "status", "account_status", "evidence_quality_status", "evidence_quality_issues", "metricool_connected", "rights_ready_assets", "evidence_path", "operator_action"];
   return [
     header.map(csvCell).join(","),
     ...closeout.rows.map((row) => [
@@ -568,6 +576,8 @@ function renderTikTokMvpCloseoutCsv(closeout) {
       row.handle,
       row.status,
       row.accountStatus,
+      row.evidenceQuality?.status || "",
+      (row.evidenceQuality?.issues || []).join("; "),
       row.metricoolConnected ? "yes" : "no",
       row.rightsReadyAssets,
       row.evidencePath,

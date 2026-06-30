@@ -353,6 +353,8 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(readiness.tiktokMvpAccountCloseout.totals.rows, 2);
   assert.equal(readiness.tiktokMvpAccountCloseout.totals.ready, 2);
   assert.ok(readiness.tiktokMvpAccountCloseout.rows.every((row) => row.platform === "tiktok"));
+  assert.ok(readiness.tiktokMvpAccountCloseout.rows.every((row) => row.evidenceQuality.status === "accepted"));
+  assert.ok(readiness.tiktokMvpAccountCloseout.rows.every((row) => row.evidenceQuality.issues.length === 0));
   assert.ok(readiness.tiktokMvpAccountCloseout.rows.some((row) => row.accountId === "sports-daily"));
   assert.ok(readiness.tiktokMvpAccountCloseout.rows.some((row) => row.accountId === "meme-radar"));
   assert.ok(readiness.tiktokMvpAccountCloseout.guardrails.some((guardrail) => guardrail.includes("approval_required")));
@@ -445,15 +447,18 @@ test("account permission readiness reports Metricool MVP without claiming direct
   assert.equal(tiktokCloseoutJson.totals.rows, 2);
   assert.equal(tiktokCloseoutJson.totals.ready, 2);
   assert.ok(tiktokCloseoutJson.rows.every((row) => row.requiredProof.includes("Metricool brand/profile connection proof")));
+  assert.ok(tiktokCloseoutJson.rows.every((row) => row.evidenceQuality.status === "accepted"));
   assert.ok(tiktokCloseoutJson.rows.every((row) => row.copyText.includes("TikTok MVP account:")));
   const tiktokCloseoutMarkdown = await readFile(path.join(rootDir, "tiktok-mvp-account-closeout.md"), "utf8");
   assert.match(tiktokCloseoutMarkdown, /TikTok MVP Account Closeout/);
+  assert.match(tiktokCloseoutMarkdown, /Evidence quality: accepted/);
+  assert.match(tiktokCloseoutMarkdown, /Evidence issues: none/);
   assert.match(tiktokCloseoutMarkdown, /SPORT|Sports Daily/);
   assert.match(tiktokCloseoutMarkdown, /Meme Radar/);
   assert.match(tiktokCloseoutMarkdown, /Direct social APIs required: no/);
   assert.doesNotMatch(tiktokCloseoutMarkdown, /client_secret|refresh_token|access_token|password/i);
   const tiktokCloseoutCsv = await readFile(path.join(rootDir, "tiktok-mvp-account-closeout.csv"), "utf8");
-  assert.match(tiktokCloseoutCsv, /"account_id","account_name","category","platform","handle","status"/);
+  assert.match(tiktokCloseoutCsv, /"account_id","account_name","category","platform","handle","status","account_status","evidence_quality_status","evidence_quality_issues"/);
   assert.match(tiktokCloseoutCsv, /sports-daily/);
   assert.match(tiktokCloseoutCsv, /meme-radar/);
   });
@@ -549,6 +554,16 @@ test("account permission readiness rejects shallow verified TikTok MVP evidence"
     assert.equal(closeout.status, "needs_tiktok_account_evidence");
     assert.equal(closeout.totals.ready, 0);
     assert.ok(closeout.rows.every((row) => row.status === "needs_account_proof"));
+    assert.ok(closeout.rows.every((row) => row.evidenceQuality.status === "rejected"));
+    assert.ok(closeout.rows.every((row) => row.evidenceQuality.issues.some((issue) => issue.includes("accountProofUrl"))));
+
+    const closeoutMarkdown = await readFile(path.join(rootDir, "tiktok-mvp-account-closeout.md"), "utf8");
+    assert.match(closeoutMarkdown, /Evidence quality: rejected/);
+    assert.match(closeoutMarkdown, /accountProofUrl must be a real safe HTTPS ownership\/security proof URL/);
+    assert.match(closeoutMarkdown, /metricoolProofUrl must be a real safe HTTPS Metricool proof URL/);
+    const closeoutCsv = await readFile(path.join(rootDir, "tiktok-mvp-account-closeout.csv"), "utf8");
+    assert.match(closeoutCsv, /"evidence_quality_status","evidence_quality_issues"/);
+    assert.match(closeoutCsv, /accountProofUrl must be a real safe HTTPS ownership\/security proof URL/);
   } finally {
     if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
     else await writeFile(sportsEvidencePath, originalSportsEvidence);
@@ -2110,6 +2125,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("tiktokMvpBlockedLaneSummary"));
   assert.ok(page.includes("Still blocked:"));
   assert.ok(page.includes('data-testid="clippers-tiktok-mvp-account-closeout"'));
+  assert.ok(page.includes('data-testid="clippers-tiktok-mvp-evidence-quality"'));
+  assert.ok(page.includes('data-testid="clippers-account-evidence-quality"'));
+  assert.ok(page.includes("Evidence quality:"));
   assert.ok(page.includes('data-testid="clippers-next-evidence-drop"'));
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));

@@ -1555,6 +1555,12 @@ interface ClipperAccountPermissionReadinessRow {
   label: string;
   handle: string;
   accountStatus: string;
+  evidenceQuality?: {
+    status: "accepted" | "rejected" | "missing" | string;
+    issues: string[];
+    requiresAccountProofUrl: boolean;
+    requiresMetricoolProofUrl: boolean;
+  };
   evidencePath: string;
   metricoolConnected: boolean;
   metricoolRightsReadyAssets: number;
@@ -1748,6 +1754,12 @@ interface ClipperAccountPermissionReadinessSummary {
       handle: string;
       status: "ready_for_metricool_tiktok" | "needs_account_proof" | "needs_metricool_connection";
       accountStatus: string;
+      evidenceQuality?: {
+        status: "accepted" | "rejected" | "missing" | string;
+        issues: string[];
+        requiresAccountProofUrl: boolean;
+        requiresMetricoolProofUrl: boolean;
+      };
       metricoolConnected: boolean;
       metricoolBrandOrProfile: string;
       rightsReadyAssets: number;
@@ -26464,6 +26476,20 @@ export default function ClippersPage() {
                               </Badge>
                             </div>
                             <p className="mt-2 text-[11px] leading-4 text-emerald-100/75">{row.operatorAction}</p>
+                            {row.evidenceQuality && (
+                              <div className="mt-2 rounded border border-white/10 bg-black/30 p-2" data-testid="clippers-tiktok-mvp-evidence-quality">
+                                <p className="text-[10px] font-medium uppercase text-zinc-400">Evidence quality: {row.evidenceQuality.status}</p>
+                                {(row.evidenceQuality.issues || []).length > 0 ? (
+                                  <div className="mt-1 space-y-1">
+                                    {(row.evidenceQuality.issues || []).slice(0, 3).map((issue) => (
+                                      <p key={`${row.accountId}-${issue}`} className="text-[11px] leading-4 text-amber-100">{issue}</p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="mt-1 text-[11px] leading-4 text-emerald-100/75">No evidence quality issues.</p>
+                                )}
+                              </div>
+                            )}
                             <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Proof: {row.evidencePath}</p>
                           </div>
                         ))}
@@ -26559,6 +26585,12 @@ export default function ClippersPage() {
                         <p>Approval: {row.readyForMetricoolApproval ? "ready" : "blocked"}</p>
                       </div>
                       <p className="mt-2 break-all text-[11px] leading-4 text-zinc-600">{row.evidencePath}</p>
+                      {row.evidenceQuality && (
+                        <div className="mt-2 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs leading-5 text-zinc-400" data-testid="clippers-account-evidence-quality">
+                          Evidence quality: {row.evidenceQuality.status}
+                          {(row.evidenceQuality.issues || []).length > 0 ? ` - ${(row.evidenceQuality.issues || []).slice(0, 2).join(" | ")}` : " - no issues"}
+                        </div>
+                      )}
                       {row.blockers.length > 0 && (
                         <div className="mt-3 space-y-1">
                           {row.blockers.slice(0, 3).map((blocker) => (
