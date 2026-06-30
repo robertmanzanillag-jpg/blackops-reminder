@@ -20,12 +20,12 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     slug: "br-website",
     description: "Black Room website repo. GitHub: robertmanzanillag-jpg/br-website.",
     environment: "production",
-    publicUrl: null,
+    publicUrl: "https://blackroomus.com",
     healthUrl: null,
     repoOwner: "robertmanzanillag-jpg",
     repoName: "br-website",
     githubRepo: "robertmanzanillag-jpg/br-website",
-    deploymentProvider: null,
+    deploymentProvider: "custom-domain",
     deploymentId: null,
     sentryProjectId: null,
     stripeAccountId: null,
@@ -33,7 +33,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-public-url", "needs-health-url", "needs-deploy-provider"],
+    tags: ["known-github-inventory", "verified-public-url", "needs-health-url"],
   },
   {
     name: "Blackops Reminder",
@@ -109,8 +109,19 @@ function mergeTags(existing: unknown, incoming: unknown): string[] {
   return Array.from(new Set([...tags(existing), ...tags(incoming)]));
 }
 
+function normalizeKnownAppTags(existing: AppProject, known: InsertAppProject, mergedTags: string[]): string[] {
+  if (known.githubRepo !== "robertmanzanillag-jpg/br-website") return mergedTags;
+  const hasPublicUrl = Boolean(known.publicUrl || existing.publicUrl);
+  const hasDeploymentProvider = Boolean(known.deploymentProvider || existing.deploymentProvider);
+  return mergedTags.filter((tag) => {
+    if (hasPublicUrl && tag === "needs-public-url") return false;
+    if (hasDeploymentProvider && tag === "needs-deploy-provider") return false;
+    return true;
+  });
+}
+
 function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<AppProject> {
-  const mergedTags = mergeTags(existing.tags, known.tags);
+  const mergedTags = normalizeKnownAppTags(existing, known, mergeTags(existing.tags, known.tags));
   const updates: Partial<AppProject> = {};
 
   const fields: Array<keyof InsertAppProject> = [
@@ -131,6 +142,7 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
   for (const field of fields) {
     const nextValue = known[field];
     if (nextValue === null || nextValue === undefined || nextValue === "") continue;
+    if (["publicUrl", "healthUrl", "deploymentProvider"].includes(field) && (existing as any)[field]) continue;
     if ((existing as any)[field] !== nextValue) {
       (updates as any)[field] = nextValue;
     }

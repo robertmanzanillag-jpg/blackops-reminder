@@ -1,5 +1,6 @@
 // GitHub integration using Replit Connectors
 import { Octokit } from '@octokit/rest';
+import { hasRealValue } from "./ceo-doctor-cli";
 
 let connectionSettings: any;
 
@@ -19,6 +20,13 @@ const BLOCKED_GITHUB_FILE_NAMES = new Set([
   'id_rsa',
   'id_ed25519',
 ]);
+
+export function getConfiguredGitHubToken(env: NodeJS.ProcessEnv = process.env): string | null {
+  return [env.GITHUB_TOKEN, env.GH_TOKEN]
+    .filter(hasRealValue)
+    .map((token) => token.trim())
+    .find((token) => /^(ghp|github_pat|gho|ghu|ghs|ghr)_[A-Za-z0-9_]+$/.test(token)) || null;
+}
 
 function githubInputError(message: string): Error & { status?: number; statusCode?: number } {
   const error = new Error(message) as Error & { status?: number; statusCode?: number };
@@ -91,6 +99,11 @@ export function validateGitHubFileWriteInput(input: {
 }
 
 async function getAccessToken() {
+  const configuredToken = getConfiguredGitHubToken();
+  if (configuredToken) {
+    return configuredToken;
+  }
+
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
     return connectionSettings.settings.access_token;
   }
@@ -415,7 +428,8 @@ export async function getAuthenticatedUser() {
 // Check if GitHub is connected
 export async function isGitHubConnected(): Promise<boolean> {
   try {
-    await getAccessToken();
+    const client = await getGitHubClient();
+    await client.users.getAuthenticated();
     return true;
   } catch {
     return false;

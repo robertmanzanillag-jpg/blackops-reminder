@@ -1274,8 +1274,13 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
   };
 }
 
-export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRepo[]): Promise<AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] }> {
-  const connectedRepos = new Set(apps.map(normalizeRepo).filter((repo): repo is string => Boolean(repo)));
+export async function analyzeGithubAppRepos(
+  apps: AppProject[],
+  repos: GithubRepo[],
+  probe = probeUrl,
+): Promise<AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] }> {
+  const connectedAppsByRepo = new Map(apps.map((app) => [normalizeRepo(app), app]).filter(([repo]) => Boolean(repo)) as Array<[string, AppProject]>);
+  const connectedRepos = new Set(connectedAppsByRepo.keys());
   const findings: AppQaFinding[] = [];
   const githubApps: AppQaGithubRepoCheck[] = [];
   const syntheticApp = { name: "GitHub" } as AppProject;
@@ -1283,6 +1288,8 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
 
   for (const repo of likelyRepos) {
     const connectedToInventory = connectedRepos.has(repo.full_name.toLowerCase());
+    const connectedApp = connectedAppsByRepo.get(repo.full_name.toLowerCase());
+    const inventoryUrl = connectedApp ? publicAppUrl(connectedApp) : null;
     const homepage = repo.homepage?.trim() || null;
     const notes: string[] = [];
     let status: AppQaStatus = "pass";
@@ -1323,7 +1330,7 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
       ));
     }
 
-    if (!homepage && !repo.archived && !repo.disabled) {
+    if (!homepage && !inventoryUrl && !repo.archived && !repo.disabled) {
       status = status === "fail" ? status : "warn";
       notes.push("Sin homepage/deploy");
       findings.push(createFinding(
@@ -1338,66 +1345,70 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
       ));
     }
 
-    if (homepage) {
-      checkedUrl = homepage;
-      if (!isValidUrl(homepage)) {
+    if (homepage || inventoryUrl) {
+      const urlToCheck = homepage || inventoryUrl!;
+      checkedUrl = urlToCheck;
+      if (!homepage && inventoryUrl) {
+        notes.push("URL conectada en Developer Health");
+      }
+      if (!isValidUrl(urlToCheck)) {
         status = "fail";
-        notes.push("Homepage invalida");
+        notes.push(homepage ? "Homepage invalida" : "URL inventario invalida");
         findings.push(createFinding(
           syntheticApp,
           "github-scout",
           "GitHub deploy",
           "high",
-          "Homepage invalida en GitHub",
-          `${repo.full_name} tiene homepage invalida: ${homepage}.`,
-          "Corregir homepage en GitHub o mover la URL real a Apps.",
+          homepage ? "Homepage invalida en GitHub" : "URL de inventario invalida",
+          `${repo.full_name} tiene URL invalida: ${urlToCheck}.`,
+          "Corregir homepage en GitHub o la URL real en Apps.",
           repo.html_url
         ));
       } else {
-        if (!homepage.startsWith("https://")) {
+        if (!urlToCheck.startsWith("https://")) {
           status = "fail";
-          notes.push("Homepage sin HTTPS");
+          notes.push(homepage ? "Homepage sin HTTPS" : "URL inventario sin HTTPS");
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "high",
-            "Homepage sin HTTPS",
-            `${repo.full_name} publica ${homepage} sin HTTPS.`,
+            homepage ? "Homepage sin HTTPS" : "URL de inventario sin HTTPS",
+            `${repo.full_name} publica ${urlToCheck} sin HTTPS.`,
             "Mover el deploy a HTTPS antes de manejar usuarios, sesiones, pagos o webhooks.",
-            homepage
+            urlToCheck
           ));
         }
 
-        const probe = await probeUrl(homepage);
-        if (!probe.ok) {
+        const probeResult = await probe(urlToCheck);
+        if (!probeResult.ok) {
           status = "fail";
-          notes.push(`Homepage fallo: ${probe.statusCode || probe.error || "sin status"}`);
+          notes.push(`Homepage fallo: ${probeResult.statusCode || probeResult.error || "sin status"}`);
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "high",
             "Homepage de repo no responde bien",
-            `${repo.full_name} apunta a ${homepage}, pero respondio ${probe.statusCode || probe.error || "sin status"} en ${probe.responseTimeMs}ms.`,
-            "Revisar deploy/dominio y actualizar GitHub homepage si la URL cambio.",
-            homepage
+            `${repo.full_name} apunta a ${urlToCheck}, pero respondio ${probeResult.statusCode || probeResult.error || "sin status"} en ${probeResult.responseTimeMs}ms.`,
+            "Revisar deploy/dominio y actualizar GitHub homepage o Apps si la URL cambio.",
+            urlToCheck
           ));
-        } else if (probe.responseTimeMs > 3000) {
+        } else if (probeResult.responseTimeMs > 3000) {
           status = status === "fail" ? status : "warn";
-          notes.push(`Homepage lenta: ${probe.responseTimeMs}ms`);
+          notes.push(`Homepage lenta: ${probeResult.responseTimeMs}ms`);
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "medium",
             "Homepage lenta desde GitHub",
-            `${repo.full_name} respondio en ${probe.responseTimeMs}ms.`,
+            `${repo.full_name} respondio en ${probeResult.responseTimeMs}ms.`,
             "Revisar cold starts, assets y servidor del deploy.",
-            homepage
+            urlToCheck
           ));
         } else {
-          notes.push(`Homepage ok: ${probe.statusCode}`);
+          notes.push(`Homepage ok: ${probeResult.statusCode}`);
         }
       }
     }

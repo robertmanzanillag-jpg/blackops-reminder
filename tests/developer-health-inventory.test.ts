@@ -57,6 +57,15 @@ test("BlackOps Reminder carries the Dialer Planner alternate Replit alias", () =
   assert.deepEqual((blackops.tags as string[]).includes("liveness-health-endpoint"), true);
 });
 
+test("Br Website carries the verified Black Room public URL", () => {
+  const brWebsite = knownDeveloperHealthApps().find((app) => app.githubRepo === "robertmanzanillag-jpg/br-website")!;
+
+  assert.equal(brWebsite.publicUrl, "https://blackroomus.com");
+  assert.equal(brWebsite.deploymentProvider, "custom-domain");
+  assert.deepEqual((brWebsite.tags as string[]).includes("verified-public-url"), true);
+  assert.deepEqual((brWebsite.tags as string[]).includes("needs-health-url"), true);
+});
+
 test("upsertKnownDeveloperHealthInventory creates missing apps and is idempotent", async () => {
   const rows: AppProject[] = [];
   const deps = {
@@ -94,7 +103,7 @@ test("upsertKnownDeveloperHealthInventory adds verified fields without erasing e
       publicUrl: "https://blackroom.example",
       healthUrl: "https://blackroom.example/health",
       deploymentProvider: "custom-domain",
-      tags: ["manual"],
+      tags: ["manual", "needs-public-url", "needs-deploy-provider"],
     }),
     appProject(kong, {
       id: "kong-existing",
@@ -128,6 +137,9 @@ test("upsertKnownDeveloperHealthInventory adds verified fields without erasing e
   assert.equal(updatedBr.healthUrl, "https://blackroom.example/health");
   assert.equal(updatedBr.deploymentProvider, "custom-domain");
   assert.deepEqual((updatedBr.tags as string[]).includes("manual"), true);
+  assert.deepEqual((updatedBr.tags as string[]).includes("needs-public-url"), false);
+  assert.deepEqual((updatedBr.tags as string[]).includes("needs-deploy-provider"), false);
+  assert.deepEqual((updatedBr.tags as string[]).includes("verified-public-url"), true);
   assert.equal(updatedKong.publicUrl, "https://kong--app.replit.app");
   assert.equal(updatedKong.healthUrl, "https://kong--app.replit.app/api/health");
   assert.equal(updatedKong.deploymentProvider, "replit");

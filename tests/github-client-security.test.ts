@@ -4,6 +4,7 @@ import {
   createIssue,
   createIssueComment,
   deleteFile,
+  getConfiguredGitHubToken,
   updateFile,
   validateGitHubCommitMessage,
   validateGitHubFilePath,
@@ -13,6 +14,29 @@ import {
   validateGitHubFileWriteInput,
   validateGitHubRepoNamePart,
 } from "../server/github-client";
+
+test("GitHub token fallback uses only real environment tokens", () => {
+  assert.equal(getConfiguredGitHubToken({}), null);
+  assert.equal(getConfiguredGitHubToken({ GITHUB_TOKEN: "replace-with-token" } as NodeJS.ProcessEnv), null);
+  assert.equal(getConfiguredGitHubToken({ GH_TOKEN: "token" } as NodeJS.ProcessEnv), null);
+  assert.equal(getConfiguredGitHubToken({ GH_TOKEN: "fake-github-token" } as NodeJS.ProcessEnv), null);
+  assert.equal(getConfiguredGitHubToken({ GH_TOKEN: "abc" } as NodeJS.ProcessEnv), null);
+  assert.equal(getConfiguredGitHubToken({ GH_TOKEN: "ghp_realLocalTokenForQa" } as NodeJS.ProcessEnv), "ghp_realLocalTokenForQa");
+  assert.equal(
+    getConfiguredGitHubToken({
+      GITHUB_TOKEN: "github_pat_realLocalTokenForQa",
+      GH_TOKEN: "ghp_other",
+    } as NodeJS.ProcessEnv),
+    "github_pat_realLocalTokenForQa",
+  );
+  assert.equal(
+    getConfiguredGitHubToken({
+      GITHUB_TOKEN: "fake-github-token",
+      GH_TOKEN: "ghp_realFallbackTokenForQa",
+    } as NodeJS.ProcessEnv),
+    "ghp_realFallbackTokenForQa",
+  );
+});
 
 test("GitHub repo identifiers reject traversal and shell-like input", () => {
   assert.equal(validateGitHubRepoNamePart("robert", "Owner"), null);

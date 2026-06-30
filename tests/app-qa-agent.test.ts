@@ -345,6 +345,46 @@ test("github scout finds new app repos that are not yet in Developer Health", as
   assert.equal(report.findings.some((finding) => finding.title === "Repo app sin URL publica en GitHub"), true);
 });
 
+test("github scout uses Developer Health URLs when repo homepage is empty", async () => {
+  const app = appProject({
+    name: "Kong Nightlife",
+    slug: "kong-nightlife",
+    publicUrl: "https://kong.example",
+    healthUrl: "https://kong.example/api/health",
+    repoOwner: "robert",
+    repoName: "kong-nightlife",
+    githubRepo: "robert/kong-nightlife",
+  });
+  const repo = {
+    id: 43,
+    name: "kong-nightlife",
+    full_name: "robert/kong-nightlife",
+    description: "Nightlife app",
+    private: true,
+    archived: false,
+    disabled: false,
+    fork: false,
+    html_url: "https://github.com/robert/kong-nightlife",
+    homepage: null,
+    default_branch: "main",
+    updated_at: "2026-06-18T12:00:00.000Z",
+    pushed_at: "2026-06-18T12:00:00.000Z",
+    open_issues_count: 0,
+    language: "TypeScript",
+  } as any;
+
+  const report = await __appQaAgentInternals.analyzeGithubAppRepos([app], [repo], async () => ({
+    ok: true,
+    statusCode: 200,
+    responseTimeMs: 50,
+  }));
+
+  assert.equal(report.githubApps[0].connectedToInventory, true);
+  assert.equal(report.githubApps[0].checkedUrl, "https://kong.example");
+  assert.equal(report.githubApps[0].status, "pass");
+  assert.equal(report.findings.some((finding) => finding.title === "Repo app sin URL publica en GitHub"), false);
+});
+
 test("visual click scout reports setup guidance when base URL is missing", async () => {
   const previousBaseUrl = process.env.APP_QA_BASE_URL;
   const previousPublicUrl = process.env.PUBLIC_APP_URL;
