@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T11:57:35.638Z",
+  "generatedAt": "2026-06-30T12:02:56.874Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -94,8 +94,8 @@
     "filesVisible": 431,
     "filesIndexed": 363,
     "imports": 1368,
-    "routes": 93,
-    "symbols": 8848
+    "routes": 94,
+    "symbols": 8849
   },
   "directories": {
     ".agents/skills": {
@@ -14451,6 +14451,7 @@
         "markdown",
         "memesEvidence",
         "memesEvidencePath",
+        "metricoolBridgeCsvLoadRoute",
         "metricoolBridgeCsvStatusRoute",
         "metricoolQueuePath",
         "operatorButtonHelper",
@@ -14526,6 +14527,7 @@
         "/api/clippers/create-tiktok-mvp-proof-links-drop-starter",
         "/api/clippers/import-tiktok-mvp-proof-links-drop",
         "/api/clippers/ingest-tiktok-mvp-proof-links-drop",
+        "/api/clippers/load-metricool-bridge-evidence-csv",
         "/api/clippers/metricool-bridge-evidence-csv-status",
         "/api/clippers/operational-readiness",
         "/api/clippers/parse-tiktok-mvp-proof-links-paste",

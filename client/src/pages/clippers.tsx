@@ -7281,6 +7281,20 @@ interface ClipperMetricoolBridgeEvidenceCsvStatus {
   nextStep: string;
 }
 
+interface ClipperMetricoolBridgeEvidenceCsvLoad {
+  status: "loaded" | "blocked_secret_like_csv";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  sourcePath: string;
+  bytes: number;
+  raw: string;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperPublisherExecutionQueueItem {
   id: string;
   postId: string;
@@ -13789,6 +13803,34 @@ export default function ClippersPage() {
     },
   });
 
+  const metricoolBridgeEvidenceCsvLoadMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/load-metricool-bridge-evidence-csv", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.metricoolBridgeEvidenceCsvLoad?.nextStep || data.error || "No pude cargar el bridge CSV local");
+      return data as {
+        metricoolBridgeEvidenceCsvLoad: ClipperMetricoolBridgeEvidenceCsvLoad;
+        metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus;
+      };
+    },
+    onSuccess: (data) => {
+      setMetricoolBridgeEvidenceBatchText(data.metricoolBridgeEvidenceCsvLoad.raw);
+      setMetricoolBridgeEvidenceBatchPreview(null);
+      queryClient.setQueryData(
+        ["/api/clippers/metricool-bridge-evidence-csv-status"],
+        data.metricoolBridgeEvidenceCsvStatus
+      );
+      toast({
+        title: "Bridge CSV cargado",
+        description: data.metricoolBridgeEvidenceCsvLoad.nextStep,
+        variant: data.metricoolBridgeEvidenceCsvLoad.status === "loaded" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude cargar bridge CSV", description: error.message, variant: "destructive" });
+    },
+  });
+
   const metricoolBridgeEvidenceBatchPreviewMutation = useMutation({
     mutationFn: async () => {
       if (!metricoolBridgeEvidenceClientCheck.canSubmit) {
@@ -18413,17 +18455,31 @@ export default function ClippersPage() {
                 {metricoolBridgeEvidenceClientCheck.issues[0] || "Ready to submit bridge evidence for review; this still does not publish."}
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMetricoolBridgeEvidenceBatchText(metricoolBridgeEvidenceTemplate)}
-              className="shrink-0 border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
-              data-testid="reset-clippers-metricool-bridge-evidence-template-button"
-            >
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              Reset template
-            </Button>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => metricoolBridgeEvidenceCsvLoadMutation.mutate()}
+                disabled={metricoolBridgeEvidenceCsvLoadMutation.isPending || isLoading}
+                className="border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
+                data-testid="load-clippers-metricool-bridge-evidence-csv-button"
+              >
+                {metricoolBridgeEvidenceCsvLoadMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Load bridge CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMetricoolBridgeEvidenceBatchText(metricoolBridgeEvidenceTemplate)}
+                className="border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-900"
+                data-testid="reset-clippers-metricool-bridge-evidence-template-button"
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Reset template
+              </Button>
+            </div>
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Textarea

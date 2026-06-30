@@ -311,6 +311,50 @@ async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
   }
 }
 
+async function loadClipperMetricoolBridgeEvidenceCsv() {
+  const generatedAt = new Date().toISOString();
+  const status = await buildClipperMetricoolBridgeEvidenceCsvStatus();
+  const raw = await readNodeFile(clipperMetricoolBridgeEvidenceCsvPath, "utf8");
+  const bytes = Buffer.byteLength(raw, "utf8");
+  const secretBlocked = containsClipperSecretLikeText(raw);
+  const base = {
+    generatedAt,
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    sourcePath: clipperMetricoolBridgeEvidenceCsvPath,
+    bytes,
+    guardrails: [
+      "Reads the local Metricool bridge CSV only.",
+      "Does not record bridge rows, queue Metricool, create calendar rows, schedule, or send posts.",
+      "Metricool remains approval_required and realPublishEnabled remains false.",
+    ],
+  };
+  if (secretBlocked) {
+    return {
+      metricoolBridgeEvidenceCsvLoad: {
+        ...base,
+        status: "blocked_secret_like_csv",
+        raw: "",
+        nextStep: "Remove passwords, tokens, cookies, recovery codes, signed URLs, or private screenshot links from the bridge CSV before loading it.",
+      },
+      metricoolBridgeEvidenceCsvStatus: status,
+    };
+  }
+  return {
+    metricoolBridgeEvidenceCsvLoad: {
+      ...base,
+      status: "loaded",
+      raw,
+      nextStep: status.status === "ready_for_preview"
+        ? "Preview the loaded bridge rows, then import only after review."
+        : "Review the loaded bridge CSV fields; rows still need real public/non-secret proof before import.",
+    },
+    metricoolBridgeEvidenceCsvStatus: status,
+  };
+}
+
 const clipperTikTokMvpProofLinksDropPastePaths = [
   "clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt",
   "clippers_workspace/proof-drop/tiktok-mvp/proof-links-drop.txt",
@@ -4911,6 +4955,19 @@ export async function registerRoutes(
       res.json({ metricoolBridgeEvidenceCsvStatus: await buildClipperMetricoolBridgeEvidenceCsvStatus() });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to read Clippers Metricool bridge evidence CSV status" });
+    }
+  });
+
+  app.post("/api/clippers/load-metricool-bridge-evidence-csv", async (_req, res) => {
+    try {
+      const result = await loadClipperMetricoolBridgeEvidenceCsv();
+      if (result.metricoolBridgeEvidenceCsvLoad.status !== "loaded") {
+        res.status(400).json(result);
+        return;
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to load Clippers Metricool bridge evidence CSV" });
     }
   });
 
