@@ -122,7 +122,14 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /\|\| !closeDepositCoversRequired/);
   assert.match(uiSource, /depositPaid: item\.cashCollectedUsd >= item\.requiredDepositUsd/);
   assert.match(uiSource, /scopeApproved: true/);
-  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff\}/);
+  assert.match(engineSource, /repoFullName: z\.string\(\)\.trim\(\)\.regex/);
+  assert.match(engineSource, /repoFullName: parsed\.repoFullName \|\| ""/);
+  assert.match(uiSource, /const \[websiteDeliveryRepoInputs, setWebsiteDeliveryRepoInputs\] = useState<Record<string, \{/);
+  assert.match(uiSource, /input-website-handoff-repo-/);
+  assert.match(uiSource, /input-website-handoff-branch-/);
+  assert.match(uiSource, /repoFullName,/);
+  assert.match(uiSource, /branchName,/);
+  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady\}/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });

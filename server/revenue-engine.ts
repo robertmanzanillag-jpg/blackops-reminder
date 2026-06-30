@@ -307,6 +307,8 @@ export const revenueWebsiteDeliveryWorkspaceSchema = z.object({
   websiteOpportunityId: z.string().trim().max(200).optional().default(""),
   mockupUrl: revenueMockupUrlSchema.optional().default(""),
   workspaceName: z.string().trim().min(2).max(180).optional().default("Website delivery workspace"),
+  repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
+  branchName: z.string().trim().max(200).optional().default(""),
   projectType: z.enum(["website", "bundle"]).default("bundle"),
   depositPaid: z.coerce.boolean().default(false),
   scopeApproved: z.coerce.boolean().default(false),
@@ -3501,6 +3503,17 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     };
   }
 
+  if (!parsed.repoFullName) {
+    return {
+      status: "blocked" as const,
+      reason: "Repo GitHub owner/repo requerido antes de crear delivery workspace PR-first.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
   if (depositPaid && websiteOpportunity.scopeApproved && lead.status !== "closed") {
     lead.status = strongerRevenueLeadStatus(lead.status, "closed");
     lead.updatedAt = new Date().toISOString();
@@ -3535,8 +3548,8 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     sourceLeadId: lead.id,
     sourceOutreachDraftId: outreachDraft?.id || "",
     mockupUrl: effectiveMockupUrl,
-    repoFullName: "",
-    branchName: "",
+    repoFullName: parsed.repoFullName || "",
+    branchName: parsed.branchName || "",
     githubIssueUrl: "",
     prUrl: "",
     secondReviewStatus: "pending",

@@ -263,6 +263,8 @@ function createSoldWebsiteWorkspaceForTest(input: {
     outreachDraftId: draft.id,
     websiteOpportunityId: opportunity.id,
     projectType: input.projectType || "website",
+    repoFullName: `robert/${input.mockupSlug}`,
+    branchName: `codex/client-${input.mockupSlug}-website`,
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: input.cashCollectedUsd ?? opportunity.requiredDepositUsd,
@@ -2519,12 +2521,35 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     projectType: "bundle",
     cashCollectedUsd: 2100,
   });
+  const postSaleSnapshot = getRevenueEngineSnapshot();
+  const leadStatusBeforeRepoBlock = postSaleSnapshot.recentLeads.find((item) => item.id === lead.id)?.status;
+  const missingRepoHandoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunity.id,
+    mockupUrl: preview.previewUrl,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 2100,
+    publicDataVerified: true,
+  });
+
+  assert.equal(missingRepoHandoff.status, "blocked");
+  assert.match(missingRepoHandoff.reason, /Repo GitHub/);
+  assert.equal(missingRepoHandoff.workspace, null);
+  assert.equal(missingRepoHandoff.snapshot.recentDeliveryWorkspaces.length, 0);
+  assert.equal(missingRepoHandoff.snapshot.recentLedger.length, postSaleSnapshot.recentLedger.length);
+  assert.equal(missingRepoHandoff.snapshot.recentLeads.find((item) => item.id === lead.id)?.status, leadStatusBeforeRepoBlock);
+
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,
     outreachDraftId: draft.id,
     websiteOpportunityId: opportunity.id,
     mockupUrl: preview.previewUrl,
     projectType: "bundle",
+    repoFullName: "robert/handoff-cafe",
+    branchName: "codex/client-handoff-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 2100,
@@ -2541,6 +2566,10 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.input.sourceOutreachDraftId, draft.id);
   assert.equal(handoff.workspace?.input.sourceOpportunityId, opportunity.id);
   assert.equal(handoff.workspace?.input.mockupUrl, preview.previewUrl);
+  assert.equal(handoff.workspace?.input.repoFullName, "robert/handoff-cafe");
+  assert.equal(handoff.workspace?.input.branchName, "codex/client-handoff-cafe-website");
+  assert.equal(handoff.workspace?.codexBuildHandoff.repoFullName, "robert/handoff-cafe");
+  assert.equal(handoff.workspace?.codexBuildHandoff.branchName, "codex/client-handoff-cafe-website");
   assert.equal(handoff.workspace?.input.clientRequest.includes("Mockup preview:"), true);
   assert.equal(handoff.workspace?.input.clientRequest.includes("Codex build rule"), true);
   assert.equal(handoff.workspace?.projectPlan.decision.status, "ready_to_build");
@@ -2570,6 +2599,8 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     websiteOpportunityId: opportunity.id,
     mockupUrl: preview.previewUrl,
     projectType: "bundle",
+    repoFullName: "robert/handoff-cafe",
+    branchName: "codex/client-handoff-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 2100,
@@ -2631,6 +2662,8 @@ test("website build queue excludes workspaces without verified public data", () 
     websiteOpportunityId: opportunity.id,
     mockupUrl: draft.mockupUrl || "",
     projectType: "website",
+    repoFullName: "robert/unverified-source-cafe",
+    branchName: "codex/client-unverified-source-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1000,
@@ -2716,6 +2749,8 @@ test("daily money command keeps delivery collection ahead of open website builds
     websiteOpportunityId: buildOpportunity.id,
     mockupUrl: buildDraft.mockupUrl || "",
     projectType: "website",
+    repoFullName: "robert/build-queue-cafe",
+    branchName: "codex/client-build-queue-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1000,
@@ -2920,6 +2955,8 @@ test("website delivery ledger notes stay bounded before closing state", () => {
     outreachDraftId: draft.draft.id,
     websiteOpportunityId: opportunityResult.opportunity.id,
     projectType: "website",
+    repoFullName: "robert/long-notes-cafe",
+    branchName: "codex/client-long-notes-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1800,
@@ -2974,6 +3011,8 @@ test("website-only handoff uses website deposit when draft also has automation u
     outreachDraftId: draft.draft.id,
     websiteOpportunityId: opportunity.id,
     projectType: "website",
+    repoFullName: "robert/website-only-cafe",
+    branchName: "codex/client-website-only-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1500,
@@ -3054,6 +3093,8 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
       outreachDraftId: draftTen.draft.id,
       websiteOpportunityId: opportunityTen.id,
       projectType: "website",
+      repoFullName: "robert/ledger-token-ten",
+      branchName: "codex/client-ledger-token-ten-website",
       depositPaid: true,
       scopeApproved: true,
       cashCollectedUsd: 1800,
@@ -3064,6 +3105,8 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
       outreachDraftId: draftOne.draft.id,
       websiteOpportunityId: opportunityOne.id,
       projectType: "website",
+      repoFullName: "robert/ledger-token-one",
+      branchName: "codex/client-ledger-token-one-website",
       depositPaid: true,
       scopeApproved: true,
       cashCollectedUsd: 1800,
@@ -3176,6 +3219,8 @@ test("website delivery handoff keeps data gate explicit before build readiness",
     outreachDraftId: draft.draft.id,
     websiteOpportunityId: opportunity.id,
     projectType: "website",
+    repoFullName: "robert/explicit-data-cafe",
+    branchName: "codex/client-explicit-data-cafe-website",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1900,

@@ -1723,6 +1723,16 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+function slugifyClientBranchValue(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "client";
+}
+
 function statusTone(status: string) {
   if (status === "pass") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -1843,6 +1853,10 @@ export default function RevenueEnginePage() {
     cashCollectedUsd?: string;
     paymentConfirmation?: string;
     notes?: string;
+  }>>({});
+  const [websiteDeliveryRepoInputs, setWebsiteDeliveryRepoInputs] = useState<Record<string, {
+    repoFullName?: string;
+    branchName?: string;
   }>>({});
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releasePrUrl, setReleasePrUrl] = useState("");
@@ -2449,6 +2463,9 @@ export default function RevenueEnginePage() {
 
   const websiteDeliveryHandoffMutation = useMutation<WebsiteDeliveryHandoffResult, Error, RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number]>({
     mutationFn: async (item) => {
+      const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+      const repoFullName = (repoInput.repoFullName || "").trim();
+      const branchName = (repoInput.branchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
       const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2457,6 +2474,8 @@ export default function RevenueEnginePage() {
           outreachDraftId: item.outreachDraftId,
           websiteOpportunityId: item.opportunityId,
           mockupUrl: item.mockupUrl,
+          repoFullName,
+          branchName,
           projectType: item.projectType,
           depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
           scopeApproved: true,
@@ -7848,6 +7867,10 @@ export default function RevenueEnginePage() {
                         ) : (
                           snapshot?.websiteDeliveryHandoffQueue.items.map((item) => {
                             const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
+                            const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+                            const repoFullName = repoInput.repoFullName || "";
+                            const branchName = repoInput.branchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
+                            const repoReady = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName.trim());
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -7869,6 +7892,41 @@ export default function RevenueEnginePage() {
                                   <Badge variant="outline" className={cn(statusTone("ready"))}>
                                     scope vendido
                                   </Badge>
+                                  <Badge variant="outline" className={cn(repoReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {repoReady ? "repo listo" : "repo requerido"}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <Input
+                                    value={repoFullName}
+                                    onChange={(event) =>
+                                      setWebsiteDeliveryRepoInputs((current) => ({
+                                        ...current,
+                                        [item.opportunityId]: {
+                                          ...current[item.opportunityId],
+                                          repoFullName: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    placeholder="owner/repo"
+                                    className="border-zinc-800 bg-zinc-950"
+                                    data-testid={`input-website-handoff-repo-${item.opportunityId}`}
+                                  />
+                                  <Input
+                                    value={branchName}
+                                    onChange={(event) =>
+                                      setWebsiteDeliveryRepoInputs((current) => ({
+                                        ...current,
+                                        [item.opportunityId]: {
+                                          ...current[item.opportunityId],
+                                          branchName: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    placeholder="codex/client-business-website"
+                                    className="border-zinc-800 bg-zinc-950"
+                                    data-testid={`input-website-handoff-branch-${item.opportunityId}`}
+                                  />
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <a href={item.mockupUrl} target="_blank" rel="noreferrer">
@@ -7888,13 +7946,13 @@ export default function RevenueEnginePage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff}
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady}
                                     onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
                                     className="bg-sky-600 text-white hover:bg-sky-500"
                                     data-testid={`button-create-website-workspace-${item.leadId}`}
                                   >
                                     {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                    {depositCoversHandoff ? "Crear workspace" : "Deposito incompleto"}
+                                    {depositCoversHandoff ? repoReady ? "Crear workspace" : "Repo requerido" : "Deposito incompleto"}
                                   </Button>
                                 </div>
                               </div>
