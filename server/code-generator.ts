@@ -227,7 +227,8 @@ export async function generateCode(request: GenerationRequest): Promise<CodeGene
     }
     
     // Generate code
-    const response = await getGeminiClient().models.generateContent({
+    const geminiClient = await getGeminiClient();
+    const response = await geminiClient.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
         { role: "user", parts: [{ text: fullContext + '\n\n## SOLICITUD:\n' + request.prompt + '\n\nResponde SOLO con JSON válido.' }] }

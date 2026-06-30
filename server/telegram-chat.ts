@@ -1,4 +1,4 @@
-import { Content, Part } from "@google/genai";
+import type { Content, Part } from "@google/genai";
 import { storage } from "./storage";
 import { sendTelegramMessage, sendTelegramPlainMessage, sendTelegramPlainMessageChunks, TelegramUpdate, setTelegramWebhook, getWebhookInfo } from "./telegram";
 import { getCalendarEvents, isGoogleCalendarConnected } from "./google-calendar";
@@ -1414,7 +1414,8 @@ ${conversationHistory}
       parts.push({ text: `${contextPrompt}\n\nUsuario dice: ${userMessage}` });
     }
 
-    const result = await getGeminiClient().models.generateContent({
+    const geminiClient = await getGeminiClient();
+    const result = await geminiClient.models.generateContent({
       model: getGeminiChatModel({ hasImage: !!imageData }),
       contents: [{ role: "user", parts }],
     });

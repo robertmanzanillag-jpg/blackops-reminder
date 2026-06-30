@@ -1,10 +1,13 @@
-import { Modality } from "@google/genai";
 import { getGeminiClient } from "../../gemini-client";
 
 export { getGeminiClient };
 
 export async function generateImage(prompt: string): Promise<string> {
-  const response = await getGeminiClient().models.generateContent({
+  const [{ Modality }, geminiClient] = await Promise.all([
+    import("@google/genai"),
+    getGeminiClient(),
+  ]);
+  const response = await geminiClient.models.generateContent({
     model: "gemini-2.5-flash-image",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
