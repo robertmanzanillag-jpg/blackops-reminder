@@ -389,6 +389,20 @@ export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema
 
 export type RevenuePublicLeadCandidateInput = z.infer<typeof revenuePublicLeadCandidateSchema>;
 
+export const revenuePublicLeadCandidateBatchSchema = z.object({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("med spas"),
+  batchText: z.string().trim().min(1).max(20000),
+  missionId: z.string().trim().max(160).optional().default(""),
+  sourceTaskId: z.string().trim().max(160).optional().default("batch-import"),
+  verificationStatus: z.enum(["needs_review", "verified_public"]).default("needs_review"),
+  publicEvidenceVerified: z.boolean().default(false),
+  approvalToImport: z.boolean().default(false),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenuePublicLeadCandidateBatchInput = z.infer<typeof revenuePublicLeadCandidateBatchSchema>;
+
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
   targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
@@ -3526,6 +3540,62 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     nextAction: candidate.importReady
       ? "Paste this candidate row into Batch leads and run Preview batch before Money sprint."
       : `Fix before import: ${blockedReasons.join("; ") || "review candidate"}.`,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenuePublicLeadCandidateBatch(input: RevenuePublicLeadCandidateBatchInput) {
+  const parsed = revenuePublicLeadCandidateBatchSchema.parse(input);
+  const parsedBatch = parseRevenueMoneySprintSeedLeadBatch(parsed.batchText, { area: parsed.area, niche: parsed.niche });
+  const recorded: Array<ReturnType<typeof recordRevenuePublicLeadCandidate>> = [];
+
+  for (const [index, seed] of parsedBatch.seedLeads.entries()) {
+    recorded.push(recordRevenuePublicLeadCandidate({
+      ...seed,
+      missionId: parsed.missionId,
+      sourceTaskId: parsed.sourceTaskId ? `${parsed.sourceTaskId}-${index + 1}` : `batch-import-${index + 1}`,
+      verificationStatus: parsed.verificationStatus,
+      publicEvidenceVerified: parsed.publicEvidenceVerified,
+      approvalToImport: parsed.approvalToImport,
+      notes: parsed.notes || "Recorded from public candidate batch.",
+    }));
+  }
+
+  return {
+    status: recorded.some((item) => item.status === "ready_for_preview")
+      ? "ready_for_preview" as const
+      : parsedBatch.blockedSeeds.length > 0 || recorded.length > 0
+        ? "needs_review" as const
+        : "empty" as const,
+    recordedCount: recorded.length,
+    importableCount: recorded.filter((item) => item.candidate.importReady).length,
+    blockedCount: parsedBatch.blockedSeeds.length + recorded.filter((item) => !item.candidate.importReady).length,
+    recorded: recorded.map((item) => ({
+      status: item.status,
+      candidate: item.candidate,
+      nextAction: item.nextAction,
+    })),
+    blockedSeeds: [
+      ...parsedBatch.blockedSeeds,
+      ...recorded
+        .filter((item) => !item.candidate.importReady)
+        .map((item) => ({
+          businessName: item.candidate.businessName,
+          reason: item.candidate.blockedReasons.join("; ") || "candidate needs review",
+        })),
+    ],
+    safety: {
+      persistsCandidates: recorded.length > 0,
+      persistsLeads: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      writesPreviewFiles: false,
+      requiresPublicEvidence: true,
+      blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+    },
+    nextAction: recorded.some((item) => item.candidate.importReady)
+      ? "Review publicLeadImportQueue, then run Money Sprint with verified candidates."
+      : "Fix blocked rows or approve verified public evidence before Money Sprint.",
     snapshot: getRevenueEngineSnapshot(),
   };
 }

@@ -35,6 +35,7 @@ import {
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
   recordRevenuePublicLeadCandidate,
+  recordRevenuePublicLeadCandidateBatch,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   runRevenueMoneySprintFromPublicCandidates,
@@ -324,6 +325,79 @@ test("blocks public lead candidates from import until evidence is verified", () 
   assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
+});
+
+test("records verified public lead candidate batch without creating leads or outreach", () => {
+  const result = recordRevenuePublicLeadCandidateBatch({
+    area: "Miami",
+    niche: "coffee shop",
+    batchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Batch Ready Cafe|Miami|coffee shop|no_website|email|owner@batchready.example|https://example.com/batch-ready|owner@batchready.example|Google listing has no website and current menu photos with public owner email.|Needs online menu and catering inquiry capture.|4200|Owner|Batch Ready Cafe has verified public no-website evidence and clear lead capture needs.",
+      "Batch Ready Salon|Miami|salon|weak_website|email|owner@batchsalon.example|https://example.com/batch-salon|owner@batchsalon.example|Public profile links to a broken website and recent salon service photos with visible owner email.|Needs booking conversion and follow-up.|3600|Owner|Batch Ready Salon has verified public weak-website evidence and a booking conversion gap.",
+    ].join("\n"),
+    sourceTaskId: "scout-batch",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Batch verified from public sources.",
+  });
+
+  assert.equal(result.status, "ready_for_preview");
+  assert.equal(result.recordedCount, 2);
+  assert.equal(result.importableCount, 2);
+  assert.equal(result.safety.persistsCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.snapshot.recentPublicLeadCandidates.length, 2);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 2);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+});
+
+test("keeps public lead candidate batch blocked until batch evidence is approved", () => {
+  const result = recordRevenuePublicLeadCandidateBatch({
+    area: "Miami",
+    niche: "coffee shop",
+    batchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Batch Review Cafe|Miami|coffee shop|no_website|email|owner@batchreview.example|https://example.com/batch-review|owner@batchreview.example|Google listing has no website and current menu photos with public owner email.|Needs online menu and catering inquiry capture.|4200|Owner|Batch Review Cafe has public evidence but has not been approved for import.",
+    ].join("\n"),
+    sourceTaskId: "scout-batch-review",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.recordedCount, 1);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.blockedCount, 1);
+  assert.equal(result.blockedSeeds[0].reason.includes("public evidence not verified"), true);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(result.snapshot.publicLeadImportQueue.blockedCount, 1);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+});
+
+test("rejects string false values for public lead candidate batch approval gates", () => {
+  assert.throws(
+    () => recordRevenuePublicLeadCandidateBatch({
+      area: "Miami",
+      niche: "coffee shop",
+      batchText: [
+        "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+        "String False Cafe|Miami|coffee shop|no_website|email|owner@stringfalse.example|https://example.com/string-false|owner@stringfalse.example|Google listing has no website and current menu photos with public owner email.|Needs online menu.|4200|Owner|String False Cafe should not import when approval values are strings.",
+      ].join("\n"),
+      sourceTaskId: "scout-string-false",
+      verificationStatus: "verified_public",
+      publicEvidenceVerified: "false",
+      approvalToImport: "false",
+    } as Parameters<typeof recordRevenuePublicLeadCandidateBatch>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentPublicLeadCandidates.length, 0);
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
 });
 
 test("runs money sprint from verified public candidates without copy paste or outreach send", () => {

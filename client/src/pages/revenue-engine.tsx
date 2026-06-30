@@ -911,6 +911,30 @@ type RevenuePublicLeadCandidateResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenuePublicLeadCandidateBatchResult = {
+  status: "ready_for_preview" | "needs_review" | "empty";
+  recordedCount: number;
+  importableCount: number;
+  blockedCount: number;
+  recorded: Array<{
+    status: "ready_for_preview" | "needs_review";
+    candidate: RevenueSnapshot["recentPublicLeadCandidates"][number];
+    nextAction: string;
+  }>;
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    requiresPublicEvidence: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
 type RevenuePublicCandidateSprintResult = {
   status: "started" | "blocked" | "needs_spend_approval";
   reason: string;
@@ -2249,6 +2273,31 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicLeadCandidateBatchMutation = useMutation<RevenuePublicLeadCandidateBatchResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: scoutingArea,
+          niche: scoutingNiche,
+          batchText: seedLeadBatchText,
+          sourceTaskId: "ui-batch",
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          notes: "Recorded from Revenue Engine batch candidates UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo guardar batch publico");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
   const mockupMutation = useMutation<RevenueMockup>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/mockup", {
@@ -3306,6 +3355,19 @@ export default function RevenueEnginePage() {
                       </Button>
                       <Button
                         type="button"
+                        disabled={publicLeadCandidateBatchMutation.isPending || seedLeadBatchText.trim().length === 0}
+                        onClick={() => publicLeadCandidateBatchMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-save-public-candidate-batch"
+                      >
+                        {publicLeadCandidateBatchMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Guardar batch publico
+                      </Button>
+                      <p className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-500">
+                        Usa los checks de evidencia/aprobacion para todas las filas del batch pegado; guarda candidatos, no leads reales ni mensajes.
+                      </p>
+                      <Button
+                        type="button"
                         disabled={moneySprintMutation.isPending}
                         onClick={() => moneySprintMutation.mutate()}
                         className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
@@ -3754,6 +3816,28 @@ export default function RevenueEnginePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {publicLeadCandidateBatchMutation.data && (
+                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-sky-100">{publicLeadCandidateBatchMutation.data.nextAction}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicLeadCandidateBatchMutation.data.status), "shrink-0")}>
+                          {publicLeadCandidateBatchMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicLeadCandidateBatchMutation.data.recordedCount} guardados · {publicLeadCandidateBatchMutation.data.importableCount} listos · {publicLeadCandidateBatchMutation.data.blockedCount} bloqueados
+                      </p>
+                      {publicLeadCandidateBatchMutation.data.blockedSeeds.length > 0 && (
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {publicLeadCandidateBatchMutation.data.blockedSeeds.slice(0, 4).map((seed) => (
+                            <div key={`${seed.businessName}-${seed.reason}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                              {seed.businessName}: {seed.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {(snapshot?.publicLeadImportQueue.items || []).length === 0 ? (
                     <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
                       Sin candidatos aprobados para Money Sprint.
@@ -4040,7 +4124,7 @@ export default function RevenueEnginePage() {
                             className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
                             data-testid="checkbox-candidate-public-verified"
                           />
-                          <span>Verifique que la fuente/contacto/evidencia son publicos y reales.</span>
+                          <span>Verifique que la fuente/contacto/evidencia del lead o batch pegado son publicos y reales.</span>
                         </label>
                         <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-approval-import">
                           <input
@@ -4051,7 +4135,7 @@ export default function RevenueEnginePage() {
                             className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
                             data-testid="checkbox-candidate-approval-import"
                           />
-                          <span>Aprobar solo esta fila para Preview batch. No contacta, no scrapea, no gasta.</span>
+                          <span>Aprobar el lead o todas las filas del batch pegado para la cola de candidatos. No contacta, no scrapea, no gasta.</span>
                         </label>
                       </div>
                       <Button
