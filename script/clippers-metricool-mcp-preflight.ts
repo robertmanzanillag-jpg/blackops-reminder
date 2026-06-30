@@ -119,6 +119,13 @@ async function main() {
       "Use the generated MCP client config template only if Metricool MCP/API automation is explicitly enabled.",
     ),
     check(
+      "metricool_credentials_do_not_replace_connection_proof",
+      "Metricool keys do not replace SPORT/memes TikTok connection proof",
+      verifier.status === "pass" && verifier.launchDecision === "ready_for_metricool_operator" ? "pass" : "warn",
+      `readyForMcp=${metricoolConfig.readyForMcp}; verifierStatus=${verifier.status || "missing"}; launchDecision=${verifier.launchDecision || "missing"}`,
+      "Paste real non-secret SPORT and memes TikTok Metricool proof URLs; MCP keys alone cannot prove the connected accounts.",
+    ),
+    check(
       "clippers_tiktok_brands_ready_in_plan",
       "Clippers SPORT and memes TikTok brands are present in the Metricool plan",
       clippersBrands.length === 2 && clippersBrands.every((brand) => brand.tiktokReady) ? "pass" : "fail",
@@ -193,6 +200,7 @@ async function main() {
     },
     guardrails: [
       "Credentials present are not proof that posts were scheduled.",
+      "Metricool MCP/API keys are not proof that SPORT or memes TikTok profiles are connected in Metricool.",
       "Do not print, store, or paste Metricool tokens into reports, CSVs, screenshots, or prompts.",
       "This preflight does not enable automatic publishing.",
       "Missing Metricool MCP/API credentials do not block the manual Metricool operator workflow.",

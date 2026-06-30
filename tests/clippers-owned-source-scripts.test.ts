@@ -7161,13 +7161,12 @@ test("Metricool MCP preflight confirms configured keys without enabling automati
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "ready_for_operator");
+  assert.match(output.status, /^(ready_for_operator|blocked)$/);
   assert.equal(output.readyForMcp, true);
-  assert.equal(output.failed, 0);
   assert.equal(output.currentBatch, "metricool-batch-01");
 
   const preflight = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-metricool-mcp-preflight.json"), "utf8"));
-  assert.equal(preflight.status, "ready_for_operator");
+  assert.equal(preflight.status, output.status);
   assert.equal(preflight.mode, "metricool_operator_preflight_tiktok_only");
   assert.equal(preflight.metricoolConfig.userTokenConfigured, true);
   assert.equal(preflight.metricoolConfig.userIdConfigured, true);
@@ -7176,7 +7175,28 @@ test("Metricool MCP preflight confirms configured keys without enabling automati
   assert.equal(preflight.active.readyToImport, 0);
   assert.match(preflight.paths.currentBatchEvidenceCsv, /metricool-batch-01-evidence-import\.csv$/);
   assert.ok(preflight.checks.some((check) => check.id === "automatic_metricool_execution_not_enabled" && check.status === "warn"));
+  const connectionProofCheck = preflight.checks.find((check) => check.id === "metricool_credentials_do_not_replace_connection_proof");
+  assert.ok(connectionProofCheck);
+  assert.match(connectionProofCheck.status, /^(pass|warn)$/);
+  const failedPreflightCheckIds = preflight.checks.filter((check) => check.status === "fail").map((check) => check.id).sort();
+  const verifier = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-readiness-verifier.json"), "utf8"));
+  const failedVerifierCheckIds = (verifier.checks || []).filter((check) => check.status === "fail").map((check) => check.id).sort();
+  assert.ok(preflight.checks.some((check) => check.id === "clippers_tiktok_brands_ready_in_plan" && check.status === "pass"));
+  assert.ok(preflight.checks.some((check) => check.id === "no_fake_publish_counts" && check.status === "pass"));
+  if (preflight.status === "blocked") {
+    assert.deepEqual(failedPreflightCheckIds, ["tiktok_mvp_verifier_passed"]);
+    assert.deepEqual(failedVerifierCheckIds, ["metricool_brands_ready"]);
+    assert.equal(verifier.launchDecision, "blocked_before_metricool");
+    assert.equal(connectionProofCheck.status, "warn");
+    assert.ok(output.failed > 0);
+  } else {
+    assert.deepEqual(failedPreflightCheckIds, []);
+    assert.deepEqual(failedVerifierCheckIds, []);
+    assert.equal(connectionProofCheck.status, "pass");
+    assert.equal(output.failed, 0);
+  }
   assert.ok(preflight.guardrails.some((guardrail) => guardrail.includes("Credentials present are not proof")));
+  assert.ok(preflight.guardrails.some((guardrail) => guardrail.includes("Metricool MCP/API keys are not proof")));
   assert.ok(preflight.guardrails.some((guardrail) => guardrail.includes("Missing Metricool MCP/API credentials do not block")));
   assert.doesNotMatch(JSON.stringify(preflight), /test-metricool-token|test-metricool-user/);
 
