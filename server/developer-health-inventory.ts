@@ -41,7 +41,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     description: "BlackOps Reminder full-stack TypeScript PWA, also referred to as Dialer Planner when running from its alternate Replit deployment. GitHub: robertmanzanillag-jpg/blackops-reminder.",
     environment: "production",
     publicUrl: "https://robplanner.replit.app",
-    healthUrl: null,
+    healthUrl: "https://robplanner.replit.app/api/health",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "blackops-reminder",
     githubRepo: "robertmanzanillag-jpg/blackops-reminder",
@@ -53,7 +53,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-health-url", "alias-dialer-planner", "alternate-replit-deployment"],
+    tags: ["known-github-inventory", "alias-dialer-planner", "alternate-replit-deployment", "liveness-health-endpoint"],
   },
   {
     name: "DROPKIT",
