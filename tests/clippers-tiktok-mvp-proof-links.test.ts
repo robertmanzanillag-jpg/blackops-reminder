@@ -40,6 +40,18 @@ test("TikTok MVP proof links parser accepts explicit packet fields", () => {
   assert.equal(parsed.directSocialApisRequired, false);
   assert.equal(parsed.realPublishEnabled, false);
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, true);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.status, "unlocks_proof_actions");
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.readyProofFields, 8);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.totalProofFields, 8);
+  assert.deepEqual(parsed.proofLinksPreview.goalBoardImpact.unlocksOperatorActions, [
+    "sports-daily:tiktok.accountOwnershipProofUrl",
+    "sports-daily:tiktok.metricoolConnectionProofUrl",
+    "meme-radar:tiktok.accountOwnershipProofUrl",
+    "meme-radar:tiktok.metricoolConnectionProofUrl",
+  ]);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "save_proof_links");
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextLockedButton, "apply_tiktok_mvp_evidence_closeout");
+  assert.doesNotMatch(JSON.stringify(parsed.proofLinksPreview.goalBoardImpact), /ready_to_send|realPublishEnabled=true|video\.publish|autopublish/i);
   assert.equal(
     parsed.proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl,
     "https://app.metricool.com/planner/sports-daily-tiktok-proof",
@@ -58,6 +70,9 @@ test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
   assert.equal(parsed.status, "needs_review");
   assert.match(parsed.issues.join("\n"), /passwords, tokens, cookies, keys, or recovery codes/i);
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.status, "blocked_proof_actions");
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "preview_proof_links");
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextLockedButton, "save_proof_links");
 });
 
 test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof domains", () => {
@@ -76,6 +91,8 @@ test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof 
   const audit = auditClipperTikTokMvpProofLinks(proofLinks);
   assert.equal(audit.status, "blocked");
   assert.equal(audit.realPublishEnabled, false);
+  assert.equal(audit.goalBoardImpact.status, "blocked_proof_actions");
+  assert.ok(audit.goalBoardImpact.readyProofFields < audit.goalBoardImpact.totalProofFields);
   assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com proof URL/);
 });
 

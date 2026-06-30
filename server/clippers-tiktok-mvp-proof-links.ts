@@ -80,22 +80,48 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
     structureError || null,
     ...lanes.flatMap((lane) => lane.issues.map((issue) => `${lane.key}: ${issue}`)),
   ].filter(Boolean);
+  const readyProofFields = lanes.reduce((sum, lane) => {
+    return sum
+      + (lane.accountProofReady ? 1 : 0)
+      + (lane.metricoolProofReady ? 1 : 0)
+      + (lane.accountNotesReady ? 1 : 0)
+      + (lane.metricoolNotesReady ? 1 : 0);
+  }, 0);
+  const totalProofFields = lanes.length * 4;
+  const readyForProofDrop = issues.length === 0;
   return {
-    status: issues.length ? "blocked" : "ready_for_proof_drop",
+    status: readyForProofDrop ? "ready_for_proof_drop" : "blocked",
     generatedAt: new Date().toISOString(),
     scope: "tiktok_only_metricool_mvp",
     launchMode: "metricool_approval_required",
     directSocialApisRequired: false,
     realPublishEnabled: false,
-    readyForProofDrop: issues.length === 0,
+    readyForProofDrop,
     lanes,
     issues,
+    goalBoardImpact: {
+      status: readyForProofDrop ? "unlocks_proof_actions" : "blocked_proof_actions",
+      readyProofFields,
+      totalProofFields,
+      unlocksOperatorActions: readyForProofDrop ? [
+        "sports-daily:tiktok.accountOwnershipProofUrl",
+        "sports-daily:tiktok.metricoolConnectionProofUrl",
+        "meme-radar:tiktok.accountOwnershipProofUrl",
+        "meme-radar:tiktok.metricoolConnectionProofUrl",
+      ] : [],
+      nextSafeButton: readyForProofDrop ? "save_proof_links" : "preview_proof_links",
+      nextLockedButton: readyForProofDrop ? "apply_tiktok_mvp_evidence_closeout" : "save_proof_links",
+      nextStep: readyForProofDrop
+        ? "Save proof links. This only stores validated proof links and refreshes gates; it still does not apply evidence or publish."
+        : "Fix every blocked proof field before Save links can unlock the first four operator actions.",
+    },
     impact: {
-      unlocks: issues.length === 0
+      unlocks: readyForProofDrop
         ? [
             "Proof links can be saved to proof-links.json.",
             "Proof drop can run quick-fill and unblocker checks.",
             "Import preview can evaluate whether target evidence CSVs are ready.",
+            "The first four goal-board proof actions can move from blocked to ready for save/apply review.",
           ]
         : [
             "No production gate is unlocked until these proof-link issues are fixed.",

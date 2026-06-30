@@ -706,6 +706,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /preview-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-impact/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-goal-impact/);
+  assert.match(page, /goalBoardImpact/);
+  assert.match(page, /unlocksOperatorActions/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-lanes/);
   assert.match(page, /save-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /!tiktokMvpProofLinksPreview\?\.readyForProofDrop/);

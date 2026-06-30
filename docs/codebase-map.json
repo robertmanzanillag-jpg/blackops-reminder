@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T14:21:35.364Z",
+  "generatedAt": "2026-06-30T14:25:15.304Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8945
+    "symbols": 8948
   },
   "directories": {
     ".agents/skills": {
@@ -8872,11 +8872,14 @@
         "preview",
         "proofLinks",
         "raw",
+        "readyForProofDrop",
+        "readyProofFields",
         "safeClipperHttpsProofUrl",
         "safeClipperMetricoolProofUrl",
         "scopedUrls",
         "structureError",
         "text",
+        "totalProofFields",
         "validClipperProofNotes",
         "validateClipperTikTokMvpProofLinks",
         "value"

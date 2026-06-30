@@ -2503,6 +2503,15 @@ interface ClipperTikTokMvpProofLinksPreviewSummary {
     readyForProofDrop: boolean;
   }>;
   issues: string[];
+  goalBoardImpact?: {
+    status: "unlocks_proof_actions" | "blocked_proof_actions";
+    readyProofFields: number;
+    totalProofFields: number;
+    unlocksOperatorActions: string[];
+    nextSafeButton: "save_proof_links" | "preview_proof_links";
+    nextLockedButton: "apply_tiktok_mvp_evidence_closeout" | "save_proof_links";
+    nextStep: string;
+  };
   impact: {
     unlocks: string[];
     doesNotUnlock: string[];
@@ -18282,6 +18291,28 @@ export default function ClippersPage() {
                           <p className="mt-1 text-zinc-400">{tiktokMvpProofLinksPreview.impact.doesNotUnlock[0]}</p>
                         </div>
                       </div>
+                      {tiktokMvpProofLinksPreview.goalBoardImpact && (
+                        <div className="mt-2 rounded border border-sky-300/10 bg-sky-950/10 p-2" data-testid="clippers-tiktok-mvp-proof-links-goal-impact">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={cn(
+                              "border text-[10px]",
+                              tiktokMvpProofLinksPreview.goalBoardImpact.status === "unlocks_proof_actions"
+                                ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                            )}>
+                              goal {tiktokMvpProofLinksPreview.goalBoardImpact.status}
+                            </Badge>
+                            <span>{formatNumber(tiktokMvpProofLinksPreview.goalBoardImpact.readyProofFields)}/{formatNumber(tiktokMvpProofLinksPreview.goalBoardImpact.totalProofFields)} proof fields</span>
+                            <span>next {tiktokMvpProofLinksPreview.goalBoardImpact.nextSafeButton}</span>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-4 text-sky-100/80">{tiktokMvpProofLinksPreview.goalBoardImpact.nextStep}</p>
+                          {tiktokMvpProofLinksPreview.goalBoardImpact.unlocksOperatorActions.length > 0 && (
+                            <p className="mt-1 break-all font-mono text-[10px] leading-4 text-zinc-500">
+                              unlocks {tiktokMvpProofLinksPreview.goalBoardImpact.unlocksOperatorActions.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-preview-lanes">
                         {tiktokMvpProofLinksPreview.lanes.map((lane) => (
                           <div key={lane.key} className="rounded border border-amber-300/10 bg-black/20 p-2">
