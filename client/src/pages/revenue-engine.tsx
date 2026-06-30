@@ -1108,6 +1108,26 @@ type RevenuePublicCandidateSprintResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenuePublicScoutAgentCommandResult = {
+  status: "candidates_ready" | "needs_review" | "blocked" | "sprint_started";
+  reason: string;
+  evidenceResult: RevenuePublicScoutEvidenceResult;
+  sprintResult: RevenuePublicCandidateSprintResult | null;
+  readyCandidateIds: string[];
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    deploys: boolean;
+    requiresApprovalToContact: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
 type RevenueMockupTemplatePack = {
   status: "ready" | "needs_spend_approval";
   pack: {
@@ -2580,6 +2600,44 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicScoutAgentCommandMutation = useMutation<RevenuePublicScoutAgentCommandResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-scout-agent-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: scoutingArea,
+          niche: scoutingNiche,
+          offerFocus: scoutingOfferFocus,
+          evidenceText: publicScoutEvidenceText,
+          sourceTaskId: "ui-scout-agent-command",
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          defaultOfferUsd: leadEstimatedOfferUsd,
+          maxCandidates: Math.min(scoutingTargetLeadCount, 50),
+          dailyResearchTarget: leadRadarDailyResearchTarget,
+          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+          dailyMockupLimit: leadRadarMockupLimit,
+          dailyContactLimit: leadRadarContactLimit,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          writePreviewFiles: true,
+          runMoneySprintIfReady: true,
+          maxSprintCandidates: Math.min(scoutingTargetLeadCount, 25),
+          notes: "Executed from Revenue Engine public scout agent command UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr scout agent command");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.evidenceResult.normalizedBatchText);
+      refetchSnapshot();
+    },
+  });
+
   const mockupMutation = useMutation<RevenueMockup>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/mockup", {
@@ -3681,6 +3739,16 @@ export default function RevenueEnginePage() {
                           {publicScoutEvidenceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
                           Normalizar evidencia publica
                         </Button>
+                        <Button
+                          type="button"
+                          disabled={publicScoutAgentCommandMutation.isPending || publicScoutEvidenceText.trim().length < 10}
+                          onClick={() => publicScoutAgentCommandMutation.mutate()}
+                          className="w-full bg-emerald-700 text-white hover:bg-emerald-600"
+                          data-testid="button-run-public-scout-agent-command"
+                        >
+                          {publicScoutAgentCommandMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                          Scout a Money Sprint
+                        </Button>
                       </div>
                       <Button
                         type="submit"
@@ -4349,6 +4417,30 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
                       )}
+                    </div>
+                  )}
+                  {publicScoutAgentCommandMutation.data && (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-emerald-100">{publicScoutAgentCommandMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutAgentCommandMutation.data.status), "shrink-0")}>
+                          {publicScoutAgentCommandMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutAgentCommandMutation.data.evidenceResult.recordedCount} candidatos · {publicScoutAgentCommandMutation.data.readyCandidateIds.length} listos · {publicScoutAgentCommandMutation.data.sprintResult?.importedCandidateIds.length ?? 0} sprint
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Outreach {publicScoutAgentCommandMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Spend {publicScoutAgentCommandMutation.data.safety.spendsMoney ? "activo" : "cero"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Deploy {publicScoutAgentCommandMutation.data.safety.deploys ? "activo" : "bloqueado"}
+                        </div>
+                      </div>
                     </div>
                   )}
                   {publicLeadCandidateBatchMutation.data && (

@@ -77,12 +77,19 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
 
   assert.match(engineSource, /recordRevenuePublicScoutEvidence/);
+  assert.match(engineSource, /runRevenuePublicScoutAgentCommand/);
+  assert.match(engineSource, /requireRobertApprovalToContact: z\.literal\(true\)/);
+  assert.match(engineSource, /maxPaidDataSpendUsd: z\.coerce\.number\(\)\.min\(0\)\.max\(0\)/);
   assert.match(engineSource, /sourceUrl must be public/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-scout-evidence/);
+  assert.match(routeSource, /\/api\/revenue-engine\/public-scout-agent-command/);
   assert.match(routeSource, /revenuePublicScoutEvidenceSchema\.parse/);
+  assert.match(routeSource, /revenuePublicScoutAgentCommandSchema\.parse/);
   assert.match(uiSource, /publicScoutEvidenceMutation/);
+  assert.match(uiSource, /publicScoutAgentCommandMutation/);
   assert.match(uiSource, /textarea-public-scout-evidence/);
   assert.match(uiSource, /button-normalize-public-scout-evidence/);
+  assert.match(uiSource, /button-run-public-scout-agent-command/);
   assert.match(uiSource, /const \[publicScoutEvidenceText, setPublicScoutEvidenceText\] = useState\(""\)/);
   assert.doesNotMatch(uiSource, /useState\(\[\s*"Business: No Site Cafe"/);
 });

@@ -42,6 +42,7 @@ import {
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   revenueDeliveryWorkspaceGithubHandoffSchema,
+  runRevenuePublicScoutAgentCommand,
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
@@ -574,6 +575,173 @@ test("blocks public scout evidence from private or local source urls", () => {
     assert.equal(result.snapshot.publicLeadImportQueue.blockedCount, index + 1);
     assert.equal(result.snapshot.recentLeads.length, 0);
   }
+});
+
+test("public scout agent command normalizes import-ready candidates without running sprint by default", () => {
+  const result = runRevenuePublicScoutAgentCommand({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Agent Command Cafe",
+      "Website: no website",
+      "Contact: owner@agentcommand.example",
+      "Source: https://example.com/agent-command-cafe",
+      "Evidence: Public listing has no website, current menu photos and visible owner email.",
+      "Pain: Needs online menu, catering inquiry capture and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  assert.equal(result.status, "candidates_ready");
+  assert.equal(result.sprintResult, null);
+  assert.equal(result.readyCandidateIds.length, 1);
+  assert.equal(result.safety.persistsCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.spendsMoney, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.snapshot.recentPublicLeadCandidates.length, 1);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("public scout agent command runs sprint only with import-ready candidates and keeps external actions blocked", () => {
+  const result = runRevenuePublicScoutAgentCommand({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    evidenceText: [
+      "Business: Agent Sprint Cafe",
+      "Website: no website",
+      "Contact: owner@agentsprint.example",
+      "Source: https://example.com/agent-sprint-cafe",
+      "Evidence: Public listing has no website, recent menu posts and verified owner email.",
+      "Pain: Needs online menu, catering inquiry capture and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    runMoneySprintIfReady: true,
+    maxPaidDataSpendUsd: 0,
+  });
+
+  assert.equal(result.status, "sprint_started");
+  assert.equal(result.readyCandidateIds.length, 1);
+  assert.equal(result.sprintResult?.sprint?.recordedLeads.length, 1);
+  assert.equal(result.sprintResult?.sprint?.outreachDrafts.length, 1);
+  assert.equal(result.sprintResult?.sprint?.outreachDrafts[0].status, "draft");
+  assert.equal(result.sprintResult?.sprint?.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.sprintResult?.sprint?.operatingLimits.externalContactMode, "draft_until_robert_approves");
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.spendsMoney, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("public scout agent command does not run sprint for unapproved or unverified evidence", () => {
+  const result = runRevenuePublicScoutAgentCommand({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Agent Review Cafe",
+      "Website: no website",
+      "Contact: owner@agentreview.example",
+      "Source: https://example.com/agent-review-cafe",
+      "Evidence: Public listing has no website and visible owner email.",
+      "Pain: Needs online menu and follow-up.",
+    ].join("\n"),
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+    runMoneySprintIfReady: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.sprintResult, null);
+  assert.equal(result.readyCandidateIds.length, 0);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("public scout agent command rejects string false safety flags", () => {
+  assert.throws(
+    () => runRevenuePublicScoutAgentCommand({
+      area: "Miami",
+      niche: "coffee shop",
+      evidenceText: [
+        "Business: String False Agent Cafe",
+        "Website: no website",
+        "Contact: owner@stringfalseagent.example",
+        "Source: https://example.com/string-false-agent",
+        "Evidence: Public listing has no website and visible owner email.",
+        "Pain: Needs online menu and follow-up.",
+      ].join("\n"),
+      verificationStatus: "verified_public",
+      publicEvidenceVerified: true,
+      approvalToImport: true,
+      runMoneySprintIfReady: "false",
+      writePreviewFiles: "false",
+    } as Parameters<typeof runRevenuePublicScoutAgentCommand>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
+  assert.equal(getRevenueEngineSnapshot().recentPublicLeadCandidates.length, 0);
+});
+
+test("public scout agent command cannot loosen contact approval or paid spend", () => {
+  const baseInput = {
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Approval Locked Agent Cafe",
+      "Website: no website",
+      "Contact: owner@approvallocked.example",
+      "Source: https://example.com/approval-locked-agent",
+      "Evidence: Public listing has no website and visible owner email.",
+      "Pain: Needs online menu and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public" as const,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    runMoneySprintIfReady: true,
+  };
+
+  assert.throws(
+    () => runRevenuePublicScoutAgentCommand({
+      ...baseInput,
+      requireRobertApprovalToContact: false,
+    }),
+    /Invalid literal value/,
+  );
+  assert.throws(
+    () => runRevenuePublicScoutAgentCommand({
+      ...baseInput,
+      maxPaidDataSpendUsd: 1,
+    }),
+    /Number must be less than or equal to 0/,
+  );
+  assert.throws(
+    () => runRevenuePublicScoutAgentCommand({
+      ...baseInput,
+      maxPaidDataSpendUsd: -1,
+    }),
+    /Number must be greater than or equal to 0/,
+  );
 });
 
 test("runs money sprint from verified public candidates without copy paste or outreach send", () => {

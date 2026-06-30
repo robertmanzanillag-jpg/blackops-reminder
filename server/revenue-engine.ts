@@ -463,6 +463,21 @@ export const revenuePublicScoutEvidenceSchema = z.object({
 
 export type RevenuePublicScoutEvidenceInput = z.infer<typeof revenuePublicScoutEvidenceSchema>;
 
+export const revenuePublicScoutAgentCommandSchema = revenuePublicScoutEvidenceSchema.extend({
+  offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
+  dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
+  dailyQualifiedLeadLimit: z.coerce.number().int().min(5).max(100).default(25),
+  dailyMockupLimit: z.coerce.number().int().min(1).max(25).default(5),
+  dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
+  requireRobertApprovalToContact: z.literal(true).default(true),
+  writePreviewFiles: z.boolean().default(true),
+  runMoneySprintIfReady: z.boolean().default(false),
+  maxSprintCandidates: z.coerce.number().int().min(1).max(25).default(10),
+  maxPaidDataSpendUsd: z.coerce.number().min(0).max(0).default(0),
+});
+
+export type RevenuePublicScoutAgentCommandInput = z.infer<typeof revenuePublicScoutAgentCommandSchema>;
+
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
   targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
@@ -4362,6 +4377,102 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
         ? "Fix blocked evidence fields before Money Sprint."
         : "Review normalized candidates, verify public evidence, then approve import.",
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function runRevenuePublicScoutAgentCommand(input: RevenuePublicScoutAgentCommandInput) {
+  const parsed = revenuePublicScoutAgentCommandSchema.parse(input);
+  const evidenceResult = recordRevenuePublicScoutEvidence(parsed);
+  const readyCandidateIds = evidenceResult.recorded
+    .filter((item) => item.candidate.importReady)
+    .map((item) => item.candidate.id)
+    .slice(0, parsed.maxSprintCandidates);
+
+  if (!parsed.runMoneySprintIfReady) {
+    return {
+      status: evidenceResult.importableCount > 0 ? "candidates_ready" as const : "needs_review" as const,
+      reason: evidenceResult.importableCount > 0
+        ? "Public scout evidence normalized into import-ready candidates. Money Sprint was not requested."
+        : "Public scout evidence recorded, but candidates need review before Money Sprint.",
+      evidenceResult,
+      sprintResult: null,
+      readyCandidateIds,
+      safety: {
+        persistsCandidates: evidenceResult.safety.persistsCandidates,
+        persistsLeads: false,
+        writesPreviewFiles: false,
+        sendsOutreach: false,
+        spendsMoney: false,
+        deploys: false,
+        requiresApprovalToContact: true,
+        blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+      },
+      nextAction: readyCandidateIds.length > 0
+        ? "Run Money Sprint from these verified candidates when ready."
+        : evidenceResult.nextAction,
+      snapshot: evidenceResult.snapshot,
+    };
+  }
+
+  if (readyCandidateIds.length === 0) {
+    return {
+      status: "blocked" as const,
+      reason: "No import-ready public candidates were created from this evidence.",
+      evidenceResult,
+      sprintResult: null,
+      readyCandidateIds,
+      safety: {
+        persistsCandidates: evidenceResult.safety.persistsCandidates,
+        persistsLeads: false,
+        writesPreviewFiles: false,
+        sendsOutreach: false,
+        spendsMoney: false,
+        deploys: false,
+        requiresApprovalToContact: true,
+        blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+      },
+      nextAction: "Fix blocked evidence fields or approve public evidence before running Money Sprint.",
+      snapshot: evidenceResult.snapshot,
+    };
+  }
+
+  const sprintResult = runRevenueMoneySprintFromPublicCandidates({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+    writePreviewFiles: parsed.writePreviewFiles,
+    candidateIds: readyCandidateIds,
+    maxCandidates: parsed.maxSprintCandidates,
+  });
+
+  return {
+    status: sprintResult.status === "started" ? "sprint_started" as const : "blocked" as const,
+    reason: sprintResult.status === "started"
+      ? "Public scout evidence became candidates, leads, mockups and draft-only outreach with zero paid spend."
+      : sprintResult.reason,
+    evidenceResult,
+    sprintResult,
+    readyCandidateIds,
+    safety: {
+      persistsCandidates: evidenceResult.safety.persistsCandidates,
+      persistsLeads: sprintResult.status === "started",
+      writesPreviewFiles: sprintResult.safety.writesPreviewFiles,
+      sendsOutreach: false,
+      spendsMoney: false,
+      deploys: false,
+      requiresApprovalToContact: true,
+      blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+    },
+    nextAction: sprintResult.status === "started"
+      ? "Review generated mockups and draft outreach; contact remains manual and approval-gated."
+      : "Resolve blocked candidates before rerunning the scout command.",
+    snapshot: sprintResult.snapshot,
   };
 }
 
