@@ -47,6 +47,16 @@ test("route scout keeps a map of pages and expected clicks", () => {
   );
 });
 
+test("route scout covers Revenue Engine money flow clicks", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine");
+
+  assert.ok(revenueRoute);
+  assert.deepEqual(
+    ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"].every((click) => revenueRoute.expectedClicks.includes(click)),
+    true,
+  );
+});
+
 test("improvement scout flags important production apps without health endpoints", () => {
   const report = analyzeImprovementIdeas([appProject({ healthUrl: null })]);
 
