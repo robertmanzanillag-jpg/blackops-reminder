@@ -18383,6 +18383,19 @@ export default function ClippersPage() {
                         <span>real publish {tiktokMvpProofLinksPastePreview.realPublishEnabled ? "enabled" : "disabled"}</span>
                       </div>
                       <p className="mt-1">{tiktokMvpProofLinksPastePreview.issues[0] || tiktokMvpProofLinksPastePreview.proofLinksPreview.issues[0] || tiktokMvpProofLinksPastePreview.nextStep}</p>
+                      {tiktokMvpProofLinksPastePreview.proofLinksPreview.readyForProofDrop && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => tiktokMvpProofLinksSaveMutation.mutate()}
+                          disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim() || !tiktokMvpProofLinksPreview?.readyForProofDrop}
+                          className="mt-2 h-8 bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+                          data-testid="save-clippers-tiktok-mvp-proof-links-from-paste-preview-button"
+                        >
+                          {tiktokMvpProofLinksSaveMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                          Save verified links
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
