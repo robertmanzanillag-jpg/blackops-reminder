@@ -49,6 +49,12 @@ export type AppQaRouteProbe = {
   label: string;
   expectedClicks: string[];
   expectedControls?: string[];
+  expectedControlGroups?: Array<{
+    name: string;
+    controls: string[];
+    activationControls?: string[];
+  }>;
+  visualTextTabs?: string[];
   status: AppQaStatus;
   notes: string[];
 };
@@ -240,8 +246,31 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
       "Correr QA",
     ],
     expectedControls: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControlGroups: [
+      {
+        name: "website_sales_packet",
+        controls: ["Copy packet", "Crear oportunidad"],
+        activationControls: ["Copy packet", "Crear oportunidad"],
+      },
+      {
+        name: "website_closure",
+        controls: ["Copy close", "Registrar deposito y vender", "Reply", "Deposit"],
+        activationControls: ["Copy close", "Registrar deposito y vender"],
+      },
+      {
+        name: "website_delivery_workspace",
+        controls: ["Crear workspace", "Copy brief", "Guardar workspace"],
+        activationControls: ["Crear workspace", "Copy brief", "Guardar workspace"],
+      },
+      {
+        name: "website_release_gate",
+        controls: ["Create issue", "Revalidar con checks marcados", "Registrar release gate", "Entregar aprobado"],
+        activationControls: ["Create issue", "Revalidar con checks marcados", "Registrar release gate", "Entregar aprobado"],
+      },
+    ],
+    visualTextTabs: ["Pipeline", "Leads", "QA entrega", "Outbox"],
     status: "pass",
-    notes: ["Outcome, delivery, GitHub handoff and delivery controls are data-dependent and validated as route click inventory."],
+    notes: ["Outcome, delivery, GitHub handoff and delivery controls are data-dependent and validated as grouped scenario controls when state is present."],
   },
   { path: "/dropshipping-ceo", label: "Dropshipping CEO", expectedClicks: ["Ciclo diario", "Launch pack"], status: "pass", notes: [] },
   { path: "/marketing-command-center", label: "Marketing HQ", expectedClicks: ["Run day", "Review analytics"], status: "pass", notes: [] },
@@ -860,9 +889,91 @@ function normalizeVisualText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function findMissingExpectedVisualControls(bodyText: string, expectedClicks: string[]): string[] {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasExpectedVisualControl(bodyText: string, expectedControl: string): boolean {
   const normalizedBody = normalizeVisualText(bodyText);
-  return expectedClicks.filter((click) => !normalizedBody.includes(normalizeVisualText(click)));
+  const normalizedControl = normalizeVisualText(expectedControl);
+  if (!normalizedControl) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedControl)}($|[^a-z0-9])`).test(normalizedBody);
+}
+
+function findMissingExpectedVisualControls(bodyText: string, expectedClicks: string[]): string[] {
+  return expectedClicks.filter((click) => !hasExpectedVisualControl(bodyText, click));
+}
+
+function countExpectedVisualControls(route: AppQaRouteProbe): number {
+  const groupedControls = (route.expectedControlGroups || []).reduce(
+    (sum, group) => sum + group.controls.length,
+    0,
+  );
+  return (route.expectedControls?.length || 0) + groupedControls;
+}
+
+type VisualRouteTextSnapshot = {
+  label: string;
+  bodyText: string;
+};
+
+function evaluateExpectedVisualControls(bodyText: string, route: AppQaRouteProbe): string[] {
+  return evaluateExpectedVisualControlSnapshots([{ label: "visible", bodyText }], route);
+}
+
+function evaluateExpectedVisualControlSnapshots(snapshots: VisualRouteTextSnapshot[], route: AppQaRouteProbe): string[] {
+  const notes: string[] = [];
+  const combinedBodyText = snapshots.map((snapshot) => snapshot.bodyText).join("\n");
+  const missingExpectedControls = findMissingExpectedVisualControls(combinedBodyText, route.expectedControls || []);
+
+  if (missingExpectedControls.length) {
+    notes.push(`Controles esperados no visibles: ${missingExpectedControls.join(", ")}`);
+  }
+
+  for (const group of route.expectedControlGroups || []) {
+    for (const snapshot of snapshots) {
+      const activationControls = group.activationControls || group.controls;
+      const activationVisible = activationControls.some((control) =>
+        !findMissingExpectedVisualControls(snapshot.bodyText, [control]).length
+      );
+      if (!activationVisible) continue;
+
+      const missingGroupControls = findMissingExpectedVisualControls(snapshot.bodyText, group.controls);
+      if (missingGroupControls.length) {
+        notes.push(`Controles de escenario ${group.name} incompletos en ${snapshot.label}: ${missingGroupControls.join(", ")}`);
+      }
+    }
+  }
+
+  return notes;
+}
+
+async function collectVisualRouteTextSnapshots(page: any, route: AppQaRouteProbe): Promise<VisualRouteTextSnapshot[]> {
+  const snapshots: VisualRouteTextSnapshot[] = [];
+  const readBody = async (label: string) => {
+    const text = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).trim();
+    if (text) snapshots.push({ label, bodyText: text });
+  };
+
+  await readBody("initial");
+  for (const tabLabel of route.visualTextTabs || []) {
+    const tab = page.getByRole("tab", { name: tabLabel }).first();
+    if (!(await tab.count().catch(() => 0))) continue;
+    await tab.click({ timeout: 3000 }).catch(() => undefined);
+    await page.waitForTimeout(100).catch(() => undefined);
+    await readBody(tabLabel);
+  }
+
+  const restoreTabLabel = route.visualTextTabs?.[0];
+  if (restoreTabLabel) {
+    const restoreTab = page.getByRole("tab", { name: restoreTabLabel }).first();
+    if (await restoreTab.count().catch(() => 0)) {
+      await restoreTab.click({ timeout: 3000 }).catch(() => undefined);
+      await page.waitForTimeout(100).catch(() => undefined);
+    }
+  }
+
+  return snapshots;
 }
 
 function isVisualAuthScreen(bodyText: string): boolean {
@@ -936,7 +1047,7 @@ export function analyzeRoutes(routes = LOCAL_ROUTE_MAP): AppQaSubAgentReport {
     status: statusFromFindings(findings),
     summary: findings.length
       ? `Mapa de rutas con ${findings.length} puntos por completar.`
-      : `Mapa local listo: ${routes.length} paginas y ${routes.reduce((sum, route) => sum + route.expectedClicks.length, 0)} clicks esperados.`,
+      : `Mapa local listo: ${routes.length} paginas, ${routes.reduce((sum, route) => sum + route.expectedClicks.length, 0)} clicks esperados y ${routes.reduce((sum, route) => sum + countExpectedVisualControls(route), 0)} controles visuales.`,
     checked: routes.length,
     findings,
   };
@@ -1208,7 +1319,8 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         const response = await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
         title = await page.title().catch(() => null);
         const statusCode = response?.status?.() || 0;
-        const bodyText = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).trim();
+        const bodySnapshots = await collectVisualRouteTextSnapshots(page, route);
+        const bodyText = bodySnapshots.map((snapshot) => snapshot.bodyText).join("\n");
         const authSeed = await page.evaluate(() => ({
           seeded: Boolean((window as any).__visualQaAuthSeeded),
           errored: Boolean((window as any).__visualQaAuthSeedError),
@@ -1235,10 +1347,10 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
           status = "fail";
           notes.push(`${consoleErrors.length} errores de consola`);
         }
-        const missingExpectedClicks = findMissingExpectedVisualControls(bodyText, route.expectedControls || []);
-        if (missingExpectedClicks.length) {
+        const controlNotes = evaluateExpectedVisualControlSnapshots(bodySnapshots, route);
+        if (controlNotes.length) {
           status = "fail";
-          notes.push(`Controles esperados no visibles: ${missingExpectedClicks.join(", ")}`);
+          notes.push(...controlNotes);
         }
 
         const links = page.locator('a[href^="/"]');
@@ -1849,6 +1961,8 @@ export const __appQaAgentInternals = {
   emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  evaluateExpectedVisualControlSnapshots,
+  evaluateExpectedVisualControls,
   findMissingExpectedVisualControls,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,

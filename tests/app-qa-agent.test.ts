@@ -77,7 +77,22 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     true,
   );
   assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]);
-  assert.match(revenueRoute.notes.join(" "), /data-dependent/);
+  assert.deepEqual(
+    expectedCriticalClicks.every((click) =>
+      [
+        ...(revenueRoute.expectedControls || []),
+        ...(revenueRoute.expectedControlGroups || []).flatMap((group) => group.controls),
+      ].includes(click)
+    ),
+    true,
+  );
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Registrar release gate")), true);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Entregar aprobado")), true);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.activationControls?.includes("Reply")), false);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.activationControls?.includes("Deposit")), false);
+  assert.deepEqual(revenueRoute.visualTextTabs?.includes("Leads"), true);
+  assert.deepEqual(revenueRoute.visualTextTabs?.includes("QA entrega"), true);
+  assert.match(revenueRoute.notes.join(" "), /grouped scenario controls/);
 });
 
 test("visual click scout can detect missing expected Revenue Engine controls", () => {
@@ -97,6 +112,132 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
     __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Missing button"]),
     ["Missing button"],
   );
+});
+
+test("visual control coverage checks Revenue Engine money-flow groups independently", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const salesOnlyBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Crear oportunidad",
+    "Copy packet",
+  ].join("\n");
+  const partialReleaseBody = [
+    salesOnlyBody,
+    "Registrar release gate",
+  ].join("\n");
+
+  const salesNotes = __appQaAgentInternals.evaluateExpectedVisualControls(salesOnlyBody, revenueRoute);
+  const releaseNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialReleaseBody, revenueRoute);
+
+  assert.deepEqual(salesNotes, []);
+  assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(releaseNotes.join("\n").includes("Entregar aprobado"), true);
+});
+
+test("visual control coverage does not merge scenario controls across tabs", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const baseBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+  ].join("\n");
+  const notes = __appQaAgentInternals.evaluateExpectedVisualControlSnapshots(
+    [
+      { label: "QA entrega", bodyText: [baseBody, "Registrar release gate"].join("\n") },
+      { label: "Outbox", bodyText: [baseBody, "Entregar aprobado", "Create issue", "Revalidar con checks marcados"].join("\n") },
+    ],
+    revenueRoute,
+  );
+
+  assert.equal(notes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(notes.join("\n").includes("Entregar aprobado"), true);
+});
+
+test("visual control coverage accepts a complete activated scenario snapshot", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Registrar release gate",
+    "Entregar aprobado",
+    "Create issue",
+    "Revalidar con checks marcados",
+  ].join("\n");
+
+  assert.deepEqual(
+    __appQaAgentInternals.evaluateExpectedVisualControlSnapshots([{ label: "QA entrega", bodyText: body }], revenueRoute),
+    [],
+  );
+});
+
+test("visual control coverage flags non-generic group controls without their required pair", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const partialSalesBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Copy packet",
+  ].join("\n");
+  const partialReleaseBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Create issue",
+  ].join("\n");
+
+  const salesNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialSalesBody, revenueRoute);
+  const releaseNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialReleaseBody, revenueRoute);
+
+  assert.equal(salesNotes.some((note) => note.includes("website_sales_packet")), true);
+  assert.equal(salesNotes.join("\n").includes("Crear oportunidad"), true);
+  assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(releaseNotes.join("\n").includes("Registrar release gate"), true);
+});
+
+test("visual control coverage does not match short controls inside longer words", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Copy close",
+    "Registrar deposito y vender",
+    "Reply",
+  ].join("\n");
+  const notes = __appQaAgentInternals.evaluateExpectedVisualControls(body, revenueRoute);
+
+  assert.equal(notes.some((note) => note.includes("website_closure")), true);
+  assert.equal(notes.join("\n").includes("Deposit"), true);
+});
+
+test("visual control coverage ignores generic scenario words until a strong money-flow control appears", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const genericBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Reply",
+    "Deposit",
+  ].join("\n");
+
+  assert.deepEqual(__appQaAgentInternals.evaluateExpectedVisualControls(genericBody, revenueRoute), []);
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {
