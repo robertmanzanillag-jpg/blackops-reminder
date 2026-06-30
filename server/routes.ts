@@ -358,6 +358,7 @@ export async function registerRoutes(
   const runClipperTikTokMvpProofRefresh = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-refresh.mjs", "TikTok MVP proof refresh");
   const runClipperTikTokMvpProofUnblocker = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-unblocker.mjs", "TikTok MVP proof unblocker");
   const runClipperTikTokMvpLocalVerification = () => runClipperJsonScript("script/clippers-tiktok-mvp-local-verification.mjs", "TikTok MVP local verification");
+  const runClipperTikTokMvpCloseoutWizard = () => runClipperJsonScript("script/clippers-tiktok-mvp-closeout-wizard.mjs", "TikTok MVP closeout wizard");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -407,6 +408,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpLocalVerification = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/local-verification.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpCloseoutWizard = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/closeout-wizard.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2869,12 +2874,36 @@ export async function registerRoutes(
       const run = await runClipperTikTokMvpLocalVerification();
       res.json({
         tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification(),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill(),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker(),
         run,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP local verification" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-closeout-wizard", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP closeout wizard has not been prepared" : "TikTok MVP closeout wizard could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-closeout-wizard", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpCloseoutWizard();
+      res.json({
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard(),
+        tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit().catch(() => null),
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP closeout wizard" });
     }
   });
 

@@ -50,6 +50,13 @@ const commands = [
     args: ["run", "clippers:tiktok-mvp-proof-unblocker"],
     required: true,
   },
+  {
+    id: "closeout_wizard",
+    label: "TikTok MVP closeout wizard",
+    command: "npm",
+    args: ["run", "clippers:tiktok-mvp-closeout-wizard"],
+    required: true,
+  },
 ];
 
 function runCommand(item) {

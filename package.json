@@ -75,6 +75,7 @@
     "clippers:record-owned-source-rights": "node script/clippers-record-owned-source-rights.mjs",
     "clippers:sync-metricool-source-readiness": "node script/clippers-sync-metricool-source-readiness.mjs",
     "clippers:tiktok-mvp-evidence-closeout": "node script/clippers-tiktok-mvp-evidence-closeout.mjs",
+    "clippers:tiktok-mvp-closeout-wizard": "node script/clippers-tiktok-mvp-closeout-wizard.mjs",
     "clippers:tiktok-mvp-proof-drop-kit": "node script/clippers-tiktok-mvp-proof-drop-kit.mjs",
     "clippers:tiktok-mvp-proof-doctor": "node script/clippers-tiktok-mvp-proof-doctor.mjs",
     "clippers:tiktok-mvp-proof-intake-import": "node script/clippers-tiktok-mvp-proof-intake-import.mjs",

@@ -2325,6 +2325,45 @@ interface ClipperTikTokMvpLocalVerificationSummary {
   };
 }
 
+interface ClipperTikTokMvpCloseoutWizardSummary {
+  status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence";
+  launchDecision: "ready_for_confirmed_apply_only" | "blocked_before_apply";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  steps: Array<{
+    id: string;
+    label: string;
+    status: "done" | "blocked" | "waiting";
+    nextAction: string;
+    issues?: string[];
+    warnings?: string[];
+    fixQueue?: unknown[];
+    statusValue?: string;
+    launchDecision?: string;
+    commandsPassed?: number;
+    commands?: number;
+    ready?: number;
+    lanes?: number;
+    rejected?: number;
+    path?: string;
+  }>;
+  paths: {
+    json: string;
+    markdown: string;
+    html: string;
+    proofDropJson: string;
+    quickFillJson: string;
+    importJson: string;
+    closeoutJson: string;
+    localVerificationJson: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpProofQuickFillSummary {
   status: "applied_to_combined_intake" | "blocked_invalid_quick_fill";
   generatedAt: string;
@@ -10303,6 +10342,16 @@ export default function ClippersPage() {
       return data.tiktokMvpLocalVerification as ClipperTikTokMvpLocalVerificationSummary;
     },
   });
+  const { data: tiktokMvpCloseoutWizard } = useQuery<ClipperTikTokMvpCloseoutWizardSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-closeout-wizard"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-closeout-wizard");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP closeout wizard");
+      return data.tiktokMvpCloseoutWizard as ClipperTikTokMvpCloseoutWizardSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -11025,12 +11074,16 @@ export default function ClippersPage() {
       if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP local verification");
       return data as {
         tiktokMvpLocalVerification: ClipperTikTokMvpLocalVerificationSummary;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-local-verification"], data.tiktokMvpLocalVerification);
+      if (data.tiktokMvpCloseoutWizard) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
       toast({
@@ -11041,6 +11094,36 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude correr local verification", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpCloseoutWizardMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-closeout-wizard", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP closeout wizard");
+      return data as {
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
+        tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary | null;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      if (data.tiktokMvpProofDropKit) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
+      }
+      if (data.tiktokMvpProofUnblocker) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      toast({
+        title: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? "Closeout wizard listo" : "Closeout wizard bloqueado",
+        description: data.tiktokMvpCloseoutWizard.nextStep,
+        variant: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar closeout wizard", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15496,6 +15579,7 @@ export default function ClippersPage() {
     || tiktokMvpProofRefreshMutation.isPending
     || tiktokMvpProofUnblockerMutation.isPending
     || tiktokMvpLocalVerificationMutation.isPending
+    || tiktokMvpCloseoutWizardMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
@@ -16722,6 +16806,18 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpCloseoutWizardMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-closeout-wizard-button"
+              >
+                {tiktokMvpCloseoutWizardMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ListChecks className="mr-2 h-3.5 w-3.5" />}
+                Closeout wizard
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
@@ -16944,6 +17040,40 @@ export default function ClippersPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {tiktokMvpCloseoutWizard && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-sky-300/15 text-sky-100/80"
+              )} data-testid="clippers-tiktok-mvp-closeout-wizard-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                  )}>
+                    wizard {tiktokMvpCloseoutWizard.status}
+                  </Badge>
+                  <span>{tiktokMvpCloseoutWizard.steps.filter((step) => step.status === "done").length}/{tiktokMvpCloseoutWizard.steps.length} steps done</span>
+                  <span>{tiktokMvpCloseoutWizard.launchDecision}</span>
+                </div>
+                <p className="mt-1">{tiktokMvpCloseoutWizard.nextStep}</p>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-closeout-wizard-steps">
+                  {tiktokMvpCloseoutWizard.steps.map((step) => (
+                    <div key={step.id} className="rounded border border-sky-300/10 bg-black/20 p-2">
+                      <p className="font-medium text-sky-100">{step.label}: {step.status}</p>
+                      <p className="mt-1 text-sky-100/70">{step.nextAction}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p className="break-all">Wizard: {tiktokMvpCloseoutWizard.paths.markdown}</p>
+                  <p>Real publish: {tiktokMvpCloseoutWizard.realPublishEnabled ? "enabled" : "disabled"}</p>
+                </div>
               </div>
             )}
             {tiktokMvpLocalVerification && (
