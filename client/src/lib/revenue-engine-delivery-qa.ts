@@ -25,7 +25,7 @@ export function buildDeliveryWorkspaceQaPayload(
   reviewChecks: RevenueDeliveryQaReviewChecks,
 ) {
   const depositVerified = workspace.input.depositPaid || reviewChecks.depositPaid;
-  const rollbackVerified = reviewChecks.rollbackPlanReady || workspace.input.clientHandoffReady;
+  const rollbackVerified = reviewChecks.rollbackPlanReady;
   const automationQaPassed = workspace.input.automationQaPassed || (reviewChecks.automationTested && rollbackVerified);
   const clientHandoffReady = workspace.input.clientHandoffReady || reviewChecks.clientHandoffReady;
   const publicDataVerified = workspace.input.publicDataVerified || reviewChecks.publicDataVerified;

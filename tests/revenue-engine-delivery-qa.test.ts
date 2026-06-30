@@ -91,7 +91,7 @@ test("delivery QA payload requires marked evidence before promoting all gates", 
   });
 });
 
-test("delivery QA payload preserves existing true workspace gates", () => {
+test("delivery QA payload does not use existing handoff as rollback evidence", () => {
   const payload = buildDeliveryWorkspaceQaPayload(
     {
       ...blockedWorkspace,
@@ -116,6 +116,31 @@ test("delivery QA payload preserves existing true workspace gates", () => {
   assert.equal(payload.publicDataVerified, true);
   assert.equal(payload.visualQaPassed, true);
   assert.equal(payload.technicalQaPassed, false);
+  assert.equal(payload.automationQaPassed, false);
+  assert.equal(payload.clientHandoffReady, true);
+});
+
+test("delivery QA payload preserves existing automation QA gate", () => {
+  const payload = buildDeliveryWorkspaceQaPayload(
+    {
+      ...blockedWorkspace,
+      input: {
+        ...blockedWorkspace.input,
+        automationQaPassed: true,
+        clientHandoffReady: true,
+      },
+    },
+    {
+      depositPaid: false,
+      publicDataVerified: false,
+      responsiveChecked: false,
+      linksChecked: false,
+      automationTested: false,
+      rollbackPlanReady: false,
+      clientHandoffReady: false,
+    },
+  );
+
   assert.equal(payload.automationQaPassed, true);
   assert.equal(payload.clientHandoffReady, true);
 });
