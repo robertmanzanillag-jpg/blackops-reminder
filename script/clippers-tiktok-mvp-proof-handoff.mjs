@@ -9,6 +9,7 @@ const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
 const outPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
 const outUnblockBoardCsvPath = path.join(reportsDir, "proof-unblock-board.csv");
+const outOneScreenPath = path.join(reportsDir, "proof-fill-one-screen.txt");
 
 const lanes = [
   {
@@ -311,6 +312,34 @@ function renderProofLinksPastePacket() {
   ].join("\n");
 }
 
+function renderOneScreenProofFill(summary) {
+  const rows = summary.unblockBoard.rows.length ? summary.unblockBoard.rows : buildUnblockBoard(summary.collectionPackets, summary.gates).rows;
+  return [
+    "TikTok MVP proof fill - one screen",
+    "",
+    "Fill these exact lines with real non-secret HTTPS proof URLs:",
+    "",
+    ...rows.map((row) => `${row.priority}. ${row.exactPasteLine}    # ${row.accountName} / ${row.field}`),
+    "",
+    "Required:",
+    "- Account ownership proof can be a safe HTTPS Drive/doc/proof URL showing account ownership/security review.",
+    "- Metricool connection proof must be a real HTTPS metricool.com URL showing the TikTok profile connected in Metricool.",
+    "- Notes already exist in the paste packet; keep them concrete and 20+ characters.",
+    "",
+    "Never paste:",
+    "- passwords, cookies, access tokens, refresh tokens, recovery codes, client secrets, API keys, signed URLs, temporary URLs, or private screenshots.",
+    "- search/explore/example/placeholder URLs.",
+    "",
+    `Paste packet: ${summary.paths.pastePacketTxt}`,
+    `Unblock board CSV: ${summary.paths.unblockBoardCsv}`,
+    `Next safe button: ${summary.nextButton}`,
+    `Next action: ${summary.nextAction}`,
+    "",
+    "This file does not apply evidence, schedule posts, publish, or enable direct social APIs.",
+    "",
+  ].join("\n");
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Handoff",
@@ -353,6 +382,7 @@ function renderMarkdown(summary) {
     "## Paste Packet",
     "",
     `- Proof links paste packet: ${summary.paths.pastePacketTxt}`,
+    `- One-screen fill guide: ${summary.paths.oneScreenTxt}`,
     "- Paste this packet into the app paste assistant after filling real proof URLs.",
     "",
     "## Guardrails",
@@ -431,6 +461,7 @@ async function main() {
       markdown: outMarkdownPath,
       collectionCsv: outCollectionCsvPath,
       pastePacketTxt: outPastePacketPath,
+      oneScreenTxt: outOneScreenPath,
       unblockBoardCsv: outUnblockBoardCsvPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
@@ -450,6 +481,7 @@ async function main() {
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
   await writeFile(outPastePacketPath, renderProofLinksPastePacket());
+  await writeFile(outOneScreenPath, renderOneScreenProofFill(summary));
   await writeFile(outUnblockBoardCsvPath, renderUnblockBoardCsv(summary.unblockBoard));
   console.log(JSON.stringify({
     status: summary.status,
@@ -462,6 +494,7 @@ async function main() {
     reportJsonPath: outJsonPath,
     collectionCsvPath: outCollectionCsvPath,
     pastePacketPath: outPastePacketPath,
+    oneScreenPath: outOneScreenPath,
     nextAction: summary.nextAction,
   }, null, 2));
 }

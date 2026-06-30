@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T14:01:09.499Z",
+  "generatedAt": "2026-06-30T14:07:05.897Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8933
+    "symbols": 8936
   },
   "directories": {
     ".agents/skills": {
@@ -6369,6 +6369,7 @@
         "outCollectionCsvPath",
         "outJsonPath",
         "outMarkdownPath",
+        "outOneScreenPath",
         "outPastePacketPath",
         "outUnblockBoardCsvPath",
         "proofDrop",
@@ -6380,6 +6381,7 @@
         "readyRows",
         "renderCollectionCsv",
         "renderMarkdown",
+        "renderOneScreenProofFill",
         "renderProofLinksPastePacket",
         "renderUnblockBoardCsv",
         "reportsDir",
@@ -14538,6 +14540,7 @@
         "metricoolBridgePreviewRoute",
         "metricoolBridgeRecordRoute",
         "metricoolQueuePath",
+        "oneScreen",
         "operatorButtonHelper",
         "output",
         "pack",

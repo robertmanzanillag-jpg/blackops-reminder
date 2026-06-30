@@ -2704,6 +2704,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
     markdown: string;
     collectionCsv: string;
     pastePacketTxt: string;
+    oneScreenTxt?: string;
     unblockBoardCsv: string;
     proofDropJson: string;
     quickFillJson: string;
@@ -18519,6 +18520,7 @@ export default function ClippersPage() {
                   <p className="break-all">Report: {tiktokMvpProofHandoff.paths.markdown}</p>
                   <p className="break-all">Collection CSV: {tiktokMvpProofHandoff.paths.collectionCsv}</p>
                   <p className="break-all">Unblock CSV: {tiktokMvpProofHandoff.paths.unblockBoardCsv}</p>
+                  {tiktokMvpProofHandoff.paths.oneScreenTxt && <p className="break-all">One-screen guide: {tiktokMvpProofHandoff.paths.oneScreenTxt}</p>}
                   <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
                 </div>
               </div>
