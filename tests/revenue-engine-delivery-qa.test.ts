@@ -22,6 +22,7 @@ test("delivery QA payload does not mark handoff ready without deposit and rollba
     linksChecked: true,
     automationTested: true,
     rollbackPlanReady: false,
+    clientHandoffReady: false,
   });
 
   assert.equal(payload.workspaceId, "workspace-1");
@@ -42,6 +43,7 @@ test("delivery QA payload keeps handoff blocked when only rollback is verified",
     linksChecked: true,
     automationTested: true,
     rollbackPlanReady: true,
+    clientHandoffReady: false,
   });
 
   assert.equal(payload.automationQaPassed, true);
@@ -50,7 +52,7 @@ test("delivery QA payload keeps handoff blocked when only rollback is verified",
   assert.match(payload.notes, /handoff=pending/);
 });
 
-test("delivery QA payload keeps automation blocked when only rollback is verified", () => {
+test("delivery QA payload keeps handoff blocked when deposit and rollback are verified without handoff evidence", () => {
   const payload = buildDeliveryWorkspaceQaPayload(blockedWorkspace, {
     depositPaid: true,
     publicDataVerified: true,
@@ -58,12 +60,13 @@ test("delivery QA payload keeps automation blocked when only rollback is verifie
     linksChecked: true,
     automationTested: false,
     rollbackPlanReady: true,
+    clientHandoffReady: false,
   });
 
   assert.equal(payload.automationQaPassed, false);
-  assert.equal(payload.clientHandoffReady, true);
+  assert.equal(payload.clientHandoffReady, false);
   assert.match(payload.notes, /automation=pending/);
-  assert.match(payload.notes, /handoff=ok/);
+  assert.match(payload.notes, /handoff=pending/);
 });
 
 test("delivery QA payload requires marked evidence before promoting all gates", () => {
@@ -74,6 +77,7 @@ test("delivery QA payload requires marked evidence before promoting all gates", 
     linksChecked: true,
     automationTested: true,
     rollbackPlanReady: true,
+    clientHandoffReady: true,
   });
 
   assert.deepEqual(payload, {
@@ -105,6 +109,7 @@ test("delivery QA payload preserves existing true workspace gates", () => {
       linksChecked: false,
       automationTested: true,
       rollbackPlanReady: false,
+      clientHandoffReady: false,
     },
   );
 

@@ -118,6 +118,10 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /releaseRobertApprovedDeploy/);
   assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
+  assert.match(uiSource, /clientHandoffReady: reviewChecks\.clientHandoffReady/);
+  assert.doesNotMatch(uiSource, /clientHandoffReady: reviewChecks\.rollbackPlanReady/);
+  assert.doesNotMatch(uiSource, /clientHandoffReady: deliveryReviewMutation\.data\?\.requiredFixes\.length === 0 && reviewChecks\.depositPaid/);
+  assert.match(uiSource, /"clientHandoffReady", "Handoff cliente listo"/);
   assert.match(uiSource, /recentWebsiteOpportunities/);
   assert.match(uiSource, /websiteOpportunityMutation/);
   assert.match(uiSource, /websiteOpportunityCloseMutation/);

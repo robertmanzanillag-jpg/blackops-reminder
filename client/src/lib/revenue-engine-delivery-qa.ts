@@ -17,6 +17,7 @@ export type RevenueDeliveryQaReviewChecks = {
   linksChecked: boolean;
   automationTested: boolean;
   rollbackPlanReady: boolean;
+  clientHandoffReady: boolean;
 };
 
 export function buildDeliveryWorkspaceQaPayload(
@@ -26,7 +27,7 @@ export function buildDeliveryWorkspaceQaPayload(
   const depositVerified = workspace.input.depositPaid || reviewChecks.depositPaid;
   const rollbackVerified = reviewChecks.rollbackPlanReady || workspace.input.clientHandoffReady;
   const automationQaPassed = workspace.input.automationQaPassed || (reviewChecks.automationTested && rollbackVerified);
-  const clientHandoffReady = workspace.input.clientHandoffReady || (depositVerified && rollbackVerified);
+  const clientHandoffReady = workspace.input.clientHandoffReady || reviewChecks.clientHandoffReady;
   const publicDataVerified = workspace.input.publicDataVerified || reviewChecks.publicDataVerified;
   const visualQaPassed = workspace.input.visualQaPassed || reviewChecks.responsiveChecked;
   const technicalQaPassed = workspace.input.technicalQaPassed || reviewChecks.linksChecked;

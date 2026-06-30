@@ -1017,6 +1017,7 @@ type DeliveryReview = {
     linksChecked: boolean;
     automationTested: boolean;
     rollbackPlanReady: boolean;
+    clientHandoffReady: boolean;
     notes: string;
   };
   status: "ready_to_deliver" | "needs_fix" | "blocked";
@@ -1939,6 +1940,7 @@ export default function RevenueEnginePage() {
     linksChecked: false,
     automationTested: false,
     rollbackPlanReady: false,
+    clientHandoffReady: false,
   });
   const [websiteOpportunityScopeApprovals, setWebsiteOpportunityScopeApprovals] = useState<Record<string, boolean>>({});
   const [websiteOpportunityCloseInputs, setWebsiteOpportunityCloseInputs] = useState<Record<string, {
@@ -2422,7 +2424,7 @@ export default function RevenueEnginePage() {
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested,
-          clientHandoffReady: reviewChecks.rollbackPlanReady,
+          clientHandoffReady: reviewChecks.clientHandoffReady,
           launchTargetDays: projectLaunchTargetDays,
         }),
       });
@@ -2527,7 +2529,7 @@ export default function RevenueEnginePage() {
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
-          clientHandoffReady: deliveryReviewMutation.data?.requiredFixes.length === 0 && reviewChecks.depositPaid,
+          clientHandoffReady: reviewChecks.clientHandoffReady,
         }),
       });
       const data = await response.json();
@@ -7845,6 +7847,7 @@ export default function RevenueEnginePage() {
                           ["linksChecked", "Links/formularios OK"],
                           ["automationTested", "Automation probada"],
                           ["rollbackPlanReady", "Rollback listo"],
+                          ["clientHandoffReady", "Handoff cliente listo"],
                         ].map(([key, label]) => (
                           <label
                             key={key}
