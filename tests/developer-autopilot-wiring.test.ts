@@ -220,6 +220,25 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.doesNotMatch(uiSource, /statusTone\("pass"\), "shrink-0"\}>\s*\{snapshot\?\.launchReadiness\.todayExecutionPack\?\.ownerAgent/);
 });
 
+test("Revenue Engine exposes money activation plan for first revenue sprint", () => {
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const serverSource = readFileSync("server/revenue-engine.ts", "utf8");
+
+  assert.match(serverSource, /buildRevenueMoneyActivationPlan/);
+  assert.match(serverSource, /ready_for_first_sprint/);
+  assert.match(serverSource, /ready_for_money_mode/);
+  assert.match(serverSource, /missingBeforeRealMoney/);
+  assert.match(serverSource, /blockedUntilApproved/);
+  assert.match(serverSource, /Can collect money/);
+  assert.match(uiSource, /Activacion de dinero/);
+  assert.match(uiSource, /moneyActivationPlan\.canStartToday/);
+  assert.match(uiSource, /moneyActivationPlan\.canContactBusinesses/);
+  assert.match(uiSource, /moneyActivationPlan\.canCollectMoney/);
+  assert.match(uiSource, /moneyActivationPlan\.canBuildWebsites/);
+  assert.match(uiSource, /moneyActivationPlan\.missingBeforeRealMoney/);
+  assert.match(uiSource, /moneyActivationPlan\.blockedUntilApproved/);
+});
+
 test("Revenue Engine exposes public scout evidence intake", () => {
   const routeSource = readFileSync("server/routes.ts", "utf8");
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
