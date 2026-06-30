@@ -391,13 +391,15 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/proof-drop/tiktok-mvp/proof-links.json", "utf8");
     return { path: "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json", raw, parsed: JSON.parse(raw) };
   };
-  const containsClipperSecretLikeText = (value: unknown) => /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || ""));
+  const clipperUnsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+  const containsClipperSecretLikeText = (value: unknown) => /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || "")) || clipperUnsafeProofQueryParamPattern.test(String(value || ""));
   const hasClipperProofPlaceholder = (value: unknown) => /<|>|paste|placeholder|replace this|example\.com|not-real|not-metricool|todo|tbd/i.test(String(value || ""));
   const safeClipperHttpsProofUrl = (value: unknown) => {
     const text = String(value || "").trim();
     if (!text || hasClipperProofPlaceholder(text) || containsClipperSecretLikeText(text)) return false;
     try {
       const parsed = new URL(text);
+      if (clipperUnsafeProofQueryParamPattern.test(parsed.search)) return false;
       return parsed.protocol === "https:" && !parsed.username && !parsed.password;
     } catch {
       return false;

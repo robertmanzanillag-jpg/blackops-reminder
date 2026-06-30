@@ -17,7 +17,7 @@ const activeLanes = [
 const activeLaneIds = new Set(activeLanes.map((lane) => `${lane.accountId}:tiktok`));
 const weakNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);
 const unsafePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
-const unsafeParamPattern = /(?:^|[?&#;])(token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i;
+const unsafeParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
 
 function parseArgs(argv) {
   const args = { apply: false, accountCsvPath: defaultAccountCsvPath, bridgeCsvPath: defaultBridgeCsvPath };

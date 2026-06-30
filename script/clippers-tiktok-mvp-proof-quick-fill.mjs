@@ -120,8 +120,10 @@ function normalize(value) {
   return String(value ?? "").trim();
 }
 
+const unsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
 function containsSecret(value) {
-  return /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i.test(String(value || ""));
+  return /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i.test(String(value || "")) || unsafeProofQueryParamPattern.test(String(value || ""));
 }
 
 function hasPlaceholder(value) {
@@ -133,6 +135,7 @@ function safeHttpsUrl(value) {
   if (!text || hasPlaceholder(text) || containsSecret(text)) return false;
   try {
     const url = new URL(text);
+    if (unsafeProofQueryParamPattern.test(url.search)) return false;
     return url.protocol === "https:" && !/(^|\.)example\.com$/i.test(url.hostname);
   } catch {
     return false;

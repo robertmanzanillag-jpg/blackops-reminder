@@ -13,6 +13,7 @@ const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok
 const metricoolQueuePath = path.join(rootDir, "scheduled/metricool-execution-queue.json");
 const routesPath = path.join(process.cwd(), "server/routes.ts");
 const clippersPagePath = path.join(process.cwd(), "client/src/pages/clippers.tsx");
+const evidenceCloseoutPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-evidence-closeout.mjs");
 const closeoutWizardPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-closeout-wizard.mjs");
 const proofIntakePath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-intake-pack.mjs");
 const proofDropKitPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-drop-kit.mjs");
@@ -183,7 +184,7 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   await writeFile(bridgeCsvPath, [
     bridgeHeader,
     "sports-daily,tiktok,SPORT,,https://viewer:secret@www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://viewer:secret@app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof?X-Amz-Signature=abc123,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n");
 
   const result = runCloseout();
@@ -194,6 +195,7 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
   assert.equal(report.totals.ready, 0);
   assert.ok(JSON.stringify(report).includes("safe HTTPS proof URL") || JSON.stringify(report).includes("public TikTok profile URL"));
+  assert.match(await readFile(evidenceCloseoutPath, "utf8"), /x-amz-signature/);
 });
 
 test("TikTok MVP evidence closeout does not claim applied when readiness stays blocked", async () => {
@@ -915,6 +917,8 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     const after = await readFile(defaultCombinedProofCsvPath, "utf8");
     assert.equal(after, before);
     const source = await readFile(proofQuickFillPath, "utf8");
+    assert.match(source, /unsafeProofQueryParamPattern/);
+    assert.match(source, /x-amz-signature/);
     assert.doesNotMatch(source, /ready_to_send|video\.publish|directSocialApisRequired:\s*true|runClipperTikTokMvpEvidenceCloseout\(true\)/);
     assert.match(source, /does not apply final evidence, publish, schedule/);
   } finally {
@@ -1243,6 +1247,8 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.match(source, /blocked_needs_public_proof_links/);
   assert.match(source, /ready_quick_fill_ran/);
   assert.match(source, /metricool\.com/);
+  assert.match(source, /unsafeProofQueryParamPattern/);
+  assert.match(source, /x-amz-signature/);
   assert.match(source, /Local files are inventory only; closeout still requires real public\/non-secret HTTPS proof URLs/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
