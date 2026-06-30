@@ -12,6 +12,7 @@ const sportsEvidencePath = path.join(rootDir, "account-evidence/sports-daily-tik
 const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
 const metricoolQueuePath = path.join(rootDir, "scheduled/metricool-execution-queue.json");
 const routesPath = path.join(process.cwd(), "server/routes.ts");
+const proofLinksModulePath = path.join(process.cwd(), "server/clippers-tiktok-mvp-proof-links.ts");
 const clippersPagePath = path.join(process.cwd(), "client/src/pages/clippers.tsx");
 const evidenceCloseoutPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-evidence-closeout.mjs");
 const closeoutWizardPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-closeout-wizard.mjs");
@@ -233,6 +234,7 @@ test("TikTok MVP evidence closeout does not claim applied when readiness stays b
 
 test("TikTok MVP evidence closeout is wired into guarded API routes and UI controls", async () => {
   const routes = await readFile(routesPath, "utf8");
+  const proofLinksModule = await readFile(proofLinksModulePath, "utf8");
   const page = await readFile(clippersPagePath, "utf8");
 
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-evidence-closeout"/);
@@ -244,13 +246,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-proof-links"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/parse-tiktok-mvp-proof-links-paste"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/save-tiktok-mvp-proof-links"/);
-  assert.match(routes, /containsClipperSecretLikeText/);
+  assert.match(proofLinksModule, /containsClipperSecretLikeText/);
+  assert.match(proofLinksModule, /clipperUnsafeProofQueryParamPattern/);
   assert.match(routes, /auditClipperTikTokMvpProofLinks/);
   assert.match(routes, /extractClipperTikTokMvpProofLinksPaste/);
-  assert.match(routes, /doesNotUnlock/);
-  assert.match(routes, /Does not apply account or Metricool evidence/);
-  assert.match(routes, /Does not schedule or publish TikTok posts/);
-  assert.match(routes, /Does not enable direct social APIs or real publishing/);
+  assert.match(proofLinksModule, /doesNotUnlock/);
+  assert.match(proofLinksModule, /Does not apply account or Metricool evidence/);
+  assert.match(proofLinksModule, /Does not schedule or publish TikTok posts/);
+  assert.match(proofLinksModule, /Does not enable direct social APIs or real publishing/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-intake-import"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-proof-intake-import"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-proof-intake-import"/);
@@ -372,8 +375,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksRoute, /auditClipperTikTokMvpProofLinks/);
   assert.doesNotMatch(proofLinksRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksPasteRoute, /extractClipperTikTokMvpProofLinksPaste/);
-  assert.match(routes, /explicitFields/);
-  assert.match(routes, /accountOwnershipProofUrl\|metricoolConnectionProofUrl\|accountNotes\|metricoolNotes/);
+  assert.match(proofLinksModule, /explicitFields/);
+  assert.match(proofLinksModule, /accountOwnershipProofUrl\|metricoolConnectionProofUrl\|accountNotes\|metricoolNotes/);
   assert.doesNotMatch(proofLinksPasteRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksSaveRoute, /validateClipperTikTokMvpProofLinks/);
   assert.match(proofLinksSaveRoute, /auditClipperTikTokMvpProofLinks/);
