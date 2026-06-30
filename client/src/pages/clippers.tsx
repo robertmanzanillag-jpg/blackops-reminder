@@ -11402,12 +11402,16 @@ export default function ClippersPage() {
         tiktokMvpProofIntakePack: ClipperTikTokMvpProofIntakePackSummary;
         accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-pack"], data.tiktokMvpProofIntakePack);
       queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: "TikTok proof intake listo",
         description: `${data.tiktokMvpProofIntakePack.totals.readyLanes}/${data.tiktokMvpProofIntakePack.totals.targetLanes} lanes listas; HTML y CSV generados.`,
@@ -11428,6 +11432,7 @@ export default function ClippersPage() {
         tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11437,6 +11442,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpProofUnblocker) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
         title: data.tiktokMvpProofDropKit.readyForQuickFill ? "Proof drop procesado" : "Proof drop listo para completar",
@@ -11762,12 +11770,16 @@ export default function ClippersPage() {
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
         tiktokMvpProofIntakePack: ClipperTikTokMvpProofIntakePackSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-pack"], data.tiktokMvpProofIntakePack);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? "Proof doctor listo" : "Proof doctor encontro blockers",
         description: `${data.tiktokMvpProofDoctor.totals.ready}/${data.tiktokMvpProofDoctor.totals.lanes} lanes listas; ${data.tiktokMvpProofDoctor.totals.blocked} bloqueadas.`,
@@ -11787,11 +11799,15 @@ export default function ClippersPage() {
       return data as {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? "Proof import listo" : "Proof import bloqueado",
         description: data.tiktokMvpProofIntakeImport.nextStep,

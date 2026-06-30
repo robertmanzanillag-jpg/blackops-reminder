@@ -3213,11 +3213,14 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-tiktok-mvp-proof-intake-pack", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpProofIntakePack();
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       res.json({
         tiktokMvpProofIntakePack: await readClipperTikTokMvpProofIntakePack(),
         accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
         tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
+        tiktokNextActionRun,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof intake pack" });
@@ -3245,11 +3248,14 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-tiktok-mvp-proof-drop-kit", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpProofDropKit();
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       res.json({
         tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
+        tiktokNextActionRun,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof drop kit" });
@@ -3454,10 +3460,13 @@ export async function registerRoutes(
   app.post("/api/clippers/preview-tiktok-mvp-proof-intake-import", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpProofIntakeImport(false);
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       res.json({
         tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport(),
         tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
+        tiktokNextActionRun,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview TikTok MVP proof intake import" });
@@ -3695,11 +3704,14 @@ export async function registerRoutes(
   app.post("/api/clippers/prepare-tiktok-mvp-proof-doctor", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpProofDoctor();
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       res.json({
         tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
         tiktokMvpProofIntakePack: await readClipperTikTokMvpProofIntakePack(),
         tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
+        tiktokNextActionRun,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof doctor" });
