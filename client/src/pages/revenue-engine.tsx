@@ -1142,6 +1142,7 @@ export default function RevenueEnginePage() {
   const [leadRadarDailyResearchTarget, setLeadRadarDailyResearchTarget] = useState(120);
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
+  const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
@@ -1225,6 +1226,10 @@ export default function RevenueEnginePage() {
   const [leadEvidence, setLeadEvidence] = useState("Instagram activo, no website en bio, menu solo en posts.");
   const [leadPainPoint, setLeadPainPoint] = useState("Necesita menu online, captura de catering y follow-up.");
   const [leadEstimatedOfferUsd, setLeadEstimatedOfferUsd] = useState(2500);
+  const [leadSourceUrl, setLeadSourceUrl] = useState("https://instagram.com/nositecafe");
+  const [leadRecipientEmail, setLeadRecipientEmail] = useState("");
+  const [leadContactName, setLeadContactName] = useState("Owner");
+  const [leadBusinessSummary, setLeadBusinessSummary] = useState("Cafe activo en Miami con social profile, menu en posts y sin website dedicado.");
   const [mockupBusinessName, setMockupBusinessName] = useState("No Site Cafe");
   const [mockupArea, setMockupArea] = useState("Miami");
   const [mockupNiche, setMockupNiche] = useState("coffee shop");
@@ -1337,6 +1342,34 @@ export default function RevenueEnginePage() {
 
   const moneySprintMutation = useMutation<RevenueMoneySprint>({
     mutationFn: async () => {
+      const seedLeadReady = Boolean(
+        includeLeadInMoneySprint
+        && leadBusinessName.trim()
+        && leadArea.trim()
+        && leadNiche.trim()
+        && leadEvidence.trim().length >= 12
+        && leadPainPoint.trim()
+        && leadContactChannel !== "unknown"
+        && leadContactValue.trim()
+      );
+      const seedLeads = seedLeadReady
+        ? [{
+          businessName: leadBusinessName,
+          area: leadArea,
+          niche: leadNiche,
+          websiteStatus: leadWebsiteStatus,
+          contactChannel: leadContactChannel,
+          contactValue: leadContactValue,
+          evidence: leadEvidence,
+          painPoint: leadPainPoint,
+          estimatedOfferUsd: leadEstimatedOfferUsd,
+          status: "research",
+          sourceUrl: leadSourceUrl,
+          recipientEmail: leadRecipientEmail,
+          contactName: leadContactName,
+          businessSummary: leadBusinessSummary,
+        }]
+        : [];
       const response = await fetch("/api/revenue-engine/money-sprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1351,6 +1384,7 @@ export default function RevenueEnginePage() {
           maxPaidDataSpendUsd: scoutingPaidSpendUsd,
           requireRobertApprovalToContact: true,
           writePreviewFiles: true,
+          seedLeads,
         }),
       });
       const data = await response.json();
@@ -3130,6 +3164,18 @@ export default function RevenueEnginePage() {
                           </p>
                         </div>
                       )}
+                      {moneySprintMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Seed blocked</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintMutation.data.blockedSeeds.map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -3255,6 +3301,47 @@ export default function RevenueEnginePage() {
                         </div>
                       </div>
                       <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-source-url">
+                          Fuente publica
+                        </label>
+                        <Input
+                          id="lead-source-url"
+                          value={leadSourceUrl}
+                          onChange={(event) => setLeadSourceUrl(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          placeholder="https://..."
+                          data-testid="input-lead-source-url"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-recipient-email">
+                            Email para draft
+                          </label>
+                          <Input
+                            id="lead-recipient-email"
+                            type="email"
+                            value={leadRecipientEmail}
+                            onChange={(event) => setLeadRecipientEmail(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            placeholder="owner@business.com"
+                            data-testid="input-lead-recipient-email"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-contact-name">
+                            Nombre
+                          </label>
+                          <Input
+                            id="lead-contact-name"
+                            value={leadContactName}
+                            onChange={(event) => setLeadContactName(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-lead-contact-name"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-evidence">
                           Evidencia publica
                         </label>
@@ -3278,6 +3365,31 @@ export default function RevenueEnginePage() {
                           data-testid="textarea-lead-pain"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-summary">
+                          Resumen para outreach
+                        </label>
+                        <Textarea
+                          id="lead-summary"
+                          value={leadBusinessSummary}
+                          onChange={(event) => setLeadBusinessSummary(event.target.value)}
+                          className="min-h-[76px] border-zinc-800 bg-black"
+                          data-testid="textarea-lead-summary"
+                        />
+                      </div>
+                      <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300" htmlFor="include-lead-money-sprint">
+                        <input
+                          id="include-lead-money-sprint"
+                          type="checkbox"
+                          checked={includeLeadInMoneySprint}
+                          onChange={(event) => setIncludeLeadInMoneySprint(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                          data-testid="checkbox-include-lead-money-sprint"
+                        />
+                        <span>
+                          Incluir este lead en Money sprint para crear preview y outreach draft si pasa los gates.
+                        </span>
+                      </label>
                       <Button
                         type="submit"
                         disabled={leadMutation.isPending}
