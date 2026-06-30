@@ -2038,6 +2038,41 @@ interface ClipperTikTokMvpEvidenceCloseoutSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofIntakePackSummary {
+  status: "ready" | "needs_real_tiktok_metricool_proof";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  paths: {
+    json: string;
+    markdown: string;
+    html: string;
+    accountCsv: string;
+    bridgeCsv: string;
+    combinedCsv: string;
+    targetAccountCsv: string;
+    targetBridgeCsv: string;
+  };
+  totals: {
+    lanes: number;
+    readyLanes: number;
+    targetLanes: number;
+    closeoutReady: number;
+    closeoutRejected: number;
+  };
+  lanes: Array<{
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    handle: string;
+    profileUrl: string;
+    metricoolBrandName: string;
+  }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -9887,6 +9922,16 @@ export default function ClippersPage() {
       return data.tiktokMvpEvidenceCloseout as ClipperTikTokMvpEvidenceCloseoutSummary;
     },
   });
+  const { data: tiktokMvpProofIntakePack } = useQuery<ClipperTikTokMvpProofIntakePackSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-intake-pack"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-intake-pack");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof intake pack");
+      return data.tiktokMvpProofIntakePack as ClipperTikTokMvpProofIntakePackSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10371,6 +10416,32 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude previsualizar TikTok closeout", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofIntakePackMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-intake-pack", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof intake pack");
+      return data as {
+        tiktokMvpProofIntakePack: ClipperTikTokMvpProofIntakePackSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-pack"], data.tiktokMvpProofIntakePack);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: "TikTok proof intake listo",
+        description: `${data.tiktokMvpProofIntakePack.totals.readyLanes}/${data.tiktokMvpProofIntakePack.totals.targetLanes} lanes listas; HTML y CSV generados.`,
+        variant: data.tiktokMvpProofIntakePack.status === "ready" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof intake", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15970,6 +16041,18 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofIntakePackMutation.mutate()}
+                disabled={tiktokMvpProofIntakePackMutation.isPending || isLoading}
+                className="h-8 border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-intake-pack-button"
+              >
+                {tiktokMvpProofIntakePackMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Proof intake
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpEvidenceCloseoutPreviewMutation.mutate()}
                 disabled={tiktokMvpEvidenceCloseoutPreviewMutation.isPending || isLoading}
                 className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
@@ -16020,6 +16103,14 @@ export default function ClippersPage() {
                 <p className="break-all">Bridge CSV: {tiktokMvpEvidenceCloseout.bridgeCsvPath}</p>
                 <p className="break-all">Report: {tiktokMvpEvidenceCloseout.reportMarkdownPath}</p>
                 <p>Mode: {tiktokMvpEvidenceCloseout.mode}; applied: {tiktokMvpEvidenceCloseout.applied}</p>
+              </div>
+            )}
+            {tiktokMvpProofIntakePack && (
+              <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2 text-[11px] leading-4 text-zinc-500" data-testid="clippers-tiktok-mvp-proof-intake-pack-paths">
+                <p className="break-all text-amber-100/80">Proof intake HTML: {tiktokMvpProofIntakePack.paths.html}</p>
+                <p className="break-all">Account template: {tiktokMvpProofIntakePack.paths.accountCsv}</p>
+                <p className="break-all">Bridge template: {tiktokMvpProofIntakePack.paths.bridgeCsv}</p>
+                <p className="mt-1 text-amber-100/80">{tiktokMvpProofIntakePack.nextStep}</p>
               </div>
             )}
           </div>

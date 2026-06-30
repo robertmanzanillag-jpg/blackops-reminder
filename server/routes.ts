@@ -346,6 +346,7 @@ export async function registerRoutes(
     if (apply) args.push("--apply");
     return runClipperNodeJson(args, apply ? "TikTok MVP evidence closeout apply" : "TikTok MVP evidence closeout preview");
   };
+  const runClipperTikTokMvpProofIntakePack = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-intake-pack.mjs", "TikTok MVP proof intake pack");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -363,6 +364,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpEvidenceCloseout = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-mvp-evidence-closeout.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofIntakePack = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-pack.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2627,6 +2632,29 @@ export async function registerRoutes(
       res.json({ accountPermissionReadiness: await readClipperAccountPermissionReadiness() });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account permission readiness" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-intake-pack", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofIntakePack: await readClipperTikTokMvpProofIntakePack() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof intake pack has not been prepared" : "TikTok MVP proof intake pack could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-intake-pack", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofIntakePack();
+      res.json({
+        tiktokMvpProofIntakePack: await readClipperTikTokMvpProofIntakePack(),
+        accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof intake pack" });
     }
   });
 
