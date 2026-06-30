@@ -904,7 +904,17 @@ export async function registerRoutes(
       postProofRefreshRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       postProofRefreshRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
       postProofRefreshRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      postProofRefreshRuns.metricoolMcpPreflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+      try {
+        postProofRefreshRuns.metricoolCurrentBatchUploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+      } catch (uploadError: any) {
+        if (!String(uploadError?.message || "").includes("already have operator evidence")) {
+          throw uploadError;
+        }
+        postProofRefreshRuns.metricoolCurrentBatchUploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+      }
       postProofRefreshRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      postProofRefreshRuns.metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
     } catch (refreshError: any) {
       postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
     }
@@ -922,6 +932,9 @@ export async function registerRoutes(
       tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
       tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
       tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
+      metricoolMcpPreflight: await readClipperMetricoolMcpPreflight().catch(() => null),
+      metricoolCurrentBatchUploadPack: await readClipperMetricoolCurrentBatchUploadPack().catch(() => null),
+      metricoolCurrentBatchSessionPacket: await readClipperMetricoolCurrentBatchSessionPacket().catch(() => null),
       metricoolBridgeEvidenceCsvStatus: await buildClipperMetricoolBridgeEvidenceCsvStatus().catch(() => null),
       proofDropRun,
       quickFillRun,
@@ -3771,7 +3784,17 @@ export async function registerRoutes(
         postCloseoutApplyRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
         postCloseoutApplyRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
         postCloseoutApplyRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+        postCloseoutApplyRuns.metricoolMcpPreflightRun = await runClipperNodeJson(["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], "Metricool MCP preflight");
+        try {
+          postCloseoutApplyRuns.metricoolCurrentBatchUploadPackRun = await runClipperJsonScript("script/clippers-metricool-current-batch-upload-pack.mjs", "Metricool current batch upload pack");
+        } catch (uploadError: any) {
+          if (!String(uploadError?.message || "").includes("already have operator evidence")) {
+            throw uploadError;
+          }
+          postCloseoutApplyRuns.metricoolCurrentBatchUploadPackRun = { status: "blocked", error: uploadError.message || "Metricool current batch upload pack blocked" };
+        }
         postCloseoutApplyRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+        postCloseoutApplyRuns.metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
       } catch (refreshError: any) {
         postCloseoutApplyError = refreshError.message || "Post-closeout apply refresh failed";
       }
@@ -3782,6 +3805,9 @@ export async function registerRoutes(
         tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
         tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
         tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
+        metricoolMcpPreflight: await readClipperMetricoolMcpPreflight().catch(() => null),
+        metricoolCurrentBatchUploadPack: await readClipperMetricoolCurrentBatchUploadPack().catch(() => null),
+        metricoolCurrentBatchSessionPacket: await readClipperMetricoolCurrentBatchSessionPacket().catch(() => null),
         run,
         postCloseoutApplyRuns,
         postCloseoutApplyError,

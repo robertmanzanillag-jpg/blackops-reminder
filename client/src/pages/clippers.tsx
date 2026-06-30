@@ -11485,6 +11485,9 @@ export default function ClippersPage() {
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
         tiktokNextAction: ClipperTikTokNextActionSummary | null;
+        metricoolMcpPreflight: ClipperMetricoolMcpPreflightSummary | null;
+        metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary | null;
+        metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary | null;
         metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus | null;
         postProofRefreshRuns: Record<string, unknown>;
         postProofRefreshError: string;
@@ -11522,6 +11525,15 @@ export default function ClippersPage() {
       }
       if (data.tiktokNextAction) {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
+      if (data.metricoolMcpPreflight) {
+        queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      }
+      if (data.metricoolCurrentBatchUploadPack) {
+        queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      }
+      if (data.metricoolCurrentBatchSessionPacket) {
+        queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
       }
       if (data.metricoolBridgeEvidenceCsvStatus) {
         queryClient.setQueryData(["/api/clippers/metricool-bridge-evidence-csv-status"], data.metricoolBridgeEvidenceCsvStatus);
@@ -12056,6 +12068,9 @@ export default function ClippersPage() {
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
         tiktokNextAction: ClipperTikTokNextActionSummary | null;
+        metricoolMcpPreflight: ClipperMetricoolMcpPreflightSummary | null;
+        metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary | null;
+        metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary | null;
         postCloseoutApplyRuns: Record<string, unknown>;
         postCloseoutApplyError: string;
       };
@@ -12072,6 +12087,15 @@ export default function ClippersPage() {
       }
       if (data.tiktokNextAction) {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
+      if (data.metricoolMcpPreflight) {
+        queryClient.setQueryData(["/api/clippers/metricool-mcp-preflight"], data.metricoolMcpPreflight);
+      }
+      if (data.metricoolCurrentBatchUploadPack) {
+        queryClient.setQueryData(["/api/clippers/metricool-current-batch-upload-pack"], data.metricoolCurrentBatchUploadPack);
+      }
+      if (data.metricoolCurrentBatchSessionPacket) {
+        queryClient.setQueryData(["/api/clippers/metricool-current-batch-session-packet"], data.metricoolCurrentBatchSessionPacket);
       }
       toast({
         title: data.postCloseoutApplyError ? "TikTok MVP evidence aplicado con refresh pendiente" : "TikTok MVP evidence aplicado",
