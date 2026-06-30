@@ -821,6 +821,39 @@ test("records verified public lead candidates as previewable batch rows without 
   assert.equal(snapshot.recentOutreach.length, 0);
 });
 
+test("records verified Instagram public lead candidate without requiring email", () => {
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Insta Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@instareadycafe",
+    sourceUrl: "https://instagram.com/instareadycafe",
+    recipientEmail: "",
+    evidence: "Public Instagram profile has no website link, active menu posts and a visible DM contact path.",
+    painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+    estimatedOfferUsd: 3600,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Insta Ready Cafe has verified public Instagram evidence and no dedicated website.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_preview");
+  assert.equal(result.candidate.importReady, true);
+  assert.equal(result.candidate.recipientEmail, "");
+  assert.equal(result.importableCount, 1);
+  assert.doesNotMatch(result.candidate.blockedReasons.join("; "), /recipientEmail/);
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(snapshot.publicLeadImportQueue.items[0].contactChannel, "instagram");
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
 test("blocks public lead candidates from import until evidence is verified", () => {
   const result = recordRevenuePublicLeadCandidate({
     businessName: "Unverified Salon",
@@ -1323,6 +1356,56 @@ test("runs money sprint from verified public candidates without copy paste or ou
   assert.equal(result.snapshot.recentLeads[0].businessName, "Verified Sprint Cafe");
   assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
   assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
+});
+
+test("runs money sprint from Instagram public candidate into manual draft without email", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Verified Insta Sprint Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@verifiedinstasprint",
+    sourceUrl: "https://instagram.com/verifiedinstasprint",
+    recipientEmail: "",
+    evidence: "Public Instagram profile has no website link, recent menu photos and a visible DM contact path.",
+    painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Verified Insta Sprint Cafe has public Instagram evidence of no website and a clear menu capture opportunity.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  const result = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidate.candidate.id],
+    maxCandidates: 5,
+  });
+
+  assert.equal(result.status, "started");
+  assert.deepEqual(result.importedCandidateIds, [candidate.candidate.id]);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.sprint?.recordedLeads.length, 1);
+  assert.equal(result.sprint?.previews.length, 1);
+  assert.equal(result.sprint?.outreachDrafts.length, 1);
+  assert.equal(result.sprint?.outreachDrafts[0].channel, "instagram");
+  assert.equal(result.sprint?.outreachDrafts[0].recipientEmail, "");
+  assert.equal(result.sprint?.outreachDrafts[0].links.mailto, "");
+  assert.equal(result.sprint?.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
+  assert.equal(result.snapshot.recentOutreach[0].status, "draft");
 });
 
 test("blocks money sprint from public candidates until candidate is verified and approved", () => {
@@ -2221,7 +2304,7 @@ test("manual outreach queue uses public source URLs for non-email channels and c
   recordRevenueOutreachDraft({
     channel: "instagram",
     approvalStatus: "approved",
-    recipientEmail: "owner@instaqueuellc.example",
+    recipientEmail: "",
     contactName: "Owner",
     businessName: "Insta Queue Studio",
     sourceUrl: "https://instagram.com/instaqueuestudio",
@@ -2234,7 +2317,7 @@ test("manual outreach queue uses public source URLs for non-email channels and c
   recordRevenueOutreachDraft({
     channel: "contact_form",
     approvalStatus: "approved",
-    recipientEmail: "owner@formqueue.example",
+    recipientEmail: "",
     contactName: "Owner",
     businessName: "Form Queue Studio",
     sourceUrl: "https://example.com/form-queue/contact",
@@ -2278,11 +2361,12 @@ test("manual outreach queue uses public source URLs for non-email channels and c
   const contactFormItem = queue.items.find((item) => item.businessName === "Form Queue Studio")!;
 
   assert.equal(instagramItem.contactUrl, "https://instagram.com/instaqueuestudio");
-  assert.equal(instagramItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.equal(instagramItem.fallbackUrl, "");
   assert.match(instagramItem.copyableContactPacket, /Open: https:\/\/instagram\.com\/instaqueuestudio/);
+  assert.match(instagramItem.copyableContactPacket, /Fallback: none/);
   assert.match(instagramItem.copyableContactPacket, /Subject:/);
   assert.equal(contactFormItem.contactUrl, "https://example.com/form-queue/contact");
-  assert.equal(contactFormItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.equal(contactFormItem.fallbackUrl, "");
   assert.match(contactFormItem.copyableContactPacket, /Open: https:\/\/example\.com\/form-queue\/contact/);
   assert.equal(queue.items.some((item) => item.businessName === "Mockup Only Form"), false);
   assert.equal(queue.blockedCount, 13);
@@ -3694,6 +3778,34 @@ test("money sprint preview parses batch without persisting leads drafts or previ
   assert.equal(result.safety.sendsOutreach, false);
   assert.equal(snapshot.recentLeads.length, 0);
   assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("money sprint preview treats manual-channel leads as draft-ready without email", () => {
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Manual Preview Cafe|Miami|coffee shop|no_website|instagram|@manualpreviewcafe|https://instagram.com/manualpreviewcafe||Public Instagram profile has no website link, recent menu photos and a visible DM contact path.|Needs online menu, catering inquiry capture and follow-up.|3600|Owner|Manual Preview Cafe has public Instagram evidence and no dedicated website.",
+    ].join("\n"),
+  });
+
+  assert.equal(result.status, "ready_to_import");
+  assert.equal(result.totals.accepted, 1);
+  assert.equal(result.totals.draftReady, 1);
+  assert.equal(result.acceptedSeeds[0].draftReady, true);
+  assert.deepEqual(result.acceptedSeeds[0].missingForDraft, []);
+  assert.equal(result.acceptedSeeds[0].recipientEmail, "");
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(getRevenueEngineSnapshot().recentOutreach.length, 0);
 });
 
 test("money sprint preview respects daily mockup limit", () => {

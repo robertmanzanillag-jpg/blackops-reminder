@@ -3774,12 +3774,14 @@ export default function RevenueEnginePage() {
                             Abrir
                           </Button>
                         </a>
-                        <a href={item.fallbackUrl}>
-                          <Button type="button" size="sm" variant="outline" className="h-8 border-zinc-700">
-                            <Send className="mr-2 h-3.5 w-3.5" />
-                            Mailto
-                          </Button>
-                        </a>
+                        {item.fallbackUrl && (
+                          <a href={item.fallbackUrl}>
+                            <Button type="button" size="sm" variant="outline" className="h-8 border-zinc-700">
+                              <Send className="mr-2 h-3.5 w-3.5" />
+                              Mailto
+                            </Button>
+                          </a>
+                        )}
                         <Button
                           type="button"
                           size="sm"

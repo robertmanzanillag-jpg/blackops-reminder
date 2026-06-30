@@ -96,7 +96,7 @@ export const deliveryReviewSchema = z.object({
 export type DeliveryReviewInput = z.infer<typeof deliveryReviewSchema>;
 
 export const proposalEmailSchema = z.object({
-  recipientEmail: z.string().trim().email().max(240),
+  recipientEmail: z.union([z.string().trim().email().max(240), z.literal("")]).optional().default(""),
   contactName: z.string().trim().min(1).max(120).default("Robert"),
   businessName: z.string().trim().min(2).max(160),
   sourceUrl: z.string().trim().url().max(300).optional(),
@@ -3761,7 +3761,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
           `Manual outreach packet: ${draft.businessName}`,
           `Channel: ${draft.channel}`,
           `Open: ${contactUrl}`,
-          `Fallback: ${draft.links.mailto}`,
+          draft.links.mailto ? `Fallback: ${draft.links.mailto}` : "Fallback: none; use approved copy only in the public manual channel.",
           `Subject: ${draft.subject}`,
           "",
           draft.body,
@@ -5270,6 +5270,36 @@ function isRevenuePublicSourceUrl(sourceUrl: string) {
   }
 }
 
+function isRevenueManualContactChannel(channel: RevenueLeadInput["contactChannel"] | RevenueOutreachDraftInput["channel"]) {
+  return channel === "instagram" || channel === "contact_form";
+}
+
+function revenueEmailRecipientFromLead(input: Pick<RevenueMoneySprintSeedLeadInput, "contactChannel" | "contactValue" | "recipientEmail">) {
+  if (input.recipientEmail.trim().length > 0) return input.recipientEmail;
+  return input.contactChannel === "email" && z.string().email().safeParse(input.contactValue.trim()).success
+    ? input.contactValue.trim()
+    : "";
+}
+
+function revenueLeadHasManualContactPath(input: Pick<RevenueMoneySprintSeedLeadInput, "contactChannel" | "contactValue" | "sourceUrl">) {
+  return isRevenueManualContactChannel(input.contactChannel)
+    && input.contactValue.trim().length >= 3
+    && input.sourceUrl.trim().length > 0
+    && isRevenuePublicSourceUrl(input.sourceUrl);
+}
+
+function revenueLeadHasDraftContactPath(input: Pick<RevenueMoneySprintSeedLeadInput, "contactChannel" | "contactValue" | "sourceUrl" | "recipientEmail">) {
+  return revenueEmailRecipientFromLead(input).length > 0 || revenueLeadHasManualContactPath(input);
+}
+
+function revenueOutreachDraftHasRecipientPath(input: Pick<RevenueOutreachDraftInput, "channel" | "recipientEmail" | "sourceUrl">) {
+  const hasEmail = input.recipientEmail.trim().length > 0;
+  const hasManualUrl = isRevenueManualContactChannel(input.channel)
+    && Boolean(input.sourceUrl)
+    && isRevenuePublicSourceUrl(input.sourceUrl || "");
+  return hasEmail || hasManualUrl;
+}
+
 function splitRevenuePublicScoutEvidenceBlocks(evidenceText: string) {
   const normalized = evidenceText
     .replace(/\r/g, "")
@@ -5451,13 +5481,14 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
   loadRevenuePublicLeadCandidates();
   const parsed = revenuePublicLeadCandidateSchema.parse(input);
   const qualification = qualifyRevenueLead(parsed);
+  const hasDraftContactPath = revenueLeadHasDraftContactPath(parsed);
   const blockedReasons = [
     parsed.verificationStatus === "blocked" && "candidate blocked by scout",
     !parsed.publicEvidenceVerified && "public evidence not verified",
     !parsed.approvalToImport && "approvalToImport false",
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
     parsed.sourceUrl.trim().length > 0 && !isRevenuePublicSourceUrl(parsed.sourceUrl) && "sourceUrl must be public",
-    parsed.recipientEmail.trim().length === 0 && "recipientEmail",
+    !hasDraftContactPath && "recipientEmail or manual contact URL",
     ...revenuePlaceholderFieldNames(parsed).map((field) => `placeholder ${field}`),
     ...qualification.missing,
   ].filter((item): item is string => Boolean(item));
@@ -6934,12 +6965,12 @@ function syncLeadAfterOutreachDraft(draft: RevenueOutreachDraft) {
 export function recordRevenueOutreachDraft(input: RevenueOutreachDraftInput) {
   loadRevenueOutreach();
   const proposal = buildProposalEmail(input);
-  const hasRecipient = input.recipientEmail.trim().length > 0;
+  const hasRecipient = revenueOutreachDraftHasRecipientPath(input);
   const hasSummary = input.businessSummary.trim().length >= 40;
   const hasSource = Boolean(input.sourceUrl || input.mockupUrl);
   const approved = input.approvalStatus === "approved";
   const qaGates = [
-    { gate: "recipient", passed: hasRecipient, fix: "Agregar email/contacto verificable antes de contactar." },
+    { gate: "recipient", passed: hasRecipient, fix: "Agregar email valido o sourceUrl publico para Instagram/contact form antes de contactar." },
     { gate: "evidence", passed: hasSummary && hasSource, fix: "Agregar fuente publica o mockup URL y resumen especifico del negocio." },
     { gate: "cost", passed: proposal.pricing.insideCostCap, fix: "Bajar herramientas/costo mensual o subir retainer." },
     { gate: "approval", passed: approved, fix: "Robert debe aprobar el mensaje antes de enviarlo por email, DM o formulario." },
@@ -7050,14 +7081,14 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
     rollbackPlanReady: false,
     notes: "Autopilot prepara venta; QA bloquea entrega hasta scope, deposito, pruebas y aprobacion.",
   });
-  const hasRecipient = parsed.recipientEmail.trim().length > 0;
-  const canDraftOutreach = hasRecipient && leadResult.qualification.missing.length === 0 && parsed.estimatedInternalCostUsd <= 100;
+  const hasDraftContactPath = revenueLeadHasDraftContactPath(parsed);
+  const canDraftOutreach = hasDraftContactPath && leadResult.qualification.missing.length === 0 && parsed.estimatedInternalCostUsd <= 100;
   const outreachResult = canDraftOutreach
     ? recordRevenueOutreachDraft({
         leadId: leadResult.lead.id,
-        channel: parsed.contactChannel === "email" ? "email" : parsed.contactChannel === "contact_form" ? "contact_form" : "gmail",
+        channel: revenueOutreachChannelFromLead(parsed.contactChannel),
         approvalStatus: parsed.approvalToContact ? "approved" : "draft",
-        recipientEmail: parsed.recipientEmail,
+        recipientEmail: revenueEmailRecipientFromLead(parsed),
         contactName: parsed.contactName || "Owner",
         businessName: parsed.businessName,
         sourceUrl: parsed.sourceUrl || undefined,
@@ -7070,7 +7101,7 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
       })
     : null;
   const requiredBeforeExternalAction = [
-    !hasRecipient && "contacto/email verificable",
+    !hasDraftContactPath && "contacto/email verificable",
     leadResult.qualification.missing.length > 0 && `resolver lead: ${leadResult.qualification.missing.join(", ")}`,
     clarificationGate.status === "needs_clarification" && "responder preguntas de aclaracion",
     !parsed.approvalToContact && "aprobar contacto externo",
@@ -8659,6 +8690,7 @@ export function buildProposalEmail(input: ProposalEmailInput) {
     "- Revenue Engine",
   ].filter((line): line is string => line !== null).join("\n");
 
+  const hasRecipientEmail = input.recipientEmail.trim().length > 0;
   const encodedTo = encodeURIComponent(input.recipientEmail);
   const encodedSubject = encodeURIComponent(subject);
   const encodedBody = encodeURIComponent(body);
@@ -8683,8 +8715,8 @@ export function buildProposalEmail(input: ProposalEmailInput) {
       requiresApproval: true,
     },
     links: {
-      mailto: `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}`,
-      gmailCompose: `https://mail.google.com/mail/?view=cm&fs=1&to=${encodedTo}&su=${encodedSubject}&body=${encodedBody}`,
+      mailto: hasRecipientEmail ? `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}` : "",
+      gmailCompose: hasRecipientEmail ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodedTo}&su=${encodedSubject}&body=${encodedBody}` : "",
     },
   };
 }
@@ -8986,11 +9018,11 @@ export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
   const acceptedSeeds = sprintSeedLeads.map((seed, index) => {
     const qualification = qualifyRevenueLead(seed);
     const hasSource = seed.sourceUrl.trim().length > 0;
-    const hasRecipient = seed.recipientEmail.trim().length > 0;
+    const hasDraftContactPath = revenueLeadHasDraftContactPath(seed);
     const mockupEligible = ["A", "B"].includes(qualification.grade);
     const mockupReady = mockupEligible && previewMockupCount < parsed.dailyMockupLimit;
     if (mockupReady) previewMockupCount += 1;
-    const draftReady = hasSource && hasRecipient && qualification.missing.length === 0;
+    const draftReady = hasSource && hasDraftContactPath && qualification.missing.length === 0;
     return {
       rowNumber: index + 1,
       businessName: seed.businessName,
@@ -9007,7 +9039,7 @@ export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
       draftReady,
       missingForDraft: [
         !hasSource && "sourceUrl publico",
-        !hasRecipient && "recipientEmail",
+        !hasDraftContactPath && "recipientEmail or manual contact URL",
         ...qualification.missing,
       ].filter((item): item is string => Boolean(item)),
     };
@@ -9123,13 +9155,13 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
       previews.push(preview);
     }
 
-    const hasRecipient = seed.recipientEmail.trim().length > 0;
-    if (hasRecipient && hasSource && leadResult.qualification.missing.length === 0) {
+    const hasDraftContactPath = revenueLeadHasDraftContactPath(seed);
+    if (hasDraftContactPath && hasSource && leadResult.qualification.missing.length === 0) {
       outreachDrafts.push(recordRevenueOutreachDraft({
         leadId: leadResult.lead.id,
         channel: revenueOutreachChannelFromLead(seed.contactChannel),
         approvalStatus: "draft",
-        recipientEmail: seed.recipientEmail,
+        recipientEmail: revenueEmailRecipientFromLead(seed),
         contactName: seed.contactName || "Owner",
         businessName: seed.businessName,
         sourceUrl: seed.sourceUrl,
@@ -9141,11 +9173,11 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         estimatedInternalMonthlyCostUsd: 54,
         notes: "Money sprint draft. No enviar sin aprobacion humana final.",
       }));
-    } else if (hasRecipient || hasSource || leadResult.qualification.missing.length > 0) {
+    } else if (hasDraftContactPath || hasSource || leadResult.qualification.missing.length > 0) {
       blockedSeeds.push({
         businessName: seed.businessName,
         reason: [
-          !hasRecipient && "falta recipientEmail",
+          !hasDraftContactPath && "falta recipientEmail o URL manual verificable",
           !hasSource && "falta sourceUrl publico",
           leadResult.qualification.missing.length > 0 && `resolver lead: ${leadResult.qualification.missing.join(", ")}`,
         ].filter(Boolean).join("; "),
