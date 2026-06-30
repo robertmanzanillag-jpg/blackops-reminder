@@ -23,8 +23,8 @@ export const revenueScoutingMissionSchema = z.object({
   offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
   targetLeadCount: z.coerce.number().int().min(5).max(100).default(25),
   maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
-  requireNoWebsiteSignal: z.coerce.boolean().default(true),
-  includeWeakWebsiteLeads: z.coerce.boolean().default(true),
+  requireNoWebsiteSignal: z.boolean().default(true),
+  includeWeakWebsiteLeads: z.boolean().default(true),
 });
 
 export type RevenueScoutingMissionInput = z.infer<typeof revenueScoutingMissionSchema>;
@@ -53,7 +53,7 @@ export const revenueLeadRadarSchema = z.object({
   dailyMockupLimit: z.coerce.number().int().min(1).max(25).default(8),
   dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
   maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
-  requireRobertApprovalToContact: z.coerce.boolean().default(true),
+  requireRobertApprovalToContact: z.boolean().default(true),
 });
 
 export type RevenueLeadRadarInput = z.infer<typeof revenueLeadRadarSchema>;
@@ -72,8 +72,8 @@ export type AutomationQuoteInput = z.infer<typeof automationQuoteSchema>;
 export const revenueAutomationOpportunitySchema = automationQuoteSchema.extend({
   sourceLeadId: z.string().trim().max(120).optional().default(""),
   status: z.enum(["intake", "quoted", "approved", "sold", "in_delivery", "delivered", "blocked"]).default("intake"),
-  clientApprovedScope: z.coerce.boolean().default(false),
-  depositPaid: z.coerce.boolean().default(false),
+  clientApprovedScope: z.boolean().default(false),
+  depositPaid: z.boolean().default(false),
 });
 
 export type RevenueAutomationOpportunityInput = z.infer<typeof revenueAutomationOpportunitySchema>;
@@ -84,13 +84,13 @@ export const deliveryReviewSchema = z.object({
   setupPriceUsd: z.coerce.number().min(0).max(100000).default(2500),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(300),
   estimatedInternalMonthlyCostUsd: z.coerce.number().min(0).max(5000).default(50),
-  clientApprovedScope: z.coerce.boolean().default(false),
-  depositPaid: z.coerce.boolean().default(false),
-  publicDataVerified: z.coerce.boolean().default(false),
-  responsiveChecked: z.coerce.boolean().default(false),
-  linksChecked: z.coerce.boolean().default(false),
-  automationTested: z.coerce.boolean().default(false),
-  rollbackPlanReady: z.coerce.boolean().default(false),
+  clientApprovedScope: z.boolean().default(false),
+  depositPaid: z.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  responsiveChecked: z.boolean().default(false),
+  linksChecked: z.boolean().default(false),
+  automationTested: z.boolean().default(false),
+  rollbackPlanReady: z.boolean().default(false),
   notes: z.string().trim().max(1200).optional().default(""),
 });
 
@@ -128,7 +128,7 @@ export type RevenueOutreachDraftInput = z.infer<typeof revenueOutreachDraftSchem
 
 export const revenueOutreachSendSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
-  approvalToSend: z.coerce.boolean().default(false),
+  approvalToSend: z.boolean().default(false),
 });
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
@@ -144,7 +144,7 @@ export type RevenueOutreachApproveInput = z.infer<typeof revenueOutreachApproveS
 export const revenueOutreachOutcomeSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
   outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]),
-  outcomeRecordedByRobert: z.coerce.boolean().default(false),
+  outcomeRecordedByRobert: z.boolean().default(false),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
   paymentConfirmation: z.string().trim().max(500).optional().default(""),
   notes: z.string().trim().max(1000).optional().default(""),
@@ -236,7 +236,7 @@ export const revenueMockupSchema = z.object({
   painPoint: z.string().trim().max(500).optional().default(""),
   primaryOffer: z.string().trim().max(200).optional().default("Website 3D Premium + Automation Sprint"),
   estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
-  includeAutomation: z.coerce.boolean().default(true),
+  includeAutomation: z.boolean().default(true),
 });
 
 export type RevenueMockupInput = z.infer<typeof revenueMockupSchema>;
@@ -257,7 +257,7 @@ export const revenueLaunchReadinessSchema = z.object({
   dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
   dailyMockupTarget: z.coerce.number().int().min(1).max(25).default(5),
   dailyContactTarget: z.coerce.number().int().min(1).max(50).default(10),
-  emailPending: z.coerce.boolean().default(true),
+  emailPending: z.boolean().default(true),
 });
 
 export type RevenueLaunchReadinessInput = z.infer<typeof revenueLaunchReadinessSchema>;
@@ -269,10 +269,10 @@ export const revenueProjectPlanSchema = z.object({
   setupUsd: z.coerce.number().min(0).max(100000).default(3500),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
-  depositPaid: z.coerce.boolean().default(false),
-  scopeApproved: z.coerce.boolean().default(false),
-  publicDataVerified: z.coerce.boolean().default(false),
-  includesAutomation: z.coerce.boolean().default(true),
+  depositPaid: z.boolean().default(false),
+  scopeApproved: z.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  includesAutomation: z.boolean().default(true),
   launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
   clientRequest: z.string().trim().max(1200).optional().default(""),
 });
@@ -296,10 +296,10 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   appQaEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).default("not_requested"),
   deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
-  visualQaPassed: z.coerce.boolean().default(false),
-  technicalQaPassed: z.coerce.boolean().default(false),
-  automationQaPassed: z.coerce.boolean().default(false),
-  clientHandoffReady: z.coerce.boolean().default(false),
+  visualQaPassed: z.boolean().default(false),
+  technicalQaPassed: z.boolean().default(false),
+  automationQaPassed: z.boolean().default(false),
+  clientHandoffReady: z.boolean().default(false),
 });
 
 export type RevenueDeliveryWorkspaceInput = z.infer<typeof revenueDeliveryWorkspaceSchema>;
@@ -313,14 +313,14 @@ export const revenueWebsiteDeliveryWorkspaceSchema = z.object({
   repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
   branchName: z.string().trim().max(200).optional().default(""),
   projectType: z.enum(["website", "bundle"]).default("bundle"),
-  depositPaid: z.coerce.boolean().default(false),
-  scopeApproved: z.coerce.boolean().default(false),
+  depositPaid: z.boolean().default(false),
+  scopeApproved: z.boolean().default(false),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
-  publicDataVerified: z.coerce.boolean().default(false),
-  visualQaPassed: z.coerce.boolean().default(false),
-  technicalQaPassed: z.coerce.boolean().default(false),
-  automationQaPassed: z.coerce.boolean().default(false),
-  clientHandoffReady: z.coerce.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  visualQaPassed: z.boolean().default(false),
+  technicalQaPassed: z.boolean().default(false),
+  automationQaPassed: z.boolean().default(false),
+  clientHandoffReady: z.boolean().default(false),
   launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
@@ -331,11 +331,11 @@ export type RevenueWebsiteDeliveryWorkspaceInput = z.infer<typeof revenueWebsite
 
 export const revenueDeliveryWorkspaceUpdateSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
-  publicDataVerified: z.coerce.boolean().optional(),
-  visualQaPassed: z.coerce.boolean().optional(),
-  technicalQaPassed: z.coerce.boolean().optional(),
-  automationQaPassed: z.coerce.boolean().optional(),
-  clientHandoffReady: z.coerce.boolean().optional(),
+  publicDataVerified: z.boolean().optional(),
+  visualQaPassed: z.boolean().optional(),
+  technicalQaPassed: z.boolean().optional(),
+  automationQaPassed: z.boolean().optional(),
+  clientHandoffReady: z.boolean().optional(),
   repoFullName: z.string().trim().max(200).optional(),
   branchName: z.string().trim().max(200).optional(),
   githubIssueUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
@@ -404,9 +404,9 @@ export const revenueAgentRunSchema = z.object({
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
   monthlyBudgetUsd: z.coerce.number().min(0).max(100).default(100),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
-  approvalToContact: z.coerce.boolean().default(false),
-  approvalToSpend: z.coerce.boolean().default(false),
-  approvalToBuild: z.coerce.boolean().default(false),
+  approvalToContact: z.boolean().default(false),
+  approvalToSpend: z.boolean().default(false),
+  approvalToBuild: z.boolean().default(false),
 });
 
 export type RevenueAgentRunInput = z.infer<typeof revenueAgentRunSchema>;
@@ -431,9 +431,9 @@ export const revenueSalesAutopilotSchema = z.object({
   sourceUrl: z.union([z.string().trim().url().max(300), z.literal("")]).optional().default(""),
   businessSummary: z.string().trim().max(2000).optional().default(""),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
-  approvalToContact: z.coerce.boolean().default(false),
-  approvalToSpend: z.coerce.boolean().default(false),
-  approvalToBuild: z.coerce.boolean().default(false),
+  approvalToContact: z.boolean().default(false),
+  approvalToSpend: z.boolean().default(false),
+  approvalToBuild: z.boolean().default(false),
 });
 
 export type RevenueSalesAutopilotInput = z.infer<typeof revenueSalesAutopilotSchema>;
@@ -456,8 +456,8 @@ export const revenueMoneySprintSchema = z.object({
   dailyMockupLimit: z.coerce.number().int().min(1).max(25).default(5),
   dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
   maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
-  requireRobertApprovalToContact: z.coerce.boolean().default(true),
-  writePreviewFiles: z.coerce.boolean().default(true),
+  requireRobertApprovalToContact: z.boolean().default(true),
+  writePreviewFiles: z.boolean().default(true),
   seedLeads: z.array(revenueMoneySprintSeedLeadSchema).max(25).optional().default([]),
   seedLeadBatchText: z.string().trim().max(20000).optional().default(""),
 });
@@ -478,8 +478,8 @@ export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
   verificationStatus: z.enum(["needs_review", "verified_public", "blocked"]).default("needs_review"),
-  publicEvidenceVerified: z.coerce.boolean().default(false),
-  approvalToImport: z.coerce.boolean().default(false),
+  publicEvidenceVerified: z.boolean().default(false),
+  approvalToImport: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -576,25 +576,25 @@ export type RevenueAutomationIntakeAnswerInput = z.infer<typeof revenueAutomatio
 export const revenueAutomationIntakeConvertSchema = z.object({
   intakeId: z.string().trim().min(1).max(200),
   status: z.enum(["intake", "quoted", "approved", "sold", "in_delivery", "delivered", "blocked"]).default("intake"),
-  clientApprovedScope: z.coerce.boolean().default(false),
-  depositPaid: z.coerce.boolean().default(false),
+  clientApprovedScope: z.boolean().default(false),
+  depositPaid: z.boolean().default(false),
 });
 
 export type RevenueAutomationIntakeConvertInput = z.infer<typeof revenueAutomationIntakeConvertSchema>;
 
 export const revenueAutomationAgentCommandSchema = revenueAutomationIntakeSchema.extend({
-  createOpportunityIfClear: z.coerce.boolean().default(true),
+  createOpportunityIfClear: z.boolean().default(true),
   lifecycleTarget: z.enum(["quote", "opportunity", "sale", "delivery"]).default("opportunity"),
-  clientApprovedScope: z.coerce.boolean().default(false),
-  depositPaid: z.coerce.boolean().default(false),
+  clientApprovedScope: z.boolean().default(false),
+  depositPaid: z.boolean().default(false),
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
-  createDeliveryWorkspaceIfSold: z.coerce.boolean().default(false),
+  createDeliveryWorkspaceIfSold: z.boolean().default(false),
   workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
-  publicDataVerified: z.coerce.boolean().default(false),
-  visualQaPassed: z.coerce.boolean().default(false),
-  technicalQaPassed: z.coerce.boolean().default(false),
-  automationQaPassed: z.coerce.boolean().default(false),
-  clientHandoffReady: z.coerce.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  visualQaPassed: z.boolean().default(false),
+  technicalQaPassed: z.boolean().default(false),
+  automationQaPassed: z.boolean().default(false),
+  clientHandoffReady: z.boolean().default(false),
   launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
 });
 
@@ -603,11 +603,11 @@ export type RevenueAutomationAgentCommandInput = z.infer<typeof revenueAutomatio
 export const revenueAutomationOpportunityDeliverySchema = z.object({
   opportunityId: z.string().trim().min(1).max(200),
   workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
-  publicDataVerified: z.coerce.boolean().default(false),
-  visualQaPassed: z.coerce.boolean().default(false),
-  technicalQaPassed: z.coerce.boolean().default(false),
-  automationQaPassed: z.coerce.boolean().default(false),
-  clientHandoffReady: z.coerce.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  visualQaPassed: z.boolean().default(false),
+  technicalQaPassed: z.boolean().default(false),
+  automationQaPassed: z.boolean().default(false),
+  clientHandoffReady: z.boolean().default(false),
   launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
 });
 
@@ -616,7 +616,7 @@ export type RevenueAutomationOpportunityDeliveryInput = z.infer<typeof revenueAu
 export const revenueAutomationOpportunityCloseSchema = z.object({
   opportunityId: z.string().trim().min(1).max(200),
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
-  markScopeApproved: z.coerce.boolean().default(true),
+  markScopeApproved: z.boolean().default(true),
   notes: z.string().trim().max(800).optional().default(""),
 });
 
@@ -6967,13 +6967,14 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
 }
 
 export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
-  const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalCostUsd;
-  const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
+  const parsed = revenueProjectPlanSchema.parse(input);
+  const grossMarginUsd = parsed.monthlyRetainerUsd - parsed.estimatedInternalCostUsd;
+  const grossMarginPercent = parsed.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / parsed.monthlyRetainerUsd) * 100) : 0;
   const missing = [
-    !input.scopeApproved && "scope aprobado",
-    !input.depositPaid && "deposito pagado",
-    !input.publicDataVerified && "data publica verificada",
-    input.estimatedInternalCostUsd > 100 && "costo interno bajo $100/mes",
+    !parsed.scopeApproved && "scope aprobado",
+    !parsed.depositPaid && "deposito pagado",
+    !parsed.publicDataVerified && "data publica verificada",
+    parsed.estimatedInternalCostUsd > 100 && "costo interno bajo $100/mes",
     grossMarginPercent < 65 && "margen mensual >= 65%",
   ].filter(Boolean) as string[];
   const status = missing.some((item) => ["deposito pagado", "data publica verificada", "costo interno bajo $100/mes", "margen mensual >= 65%"].includes(item))
@@ -6995,10 +6996,10 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
     },
     {
       id: "build",
-      name: input.projectType === "automation" ? "Build automation" : "Build website",
-      ownerAgent: input.projectType === "automation" ? "automation-architect" : "mockup-builder",
-      days: Math.max(2, Math.min(4, input.launchTargetDays - 3)),
-      tasks: input.projectType === "automation"
+      name: parsed.projectType === "automation" ? "Build automation" : "Build website",
+      ownerAgent: parsed.projectType === "automation" ? "automation-architect" : "mockup-builder",
+      days: Math.max(2, Math.min(4, parsed.launchTargetDays - 3)),
+      tasks: parsed.projectType === "automation"
         ? [
             "Mapear trigger, datos, aprobaciones y rollback.",
             "Crear flujo minimo rentable con logs y datos de ejemplo.",
@@ -7014,8 +7015,8 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
       id: "automation",
       name: "Automation sprint",
       ownerAgent: "automation-architect",
-      days: input.includesAutomation ? 2 : 0,
-      tasks: input.includesAutomation
+      days: parsed.includesAutomation ? 2 : 0,
+      tasks: parsed.includesAutomation
         ? [
             "Configurar follow-up con aprobacion humana antes de mensajes sensibles.",
             "Crear reporte semanal de leads, clicks, reservas/interes y costo.",
@@ -7048,7 +7049,7 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
   ];
 
   return {
-    input,
+    input: parsed,
     decision: {
       status,
       missing,
@@ -7061,13 +7062,13 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
             : "Bloqueado: no construir, lanzar ni enviar hasta resolver gates criticos.",
     },
     budget: {
-      setupUsd: input.setupUsd,
-      requiredDepositUsd: Math.round(input.setupUsd * 0.5),
-      monthlyRetainerUsd: input.monthlyRetainerUsd,
-      estimatedInternalCostUsd: input.estimatedInternalCostUsd,
+      setupUsd: parsed.setupUsd,
+      requiredDepositUsd: Math.round(parsed.setupUsd * 0.5),
+      monthlyRetainerUsd: parsed.monthlyRetainerUsd,
+      estimatedInternalCostUsd: parsed.estimatedInternalCostUsd,
       grossMarginUsd,
       grossMarginPercent,
-      insideCostCap: input.estimatedInternalCostUsd <= 100,
+      insideCostCap: parsed.estimatedInternalCostUsd <= 100,
     },
     phases,
     subagentCorrections: [
@@ -7079,10 +7080,10 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
       { agent: "closer", corrects: "propuesta confusa, precio sin deposito, promesas no aprobadas" },
     ],
     deliveryGates: [
-      { gate: "scope", passed: input.scopeApproved, fix: "Conseguir aprobacion escrita del scope." },
-      { gate: "deposit", passed: input.depositPaid, fix: "Cobrar deposito antes de construir/lanzar." },
-      { gate: "data", passed: input.publicDataVerified, fix: "Verificar fuentes publicas y quitar claims dudosos." },
-      { gate: "cost", passed: input.estimatedInternalCostUsd <= 100, fix: "Reducir herramientas o subir retainer." },
+      { gate: "scope", passed: parsed.scopeApproved, fix: "Conseguir aprobacion escrita del scope." },
+      { gate: "deposit", passed: parsed.depositPaid, fix: "Cobrar deposito antes de construir/lanzar." },
+      { gate: "data", passed: parsed.publicDataVerified, fix: "Verificar fuentes publicas y quitar claims dudosos." },
+      { gate: "cost", passed: parsed.estimatedInternalCostUsd <= 100, fix: "Reducir herramientas o subir retainer." },
       { gate: "margin", passed: grossMarginPercent >= 65, fix: "Subir precio mensual o recortar alcance." },
     ],
     doneDefinition: [
@@ -7231,10 +7232,11 @@ function buildAgentWorkOrder(input: RevenueAgentRunInput) {
 
 export function recordRevenueAgentRun(input: RevenueAgentRunInput) {
   loadRevenueAgentRuns();
-  const built = buildAgentWorkOrder(input);
+  const parsed = revenueAgentRunSchema.parse(input);
+  const built = buildAgentWorkOrder(parsed);
   const now = new Date().toISOString();
   const run: RevenueAgentRun = {
-    ...input,
+    ...parsed,
     id: `agent-run-${Date.now()}-${revenueAgentRuns.length + 1}`,
     createdAt: now,
     updatedAt: now,
@@ -7563,7 +7565,8 @@ export function approveRevenueOutreachDraft(input: RevenueOutreachApproveInput) 
 
 export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) {
   loadRevenueOutreach();
-  const draft = revenueOutreachDrafts.find((item) => item.id === input.draftId);
+  const parsed = revenueOutreachSendSchema.parse(input);
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId);
   const provider = getRevenueEmailProviderStatus();
   const now = new Date().toISOString();
   const manualQueue = buildRevenueManualOutreachQueue(10);
@@ -7572,7 +7575,7 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
-    { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "human_approval", passed: parsed.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
     { gate: "daily_contact_cap", passed: insideDailyQueue, fix: "Este draft no esta en la cola manual de hoy o excede el limite diario de contacto." },
     { gate: "email_channel", passed: canUseEmailProvider, fix: "Este canal es manual; abre el perfil/formulario desde la cola de Outreach manual hoy." },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
@@ -8380,7 +8383,8 @@ export function buildAutomationQuote(input: AutomationQuoteInput) {
 
 export function recordRevenueAutomationOpportunity(input: RevenueAutomationOpportunityInput) {
   loadRevenueAutomationOpportunities();
-  const quote = buildAutomationQuote(input);
+  const parsed = revenueAutomationOpportunitySchema.parse(input);
+  const quote = buildAutomationQuote(parsed);
   const qaGates = [
     {
       gate: "clarity",
@@ -8389,12 +8393,12 @@ export function recordRevenueAutomationOpportunity(input: RevenueAutomationOppor
     },
     {
       gate: "scope",
-      passed: input.clientApprovedScope || input.status === "intake" || input.status === "quoted",
+      passed: parsed.clientApprovedScope || parsed.status === "intake" || parsed.status === "quoted",
       fix: "Conseguir aprobacion escrita del alcance antes de delivery.",
     },
     {
       gate: "deposit",
-      passed: input.depositPaid || input.status === "intake" || input.status === "quoted",
+      passed: parsed.depositPaid || parsed.status === "intake" || parsed.status === "quoted",
       fix: `Cobrar deposito de $${quote.pricing.requiredDepositUsd.toLocaleString("en-US")} antes de construir.`,
     },
     {
@@ -8410,10 +8414,10 @@ export function recordRevenueAutomationOpportunity(input: RevenueAutomationOppor
   ];
   const hasBlockingGate = qaGates.some((gate) => !gate.passed && ["clarity", "cost", "margin"].includes(gate.gate));
   const status: RevenueAutomationOpportunity["status"] =
-    hasBlockingGate ? "blocked" : input.status === "intake" && quote.decision.status === "ready_to_pitch" ? "quoted" : input.status;
+    hasBlockingGate ? "blocked" : parsed.status === "intake" && quote.decision.status === "ready_to_pitch" ? "quoted" : parsed.status;
   const now = new Date().toISOString();
   const opportunity: RevenueAutomationOpportunity = {
-    ...input,
+    ...parsed,
     status,
     id: `automation-opportunity-${Date.now()}-${revenueAutomationOpportunities.length + 1}`,
     createdAt: now,
@@ -8442,66 +8446,67 @@ export function recordRevenueAutomationOpportunity(input: RevenueAutomationOppor
 }
 
 export function buildDeliveryReview(input: DeliveryReviewInput) {
-  const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
-  const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
-  const isAutomation = input.projectType === "automation" || input.projectType === "bundle";
-  const isWebsite = input.projectType === "website" || input.projectType === "bundle";
+  const parsed = deliveryReviewSchema.parse(input);
+  const grossMarginUsd = parsed.monthlyRetainerUsd - parsed.estimatedInternalMonthlyCostUsd;
+  const grossMarginPercent = parsed.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / parsed.monthlyRetainerUsd) * 100) : 0;
+  const isAutomation = parsed.projectType === "automation" || parsed.projectType === "bundle";
+  const isWebsite = parsed.projectType === "website" || parsed.projectType === "bundle";
 
   const gates = [
     {
       id: "commercial-approval",
       agent: "closer",
       label: "Scope aprobado por cliente",
-      passed: input.clientApprovedScope,
+      passed: parsed.clientApprovedScope,
       fix: "Conseguir aprobacion escrita del alcance, precio, timeline y limites.",
     },
     {
       id: "deposit",
       agent: "finance-controller",
       label: "Deposito recibido",
-      passed: input.depositPaid,
+      passed: parsed.depositPaid,
       fix: "No construir ni lanzar trabajo sensible sin deposito.",
     },
     {
       id: "data-verification",
       agent: "business-researcher",
       label: "Data publica verificada",
-      passed: input.publicDataVerified,
+      passed: parsed.publicDataVerified,
       fix: "Marcar fuentes, quitar claims dudosos y confirmar datos del negocio.",
     },
     {
       id: "responsive",
       agent: "visual-qa",
       label: "Mobile/desktop revisado",
-      passed: !isWebsite || input.responsiveChecked,
+      passed: !isWebsite || parsed.responsiveChecked,
       fix: "Revisar mobile, desktop, textos largos, formularios y hero visual.",
     },
     {
       id: "links",
       agent: "technical-qa",
       label: "Links y formularios probados",
-      passed: input.linksChecked,
+      passed: parsed.linksChecked,
       fix: "Probar CTA, formulario, email, telefono, tracking y paginas clave.",
     },
     {
       id: "automation-test",
       agent: "automation-qa",
       label: "Automatizacion probada con datos de ejemplo",
-      passed: !isAutomation || input.automationTested,
+      passed: !isAutomation || parsed.automationTested,
       fix: "Correr pruebas con datos falsos, errores comunes y aprobaciones sensibles.",
     },
     {
       id: "rollback",
       agent: "ops-qa",
       label: "Rollback/manual fallback listo",
-      passed: !isAutomation || input.rollbackPlanReady,
+      passed: !isAutomation || parsed.rollbackPlanReady,
       fix: "Definir como pausar el flujo y operar manualmente si algo falla.",
     },
     {
       id: "cost-cap",
       agent: "cost-controller",
       label: "Costo interno bajo $100/mes",
-      passed: input.estimatedInternalMonthlyCostUsd <= 100,
+      passed: parsed.estimatedInternalMonthlyCostUsd <= 100,
       fix: "Reducir herramientas pagadas, limitar volumen o subir retainer antes de lanzar.",
     },
     {
@@ -8518,19 +8523,19 @@ export function buildDeliveryReview(input: DeliveryReviewInput) {
   const status = blockingGates.length > 0 ? "blocked" : failedGates.length > 0 ? "needs_fix" : "ready_to_deliver";
 
   return {
-    input,
+    input: parsed,
     status,
     summary: {
       passed: gates.length - failedGates.length,
       total: gates.length,
       failed: failedGates.length,
       blocking: blockingGates.length,
-      setupPriceUsd: input.setupPriceUsd,
-      monthlyRetainerUsd: input.monthlyRetainerUsd,
-      estimatedInternalMonthlyCostUsd: input.estimatedInternalMonthlyCostUsd,
+      setupPriceUsd: parsed.setupPriceUsd,
+      monthlyRetainerUsd: parsed.monthlyRetainerUsd,
+      estimatedInternalMonthlyCostUsd: parsed.estimatedInternalMonthlyCostUsd,
       grossMarginUsd,
       grossMarginPercent,
-      insideCostCap: input.estimatedInternalMonthlyCostUsd <= 100,
+      insideCostCap: parsed.estimatedInternalMonthlyCostUsd <= 100,
     },
     gates,
     requiredFixes: failedGates.map((gate) => ({
@@ -8629,7 +8634,8 @@ export function buildRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInp
 
 export function recordRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInput) {
   loadRevenueDeliveryWorkspaces();
-  const workspace = buildRevenueDeliveryWorkspace(input);
+  const parsed = revenueDeliveryWorkspaceSchema.parse(input);
+  const workspace = buildRevenueDeliveryWorkspace(parsed);
   const now = new Date().toISOString();
   const persisted: RevenueDeliveryWorkspace = {
     ...workspace,

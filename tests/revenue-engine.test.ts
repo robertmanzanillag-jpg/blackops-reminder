@@ -8,6 +8,7 @@ import {
   answerRevenueAutomationIntake,
   approveRevenuePublicLeadCandidate,
   buildAutomationQuote,
+  buildDeliveryReview,
   buildRevenueUserDataPaths,
   buildImprovementReview,
   buildRevenueEnginePlan,
@@ -4245,6 +4246,35 @@ test("sales autopilot blocks when internal cost breaks the starting cap", () => 
   assert.equal(result.agentRun.status, "blocked");
 });
 
+test("sales autopilot rejects string false approval flags", () => {
+  assert.throws(
+    () => recordRevenueSalesAutopilot({
+      businessName: "String False Sales Cafe",
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: "owner@stringfalsesales.example",
+      evidence: "Public listing has no website and verified owner email.",
+      painPoint: "Needs online menu and catering capture.",
+      request: "Prepare website mockup and outreach draft for a conversion-focused menu site.",
+      projectType: "website",
+      estimatedOfferUsd: 3200,
+      estimatedInternalCostUsd: 54,
+      monthlyBudgetUsd: 100,
+      cashCollectedUsd: 0,
+      recipientEmail: "owner@stringfalsesales.example",
+      businessSummary: "String False Sales Cafe has a verified public listing and no website.",
+      approvalToContact: "false",
+      approvalToSpend: "false",
+      approvalToBuild: "false",
+    } as Parameters<typeof recordRevenueSalesAutopilot>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentOutreach.length, 0);
+});
+
 test("blocks outreach draft when evidence or cost cap fails", () => {
   const result = recordRevenueOutreachDraft({
     channel: "gmail",
@@ -4314,6 +4344,40 @@ test("blocks outreach send when email provider is missing", async () => {
   assert.equal(sendResult.provider.configured, false);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
   assert.equal(sendResult.gates.some((gate) => gate.gate === "provider_configured" && gate.passed === false), true);
+});
+
+test("outreach send rejects string false approval without sending", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  let sendCount = 0;
+  setRevenueOutreachSenderForTests(async () => {
+    sendCount += 1;
+    return { id: "should_not_send" };
+  });
+  const result = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "owner@string-false-send.example",
+    contactName: "Owner",
+    businessName: "String False Send Cafe",
+    sourceUrl: "https://example.com/string-false-send-cafe",
+    businessSummary: "String False Send Cafe has public no-website evidence and a verified owner email path.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  await assert.rejects(
+    () => sendRevenueOutreachDraft({
+      draftId: result.draft.id,
+      approvalToSend: "false",
+    } as Parameters<typeof sendRevenueOutreachDraft>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(sendCount, 0);
+  assert.equal(getRevenueEngineSnapshot().recentOutreach[0].delivery.sendStatus, "not_sent");
 });
 
 test("blocks outreach send when email provider values are placeholders", async () => {
@@ -4955,6 +5019,29 @@ test("blocks revenue agent run when cost cap is broken", () => {
   assert.equal(result.snapshot.metrics.approvalQueue, 1);
 });
 
+test("revenue agent run rejects string false approval flags", () => {
+  assert.throws(
+    () => recordRevenueAgentRun({
+      businessName: "String False Agent Cafe",
+      area: "Miami",
+      niche: "coffee shop",
+      request: "Prepare a website mockup, proposal and outreach draft for a real public lead.",
+      stage: "proposal",
+      projectType: "website",
+      estimatedOfferUsd: 3200,
+      estimatedInternalCostUsd: 54,
+      monthlyBudgetUsd: 100,
+      cashCollectedUsd: 0,
+      approvalToContact: "false",
+      approvalToSpend: "false",
+      approvalToBuild: "false",
+    } as Parameters<typeof recordRevenueAgentRun>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentAgentRuns.length, 0);
+});
+
 test("main revenue agent asks questions when the client request is unclear", () => {
   const result = recordRevenueAgentRun({
     businessName: "Unclear Salon",
@@ -5043,6 +5130,26 @@ test("blocks automation opportunity when request is unclear", () => {
   assert.equal(result.opportunity.quote.clarificationGate.status, "needs_clarification");
   assert.equal(result.opportunity.qaGates.some((gate) => gate.gate === "clarity" && gate.passed === false), true);
   assert.equal(result.snapshot.metrics.approvalQueue, 1);
+});
+
+test("automation opportunity rejects string false sale gates", () => {
+  assert.throws(
+    () => recordRevenueAutomationOpportunity({
+      businessName: "String False Automation",
+      industry: "gym",
+      request: "Automate new website lead intake into Google Sheets, notify the owner, send approved follow-up, and report booked trials weekly.",
+      currentTools: "Google Sheets, Gmail",
+      monthlyBudgetUsd: 700,
+      urgency: "this_week",
+      sourceLeadId: "",
+      status: "sold",
+      clientApprovedScope: "false",
+      depositPaid: "false",
+    } as Parameters<typeof recordRevenueAutomationOpportunity>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentAutomationOpportunities.length, 0);
 });
 
 test("asks clarifying questions before quoting vague automation requests", () => {
@@ -5499,6 +5606,46 @@ test("blocks production plan when deposit or cost cap fails", () => {
   assert.equal(plan.deliveryGates.some((gate) => gate.gate === "cost" && gate.passed === false), true);
 });
 
+test("project plan rejects string false readiness gates", () => {
+  assert.throws(
+    () => buildRevenueProjectPlan({
+      clientName: "String False Plan",
+      projectType: "bundle",
+      packageName: "Website 3D Premium + Automation Sprint",
+      setupUsd: 5000,
+      monthlyRetainerUsd: 750,
+      estimatedInternalCostUsd: 54,
+      depositPaid: "false",
+      scopeApproved: "false",
+      publicDataVerified: "false",
+      includesAutomation: "false",
+      launchTargetDays: 7,
+      clientRequest: "Website plus booking follow-up automation.",
+    } as Parameters<typeof buildRevenueProjectPlan>[0]),
+    /Expected boolean/,
+  );
+});
+
+test("delivery review rejects string false QA gates", () => {
+  assert.throws(
+    () => buildDeliveryReview({
+      projectName: "String False Review",
+      projectType: "bundle",
+      setupPriceUsd: 5000,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+      clientApprovedScope: "false",
+      depositPaid: "false",
+      publicDataVerified: "false",
+      responsiveChecked: "false",
+      linksChecked: "false",
+      automationTested: "false",
+      rollbackPlanReady: "false",
+    } as Parameters<typeof buildDeliveryReview>[0]),
+    /Expected boolean/,
+  );
+});
+
 test("creates delivery workspace with subagent corrections before client handoff", () => {
   const result = recordRevenueDeliveryWorkspace({
     workspaceName: "Booked Solid delivery",
@@ -5527,6 +5674,34 @@ test("creates delivery workspace with subagent corrections before client handoff
   assert.equal(result.workspace.runbook.some((step) => step.ownerAgent === "qa-council"), true);
   assert.equal(result.snapshot.recentDeliveryWorkspaces[0].input.clientName, "Booked Solid Salon");
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "delivery_workspace"), true);
+});
+
+test("delivery workspace rejects string false readiness gates", () => {
+  assert.throws(
+    () => recordRevenueDeliveryWorkspace({
+      workspaceName: "String False delivery",
+      sourceOpportunityId: "opp_string_false",
+      clientName: "String False Client",
+      projectType: "bundle",
+      packageName: "Website 3D Premium + Automation Sprint",
+      setupUsd: 5000,
+      monthlyRetainerUsd: 750,
+      estimatedInternalCostUsd: 54,
+      depositPaid: "false",
+      scopeApproved: "false",
+      publicDataVerified: "false",
+      includesAutomation: "false",
+      launchTargetDays: 7,
+      clientRequest: "Website plus booking follow-up automation.",
+      visualQaPassed: "false",
+      technicalQaPassed: "false",
+      automationQaPassed: "false",
+      clientHandoffReady: "false",
+    } as Parameters<typeof recordRevenueDeliveryWorkspace>[0]),
+    /Expected boolean/,
+  );
+
+  assert.equal(getRevenueEngineSnapshot().recentDeliveryWorkspaces.length, 0);
 });
 
 test("revalidates delivery workspace after subagents resolve QA corrections", () => {
