@@ -2913,6 +2913,33 @@ interface ClipperTikTokMvpOperatingRefreshSummary {
     externalActionsRequired: number;
     minimumProofUrlsNeeded: number;
   };
+  proofGate?: {
+    status: "blocked_needs_real_metricool_tiktok_proof" | "ready_for_operator_review" | string;
+    requiredLanes: string[];
+    minimumProofUrlsNeeded: number;
+    proofPacketsNeeded: number;
+    fastPathAvailable: boolean;
+    nextSafeButton: string;
+    nextLockedButton: string;
+    failedPreflightChecks: string[];
+    failedVerifierChecks: string[];
+    missingRequiredReports?: string[];
+    boundaryNotReady?: string[];
+    preflightNotReady?: string;
+    blockedBy: string[];
+    paths: {
+      proofLinksJson: string;
+      proofLinksStarterJson: string;
+      pastePacket: string;
+      oneScreenGuide: string;
+      proofHandoff: string;
+      preflight: string;
+      verifier: string;
+      bridgeEvidenceCsv: string;
+    };
+    guardrails: string[];
+    nextStep: string;
+  };
   blockers: string[];
   guardrails: string[];
   nextStep: string;
@@ -19161,6 +19188,51 @@ export default function ClippersPage() {
                   <span>URLs {tiktokMvpOperatingRefresh.totals.minimumProofUrlsNeeded}</span>
                 </div>
                 <p className="mt-1">{tiktokMvpOperatingRefresh.nextStep}</p>
+                {tiktokMvpOperatingRefresh.proofGate && (
+                  <div className={cn(
+                    "mt-2 rounded-md border bg-black/30 p-2",
+                    tiktokMvpOperatingRefresh.proofGate.status === "ready_for_operator_review"
+                      ? "border-emerald-300/15 text-emerald-100/80"
+                      : "border-amber-300/15 text-amber-100/80"
+                  )} data-testid="clippers-tiktok-mvp-operating-refresh-proof-gate">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn(
+                        "border text-[10px]",
+                        tiktokMvpOperatingRefresh.proofGate.status === "ready_for_operator_review"
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>
+                        proof gate {tiktokMvpOperatingRefresh.proofGate.status}
+                      </Badge>
+                      <span>lanes {(tiktokMvpOperatingRefresh.proofGate.requiredLanes || []).join(", ") || "missing"}</span>
+                      <span>min URLs {tiktokMvpOperatingRefresh.proofGate.minimumProofUrlsNeeded}</span>
+                      <span>packets {tiktokMvpOperatingRefresh.proofGate.proofPacketsNeeded}</span>
+                      <span>safe {tiktokMvpOperatingRefresh.proofGate.nextSafeButton}</span>
+                      <span>locked {tiktokMvpOperatingRefresh.proofGate.nextLockedButton}</span>
+                    </div>
+                    <p className="mt-1">{tiktokMvpOperatingRefresh.proofGate.nextStep}</p>
+                    <div className="mt-2 grid gap-1 md:grid-cols-2">
+                      {(tiktokMvpOperatingRefresh.proofGate.blockedBy?.length
+                        ? tiktokMvpOperatingRefresh.proofGate.blockedBy
+                        : (tiktokMvpOperatingRefresh.proofGate.guardrails || []).slice(0, 2)
+                      ).slice(0, 6).map((item) => (
+                        <p key={item} className="rounded border border-amber-300/10 bg-black/20 p-2">{item}</p>
+                      ))}
+                    </div>
+                    <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                      <p>Missing reports: {tiktokMvpOperatingRefresh.proofGate.missingRequiredReports?.length || 0}</p>
+                      <p>Boundary blockers: {tiktokMvpOperatingRefresh.proofGate.boundaryNotReady?.length || 0}</p>
+                      <p>Preflight failures: {(tiktokMvpOperatingRefresh.proofGate.failedPreflightChecks || []).join(", ") || "none"}</p>
+                      <p>Verifier failures: {(tiktokMvpOperatingRefresh.proofGate.failedVerifierChecks || []).join(", ") || "none"}</p>
+                      {tiktokMvpOperatingRefresh.proofGate.preflightNotReady && (
+                        <p className="break-words">Preflight status: {tiktokMvpOperatingRefresh.proofGate.preflightNotReady}</p>
+                      )}
+                      <p className="break-all">Proof JSON: {tiktokMvpOperatingRefresh.proofGate.paths?.proofLinksJson || "missing"}</p>
+                      <p className="break-all">Paste packet: {tiktokMvpOperatingRefresh.proofGate.paths?.pastePacket || "missing"}</p>
+                      <p className="break-all">Bridge CSV: {tiktokMvpOperatingRefresh.proofGate.paths?.bridgeEvidenceCsv || "missing"}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-2 grid gap-1 md:grid-cols-3" data-testid="clippers-tiktok-mvp-operating-refresh-artifacts">
                   <div className="rounded border border-white/10 bg-black/20 p-2">
                     <p className="font-medium text-teal-100">Source Scout: {tiktokMvpOperatingRefresh.artifacts.sourceScoutStatus}</p>

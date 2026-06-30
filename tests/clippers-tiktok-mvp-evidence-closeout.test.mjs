@@ -566,6 +566,16 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /Metricool connection proof/);
   assert.match(page, /prepare-clippers-tiktok-mvp-operating-refresh-button/);
   assert.match(page, /clippers-tiktok-mvp-operating-refresh-panel/);
+  assert.match(page, /clippers-tiktok-mvp-operating-refresh-proof-gate/);
+  assert.match(page, /proofGate\.status/);
+  assert.match(page, /proofGate\.requiredLanes \|\| \[\]\)\.join/);
+  assert.match(page, /proofGate\.nextSafeButton/);
+  assert.match(page, /proofGate\.nextLockedButton/);
+  assert.match(page, /proofGate\.blockedBy/);
+  assert.match(page, /proofGate\.failedPreflightChecks/);
+  assert.match(page, /proofGate\.failedVerifierChecks/);
+  assert.match(page, /proofGate\.paths\?\.proofLinksJson/);
+  assert.match(page, /proofGate\.paths\?\.bridgeEvidenceCsv/);
   assert.match(page, /tiktokMvpOperatingRefreshMutation/);
   assert.match(operatingRefreshRoute, /runClipperTikTokMvpOperatingRefresh/);
   assert.match(operatingRefreshRoute, /readClipperTikTokMvpOperatingRefresh/);
