@@ -49,13 +49,27 @@ test("route scout keeps a map of pages and expected clicks", () => {
 
 test("route scout covers Revenue Engine money flow clicks", () => {
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine");
+  const expectedCriticalClicks = [
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Reply",
+    "Deposit",
+    "Crear workspace",
+    "Guardar workspace",
+    "Create issue",
+    "Revalidar con checks marcados",
+    "Entregar aprobado",
+    "Correr QA",
+  ];
 
   assert.ok(revenueRoute);
   assert.deepEqual(
-    ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"].every((click) => revenueRoute.expectedClicks.includes(click)),
+    expectedCriticalClicks.every((click) => revenueRoute.expectedClicks.includes(click)),
     true,
   );
   assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]);
+  assert.match(revenueRoute.notes.join(" "), /data-dependent/);
 });
 
 test("visual click scout can detect missing expected Revenue Engine controls", () => {

@@ -45,7 +45,15 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(routeSource, /createDeveloperAutopilotHandoffFromRequest/);
   assert.match(routeSource, /kind: "client_build"/);
   assert.match(routeSource, /repo_mismatch/);
+  assert.match(routeSource, /publicIssueDescription/);
+  assert.match(routeSource, /Commercial details intentionally withheld/);
+  assert.doesNotMatch(routeSource, /`Package: \$\{workspace\.input\.packageName\}`/);
+  assert.match(routeSource, /githubIssueUrl: ""/);
+  assert.match(routeSource, /prUrl: ""/);
+  assert.match(routeSource, /secondReviewStatus: "pending"/);
+  assert.match(routeSource, /approvedByRobert: false/);
   assert.match(routeSource, /updateRevenueDeliveryWorkspaceQa\(\{/);
+  assert.doesNotMatch(routeSource, /workspace\.codexBuildHandoff\.codexBrief/);
   assert.match(uiSource, /button-create-github-handoff/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);

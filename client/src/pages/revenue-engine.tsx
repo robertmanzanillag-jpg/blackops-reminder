@@ -1587,14 +1587,8 @@ export default function RevenueEnginePage() {
     linksChecked: false,
     automationTested: false,
     rollbackPlanReady: false,
-    secondReviewPassed: false,
-    appQaPassed: false,
-    deploymentApproved: false,
   });
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
-  const [reviewGithubIssueUrl, setReviewGithubIssueUrl] = useState("");
-  const [reviewPrUrl, setReviewPrUrl] = useState("");
-  const [reviewDeploymentApprovalUrl, setReviewDeploymentApprovalUrl] = useState("");
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
   const [proposalRecipientEmail, setProposalRecipientEmail] = useState("robert.manzanillag@gmail.com");
   const [proposalContactName, setProposalContactName] = useState("Robert");
@@ -2066,12 +2060,6 @@ export default function RevenueEnginePage() {
           launchTargetDays: 7,
           clientRequest: reviewNotes,
           repoFullName: reviewRepoFullName,
-          githubIssueUrl: reviewGithubIssueUrl,
-          prUrl: reviewPrUrl,
-          secondReviewStatus: reviewChecks.secondReviewPassed ? "pass" : "pending",
-          appQaStatus: reviewChecks.appQaPassed ? "pass" : "pending",
-          deploymentApprovalStatus: reviewChecks.deploymentApproved && reviewDeploymentApprovalUrl ? "approved" : "not_requested",
-          deploymentApprovalUrl: reviewDeploymentApprovalUrl,
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
@@ -2172,12 +2160,6 @@ export default function RevenueEnginePage() {
         body: JSON.stringify({
           ...buildDeliveryWorkspaceQaPayload(workspace, reviewChecks),
           repoFullName: reviewRepoFullName || workspace.input.repoFullName,
-          githubIssueUrl: reviewGithubIssueUrl || workspace.input.githubIssueUrl,
-          prUrl: reviewPrUrl || workspace.input.prUrl,
-          secondReviewStatus: reviewChecks.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
-          appQaStatus: reviewChecks.appQaPassed ? "pass" : workspace.input.appQaStatus,
-          deploymentApprovalStatus: reviewChecks.deploymentApproved && (reviewDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl) ? "approved" : workspace.input.deploymentApprovalStatus,
-          deploymentApprovalUrl: reviewDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl,
         }),
       });
       const data = await response.json();
@@ -6257,9 +6239,6 @@ export default function RevenueEnginePage() {
                           ["linksChecked", "Links/formularios OK"],
                           ["automationTested", "Automation probada"],
                           ["rollbackPlanReady", "Rollback listo"],
-                          ["secondReviewPassed", "Review externo OK"],
-                          ["appQaPassed", "App QA OK"],
-                          ["deploymentApproved", "Deploy aprobado"],
                         ].map(([key, label]) => (
                           <label
                             key={key}
@@ -6277,7 +6256,7 @@ export default function RevenueEnginePage() {
                         ))}
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-4">
+                      <div className="grid gap-3">
                         <div className="space-y-2">
                           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-repo">
                             Repo
@@ -6289,45 +6268,6 @@ export default function RevenueEnginePage() {
                             placeholder="owner/repo"
                             className="border-zinc-800 bg-black"
                             data-testid="input-review-repo"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-issue-url">
-                            Issue PR-first
-                          </label>
-                          <Input
-                            id="review-issue-url"
-                            value={reviewGithubIssueUrl}
-                            onChange={(event) => setReviewGithubIssueUrl(event.target.value)}
-                            placeholder="https://github.com/.../issues/..."
-                            className="border-zinc-800 bg-black"
-                            data-testid="input-review-issue-url"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-pr-url">
-                            PR
-                          </label>
-                          <Input
-                            id="review-pr-url"
-                            value={reviewPrUrl}
-                            onChange={(event) => setReviewPrUrl(event.target.value)}
-                            placeholder="https://github.com/.../pull/..."
-                            className="border-zinc-800 bg-black"
-                            data-testid="input-review-pr-url"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-deploy-approval-url">
-                            Deploy approval
-                          </label>
-                          <Input
-                            id="review-deploy-approval-url"
-                            value={reviewDeploymentApprovalUrl}
-                            onChange={(event) => setReviewDeploymentApprovalUrl(event.target.value)}
-                            placeholder="https://github.com/.../pull/...#issuecomment-..."
-                            className="border-zinc-800 bg-black"
-                            data-testid="input-review-deploy-approval-url"
                           />
                         </div>
                       </div>

@@ -5090,7 +5090,15 @@ export async function registerRoutes(
   app.post("/api/revenue-engine/delivery-workspaces", async (req, res) => {
     try {
       const input = revenueDeliveryWorkspaceSchema.parse(req.body);
-      res.json(recordRevenueDeliveryWorkspace(input));
+      res.json(recordRevenueDeliveryWorkspace({
+        ...input,
+        githubIssueUrl: "",
+        prUrl: "",
+        secondReviewStatus: "pending",
+        appQaStatus: "pending",
+        deploymentApprovalStatus: "not_requested",
+        deploymentApprovalUrl: "",
+      }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
@@ -5165,23 +5173,35 @@ export async function registerRoutes(
       }
 
       const branchName = input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+      const publicIssueTitle = `[Revenue Client Build] ${workspace.id}`;
+      const publicIssueDescription = [
+        "PR-first client build handoff from Revenue Engine.",
+        "",
+        `Revenue workspace: ${workspace.id}`,
+        `Project type: ${workspace.input.projectType}`,
+        `Target branch: ${branchName}`,
+        "",
+        "Use the private Revenue Engine workspace for client, pricing, deposit, mockup, and commercial context.",
+        "Do not include private client details, prices, deposits, mockup links, or non-public evidence in this public GitHub issue.",
+        "",
+        "Required gates before delivery:",
+        "- Open a pull request before merge.",
+        "- Second-agent review must pass.",
+        "- App QA gate must pass.",
+        "- Replit/custom deploy requires explicit Robert approval.",
+        "- Include tests/checks run, QA summary, risks, and rollback notes in the PR.",
+      ].join("\n");
       const developerHandoff = await createDeveloperAutopilotHandoffFromRequest(userId, {
         source: "manual",
         repoFullName,
-        appName: workspace.input.clientName,
+        appName: "Revenue client build",
         kind: "client_build",
-        title: workspace.codexBuildHandoff.title,
-        description: [
-          workspace.codexBuildHandoff.codexBrief,
-          "",
-          `Target branch: ${branchName}`,
-          "Create the GitHub issue only. Do not deploy, merge, or publish a client preview without Robert approval.",
-        ].join("\n"),
+        title: publicIssueTitle,
+        description: publicIssueDescription,
         severity: "medium",
         evidence: [
-          workspace.input.mockupUrl ? `Mockup: ${workspace.input.mockupUrl}` : "",
           `Revenue workspace: ${workspace.id}`,
-          `Package: ${workspace.input.packageName}`,
+          "Commercial details intentionally withheld from GitHub issue.",
         ].filter(Boolean),
       });
 
@@ -5192,6 +5212,8 @@ export async function registerRoutes(
           branchName,
           githubIssueUrl: developerHandoff.issueUrl,
           notes: `GitHub handoff issue creado desde Revenue Engine: ${developerHandoff.issueUrl}`,
+        }, {
+          allowGithubIssueEvidence: true,
         });
 
         return res.status(201).json({
@@ -5235,7 +5257,10 @@ export async function registerRoutes(
   app.post("/api/revenue-engine/delivery-workspaces/deliver", async (req, res) => {
     try {
       const input = revenueDeliveryWorkspaceDeliverSchema.parse(req.body);
-      res.json(deliverRevenueDeliveryWorkspace(input));
+      res.json(deliverRevenueDeliveryWorkspace({
+        ...input,
+        approvedByRobert: false,
+      }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });

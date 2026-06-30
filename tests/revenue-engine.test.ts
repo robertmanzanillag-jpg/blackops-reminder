@@ -1542,6 +1542,9 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/handoff-cafe/pull/2#issuecomment-approval",
     notes: "PR, second review, App QA and Robert deploy approval verified.",
+  }, {
+    allowGithubIssueEvidence: true,
+    allowReleaseGateEvidence: true,
   });
 
   assert.equal(qaReady.status, "ready");
@@ -1893,6 +1896,8 @@ test("delivery workspace records GitHub handoff issue without bypassing PR-first
     branchName: parsed.branchName,
     githubIssueUrl: "https://github.com/robert/handoff-cafe/issues/41",
     notes: "GitHub handoff issue creado desde Revenue Engine.",
+  }, {
+    allowGithubIssueEvidence: true,
   });
 
   assert.equal(updated.workspace?.input.githubIssueUrl, "https://github.com/robert/handoff-cafe/issues/41");
@@ -1901,6 +1906,48 @@ test("delivery workspace records GitHub handoff issue without bypassing PR-first
   assert.equal(updated.workspace?.codexBuildHandoff.status, "needs_pr");
   assert.equal(updated.workspace?.approvalSummary.canLaunch, false);
   assert.equal(updated.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
+});
+
+test("public delivery workspace QA update cannot assert PR release gates", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Untrusted release gate",
+    clientName: "Untrusted Gate Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const untrusted = updateRevenueDeliveryWorkspaceQa({
+    workspaceId: created.workspace.id,
+    githubIssueUrl: "https://github.com/robert/untrusted-gate/issues/1",
+    prUrl: "https://github.com/robert/untrusted-gate/pull/2",
+    secondReviewStatus: "pass",
+    appQaStatus: "pass",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/untrusted-gate/pull/2#issuecomment-approval",
+    notes: "Browser tried to assert release gates.",
+  });
+
+  assert.equal(untrusted.workspace?.input.githubIssueUrl || "", "");
+  assert.equal(untrusted.workspace?.input.prUrl || "", "");
+  assert.equal(untrusted.workspace?.input.secondReviewStatus || "pending", "pending");
+  assert.equal(untrusted.workspace?.input.appQaStatus || "pending", "pending");
+  assert.equal(untrusted.workspace?.input.deploymentApprovalStatus || "not_requested", "not_requested");
+  assert.equal(untrusted.workspace?.approvalSummary.canLaunch, false);
+  assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("GitHub handoff issue PR-first"), true);
+  assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("pull request de build"), true);
 });
 
 test("money sprint parses pasted lead batches with partial failures", () => {
@@ -2873,7 +2920,7 @@ test("automation agent command blocks sale lifecycle without scope and deposit",
 });
 
 test("automation agent command records sale and creates delivery workspace when lifecycle gates pass", () => {
-  const result = runRevenueAutomationAgentCommand({
+  const commandInput = {
     businessName: "Lifecycle Gym",
     industry: "gym",
     request: "Automate new website trial signup into Google Sheets, notify the owner, send an approved trial follow-up email, and report booked trials weekly.",
@@ -2894,7 +2941,8 @@ test("automation agent command records sale and creates delivery workspace when 
     automationQaPassed: false,
     clientHandoffReady: false,
     launchTargetDays: 7,
-  });
+  } as const;
+  const result = runRevenueAutomationAgentCommand(commandInput);
 
   assert.equal(result.status, "delivery_workspace_created");
   assert.equal(result.closeResult?.status, "recorded");
@@ -2905,6 +2953,13 @@ test("automation agent command records sale and creates delivery workspace when 
   assert.equal(result.workspaceResult?.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
   assert.equal(result.snapshot.metrics.automationsSold, 1);
   assert.equal(result.snapshot.metrics.cashCollectedUsd, 2500);
+
+  const retry = runRevenueAutomationAgentCommand(commandInput);
+  assert.equal(retry.status, "already_recorded");
+  assert.equal(retry.closeResult?.status, "already_recorded");
+  assert.equal(retry.snapshot.metrics.automationsSold, 1);
+  assert.equal(retry.snapshot.metrics.cashCollectedUsd, 2500);
+  assert.equal(retry.snapshot.recentLedger.filter((entry) => entry.kind === "automation_sale").length, 1);
 });
 
 test("blocks automation intake conversion until clarification is complete", () => {
@@ -3280,6 +3335,8 @@ test("blocks delivery handoff when workspace still has QA corrections", () => {
   const delivered = deliverRevenueDeliveryWorkspace({
     workspaceId: created.workspace.id,
     approvedByRobert: true,
+  }, {
+    allowRobertApprovalEvidence: true,
   });
 
   assert.equal(delivered.status, "blocked");
@@ -3325,6 +3382,8 @@ test("delivers ready workspace and marks linked automation opportunity delivered
     workspaceId: created.workspace.id,
     approvedByRobert: true,
     notes: "Client handoff complete.",
+  }, {
+    allowRobertApprovalEvidence: true,
   });
 
   assert.equal(delivered.status, "delivered");
@@ -3332,6 +3391,37 @@ test("delivers ready workspace and marks linked automation opportunity delivered
   assert.equal(delivered.opportunity?.status, "delivered");
   assert.equal(delivered.workspace?.learningNote.includes("entregado con QA aprobado"), true);
   assert.equal(delivered.snapshot.recentAutomationOpportunities[0].status, "delivered");
+});
+
+test("blocks ready delivery when approval is only client-asserted", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Client asserted delivery",
+    clientName: "Client Asserted Gym",
+    projectType: "automation",
+    packageName: "Automation Sprint",
+    setupUsd: 3200,
+    monthlyRetainerUsd: 650,
+    estimatedInternalCostUsd: 45,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Automate lead intake and owner follow-up.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const delivered = deliverRevenueDeliveryWorkspace({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+  });
+
+  assert.equal(delivered.status, "blocked");
+  assert.match(delivered.reason, /gate confiable/);
+  assert.equal(delivered.workspace?.learningNote.includes("entregado con QA aprobado"), false);
 });
 
 test("blocks delivery improvement review until workspace is ready", () => {
@@ -3504,6 +3594,8 @@ test("legacy website delivery workspaces reload into PR-first blocked state", ()
   const delivered = deliverRevenueDeliveryWorkspace({
     workspaceId: "legacy-website-workspace",
     approvedByRobert: true,
+  }, {
+    allowRobertApprovalEvidence: true,
   });
 
   assert.equal(delivered.status, "blocked");

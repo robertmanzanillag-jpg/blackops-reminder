@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hasRealValue } from "./ceo-doctor-cli";
 
@@ -298,6 +299,11 @@ export const revenueDeliveryWorkspaceUpdateSchema = z.object({
 
 export type RevenueDeliveryWorkspaceUpdateInput = z.infer<typeof revenueDeliveryWorkspaceUpdateSchema>;
 
+type RevenueDeliveryWorkspaceUpdateOptions = {
+  allowGithubIssueEvidence?: boolean;
+  allowReleaseGateEvidence?: boolean;
+};
+
 export const revenueDeliveryWorkspaceGithubHandoffSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
   repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
@@ -313,6 +319,10 @@ export const revenueDeliveryWorkspaceDeliverSchema = z.object({
 });
 
 export type RevenueDeliveryWorkspaceDeliverInput = z.infer<typeof revenueDeliveryWorkspaceDeliverSchema>;
+
+type RevenueDeliveryWorkspaceDeliverOptions = {
+  allowRobertApprovalEvidence?: boolean;
+};
 
 export const revenueDeliveryWorkspaceImprovementReviewSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
@@ -2741,6 +2751,32 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
     };
   }
 
+  const automationSaleFingerprint = buildAutomationSaleFingerprint(parsed);
+  if ((parsed.lifecycleTarget === "sale" || parsed.lifecycleTarget === "delivery") && parsed.clientApprovedScope && (parsed.depositPaid || (parsed.cashCollectedUsd || 0) > 0)) {
+    loadRevenueLedger();
+    const existingSale = findRevenueLedgerEntryByExactNoteToken(automationSaleFingerprint);
+    if (existingSale) {
+      return {
+        status: "already_recorded" as const,
+        reason: "Esta venta de automatizacion ya fue registrada en ledger; no se vuelve a contar cash.",
+        intake,
+        quote: effectiveQuote,
+        opportunity: null,
+        closeResult: {
+          status: "already_recorded" as const,
+          reason: "Venta deduplicada por huella estable del automation agent command.",
+          opportunity: null,
+          entry: existingSale,
+          snapshot: getRevenueEngineSnapshot(),
+        },
+        workspaceResult: null,
+        blockedUntilAnswered: [],
+        nextActions: ["Usar la venta/workspace existente.", "No registrar otro cobro para el mismo comando.", "Continuar con QA o delivery desde el workspace existente."],
+        snapshot: getRevenueEngineSnapshot(),
+      };
+    }
+  }
+
   const opportunityResult = recordRevenueAutomationOpportunity({
     businessName: intake.businessName,
     industry: intake.industry,
@@ -2809,7 +2845,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
     opportunityId: opportunityResult.opportunity.id,
     cashCollectedUsd: parsed.cashCollectedUsd,
     markScopeApproved: parsed.clientApprovedScope,
-    notes: "Cierre ejecutado por automation agent command con guardrails.",
+    notes: `${automationSaleFingerprint} | Cierre ejecutado por automation agent command con guardrails.`,
   });
 
   if (closeResult.status !== "recorded") {
@@ -5842,6 +5878,37 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function normalizeRevenueFingerprintPart(value: string | number | boolean | undefined | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
+}
+
+function buildAutomationSaleFingerprint(input: Pick<
+  RevenueAutomationAgentCommandInput,
+  "businessName" | "industry" | "request" | "currentTools" | "monthlyBudgetUsd" | "urgency" | "knownAnswers"
+>) {
+  const source = [
+    "automation-sale",
+    normalizeRevenueFingerprintPart(input.businessName),
+    normalizeRevenueFingerprintPart(input.industry),
+    normalizeRevenueFingerprintPart(input.request),
+    normalizeRevenueFingerprintPart(input.currentTools),
+    normalizeRevenueFingerprintPart(input.monthlyBudgetUsd),
+    normalizeRevenueFingerprintPart(input.urgency),
+    normalizeRevenueFingerprintPart(input.knownAnswers),
+  ].join("|").slice(0, 900);
+  return `[automation-agent-sale:${createHash("sha256").update(source).digest("hex").slice(0, 20)}]`;
+}
+
+function findRevenueLedgerEntryByExactNoteToken(token: string) {
+  return revenueLedger.find((entry) =>
+    entry.notes.split("|").map((part) => part.trim()).includes(token)
+  );
+}
+
 function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const isWebsiteBuild = input.projectType === "website" || input.projectType === "bundle";
   const repoFullName = (input.repoFullName || "").trim();
@@ -6367,7 +6434,10 @@ export function recordRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceIn
   };
 }
 
-export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspaceUpdateInput) {
+export function updateRevenueDeliveryWorkspaceQa(
+  input: RevenueDeliveryWorkspaceUpdateInput,
+  options: RevenueDeliveryWorkspaceUpdateOptions = {},
+) {
   loadRevenueDeliveryWorkspaces();
   const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
   const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
@@ -6382,6 +6452,8 @@ export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspace
   }
 
   const existing = revenueDeliveryWorkspaces[workspaceIndex];
+  const allowGithubIssueEvidence = Boolean(options.allowGithubIssueEvidence);
+  const allowReleaseGateEvidence = Boolean(options.allowReleaseGateEvidence);
   const nextInput: RevenueDeliveryWorkspaceInput = {
     ...existing.input,
     publicDataVerified: parsed.publicDataVerified ?? existing.input.publicDataVerified,
@@ -6391,12 +6463,12 @@ export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspace
     clientHandoffReady: parsed.clientHandoffReady ?? existing.input.clientHandoffReady,
     repoFullName: parsed.repoFullName ?? existing.input.repoFullName,
     branchName: parsed.branchName ?? existing.input.branchName,
-    githubIssueUrl: parsed.githubIssueUrl ?? existing.input.githubIssueUrl,
-    prUrl: parsed.prUrl ?? existing.input.prUrl,
-    secondReviewStatus: parsed.secondReviewStatus ?? existing.input.secondReviewStatus,
-    appQaStatus: parsed.appQaStatus ?? existing.input.appQaStatus,
-    deploymentApprovalStatus: parsed.deploymentApprovalStatus ?? existing.input.deploymentApprovalStatus,
-    deploymentApprovalUrl: parsed.deploymentApprovalUrl ?? existing.input.deploymentApprovalUrl,
+    githubIssueUrl: allowGithubIssueEvidence ? parsed.githubIssueUrl ?? existing.input.githubIssueUrl : existing.input.githubIssueUrl,
+    prUrl: allowReleaseGateEvidence ? parsed.prUrl ?? existing.input.prUrl : existing.input.prUrl,
+    secondReviewStatus: allowReleaseGateEvidence ? parsed.secondReviewStatus ?? existing.input.secondReviewStatus : existing.input.secondReviewStatus,
+    appQaStatus: allowReleaseGateEvidence ? parsed.appQaStatus ?? existing.input.appQaStatus : existing.input.appQaStatus,
+    deploymentApprovalStatus: allowReleaseGateEvidence ? parsed.deploymentApprovalStatus ?? existing.input.deploymentApprovalStatus : existing.input.deploymentApprovalStatus,
+    deploymentApprovalUrl: allowReleaseGateEvidence ? parsed.deploymentApprovalUrl ?? existing.input.deploymentApprovalUrl : existing.input.deploymentApprovalUrl,
     clientRequest: parsed.notes
       ? `${existing.input.clientRequest}\n\nQA update: ${parsed.notes}`.slice(0, 1200)
       : existing.input.clientRequest,
@@ -6434,7 +6506,10 @@ export function getRevenueDeliveryWorkspaceById(workspaceId: string) {
   };
 }
 
-export function deliverRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceDeliverInput) {
+export function deliverRevenueDeliveryWorkspace(
+  input: RevenueDeliveryWorkspaceDeliverInput,
+  options: RevenueDeliveryWorkspaceDeliverOptions = {},
+) {
   loadRevenueDeliveryWorkspaces();
   loadRevenueAutomationOpportunities();
   const parsed = revenueDeliveryWorkspaceDeliverSchema.parse(input);
@@ -6452,8 +6527,9 @@ export function deliverRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceD
   }
 
   const workspace = revenueDeliveryWorkspaces[workspaceIndex];
+  const approvedByTrustedGate = Boolean(options.allowRobertApprovalEvidence && parsed.approvedByRobert);
   const missing = [
-    !parsed.approvedByRobert && "aprobacion final de Robert",
+    !approvedByTrustedGate && "aprobacion final de Robert desde gate confiable",
     workspace.status !== "ready_to_deliver" && `workspace no esta listo: ${workspace.status}`,
     !workspace.approvalSummary.canLaunch && "launch/handoff bloqueado",
     ...workspace.approvalSummary.requiredBeforeClient,
