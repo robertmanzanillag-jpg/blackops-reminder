@@ -100,7 +100,12 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /button-create-website-opportunity-/);
   assert.match(uiSource, /button-approve-website-sales-draft-/);
   assert.match(uiSource, /item\.draftStatus !== "approved"/);
+  assert.match(uiSource, /checkbox-website-opportunity-scope-/);
+  assert.match(uiSource, /scopeApproved: scopeApprovedForClose/);
   assert.match(uiSource, /button-close-website-opportunity-/);
+  assert.match(uiSource, /depositPaid: item\.cashCollectedUsd >= item\.requiredDepositUsd/);
+  assert.match(uiSource, /scopeApproved: true/);
+  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff\}/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });

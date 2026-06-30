@@ -1809,6 +1809,7 @@ export default function RevenueEnginePage() {
     automationTested: false,
     rollbackPlanReady: false,
   });
+  const [websiteOpportunityScopeApprovals, setWebsiteOpportunityScopeApprovals] = useState<Record<string, boolean>>({});
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releasePrUrl, setReleasePrUrl] = useState("");
   const [releaseSecondReviewEvidenceUrl, setReleaseSecondReviewEvidenceUrl] = useState("");
@@ -2393,8 +2394,8 @@ export default function RevenueEnginePage() {
           websiteOpportunityId: item.opportunityId,
           mockupUrl: item.mockupUrl,
           projectType: item.projectType,
-          depositPaid: reviewChecks.depositPaid,
-          scopeApproved: reviewChecks.clientApprovedScope,
+          depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
+          scopeApproved: true,
           cashCollectedUsd: item.cashCollectedUsd,
           publicDataVerified: reviewChecks.publicDataVerified,
           visualQaPassed: reviewChecks.responsiveChecked,
@@ -2435,15 +2436,19 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const websiteOpportunityCloseMutation = useMutation<WebsiteOpportunityCloseResult, Error, RevenueSnapshot["recentWebsiteOpportunities"][number]>({
-    mutationFn: async (opportunity) => {
+  const websiteOpportunityCloseMutation = useMutation<
+    WebsiteOpportunityCloseResult,
+    Error,
+    { opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number]; scopeApproved: boolean }
+  >({
+    mutationFn: async ({ opportunity, scopeApproved }) => {
       const response = await fetch("/api/revenue-engine/website-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunityId: opportunity.id,
           depositPaid: opportunity.depositPaid,
-          scopeApproved: reviewChecks.clientApprovedScope,
+          scopeApproved,
           cashCollectedUsd: opportunity.cashCollectedUsd,
           paymentConfirmation: opportunity.paymentConfirmation || "Using recorded manual deposit outcome.",
           notes: "Closed from Revenue Engine website opportunity UI.",
@@ -2453,7 +2458,14 @@ export default function RevenueEnginePage() {
       if (!response.ok) throw new Error(data.error || "No se pudo cerrar oportunidad website");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.opportunity?.id) {
+        setWebsiteOpportunityScopeApprovals((current) => {
+          const next = { ...current };
+          delete next[data.opportunity!.id];
+          return next;
+        });
+      }
       refetchSnapshot();
     },
   });
@@ -5375,47 +5387,73 @@ export default function RevenueEnginePage() {
                     </div>
                   ) : (
                     <div className="grid gap-3 xl:grid-cols-2">
-                      {(snapshot?.recentWebsiteOpportunities || []).slice(0, 6).map((opportunity) => (
-                        <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-black p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-white">{opportunity.businessName}</p>
-                              <p className="mt-1 text-xs text-zinc-500">
-                                {opportunity.projectType} · deposito {money.format(opportunity.requiredDepositUsd)} · cash {money.format(opportunity.cashCollectedUsd)}
-                              </p>
+                      {(snapshot?.recentWebsiteOpportunities || []).slice(0, 6).map((opportunity) => {
+                        const scopeApprovedForClose = opportunity.scopeApproved || Boolean(websiteOpportunityScopeApprovals[opportunity.id]);
+                        return (
+                          <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-white">{opportunity.businessName}</p>
+                                <p className="mt-1 text-xs text-zinc-500">
+                                  {opportunity.projectType} · deposito {money.format(opportunity.requiredDepositUsd)} · cash {money.format(opportunity.cashCollectedUsd)}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className={cn(statusTone(opportunity.status), "shrink-0")}>{opportunity.status}</Badge>
                             </div>
-                            <Badge variant="outline" className={cn(statusTone(opportunity.status), "shrink-0")}>{opportunity.status}</Badge>
+                            <p className="mt-3 text-sm leading-6 text-zinc-400">{opportunity.nextAction}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Badge variant="outline" className={cn(opportunity.depositPaid ? statusTone("ready") : statusTone("blocked"))}>
+                                {opportunity.depositPaid ? "deposito registrado" : "falta deposito"}
+                              </Badge>
+                              <label className="flex h-8 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs text-zinc-300">
+                                <input
+                                  type="checkbox"
+                                  checked={scopeApprovedForClose}
+                                  disabled={opportunity.status === "sold"}
+                                  onChange={() => {
+                                    setWebsiteOpportunityScopeApprovals((current) => ({
+                                      ...current,
+                                      [opportunity.id]: !scopeApprovedForClose,
+                                    }));
+                                  }}
+                                  data-testid={`checkbox-website-opportunity-scope-${opportunity.id}`}
+                                />
+                                Scope aprobado
+                              </label>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={
+                                  websiteOpportunityCloseMutation.isPending
+                                  || opportunity.status === "sold"
+                                  || !opportunity.depositPaid
+                                  || opportunity.cashCollectedUsd < opportunity.requiredDepositUsd
+                                  || !scopeApprovedForClose
+                                }
+                                onClick={() => websiteOpportunityCloseMutation.mutate({
+                                  opportunity,
+                                  scopeApproved: scopeApprovedForClose,
+                                })}
+                                className="bg-emerald-600 text-white hover:bg-emerald-500"
+                                data-testid={`button-close-website-opportunity-${opportunity.id}`}
+                              >
+                                {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                {opportunity.depositPaid && scopeApprovedForClose ? "Marcar vendida" : "Deposito manual + scope"}
+                              </Button>
+                              {opportunity.mockupUrl && (
+                                <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Mockup
+                                  </Button>
+                                </a>
+                              )}
+                            </div>
                           </div>
-                          <p className="mt-3 text-sm leading-6 text-zinc-400">{opportunity.nextAction}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={
-                                websiteOpportunityCloseMutation.isPending
-                                || opportunity.status === "sold"
-                                || !opportunity.depositPaid
-                                || opportunity.cashCollectedUsd < opportunity.requiredDepositUsd
-                                || !reviewChecks.clientApprovedScope
-                              }
-                              onClick={() => websiteOpportunityCloseMutation.mutate(opportunity)}
-                              className="bg-emerald-600 text-white hover:bg-emerald-500"
-                              data-testid={`button-close-website-opportunity-${opportunity.id}`}
-                            >
-                              {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                              {opportunity.depositPaid && reviewChecks.clientApprovedScope ? "Marcar vendida" : "Deposito manual + scope"}
-                            </Button>
-                            {opportunity.mockupUrl && (
-                              <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
-                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
-                                  <ExternalLink className="mr-2 h-4 w-4" />
-                                  Mockup
-                                </Button>
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   {websiteOpportunityMutation.data && (
@@ -7552,49 +7590,60 @@ export default function RevenueEnginePage() {
                             Sin oportunidades website vendidas listas para workspace.
                           </div>
                         ) : (
-                          snapshot?.websiteDeliveryHandoffQueue.items.map((item) => (
-                            <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
-                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                <div>
-                                  <p className="text-sm font-medium text-white">{item.businessName}</p>
-                                  <p className="mt-1 text-xs text-zinc-500">
-                                    {item.projectType} · {item.leadStatus} · cash {money.format(item.cashCollectedUsd)} / deposito {money.format(item.requiredDepositUsd)}
-                                  </p>
+                          snapshot?.websiteDeliveryHandoffQueue.items.map((item) => {
+                            const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
+                            return (
+                              <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{item.businessName}</p>
+                                    <p className="mt-1 text-xs text-zinc-500">
+                                      {item.projectType} · {item.leadStatus} · cash {money.format(item.cashCollectedUsd)} / deposito {money.format(item.requiredDepositUsd)}
+                                    </p>
+                                  </div>
+                                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                                    vendida
+                                  </Badge>
                                 </div>
-                                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
-                                  vendida
-                                </Badge>
-                              </div>
-                              <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <a href={item.mockupUrl} target="_blank" rel="noreferrer">
-                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
-                                    <ExternalLink className="mr-2 h-4 w-4" />
-                                    Mockup
-                                  </Button>
-                                </a>
-                                {item.sourceUrl && (
-                                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Badge variant="outline" className={cn(depositCoversHandoff ? statusTone("ready") : statusTone("blocked"))}>
+                                    {depositCoversHandoff ? "deposito cubierto" : "deposito incompleto"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(statusTone("ready"))}>
+                                    scope vendido
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <a href={item.mockupUrl} target="_blank" rel="noreferrer">
                                     <Button type="button" size="sm" variant="outline" className="border-zinc-700">
                                       <ExternalLink className="mr-2 h-4 w-4" />
-                                      Fuente
+                                      Mockup
                                     </Button>
                                   </a>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={websiteDeliveryHandoffMutation.isPending || !reviewChecks.depositPaid || !reviewChecks.clientApprovedScope}
-                                  onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
-                                  className="bg-sky-600 text-white hover:bg-sky-500"
-                                  data-testid={`button-create-website-workspace-${item.leadId}`}
-                                >
-                                  {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                  {reviewChecks.depositPaid && reviewChecks.clientApprovedScope ? "Crear workspace" : "Deposito + scope"}
-                                </Button>
+                                  {item.sourceUrl && (
+                                    <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Fuente
+                                      </Button>
+                                    </a>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff}
+                                    onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
+                                    className="bg-sky-600 text-white hover:bg-sky-500"
+                                    data-testid={`button-create-website-workspace-${item.leadId}`}
+                                  >
+                                    {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                                    {depositCoversHandoff ? "Crear workspace" : "Deposito incompleto"}
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                         {(snapshot?.websiteDeliveryHandoffQueue.blocked || []).length > 0 && (
                           <div className="space-y-2">
