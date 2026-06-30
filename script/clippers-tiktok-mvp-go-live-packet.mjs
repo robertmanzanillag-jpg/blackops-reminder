@@ -10,6 +10,7 @@ const trackerPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.json");
 const syncPath = path.join(reportsDir, "clippers-tiktok-batch-evidence-sync.json");
 const evidenceChecklistPath = path.join(reportsDir, "clippers-tiktok-evidence-checklist.json");
 const goalAuditPath = path.join(reportsDir, "clippers-goal-completion-audit.json");
+const operatingRefreshPath = path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json");
 const metricool100HandoffPath = path.join(rootDir, "scheduled", "metricool-100-operator-handoff.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-mvp-go-live-packet.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-mvp-go-live-packet.md");
@@ -76,7 +77,79 @@ function renderCsv(summary) {
   ].join("\n") + "\n";
 }
 
+function proofGateFor(report = {}) {
+  const gate = report?.proofGate || {};
+  const controlFieldsPresent = [
+    "status",
+    "requiredLanes",
+    "minimumProofUrlsNeeded",
+    "failedPreflightChecks",
+    "failedVerifierChecks",
+    "missingRequiredReports",
+    "boundaryNotReady",
+    "blockedBy",
+    "preflightNotReady",
+  ].every((field) => Object.hasOwn(gate, field))
+    && Array.isArray(gate.requiredLanes)
+    && typeof gate.minimumProofUrlsNeeded === "number"
+    && Array.isArray(gate.failedPreflightChecks)
+    && Array.isArray(gate.failedVerifierChecks)
+    && Array.isArray(gate.missingRequiredReports)
+    && Array.isArray(gate.boundaryNotReady)
+    && Array.isArray(gate.blockedBy);
+  return {
+    status: gate.status || "missing",
+    controlFieldsPresent,
+    requiredLanes: Array.isArray(gate.requiredLanes) ? gate.requiredLanes : [],
+    minimumProofUrlsNeeded: Number(gate.minimumProofUrlsNeeded || 0),
+    proofPacketsNeeded: Number(gate.proofPacketsNeeded || 0),
+    fastPathAvailable: Boolean(gate.fastPathAvailable),
+    nextSafeButton: gate.nextSafeButton || "",
+    nextLockedButton: gate.nextLockedButton || "",
+    failedPreflightChecks: Array.isArray(gate.failedPreflightChecks) ? gate.failedPreflightChecks : [],
+    failedVerifierChecks: Array.isArray(gate.failedVerifierChecks) ? gate.failedVerifierChecks : [],
+    missingRequiredReports: Array.isArray(gate.missingRequiredReports) ? gate.missingRequiredReports : [],
+    boundaryNotReady: Array.isArray(gate.boundaryNotReady) ? gate.boundaryNotReady : [],
+    blockedBy: Array.isArray(gate.blockedBy) ? gate.blockedBy : [],
+    preflightNotReady: gate.preflightNotReady || "",
+    paths: gate.paths || {},
+    guardrails: Array.isArray(gate.guardrails) ? gate.guardrails : [],
+    nextStep: gate.nextStep || report?.nextStep || "",
+  };
+}
+
+function proofGateReady(proofGate = {}) {
+  return proofGate.status === "ready_for_operator_review"
+    && proofGate.controlFieldsPresent === true
+    && proofGate.requiredLanes.includes("sports-daily:tiktok")
+    && proofGate.requiredLanes.includes("meme-radar:tiktok")
+    && proofGate.minimumProofUrlsNeeded === 0
+    && proofGate.failedPreflightChecks.length === 0
+    && proofGate.failedVerifierChecks.length === 0
+    && proofGate.missingRequiredReports.length === 0
+    && proofGate.boundaryNotReady.length === 0
+    && proofGate.blockedBy.length === 0
+    && !proofGate.preflightNotReady;
+}
+
 function markdown(summary) {
+  const proofGateLines = [
+    "## Proof Gate",
+    "",
+    `- Status: ${summary.proofGate.status}`,
+    `- Control fields present: ${summary.proofGate.controlFieldsPresent}`,
+    `- Required lanes: ${summary.proofGate.requiredLanes.join(", ") || "missing"}`,
+    `- Minimum proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}`,
+    `- Fast path available: ${summary.proofGate.fastPathAvailable}`,
+    `- Next safe button: ${summary.proofGate.nextSafeButton || "missing"}`,
+    `- Next locked button: ${summary.proofGate.nextLockedButton || "missing"}`,
+    `- One-screen guide: ${summary.proofGate.paths?.oneScreenGuide || "missing"}`,
+    `- Proof JSON: ${summary.proofGate.paths?.proofLinksJson || "missing"}`,
+    `- Paste packet: ${summary.proofGate.paths?.pastePacket || "missing"}`,
+    `- Next step: ${summary.proofGate.nextStep || "missing"}`,
+    ...(summary.proofGate.blockedBy || []).map((blocker) => `- Blocker: ${blocker}`),
+    "",
+  ];
   return [
     "# Clippers TikTok MVP Go-Live Packet",
     "",
@@ -95,6 +168,7 @@ function markdown(summary) {
     `- Deferred lanes: ${summary.operatingMode.deferredLanes.join(", ") || "none"}`,
     `- Batch platform check: ${summary.operatingMode.batchPlatformCheck}`,
     "",
+    ...proofGateLines,
     "## Totals",
     "",
     `- Account lanes ready: ${summary.totals.accountReady}/${summary.totals.accountRows}`,
@@ -146,6 +220,13 @@ function markdown(summary) {
       "```text",
       summary.nextRow.operatorCopyText || summary.nextRow.operatorStep,
       "```",
+    ].join("\n") : summary.blockedNextRow ? [
+      `- Blocked queue item: ${summary.blockedNextRow.metricoolQueueItemId}`,
+      `- Account: ${summary.blockedNextRow.accountName || summary.blockedNextRow.accountId}`,
+      `- Brand: ${summary.blockedNextRow.metricoolBrandName}`,
+      `- Source: ${summary.blockedNextRow.sourceFileName}`,
+      `- Blocker: ${summary.blockedNextRow.blocker}`,
+      `- Next action: ${summary.blockedNextRow.nextAction}`,
     ].join("\n") : "No active next row.",
     "",
     "## Guardrails",
@@ -179,18 +260,22 @@ async function main() {
   if (!readOnlyMode) {
     await mkdir(reportsDir, { recursive: true });
     prerequisites.splice(1, 0, ["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"]);
+    prerequisites.push(["--import", "tsx", "script/clippers-tiktok-mvp-operating-refresh.ts"]);
     prerequisites.push("script/clippers-metricool-operator-handoff.mjs");
     prerequisites.forEach(runPrerequisite);
   }
-  const [accountCloseout, runbook, tracker, sync, evidenceChecklist, goalAudit, metricool100Handoff] = await Promise.all([
+  const [accountCloseout, runbook, tracker, sync, evidenceChecklist, goalAudit, operatingRefresh, metricool100Handoff] = await Promise.all([
     readJson(accountCloseoutPath),
     readJson(runbookPath),
     readJson(trackerPath),
     readJson(syncPath),
     readJson(evidenceChecklistPath),
     readJson(goalAuditPath),
+    readJsonOrNull(operatingRefreshPath),
     readJsonOrNull(metricool100HandoffPath),
   ]);
+  const proofGate = proofGateFor(operatingRefresh || {});
+  const operatingProofGateReady = proofGateReady(proofGate);
   const accountReady = Number(accountCloseout.totals?.ready || 0);
   const accountRows = Number(accountCloseout.totals?.rows || 0);
   const trackerTotals = tracker.totals || {};
@@ -224,12 +309,24 @@ async function main() {
     && accountReady === accountRows
     && accountRows > 0
     && batchOnlyUsesActiveTikTokAccounts
+    && operatingProofGateReady
     && Number(trackerTotals.readyToImport || 0) === 0
     && Number(syncConsistency.conflicts || 0) === 0;
   const nextRow = (runbook.rows || []).find((row) => row.state === "not_started") || (runbook.rows || [])[0] || null;
+  const blockedNextRow = !operatingProofGateReady && nextRow ? {
+    rank: nextRow.rank,
+    metricoolQueueItemId: nextRow.metricoolQueueItemId,
+    accountId: nextRow.accountId,
+    accountName: nextRow.accountName,
+    metricoolBrandName: nextRow.metricoolBrandName,
+    scheduledFor: nextRow.scheduledFor,
+    sourceFileName: nextRow.sourceFileName,
+    blocker: "tiktok_metricool_proof_gate_not_ready",
+    nextAction: proofGate.nextStep || "Fill SPORT and memes proof links before opening Metricool.",
+  } : null;
   const metricool100SourceReadyBatches = (metricool100Handoff?.batches || []).filter((batch) => batch.status === "ready_for_metricool_review").length;
   const metricool100SourceBlockedBatches = (metricool100Handoff?.batches || []).filter((batch) => batch.status === "blocked_source_verification").length;
-  const metricool100OperatorGateOpen = readyForOperator;
+  const metricool100OperatorGateOpen = readyForOperator && operatingProofGateReady;
   const metricool100Ready = metricool100OperatorGateOpen
     && metricool100Handoff?.status === "ready_for_operator"
     && metricool100Handoff?.operatorConsole?.status === "ready_for_metricool_review"
@@ -261,6 +358,16 @@ async function main() {
   };
   const operatorSteps = [
     {
+      id: "proof-gate",
+      status: proofGate.status,
+      owner: "app",
+      action: operatingProofGateReady
+        ? "Use the approved SPORT and memes TikTok Metricool proof gate for operator review."
+        : proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence before processing the batch.",
+      proof: proofGate.paths?.oneScreenGuide || operatingRefreshPath,
+      blocker: operatingProofGateReady ? "" : "tiktok_metricool_proof_gate_not_ready",
+    },
+    {
       id: "account-closeout",
       status: accountCloseout.status,
       owner: "app",
@@ -274,11 +381,15 @@ async function main() {
       id: "metricool-batch",
       status: runbook.status,
       owner: "operator",
-      action: nextRow
+      action: !operatingProofGateReady
+        ? "Do not open Metricool scheduling until the TikTok Metricool proof gate is ready."
+        : nextRow
         ? `Open Metricool and process row #${nextRow.rank} (${nextRow.metricoolQueueItemId}).`
         : "No next batch row available.",
       proof: runbook.paths?.markdown || runbookPath,
-      blocker: runbook.status === "ready_for_metricool_operator" ? "" : "batch_runbook_not_ready",
+      blocker: !operatingProofGateReady
+        ? "tiktok_metricool_proof_gate_not_ready"
+        : runbook.status === "ready_for_metricool_operator" ? "" : "batch_runbook_not_ready",
     },
     {
       id: "live-evidence",
@@ -302,6 +413,7 @@ async function main() {
     status: fullyReadyForMetricoolOperator ? "ready_for_metricool_operator" : "in_progress",
     generatedAt: new Date().toISOString(),
     launchMode: "metricool_approval_required",
+    proofGate,
     operatingMode: {
       scope: "tiktok_only_metricool_mvp",
       activePlatforms: ["tiktok"],
@@ -327,6 +439,7 @@ async function main() {
       sync: syncPath,
       evidenceChecklist: evidenceChecklistPath,
       goalAudit: goalAuditPath,
+      operatingRefresh: operatingRefreshPath,
       metricool100Handoff: metricool100HandoffPath,
     },
     sourceStatuses: {
@@ -336,6 +449,7 @@ async function main() {
       sync: sync.status,
       evidenceChecklist: evidenceChecklist.status,
       goalAudit: goalAudit.status,
+      operatingRefresh: operatingRefresh?.status || "missing",
       metricool100Handoff: metricool100.status,
     },
     metricool100,
@@ -361,17 +475,21 @@ async function main() {
       metricool100SourceReadyBatches: metricool100.sourceReadyBatches,
       metricool100BlockedBatches: metricool100.blockedBatches,
     },
-    nextRow,
+    nextRow: operatingProofGateReady ? nextRow : null,
+    blockedNextRow,
     operatorSteps,
     guardrails: [
       "Metricool remains approval_required.",
       "realPublishEnabled remains false.",
+      "TikTok Metricool proof gate must be ready before any operator opens Metricool scheduling.",
       "Scheduled rows are not counted as published.",
       "Published/importable requires an exact public TikTok video URL and nonzero 24h metrics.",
       "Do not store login material, browser sessions, tokens, cookies, recovery codes, or private screenshots.",
       "Direct social APIs are not required for this TikTok MVP.",
     ],
-    nextStep: readyForOperator
+    nextStep: !operatingProofGateReady
+      ? proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence before processing the batch."
+      : readyForOperator
       ? metricool100.ready
         ? `Open Metricool and process ${metricool100.currentBatchId || "metricool-batch-01"} first; after scheduling, fill scheduled evidence. Add public TikTok URLs and 24h metrics only after posts are live.`
         : "Prepare or repair the Metricool 100 operator handoff before processing the weekly run."
@@ -399,8 +517,13 @@ async function main() {
     metricool100ReadyBatches: summary.totals.metricool100ReadyBatches,
     metricool100SourceReadyBatches: summary.totals.metricool100SourceReadyBatches,
     metricool100BlockedBatches: summary.totals.metricool100BlockedBatches,
+    proofGateStatus: summary.proofGate.status,
+    proofGateControlFieldsPresent: summary.proofGate.controlFieldsPresent,
+    minimumProofUrlsNeeded: summary.proofGate.minimumProofUrlsNeeded,
+    metricool100OperatorGateOpen: summary.metricool100.operatorGateOpen,
+    blockedNextRowBlocker: summary.blockedNextRow?.blocker || null,
     conflicts: summary.totals.conflicts,
-    nextQueueItem: summary.nextRow?.metricoolQueueItemId || null,
+    nextQueueItem: summary.nextRow?.metricoolQueueItemId || summary.blockedNextRow?.metricoolQueueItemId || null,
     markdownPath: outMarkdownPath,
   }, null, 2));
 }

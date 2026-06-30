@@ -1443,6 +1443,24 @@ interface ClipperTikTokMvpGoLivePacketSummary {
     metricool100Handoff?: string;
   };
   sourceStatuses: Record<string, string>;
+  proofGate?: {
+    status: string;
+    controlFieldsPresent?: boolean;
+    requiredLanes: string[];
+    minimumProofUrlsNeeded: number;
+    proofPacketsNeeded?: number;
+    fastPathAvailable?: boolean;
+    nextSafeButton?: string;
+    nextLockedButton?: string;
+    failedPreflightChecks?: string[];
+    failedVerifierChecks?: string[];
+    missingRequiredReports?: string[];
+    boundaryNotReady?: string[];
+    blockedBy?: string[];
+    preflightNotReady?: string;
+    paths?: Record<string, string>;
+    nextStep?: string;
+  };
   metricool100?: {
     status: string;
     consoleStatus: string;
@@ -1502,6 +1520,17 @@ interface ClipperTikTokMvpGoLivePacketSummary {
     captionSeed: string;
     operatorStep?: string;
     operatorCopyText?: string;
+  };
+  blockedNextRow?: null | {
+    rank: number;
+    metricoolQueueItemId: string;
+    accountId: string;
+    accountName: string;
+    metricoolBrandName: string;
+    scheduledFor: string;
+    sourceFileName: string;
+    blocker: string;
+    nextAction: string;
   };
   operatorSteps: Array<{
     id: string;
@@ -16830,6 +16859,21 @@ export default function ClippersPage() {
   const effectiveMetricoolUploadPack = metricoolCurrentBatchUploadPack ?? status?.metricoolCurrentBatchUploadPack;
   const effectiveMetricoolSessionPacket = metricoolCurrentBatchSessionPacket ?? statusMetricoolSessionBlocker;
   const effectiveTikTokGoLivePacket = tiktokMvpGoLivePacket;
+  const tiktokMetricoolProofGate = effectiveTikTokGoLivePacket?.proofGate;
+  const tiktokMetricoolProofGateOpen = Boolean(
+    tiktokMetricoolProofGate
+      && tiktokMetricoolProofGate.status === "ready_for_operator_review"
+      && tiktokMetricoolProofGate.controlFieldsPresent === true
+      && tiktokMetricoolProofGate.requiredLanes.includes("sports-daily:tiktok")
+      && tiktokMetricoolProofGate.requiredLanes.includes("meme-radar:tiktok")
+      && tiktokMetricoolProofGate.minimumProofUrlsNeeded === 0
+      && (tiktokMetricoolProofGate.failedPreflightChecks || []).length === 0
+      && (tiktokMetricoolProofGate.failedVerifierChecks || []).length === 0
+      && (tiktokMetricoolProofGate.missingRequiredReports || []).length === 0
+      && (tiktokMetricoolProofGate.boundaryNotReady || []).length === 0
+      && (tiktokMetricoolProofGate.blockedBy || []).length === 0
+      && !tiktokMetricoolProofGate.preflightNotReady,
+  );
   const statusBatchTrackerForDisplay = tiktokBatchTracker ?? status?.tiktokBatchTracker;
   const statusTikTokNextActionForDisplay = tiktokNextAction ?? status?.tiktokNextAction;
   const statusMvpBlockingStatus = effectiveMetricoolSessionPacket?.status.startsWith("blocked")
@@ -21528,6 +21572,29 @@ export default function ClippersPage() {
                 </div>
               </div>
             </div>
+            {tiktokMvpGoLivePacket.proofGate && (
+              <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-tiktok-mvp-go-live-proof-gate">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">TikTok Metricool proof gate</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-300">
+                      {tiktokMvpGoLivePacket.proofGate.minimumProofUrlsNeeded} proof URLs needed · lanes {tiktokMvpGoLivePacket.proofGate.requiredLanes.join(", ") || "missing"}.
+                    </p>
+                    <p className="mt-1 break-all text-[11px] leading-4 text-amber-100/70">
+                      {tiktokMvpGoLivePacket.proofGate.paths?.oneScreenGuide || tiktokMvpGoLivePacket.proofGate.nextStep || "proof gate evidence pending"}
+                    </p>
+                  </div>
+                  <Badge className={cn(
+                    "w-fit border text-[10px]",
+                    tiktokMvpGoLivePacket.proofGate.status === "ready_for_operator_review"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    {tiktokMvpGoLivePacket.proofGate.status}
+                  </Badge>
+                </div>
+              </div>
+            )}
             {tiktokMvpGoLivePacket.metricool100 && (
               <div
                 className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3"
@@ -21659,6 +21726,23 @@ export default function ClippersPage() {
                 </pre>
               </div>
             )}
+            {!tiktokMvpGoLivePacket.nextRow && tiktokMvpGoLivePacket.blockedNextRow && (
+              <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Next row locked</p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      #{tiktokMvpGoLivePacket.blockedNextRow.rank} {tiktokMvpGoLivePacket.blockedNextRow.accountName || tiktokMvpGoLivePacket.blockedNextRow.accountId} · {tiktokMvpGoLivePacket.blockedNextRow.metricoolBrandName}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">{tiktokMvpGoLivePacket.blockedNextRow.sourceFileName} · {tiktokMvpGoLivePacket.blockedNextRow.scheduledFor}</p>
+                    <p className="mt-2 text-[11px] leading-4 text-amber-100/75">{tiktokMvpGoLivePacket.blockedNextRow.nextAction}</p>
+                  </div>
+                  <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                    {tiktokMvpGoLivePacket.blockedNextRow.blocker}
+                  </Badge>
+                </div>
+              </div>
+            )}
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {tiktokMvpGoLivePacket.operatorSteps.slice(0, 4).map((step) => (
                 <div key={step.id} className="rounded-md border border-teal-300/10 bg-black/25 p-2 text-xs">
@@ -21711,6 +21795,11 @@ export default function ClippersPage() {
                 <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Runbook</h2>
                 <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchRunbook.nextStep}</p>
                 <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokBatchRunbook.paths.markdown}</p>
+                {!tiktokMetricoolProofGateOpen && effectiveTikTokGoLivePacket?.proofGate && (
+                  <p className="mt-2 text-xs leading-5 text-amber-100" data-testid="clippers-tiktok-runbook-proof-gate-lock">
+                    Metricool scheduling controls are locked until proof gate is ready: {effectiveTikTokGoLivePacket.proofGate.status}.
+                  </p>
+                )}
               </div>
               <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
                 <div className="rounded-md border border-white/10 bg-black/25 p-2">
@@ -21746,7 +21835,7 @@ export default function ClippersPage() {
                 </div>
               ))}
             </div>
-            {tiktokBatchRunbook.operatorSession && (
+            {tiktokBatchRunbook.operatorSession && tiktokMetricoolProofGateOpen && (
               <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3" data-testid="clippers-tiktok-operator-session">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
@@ -21894,16 +21983,24 @@ export default function ClippersPage() {
                       ) : null}
                     </div>
                   </div>
-                  <p className="line-clamp-2 text-[11px] leading-4 text-cyan-100/70">{row.operatorStep}</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
-                    onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
-                    data-testid={`select-tiktok-batch-runbook-row-${row.rank}`}
-                  >
-                    Usar fila
-                  </Button>
+                  <p className="line-clamp-2 text-[11px] leading-4 text-cyan-100/70">
+                    {tiktokMetricoolProofGateOpen ? row.operatorStep : "Locked until TikTok Metricool proof gate is ready."}
+                  </p>
+                  {tiktokMetricoolProofGateOpen ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 border-cyan-300/20 bg-transparent px-2 text-[11px] text-cyan-100 hover:bg-cyan-300/10"
+                      onClick={() => selectMetricoolEvidenceItem(row.metricoolQueueItemId)}
+                      data-testid={`select-tiktok-batch-runbook-row-${row.rank}`}
+                    >
+                      Usar fila
+                    </Button>
+                  ) : (
+                    <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                      proof gate locked
+                    </Badge>
+                  )}
                 </div>
                 );
               })}
