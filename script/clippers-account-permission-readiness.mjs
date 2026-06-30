@@ -1056,6 +1056,13 @@ async function main() {
       const evidenceIssues = evidence?.status === "verified"
         ? activeTikTokMvpEvidenceIssues(account, platform.platform, evidence)
         : [];
+      const missingEvidenceIssues = activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok"
+        ? [
+          `missing verified account evidence file with exact profileUrl ${exactTikTokProfileUrlFor(account.handle)}`,
+          "missing safe HTTPS accountProofUrl ownership/security proof",
+          "missing safe HTTPS metricoolProofUrl connection proof",
+        ]
+        : ["account evidence not verified"];
       const accountStatus = evidence?.status === "verified"
         ? evidenceIssues.length === 0 ? "verified" : "rejected"
         : evidence?.status || "missing";
@@ -1086,7 +1093,7 @@ async function main() {
         accountStatus,
         evidenceQuality: {
           status: evidence?.status === "verified" && evidenceIssues.length === 0 ? "accepted" : evidence?.status === "verified" ? "rejected" : "missing",
-          issues: evidenceIssues,
+          issues: evidence?.status === "verified" ? evidenceIssues : missingEvidenceIssues,
           requiresAccountProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
           requiresMetricoolProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
         },

@@ -486,6 +486,12 @@ test("account permission readiness writes active TikTok MVP account evidence row
     const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
     assert.equal(readiness.metricoolMvpEvidence.accountRows, 2);
     assert.match(readiness.metricoolMvpEvidence.accountEvidenceCsvPath, /account-permission-mvp-account-evidence\.csv$/);
+    const sportsRow = readiness.accountRows.find((row) => row.accountId === "sports-daily" && row.platform === "tiktok");
+    assert.equal(sportsRow.evidenceQuality.status, "missing");
+    assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("exact profileUrl")));
+    assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("accountProofUrl")));
+    assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("metricoolProofUrl")));
+    assert.ok(readiness.tiktokMvpAccountCloseout.rows.every((row) => row.evidenceQuality.issues.length > 0));
 
     const mvpAccountEvidenceCsv = await readFile(path.join(rootDir, "account-permission-mvp-account-evidence.csv"), "utf8");
     assert.match(mvpAccountEvidenceCsv, /"account","sports-daily","tiktok","verified"/);
