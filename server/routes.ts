@@ -2873,11 +2873,24 @@ export async function registerRoutes(
         });
         return;
       }
+      const postImportApplyRuns: Record<string, any> = {};
+      let postImportApplyError = "";
+      try {
+        postImportApplyRuns.proofDoctorRun = await runClipperTikTokMvpProofDoctor();
+        postImportApplyRuns.closeoutWizardRun = await runClipperTikTokMvpCloseoutWizard();
+        postImportApplyRuns.proofHandoffRun = await runClipperTikTokMvpProofHandoff();
+      } catch (refreshError: any) {
+        postImportApplyError = refreshError.message || "Post-import apply refresh failed";
+      }
       res.json({
         tiktokMvpProofIntakeImport,
         tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
         tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
         run,
+        postImportApplyRuns,
+        postImportApplyError,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply TikTok MVP proof intake import" });
@@ -3105,11 +3118,31 @@ export async function registerRoutes(
         return;
       }
       await runClipperOperationalReadiness();
+      const postCloseoutApplyRuns: Record<string, any> = {};
+      let postCloseoutApplyError = "";
+      try {
+        postCloseoutApplyRuns.accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+        postCloseoutApplyRuns.syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+        postCloseoutApplyRuns.trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+        postCloseoutApplyRuns.runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+        postCloseoutApplyRuns.checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+        postCloseoutApplyRuns.metricoolHandoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+        postCloseoutApplyRuns.launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+        postCloseoutApplyRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+        postCloseoutApplyRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+        postCloseoutApplyRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      } catch (refreshError: any) {
+        postCloseoutApplyError = refreshError.message || "Post-closeout apply refresh failed";
+      }
       res.json({
         tiktokMvpEvidenceCloseout,
         accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
         operationalReadiness: await readClipperOperationalReadiness(),
+        tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
+        tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
         run,
+        postCloseoutApplyRuns,
+        postCloseoutApplyError,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply TikTok MVP evidence closeout" });

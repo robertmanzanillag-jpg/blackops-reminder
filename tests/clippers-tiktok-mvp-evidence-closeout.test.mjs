@@ -402,6 +402,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(importApplyRoute, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-proof-intake-import"/);
   assert.match(importApplyRoute, /runClipperTikTokMvpProofIntakeImport\(true\)/);
   assert.match(importApplyRoute, /tiktokMvpProofIntakeImport\.status !== "applied"/);
+  assert.match(importApplyRoute, /postImportApplyRuns/);
+  assert.match(importApplyRoute, /runClipperTikTokMvpProofDoctor/);
+  assert.match(importApplyRoute, /runClipperTikTokMvpCloseoutWizard/);
+  assert.match(importApplyRoute, /runClipperTikTokMvpProofHandoff/);
+  assert.match(importApplyRoute, /readClipperTikTokMvpCloseoutWizard/);
+  assert.match(importApplyRoute, /readClipperTikTokMvpProofHandoff/);
   assert.doesNotMatch(importApplyRoute, /runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(quickFillRoute, /runClipperTikTokMvpProofQuickFill/);
   assert.match(quickFillRoute, /proof-quick-fill-input\.json/);
@@ -452,6 +458,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(applyRoute, /tiktokMvpEvidenceCloseout\.status !== "applied"/);
   assert.match(applyRoute, /res\.status\(400\)/);
   assert.match(applyRoute, /runClipperOperationalReadiness/);
+  assert.match(applyRoute, /postCloseoutApplyRuns/);
+  assert.match(applyRoute, /script\/clippers-tiktok-mvp-go-live-packet\.mjs/);
+  assert.match(applyRoute, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
+  assert.match(applyRoute, /readClipperTikTokMvpGoLivePacket/);
+  assert.match(applyRoute, /readClipperTikTokMvpReadinessVerifier/);
   assert.doesNotMatch(applyRoute, /ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
 
   assert.match(page, /preview-clippers-tiktok-mvp-evidence-closeout-button/);
@@ -521,6 +532,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-operator-session/);
   assert.match(page, /run-clippers-tiktok-mvp-operator-recommended-button/);
   assert.match(page, /runTikTokMvpOperatorButton/);
+  assert.match(page, /postImportApplyError/);
+  assert.match(page, /postCloseoutApplyError/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-closeout-wizard"\], data\.tiktokMvpCloseoutWizard/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-handoff"\], data\.tiktokMvpProofHandoff/);
   assert.match(page, /getTikTokMvpOperatorButtonLabel/);
   assert.match(page, /case "import_preview"/);
   assert.match(page, /case "closeout_preview"/);

@@ -11335,15 +11335,26 @@ export default function ClippersPage() {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary | null;
+        postImportApplyRuns: Record<string, unknown>;
+        postImportApplyError: string;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      if (data.tiktokMvpCloseoutWizard) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
+      if (data.tiktokMvpProofHandoff) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      }
       toast({
-        title: "Proof import aplicado",
-        description: "Los CSVs objetivo quedaron listos para closeout; esto no publica ni agenda.",
+        title: data.postImportApplyError ? "Proof import aplicado con refresh pendiente" : "Proof import aplicado",
+        description: data.postImportApplyError || "Los CSVs objetivo quedaron listos para closeout; esto no publica ni agenda.",
+        variant: data.postImportApplyError ? "destructive" : undefined,
       });
     },
     onError: (error: Error) => {
@@ -11517,15 +11528,26 @@ export default function ClippersPage() {
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
         accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
         operationalReadiness: ClipperOperationalReadinessSummary;
+        tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
+        tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        postCloseoutApplyRuns: Record<string, unknown>;
+        postCloseoutApplyError: string;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
       queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
       queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      if (data.tiktokMvpGoLivePacket) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      }
+      if (data.tiktokMvpReadinessVerifier) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      }
       toast({
-        title: "TikTok MVP evidence aplicado",
-        description: `${data.accountPermissionReadiness.activeMvp?.readyLanes ?? 0}/${data.accountPermissionReadiness.activeMvp?.targetLanes ?? 2} TikTok lanes listas para Metricool approval_required.`,
+        title: data.postCloseoutApplyError ? "TikTok MVP evidence aplicado con refresh pendiente" : "TikTok MVP evidence aplicado",
+        description: data.postCloseoutApplyError || `${data.accountPermissionReadiness.activeMvp?.readyLanes ?? 0}/${data.accountPermissionReadiness.activeMvp?.targetLanes ?? 2} TikTok lanes listas para Metricool approval_required.`,
+        variant: data.postCloseoutApplyError ? "destructive" : undefined,
       });
       refreshMetricoolCaches();
     },
