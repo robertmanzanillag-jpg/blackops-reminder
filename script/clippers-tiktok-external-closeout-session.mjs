@@ -197,6 +197,75 @@ function renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout) {
   ].join("\n");
 }
 
+function proofLinksOperatorChecklist() {
+  return [
+    {
+      id: "copy_packet",
+      label: "Copy proof links packet",
+      owner: "operator",
+      target: outProofLinksPastePacketPath,
+      expectedGate: "template_only",
+      nextButton: "Copy proof links",
+    },
+    {
+      id: "fill_real_proofs",
+      label: "Fill real non-secret proof URLs and notes",
+      owner: "robert",
+      target: proofLinksFilledDropPath,
+      expectedGate: "manual_real_evidence_required",
+      nextButton: "Import proof links drop or Parse paste",
+    },
+    {
+      id: "preview_proof_links",
+      label: "Preview proof-links and verify all lanes are clean",
+      owner: "operator",
+      target: "Proof Links Assistant",
+      expectedGate: "readyForProofDrop=true",
+      nextButton: "Preview proof links",
+    },
+    {
+      id: "save_and_ingest",
+      label: "Save proof links and safe-ingest the drop",
+      owner: "operator",
+      target: proofLinksJsonDropPath,
+      expectedGate: "proof-links validation accepted",
+      nextButton: "Save proof links, then Safe ingest drop",
+    },
+    {
+      id: "load_bridge_csv",
+      label: "Load generated Metricool bridge CSV",
+      owner: "operator",
+      target: metricoolBridgeEvidencePath,
+      expectedGate: "safe CSV loaded with rawStored=false",
+      nextButton: "Load bridge CSV",
+    },
+    {
+      id: "preview_bridge_rows",
+      label: "Preview Metricool bridge rows",
+      owner: "operator",
+      target: "metricool-bridge-preview-gate.json",
+      expectedGate: "Preview gate ready_for_import and not expired",
+      nextButton: "Preview bridge rows",
+    },
+    {
+      id: "import_bridge_rows",
+      label: "Import bridge rows only after preview gate is clean",
+      owner: "operator",
+      target: metricoolBridgeEvidencePath,
+      expectedGate: "current previewHash accepted",
+      nextButton: "Import bridge rows",
+    },
+    {
+      id: "rerun_readiness",
+      label: "Rerun proof doctor and readiness verifier",
+      owner: "operator",
+      target: "clippers-tiktok-mvp-readiness-verifier",
+      expectedGate: "blocked_before_metricool clears without enabling real publishing",
+      nextButton: "Proof doctor / Readiness verifier",
+    },
+  ];
+}
+
 function sortableNumber(value, fallback = 999) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -388,6 +457,7 @@ async function main() {
       filledDropPath: proofLinksFilledDropPath,
       proofLinksJsonPath: proofLinksJsonDropPath,
       nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse -> Save proof links -> Safe ingest drop.",
+      checklist: proofLinksOperatorChecklist(),
       guardrails: [
         "This packet is a template and does not save evidence by itself.",
         "Metricool URLs must be real HTTPS metricool.com URLs.",

@@ -1098,6 +1098,20 @@ test("TikTok external closeout session surfaces active Metricool MVP proof block
   assert.match(session.tasks[0].csvRowTemplate, /sports-daily/);
   assert.equal(/client_secret=|access_token=|refresh_token=|bearer\s+[a-z0-9._-]+/i.test(session.tasks.map((task) => task.csvRowTemplate).join("\n")), false);
   assert.equal(session.proofLinksFlow.status, "needs_real_proof_links");
+  assert.deepEqual(session.proofLinksFlow.checklist.map((item) => item.id), [
+    "copy_packet",
+    "fill_real_proofs",
+    "preview_proof_links",
+    "save_and_ingest",
+    "load_bridge_csv",
+    "preview_bridge_rows",
+    "import_bridge_rows",
+    "rerun_readiness",
+  ]);
+  assert.ok(session.proofLinksFlow.checklist.every((item) => item.expectedGate && item.nextButton));
+  assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "preview_bridge_rows")?.expectedGate || "", /ready_for_import/);
+  assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "rerun_readiness")?.expectedGate || "", /without enabling real publishing/);
+  assert.doesNotMatch(JSON.stringify(session.proofLinksFlow), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
   assert.match(session.paths.proofLinksPastePacket, /clippers-tiktok-external-closeout-proof-links-paste-packet\.txt$/);
   assert.match(session.paths.proofLinksFilledDrop, /proof-links-paste-packet-filled\.txt$/);
   assert.match(session.proofLinksPastePacket, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
@@ -2126,6 +2140,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-external-task-button"'));
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-mvp-proof-links-packet-button"'));
   assert.ok(page.includes('data-testid="clippers-tiktok-external-proof-links-flow"'));
+  assert.ok(page.includes('data-testid="clippers-tiktok-external-proof-links-checklist"'));
   assert.ok(page.includes('queryKey: ["/api/clippers/tiktok-external-closeout-session"]'));
   assert.ok(page.includes('/api/clippers/prepare-tiktok-external-closeout-session'));
   assert.ok(page.includes("Bridge:"));
@@ -2134,6 +2149,8 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("task.proofType"));
   assert.ok(page.includes("proofLinksPastePacket"));
   assert.ok(page.includes("proofLinksFlow"));
+  assert.ok(page.includes("expectedGate"));
+  assert.ok(page.includes("nextButton"));
   assert.ok(page.includes("priorityPolicy"));
   assert.ok(page.includes("priorityLabel"));
   assert.ok(page.includes("Active first:"));

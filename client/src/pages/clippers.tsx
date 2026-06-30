@@ -3118,6 +3118,14 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     filledDropPath: string;
     proofLinksJsonPath: string;
     nextStep: string;
+    checklist?: Array<{
+      id: string;
+      label: string;
+      owner: string;
+      target: string;
+      expectedGate: string;
+      nextButton: string;
+    }>;
     guardrails: string[];
   };
   guardrails: string[];
@@ -26884,6 +26892,17 @@ export default function ClippersPage() {
                             <p className="mt-1">{tiktokExternalCloseoutSession.proofLinksFlow.nextStep}</p>
                             <p className="mt-1 break-all">Packet: {tiktokExternalCloseoutSession.paths.proofLinksPastePacket}</p>
                             <p className="mt-1 break-all">Filled drop: {tiktokExternalCloseoutSession.paths.proofLinksFilledDrop}</p>
+                            {(tiktokExternalCloseoutSession.proofLinksFlow.checklist ?? []).length > 0 && (
+                              <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-external-proof-links-checklist">
+                                {(tiktokExternalCloseoutSession.proofLinksFlow.checklist ?? []).slice(0, 8).map((item, index) => (
+                                  <div key={item.id} className="rounded border border-cyan-300/10 bg-black/20 p-2">
+                                    <p className="font-medium text-cyan-100">{index + 1}. {item.label}</p>
+                                    <p className="mt-1 text-cyan-100/70">Button: {item.nextButton}</p>
+                                    <p className="mt-1 text-cyan-100/60">Gate: {item.expectedGate}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="mt-3 grid gap-2 xl:grid-cols-2">
