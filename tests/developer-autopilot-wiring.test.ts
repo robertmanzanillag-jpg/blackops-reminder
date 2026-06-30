@@ -85,6 +85,20 @@ test("Revenue Engine exposes manual outreach outcome recording", () => {
   assert.match(uiSource, /button-record-outreach-deposit/);
 });
 
+test("Revenue Engine approval decisions require explicit queue target selection", () => {
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+
+  assert.match(uiSource, /select-approval-target/);
+  assert.match(uiSource, /select-approval-decision/);
+  assert.match(uiSource, /input-approval-max-spend/);
+  assert.match(uiSource, /approvalDecisionMutation\.mutate\(selectedApprovalQueueItem\)/);
+  assert.match(uiSource, /approvalQueue\.length > 0 && !queueItem/);
+  assert.match(uiSource, /approvalQueue\.length > 0 && !selectedApprovalQueueItem/);
+  assert.match(uiSource, /setApprovalAction\(nextItem\.action\)/);
+  assert.match(uiSource, /approvedAction: queueItem\?\.action \|\| approvalAction/);
+  assert.doesNotMatch(uiSource, /approvalQueueItems\?\.\[0\]/);
+});
+
 test("Dashboard chat exposes a subscription handoff prompt", () => {
   const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
 

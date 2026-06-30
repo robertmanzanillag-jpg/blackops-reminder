@@ -871,6 +871,23 @@ test("records approval decisions without bypassing spend guardrails", () => {
   assert.equal(result.snapshot.recentApprovalDecisions[0].approvedAction, "Aprobar research y mockup interno");
 });
 
+test("records non-approval decisions against explicit queue targets", () => {
+  const result = recordRevenueApprovalDecision({
+    targetId: "outreach-draft-1",
+    targetType: "outbox",
+    decision: "needs_changes",
+    approvedAction: "Reescribir propuesta antes de contacto externo",
+    maxSpendUsd: 0,
+    notes: "El target exacto de la cola necesita cambios.",
+  });
+
+  assert.equal(result.decision.targetId, "outreach-draft-1");
+  assert.equal(result.decision.targetType, "outbox");
+  assert.equal(result.decision.decision, "needs_changes");
+  assert.equal(result.decision.guardrail.status, "recorded");
+  assert.equal(result.snapshot.recentApprovalDecisions[0].decision, "needs_changes");
+});
+
 test("blocks approval decisions that try to spend before profit guard allows it", () => {
   const result = recordRevenueApprovalDecision({
     targetId: "paid-data",

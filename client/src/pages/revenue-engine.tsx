@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -1562,6 +1562,9 @@ export default function RevenueEnginePage() {
   const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
+  const [selectedApprovalTargetId, setSelectedApprovalTargetId] = useState("");
+  const [approvalDecisionValue, setApprovalDecisionValue] = useState<"approved" | "rejected" | "needs_changes">("approved");
+  const [approvalMaxSpendUsd, setApprovalMaxSpendUsd] = useState(0);
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
   const [automationIndustry, setAutomationIndustry] = useState("restaurant");
   const [automationRequest, setAutomationRequest] = useState("Quiero automatizar seguimiento de leads, reservas y mensajes para que nadie se pierda.");
@@ -1696,6 +1699,21 @@ export default function RevenueEnginePage() {
       return response.json();
     },
   });
+  const approvalQueue = snapshot?.approvalQueueItems || [];
+  const selectedApprovalQueueItem = approvalQueue.find((item) => item.id === selectedApprovalTargetId) || null;
+  const approvalActionForSubmit = selectedApprovalQueueItem?.action || approvalAction;
+
+  useEffect(() => {
+    if (approvalQueue.length === 0) {
+      if (selectedApprovalTargetId) setSelectedApprovalTargetId("");
+      return;
+    }
+    if (!selectedApprovalQueueItem) {
+      const nextItem = approvalQueue[0];
+      setSelectedApprovalTargetId(nextItem.id);
+      setApprovalAction(nextItem.action);
+    }
+  }, [approvalQueue, selectedApprovalQueueItem, selectedApprovalTargetId]);
 
   const planMutation = useMutation<RevenuePlan>({
     mutationFn: async () => {
@@ -2238,18 +2256,24 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const approvalDecisionMutation = useMutation<{ decision: RevenueSnapshot["recentApprovalDecisions"][number]; snapshot: RevenueSnapshot }>({
-    mutationFn: async () => {
-      const firstQueueItem = snapshot?.approvalQueueItems?.[0];
+  const approvalDecisionMutation = useMutation<
+    { decision: RevenueSnapshot["recentApprovalDecisions"][number]; snapshot: RevenueSnapshot },
+    Error,
+    RevenueSnapshot["approvalQueueItems"][number] | null
+  >({
+    mutationFn: async (queueItem) => {
+      if (approvalQueue.length > 0 && !queueItem) {
+        throw new Error("Selecciona un item de approval queue antes de registrar la decision");
+      }
       const response = await fetch("/api/revenue-engine/approval-decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          targetId: firstQueueItem?.id || "manual",
-          targetType: firstQueueItem?.source || "manual",
-          decision: "approved",
-          approvedAction: approvalAction,
-          maxSpendUsd: 0,
+          targetId: queueItem?.id || "manual",
+          targetType: queueItem?.source || "manual",
+          decision: approvalDecisionValue,
+          approvedAction: queueItem?.action || approvalAction,
+          maxSpendUsd: approvalMaxSpendUsd,
           notes: approvalNotes,
         }),
       });
@@ -2946,8 +2970,61 @@ export default function RevenueEnginePage() {
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Decision manual</p>
               <div className="space-y-2">
+                <select
+                  value={selectedApprovalTargetId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    const nextItem = approvalQueue.find((item) => item.id === nextId) || null;
+                    setSelectedApprovalTargetId(nextId);
+                    if (nextItem) setApprovalAction(nextItem.action);
+                  }}
+                  className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm text-white"
+                  data-testid="select-approval-target"
+                >
+                  {approvalQueue.length === 0 ? (
+                    <option value="">Manual</option>
+                  ) : (
+                    approvalQueue.map((item) => (
+                      <option key={`${item.source}-${item.id}`} value={item.id}>
+                        {item.source}: {item.title} - {item.status}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={approvalDecisionValue}
+                    onChange={(event) => setApprovalDecisionValue(event.target.value as typeof approvalDecisionValue)}
+                    className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm text-white"
+                    data-testid="select-approval-decision"
+                  >
+                    <option value="approved">Aprobar</option>
+                    <option value="needs_changes">Cambios</option>
+                    <option value="rejected">Rechazar</option>
+                  </select>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={approvalMaxSpendUsd}
+                    onChange={(event) => setApprovalMaxSpendUsd(Number(event.target.value))}
+                    className="border-zinc-800 bg-black"
+                    data-testid="input-approval-max-spend"
+                  />
+                </div>
+                {selectedApprovalQueueItem && (
+                  <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-medium text-white">{selectedApprovalQueueItem.title}</p>
+                      <Badge variant="outline" className={cn(statusTone(selectedApprovalQueueItem.priority === "high" ? "blocked" : "draft"), "shrink-0")}>
+                        {selectedApprovalQueueItem.source}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">{selectedApprovalQueueItem.action}</p>
+                  </div>
+                )}
                 <Input
-                  value={approvalAction}
+                  value={approvalActionForSubmit}
                   onChange={(event) => setApprovalAction(event.target.value)}
                   className="border-zinc-800 bg-black"
                   data-testid="input-approval-action"
@@ -2960,8 +3037,8 @@ export default function RevenueEnginePage() {
                 />
                 <Button
                   type="button"
-                  disabled={approvalDecisionMutation.isPending}
-                  onClick={() => approvalDecisionMutation.mutate()}
+                  disabled={approvalDecisionMutation.isPending || (approvalQueue.length > 0 && !selectedApprovalQueueItem)}
+                  onClick={() => approvalDecisionMutation.mutate(selectedApprovalQueueItem)}
                   className="w-full bg-sky-600 text-white hover:bg-sky-500"
                   data-testid="button-record-approval-decision"
                 >
