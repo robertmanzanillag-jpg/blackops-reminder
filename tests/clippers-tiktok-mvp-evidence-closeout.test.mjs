@@ -28,6 +28,8 @@ const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evide
 const combinedProofCsvPath = path.join(tmpDir, "tiktok-mvp-combined-proof-test.csv");
 const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/combined-proof-intake.csv");
 const quickFillInputPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json");
+const proofLinksPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links.json");
+const proofLinksStarterPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links-starter.json");
 const targetAccountCsvPath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
 const targetBridgeCsvPath = path.join(rootDir, "scheduled/metricool-tiktok-bridge-evidence.csv");
 
@@ -1271,15 +1273,16 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
 });
 
 test("TikTok MVP proof drop kit prepares local inventory without applying evidence", async () => {
-  const result = spawnSync(process.execPath, ["--check", proofDropKitPath], {
+  const syntaxResult = spawnSync(process.execPath, ["--check", proofDropKitPath], {
     cwd: process.cwd(),
     encoding: "utf8",
   });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(syntaxResult.status, 0, syntaxResult.stderr || syntaxResult.stdout);
 
   const source = await readFile(proofDropKitPath, "utf8");
   assert.match(source, /proof-drop/);
   assert.match(source, /proof-links\.json/);
+  assert.match(source, /proof-links-starter\.json/);
   assert.match(source, /blocked_needs_public_proof_links/);
   assert.match(source, /ready_quick_fill_ran/);
   assert.match(source, /metricool\.com/);
@@ -1294,6 +1297,57 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.doesNotMatch(source, /ready_to_send/);
   assert.match(source, /realPublishEnabled:\s*false/);
   assert.match(source, /directSocialApisRequired:\s*false/);
+
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(proofLinksPath), { recursive: true });
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "",
+          metricoolConnectionProofUrl: "",
+          accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "",
+          metricoolConnectionProofUrl: "",
+          accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+        },
+      },
+    }, null, 2));
+
+    const runResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-drop-kit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(runResult.status, 0, runResult.stderr || runResult.stdout);
+    const output = JSON.parse(runResult.stdout);
+    assert.equal(output.status, "blocked_needs_public_proof_links");
+    assert.equal(output.readyForQuickFill, false);
+    assert.equal(output.quickFillStatus, "not_run");
+    assert.match(output.proofLinksStarterPath, /proof-links-starter\.json$/);
+
+    const starter = JSON.parse(await readFile(proofLinksStarterPath, "utf8"));
+    assert.deepEqual(Object.keys(starter.lanes).sort(), ["meme-radar:tiktok", "sports-daily:tiktok"]);
+    for (const lane of Object.values(starter.lanes)) {
+      assert.equal(typeof lane.accountOwnershipProofUrl, "string");
+      assert.equal(typeof lane.metricoolConnectionProofUrl, "string");
+      assert.equal(typeof lane.accountNotes, "string");
+      assert.equal(typeof lane.metricoolNotes, "string");
+    }
+    assert.doesNotMatch(JSON.stringify(starter), /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
+    assert.equal(report.paths.proofLinksStarterJson, proofLinksStarterPath);
+    assert.equal(report.quickFillStatus, "not_run");
+    assert.equal(report.realPublishEnabled, false);
+    assert.equal(report.directSocialApisRequired, false);
+  } finally {
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
+  }
 });
 
 test("TikTok MVP local verification cannot apply evidence or enable publishing", async () => {

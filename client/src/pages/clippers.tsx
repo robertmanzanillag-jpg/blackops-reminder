@@ -2301,6 +2301,7 @@ interface ClipperTikTokMvpProofDropKitSummary {
     html: string;
     dropDir: string;
     proofLinksJson: string;
+    proofLinksStarterJson: string;
     quickFillInputJson: string;
   };
   guardrails: string[];
@@ -17320,6 +17321,7 @@ export default function ClippersPage() {
                 <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
                   <p className="break-all">Drop folder: {tiktokMvpProofDropKit.paths.dropDir}</p>
                   <p className="break-all">Links JSON: {tiktokMvpProofDropKit.paths.proofLinksJson}</p>
+                  <p className="break-all">Starter JSON: {tiktokMvpProofDropKit.paths.proofLinksStarterJson}</p>
                   <p className="break-all">HTML: {tiktokMvpProofDropKit.paths.html}</p>
                   <p>Real publish: {tiktokMvpProofDropKit.realPublishEnabled ? "enabled" : "disabled"}</p>
                 </div>

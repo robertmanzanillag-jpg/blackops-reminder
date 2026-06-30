@@ -6,6 +6,7 @@ const rootDir = path.join(process.cwd(), "clippers_workspace");
 const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const dropDir = path.join(rootDir, "proof-drop", "tiktok-mvp");
 const proofLinksPath = path.join(dropDir, "proof-links.json");
+const proofLinksStarterPath = path.join(dropDir, "proof-links-starter.json");
 const quickFillInputPath = path.join(reportsDir, "proof-quick-fill-input.json");
 const outJsonPath = path.join(reportsDir, "proof-drop-kit.json");
 const outMarkdownPath = path.join(reportsDir, "proof-drop-kit.md");
@@ -136,6 +137,7 @@ function proofTemplate() {
 async function ensureDropKitFiles() {
   await mkdir(dropDir, { recursive: true });
   await mkdir(reportsDir, { recursive: true });
+  await writeFile(proofLinksStarterPath, JSON.stringify(proofTemplate(), null, 2));
   const existing = await readJson(proofLinksPath, null);
   if (!existing) {
     await writeFile(proofLinksPath, JSON.stringify(proofTemplate(), null, 2));
@@ -152,6 +154,7 @@ async function ensureDropKitFiles() {
       `- ${lane.expectedFiles.metricool}.png/pdf/jpg/etc for ${lane.metricoolBrandName} Metricool connection proof`,
     ]),
     "",
+    "Use proof-links-starter.json as the safe copy-paste starter if proof-links.json gets messy.",
     "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof must be a metricool.com HTTPS URL. URLs with x-amz/signature/expires/session/token query params are blocked.",
     "This kit never applies final evidence, publishes, schedules, or enables real publishing.",
     "",
@@ -248,6 +251,11 @@ function renderMarkdown(summary) {
     "",
     summary.nextStep,
     "",
+    "## Starter",
+    "",
+    `- Safe starter JSON: ${summary.paths.proofLinksStarterJson}`,
+    "- This starter is overwritten by the kit and never applies evidence by itself.",
+    "",
   ].join("\n");
 }
 
@@ -277,6 +285,7 @@ function renderHtml(summary) {
   <h1>TikTok MVP Proof Drop Kit</h1>
   <p>Status: <strong>${htmlEscape(summary.status)}</strong></p>
   <p>${htmlEscape(summary.nextStep)}</p>
+  <p>Starter JSON: <code>${htmlEscape(summary.paths.proofLinksStarterJson)}</code></p>
   ${summary.lanes.map((lane) => `
     <div class="lane">
       <h2>${htmlEscape(lane.accountName)}</h2>
@@ -303,8 +312,8 @@ async function main() {
     unblockerRun = runJson(["script/clippers-tiktok-mvp-proof-unblocker.mjs"]);
   }
 
-  const proofQuickFill = await readJson(path.join(reportsDir, "proof-quick-fill.json"), {});
-  const proofUnblocker = await readJson(path.join(reportsDir, "proof-unblocker.json"), {});
+  const proofQuickFill = validation.readyForQuickFill ? await readJson(path.join(reportsDir, "proof-quick-fill.json"), {}) : {};
+  const proofUnblocker = validation.readyForQuickFill ? await readJson(path.join(reportsDir, "proof-unblocker.json"), {}) : {};
   const summary = {
     status: validation.readyForQuickFill ? "ready_quick_fill_ran" : "blocked_needs_public_proof_links",
     generatedAt: new Date().toISOString(),
@@ -330,6 +339,7 @@ async function main() {
       html: outHtmlPath,
       dropDir,
       proofLinksJson: proofLinksPath,
+      proofLinksStarterJson: proofLinksStarterPath,
       quickFillInputJson: quickFillInputPath,
     },
     guardrails: [
@@ -355,6 +365,7 @@ async function main() {
     openFixes: summary.openFixes,
     dropDir,
     proofLinksPath,
+    proofLinksStarterPath,
     reportJsonPath: outJsonPath,
     nextStep: summary.nextStep,
   }, null, 2));
