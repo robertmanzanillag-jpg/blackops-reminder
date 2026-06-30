@@ -2338,6 +2338,38 @@ interface ClipperTikTokMvpLocalVerificationSummary {
   };
 }
 
+interface ClipperTikTokMvpProofHandoffSummary {
+  status: "blocked_needs_proof_links" | "blocked_needs_quick_fill" | "blocked_needs_import_preview" | "blocked_needs_closeout_preview" | "ready_for_operator_apply_review" | "review_required";
+  nextButton: "save_proof_links" | "quick_fill" | "import_preview" | "preview_closeout" | "operator_confirmed_apply" | "closeout_wizard";
+  nextAction: string;
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  gates: Array<{
+    id: string;
+    status: "pass" | "blocked";
+    detail: string;
+  }>;
+  totals: {
+    proofIssues: number;
+    quickFillIssues: number;
+    importFixes: number;
+    closeoutRejected: number;
+  };
+  paths: {
+    json: string;
+    markdown: string;
+    proofDropJson: string;
+    quickFillJson: string;
+    importJson: string;
+    closeoutJson: string;
+    wizardJson: string;
+  };
+  guardrails: string[];
+}
+
 interface ClipperTikTokMvpCloseoutWizardSummary {
   status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence";
   launchDecision: "ready_for_confirmed_apply_only" | "blocked_before_apply";
@@ -10357,6 +10389,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofUnblocker as ClipperTikTokMvpProofUnblockerSummary;
     },
   });
+  const { data: tiktokMvpProofHandoff } = useQuery<ClipperTikTokMvpProofHandoffSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-handoff"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-handoff");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof handoff");
+      return data.tiktokMvpProofHandoff as ClipperTikTokMvpProofHandoffSummary;
+    },
+  });
   const { data: tiktokMvpLocalVerification } = useQuery<ClipperTikTokMvpLocalVerificationSummary | null>({
     queryKey: ["/api/clippers/tiktok-mvp-local-verification"],
     queryFn: async () => {
@@ -10962,6 +11004,48 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude guardar proof links", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofHandoffMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-handoff", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof handoff");
+      return data as {
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary;
+        tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary | null;
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary | null;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      if (data.tiktokMvpProofDropKit) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
+      }
+      if (data.tiktokMvpProofQuickFill) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      }
+      if (data.tiktokMvpProofIntakeImport) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      }
+      if (data.tiktokMvpEvidenceCloseout) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      }
+      if (data.tiktokMvpCloseoutWizard) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
+      toast({
+        title: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? "Proof handoff listo" : "Proof handoff actualizado",
+        description: data.tiktokMvpProofHandoff.nextAction,
+        variant: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof handoff", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15643,6 +15727,7 @@ export default function ClippersPage() {
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
+    || tiktokMvpProofHandoffMutation.isPending
     || tiktokMvpProofDoctorMutation.isPending
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
@@ -16889,6 +16974,18 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpProofHandoffMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-handoff-button"
+              >
+                {tiktokMvpProofHandoffMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ListChecks className="mr-2 h-3.5 w-3.5" />}
+                Proof handoff
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
@@ -17181,6 +17278,43 @@ export default function ClippersPage() {
                 <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
                   <p className="break-all">Wizard: {tiktokMvpCloseoutWizard.paths.markdown}</p>
                   <p>Real publish: {tiktokMvpCloseoutWizard.realPublishEnabled ? "enabled" : "disabled"}</p>
+                </div>
+              </div>
+            )}
+            {tiktokMvpProofHandoff && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpProofHandoff.status === "ready_for_operator_apply_review"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-amber-300/15 text-amber-100/80"
+              )} data-testid="clippers-tiktok-mvp-proof-handoff-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpProofHandoff.status === "ready_for_operator_apply_review"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                  )}>
+                    handoff {tiktokMvpProofHandoff.status}
+                  </Badge>
+                  <span>next: {tiktokMvpProofHandoff.nextButton}</span>
+                  <span>proof issues {tiktokMvpProofHandoff.totals.proofIssues}</span>
+                  <span>import fixes {tiktokMvpProofHandoff.totals.importFixes}</span>
+                </div>
+                <p className="mt-1">{tiktokMvpProofHandoff.nextAction}</p>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-handoff-gates">
+                  {tiktokMvpProofHandoff.gates.map((gate) => (
+                    <div key={gate.id} className="rounded border border-amber-300/10 bg-black/20 p-2">
+                      <p className={cn("font-medium", gate.status === "pass" ? "text-emerald-100" : "text-amber-100")}>{gate.id}: {gate.status}</p>
+                      <p className="mt-1 text-zinc-400">{gate.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Mode: {tiktokMvpProofHandoff.launchMode}</p>
+                  <p>Real publish: {tiktokMvpProofHandoff.realPublishEnabled ? "enabled" : "disabled"}</p>
+                  <p>Direct APIs: {tiktokMvpProofHandoff.directSocialApisRequired ? "required" : "not required"}</p>
+                  <p className="break-all">Report: {tiktokMvpProofHandoff.paths.markdown}</p>
                 </div>
               </div>
             )}

@@ -357,6 +357,7 @@ export async function registerRoutes(
   };
   const runClipperTikTokMvpProofRefresh = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-refresh.mjs", "TikTok MVP proof refresh");
   const runClipperTikTokMvpProofUnblocker = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-unblocker.mjs", "TikTok MVP proof unblocker");
+  const runClipperTikTokMvpProofHandoff = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-handoff.mjs", "TikTok MVP proof handoff");
   const runClipperTikTokMvpLocalVerification = () => runClipperJsonScript("script/clippers-tiktok-mvp-local-verification.mjs", "TikTok MVP local verification");
   const runClipperTikTokMvpCloseoutWizard = () => runClipperJsonScript("script/clippers-tiktok-mvp-closeout-wizard.mjs", "TikTok MVP closeout wizard");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
@@ -423,6 +424,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofUnblocker = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-unblocker.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofHandoff = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-handoff.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperTikTokMvpLocalVerification = async () => {
@@ -2914,6 +2919,32 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof unblocker" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-handoff", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof handoff has not been prepared" : "TikTok MVP proof handoff could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-handoff", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofHandoff();
+      res.json({
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
+        tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit().catch(() => null),
+        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport().catch(() => null),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof handoff" });
     }
   });
 
