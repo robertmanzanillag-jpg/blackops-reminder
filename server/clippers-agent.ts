@@ -33109,6 +33109,22 @@ function isMetricoolProofUrl(value: string): boolean {
   }
 }
 
+function isGoogleMetricoolEvidenceProofUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === "https:"
+      && (hostname === "drive.google.com" || hostname === "docs.google.com")
+      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolConnectionProofUrl(value: string): boolean {
+  return isMetricoolProofUrl(value) || isGoogleMetricoolEvidenceProofUrl(value);
+}
+
 async function readExistingAccountEvidenceStatus(accountId: string, platform: ClipperPlatform): Promise<ClipperAccountEvidenceItemStatus | null> {
   try {
     const parsed = JSON.parse(await readFile(accountEvidenceJsonPath(accountId, platform), "utf8")) as { status?: unknown };
@@ -33170,8 +33186,8 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a public TikTok profile_url for the active lane." });
       continue;
     }
-    if (!isMetricoolProofUrl(proof)) {
-      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a real Metricool proof URL." });
+    if (!isMetricoolConnectionProofUrl(proof)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a real Metricool proof URL or Google Drive/Docs evidence URL." });
       continue;
     }
 
@@ -33205,7 +33221,7 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
     nextStep: recorded.length
       ? options.write
         ? "Refresh account permission readiness, then keep remaining external proof rows blocked until real account/security evidence exists."
-        : "Preview accepted these rows. Import only if the proof URLs are real, public, non-secret Metricool/TikTok evidence."
+        : "Preview accepted these rows. Import only if the proof URLs are real, public, non-secret Metricool/TikTok or Google Drive/Docs evidence."
       : `Paste rows using header: ${METRICOOL_BRIDGE_EVIDENCE_TEMPLATE}`,
   };
   return { metricoolBridgeEvidenceBatch, status: options.write ? await getClipperStatus(userId) : null };

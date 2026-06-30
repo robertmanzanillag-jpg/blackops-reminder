@@ -75,7 +75,7 @@ function laneNextAction(row) {
   if (!row) return "Add account and Metricool proof rows.";
   if (row.status === "ready") return "No proof fix needed for this lane; wait for readiness gate.";
   if (row.reasons.some((reason) => /account/i.test(reason))) return "Fix the account proof row with a real safe HTTPS ownership/security proof URL and 20+ character notes.";
-  if (row.reasons.some((reason) => /Metricool|bridge/i.test(reason))) return "Fix the Metricool bridge row with the exact TikTok profile URL, real metricool.com proof URL, and 20+ character notes.";
+  if (row.reasons.some((reason) => /Metricool|bridge/i.test(reason))) return "Fix the Metricool bridge row with the exact TikTok profile URL, real metricool.com proof URL or Google Drive/Docs evidence URL, and 20+ character notes.";
   return row.reasons[0] || "Run proof intake pack, replace placeholders, then preview closeout again.";
 }
 
@@ -100,7 +100,7 @@ function rejectedNextAction(row) {
     return "Paste a real public/non-secret ownership or 2FA/security proof URL, then keep notes at 20+ characters.";
   }
   if (row.source === "bridge") {
-    return "Paste the real HTTPS metricool.com proof URL for the connected TikTok profile, then keep notes at 20+ characters.";
+    return "Paste the real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL for the connected TikTok profile, then keep notes at 20+ characters.";
   }
   return "Replace the rejected placeholder with real non-secret evidence and rerun proof doctor.";
 }
@@ -114,7 +114,7 @@ function normalizeFixQueueItem(row, paths) {
     column: rejectedColumn(row),
     reason: row.reason,
     requiredValue: row.source === "bridge"
-      ? "real HTTPS metricool.com proof URL"
+      ? "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL"
       : "real safe HTTPS ownership/security proof URL",
     nextAction: rejectedNextAction(row),
   };
@@ -284,7 +284,7 @@ async function main() {
       },
       {
         key: "sports-daily:tiktok.metricoolConnectionProofUrl",
-        description: "Real public/non-secret HTTPS Metricool proof URL showing Sports Daily TikTok is connected in Metricool.",
+        description: "Real public/non-secret HTTPS Metricool proof URL or Google Drive/Docs evidence URL showing Sports Daily TikTok is connected in Metricool.",
       },
       {
         key: "meme-radar:tiktok.accountOwnershipProofUrl",
@@ -292,7 +292,7 @@ async function main() {
       },
       {
         key: "meme-radar:tiktok.metricoolConnectionProofUrl",
-        description: "Real public/non-secret HTTPS Metricool proof URL showing Meme Radar TikTok is connected in Metricool.",
+        description: "Real public/non-secret HTTPS Metricool proof URL or Google Drive/Docs evidence URL showing Meme Radar TikTok is connected in Metricool.",
       },
     ],
     recommendedProofFlow: {

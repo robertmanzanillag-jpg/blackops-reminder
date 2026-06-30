@@ -304,7 +304,7 @@ async function main() {
       "Do not paste passwords, cookies, access tokens, recovery codes, private keys, or private screenshots.",
       "Use only public/non-secret proof URLs and 20+ character notes.",
       "TikTok profile URLs must exactly match @sportsdaily and @memeradar.",
-      "Metricool proof URLs must be real HTTPS metricool.com URLs.",
+      "Metricool proof URLs must be real HTTPS metricool.com URLs or Google Drive/Docs evidence URLs.",
       "This pack does not publish, schedule, or enable direct social APIs.",
     ],
     nextStep: ready >= target

@@ -36,6 +36,20 @@ export function safeClipperMetricoolProofUrl(value: unknown): boolean {
   }
 }
 
+export function safeClipperGoogleEvidenceProofUrl(value: unknown): boolean {
+  if (!safeClipperHttpsProofUrl(value)) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return /^(drive|docs)\.google\.com$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function safeClipperMetricoolConnectionProofUrl(value: unknown): boolean {
+  return safeClipperMetricoolProofUrl(value) || safeClipperGoogleEvidenceProofUrl(value);
+}
+
 function validClipperProofNotes(value: unknown, pattern: RegExp): boolean {
   const text = String(value || "").trim();
   return text.length >= 20 && !hasClipperProofPlaceholder(text) && !containsClipperSecretLikeText(text) && pattern.test(text);
@@ -60,16 +74,17 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
   const structureError = validateClipperTikTokMvpProofLinks(value);
   const lanes = clipperTikTokMvpProofLaneSpecs.map((spec) => {
     const lane = value?.lanes?.[spec.key] || {};
+    const metricoolConnectionProofReady = safeClipperMetricoolConnectionProofUrl(lane.metricoolConnectionProofUrl);
     const issues = [
       safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl) ? null : "accountOwnershipProofUrl must be a real safe HTTPS proof URL",
-      safeClipperMetricoolProofUrl(lane.metricoolConnectionProofUrl) ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com proof URL",
+      metricoolConnectionProofReady ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL",
       validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i) ? null : "accountNotes must be 20+ chars and mention ownership/security proof",
       validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i) ? null : "metricoolNotes must be 20+ chars and mention Metricool connection proof",
     ].filter(Boolean);
     return {
       ...spec,
       accountProofReady: safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl),
-      metricoolProofReady: safeClipperMetricoolProofUrl(lane.metricoolConnectionProofUrl),
+      metricoolProofReady: metricoolConnectionProofReady,
       accountNotesReady: validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i),
       metricoolNotesReady: validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i),
       issues,
@@ -169,7 +184,7 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
     const scopedUrls = Array.from(laneText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
     const candidateUrls = scopedUrls.length ? scopedUrls : allUrls;
     const accountOwnershipProofUrl = explicitLane.accountOwnershipProofUrl || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolProofUrl(url)) || "";
-    const metricoolConnectionProofUrl = explicitLane.metricoolConnectionProofUrl || candidateUrls.find((url) => safeClipperMetricoolProofUrl(url)) || "";
+    const metricoolConnectionProofUrl = explicitLane.metricoolConnectionProofUrl || candidateUrls.find((url) => safeClipperMetricoolConnectionProofUrl(url) && url !== accountOwnershipProofUrl) || "";
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
     if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
     if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com connection proof URL.`);

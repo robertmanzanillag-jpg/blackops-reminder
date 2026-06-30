@@ -76,6 +76,14 @@ function cleanBridgeCsv() {
   ].join("\n") + "\n";
 }
 
+function cleanBridgeCsvWithGoogleEvidence() {
+  return [
+    bridgeHeader,
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://drive.google.com/file/d/sports-daily-metricool-connected-proof/view?usp=sharing,SPORT TikTok is connected in Metricool with public non-secret Drive screenshot proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing,memes TikTok is connected in Metricool with public non-secret Docs proof reviewed by Robert",
+  ].join("\n") + "\n";
+}
+
 function cleanCombinedCsv() {
   return [
     combinedHeader,
@@ -155,6 +163,40 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
       cwd: process.cwd(),
       encoding: "utf8",
     });
+  }
+});
+
+test("TikTok MVP evidence closeout accepts Google Drive or Docs Metricool evidence URLs", async () => {
+  const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(accountCsvPath, cleanAccountCsv());
+    await writeFile(bridgeCsvPath, cleanBridgeCsvWithGoogleEvidence());
+
+    const preview = runCloseout();
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const previewOutput = JSON.parse(preview.stdout);
+    assert.equal(previewOutput.status, "ready_to_apply");
+    assert.equal(previewOutput.applied, 0);
+
+    const applied = runCloseout(["--apply"]);
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    const appliedOutput = JSON.parse(applied.stdout);
+    assert.equal(appliedOutput.status, "applied");
+    assert.equal(appliedOutput.applied, 2);
+
+    const sportsEvidence = JSON.parse(await readFile(sportsEvidencePath, "utf8"));
+    const memesEvidence = JSON.parse(await readFile(memesEvidencePath, "utf8"));
+    assert.equal(sportsEvidence.metricoolProofUrl, "https://drive.google.com/file/d/sports-daily-metricool-connected-proof/view?usp=sharing");
+    assert.equal(memesEvidence.metricoolProofUrl, "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing");
+    assert.equal(sportsEvidence.status, "verified");
+    assert.equal(memesEvidence.status, "verified");
+  } finally {
+    if (previousSports === null) await unlink(sportsEvidencePath).catch(() => undefined);
+    else await writeFile(sportsEvidencePath, previousSports);
+    if (previousMemes === null) await unlink(memesEvidencePath).catch(() => undefined);
+    else await writeFile(memesEvidencePath, previousMemes);
   }
 });
 
@@ -1054,7 +1096,7 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
 
   const fixQueueCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fix-queue.csv"), "utf8");
   assert.match(fixQueueCsv, /sports-daily:tiktok/);
-  assert.match(fixQueueCsv, /real HTTPS metricool.com proof URL/);
+  assert.match(fixQueueCsv, /real HTTPS metricool.com proof URL or Google Drive\/Docs evidence URL/);
   assert.doesNotMatch(fixQueueCsv, /ready_to_send|video\.publish|access_token=|refresh_token=|client_secret=/i);
 });
 
@@ -1600,7 +1642,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(pastePacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
-  assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com/);
+  assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com\/\.\.\. or Google Drive\/Docs evidence URLs/);
   assert.doesNotMatch(pastePacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 
   const oneScreen = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fill-one-screen.txt"), "utf8");

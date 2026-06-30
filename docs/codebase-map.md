@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T14:31:02.749Z
+Generated: 2026-06-30T14:38:47.329Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 97 | 8948 |
+| 431 | 363 | 1368 | 97 | 8962 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -148,7 +148,7 @@ Package: `rest-express`
 - `script/ceo-restore.ts` (script; 9 symbols, 4 imports)
 - `script/ceo-smoke.ts` (script; 29 symbols, 15 imports)
 - `script/ceo-verify-local.mjs` (script; 2 symbols, 1 imports)
-- `script/clippers-account-permission-readiness.mjs` (script; 160 symbols, 2 imports)
+- `script/clippers-account-permission-readiness.mjs` (script; 162 symbols, 2 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 268 symbols, 3 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
@@ -172,15 +172,15 @@ Package: `rest-express`
 - `script/clippers-tiktok-external-closeout-session.mjs` (script; 56 symbols, 2 imports)
 - `script/clippers-tiktok-launch-control.mjs` (script; 63 symbols, 2 imports)
 - `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 45 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 66 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 68 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 46 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-local-verification.mjs` (script; 25 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-doctor.mjs` (script; 49 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 57 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-handoff.mjs` (script; 51 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-intake-import.mjs` (script; 69 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-intake-pack.mjs` (script; 35 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-quick-fill.mjs` (script; 51 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-quick-fill.mjs` (script; 53 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-refresh.mjs` (script; 20 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-unblocker.mjs` (script; 41 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-readiness-verifier.mjs` (script; 47 symbols, 2 imports)

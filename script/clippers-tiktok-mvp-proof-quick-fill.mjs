@@ -165,6 +165,21 @@ function metricoolProofUrl(value) {
   }
 }
 
+function googleEvidenceProofUrl(value) {
+  const text = normalize(value);
+  if (!safeHttpsUrl(text)) return false;
+  try {
+    const url = new URL(text);
+    return /^(drive|docs)\.google\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function metricoolConnectionProofUrl(value) {
+  return metricoolProofUrl(value) || googleEvidenceProofUrl(value);
+}
+
 function validNotes(value) {
   const text = normalize(value);
   return text.length >= 20 && !hasPlaceholder(text) && !containsSecret(text);
@@ -181,8 +196,8 @@ function validateInput(input) {
     if (!safeHttpsUrl(row.accountOwnershipProofUrl)) {
       issues.push(`${lane.key}: accountOwnershipProofUrl must be a real safe HTTPS proof URL.`);
     }
-    if (!metricoolProofUrl(row.metricoolConnectionProofUrl)) {
-      issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com proof URL.`);
+    if (!metricoolConnectionProofUrl(row.metricoolConnectionProofUrl)) {
+      issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.`);
     }
     if (!validNotes(row.accountNotes)) {
       issues.push(`${lane.key}: accountNotes must be 20+ chars and contain no placeholders or secrets.`);

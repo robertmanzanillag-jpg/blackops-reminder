@@ -149,17 +149,17 @@ function buildCollectionPackets(proofDrop) {
         handle: lane.handle,
         field: "metricoolConnectionProofUrl",
         status: state.metricoolProofReady && state.metricoolNotesReady ? "ready" : "needed",
-        proofUrlRule: "Must be a real HTTPS metricool.com URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
+        proofUrlRule: "Must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
         acceptedProof: [
           `Metricool brand/profile ${lane.metricoolBrandName} shows TikTok connected to ${lane.handle}.`,
           "Metricool planner/profile proof URL that does not expose secret account data.",
           "Notes must be 20+ characters and mention Metricool connection proof.",
         ],
         rejectIf: [
-          "The URL is not on metricool.com.",
+          "The URL is not on metricool.com or Google Drive/Docs.",
           "The proof is a placeholder, private credential page, screenshot with secrets, signed URL, temporary URL, or contains auth material.",
         ],
-        copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
+        copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
       },
     ];
   });
@@ -257,7 +257,7 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
     guardrails: [
       "Do not paste passwords, tokens, cookies, recovery codes, client secrets, API keys, signed URLs, or private screenshots.",
       "Do not use search/explore/example/placeholder URLs as proof.",
-      "Metricool connection proof must be a real HTTPS metricool.com URL.",
+      "Metricool connection proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.",
       "This board does not apply evidence, schedule posts, publish, or enable direct social APIs.",
     ],
   };
@@ -300,7 +300,7 @@ function renderProofLinksPastePacket() {
   return [
     "# TikTok MVP proof-links paste packet",
     "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
-    "# Metricool proof URLs must be https://*.metricool.com/...",
+    "# Metricool proof URLs must be https://*.metricool.com/... or Google Drive/Docs evidence URLs",
     "",
     ...lanes.flatMap((lane) => [
       `${lane.key}.accountOwnershipProofUrl=`,
@@ -323,7 +323,7 @@ function renderOneScreenProofFill(summary) {
     "",
     "Required:",
     "- Account ownership proof can be a safe HTTPS Drive/doc/proof URL showing account ownership/security review.",
-    "- Metricool connection proof must be a real HTTPS metricool.com URL showing the TikTok profile connected in Metricool.",
+    "- Metricool connection proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL showing the TikTok profile connected in Metricool.",
     "- Notes already exist in the paste packet; keep them concrete and 20+ characters.",
     "",
     "Never paste:",

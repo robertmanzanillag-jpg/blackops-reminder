@@ -233,7 +233,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       owner: "Robert",
       buttonOrFile: oneScreenProofPath,
       proofLine: `${accountId}:tiktok.metricoolConnectionProofUrl=`,
-      guardrail: "Metricool proof must be a real HTTPS metricool.com URL; keep Metricool approval_required.",
+      guardrail: "Metricool proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; keep Metricool approval_required.",
       nextAction: activeMvpReady
         ? "Already covered by applied TikTok MVP evidence."
         : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, then preview/save proof links.`,

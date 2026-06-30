@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   auditClipperTikTokMvpProofLinks,
   extractClipperTikTokMvpProofLinksPaste,
+  safeClipperMetricoolConnectionProofUrl,
   safeClipperMetricoolProofUrl,
   validateClipperTikTokMvpProofLinks,
 } from "../server/clippers-tiktok-mvp-proof-links";
@@ -88,12 +89,39 @@ test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof 
 
   assert.equal(validateClipperTikTokMvpProofLinks(proofLinks), "");
   assert.equal(safeClipperMetricoolProofUrl("https://example.com/not-metricool-proof"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://example.com/not-metricool-proof"), false);
   const audit = auditClipperTikTokMvpProofLinks(proofLinks);
   assert.equal(audit.status, "blocked");
   assert.equal(audit.realPublishEnabled, false);
   assert.equal(audit.goalBoardImpact.status, "blocked_proof_actions");
   assert.ok(audit.goalBoardImpact.readyProofFields < audit.goalBoardImpact.totalProofFields);
-  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com proof URL/);
+  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or Google Drive\/Docs evidence URL/);
+});
+
+test("TikTok MVP proof links audit accepts Google Drive Metricool screenshots as non-secret evidence", () => {
+  const proofLinks = {
+    lanes: {
+      ...cleanProofLinks.lanes,
+      "sports-daily:tiktok": {
+        ...cleanProofLinks.lanes["sports-daily:tiktok"],
+        metricoolConnectionProofUrl: "https://drive.google.com/file/d/sports-daily-metricool-connected-screenshot/view?usp=sharing",
+        metricoolNotes: "Metricool screenshot proof shows SPORT TikTok profile connected in approval_required mode.",
+      },
+      "meme-radar:tiktok": {
+        ...cleanProofLinks.lanes["meme-radar:tiktok"],
+        metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+        metricoolNotes: "Metricool proof document shows memes TikTok profile connected without sharing secrets.",
+      },
+    },
+  };
+
+  assert.equal(safeClipperMetricoolProofUrl(proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl(proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl), true);
+  assert.equal(safeClipperMetricoolConnectionProofUrl(proofLinks.lanes["meme-radar:tiktok"].metricoolConnectionProofUrl), true);
+  const audit = auditClipperTikTokMvpProofLinks(proofLinks);
+  assert.equal(audit.status, "ready_for_proof_drop");
+  assert.equal(audit.readyForProofDrop, true);
+  assert.equal(audit.realPublishEnabled, false);
 });
 
 test("TikTok MVP proof links validator rejects secrets anywhere in JSON", () => {

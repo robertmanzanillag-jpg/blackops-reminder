@@ -117,6 +117,21 @@ function isMetricoolEvidenceUrl(value) {
   }
 }
 
+function isGoogleEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    return isSafeEvidenceUrl(value)
+      && (hostname === "drive.google.com" || hostname === "docs.google.com");
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolConnectionEvidenceUrl(value) {
+  return isMetricoolEvidenceUrl(value) || isGoogleEvidenceUrl(value);
+}
+
 function exactTikTokProfileUrlFor(handle) {
   return `https://www.tiktok.com/${String(handle || "").startsWith("@") ? handle : `@${handle}`}`;
 }
@@ -155,7 +170,7 @@ function activeTikTokMvpEvidenceIssues(account, platform, evidence) {
   return [
     !isExactTikTokProfileUrl(profileUrl, account.handle) ? `profileUrl must be the exact public TikTok profile ${exactTikTokProfileUrlFor(account.handle)}` : null,
     !isSafeEvidenceUrl(accountProofUrl) ? "accountProofUrl must be a real safe HTTPS ownership/security proof URL" : null,
-    !isMetricoolEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL" : null,
+    !isMetricoolConnectionEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL or Google Drive/Docs evidence URL" : null,
     evidenceNotesIssue(notes),
     unsafeEvidencePattern.test(combined) || unsafeEvidenceParamPattern.test(combined) ? "evidence contains placeholder or secret-like text" : null,
   ].filter(Boolean);

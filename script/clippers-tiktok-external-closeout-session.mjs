@@ -181,7 +181,7 @@ function renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout) {
   return [
     "# TikTok MVP proof-links paste packet",
     "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
-    "# Metricool proof URLs must be https://*.metricool.com/...",
+    "# Metricool proof URLs must be https://*.metricool.com/... or Google Drive/Docs evidence URLs",
     "# Save the filled copy to clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt or paste it into the Proof Links Assistant.",
     "",
     ...activeRows.flatMap((row) => {
@@ -461,7 +461,7 @@ async function main() {
       checklist: proofLinksOperatorChecklist(),
       guardrails: [
         "This packet is a template and does not save evidence by itself.",
-        "Metricool URLs must be real HTTPS metricool.com URLs.",
+        "Metricool URLs must be real HTTPS metricool.com URLs or Google Drive/Docs evidence URLs.",
         "Ownership proof URLs must be safe HTTPS URLs without token, signature, session, or expiry query params.",
       ],
     },

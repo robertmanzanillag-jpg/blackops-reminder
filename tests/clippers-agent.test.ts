@@ -6228,9 +6228,9 @@ test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", asy
     const raw = [
       "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
       "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge connected in Metricool with redacted proof reference.",
-      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://app.metricool.com/brands/6431685,Memes TikTok bridge connected in Metricool with redacted proof reference.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/metricool-proof/view,Memes TikTok bridge connected in Metricool with redacted Drive proof reference.",
       "sports-daily,tiktok,SPORT,6431687,https://www.instagram.com/sportsdaily,https://app.metricool.com/brands/6431687,Declared TikTok lane must not accept an Instagram profile URL.",
-      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/metricool-proof/view,Declared TikTok lane must still require Metricool proof URL.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://evidence.invalid/metricool-proof,Declared TikTok lane must still reject generic proof domains.",
       "sports-daily,youtube,SPORT,6431687,https://www.youtube.com/@sportsdaily,https://app.metricool.com/brands/6431687,YouTube bridge proof is formatted but deferred outside the TikTok MVP.",
       "meme-radar,instagram,memes,6431685,https://www.instagram.com/memeradar,https://app.metricool.com/brands/6431685,Instagram bridge proof is formatted but deferred outside the TikTok MVP.",
       "streamer-pulse,tiktok,Streamers,6431688,https://www.tiktok.com/@streamerpulse,https://app.metricool.com/brands/6431688,Streamer TikTok proof is formatted but not in the initial SPORT memes MVP.",
@@ -6246,7 +6246,7 @@ test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", asy
       ["meme-radar:tiktok", "sports-daily:tiktok"],
     );
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("public TikTok profile_url")));
-    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("real Metricool proof URL")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("Metricool proof URL or Google Drive/Docs")));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "youtube"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "instagram"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "streamer-pulse" && item.platform === "tiktok"));

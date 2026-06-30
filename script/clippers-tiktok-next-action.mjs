@@ -82,7 +82,7 @@ function nextStepFor(summary) {
     return [
       "Record non-secret Metricool bridge evidence for SPORT and memes TikTok before scheduling clips.",
       blockedLabels ? `Blocked lanes: ${blockedLabels}.` : "",
-      "Use the Metricool bridge evidence batch panel with public TikTok profile URL, real https Metricool proof URL, and 20+ character notes; do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+      "Use the Metricool bridge evidence batch panel with public TikTok profile URL, real https Metricool proof URL or Google Drive/Docs evidence URL, and 20+ character notes; do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
     ].filter(Boolean).join(" ");
   }
   if (summary.status === "blocked_evidence_fix") {
@@ -115,7 +115,7 @@ function taskRowsFor(summary) {
       evidence: `${summary.account.readyLanes}/${summary.account.totalLanes} TikTok MVP lanes ready`,
       nextAction: summary.account.ready
         ? "Use SPORT and memes TikTok lanes only."
-        : "Import Metricool bridge evidence rows for SPORT/memes TikTok with public profile URL, real https Metricool proof URL, and safe notes.",
+        : "Import Metricool bridge evidence rows for SPORT/memes TikTok with public profile URL, real https Metricool proof URL or Google Drive/Docs evidence URL, and safe notes.",
     },
     {
       id: "upload_pack",

@@ -114,6 +114,21 @@ function metricoolProofUrl(value) {
   }
 }
 
+function googleEvidenceProofUrl(value) {
+  const text = normalize(value);
+  if (!safeHttpsUrl(text)) return false;
+  try {
+    const url = new URL(text);
+    return /^(drive|docs)\.google\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function metricoolConnectionProofUrl(value) {
+  return metricoolProofUrl(value) || googleEvidenceProofUrl(value);
+}
+
 function validNotes(value, pattern) {
   const text = normalize(value);
   return text.length >= 20 && !hasPlaceholder(text) && !containsSecret(text) && pattern.test(text);
@@ -159,7 +174,7 @@ async function ensureDropKitFiles() {
     ]),
     "",
     "Use proof-links-starter.json as the safe copy-paste starter if proof-links.json gets messy.",
-    "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof must be a metricool.com HTTPS URL. URLs with x-amz/signature/expires/session/token query params are blocked.",
+    "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof can be a metricool.com HTTPS URL or a Google Drive/Docs evidence URL showing the connection. URLs with x-amz/signature/expires/session/token query params are blocked.",
     "This kit never applies final evidence, publishes, schedules, or enables real publishing.",
     "",
   ].join("\n"));
@@ -195,13 +210,13 @@ function validateProofLinks(input, detectedRows) {
     const accountFileReady = (detected?.accountFiles || []).length > 0;
     const metricoolFileReady = (detected?.metricoolFiles || []).length > 0;
     const accountProofReady = safeHttpsUrl(payload.accountOwnershipProofUrl);
-    const metricoolProofReady = metricoolProofUrl(payload.metricoolConnectionProofUrl);
+    const metricoolProofReady = metricoolConnectionProofUrl(payload.metricoolConnectionProofUrl);
     const accountNotesReady = validNotes(payload.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i);
     const metricoolNotesReady = validNotes(payload.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i);
     if (!accountFileReady) warnings.push(`${lane.key}: optional local inventory file ${lane.expectedFiles.account}.png/pdf/jpg was not detected.`);
     if (!metricoolFileReady) warnings.push(`${lane.key}: optional local inventory file ${lane.expectedFiles.metricool}.png/pdf/jpg was not detected.`);
     if (!accountProofReady) issues.push(`${lane.key}: accountOwnershipProofUrl must be a real safe HTTPS proof URL.`);
-    if (!metricoolProofReady) issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com proof URL.`);
+    if (!metricoolProofReady) issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.`);
     if (!accountNotesReady) issues.push(`${lane.key}: accountNotes must be 20+ chars, mention ownership/security proof, and contain no secrets/placeholders.`);
     if (!metricoolNotesReady) issues.push(`${lane.key}: metricoolNotes must be 20+ chars, mention Metricool connection proof, and contain no secrets/placeholders.`);
     lanesSummary.push({
