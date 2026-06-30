@@ -337,6 +337,44 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  websiteClosureQueue: {
+    status: "ready" | "empty";
+    readyCount: number;
+    items: Array<{
+      id: string;
+      opportunityId: string;
+      leadId: string;
+      outreachDraftId: string;
+      sourceLeadId: string;
+      sourceOutreachDraftId: string;
+      businessName: string;
+      projectType: "website" | "bundle";
+      status: "quoted" | "scope_approved" | "sold" | "blocked";
+      sourceUrl: string;
+      mockupUrl: string;
+      setupUsd: number;
+      requiredDepositUsd: number;
+      cashCollectedUsd: number;
+      monthlyRetainerUsd: number;
+      depositPaid: boolean;
+      scopeApproved: boolean;
+      paymentConfirmation: string;
+      closureStage: "collect_deposit" | "approve_scope" | "collect_deposit_and_scope";
+      priority: "high" | "medium";
+      readiness: string[];
+      copyableClosurePacket: string;
+      nextAction: string;
+    }>;
+    safety: {
+      sendsOutreach: false;
+      collectsPaymentAutomatically: false;
+      createsWorkspace: false;
+      requiresPaymentEvidence: true;
+      requiresScopeApproval: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
   publicLeadImportQueue: {
     status: "ready" | "needs_review" | "empty";
     readyCount: number;
@@ -2565,7 +2603,7 @@ export default function RevenueEnginePage() {
     WebsiteOpportunityCloseResult,
     Error,
     {
-      opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number];
+      opportunity: RevenueSnapshot["websiteClosureQueue"]["items"][number];
       scopeApproved: boolean;
       cashCollectedUsd: number;
       paymentConfirmation: string;
@@ -5679,18 +5717,18 @@ export default function RevenueEnginePage() {
                       </p>
                     </div>
                     <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
-                      {(snapshot?.recentWebsiteOpportunities || []).filter((item) => item.status === "sold").length} vendidas
+                      {snapshot?.websiteClosureQueue.readyCount ?? 0} por cerrar
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {(snapshot?.recentWebsiteOpportunities || []).length === 0 ? (
+                  {(snapshot?.websiteClosureQueue.items || []).length === 0 ? (
                     <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
-                      Sin oportunidades website cotizadas todavia.
+                      Sin oportunidades website pendientes de scope/deposito.
                     </div>
                   ) : (
                     <div className="grid gap-3 xl:grid-cols-2">
-                      {(snapshot?.recentWebsiteOpportunities || []).slice(0, 6).map((opportunity) => {
+                      {(snapshot?.websiteClosureQueue.items || []).map((opportunity) => {
                         const scopeApprovedForClose = opportunity.scopeApproved || Boolean(websiteOpportunityScopeApprovals[opportunity.id]);
                         const closeInput = websiteOpportunityCloseInputs[opportunity.id] || {};
                         const closeCashValue = closeInput.cashCollectedUsd ?? String(opportunity.cashCollectedUsd || opportunity.requiredDepositUsd || 0);
@@ -5723,6 +5761,9 @@ export default function RevenueEnginePage() {
                               </Badge>
                               <Badge variant="outline" className={cn(closeDepositCoversRequired ? statusTone("ready") : statusTone("blocked"))}>
                                 {closeDepositCoversRequired ? "monto suficiente" : "monto parcial"}
+                              </Badge>
+                              <Badge variant="outline" className={cn(opportunity.priority === "high" ? statusTone("ready_to_start") : statusTone("draft"))}>
+                                {opportunity.closureStage}
                               </Badge>
                               <label className="flex h-8 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs text-zinc-300">
                                 <input
@@ -5818,6 +5859,17 @@ export default function RevenueEnginePage() {
                               </div>
                             )}
                             <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-zinc-700"
+                                onClick={() => navigator.clipboard.writeText(opportunity.copyableClosurePacket)}
+                                data-testid={`button-copy-website-closure-packet-${opportunity.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy close
+                              </Button>
                               <Button
                                 type="button"
                                 size="sm"

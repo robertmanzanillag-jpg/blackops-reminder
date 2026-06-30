@@ -2549,6 +2549,12 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(scopedOnlyResult.opportunity?.status, "scope_approved");
   assert.equal(scopedOnlyResult.opportunity?.scopeApproved, true);
   assert.equal(scopedOnlyResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.readyCount, 1);
+  assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.items[0].opportunityId, opportunityResult.opportunity?.id);
+  assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.items[0].closureStage, "collect_deposit");
+  assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.sendsOutreach, false);
+  assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.collectsPaymentAutomatically, false);
+  assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.status, "collect");
 
   const preservedOpportunity = recordRevenueWebsiteOpportunity({
     leadId: readyLead.lead.id,
@@ -2577,6 +2583,7 @@ test("website delivery handoff queue requires a sold website opportunity", async
 
   assert.equal(closeResult.status, "sold");
   assert.equal(closeResult.opportunity?.status, "sold");
+  assert.equal(closeResult.snapshot.websiteClosureQueue.readyCount, 0);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].opportunityId, opportunityResult.opportunity?.id);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
@@ -2613,6 +2620,57 @@ test("website opportunity close requires recorded manual deposit outcome", () =>
   assert.equal(fakeClose.snapshot.metrics.cashCollectedUsd, 0);
   assert.equal(fakeClose.snapshot.recentLedger.length, 0);
   assert.equal(fakeClose.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+});
+
+test("website closure queue keeps older money-ready opportunities visible", () => {
+  const oldReady = createApprovedWebsiteDraftForTest({
+    businessName: "Older Closure Cafe",
+    contactEmail: "owner@olderclosure.example",
+    sourceUrl: "https://example.com/older-closure-cafe",
+    mockupSlug: "older-closure-cafe",
+  });
+  const oldOpportunity = recordRevenueWebsiteOpportunity({
+    leadId: oldReady.lead.id,
+    outreachDraftId: oldReady.draft.id,
+    projectType: "website",
+  });
+  assert.equal(oldOpportunity.status, "quoted");
+
+  const scopedOnly = closeRevenueWebsiteOpportunity({
+    opportunityId: oldOpportunity.opportunity!.id,
+    depositPaid: false,
+    scopeApproved: true,
+    cashCollectedUsd: 0,
+    notes: "Scope approved but deposit still pending.",
+  });
+  assert.equal(scopedOnly.status, "blocked");
+  assert.equal(scopedOnly.opportunity?.status, "scope_approved");
+
+  for (let index = 1; index <= 29; index += 1) {
+    const newer = createApprovedWebsiteDraftForTest({
+      businessName: `Newer Closure Cafe ${index}`,
+      contactEmail: `owner${index}@newerclosure.example`,
+      sourceUrl: `https://example.com/newer-closure-cafe-${index}`,
+      mockupSlug: `newer-closure-cafe-${index}`,
+    });
+    const newerOpportunity = recordRevenueWebsiteOpportunity({
+      leadId: newer.lead.id,
+      outreachDraftId: newer.draft.id,
+      projectType: "website",
+    });
+    assert.equal(newerOpportunity.status, "quoted");
+  }
+
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.recentWebsiteOpportunities.some((item) => item.id === oldOpportunity.opportunity!.id), false);
+  assert.equal(snapshot.websiteClosureQueue.readyCount, 30);
+  assert.equal(snapshot.websiteClosureQueue.items.length, 30);
+  assert.equal(snapshot.websiteClosureQueue.items.some((item) => item.opportunityId === oldOpportunity.opportunity!.id), true);
+  const olderClosure = snapshot.websiteClosureQueue.items.find((item) => item.opportunityId === oldOpportunity.opportunity!.id)!;
+  assert.equal(olderClosure.closureStage, "collect_deposit");
+  assert.match(olderClosure.copyableClosurePacket, /Deposit required/);
+  assert.equal(snapshot.dailyMoneyCommand.status, "collect");
+  assert.equal(snapshot.dailyMoneyCommand.funnel.websiteClosuresPending, 30);
 });
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
