@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T15:11:05.377Z",
+  "generatedAt": "2026-06-30T20:24:36.656Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8968
+    "symbols": 8970
   },
   "directories": {
     ".agents/skills": {
@@ -5287,6 +5287,8 @@
         "sourceTotals",
         "status",
         "summary",
+        "tiktokMvpReadinessVerifierPath",
+        "tiktokVerifierReady",
         "timeout",
         "unique"
       ],

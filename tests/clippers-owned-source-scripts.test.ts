@@ -584,30 +584,78 @@ test("account permission readiness rejects shallow verified TikTok MVP evidence"
   }
 });
 
-test("operational readiness keeps MVP separate from full external readiness", async () => {
+test("operational readiness blocks Metricool MVP when TikTok proof verifier fails", async () => {
   const result = spawnSync(process.execPath, ["script/clippers-operational-readiness.mjs"], {
     cwd: process.cwd(),
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "metricool_mvp_ready");
-  assert.equal(output.metricoolMvpReady, true);
+  assert.equal(output.status, "blocked");
+  assert.equal(output.metricoolMvpReady, false);
   assert.equal(output.fullDirectApiReady, false);
   assert.equal(output.readyToSend, 0);
-  assert.equal(output.metricoolMvpBlockers, 0);
+  assert.ok(output.metricoolMvpBlockers > 0);
   assert.ok(output.directApiBacklog > 0);
 
   const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-operational-readiness.json"), "utf8"));
-  assert.equal(report.status, "metricool_mvp_ready");
+  assert.equal(report.status, "blocked");
   assert.equal(report.mvp.launchMode, "metricool_approval_required");
   assert.equal(report.mvp.directSocialApisRequired, false);
+  assert.equal(report.mvp.tiktokVerifierStatus, "fail");
+  assert.equal(report.mvp.tiktokLaunchDecision, "blocked_before_metricool");
   assert.equal(report.metricool.realPublishEnabled, false);
   assert.equal(report.metricool.publishMode, "approval_required");
   assert.equal(report.metricool.readyToSend, 0);
   assert.equal(report.accounts.directApiReadyLanes, 0);
-  assert.deepEqual(report.metricoolMvpBlockers, []);
+  assert.ok(report.metricoolMvpBlockers.some((blocker) => blocker.includes("TikTok MVP verifier is fail")));
   assert.ok(report.directApiBacklog.some((blocker) => blocker.includes("direct API publishing remains blocked")));
+});
+
+test("operational readiness stays blocked when only TikTok verifier fails", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
+    const goalAuditPath = path.join(rootDir, "reports/clippers-goal-completion-audit.json");
+    const reportPath = path.join(rootDir, "reports/clippers-operational-readiness.json");
+    const originalGoalAudit = await readFile(goalAuditPath, "utf8");
+    const originalReport = await readFile(reportPath, "utf8").catch(() => null);
+    try {
+      const goalAudit = JSON.parse(originalGoalAudit);
+      goalAudit.status = "complete";
+      goalAudit.fullGoalStatus = "complete";
+      goalAudit.totals = {
+        ...(goalAudit.totals || {}),
+        waitingMetricoolWork: 0,
+        needsExternalAction: 0,
+      };
+      await writeFile(goalAuditPath, JSON.stringify(goalAudit, null, 2));
+
+      const result = spawnSync(process.execPath, ["script/clippers-operational-readiness.mjs"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const output = JSON.parse(result.stdout);
+      assert.equal(output.status, "blocked");
+      assert.equal(output.metricoolMvpReady, false);
+      assert.ok(output.metricoolMvpBlockers > 0);
+
+      const report = JSON.parse(await readFile(reportPath, "utf8"));
+      assert.equal(report.accounts.metricoolReadyLanes, 2);
+      assert.equal(report.sources.sourceReadinessReady, true);
+      assert.equal(report.metricool.queuedForApproval, 100);
+      assert.equal(report.metricool.readyToSend, 0);
+      assert.equal(report.mvp.approvalQueueReady, true);
+      assert.equal(report.mvp.tiktokVerifierStatus, "fail");
+      assert.equal(report.mvp.tiktokLaunchDecision, "blocked_before_metricool");
+      assert.equal(report.status, "blocked");
+      assert.notEqual(report.status, "metricool_mvp_ready_with_blockers");
+      assert.ok(report.metricoolMvpBlockers.some((blocker) => blocker.includes("TikTok MVP verifier is fail")));
+    } finally {
+      await writeFile(goalAuditPath, originalGoalAudit);
+      if (originalReport === null) await unlink(reportPath).catch(() => undefined);
+      else await writeFile(reportPath, originalReport);
+    }
+  });
 });
 
 test("external closeout pack lists remaining account developer and permission actions", async () => {
