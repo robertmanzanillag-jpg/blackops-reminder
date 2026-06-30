@@ -2376,6 +2376,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
   paths: {
     json: string;
     markdown: string;
+    collectionCsv: string;
     proofDropJson: string;
     quickFillJson: string;
     importJson: string;
@@ -17349,6 +17350,7 @@ export default function ClippersPage() {
                   <p>Real publish: {tiktokMvpProofHandoff.realPublishEnabled ? "enabled" : "disabled"}</p>
                   <p>Direct APIs: {tiktokMvpProofHandoff.directSocialApisRequired ? "required" : "not required"}</p>
                   <p className="break-all">Report: {tiktokMvpProofHandoff.paths.markdown}</p>
+                  <p className="break-all">Collection CSV: {tiktokMvpProofHandoff.paths.collectionCsv}</p>
                 </div>
               </div>
             )}

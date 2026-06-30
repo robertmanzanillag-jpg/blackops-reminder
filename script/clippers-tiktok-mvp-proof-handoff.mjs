@@ -6,6 +6,7 @@ const rootDir = path.join(process.cwd(), "clippers_workspace");
 const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
+const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
 
 const lanes = [
   {
@@ -161,6 +162,45 @@ function buildCollectionPackets(proofDrop) {
   });
 }
 
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function renderCollectionCsv(packets) {
+  const header = [
+    "id",
+    "lane",
+    "account_id",
+    "account_name",
+    "platform",
+    "handle",
+    "field",
+    "status",
+    "proof_url_rule",
+    "accepted_proof",
+    "reject_if",
+    "copy_prompt",
+  ];
+  return [
+    header.join(","),
+    ...packets.map((packet) => [
+      packet.id,
+      packet.lane,
+      packet.accountId,
+      packet.accountName,
+      packet.platform,
+      packet.handle,
+      packet.field,
+      packet.status,
+      packet.proofUrlRule,
+      packet.acceptedProof.join(" | "),
+      packet.rejectIf.join(" | "),
+      packet.copyPrompt,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Handoff",
@@ -255,6 +295,7 @@ async function main() {
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,
+      collectionCsv: outCollectionCsvPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
       importJson: path.join(reportsDir, "proof-intake-import.json"),
@@ -271,6 +312,7 @@ async function main() {
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
+  await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
   console.log(JSON.stringify({
     status: summary.status,
     nextButton: summary.nextButton,
@@ -280,6 +322,7 @@ async function main() {
     closeoutRejected: summary.totals.closeoutRejected,
     proofPacketsNeeded: summary.totals.proofPacketsNeeded,
     reportJsonPath: outJsonPath,
+    collectionCsvPath: outCollectionCsvPath,
     nextAction: summary.nextAction,
   }, null, 2));
 }

@@ -1130,6 +1130,8 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /accountOwnershipProofUrl/);
   assert.match(source, /metricoolConnectionProofUrl/);
   assert.match(source, /proofPacketsNeeded/);
+  assert.match(source, /proof-handoff-collection-packets\.csv/);
+  assert.match(source, /renderCollectionCsv/);
   assert.match(source, /Must be a real HTTPS metricool\.com URL/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-drop-kit\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-intake-import\.mjs/);
@@ -1142,6 +1144,25 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.doesNotMatch(source, /ready_to_send/);
   assert.match(source, /realPublishEnabled:\s*false/);
   assert.match(source, /directSocialApisRequired:\s*false/);
+});
+
+test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
+  const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-handoff.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.match(output.collectionCsvPath, /proof-handoff-collection-packets\.csv$/);
+  assert.equal(output.proofPacketsNeeded, 4);
+
+  const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff-collection-packets.csv"), "utf8");
+  assert.match(csv, /sports-daily-account-ownership/);
+  assert.match(csv, /sports-daily-metricool-connection/);
+  assert.match(csv, /meme-radar-account-ownership/);
+  assert.match(csv, /meme-radar-metricool-connection/);
+  assert.match(csv, /Must be a real HTTPS metricool\.com URL/);
+  assert.doesNotMatch(csv, /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i);
 });
 
 test("TikTok MVP proof drop kit prepares local inventory without applying evidence", async () => {
