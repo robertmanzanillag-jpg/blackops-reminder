@@ -95,11 +95,17 @@ export const proposalEmailSchema = z.object({
 
 export type ProposalEmailInput = z.infer<typeof proposalEmailSchema>;
 
+const revenueMockupUrlSchema = z.union([
+  z.string().trim().url().max(300),
+  z.string().trim().regex(/^\/api\/revenue-engine\/mockup-previews\/[a-z0-9-]{1,120}$/).max(300),
+  z.literal(""),
+]);
+
 export const revenueOutreachDraftSchema = proposalEmailSchema.extend({
   leadId: z.string().trim().max(120).optional().default(""),
   channel: z.enum(["email", "gmail", "mailto", "instagram", "contact_form"]).default("gmail"),
   approvalStatus: z.enum(["draft", "approved"]).default("draft"),
-  mockupUrl: z.string().trim().url().max(300).optional(),
+  mockupUrl: revenueMockupUrlSchema.optional(),
 });
 
 export type RevenueOutreachDraftInput = z.infer<typeof revenueOutreachDraftSchema>;
@@ -221,6 +227,9 @@ export type RevenueProjectPlanInput = z.infer<typeof revenueProjectPlanSchema>;
 export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
   sourceOpportunityId: z.string().trim().max(160).optional().default(""),
+  sourceLeadId: z.string().trim().max(160).optional().default(""),
+  sourceOutreachDraftId: z.string().trim().max(160).optional().default(""),
+  mockupUrl: revenueMockupUrlSchema.optional().default(""),
   visualQaPassed: z.coerce.boolean().default(false),
   technicalQaPassed: z.coerce.boolean().default(false),
   automationQaPassed: z.coerce.boolean().default(false),
@@ -228,6 +237,28 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
 });
 
 export type RevenueDeliveryWorkspaceInput = z.infer<typeof revenueDeliveryWorkspaceSchema>;
+
+export const revenueWebsiteDeliveryWorkspaceSchema = z.object({
+  leadId: z.string().trim().min(1).max(200),
+  outreachDraftId: z.string().trim().max(200).optional().default(""),
+  mockupUrl: revenueMockupUrlSchema.optional().default(""),
+  workspaceName: z.string().trim().min(2).max(180).optional().default("Website delivery workspace"),
+  projectType: z.enum(["website", "bundle"]).default("bundle"),
+  depositPaid: z.coerce.boolean().default(false),
+  scopeApproved: z.coerce.boolean().default(false),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  publicDataVerified: z.coerce.boolean().default(false),
+  visualQaPassed: z.coerce.boolean().default(false),
+  technicalQaPassed: z.coerce.boolean().default(false),
+  automationQaPassed: z.coerce.boolean().default(false),
+  clientHandoffReady: z.coerce.boolean().default(false),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+  monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
+  notes: z.string().trim().max(1200).optional().default(""),
+});
+
+export type RevenueWebsiteDeliveryWorkspaceInput = z.infer<typeof revenueWebsiteDeliveryWorkspaceSchema>;
 
 export const revenueDeliveryWorkspaceUpdateSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
@@ -2650,6 +2681,9 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
   const workspaceResult = recordRevenueDeliveryWorkspace({
     workspaceName: parsed.workspaceName === "Delivery workspace" ? `${opportunity.businessName} delivery` : parsed.workspaceName,
     sourceOpportunityId: opportunity.id,
+    sourceLeadId: "",
+    sourceOutreachDraftId: "",
+    mockupUrl: "",
     clientName: opportunity.businessName,
     projectType: "automation",
     packageName: opportunity.quote.scope.packageName,
@@ -2677,6 +2711,124 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     status: "created" as const,
     reason: "Workspace de delivery creado con subagentes QA y guardrails de rentabilidad.",
     opportunity,
+    workspace: workspaceResult.workspace,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeliveryWorkspaceInput) {
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  const parsed = revenueWebsiteDeliveryWorkspaceSchema.parse(input);
+  const lead = revenueLeads.find((item) => item.id === parsed.leadId);
+
+  if (!lead) {
+    return {
+      status: "not_found" as const,
+      reason: "Lead no encontrado.",
+      lead: null,
+      outreachDraft: null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const outreachDraft = parsed.outreachDraftId
+    ? revenueOutreachDrafts.find((draft) => draft.id === parsed.outreachDraftId)
+    : revenueOutreachDrafts
+      .slice()
+      .reverse()
+      .find((draft) => draft.leadId === lead.id || draft.businessName.toLowerCase() === lead.businessName.toLowerCase());
+
+  if (parsed.outreachDraftId && !outreachDraft) {
+    return {
+      status: "blocked" as const,
+      reason: "Outreach draft no encontrado para este handoff.",
+      lead,
+      outreachDraft: null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+  const draftMatchesLead = !outreachDraft
+    || outreachDraft.leadId === lead.id
+    || (!outreachDraft.leadId && outreachDraft.businessName.toLowerCase() === lead.businessName.toLowerCase());
+  if (!draftMatchesLead) {
+    return {
+      status: "blocked" as const,
+      reason: "Outreach draft no pertenece al lead seleccionado.",
+      lead,
+      outreachDraft,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const qualification = qualifyRevenueLead(lead);
+  const effectiveMockupUrl = parsed.mockupUrl || outreachDraft?.mockupUrl || "";
+  const setupUsd = outreachDraft
+    ? parsed.projectType === "website"
+      ? Math.max(1500, outreachDraft.websitePriceUsd)
+      : outreachDraft.pricing.totalSetupUsd
+    : Math.max(1500, lead.estimatedOfferUsd);
+  const monthlyRetainerUsd = outreachDraft?.monthlyRetainerUsd || parsed.monthlyRetainerUsd;
+  const estimatedInternalCostUsd = outreachDraft?.estimatedInternalMonthlyCostUsd || parsed.estimatedInternalCostUsd;
+  const includesAutomation = parsed.projectType === "bundle" || Boolean(outreachDraft && outreachDraft.automationPriceUsd > 0);
+  const depositPaid = parsed.depositPaid || parsed.cashCollectedUsd > 0;
+  const publicDataVerified = parsed.publicDataVerified;
+  const sourceUrl = outreachDraft?.sourceUrl || "";
+  const contextLines = [
+    `Lead: ${lead.businessName} (${lead.niche}, ${lead.area})`,
+    `Website status: ${lead.websiteStatus}`,
+    `Qualification: ${qualification.grade} - ${qualification.guardrail}`,
+    lead.evidence && `Public evidence: ${lead.evidence}`,
+    lead.painPoint && `Pain point: ${lead.painPoint}`,
+    sourceUrl && `Source URL: ${sourceUrl}`,
+    effectiveMockupUrl && `Mockup preview: ${effectiveMockupUrl}`,
+    outreachDraft && `Outreach draft: ${outreachDraft.subject} (${outreachDraft.status}, ${outreachDraft.delivery.sendStatus})`,
+    parsed.cashCollectedUsd > 0 && `Cash collected for deposit: $${parsed.cashCollectedUsd.toLocaleString("en-US")}`,
+    parsed.notes && `Operator notes: ${parsed.notes}`,
+    "Codex build rule: create a separate branch and PR; do not deploy without Robert approval and App QA.",
+  ].filter(Boolean).join("\n");
+
+  if (depositPaid && parsed.scopeApproved && lead.status !== "closed") {
+    lead.status = strongerRevenueLeadStatus(lead.status, "closed");
+    lead.updatedAt = new Date().toISOString();
+    persistRevenueLeads();
+  }
+
+  const workspaceResult = recordRevenueDeliveryWorkspace({
+    workspaceName: parsed.workspaceName === "Website delivery workspace" ? `${lead.businessName} website delivery` : parsed.workspaceName,
+    sourceOpportunityId: "",
+    sourceLeadId: lead.id,
+    sourceOutreachDraftId: outreachDraft?.id || "",
+    mockupUrl: effectiveMockupUrl,
+    clientName: lead.businessName,
+    projectType: parsed.projectType,
+    packageName: parsed.projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
+    setupUsd,
+    monthlyRetainerUsd,
+    estimatedInternalCostUsd,
+    depositPaid,
+    scopeApproved: parsed.scopeApproved,
+    publicDataVerified,
+    includesAutomation,
+    launchTargetDays: parsed.launchTargetDays,
+    clientRequest: contextLines.slice(0, 1200),
+    visualQaPassed: parsed.visualQaPassed,
+    technicalQaPassed: parsed.technicalQaPassed,
+    automationQaPassed: parsed.automationQaPassed,
+    clientHandoffReady: parsed.clientHandoffReady,
+  });
+
+  return {
+    status: "created" as const,
+    reason:
+      workspaceResult.workspace.status === "ready_to_deliver"
+        ? "Website delivery workspace listo para entrega controlada despues de QA final."
+        : "Website delivery workspace creado; resolver correctionQueue antes de construir, mostrar o lanzar.",
+    lead,
+    outreachDraft: outreachDraft || null,
     workspace: workspaceResult.workspace,
     snapshot: getRevenueEngineSnapshot(),
   };
@@ -5847,8 +5999,9 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
 
     const hasSource = seed.sourceUrl.trim().length > 0;
     const isMockupCandidate = ["A", "B"].includes(leadResult.qualification.grade) && previews.length < parsed.dailyMockupLimit;
+    let preview: ReturnType<typeof buildRevenueMockupPreview> | null = null;
     if (isMockupCandidate) {
-      previews.push(buildRevenueMockupPreview({
+      preview = buildRevenueMockupPreview({
         businessName: seed.businessName,
         area: seed.area,
         niche: seed.niche,
@@ -5858,7 +6011,8 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         primaryOffer: parsed.offerFocus === "automations" ? "Automation Sprint + Revenue Dashboard" : "Website 3D Premium + Automation Sprint",
         estimatedOfferUsd: seed.estimatedOfferUsd,
         includeAutomation: parsed.offerFocus !== "websites",
-      }, { writeFile: parsed.writePreviewFiles }));
+      }, { writeFile: parsed.writePreviewFiles });
+      previews.push(preview);
     }
 
     const hasRecipient = seed.recipientEmail.trim().length > 0;
@@ -5871,6 +6025,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         contactName: seed.contactName || "Owner",
         businessName: seed.businessName,
         sourceUrl: seed.sourceUrl,
+        mockupUrl: preview?.previewUrl,
         businessSummary: summarizeSeedLead(seed),
         websitePriceUsd: parsed.offerFocus === "automations" ? 0 : Math.max(1500, Math.round(seed.estimatedOfferUsd * 0.65)),
         automationPriceUsd: parsed.offerFocus === "websites" ? 0 : Math.max(750, Math.round(seed.estimatedOfferUsd * 0.35)),

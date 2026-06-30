@@ -18,6 +18,7 @@ import {
   closeRevenueAutomationOpportunity,
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
+  createWebsiteDeliveryWorkspaceFromLead,
   deliverRevenueDeliveryWorkspace,
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
@@ -1057,9 +1058,159 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), true);
   assert.equal(result.outreachDrafts.length, 1);
   assert.equal(result.outreachDrafts[0].status, "draft");
+  assert.equal(result.outreachDrafts[0].mockupUrl, result.previews[0].previewUrl);
   assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
   assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
+});
+
+test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
+  const sprint = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [
+      {
+        businessName: "Handoff Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@handoffcafe.example",
+        evidence: "Google listing has no website, public social profile has menu photos and a verified owner email.",
+        painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 4200,
+        status: "research",
+        sourceUrl: "https://example.com/handoff-cafe-listing",
+        recipientEmail: "owner@handoffcafe.example",
+        contactName: "Owner",
+        businessSummary: "Handoff Cafe has no dedicated website and needs a stronger online menu, catering capture and follow-up system.",
+      },
+    ],
+  });
+  const lead = sprint.recordedLeads[0].lead;
+  const draft = sprint.outreachDrafts[0];
+  const preview = sprint.previews[0];
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    mockupUrl: preview.previewUrl,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 2100,
+    publicDataVerified: true,
+    visualQaPassed: false,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    notes: "Client said yes to a controlled build after seeing the mockup.",
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.equal(handoff.workspace?.input.sourceLeadId, lead.id);
+  assert.equal(handoff.workspace?.input.sourceOutreachDraftId, draft.id);
+  assert.equal(handoff.workspace?.input.mockupUrl, preview.previewUrl);
+  assert.equal(handoff.workspace?.input.clientRequest.includes("Mockup preview:"), true);
+  assert.equal(handoff.workspace?.input.clientRequest.includes("Codex build rule"), true);
+  assert.equal(handoff.workspace?.projectPlan.decision.status, "ready_to_build");
+  assert.equal(handoff.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
+  assert.equal(handoff.outreachDraft?.delivery.sendStatus, "not_sent");
+  assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
+  assert.equal(handoff.snapshot.recentDeliveryWorkspaces[0].input.sourceLeadId, lead.id);
+});
+
+test("blocks website delivery handoff when outreach draft belongs to another lead", () => {
+  const leadA = recordRevenueLead({
+    businessName: "Lead A Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@leada.example",
+    evidence: "Public listing has no website, active menu photos and verified owner contact.",
+    painPoint: "Needs menu capture.",
+    estimatedOfferUsd: 3600,
+    status: "qualified",
+  });
+  const leadB = recordRevenueLead({
+    businessName: "Lead B Salon",
+    area: "Miami",
+    niche: "salon",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@leadb.example",
+    evidence: "Public website has no booking flow, weak service pages and verified owner contact.",
+    painPoint: "Needs booking capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draftB = recordRevenueOutreachDraft({
+    leadId: leadB.lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@leadb.example",
+    contactName: "Owner",
+    businessName: "Lead B Salon",
+    sourceUrl: "https://example.com/lead-b",
+    businessSummary: "Lead B Salon has public evidence of a weak website and needs booking capture plus follow-up.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: leadA.lead.id,
+    outreachDraftId: draftB.draft.id,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 2100,
+    publicDataVerified: true,
+  });
+
+  assert.equal(handoff.status, "blocked");
+  assert.equal(handoff.reason.includes("no pertenece"), true);
+  assert.equal(handoff.workspace, null);
+  assert.equal(handoff.snapshot.recentLeads.find((lead) => lead.id === leadA.lead.id)?.status, "qualified");
+});
+
+test("website delivery handoff keeps data gate explicit before build readiness", () => {
+  const lead = recordRevenueLead({
+    businessName: "Explicit Data Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@explicitdata.example",
+    evidence: "Public listing has no website, active menu photos and verified owner contact.",
+    painPoint: "Needs online menu capture.",
+    estimatedOfferUsd: 3800,
+    status: "qualified",
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.lead.id,
+    projectType: "website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1900,
+    publicDataVerified: false,
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.equal(handoff.workspace?.projectPlan.decision.status, "needs_scope");
+  assert.equal(handoff.workspace?.projectPlan.decision.missing.includes("data publica verificada"), true);
+  assert.equal(handoff.workspace?.input.publicDataVerified, false);
 });
 
 test("money sprint parses pasted lead batches with partial failures", () => {
