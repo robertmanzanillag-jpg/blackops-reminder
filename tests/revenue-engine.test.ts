@@ -46,6 +46,7 @@ import {
   revenueDeliveryWorkspaceGithubHandoffSchema,
   approveRevenueOutreachDraft,
   deliverRevenueDeliveryWorkspaceFromTrustedApproval,
+  runRevenueDailyScoutSprint,
   runRevenuePublicScoutAgentCommand,
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
@@ -54,6 +55,7 @@ import {
   resetRevenueApprovalDecisionsForTests,
   resetRevenueAutomationIntakesForTests,
   resetRevenueAutomationOpportunitiesForTests,
+  resetRevenueDailyScoutSprintsForTests,
   resetRevenueDeliveryWorkspacesForTests,
   resetRevenueImprovementReviewsForTests,
   resetRevenueLeadsForTests,
@@ -65,6 +67,7 @@ import {
   setRevenueApprovalDecisionsPathForTests,
   setRevenueAutomationIntakesPathForTests,
   setRevenueAutomationOpportunitiesPathForTests,
+  setRevenueDailyScoutSprintsPathForTests,
   setRevenueDeliveryWorkspacesPathForTests,
   setRevenueImprovementReviewsPathForTests,
   setRevenueLeadsPathForTests,
@@ -87,6 +90,7 @@ const testAutomationIntakesPath = path.join("/tmp", "revenue-engine-automation-i
 const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automation-opportunities-test.json");
 const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
 const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
+const testDailyScoutSprintsPath = path.join("/tmp", "revenue-engine-daily-scout-sprints-test.json");
 const testPublicLeadCandidatesPath = path.join("/tmp", "revenue-engine-public-lead-candidates-test.json");
 const testDeliveryWorkspacesPath = path.join("/tmp", "revenue-engine-delivery-workspaces-test.json");
 const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
@@ -109,6 +113,7 @@ test.beforeEach(() => {
   setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
   setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
   setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
+  setRevenueDailyScoutSprintsPathForTests(testDailyScoutSprintsPath);
   setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
   setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
   setRevenueOutreachSenderForTests(null);
@@ -121,6 +126,7 @@ test.beforeEach(() => {
   resetRevenueAutomationOpportunitiesForTests();
   resetRevenueImprovementReviewsForTests();
   resetRevenueScoutingMissionsForTests();
+  resetRevenueDailyScoutSprintsForTests();
   resetRevenuePublicLeadCandidatesForTests();
   resetRevenueDeliveryWorkspacesForTests();
 });
@@ -277,7 +283,68 @@ test("business scout queue handles minimum-size scouting missions without snapsh
   assert.equal(snapshot.businessScoutQueue.dailyResearchTarget, 10);
   assert.equal(snapshot.businessScoutQueue.tasks.length >= 3, true);
   assert.equal(snapshot.businessScoutQueue.safety.persistsCandidates, false);
-  assert.match(snapshot.businessScoutQueue.nextAction, /Guardar batch publico/);
+  assert.match(snapshot.businessScoutQueue.nextAction, /Start daily scout sprint/);
+});
+
+test("starts and persists a daily scout sprint without creating candidates, leads or outreach", () => {
+  recordRevenueScoutingMission({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    targetLeadCount: 10,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+
+  const result = runRevenueDailyScoutSprint({
+    maxTasks: 5,
+    resultSlotsPerTask: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "started");
+  assert.equal(result.sprint.source, "latest_scouting_mission");
+  assert.equal(result.sprint.area, "Orlando");
+  assert.equal(result.sprint.niche, "roofers");
+  assert.equal(result.sprint.status, "open");
+  assert.equal(result.sprint.tasks.length, 3);
+  assert.equal(result.sprint.targetRows, 6);
+  assert.equal(result.sprint.tasks.every((task) => task.resultSlots.length === 2), true);
+  assert.match(result.sprint.tasks[0].resultSlots[0].copyableEvidenceBlock, /Business:/);
+  assert.match(result.sprint.agentBriefs[0].copyableBrief, /Do not contact businesses/);
+  assert.equal(result.safety.persistsScoutRun, true);
+  assert.equal(result.safety.persistsCandidates, false);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.spendsMoney, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(snapshot.latestDailyScoutSprint?.id, result.sprint.id);
+  assert.equal(snapshot.recentDailyScoutSprints.length, 1);
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 0);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+  assert.equal(existsSync(testDailyScoutSprintsPath), true);
+});
+
+test("daily scout sprint rejects paid spend and string false contact approval", () => {
+  assert.throws(
+    () => runRevenueDailyScoutSprint({
+      maxPaidDataSpendUsd: 1,
+      requireRobertApprovalToContact: true,
+    }),
+    /Number must be less than or equal to 0/,
+  );
+  assert.throws(
+    () => runRevenueDailyScoutSprint({
+      maxPaidDataSpendUsd: 0,
+      requireRobertApprovalToContact: "false",
+    } as Parameters<typeof runRevenueDailyScoutSprint>[0]),
+    /Invalid literal value/,
+  );
+  assert.equal(getRevenueEngineSnapshot().recentDailyScoutSprints.length, 0);
 });
 
 test("daily money command prioritizes verified public candidates before more searching", () => {
@@ -746,6 +813,31 @@ test("public scout agent command cannot loosen contact approval or paid spend", 
     }),
     /Number must be greater than or equal to 0/,
   );
+});
+
+test("money sprint without lead evidence reports needs_lead_evidence instead of ready", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 10,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: "",
+  });
+
+  assert.equal(result.status, "needs_lead_evidence");
+  assert.equal(result.recordedLeads.length, 0);
+  assert.equal(result.previews.length, 0);
+  assert.equal(result.outreachDrafts.length, 0);
+  assert.match(result.nextActions[0], /Open scoutQueue tasks/);
+  assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
+  assert.equal(getRevenueEngineSnapshot().recentOutreach.length, 0);
 });
 
 test("runs money sprint from verified public candidates without copy paste or outreach send", () => {

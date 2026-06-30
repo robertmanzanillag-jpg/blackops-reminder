@@ -73,12 +73,21 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
 });
 
 test("Revenue Engine exposes the daily money command panel", () => {
+  const routeSource = readFileSync("server/routes.ts", "utf8");
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
   const serverSource = readFileSync("server/revenue-engine.ts", "utf8");
 
   assert.match(serverSource, /buildRevenueDailyMoneyCommand/);
   assert.match(serverSource, /dailyMoneyCommand/);
   assert.match(uiSource, /button-copy-daily-money-command/);
+  assert.match(routeSource, /\/api\/revenue-engine\/daily-scout-sprint/);
+  assert.match(routeSource, /revenueDailyScoutSprintSchema\.parse/);
+  assert.match(uiSource, /dailyScoutSprintMutation/);
+  assert.match(uiSource, /button-start-daily-scout-sprint/);
+  assert.match(uiSource, /panel-latest-daily-scout-sprint/);
+  assert.match(uiSource, /area: snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);
+  assert.match(uiSource, /niche: snapshot\?\.businessScoutQueue\.niche \|\| scoutingNiche/);
+  assert.match(uiSource, /targetLeadCount: snapshot\?\.businessScoutQueue\.dailyResearchTarget \|\| scoutingTargetLeadCount/);
   assert.match(uiSource, /dailyMoneyCommand\.primaryAction/);
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
 });

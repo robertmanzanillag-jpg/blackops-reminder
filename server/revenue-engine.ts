@@ -28,6 +28,20 @@ export const revenueScoutingMissionSchema = z.object({
 
 export type RevenueScoutingMissionInput = z.infer<typeof revenueScoutingMissionSchema>;
 
+export const revenueDailyScoutSprintSchema = z.object({
+  area: z.string().trim().min(2).max(120).optional(),
+  niche: z.string().trim().min(2).max(120).optional(),
+  offerFocus: z.enum(["websites", "automations", "both"]).optional(),
+  targetLeadCount: z.coerce.number().int().min(5).max(100).optional(),
+  maxTasks: z.coerce.number().int().min(3).max(30).default(9),
+  resultSlotsPerTask: z.coerce.number().int().min(1).max(5).default(2),
+  maxPaidDataSpendUsd: z.coerce.number().min(0).max(0).default(0),
+  requireRobertApprovalToContact: z.literal(true).default(true),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueDailyScoutSprintInput = z.infer<typeof revenueDailyScoutSprintSchema>;
+
 export const revenueLeadRadarSchema = z.object({
   area: z.string().trim().min(2).max(120),
   niches: z.string().trim().min(2).max(500).default("med spas, gyms, restaurants"),
@@ -652,6 +666,56 @@ type RevenueBusinessScoutQueue = {
   };
 };
 
+type RevenueDailyScoutSprint = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "open" | "completed" | "blocked";
+  source: "latest_scouting_mission" | "manual_override" | "default_market";
+  area: string;
+  niche: string;
+  offerFocus: RevenueMoneySprintInput["offerFocus"];
+  targetRows: number;
+  tasks: Array<{
+    taskId: string;
+    ownerAgent: string;
+    source: string;
+    query: string;
+    url: string;
+    targetRows: number;
+    status: "open" | "submitted" | "blocked";
+    resultSlots: Array<{
+      slotId: string;
+      status: "open" | "filled" | "rejected";
+      evidenceTemplate: string;
+      copyableEvidenceBlock: string;
+      acceptanceCriteria: string[];
+    }>;
+    allowedAction: string;
+    blockedActions: string[];
+  }>;
+  agentBriefs: Array<{
+    ownerAgent: string;
+    taskIds: string[];
+    copyableBrief: string;
+  }>;
+  copyableBatchTemplate: string;
+  copyableOperatorBrief: string;
+  qualityGate: string[];
+  nextAction: string;
+  safety: {
+    researchesPublicSources: true;
+    persistsScoutRun: true;
+    persistsCandidates: false;
+    persistsLeads: false;
+    sendsOutreach: false;
+    spendsMoney: false;
+    deploys: false;
+    requiresRobertApprovalToContact: true;
+    blockedActions: string[];
+  };
+};
+
 type RevenueWebsiteSalesPacketQueue = {
   status: "ready" | "needs_context" | "empty";
   readyCount: number;
@@ -953,6 +1017,7 @@ const revenueAgentRuns: RevenueAgentRun[] = [];
 const revenueAutomationOpportunities: RevenueAutomationOpportunity[] = [];
 const revenueImprovementReviews: RevenueImprovementReview[] = [];
 const revenueScoutingMissions: RevenueScoutingMission[] = [];
+const revenueDailyScoutSprints: RevenueDailyScoutSprint[] = [];
 const revenuePublicLeadCandidates: RevenuePublicLeadCandidate[] = [];
 const revenueDeliveryWorkspaces: RevenueDeliveryWorkspace[] = [];
 const revenueApprovalDecisions: RevenueApprovalDecision[] = [];
@@ -1153,6 +1218,55 @@ const persistedRevenuePublicLeadCandidateSchema = revenuePublicLeadCandidateSche
     writesPreviewFiles: z.boolean(),
   }),
 });
+const persistedRevenueDailyScoutSprintSchema: z.ZodType<RevenueDailyScoutSprint> = z.object({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["open", "completed", "blocked"]),
+  source: z.enum(["latest_scouting_mission", "manual_override", "default_market"]),
+  area: z.string().trim().min(1),
+  niche: z.string().trim().min(1),
+  offerFocus: z.enum(["websites", "automations", "both"]),
+  targetRows: z.number(),
+  tasks: z.array(z.object({
+    taskId: z.string(),
+    ownerAgent: z.string(),
+    source: z.string(),
+    query: z.string(),
+    url: z.string(),
+    targetRows: z.number(),
+    status: z.enum(["open", "submitted", "blocked"]),
+    resultSlots: z.array(z.object({
+      slotId: z.string(),
+      status: z.enum(["open", "filled", "rejected"]),
+      evidenceTemplate: z.string(),
+      copyableEvidenceBlock: z.string(),
+      acceptanceCriteria: z.array(z.string()),
+    })),
+    allowedAction: z.string(),
+    blockedActions: z.array(z.string()),
+  })),
+  agentBriefs: z.array(z.object({
+    ownerAgent: z.string(),
+    taskIds: z.array(z.string()),
+    copyableBrief: z.string(),
+  })),
+  copyableBatchTemplate: z.string(),
+  copyableOperatorBrief: z.string(),
+  qualityGate: z.array(z.string()),
+  nextAction: z.string(),
+  safety: z.object({
+    researchesPublicSources: z.literal(true),
+    persistsScoutRun: z.literal(true),
+    persistsCandidates: z.literal(false),
+    persistsLeads: z.literal(false),
+    sendsOutreach: z.literal(false),
+    spendsMoney: z.literal(false),
+    deploys: z.literal(false),
+    requiresRobertApprovalToContact: z.literal(true),
+    blockedActions: z.array(z.string()),
+  }),
+});
 const persistedRevenueDeliveryWorkspaceSchema = z.object({
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
@@ -1222,6 +1336,9 @@ let revenueImprovementReviewsPathOverride: string | null = null;
 let revenueScoutingMissionsLoaded = false;
 let revenueScoutingMissionsPersistenceError: string | null = null;
 let revenueScoutingMissionsPathOverride: string | null = null;
+let revenueDailyScoutSprintsLoaded = false;
+let revenueDailyScoutSprintsPersistenceError: string | null = null;
+let revenueDailyScoutSprintsPathOverride: string | null = null;
 let revenuePublicLeadCandidatesLoaded = false;
 let revenuePublicLeadCandidatesPersistenceError: string | null = null;
 let revenuePublicLeadCandidatesPathOverride: string | null = null;
@@ -1244,6 +1361,7 @@ const REVENUE_ENGINE_DATA_FILES = {
   automationOpportunities: "automation_opportunities.json",
   improvementReviews: "improvement_reviews.json",
   scoutingMissions: "scouting_missions.json",
+  dailyScoutSprints: "daily_scout_sprints.json",
   publicLeadCandidates: "public_lead_candidates.json",
   deliveryWorkspaces: "delivery_workspaces.json",
   approvalDecisions: "approval_decisions.json",
@@ -1266,6 +1384,7 @@ export function buildRevenueUserDataPaths(userId: string) {
     automationOpportunitiesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationOpportunities),
     improvementReviewsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.improvementReviews),
     scoutingMissionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.scoutingMissions),
+    dailyScoutSprintsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.dailyScoutSprints),
     publicLeadCandidatesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.publicLeadCandidates),
     deliveryWorkspacesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.deliveryWorkspaces),
     approvalDecisionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.approvalDecisions),
@@ -1281,6 +1400,7 @@ function clearRevenueEngineMemory() {
   revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
   revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
   revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
+  revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length);
   revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length);
   revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length);
   revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length);
@@ -1295,6 +1415,7 @@ function markRevenueEngineDataUnloaded() {
   revenueAutomationOpportunitiesLoaded = false;
   revenueImprovementReviewsLoaded = false;
   revenueScoutingMissionsLoaded = false;
+  revenueDailyScoutSprintsLoaded = false;
   revenuePublicLeadCandidatesLoaded = false;
   revenueDeliveryWorkspacesLoaded = false;
   revenueApprovalDecisionsLoaded = false;
@@ -1312,6 +1433,7 @@ export function setRevenueUserDataScope(userId: string) {
   revenueAutomationOpportunitiesPathOverride = paths.automationOpportunitiesPath;
   revenueImprovementReviewsPathOverride = paths.improvementReviewsPath;
   revenueScoutingMissionsPathOverride = paths.scoutingMissionsPath;
+  revenueDailyScoutSprintsPathOverride = paths.dailyScoutSprintsPath;
   revenuePublicLeadCandidatesPathOverride = paths.publicLeadCandidatesPath;
   revenueDeliveryWorkspacesPathOverride = paths.deliveryWorkspacesPath;
   revenueApprovalDecisionsPathOverride = paths.approvalDecisionsPath;
@@ -1444,6 +1566,10 @@ function getRevenueImprovementReviewsPath() {
 
 function getRevenueScoutingMissionsPath() {
   return revenueScoutingMissionsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_SCOUTING_MISSIONS_PATH", "scouting_missions.json");
+}
+
+function getRevenueDailyScoutSprintsPath() {
+  return revenueDailyScoutSprintsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_DAILY_SCOUT_SPRINTS_PATH", "daily_scout_sprints.json");
 }
 
 function getRevenuePublicLeadCandidatesPath() {
@@ -1606,6 +1732,27 @@ function loadRevenueScoutingMissions() {
     revenueScoutingMissionsPersistenceError = null;
   } catch (error) {
     revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo leer misiones de scouting.";
+  }
+}
+
+function loadRevenueDailyScoutSprints() {
+  if (revenueDailyScoutSprintsLoaded) return;
+  revenueDailyScoutSprintsLoaded = true;
+  const sprintsPath = getRevenueDailyScoutSprintsPath();
+
+  if (!fs.existsSync(sprintsPath)) return;
+
+  try {
+    const raw = fs.readFileSync(sprintsPath, "utf8");
+    const parsed = z.array(persistedRevenueDailyScoutSprintSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueDailyScoutSprintsPersistenceError = "Daily scout sprints invalidos; no se cargaron.";
+      return;
+    }
+    revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length, ...parsed.data);
+    revenueDailyScoutSprintsPersistenceError = null;
+  } catch (error) {
+    revenueDailyScoutSprintsPersistenceError = error instanceof Error ? error.message : "No se pudo leer daily scout sprints.";
   }
 }
 
@@ -1779,6 +1926,18 @@ function persistRevenueScoutingMissions() {
     revenueScoutingMissionsPersistenceError = null;
   } catch (error) {
     revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar mision de scouting.";
+    throw error;
+  }
+}
+
+function persistRevenueDailyScoutSprints() {
+  const sprintsPath = getRevenueDailyScoutSprintsPath();
+  try {
+    fs.mkdirSync(path.dirname(sprintsPath), { recursive: true });
+    fs.writeFileSync(sprintsPath, `${JSON.stringify(revenueDailyScoutSprints, null, 2)}\n`, "utf8");
+    revenueDailyScoutSprintsPersistenceError = null;
+  } catch (error) {
+    revenueDailyScoutSprintsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar daily scout sprint.";
     throw error;
   }
 }
@@ -3620,7 +3779,7 @@ function buildRevenueBusinessScoutQueue(): RevenueBusinessScoutQueue {
     dailyResearchTarget,
     tasks,
     workPack,
-    nextAction: "Abrir tareas de busqueda y capturar evidencia publica; despues usar Guardar batch publico para persistir candidatos.",
+    nextAction: "Start daily scout sprint para crear slots por subagente; despues pegar evidencia publica y guardar candidatos verificados.",
     safety: {
       researchesPublicSources: true,
       persistsCandidates: false,
@@ -3628,6 +3787,192 @@ function buildRevenueBusinessScoutQueue(): RevenueBusinessScoutQueue {
       spendsMoney: false,
       blockedActions: workPack.safety.blockedActions,
     },
+  };
+}
+
+function buildRevenueScoutSlotTemplate(input: {
+  slotId: string;
+  area: string;
+  niche: string;
+  sourceTaskId: string;
+  ownerAgent: string;
+  sourceUrl: string;
+}) {
+  return [
+    `Business: REPLACE_REAL_BUSINESS_NAME_${input.slotId}`,
+    `Area: ${input.area}`,
+    `Niche: ${input.niche}`,
+    "Website: no website | weak website | unknown",
+    "Contact: REPLACE_PUBLIC_CONTACT_PATH",
+    "Email: owner@example.com",
+    `Source: ${input.sourceUrl}`,
+    "Evidence: Public listing/profile reviewed by "
+      + `${input.ownerAgent}; replace with specific no/weak website signal, recent activity and contact path.`,
+    "Pain: Needs conversion-focused website, inquiry capture and follow-up.",
+    "Offer: 3500",
+    "Contact name: Owner",
+    `Summary: REPLACE_REAL_BUSINESS_NAME_${input.slotId} is a real public lead from ${input.sourceTaskId}.`,
+  ].join("\n");
+}
+
+export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailyScoutSprintSchema> = {}) {
+  loadRevenueScoutingMissions();
+  loadRevenueDailyScoutSprints();
+  const parsed = revenueDailyScoutSprintSchema.parse(input);
+  const latestMission = revenueScoutingMissions.at(-1);
+  const hasManualOverride = Boolean(parsed.area || parsed.niche || parsed.offerFocus || parsed.targetLeadCount);
+  const area = parsed.area || latestMission?.mission.area || "Miami";
+  const niche = parsed.niche || latestMission?.mission.niche || "restaurants";
+  const offerFocus = parsed.offerFocus || latestMission?.mission.offerFocus || "both";
+  const requestedTarget = parsed.targetLeadCount || latestMission?.mission.targetLeadCount || 10;
+  const preliminaryInput: RevenueMoneySprintInput = {
+    area,
+    niche,
+    offerFocus,
+    dailyResearchTarget: Math.max(requestedTarget, 10),
+    dailyQualifiedLeadLimit: Math.min(Math.max(requestedTarget, 5), 10),
+    dailyMockupLimit: 5,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [],
+    seedLeadBatchText: "",
+  };
+  const scoutQueue = buildRevenueScoutQueue(preliminaryInput).slice(0, parsed.maxTasks);
+  const targetRows = Math.min(Math.max(requestedTarget, 5), scoutQueue.length * parsed.resultSlotsPerTask, 10);
+  const moneySprintInput: RevenueMoneySprintInput = {
+    area,
+    niche,
+    offerFocus,
+    dailyResearchTarget: Math.max(targetRows, 10),
+    dailyQualifiedLeadLimit: targetRows,
+    dailyMockupLimit: 5,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [],
+    seedLeadBatchText: "",
+  };
+  const workPack = buildRevenueScoutWorkPack(moneySprintInput, scoutQueue);
+  const qualityGate = [
+    ...workPack.qualityGate,
+    "Cada slot debe corresponder a un negocio real; no usar placeholders como evidencia final.",
+    "No se registra candidato hasta que publicEvidenceVerified y approvalToImport sean true.",
+  ];
+  const tasks = scoutQueue.map((task) => {
+    const resultSlots = Array.from({ length: parsed.resultSlotsPerTask }, (_, slotIndex) => {
+      const slotId = `${task.id}-slot-${String(slotIndex + 1).padStart(2, "0")}`;
+      const evidenceTemplate = buildRevenueScoutSlotTemplate({
+        slotId,
+        area,
+        niche,
+        sourceTaskId: task.id,
+        ownerAgent: task.ownerAgent,
+        sourceUrl: task.url,
+      });
+      return {
+        slotId,
+        status: "open" as const,
+        evidenceTemplate,
+        copyableEvidenceBlock: evidenceTemplate,
+        acceptanceCriteria: qualityGate,
+      };
+    });
+
+    return {
+      taskId: task.id,
+      ownerAgent: task.ownerAgent,
+      source: task.source,
+      query: task.query,
+      url: task.url,
+      targetRows: resultSlots.length,
+      status: "open" as const,
+      resultSlots,
+      allowedAction: task.allowedAction,
+      blockedActions: task.blockedActions,
+    };
+  });
+  const agentBriefs = Array.from(new Set(tasks.map((task) => task.ownerAgent))).map((ownerAgent) => {
+    const ownedTasks = tasks.filter((task) => task.ownerAgent === ownerAgent);
+    return {
+      ownerAgent,
+      taskIds: ownedTasks.map((task) => task.taskId),
+      copyableBrief: [
+        `Daily scout sprint for ${ownerAgent}`,
+        `Area: ${area}`,
+        `Niche: ${niche}`,
+        `Offer focus: ${offerFocus}`,
+        "",
+        "Open only these public research tasks:",
+        ...ownedTasks.map((task) => `- ${task.taskId}: ${task.query} (${task.url})`),
+        "",
+        "Fill each slot with real public evidence using the template fields.",
+        "Do not contact businesses, buy data, scrape at scale, publish previews or invent evidence.",
+      ].join("\n"),
+    };
+  });
+  const now = new Date().toISOString();
+  const safetyBlockedActions = Array.from(new Set([
+    ...tasks.flatMap((task) => task.blockedActions),
+    "send outreach",
+    "persist lead before verified public evidence",
+    "run paid data",
+    "deploy website",
+  ]));
+  const sprint: RevenueDailyScoutSprint = {
+    id: `daily-scout-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    createdAt: now,
+    updatedAt: now,
+    status: "open",
+    source: hasManualOverride ? "manual_override" : latestMission ? "latest_scouting_mission" : "default_market",
+    area,
+    niche,
+    offerFocus,
+    targetRows,
+    tasks,
+    agentBriefs,
+    copyableBatchTemplate: workPack.copyableBatchTemplate,
+    copyableOperatorBrief: [
+      "Revenue Engine daily scout sprint",
+      "",
+      `Sprint: ${now.slice(0, 10)} ${area} ${niche}`,
+      `Target rows: ${targetRows}`,
+      `Tasks: ${tasks.length}`,
+      "",
+      "Subagent handoff:",
+      ...agentBriefs.map((brief) => `- ${brief.ownerAgent}: ${brief.taskIds.join(", ")}`),
+      "",
+      "After research:",
+      "1. Paste completed evidence blocks into Public scout evidence.",
+      "2. Mark public evidence verified only after checking URLs.",
+      "3. Approve import, then run Money Sprint from verified candidates.",
+    ].join("\n"),
+    qualityGate,
+    nextAction: "Asignar briefs a subagentes, llenar slots con evidencia publica real y pegar los bloques completos en Public scout evidence.",
+    safety: {
+      researchesPublicSources: true,
+      persistsScoutRun: true,
+      persistsCandidates: false,
+      persistsLeads: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      deploys: false,
+      requiresRobertApprovalToContact: true,
+      blockedActions: safetyBlockedActions,
+    },
+  };
+
+  revenueDailyScoutSprints.push(sprint);
+  persistRevenueDailyScoutSprints();
+
+  return {
+    status: "started" as const,
+    sprint,
+    safety: sprint.safety,
+    nextAction: sprint.nextAction,
+    snapshot: getRevenueEngineSnapshot(),
   };
 }
 
@@ -3771,6 +4116,7 @@ export function getRevenueEngineSnapshot() {
   loadRevenueAutomationOpportunities();
   loadRevenueImprovementReviews();
   loadRevenueScoutingMissions();
+  loadRevenueDailyScoutSprints();
   loadRevenuePublicLeadCandidates();
   loadRevenueDeliveryWorkspaces();
   loadRevenueApprovalDecisions();
@@ -3925,6 +4271,8 @@ export function getRevenueEngineSnapshot() {
     launchReadiness,
     agentOperatingContract,
     businessScoutQueue,
+    latestDailyScoutSprint: revenueDailyScoutSprints.at(-1) || null,
+    recentDailyScoutSprints: revenueDailyScoutSprints.slice(-5).reverse(),
     websiteSalesPacketQueue,
     manualOutreachQueue,
     publicLeadImportQueue,
@@ -3963,6 +4311,7 @@ export function getRevenueEngineSnapshot() {
       automationOpportunitiesPath: getRevenueAutomationOpportunitiesPath(),
       improvementReviewsPath: getRevenueImprovementReviewsPath(),
       scoutingMissionsPath: getRevenueScoutingMissionsPath(),
+      dailyScoutSprintsPath: getRevenueDailyScoutSprintsPath(),
       publicLeadCandidatesPath: getRevenuePublicLeadCandidatesPath(),
       deliveryWorkspacesPath: getRevenueDeliveryWorkspacesPath(),
       approvalDecisionsPath: getRevenueApprovalDecisionsPath(),
@@ -3974,6 +4323,7 @@ export function getRevenueEngineSnapshot() {
       automationOpportunitiesStatus: revenueAutomationOpportunitiesPersistenceError ? "warning" : "ok",
       improvementReviewsStatus: revenueImprovementReviewsPersistenceError ? "warning" : "ok",
       scoutingMissionsStatus: revenueScoutingMissionsPersistenceError ? "warning" : "ok",
+      dailyScoutSprintsStatus: revenueDailyScoutSprintsPersistenceError ? "warning" : "ok",
       publicLeadCandidatesStatus: revenuePublicLeadCandidatesPersistenceError ? "warning" : "ok",
       deliveryWorkspacesStatus: revenueDeliveryWorkspacesPersistenceError ? "warning" : "ok",
       approvalDecisionsStatus: revenueApprovalDecisionsPersistenceError ? "warning" : "ok",
@@ -3986,6 +4336,7 @@ export function getRevenueEngineSnapshot() {
         revenueAutomationOpportunitiesPersistenceError ||
         revenueImprovementReviewsPersistenceError ||
         revenueScoutingMissionsPersistenceError ||
+        revenueDailyScoutSprintsPersistenceError ||
         revenuePublicLeadCandidatesPersistenceError ||
         revenueDeliveryWorkspacesPersistenceError ||
         revenueApprovalDecisionsPersistenceError ||
@@ -6144,6 +6495,14 @@ export function setRevenueScoutingMissionsPathForTests(filePath: string) {
   revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
 }
 
+export function setRevenueDailyScoutSprintsPathForTests(filePath: string) {
+  revenueUserDataScope = null;
+  revenueDailyScoutSprintsPathOverride = filePath;
+  revenueDailyScoutSprintsLoaded = false;
+  revenueDailyScoutSprintsPersistenceError = null;
+  revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length);
+}
+
 export function setRevenuePublicLeadCandidatesPathForTests(filePath: string) {
   revenueUserDataScope = null;
   revenuePublicLeadCandidatesPathOverride = filePath;
@@ -6244,6 +6603,16 @@ export function resetRevenueScoutingMissionsForTests() {
   const missionsPath = getRevenueScoutingMissionsPath();
   if (fs.existsSync(missionsPath)) {
     fs.unlinkSync(missionsPath);
+  }
+}
+
+export function resetRevenueDailyScoutSprintsForTests() {
+  revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length);
+  revenueDailyScoutSprintsLoaded = true;
+  revenueDailyScoutSprintsPersistenceError = null;
+  const sprintsPath = getRevenueDailyScoutSprintsPath();
+  if (fs.existsSync(sprintsPath)) {
+    fs.unlinkSync(sprintsPath);
   }
 }
 
@@ -7747,7 +8116,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
   }
 
   const paidSpendBlocked = parsed.maxPaidDataSpendUsd > 0;
-  const canStartSelling = !paidSpendBlocked && (sprintSeedLeads.length === 0 || recordedLeads.some((result) => ["A", "B"].includes(result.qualification.grade)));
+  const canStartSelling = !paidSpendBlocked && sprintSeedLeads.length > 0 && recordedLeads.some((result) => ["A", "B"].includes(result.qualification.grade));
 
   return {
     status: paidSpendBlocked ? "needs_spend_approval" as const : canStartSelling ? "ready_to_start" as const : "needs_lead_evidence" as const,

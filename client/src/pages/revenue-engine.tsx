@@ -34,6 +34,55 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
 
+type RevenueDailyScoutSprintSnapshot = {
+  id: string;
+  createdAt: string;
+  status: "open" | "completed" | "blocked";
+  source: "latest_scouting_mission" | "manual_override" | "default_market";
+  area: string;
+  niche: string;
+  offerFocus: "websites" | "automations" | "both";
+  targetRows: number;
+  tasks: Array<{
+    taskId: string;
+    ownerAgent: string;
+    source: string;
+    query: string;
+    url: string;
+    targetRows: number;
+    status: "open" | "submitted" | "blocked";
+    resultSlots: Array<{
+      slotId: string;
+      status: "open" | "filled" | "rejected";
+      evidenceTemplate: string;
+      copyableEvidenceBlock: string;
+      acceptanceCriteria: string[];
+    }>;
+    allowedAction: string;
+    blockedActions: string[];
+  }>;
+  agentBriefs: Array<{
+    ownerAgent: string;
+    taskIds: string[];
+    copyableBrief: string;
+  }>;
+  copyableBatchTemplate: string;
+  copyableOperatorBrief: string;
+  qualityGate: string[];
+  nextAction: string;
+  safety: {
+    researchesPublicSources: true;
+    persistsScoutRun: true;
+    persistsCandidates: false;
+    persistsLeads: false;
+    sendsOutreach: false;
+    spendsMoney: false;
+    deploys: false;
+    requiresRobertApprovalToContact: true;
+    blockedActions: string[];
+  };
+};
+
 type RevenueSnapshot = {
   metrics: {
     appsSold: number;
@@ -206,6 +255,8 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  latestDailyScoutSprint: RevenueDailyScoutSprintSnapshot | null;
+  recentDailyScoutSprints: RevenueDailyScoutSprintSnapshot[];
   websiteSalesPacketQueue: {
     status: "ready" | "needs_context" | "empty";
     readyCount: number;
@@ -748,6 +799,14 @@ type RevenueScoutingMission = {
 
 type RevenueScoutingMissionResult = {
   mission: RevenueSnapshot["recentScoutingMissions"][number];
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueDailyScoutSprintResult = {
+  status: "started";
+  sprint: RevenueDailyScoutSprintSnapshot;
+  safety: RevenueDailyScoutSprintSnapshot["safety"];
+  nextAction: string;
   snapshot: RevenueSnapshot;
 };
 
@@ -1797,6 +1856,32 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear la mision de scouting");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const dailyScoutSprintMutation = useMutation<RevenueDailyScoutSprintResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/daily-scout-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: snapshot?.businessScoutQueue.area || scoutingArea,
+          niche: snapshot?.businessScoutQueue.niche || scoutingNiche,
+          offerFocus: snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus,
+          targetLeadCount: snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount,
+          maxTasks: 5,
+          resultSlotsPerTask: 2,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          notes: "Started from Revenue Engine UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo iniciar daily scout sprint");
       return data;
     },
     onSuccess: () => {
@@ -4114,6 +4199,21 @@ export default function RevenueEnginePage() {
                       <Button
                         type="button"
                         size="sm"
+                        className="bg-emerald-400 text-black hover:bg-emerald-300"
+                        onClick={() => dailyScoutSprintMutation.mutate()}
+                        disabled={dailyScoutSprintMutation.isPending}
+                        data-testid="button-start-daily-scout-sprint"
+                      >
+                        {dailyScoutSprintMutation.isPending ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Search className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Start scout sprint
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
                         variant="outline"
                         className="border-zinc-700 bg-zinc-950"
                         onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.copyableBatchTemplate || "")}
@@ -4134,6 +4234,70 @@ export default function RevenueEnginePage() {
                         Copy brief
                       </Button>
                     </div>
+                    {dailyScoutSprintMutation.error && (
+                      <p className="mt-2 text-xs text-red-300">{dailyScoutSprintMutation.error.message}</p>
+                    )}
+                    {snapshot?.latestDailyScoutSprint && (
+                      <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-latest-daily-scout-sprint">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-emerald-200">Daily scout sprint</p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {snapshot.latestDailyScoutSprint.area} · {snapshot.latestDailyScoutSprint.niche} · {snapshot.latestDailyScoutSprint.targetRows} slots
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={cn(statusTone(snapshot.latestDailyScoutSprint.status), "shrink-0")}>
+                            {snapshot.latestDailyScoutSprint.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-emerald-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(snapshot.latestDailyScoutSprint?.copyableOperatorBrief || "")}
+                            data-testid="button-copy-daily-scout-sprint-brief"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy sprint
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-emerald-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(snapshot.latestDailyScoutSprint?.agentBriefs.map((brief) => brief.copyableBrief).join("\n\n") || "")}
+                            data-testid="button-copy-daily-scout-agent-briefs"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy agents
+                          </Button>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {snapshot.latestDailyScoutSprint.tasks.slice(0, 3).map((task) => (
+                            <div key={task.taskId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs font-medium text-white">{task.taskId} · {task.ownerAgent}</p>
+                                <span className="text-xs text-zinc-500">{task.resultSlots.length} slots</span>
+                              </div>
+                              <p className="mt-1 text-xs text-zinc-500">{task.query}</p>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-2 h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                onClick={() => navigator.clipboard.writeText(task.resultSlots.map((slot) => slot.copyableEvidenceBlock).join("\n\n"))}
+                                data-testid={`button-copy-daily-scout-slots-${task.taskId}`}
+                              >
+                                <Copy className="mr-1.5 h-3 w-3" />
+                                Copy slots
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-3 space-y-2">
                       {(snapshot?.businessScoutQueue.workPack.importInstructions || []).map((item) => (
                         <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
