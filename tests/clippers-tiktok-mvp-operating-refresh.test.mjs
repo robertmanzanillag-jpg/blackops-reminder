@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import express from "express";
 import test from "node:test";
+import { registerRoutes } from "../server/routes";
 
 const scriptPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-operating-refresh.ts");
 const queuePaths = [
@@ -96,4 +99,44 @@ test("TikTok MVP operating refresh preserves Metricool queue artifacts byte for 
   const output = JSON.parse(run.stdout);
   assert.equal(output.status, "blocked_external_account_proof");
   assert.equal(output.launchDecision, "blocked_before_metricool");
+});
+
+test("TikTok MVP operating refresh POST route refreshes status without changing Metricool queue", async () => {
+  const before = await readQueueSnapshot();
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/clippers/prepare-tiktok-mvp-operating-refresh`, {
+      method: "POST",
+    });
+    const body = await response.json();
+    const after = await readQueueSnapshot();
+
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.tiktokMvpOperatingRefresh.status, "blocked_external_account_proof");
+    assert.equal(body.tiktokMvpOperatingRefresh.launchDecision, "blocked_before_metricool");
+    assert.equal(body.tiktokMvpOperatingRefresh.realPublishEnabled, false);
+    assert.equal(body.tiktokMvpOperatingRefresh.directSocialApisRequired, false);
+    assert.equal(body.tiktokMvpOperatingRefresh.codexCanCreateExternalAccounts, false);
+    assert.equal(body.tiktokMvpOperatingRefresh.codexCanInventPermissions, false);
+    assert.equal(body.tiktokMvpAutopilotBoundary.status, "blocked_external_account_proof");
+    assert.equal(body.tiktokNextAction?.realPublishEnabled ?? false, false);
+    assert.deepEqual(after, before);
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  }
 });
