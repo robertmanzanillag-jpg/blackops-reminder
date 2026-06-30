@@ -496,6 +496,60 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/closeout-wizard.json", "utf8");
     return JSON.parse(raw);
   };
+  const saveClipperTikTokMvpProofLinksAndRefresh = async (parsed: any) => {
+    await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
+    await writeNodeFile(
+      "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json",
+      `${JSON.stringify(parsed, null, 2)}\n`,
+    );
+    const proofDropRun = await runClipperTikTokMvpProofDropKit();
+    await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+    await writeNodeFile(
+      "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json",
+      `${JSON.stringify(parsed, null, 2)}\n`,
+    );
+    const quickFillRun = await runClipperTikTokMvpProofQuickFill();
+    const importPreviewRun = await runClipperTikTokMvpProofIntakeImport(false);
+    const wizardRun = await runClipperTikTokMvpCloseoutWizard();
+    const proofHandoffRun = await runClipperTikTokMvpProofHandoff();
+    const postProofRefreshRuns: Record<string, any> = {};
+    let postProofRefreshError = "";
+    try {
+      postProofRefreshRuns.accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+      postProofRefreshRuns.syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+      postProofRefreshRuns.trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+      postProofRefreshRuns.runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+      postProofRefreshRuns.checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+      postProofRefreshRuns.metricoolHandoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+      postProofRefreshRuns.launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      postProofRefreshRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      postProofRefreshRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+      postProofRefreshRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+    } catch (refreshError: any) {
+      postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
+    }
+    return {
+      tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks(),
+      tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
+      tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard(),
+      tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
+      tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
+      tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+      tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh().catch(() => null),
+      tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport().catch(() => null),
+      tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor().catch(() => null),
+      tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
+      tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
+      tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
+      proofDropRun,
+      quickFillRun,
+      importPreviewRun,
+      wizardRun,
+      proofHandoffRun,
+      postProofRefreshRuns,
+      postProofRefreshError,
+    };
+  };
   const readClipperExternalCloseoutPack = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-external-closeout-pack.json", "utf8");
     const parsed = JSON.parse(raw);
@@ -2923,6 +2977,63 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clippers/ingest-tiktok-mvp-proof-links-drop", async (_req, res) => {
+    try {
+      const drop = await readClipperTikTokMvpProofLinksDropPaste();
+      const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
+      const validationError = validateClipperTikTokMvpProofLinks(parsedPreview.proofLinks);
+      if (validationError || parsedPreview.issues.length || !parsedPreview.proofLinksPreview.readyForProofDrop) {
+        res.status(400).json({
+          error: validationError || parsedPreview.issues[0] || parsedPreview.proofLinksPreview.issues[0] || "proof links drop file is not ready to ingest",
+          tiktokMvpProofLinksDropIngest: {
+            status: "blocked_invalid_drop",
+            generatedAt: parsedPreview.generatedAt,
+            scope: parsedPreview.scope,
+            launchMode: parsedPreview.launchMode,
+            directSocialApisRequired: parsedPreview.directSocialApisRequired,
+            realPublishEnabled: false,
+            sourcePath: drop.sourcePath,
+            extractedUrls: parsedPreview.extractedUrls,
+            issues: [validationError, ...parsedPreview.issues, ...parsedPreview.proofLinksPreview.issues].filter(Boolean),
+            guardrails: [
+              "Blocked before saving because the local proof links drop did not pass validation.",
+              "Does not apply evidence, queue Metricool, create calendar rows, or send posts.",
+            ],
+            nextStep: "Fix the proof links drop file, then run Safe ingest drop again.",
+          },
+          tiktokMvpProofLinksPastePreview: parsedPreview,
+        });
+        return;
+      }
+      const saved = await saveClipperTikTokMvpProofLinksAndRefresh(parsedPreview.proofLinks);
+      res.json({
+        ...saved,
+        tiktokMvpProofLinksDropIngest: {
+          status: "saved_and_refreshed",
+          generatedAt: new Date().toISOString(),
+          scope: "tiktok_only_metricool_mvp",
+          launchMode: "metricool_approval_required",
+          directSocialApisRequired: false,
+          realPublishEnabled: false,
+          sourcePath: drop.sourcePath,
+          extractedUrls: parsedPreview.extractedUrls,
+          issues: [],
+          guardrails: [
+            "Saved only after proof links drop validation passed.",
+            "Runs proof drop, quick fill, import preview, closeout wizard, and readiness refresh.",
+            "Does not apply final evidence, queue Metricool approval rows, create calendar rows, or send posts.",
+          ],
+          nextStep: saved.tiktokMvpReadinessVerifier?.nextStep || saved.tiktokMvpCloseoutWizard?.nextStep || "Review refreshed TikTok MVP proof gates before any apply action.",
+        },
+        tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
+        tiktokMvpProofLinksPastePreview: parsedPreview,
+      });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 400;
+      res.status(status).json({ error: error.message || "Failed to ingest TikTok MVP proof links drop file" });
+    }
+  });
+
   app.post("/api/clippers/save-tiktok-mvp-proof-links", async (req, res) => {
     try {
       const parsed = typeof req.body?.proofLinksText === "string" ? JSON.parse(req.body.proofLinksText) : req.body?.proofLinks;
@@ -2939,58 +3050,7 @@ export async function registerRoutes(
         });
         return;
       }
-      await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
-      await writeNodeFile(
-        "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json",
-        `${JSON.stringify(parsed, null, 2)}\n`,
-      );
-      const proofDropRun = await runClipperTikTokMvpProofDropKit();
-      await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
-      await writeNodeFile(
-        "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json",
-        `${JSON.stringify(parsed, null, 2)}\n`,
-      );
-      const quickFillRun = await runClipperTikTokMvpProofQuickFill();
-      const importPreviewRun = await runClipperTikTokMvpProofIntakeImport(false);
-      const wizardRun = await runClipperTikTokMvpCloseoutWizard();
-      const proofHandoffRun = await runClipperTikTokMvpProofHandoff();
-      const postProofRefreshRuns: Record<string, any> = {};
-      let postProofRefreshError = "";
-      try {
-        postProofRefreshRuns.accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
-        postProofRefreshRuns.syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
-        postProofRefreshRuns.trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
-        postProofRefreshRuns.runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
-        postProofRefreshRuns.checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
-        postProofRefreshRuns.metricoolHandoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
-        postProofRefreshRuns.launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
-        postProofRefreshRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
-        postProofRefreshRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
-        postProofRefreshRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
-      } catch (refreshError: any) {
-        postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
-      }
-      res.json({
-        tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks(),
-        tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
-        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard(),
-        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
-        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
-        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
-        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh().catch(() => null),
-        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport().catch(() => null),
-        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor().catch(() => null),
-        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
-        tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
-        tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
-        proofDropRun,
-        quickFillRun,
-        importPreviewRun,
-        wizardRun,
-        proofHandoffRun,
-        postProofRefreshRuns,
-        postProofRefreshError,
-      });
+      res.json(await saveClipperTikTokMvpProofLinksAndRefresh(parsed));
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to save TikTok MVP proof links" });
     }

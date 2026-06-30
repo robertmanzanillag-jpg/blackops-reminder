@@ -2430,6 +2430,20 @@ interface ClipperTikTokMvpProofLinksDropStarterSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksDropIngestSummary {
+  status: "blocked_invalid_drop" | "saved_and_refreshed";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  sourcePath: string;
+  extractedUrls: number;
+  issues: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -11355,6 +11369,58 @@ export default function ClippersPage() {
     },
   });
 
+  const tiktokMvpProofLinksDropIngestMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/ingest-tiktok-mvp-proof-links-drop", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude ingerir el proof drop");
+      return data as {
+        tiktokMvpProofLinksDropIngest: ClipperTikTokMvpProofLinksDropIngestSummary;
+        tiktokMvpProofLinksDropStatus: ClipperTikTokMvpProofLinksDropStatusSummary;
+        tiktokMvpProofLinksPastePreview: ClipperTikTokMvpProofLinksPastePreviewSummary;
+        tiktokMvpProofLinks: ClipperTikTokMvpProofLinksSummary;
+        tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary;
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary | null;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary | null;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary | null;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
+        tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
+        tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        postProofRefreshError: string;
+      };
+    },
+    onSuccess: (data) => {
+      setTiktokMvpProofLinksPastePreview(data.tiktokMvpProofLinksPastePreview);
+      setTiktokMvpProofLinksText(data.tiktokMvpProofLinks.raw);
+      setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksPastePreview.proofLinksPreview);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], data.tiktokMvpProofLinksDropStatus);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links"], data.tiktokMvpProofLinks);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      if (data.tiktokMvpProofQuickFill) queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      if (data.tiktokMvpProofUnblocker) queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      if (data.tiktokMvpProofRefresh) queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
+      if (data.tiktokMvpProofIntakeImport) queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      if (data.tiktokMvpProofDoctor) queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      if (data.tiktokMvpEvidenceCloseout) queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokMvpGoLivePacket) queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      if (data.tiktokMvpReadinessVerifier) queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      toast({
+        title: data.postProofRefreshError ? "Drop guardado con blockers" : "Drop ingerido y refrescado",
+        description: data.postProofRefreshError || data.tiktokMvpProofLinksDropIngest.nextStep,
+        variant: data.postProofRefreshError ? "destructive" : undefined,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude ingerir proof drop", description: error.message, variant: "destructive" });
+    },
+  });
+
   const tiktokMvpProofHandoffMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-handoff", { method: "POST" });
@@ -16099,6 +16165,7 @@ export default function ClippersPage() {
     || tiktokMvpProofLinksPasteMutation.isPending
     || tiktokMvpProofLinksDropImportMutation.isPending
     || tiktokMvpProofLinksDropStarterMutation.isPending
+    || tiktokMvpProofLinksDropIngestMutation.isPending
     || tiktokMvpProofLinksPreviewMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofHandoffMutation.isPending
@@ -17605,6 +17672,18 @@ export default function ClippersPage() {
                     >
                       {tiktokMvpProofLinksDropStarterMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-2 h-3.5 w-3.5" />}
                       Create starter
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => tiktokMvpProofLinksDropIngestMutation.mutate()}
+                      disabled={tiktokProofFlowBusy || isLoading || tiktokMvpProofLinksDropStatus?.status !== "ready_for_import"}
+                      className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10 disabled:border-zinc-700 disabled:text-zinc-500"
+                      data-testid="ingest-clippers-tiktok-mvp-proof-links-drop-button"
+                    >
+                      {tiktokMvpProofLinksDropIngestMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                      Safe ingest drop
                     </Button>
                     <Button
                       type="button"

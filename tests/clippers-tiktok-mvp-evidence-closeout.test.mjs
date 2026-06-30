@@ -248,6 +248,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-links-drop-status"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/create-tiktok-mvp-proof-links-drop-starter"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/import-tiktok-mvp-proof-links-drop"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/ingest-tiktok-mvp-proof-links-drop"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/save-tiktok-mvp-proof-links"/);
   assert.match(proofLinksModule, /containsClipperSecretLikeText/);
   assert.match(proofLinksModule, /clipperUnsafeProofQueryParamPattern/);
@@ -321,12 +322,22 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   const proofLinksDropImportRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/import-tiktok-mvp-proof-links-drop"',
+    'app.post("/api/clippers/ingest-tiktok-mvp-proof-links-drop"',
+  );
+  const proofLinksDropIngestRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/ingest-tiktok-mvp-proof-links-drop"',
     'app.post("/api/clippers/save-tiktok-mvp-proof-links"',
   );
   const proofLinksSaveRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/save-tiktok-mvp-proof-links"',
     'app.get("/api/clippers/tiktok-mvp-proof-intake-import"',
+  );
+  const proofLinksSaveHelper = requiredSlice(
+    routes,
+    "const saveClipperTikTokMvpProofLinksAndRefresh =",
+    "const readClipperExternalCloseoutPack =",
   );
   const importPreviewRoute = requiredSlice(
     routes,
@@ -412,24 +423,34 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksDropImportRoute, /realPublishEnabled:\s*false/);
   assert.match(proofLinksDropImportRoute, /Does not save proof-links\.json until the operator presses Save proof links/);
   assert.doesNotMatch(proofLinksDropImportRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|schedule/i);
+  assert.match(proofLinksDropIngestRoute, /readClipperTikTokMvpProofLinksDropPaste/);
+  assert.match(proofLinksDropIngestRoute, /extractClipperTikTokMvpProofLinksPaste/);
+  assert.match(proofLinksDropIngestRoute, /validateClipperTikTokMvpProofLinks/);
+  assert.match(proofLinksDropIngestRoute, /blocked_invalid_drop/);
+  assert.match(proofLinksDropIngestRoute, /saveClipperTikTokMvpProofLinksAndRefresh/);
+  assert.match(proofLinksDropIngestRoute, /saved_and_refreshed/);
+  assert.match(proofLinksDropIngestRoute, /realPublishEnabled:\s*false/);
+  assert.match(proofLinksDropIngestRoute, /Does not apply final evidence/);
+  assert.doesNotMatch(proofLinksDropIngestRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|schedule/i);
   assert.match(proofLinksSaveRoute, /validateClipperTikTokMvpProofLinks/);
   assert.match(proofLinksSaveRoute, /auditClipperTikTokMvpProofLinks/);
   assert.match(proofLinksSaveRoute, /!audit\.readyForProofDrop/);
-  assert.match(proofLinksSaveRoute, /proof-links\.json/);
-  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofDropKit/);
-  assert.match(proofLinksSaveRoute, /proof-quick-fill-input\.json/);
-  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofQuickFill/);
-  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofIntakeImport\(false\)/);
-  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpCloseoutWizard/);
-  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofHandoff/);
-  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpProofHandoff/);
-  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpProofIntakeImport/);
-  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpEvidenceCloseout/);
-  assert.match(proofLinksSaveRoute, /postProofRefreshRuns/);
-  assert.match(proofLinksSaveRoute, /script\/clippers-tiktok-mvp-go-live-packet\.mjs/);
-  assert.match(proofLinksSaveRoute, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
-  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpGoLivePacket/);
-  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpReadinessVerifier/);
+  assert.match(proofLinksSaveRoute, /saveClipperTikTokMvpProofLinksAndRefresh/);
+  assert.match(proofLinksSaveHelper, /proof-links\.json/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofDropKit/);
+  assert.match(proofLinksSaveHelper, /proof-quick-fill-input\.json/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofQuickFill/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofIntakeImport\(false\)/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpCloseoutWizard/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofHandoff/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokMvpProofHandoff/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokMvpProofIntakeImport/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokMvpEvidenceCloseout/);
+  assert.match(proofLinksSaveHelper, /postProofRefreshRuns/);
+  assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-mvp-go-live-packet\.mjs/);
+  assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokMvpGoLivePacket/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokMvpReadinessVerifier/);
   assert.doesNotMatch(proofLinksRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(importPreviewRoute, /runClipperTikTokMvpProofIntakeImport\(false\)/);
   assert.doesNotMatch(importPreviewRoute, /x-clippers-operator-confirm|runClipperTikTokMvpProofIntakeImport\(true\)|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
@@ -528,6 +549,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
   assert.match(page, /import-clippers-tiktok-mvp-proof-links-drop-button/);
   assert.match(page, /create-clippers-tiktok-mvp-proof-links-drop-starter-button/);
+  assert.match(page, /ingest-clippers-tiktok-mvp-proof-links-drop-button/);
+  assert.match(page, /tiktokMvpProofLinksDropIngestMutation/);
   assert.match(page, /tiktokMvpProofLinksDropStarterMutation/);
   assert.match(page, /tiktokMvpProofLinksDropImportMutation/);
   assert.match(page, /tiktokMvpProofHandoff\?\.pastePacketText/);
