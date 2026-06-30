@@ -118,6 +118,14 @@ export const revenueOutreachSendSchema = z.object({
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
 
+export const revenueOutreachApproveSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  approvedByRobert: z.boolean().default(false),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueOutreachApproveInput = z.infer<typeof revenueOutreachApproveSchema>;
+
 export const revenueOutreachOutcomeSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
   outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]),
@@ -5735,6 +5743,54 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
           ? ["Completar evidencia/contacto/aprobacion.", "Mantener outreach en draft.", "Usar QA antes de enviar preview."]
           : ["Revisar draft en Outbox.", "Aprobar envio manual/API.", "Registrar deposito en ledger si cierra."],
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function approveRevenueOutreachDraft(input: RevenueOutreachApproveInput) {
+  loadRevenueOutreach();
+  const parsed = revenueOutreachApproveSchema.parse(input);
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId) || null;
+  const gates = [
+    { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
+    { gate: "human_approval", passed: parsed.approvedByRobert, fix: "Robert debe aprobar explicitamente este contacto." },
+    { gate: "not_sent", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; no se puede reaprobar como nuevo contacto." },
+    { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.filter((gate) => gate.gate !== "approval").every((gate) => gate.passed)), fix: "Resolver recipient/evidence/cost antes de aprobar contacto." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!draft || failedGate) {
+    return {
+      status: "blocked" as const,
+      reason: failedGate?.fix || "No se pudo aprobar el draft.",
+      gates,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const now = new Date().toISOString();
+  draft.status = "approved";
+  draft.qaGates = draft.qaGates.map((gate) =>
+    gate.gate === "approval"
+      ? { ...gate, passed: true, fix: "Aprobado por Robert; contacto sigue manual o provider-gated." }
+      : gate
+  );
+  draft.updatedAt = now;
+  persistRevenueOutreach();
+
+  return {
+    status: "approved" as const,
+    reason: "Draft aprobado para cola manual; no se envio outreach ni se marco contacto externo.",
+    gates,
+    draft,
+    snapshot: getRevenueEngineSnapshot(),
+    safety: {
+      sendsOutreach: false,
+      spendsMoney: false,
+      writesPreviewFiles: false,
+      createsLedger: false,
+      createsDelivery: false,
+    },
   };
 }
 

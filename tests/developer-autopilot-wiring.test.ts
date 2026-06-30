@@ -99,9 +99,14 @@ test("Revenue Engine exposes manual outreach outcome recording", () => {
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
   const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
 
+  assert.match(engineSource, /approveRevenueOutreachDraft/);
   assert.match(engineSource, /recordRevenueOutreachOutcome/);
+  assert.match(routeSource, /\/api\/revenue-engine\/outreach-drafts\/approve/);
+  assert.match(routeSource, /revenueOutreachApproveSchema\.parse/);
   assert.match(routeSource, /\/api\/revenue-engine\/outreach-outcome/);
   assert.match(routeSource, /revenueOutreachOutcomeSchema\.parse/);
+  assert.match(uiSource, /outreachApproveMutation/);
+  assert.match(uiSource, /button-approve-draft-/);
   assert.match(uiSource, /outreachOutcomeMutation/);
   assert.match(uiSource, /button-record-outreach-reply/);
   assert.match(uiSource, /button-record-outreach-call/);

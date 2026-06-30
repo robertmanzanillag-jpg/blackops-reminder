@@ -888,6 +888,21 @@ type OutreachDraftResult = {
   snapshot: RevenueSnapshot;
 };
 
+type OutreachApproveResult = {
+  status: "approved" | "blocked";
+  reason: string;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  snapshot: RevenueSnapshot;
+  safety?: {
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    createsLedger: boolean;
+    createsDelivery: boolean;
+  };
+};
+
 type OutreachSendResult = {
   status: "sent" | "blocked" | "failed";
   provider: RevenueSnapshot["emailProvider"];
@@ -2392,6 +2407,26 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo guardar el outreach");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const outreachApproveMutation = useMutation<OutreachApproveResult, Error, string>({
+    mutationFn: async (draftId) => {
+      const response = await fetch("/api/revenue-engine/outreach-drafts/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId,
+          approvedByRobert: true,
+          notes: "Robert aprobo este draft para cola manual; no enviar automaticamente.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo aprobar el draft");
       return data;
     },
     onSuccess: () => {
@@ -7431,6 +7466,17 @@ export default function RevenueEnginePage() {
                           <p className="mt-2 text-sm leading-6 text-zinc-500">{outreachOutcomeMutation.data.reason}</p>
                         </div>
                       )}
+                      {outreachApproveMutation.data && (
+                        <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-emerald-100">Aprobacion de draft</p>
+                            <Badge variant="outline" className={cn(statusTone(outreachApproveMutation.data.status), "shrink-0")}>
+                              {outreachApproveMutation.data.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-zinc-500">{outreachApproveMutation.data.reason}</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -7467,6 +7513,18 @@ export default function RevenueEnginePage() {
                               </p>
                             )}
                             <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-sky-700 text-sky-100"
+                                disabled={outreachApproveMutation.isPending || draft.status === "approved" || draft.delivery.sendStatus === "sent"}
+                                onClick={() => outreachApproveMutation.mutate(draft.id)}
+                                data-testid={`button-approve-draft-${draft.id}`}
+                              >
+                                {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                Aprobar
+                              </Button>
                               <Button
                                 type="button"
                                 size="sm"

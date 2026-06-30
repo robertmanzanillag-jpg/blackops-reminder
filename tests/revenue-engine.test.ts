@@ -42,6 +42,7 @@ import {
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   revenueDeliveryWorkspaceGithubHandoffSchema,
+  approveRevenueOutreachDraft,
   runRevenuePublicScoutAgentCommand,
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
@@ -1433,6 +1434,152 @@ test("records outreach draft without sending and moves matching lead to outreach
   assert.equal(result.snapshot.recentOutreach[0].businessName, "Black Room");
   assert.equal(result.snapshot.metrics.approvalQueue, 1);
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Black Room"), true);
+});
+
+test("approves outreach draft for manual queue without sending or side effects", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Approve Draft Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@approvedraft.example",
+    evidence: "Public listing has no website, current menu photos and a visible owner email.",
+    painPoint: "Needs online menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@approvedraft.example",
+    contactName: "Owner",
+    businessName: "Approve Draft Cafe",
+    sourceUrl: "https://example.com/approve-draft-cafe",
+    businessSummary: "Approve Draft Cafe has public evidence of no website, recent menu photos and a verified owner contact path.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+  const statusBeforeApproval = getRevenueEngineSnapshot().recentLeads[0].status;
+
+  const result = approveRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvedByRobert: true,
+    notes: "Robert approved manual outreach.",
+  });
+
+  assert.equal(result.status, "approved");
+  assert.equal(result.draft?.status, "approved");
+  assert.equal(result.draft?.qaGates.find((gate) => gate.gate === "approval")?.passed, true);
+  assert.equal(result.draft?.delivery.sendStatus, "not_sent");
+  assert.equal(result.draft?.delivery.sentAt, undefined);
+  assert.equal(result.draft?.delivery.externalMessageId, undefined);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.spendsMoney, false);
+  assert.equal(result.safety.createsLedger, false);
+  assert.equal(result.safety.createsDelivery, false);
+  assert.equal(result.snapshot.manualOutreachQueue.readyCount, 1);
+  assert.equal(result.snapshot.recentLeads[0].status, statusBeforeApproval);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("blocks outreach draft approval when non-approval QA gates fail", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "",
+    contactName: "Owner",
+    businessName: "Blocked Approval Cafe",
+    businessSummary: "Too short",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const result = approveRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.match(result.reason, /recipient\/evidence\/cost/);
+  assert.equal(result.draft?.status, "blocked");
+  assert.equal(result.draft?.qaGates.find((gate) => gate.gate === "approval")?.passed, false);
+  assert.equal(result.draft?.delivery.sendStatus, "not_sent");
+  assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+});
+
+test("blocks outreach draft approval without explicit Robert approval", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@noapproval.example",
+    contactName: "Owner",
+    businessName: "No Approval Cafe",
+    sourceUrl: "https://example.com/no-approval-cafe",
+    businessSummary: "No Approval Cafe has public evidence of no website, current menu photos and a verified contact path.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const result = approveRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvedByRobert: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.match(result.reason, /Robert/);
+  assert.equal(result.draft?.status, "draft");
+  assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
+});
+
+test("blocks outreach draft approval after the draft was already sent", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  let sendCount = 0;
+  setRevenueOutreachSenderForTests(async () => {
+    sendCount += 1;
+    return { id: "email_already_sent" };
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@already-sent.example",
+    contactName: "Owner",
+    businessName: "Already Sent Cafe",
+    sourceUrl: "https://example.com/already-sent-cafe",
+    businessSummary: "Already Sent Cafe has public evidence of no website, current menu photos and a verified contact path.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvalToSend: true,
+  });
+
+  const result = approveRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvedByRobert: true,
+  });
+
+  assert.equal(sendResult.status, "sent");
+  assert.equal(sendCount, 1);
+  assert.equal(result.status, "blocked");
+  assert.match(result.reason, /ya fue enviado/);
+  assert.equal(result.draft?.delivery.sendStatus, "sent");
+  assert.equal(result.draft?.delivery.externalMessageId, "email_already_sent");
+  assert.equal(sendCount, 1);
 });
 
 test("snapshot builds a capped manual outreach queue from approved drafts", () => {
