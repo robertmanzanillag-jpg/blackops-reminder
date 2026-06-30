@@ -146,6 +146,8 @@ function clipperUniqueStrings(values: unknown[]): string[] {
 
 const clipperMetricoolBridgeEvidenceCsvPath = "clippers_workspace/scheduled/metricool-tiktok-bridge-evidence.csv";
 const clipperMetricoolBridgePreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/metricool-bridge-preview-gate.json";
+const clipperTikTokMvpAccountEvidenceCsvPath = "clippers_workspace/account-permission-mvp-account-evidence.csv";
+const clipperTikTokMvpEvidenceCloseoutPreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/evidence-closeout-preview-gate.json";
 const clipperMetricoolBridgeRequiredRows = [
   { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdaily", accountName: "Sports Daily Clips" },
   { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradar", accountName: "Meme Radar" },
@@ -216,6 +218,20 @@ function isClipperMetricoolProofUrl(value: unknown): boolean {
   }
 }
 
+function isClipperGoogleEvidenceProofUrl(value: unknown): boolean {
+  if (!isClipperSafeHttpsUrl(value)) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return /^(drive|docs)\.google\.com$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isClipperMetricoolConnectionProofUrl(value: unknown): boolean {
+  return isClipperMetricoolProofUrl(value) || isClipperGoogleEvidenceProofUrl(value);
+}
+
 function isClipperBridgeNotesReady(value: unknown): boolean {
   const text = String(value || "").trim();
   return text.length >= 20 && !/<|>|placeholder|paste|replace|todo|tbd/i.test(text) && !containsClipperSecretLikeText(text);
@@ -223,6 +239,67 @@ function isClipperBridgeNotesReady(value: unknown): boolean {
 
 function hashClipperMetricoolBridgeRaw(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
+}
+
+function hashClipperTikTokMvpEvidenceCloseoutRaw(accountRaw: string, bridgeRaw: string): string {
+  return createHash("sha256").update(["account", accountRaw, "bridge", bridgeRaw].join("\n---clippers-closeout-boundary---\n")).digest("hex");
+}
+
+async function readClipperTikTokMvpEvidenceCloseoutCsvPair() {
+  const [accountRaw, bridgeRaw] = await Promise.all([
+    readNodeFile(clipperTikTokMvpAccountEvidenceCsvPath, "utf8").catch(() => ""),
+    readNodeFile(clipperMetricoolBridgeEvidenceCsvPath, "utf8").catch(() => ""),
+  ]);
+  return { accountRaw, bridgeRaw };
+}
+
+async function writeClipperTikTokMvpEvidenceCloseoutPreviewGate(summary: any) {
+  const { accountRaw, bridgeRaw } = await readClipperTikTokMvpEvidenceCloseoutCsvPair();
+  const rawHash = hashClipperTikTokMvpEvidenceCloseoutRaw(accountRaw, bridgeRaw);
+  const ready = summary?.status === "ready_to_apply" && Number(summary?.totals?.ready || 0) === Number(summary?.totals?.lanes || 0);
+  const rejected = Number(summary?.totals?.rejected || 0);
+  const gate = {
+    status: ready && rejected === 0 ? "ready_for_apply" : "blocked_preview_not_clean",
+    generatedAt: new Date().toISOString(),
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    rawHash,
+    rawStored: false,
+    totals: {
+      lanes: Number(summary?.totals?.lanes || 0),
+      ready: Number(summary?.totals?.ready || 0),
+      rejected,
+    },
+    guardrails: [
+      "Stores only a SHA-256 hash and preview totals; it does not store raw CSV text.",
+      "Does not apply evidence, queue Metricool, create calendar rows, schedule, or send posts.",
+      "Apply closeout requires this preview gate to match the current account and bridge CSV files.",
+    ],
+    nextStep: ready && rejected === 0
+      ? "Apply closeout is allowed for the currently previewed account and bridge CSV rows only."
+      : "Fix rejected proof rows and preview closeout again before applying.",
+  };
+  await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+  await writeNodeFile(clipperTikTokMvpEvidenceCloseoutPreviewGatePath, `${JSON.stringify(gate, null, 2)}\n`);
+  return gate;
+}
+
+async function validateClipperTikTokMvpEvidenceCloseoutPreviewGate() {
+  const { accountRaw, bridgeRaw } = await readClipperTikTokMvpEvidenceCloseoutCsvPair();
+  const currentHash = hashClipperTikTokMvpEvidenceCloseoutRaw(accountRaw, bridgeRaw);
+  const gate = await readNodeFile(clipperTikTokMvpEvidenceCloseoutPreviewGatePath, "utf8").then((raw) => JSON.parse(raw)).catch(() => null);
+  const ageMs = gate?.generatedAt ? Date.now() - new Date(gate.generatedAt).getTime() : Number.POSITIVE_INFINITY;
+  const issues = [
+    gate ? null : "Run Preview closeout before applying TikTok MVP evidence.",
+    gate?.status === "ready_for_apply" ? null : "Latest closeout preview is not clean.",
+    gate?.rawHash === currentHash ? null : "Latest closeout preview gate does not match the current account/bridge CSV files.",
+    ageMs <= 30 * 60 * 1000 ? null : "Latest closeout preview gate expired; preview again.",
+    Number(gate?.totals?.ready || 0) === Number(gate?.totals?.lanes || 0) && Number(gate?.totals?.lanes || 0) > 0 ? null : "Latest closeout preview did not accept every TikTok MVP lane.",
+    Number(gate?.totals?.rejected || 0) === 0 ? null : "Latest closeout preview had rejected rows.",
+  ].filter(Boolean) as string[];
+  return { ok: issues.length === 0, currentHash, gate, issues };
 }
 
 async function writeClipperMetricoolBridgePreviewGate(raw: string, batch: any) {
@@ -339,8 +416,8 @@ async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
         {
           field: "proof",
           label: "Metricool connection proof",
-          status: isClipperMetricoolProofUrl(record.proof) ? "ready" : "missing_or_invalid",
-          required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params",
+          status: isClipperMetricoolConnectionProofUrl(record.proof) ? "ready" : "missing_or_invalid",
+          required: "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL, no tokens/cookies/signed params",
         },
         {
           field: "notes",
@@ -3865,8 +3942,11 @@ export async function registerRoutes(
   app.post("/api/clippers/preview-tiktok-mvp-evidence-closeout", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpEvidenceCloseout(false);
+      const tiktokMvpEvidenceCloseout = await readClipperTikTokMvpEvidenceCloseout();
+      const tiktokMvpEvidenceCloseoutPreviewGate = await writeClipperTikTokMvpEvidenceCloseoutPreviewGate(tiktokMvpEvidenceCloseout);
       res.json({
-        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        tiktokMvpEvidenceCloseout,
+        tiktokMvpEvidenceCloseoutPreviewGate,
         accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
         run,
       });
@@ -3879,6 +3959,26 @@ export async function registerRoutes(
     try {
       if (_req.get("x-clippers-operator-confirm") !== "apply-tiktok-mvp-evidence-closeout") {
         res.status(403).json({ error: "Operator confirmation header required for TikTok MVP evidence closeout apply." });
+        return;
+      }
+      const closeoutGate = await validateClipperTikTokMvpEvidenceCloseoutPreviewGate();
+      if (!closeoutGate.ok) {
+        res.status(400).json({
+          error: closeoutGate.issues[0] || "TikTok MVP evidence closeout preview gate is not ready.",
+          tiktokMvpEvidenceCloseoutPreviewGate: {
+            status: "blocked_missing_or_stale_preview",
+            currentHash: closeoutGate.currentHash,
+            issues: closeoutGate.issues,
+            gate: closeoutGate.gate,
+            guardrails: [
+              "Blocked before applying evidence because the current account/bridge CSV files do not match a clean preview gate.",
+              "This response does not apply evidence, queue Metricool, create calendar rows, or send posts.",
+              "Preview closeout again after every CSV edit.",
+            ],
+          },
+          tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
+          accountPermissionReadiness: await readClipperAccountPermissionReadiness().catch(() => null),
+        });
         return;
       }
       const run = await runClipperTikTokMvpEvidenceCloseout(true);

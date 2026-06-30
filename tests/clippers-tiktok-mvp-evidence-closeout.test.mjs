@@ -491,11 +491,15 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(metricoolBridgeRecordRoute, /previewHash/);
   assert.match(metricoolBridgeRecordRoute, /blocked_missing_or_stale_preview/);
   assert.match(routes, /clipperMetricoolBridgePreviewGatePath/);
+  assert.match(routes, /clipperTikTokMvpEvidenceCloseoutPreviewGatePath/);
   assert.match(routes, /hashClipperMetricoolBridgeRaw/);
+  assert.match(routes, /hashClipperTikTokMvpEvidenceCloseoutRaw/);
   assert.match(routes, /createHash\("sha256"\)/);
   assert.match(routes, /Stores only a SHA-256 hash and preview totals/);
   assert.match(routes, /rawStored:\s*false/);
   assert.match(routes, /expired/);
+  assert.match(routes, /writeClipperTikTokMvpEvidenceCloseoutPreviewGate/);
+  assert.match(routes, /validateClipperTikTokMvpEvidenceCloseoutPreviewGate/);
   assert.match(metricoolBridgeCsvLoadRoute, /loadClipperMetricoolBridgeEvidenceCsv/);
   assert.match(routes, /async function loadClipperMetricoolBridgeEvidenceCsv/);
   assert.match(routes, /readNodeFile\(clipperMetricoolBridgeEvidenceCsvPath/);
@@ -505,6 +509,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /clipperMetricoolBridgeEvidenceCsvPath/);
   assert.match(routes, /Public TikTok profile URL/);
   assert.match(routes, /Metricool connection proof/);
+  assert.match(routes, /isClipperMetricoolConnectionProofUrl/);
+  assert.match(routes, /Google Drive\/Docs evidence URL/);
   assert.match(routes, /realPublishEnabled:\s*false/);
   assert.doesNotMatch(metricoolBridgeCsvStatusRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule|send posts/i);
   assert.doesNotMatch(metricoolBridgeCsvLoadRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true/);
@@ -659,6 +665,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.doesNotMatch(doctorRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
   assert.match(applyRoute, /res\.status\(403\)/);
   assert.match(applyRoute, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
+  assert.match(applyRoute, /validateClipperTikTokMvpEvidenceCloseoutPreviewGate/);
+  assert.match(applyRoute, /blocked_missing_or_stale_preview/);
+  assert.match(applyRoute, /Preview closeout again after every CSV edit/);
   assert.match(applyRoute, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
   assert.match(applyRoute, /tiktokMvpEvidenceCloseout\.status !== "applied"/);
   assert.match(applyRoute, /res\.status\(400\)/);
