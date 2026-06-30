@@ -5301,6 +5301,31 @@ export async function registerRoutes(
 
       const branchName = input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName;
       const publicIssueTitle = `[Revenue Client Build] ${workspace.id}`;
+      const sanitizedBuildBrief = [
+        "Sanitized build context:",
+        `- Client/workspace name: ${workspace.input.clientName}`,
+        `- Revenue workspace: ${workspace.id}`,
+        `- Project type: ${workspace.input.projectType}`,
+        `- Package: ${workspace.input.packageName}`,
+        `- Target branch: ${branchName}`,
+        workspace.input.sourceUrl ? `- Public source: ${workspace.input.sourceUrl}` : null,
+        workspace.input.mockupUrl ? `- Mockup preview: ${workspace.input.mockupUrl}` : null,
+        "",
+        "Approved scope summary:",
+        workspace.input.clientRequest || "Use the Revenue Engine workspace context and public business facts.",
+        "",
+        "Build acceptance criteria:",
+        ...workspace.codexBuildHandoff.acceptanceCriteria.map((item) => `- ${item}`),
+        "- Website experience must match the approved scope and public business facts.",
+        "- Mobile and desktop layouts must be checked.",
+        "- CTA/contact paths must work or be clearly stubbed for Robert/client approval.",
+        "- Include tests/checks run, QA summary, risks, and rollback notes in the PR.",
+        "",
+        "Public issue privacy rules:",
+        "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
+        "- Do not include private client data or non-public evidence.",
+        "- Use only public source/mockup context and the sanitized scope above.",
+      ].filter((line): line is string => line !== null).join("\n");
       const publicIssueDescription = [
         "PR-first client build handoff from Revenue Engine.",
         "",
@@ -5308,8 +5333,7 @@ export async function registerRoutes(
         `Project type: ${workspace.input.projectType}`,
         `Target branch: ${branchName}`,
         "",
-        "Use the private Revenue Engine workspace for client, pricing, deposit, mockup, and commercial context.",
-        "Do not include private client details, prices, deposits, mockup links, or non-public evidence in this public GitHub issue.",
+        sanitizedBuildBrief,
         "",
         "Required gates before delivery:",
         "- Open a pull request before merge.",
@@ -5328,7 +5352,9 @@ export async function registerRoutes(
         severity: "medium",
         evidence: [
           `Revenue workspace: ${workspace.id}`,
-          "Commercial details intentionally withheld from GitHub issue.",
+          workspace.input.sourceUrl ? `Public source: ${workspace.input.sourceUrl}` : "",
+          workspace.input.mockupUrl ? `Mockup preview: ${workspace.input.mockupUrl}` : "",
+          "Sensitive sale details and private client data intentionally withheld from GitHub issue.",
         ].filter(Boolean),
       });
 

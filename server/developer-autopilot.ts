@@ -121,6 +121,20 @@ function redactSensitiveText(value: string): string {
   return SENSITIVE_TEXT_PATTERNS.reduce((text, pattern) => text.replace(pattern, "[redacted]"), value);
 }
 
+function sanitizeClientBuildPublicText(value: string): string {
+  const sensitiveLinePattern = /\b(cash collected|cash recorded|payment confirmation)\b/i;
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !sensitiveLinePattern.test(line))
+    .join("\n")
+    .replace(/\b(?:stripe\s+)?pi_[A-Za-z0-9_-]+\b/gi, "[transfer-ref-redacted]")
+    .replace(/\b(?:payment\s*(?:ref|reference)\b|zelle|ach|wire|paypal|venmo|cashapp)(?:\s+(?:ref|reference|id|code|confirmation))?\s*[:#-]?\s+[A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+){0,3}\b/gi, "[transfer-ref-redacted]")
+    .replace(/\b(?:ach|wire|zelle|paypal|venmo|cashapp)-[A-Za-z0-9_.-]+\b/gi, "[transfer-ref-redacted]")
+    .replace(/\$\s?\d[\d,]*(?:\.\d{2})?(?:\s?\/\s?(?:mo|month))?/gi, "[amount-redacted]")
+    .replace(/\b(?:deposit|payment|paid|pricing|price|commercial|invoice|cash)\b/gi, "[commercial-term-redacted]")
+    .trim();
+}
+
 function removeUrls(value: string): string {
   return value.replace(/\bhttps?:\/\/\S+/gi, " ");
 }
@@ -330,13 +344,16 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
 }
 
 export function buildCodexDispatchComment(request: DeveloperAutopilotRequest): string {
+  const safeTask = request.kind === "client_build"
+    ? sanitizeClientBuildPublicText(redactSensitiveText(request.description))
+    : request.description;
   return [
     "@codex fix this issue PR-first.",
     "",
     "Use the signed-in Codex/GitHub integration. Do not use BlackOps OpenAI API spend.",
     "",
     "Task:",
-    request.description,
+    safeTask,
     "",
     "Rules:",
     "- Work only on this PR branch/context.",
@@ -397,7 +414,8 @@ export function buildCodexGitHubIssueTitle(request: DeveloperAutopilotRequest, r
     : "[Codex PR-first]";
   const isPublicSecurity = (request.kind === "security" || request.kind === "threat") && repo?.private === false;
   const title = isPublicSecurity ? "Security-sensitive fix request" : request.title;
-  return `${prefix} ${title}`.slice(0, 200);
+  const safeTitle = request.kind === "client_build" ? sanitizeClientBuildPublicText(title) : title;
+  return `${prefix} ${safeTitle || "Client build request"}`.slice(0, 200);
 }
 
 export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, repo: MinimalRepo): string {
@@ -410,8 +428,13 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
       }
     : {
         ...request,
-        description: redactSensitiveText(request.description),
-        evidence: normalizeEvidence(request.evidence).map(redactSensitiveText),
+        description: request.kind === "client_build"
+          ? sanitizeClientBuildPublicText(redactSensitiveText(request.description))
+          : redactSensitiveText(request.description),
+        evidence: normalizeEvidence(request.evidence)
+          .map(redactSensitiveText)
+          .map((item) => request.kind === "client_build" ? sanitizeClientBuildPublicText(item) : item)
+          .filter(Boolean),
       };
 
   return [

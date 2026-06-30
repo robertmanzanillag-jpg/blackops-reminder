@@ -723,6 +723,7 @@ type RevenueSnapshot = {
       includesAutomation: boolean;
       launchTargetDays: number;
       clientRequest: string;
+      sourceUrl: string;
       repoFullName: string;
       branchName: string;
       githubIssueUrl: string;

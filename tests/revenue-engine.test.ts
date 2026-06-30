@@ -2673,6 +2673,36 @@ test("website closure queue keeps older money-ready opportunities visible", () =
   assert.equal(snapshot.dailyMoneyCommand.funnel.websiteClosuresPending, 30);
 });
 
+test("website sales packet queue keeps older ready packages visible", () => {
+  const older = createApprovedWebsiteDraftForTest({
+    businessName: "Older Sales Packet Cafe",
+    contactEmail: "owner@oldersalespacket.example",
+    sourceUrl: "https://example.com/older-sales-packet-cafe",
+    mockupSlug: "older-sales-packet-cafe",
+  });
+
+  for (let index = 1; index <= 11; index += 1) {
+    createApprovedWebsiteDraftForTest({
+      businessName: `Newer Sales Packet Cafe ${index}`,
+      contactEmail: `owner${index}@salespacket.example`,
+      sourceUrl: `https://example.com/newer-sales-packet-cafe-${index}`,
+      mockupSlug: `newer-sales-packet-cafe-${index}`,
+    });
+  }
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.recentLeads.some((item) => item.id === older.lead.id), false);
+  assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 12);
+  assert.equal(snapshot.websiteSalesPacketQueue.items.length, 12);
+  assert.equal(snapshot.websiteSalesPacketQueue.items.some((item) => item.leadId === older.lead.id), true);
+  const olderPacket = snapshot.websiteSalesPacketQueue.items.find((item) => item.leadId === older.lead.id)!;
+  assert.equal(olderPacket.outreachDraftId, older.draft.id);
+  assert.match(olderPacket.copyableSalesPacket, /Older Sales Packet Cafe/);
+  assert.equal(snapshot.dailyMoneyCommand.status, "contact");
+  assert.equal(snapshot.dailyMoneyCommand.funnel.salesPacketsReady, 12);
+});
+
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
   const sprint = runRevenueMoneySprint({
     area: "Miami",
@@ -2772,6 +2802,7 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.input.sourceLeadId, lead.id);
   assert.equal(handoff.workspace?.input.sourceOutreachDraftId, draft.id);
   assert.equal(handoff.workspace?.input.sourceOpportunityId, opportunity.id);
+  assert.equal(handoff.workspace?.input.sourceUrl, "https://example.com/handoff-cafe-listing");
   assert.equal(handoff.workspace?.input.mockupUrl, preview.previewUrl);
   assert.equal(handoff.workspace?.input.repoFullName, "robert/handoff-cafe");
   assert.equal(handoff.workspace?.input.branchName, "codex/client-handoff-cafe-website");

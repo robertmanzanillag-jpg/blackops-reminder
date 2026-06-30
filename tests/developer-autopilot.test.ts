@@ -178,6 +178,24 @@ test("developer autopilot accepts sold client website build handoffs", async () 
 });
 
 test("developer autopilot creates client build handoff from structured Revenue Engine request", async () => {
+  const safeTitle = buildCodexGitHubIssueTitle({
+    source: "manual",
+    repoFullName: "robert/handoff-cafe",
+    appName: "Handoff Cafe",
+    kind: "client_build",
+    title: "Paid deposit payment client build",
+    description: "Build the client website.",
+  }, {
+    full_name: "robert/handoff-cafe",
+    name: "handoff-cafe",
+    private: true,
+  });
+
+  assert.match(safeTitle, /\[Codex PR-first\]\[client-build\]/);
+  assert.doesNotMatch(safeTitle, /\bpaid\b/i);
+  assert.doesNotMatch(safeTitle, /\bdeposit\b/i);
+  assert.doesNotMatch(safeTitle, /\bpayment\b/i);
+
   const created = await createDeveloperAutopilotHandoffFromRequest(
     "user-1",
     {
@@ -186,9 +204,37 @@ test("developer autopilot creates client build handoff from structured Revenue E
       appName: "Handoff Cafe",
       kind: "client_build",
       title: "[Revenue Website Build] Handoff Cafe - Website 3D Premium",
-      description: "Build the sold website delivery from the approved Revenue Engine workspace. Target branch: codex/client-handoff-cafe-website",
+      description: [
+        "PR-first client build handoff from Revenue Engine.",
+        "",
+        "Sanitized build context:",
+        "- Client/workspace name: Handoff Cafe",
+        "- Revenue workspace: delivery-workspace-1",
+        "- Project type: website",
+        "- Package: Website 3D Premium - $4,200 / Deposit $2,100",
+        "- Target branch: codex/client-handoff-cafe-website",
+        "- Public source: https://example.com/handoff-cafe",
+        "- Mockup preview: /api/revenue-engine/mockup-previews/handoff-cafe",
+        "",
+        "Approved scope summary:",
+        "Build a mobile menu, catering inquiry CTA and follow-up capture from public business facts. Payment ref ACH-123 should stay private.",
+        "",
+        "Cash collected for deposit: $2,100",
+        "Setup: $3,500",
+        "",
+        "Public issue privacy rules:",
+        "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
+      ].join("\n"),
       severity: "medium",
-      evidence: ["Revenue workspace: delivery-workspace-1", "Package: Website 3D Premium"],
+      evidence: [
+        "Revenue workspace: delivery-workspace-1",
+        "Public source: https://example.com/handoff-cafe",
+        "Mockup preview: /api/revenue-engine/mockup-previews/handoff-cafe",
+        "Stripe pi_secret_12345",
+        "deposit confirmation private",
+        "package deposit tier",
+        "Sensitive sale details and private client data intentionally withheld from GitHub issue.",
+      ],
     },
     {
       getAppProjects: async () => [],
@@ -203,7 +249,22 @@ test("developer autopilot creates client build handoff from structured Revenue E
         assert.match(title, /\[Codex PR-first\]\[client-build\]/);
         assert.match(body, /Revenue workspace: delivery-workspace-1/);
         assert.match(body, /Target branch: codex\/client-handoff-cafe-website/);
+        assert.match(body, /Public source: https:\/\/example\.com\/handoff-cafe/);
+        assert.match(body, /Mockup preview: \/api\/revenue-engine\/mockup-previews\/handoff-cafe/);
+        assert.match(body, /Build a mobile menu, catering inquiry CTA and follow-up capture/);
+        assert.match(body, /amount-redacted/);
+        assert.match(body, /transfer-ref-redacted/);
+        assert.match(body, /Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details/);
         assert.match(body, /Robert must approve Replit deployment explicitly/);
+        assert.doesNotMatch(body, /Setup: \$/);
+        assert.doesNotMatch(body, /Cash collected/);
+        assert.doesNotMatch(body, /\$2,100/);
+        assert.doesNotMatch(body, /\$4,200/);
+        assert.doesNotMatch(body, /ACH-123/);
+        assert.doesNotMatch(body, /\bdeposit\b/i);
+        assert.doesNotMatch(body, /\bpayment\b/i);
+        assert.doesNotMatch(body, /\bpaid\b/i);
+        assert.doesNotMatch(body, /Stripe pi_/i);
         return { number: 41, html_url: "https://github.com/robert/handoff-cafe/issues/41" };
       },
       createIssueComment: async () => {
@@ -436,6 +497,26 @@ test("Codex dispatch comment keeps approval and no-API rules", () => {
   assert.match(comment, /Do not use BlackOps OpenAI API spend/);
   assert.match(comment, /Work only on this PR branch/);
   assert.match(comment, /Robert must approve merge\/deploy after QA/);
+
+  const clientBuildComment = buildCodexDispatchComment({
+    source: "manual",
+    repoFullName: "robert/handoff-cafe",
+    pullRequestNumber: 41,
+    kind: "client_build",
+    title: "Client build",
+    description: "Build package after deposit payment ref ACH-123 and $2,100 collection. Zelle ref scoped-deposit-123.",
+    severity: "medium",
+  });
+
+  assert.match(clientBuildComment, /commercial-term-redacted/);
+  assert.match(clientBuildComment, /transfer-ref-redacted/);
+  assert.match(clientBuildComment, /amount-redacted/);
+  assert.doesNotMatch(clientBuildComment, /\bdeposit\b/i);
+  assert.doesNotMatch(clientBuildComment, /\bpayment\b/i);
+  assert.doesNotMatch(clientBuildComment, /ACH-123/);
+  assert.doesNotMatch(clientBuildComment, /scoped/i);
+  assert.doesNotMatch(clientBuildComment, /Zelle/i);
+  assert.doesNotMatch(clientBuildComment, /\$2,100/);
 });
 
 test("public security handoff redacts sensitive issue details", () => {

@@ -283,6 +283,7 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   sourceOpportunityId: z.string().trim().max(160).optional().default(""),
   sourceLeadId: z.string().trim().max(160).optional().default(""),
   sourceOutreachDraftId: z.string().trim().max(160).optional().default(""),
+  sourceUrl: z.string().trim().url().max(300).optional().or(z.literal("")).default(""),
   mockupUrl: revenueMockupUrlSchema.optional().default(""),
   repoFullName: z.string().trim().max(200).optional().default(""),
   branchName: z.string().trim().max(200).optional().default(""),
@@ -3374,6 +3375,7 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     sourceOpportunityId: opportunity.id,
     sourceLeadId: "",
     sourceOutreachDraftId: "",
+    sourceUrl: "",
     mockupUrl: "",
     repoFullName: "",
     branchName: "",
@@ -3589,6 +3591,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     sourceOpportunityId: websiteOpportunity.id,
     sourceLeadId: lead.id,
     sourceOutreachDraftId: outreachDraft?.id || "",
+    sourceUrl,
     mockupUrl: effectiveMockupUrl,
     repoFullName: parsed.repoFullName || "",
     branchName: parsed.branchName || "",
@@ -4214,8 +4217,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
   };
 }
 
-function buildRevenueWebsiteSalesPacketQueue(limit = 8): RevenueWebsiteSalesPacketQueue {
-  const visibleLimit = Math.max(0, Math.min(25, limit));
+function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
   const packetStatuses: RevenueLead["status"][] = ["qualified", "mockup_ready", "outreach_ready", "proposal_sent"];
   const candidates = revenueLeads
     .filter((lead) => packetStatuses.includes(lead.status))
@@ -4307,8 +4309,8 @@ function buildRevenueWebsiteSalesPacketQueue(limit = 8): RevenueWebsiteSalesPack
     status: items.length > 0 ? "ready" : blocked.length > 0 ? "needs_context" : "empty",
     readyCount: items.length,
     blockedCount: blocked.length,
-    items: items.slice(0, visibleLimit),
-    blocked: blocked.slice(0, visibleLimit),
+    items,
+    blocked,
     safety: {
       sendsOutreach: false,
       publishesWebsite: false,
@@ -5190,7 +5192,7 @@ export function getRevenueEngineSnapshot() {
       })),
   ].filter(Boolean);
   const businessScoutQueue = buildRevenueBusinessScoutQueue();
-  const websiteSalesPacketQueue = buildRevenueWebsiteSalesPacketQueue(8);
+  const websiteSalesPacketQueue = buildRevenueWebsiteSalesPacketQueue();
   const manualOutreachQueue = buildRevenueManualOutreachQueue(10);
   const publicLeadImportQueue = buildRevenuePublicLeadImportQueue(10);
   const websiteClosureQueue = buildRevenueWebsiteClosureQueue();
