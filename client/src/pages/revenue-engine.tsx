@@ -161,6 +161,24 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  moneyActivationPlan: {
+    status: "ready_for_money_mode" | "ready_for_first_sprint" | "dry_run_research_only" | "blocked";
+    headline: string;
+    canStartToday: boolean;
+    canContactBusinesses: boolean;
+    canCollectMoney: boolean;
+    canBuildWebsites: boolean;
+    allowedToday: string[];
+    missingBeforeRealMoney: Array<{
+      id: string;
+      label: string;
+      reason: string;
+      nextStep: string;
+    }>;
+    blockedUntilApproved: string[];
+    nextRobertAction: string;
+    copyableBrief: string;
+  };
   systemReadiness: {
     score: number;
     ready: number;
@@ -1839,6 +1857,9 @@ function statusTone(status: string) {
   if (status === "collect_first") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "scale_carefully") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_money_mode") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_first_sprint") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "dry_run_research_only") return "border-cyan-500/40 bg-cyan-500/10 text-cyan-200";
   if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_for_preview") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_for_qa") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -3512,6 +3533,74 @@ export default function RevenueEnginePage() {
                 {(snapshot?.operatorConsole.waitingOnRobert || ["aprobar mensaje antes de enviar"]).map((action) => (
                   <div key={action} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-100">
                     {action}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-cyan-500/20 bg-zinc-950/90">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Rocket className="h-4 w-4 text-cyan-200" />
+                <p className="text-sm font-medium text-white">Activacion de dinero</p>
+                <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.status || "review"), "shrink-0")}>
+                  {snapshot?.moneyActivationPlan.status || "loading"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-lg font-semibold leading-7 text-white">
+                {snapshot?.moneyActivationPlan.headline || "Calculando modo de arranque."}
+              </p>
+              <p className="mt-2 rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2 text-sm leading-6 text-cyan-100">
+                {snapshot?.moneyActivationPlan.nextRobertAction || "Preparar research publico sin contacto externo."}
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canStartToday ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-red-500/20 bg-red-500/5 text-red-100")}>
+                  Start {snapshot?.moneyActivationPlan.canStartToday ? "yes" : "no"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canContactBusinesses ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-amber-500/20 bg-amber-500/5 text-amber-100")}>
+                  Contact {snapshot?.moneyActivationPlan.canContactBusinesses ? "yes" : "approval"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canCollectMoney ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-amber-500/20 bg-amber-500/5 text-amber-100")}>
+                  Collect {snapshot?.moneyActivationPlan.canCollectMoney ? "approval" : "wait"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canBuildWebsites ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-zinc-800 bg-black text-zinc-300")}>
+                  Build {snapshot?.moneyActivationPlan.canBuildWebsites ? "ready" : "wait"}
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Puede hacer hoy</p>
+              <div className="space-y-2">
+                {(snapshot?.moneyActivationPlan.allowedToday || ["buscar negocios publicos"]).slice(0, 5).map((action) => (
+                  <div key={action} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    {action}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Falta para money mode real</p>
+              <div className="space-y-2">
+                {(snapshot?.moneyActivationPlan.missingBeforeRealMoney || []).slice(0, 4).map((item) => (
+                  <div key={item.id} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                    <p className="text-sm font-medium text-amber-100">{item.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-100/80">{item.nextStep}</p>
+                  </div>
+                ))}
+                {snapshot?.moneyActivationPlan.missingBeforeRealMoney.length === 0 && (
+                  <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    Sin bloqueos de activacion.
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 mb-2 text-xs uppercase tracking-wide text-zinc-500">Bloqueado hasta aprobar</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(snapshot?.moneyActivationPlan.blockedUntilApproved || []).slice(0, 6).map((item) => (
+                  <div key={item} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-300">
+                    {item}
                   </div>
                 ))}
               </div>

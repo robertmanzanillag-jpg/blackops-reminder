@@ -1741,6 +1741,14 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.launchReadiness.todayExecutionPack.approvalRequiredBefore.includes("deployment"), true);
   assert.equal(snapshot.dailyMoneyCommand.status, "search");
   assert.match(snapshot.dailyMoneyCommand.primaryAction, /Buscar negocios publicos/);
+  assert.equal(snapshot.moneyActivationPlan.status, "dry_run_research_only");
+  assert.equal(snapshot.moneyActivationPlan.canStartToday, true);
+  assert.equal(snapshot.moneyActivationPlan.canContactBusinesses, false);
+  assert.equal(snapshot.moneyActivationPlan.canCollectMoney, false);
+  assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "production_database"), true);
+  assert.equal(snapshot.moneyActivationPlan.allowedToday.includes("buscar negocios publicos"), true);
+  assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("production DATABASE_URL"), true);
+  assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("client charge/deposit confirmation"), true);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
@@ -1755,6 +1763,14 @@ test("snapshot launch readiness starts only with production persistence ready", 
   assert.equal(snapshot.launchReadiness.blocked, 0);
   assert.equal(snapshot.launchReadiness.items.some((item) => item.id === "production_persistence"), false);
   assert.equal(snapshot.launchReadiness.todayExecutionPack.status, "ready");
+  assert.equal(snapshot.moneyActivationPlan.status, "ready_for_first_sprint");
+  assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "production_database"), false);
+  assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "controlled_autonomy"), true);
+  assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("outreach send"), true);
+  assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("cobrar cliente"), true);
+  assert.equal(snapshot.moneyActivationPlan.canCollectMoney, true);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
 });
 
 test("records sold apps and automations into revenue metrics", () => {

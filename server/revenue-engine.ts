@@ -5308,6 +5308,116 @@ function applyRevenueProductionPersistenceGate(input: {
   };
 }
 
+function buildRevenueMoneyActivationPlan(input: {
+  launchReadiness: ReturnType<typeof applyRevenueProductionPersistenceGate>["launchReadiness"];
+  dailyMoneyCommand: RevenueDailyMoneyCommand;
+  systemReadiness: ReturnType<typeof buildRevenueSystemReadiness>;
+  agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
+}) {
+  const productionPersistence = input.systemReadiness.items.find((item) => item.id === "production_persistence");
+  const hardMissing = [
+    productionPersistence && productionPersistence.status !== "ready" && {
+      id: "production_database",
+      label: "Configurar DATABASE_URL real",
+      reason: productionPersistence.evidence,
+      nextStep: productionPersistence.nextStep,
+    },
+    ...input.systemReadiness.items
+      .filter((item) => item.id !== "production_persistence" && item.status === "blocked")
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        reason: item.evidence,
+        nextStep: item.nextStep,
+      })),
+  ].filter(Boolean) as Array<{ id: string; label: string; reason: string; nextStep: string }>;
+  const softMissing = input.systemReadiness.items
+    .filter((item) => item.id !== "production_persistence" && (item.status === "needs_data" || item.status === "needs_approval"))
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      reason: item.evidence,
+      nextStep: item.nextStep,
+    }));
+  const dedupedMissing = Array.from(new Map([...hardMissing, ...softMissing].map((item) => [item.id, item])).values());
+  const canResearchNow = input.dailyMoneyCommand.safety.sendsOutreach === false
+    && input.dailyMoneyCommand.safety.spendsMoney === false
+    && input.dailyMoneyCommand.safety.deploys === false;
+  const canCollectMoney = input.launchReadiness.status === "ready_to_start"
+    && !hardMissing.some((item) => item.id === "production_database")
+    && input.dailyMoneyCommand.safety.requiresHumanApproval.includes("client charge/deposit confirmation");
+  const approvals = Array.from(new Set([
+    ...input.launchReadiness.todayExecutionPack.approvalRequiredBefore,
+    ...input.dailyMoneyCommand.safety.requiresHumanApproval,
+    ...input.dailyMoneyCommand.safety.blockedActions,
+    ...input.agentOperatingContract.requiresHumanApproval,
+  ]));
+  const status =
+    input.launchReadiness.status === "ready_to_start"
+    && hardMissing.length === 0
+    && softMissing.length === 0
+    && input.agentOperatingContract.mode === "controlled_autopilot"
+      ? "ready_for_money_mode" as const
+      : input.launchReadiness.status === "ready_to_start" && hardMissing.length === 0
+        ? "ready_for_first_sprint" as const
+      : canResearchNow
+        ? "dry_run_research_only" as const
+        : "blocked" as const;
+
+  return {
+    status,
+    headline: status === "ready_for_money_mode"
+      ? "Listo para operar el primer sprint de dinero con aprobaciones."
+      : status === "ready_for_first_sprint"
+        ? "Listo para preparar el primer sprint; contacto, cobro y deploy siguen con aprobacion."
+      : status === "dry_run_research_only"
+        ? "Puede buscar negocios en modo dry-run; falta activar money mode real."
+        : "Pausado hasta resolver bloqueos de seguridad.",
+    canStartToday: canResearchNow,
+    canContactBusinesses: input.launchReadiness.todayExecutionPack.status === "ready"
+      && input.agentOperatingContract.mode === "controlled_autopilot"
+      && !input.dailyMoneyCommand.safety.blockedActions.some((action) => action.includes("contact")),
+    canCollectMoney,
+    canBuildWebsites: input.dailyMoneyCommand.funnel.deliveryHandoffsReady > 0
+      || input.dailyMoneyCommand.funnel.buildHandoffsOpen > 0,
+    allowedToday: Array.from(new Set([
+      "buscar negocios publicos",
+      "guardar candidatos con evidencia verificable",
+      "crear mockups internos",
+      "preparar outreach/propuesta en draft",
+      ...input.agentOperatingContract.canRunAutonomously,
+    ])).slice(0, 8),
+    missingBeforeRealMoney: dedupedMissing,
+    blockedUntilApproved: approvals,
+    nextRobertAction: dedupedMissing[0]?.nextStep
+      || input.dailyMoneyCommand.primaryAction
+      || "Aprobar el siguiente batch controlado.",
+    copyableBrief: [
+      "Revenue Engine activation brief",
+      "",
+      `Status: ${status}`,
+      `Can start today: ${canResearchNow ? "yes, dry-run/public research only" : "no"}`,
+      `Can contact businesses: ${input.launchReadiness.todayExecutionPack.status === "ready" ? "only with Robert approval" : "no"}`,
+      `Can collect money: ${canCollectMoney ? "only after Robert confirms payment/deposit evidence" : "no"}`,
+      `Can build websites: ${input.dailyMoneyCommand.funnel.deliveryHandoffsReady + input.dailyMoneyCommand.funnel.buildHandoffsOpen > 0 ? "yes, PR-first after deposit/scope/QA" : "not until a paid opportunity is ready"}`,
+      "",
+      "Allowed today:",
+      ...Array.from(new Set([
+        "buscar negocios publicos",
+        "guardar candidatos con evidencia verificable",
+        "crear mockups internos",
+        "preparar outreach/propuesta en draft",
+      ])).map((item) => `- ${item}`),
+      "",
+      "Missing before real money mode:",
+      ...(dedupedMissing.length > 0 ? dedupedMissing.map((item) => `- ${item.label}: ${item.nextStep}`) : ["- none"]),
+      "",
+      "Blocked until approval:",
+      ...(approvals.length > 0 ? approvals.map((item) => `- ${item}`) : ["- none"]),
+    ].join("\n"),
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -5480,6 +5590,12 @@ export function getRevenueEngineSnapshot() {
     dailyMoneyCommand: baseDailyMoneyCommand,
     systemReadiness,
   });
+  const moneyActivationPlan = buildRevenueMoneyActivationPlan({
+    launchReadiness,
+    dailyMoneyCommand,
+    systemReadiness,
+    agentOperatingContract,
+  });
 
   return {
     metrics: {
@@ -5495,6 +5611,7 @@ export function getRevenueEngineSnapshot() {
     executiveSummary,
     operatorConsole,
     dailyMoneyCommand,
+    moneyActivationPlan,
     systemReadiness,
     launchReadiness,
     agentOperatingContract,
