@@ -3056,12 +3056,16 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     csv: string;
     evidenceImport: string;
     repairWorkPacket: string;
+    tiktokMvpAccountCloseout?: string;
+    mvpAccountEvidence?: string;
+    metricoolBridgeEvidence?: string;
   };
   source: {
     evidenceImportStatus: string;
     repairWorkPacketStatus: string;
     metricoolMvpReady?: boolean;
     activeMetricoolAccountIds?: string[];
+    activeMvpProofRows?: number;
     freshness?: {
       status: string;
       reportIsFresh: boolean;
@@ -3077,6 +3081,7 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     account: number;
     developerApp: number;
     permission: number;
+    metricoolBridge?: number;
     blocked: number;
   };
   tasks: Array<{
@@ -3086,7 +3091,7 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     accountId: string;
     scope: string;
     requiredStatus: string;
-    csvRow: number | null;
+    csvRow: number | string | null;
     proofPath: string;
     portalUrl: string;
     docsUrl: string;
@@ -3095,6 +3100,7 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     csvRowTemplate: string;
     nextAction: string;
     copyPacket: string;
+    proofType?: string;
     activeForMetricoolMvp?: boolean;
     deferredForMetricoolMvp?: boolean;
     deferredReason?: string;
@@ -26840,10 +26846,11 @@ export default function ClippersPage() {
                     </div>
                     {tiktokExternalCloseoutSession ? (
                       <>
-                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-5">
+                        <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-6">
                           <p>Active now: {tiktokExternalCloseoutSession.totals.activeTasks ?? tiktokExternalCloseoutSession.totals.tiktokTasks}</p>
                           <p>Deferred: {tiktokExternalCloseoutSession.totals.deferredTasks ?? 0}</p>
                           <p>Accounts: {tiktokExternalCloseoutSession.totals.account}</p>
+                          <p>Bridge: {tiktokExternalCloseoutSession.totals.metricoolBridge ?? 0}</p>
                           <p>Apps: {tiktokExternalCloseoutSession.totals.developerApp}</p>
                           <p>Permissions: {tiktokExternalCloseoutSession.totals.permission}</p>
                         </div>
@@ -26856,7 +26863,13 @@ export default function ClippersPage() {
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                   <p className={cn("truncate text-xs font-medium", task.deferredForMetricoolMvp ? "text-zinc-200" : "text-emerald-100")}>#{task.rank} {task.closeoutId}</p>
+                                  {task.proofType && (
+                                    <p className="mt-1 text-[11px] leading-4 text-emerald-100/70">Proof type: {task.proofType}</p>
+                                  )}
                                   <p className="mt-1 text-[11px] leading-4 text-zinc-400">{task.nextAction}</p>
+                                  {task.reason && (
+                                    <p className="mt-1 text-[11px] leading-4 text-zinc-500">{task.reason}</p>
+                                  )}
                                   {task.deferredForMetricoolMvp && (
                                     <p className="mt-1 text-[11px] leading-4 text-zinc-500">{task.deferredReason || "deferred_for_metricool_mvp"}</p>
                                   )}

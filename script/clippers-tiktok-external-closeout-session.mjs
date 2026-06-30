@@ -7,6 +7,9 @@ const evidenceImportPath = path.join(reportsDir, "clippers-external-closeout-evi
 const evidenceCsvPath = path.join(rootDir, "evidence-drop", "external-closeout-evidence-import.csv");
 const repairWorkPacketPath = path.join(reportsDir, "clippers-external-closeout-repair-work-packet.json");
 const accountReadinessPath = path.join(rootDir, "account-permission-readiness.json");
+const tiktokMvpAccountCloseoutPath = path.join(rootDir, "tiktok-mvp-account-closeout.json");
+const metricoolBridgeEvidencePath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv");
+const mvpAccountEvidencePath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.csv");
@@ -52,6 +55,9 @@ async function evidenceImportFreshness() {
 }
 
 function taskAction(row) {
+  if (row.lane === "metricool_bridge") {
+    return "Add the real non-secret Metricool proof URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
+  }
   if (row.lane === "account") {
     return "Create/verify the TikTok account, then add non-secret proof and update the CSV row.";
   }
@@ -105,6 +111,66 @@ function copyPacketFor(row) {
   ].filter(Boolean).join("\n");
 }
 
+function mvpProofTaskCsvRow(row, proofType) {
+  if (proofType === "metricool_bridge") {
+    return `"${row.accountId}","tiktok","${row.metricoolBrandOrProfile || row.accountName || ""}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
+  }
+  return `"account","${row.accountId}","tiktok","verified","","","","","https://www.tiktok.com/signup","","<paste real public/non-secret ownership proof URL>","Replace with a real 20+ character note confirming the TikTok account ownership and safety setup."`;
+}
+
+function activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) {
+  if (metricoolMvpReady) return [];
+  const rows = Array.isArray(tiktokMvpCloseout?.rows) ? tiktokMvpCloseout.rows : [];
+  return rows
+    .map((row, index) => ({ ...row, sourceOrder: index }))
+    .filter((row) => row.platform === "tiktok" && row.status !== "ready_for_metricool_tiktok")
+    .flatMap((row) => {
+      const profileUrl = `https://www.tiktok.com/${row.handle || ""}`;
+      const accountTask = {
+        closeoutId: `account-proof:${row.accountId}:tiktok`,
+        lane: "account",
+        accountId: row.accountId,
+        platform: "tiktok",
+        requiredStatus: "verified",
+        csvRow: "mvp-account-evidence",
+        proofPath: row.evidencePath || "",
+        portalUrl: profileUrl,
+        docsUrl: "",
+        reason: (row.evidenceQuality?.issues || row.blockers || ["account proof missing"]).join("; "),
+        missingCsvFields: ["proof", "notes"],
+        csvRowTemplate: mvpProofTaskCsvRow(row, "account"),
+        priority: 0,
+        sourceOrder: row.sourceOrder,
+        proofOrder: 0,
+        priorityLabel: "TikTok Metricool MVP proof",
+      };
+      const bridgeTask = {
+        closeoutId: `metricool-bridge-proof:${row.accountId}:tiktok`,
+        lane: "metricool_bridge",
+        accountId: row.accountId,
+        platform: "tiktok",
+        requiredStatus: "verified",
+        csvRow: "metricool-tiktok-bridge-evidence",
+        proofPath: metricoolBridgeEvidencePath,
+        portalUrl: "https://app.metricool.com/",
+        docsUrl: "",
+        reason: "Metricool bridge proof is missing or not imported for this active TikTok MVP account.",
+        missingCsvFields: ["profile_url", "proof", "notes"],
+        csvRowTemplate: mvpProofTaskCsvRow(row, "metricool_bridge"),
+        priority: 0,
+        sourceOrder: row.sourceOrder,
+        proofOrder: 1,
+        priorityLabel: "TikTok Metricool MVP proof",
+      };
+      return [accountTask, bridgeTask];
+    });
+}
+
+function sortableNumber(value, fallback = 999) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 function renderMarkdown(summary) {
   return [
     "# Clippers TikTok External Closeout Session",
@@ -130,6 +196,7 @@ function renderMarkdown(summary) {
       task.accountId ? `- Account: ${task.accountId}` : null,
       task.scope ? `- Scope: ${task.scope}` : null,
       `- Required status: ${task.requiredStatus}`,
+      task.proofType ? `- Proof type: ${task.proofType}` : null,
       `- Active for Metricool MVP: ${task.activeForMetricoolMvp ? "yes" : "no"}`,
       task.deferredReason ? `- Deferred reason: ${task.deferredReason}` : null,
       `- Portal: ${task.portalUrl || "n/a"}`,
@@ -175,19 +242,31 @@ async function main() {
     readJson(repairWorkPacketPath),
     readJson(accountReadinessPath),
   ]);
+  const tiktokMvpCloseout = await readJson(tiktokMvpAccountCloseoutPath);
   const activeMetricoolAccountIds = new Set(
     Array.isArray(accountReadiness.activeMvp?.accountIds)
       ? accountReadiness.activeMvp.accountIds.map((accountId) => String(accountId || ""))
       : ["sports-daily", "meme-radar"],
   );
   const metricoolMvpReady = accountReadiness.activeMvp?.status === "ready";
+  const activeMvpProofRows = freshness.reportIsFresh ? activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) : [];
   const repairQueue = freshness.reportIsFresh && Array.isArray(evidenceImport.repairQueue) ? evidenceImport.repairQueue : [];
-  const tiktokRows = repairQueue
+  const coveredActiveMvpAccountRows = new Set(
+    activeMvpProofRows
+      .filter((row) => row.lane === "account")
+      .map((row) => `${row.accountId}:tiktok`),
+  );
+  const tiktokRows = [
+    ...activeMvpProofRows,
+    ...repairQueue
     .filter((row) => String(row.platform || "").toLowerCase() === "tiktok")
-    .sort((left, right) =>
-      Number(left.priority ?? 99) - Number(right.priority ?? 99) ||
-      Number(left.csvRow || 0) - Number(right.csvRow || 0) ||
-      String(left.closeoutId || "").localeCompare(String(right.closeoutId || "")));
+    .filter((row) => !(row.lane === "account" && coveredActiveMvpAccountRows.has(`${row.accountId}:tiktok`)))
+  ].sort((left, right) =>
+    sortableNumber(left.priority, 99) - sortableNumber(right.priority, 99) ||
+    sortableNumber(left.sourceOrder, 99) - sortableNumber(right.sourceOrder, 99) ||
+    sortableNumber(left.proofOrder, 99) - sortableNumber(right.proofOrder, 99) ||
+    sortableNumber(left.csvRow, 999) - sortableNumber(right.csvRow, 999) ||
+    String(left.closeoutId || "").localeCompare(String(right.closeoutId || "")));
   const tasks = tiktokRows.map((row, index) => {
     const deferral = deferralFor(row, activeMetricoolAccountIds);
     return {
@@ -206,6 +285,7 @@ async function main() {
       csvRowTemplate: row.csvRowTemplate || "",
       nextAction: deferral.deferred ? deferral.note : taskAction(row),
       copyPacket: copyPacketFor(row),
+      proofType: row.lane === "metricool_bridge" ? "metricool_connection" : row.lane === "account" ? "account_ownership" : "",
       activeForMetricoolMvp: !deferral.deferred,
       deferredForMetricoolMvp: deferral.deferred,
       deferredReason: deferral.reason,
@@ -231,12 +311,16 @@ async function main() {
       evidenceCsv: evidenceCsvPath,
       evidenceImport: evidenceImportPath,
       repairWorkPacket: repairWorkPacketPath,
+      tiktokMvpAccountCloseout: tiktokMvpAccountCloseoutPath,
+      mvpAccountEvidence: mvpAccountEvidencePath,
+      metricoolBridgeEvidence: metricoolBridgeEvidencePath,
     },
     source: {
       evidenceImportStatus: evidenceImport.status || "missing",
       repairWorkPacketStatus: repairWorkPacket.status || "missing",
       metricoolMvpReady,
       activeMetricoolAccountIds: [...activeMetricoolAccountIds].filter(Boolean),
+      activeMvpProofRows: activeMvpProofRows.length,
       freshness,
     },
     totals: {
@@ -246,6 +330,7 @@ async function main() {
       account: tasks.filter((task) => task.lane === "account").length,
       developerApp: tasks.filter((task) => task.lane === "developer_app").length,
       permission: tasks.filter((task) => task.lane === "permission").length,
+      metricoolBridge: tasks.filter((task) => task.lane === "metricool_bridge").length,
       blocked: activeTasks.length,
     },
     tasks,

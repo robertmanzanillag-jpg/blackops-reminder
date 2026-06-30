@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T12:29:13.709Z
+Generated: 2026-06-30T12:41:13.541Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 97 | 8866 |
+| 431 | 363 | 1368 | 97 | 8880 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -169,7 +169,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-batch-runbook.mjs` (script; 54 symbols, 2 imports)
 - `script/clippers-tiktok-batch-tracker.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-tiktok-evidence-checklist.mjs` (script; 38 symbols, 2 imports)
-- `script/clippers-tiktok-external-closeout-session.mjs` (script; 32 symbols, 2 imports)
+- `script/clippers-tiktok-external-closeout-session.mjs` (script; 46 symbols, 2 imports)
 - `script/clippers-tiktok-launch-control.mjs` (script; 63 symbols, 2 imports)
 - `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 45 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 66 symbols, 3 imports)

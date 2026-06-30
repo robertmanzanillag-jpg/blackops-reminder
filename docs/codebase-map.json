@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T12:29:13.709Z",
+  "generatedAt": "2026-06-30T12:41:13.541Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8866
+    "symbols": 8880
   },
   "directories": {
     ".agents/skills": {
@@ -5827,9 +5827,14 @@
       "exports": [],
       "symbols": [
         "accountReadinessPath",
+        "accountTask",
         "activeMetricoolAccountIds",
+        "activeMetricoolMvpProofRows",
+        "activeMvpProofRows",
         "activeTasks",
+        "bridgeTask",
         "copyPacketFor",
+        "coveredActiveMvpAccountRows",
         "csvCell",
         "deferral",
         "deferralFor",
@@ -5840,10 +5845,15 @@
         "freshness",
         "header",
         "main",
+        "metricoolBridgeEvidencePath",
         "metricoolMvpReady",
+        "mvpAccountEvidencePath",
+        "mvpProofTaskCsvRow",
+        "number",
         "outCsvPath",
         "outJsonPath",
         "outMarkdownPath",
+        "profileUrl",
         "raw",
         "readJson",
         "renderCsv",
@@ -5853,10 +5863,14 @@
         "reportIsFresh",
         "reportsDir",
         "rootDir",
+        "rows",
+        "sortableNumber",
         "status",
         "summary",
         "taskAction",
         "tasks",
+        "tiktokMvpAccountCloseoutPath",
+        "tiktokMvpCloseout",
         "tiktokRows"
       ],
       "routes": []

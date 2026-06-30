@@ -1047,7 +1047,10 @@ test("external closeout evidence importer rejects placeholders without applying"
   assert.equal(repairWorkPacket.groups[0].priorityLabel, "TikTok first");
 });
 
-test("TikTok external closeout session defers non-Metricool TikTok backlog while MVP is ready", async () => {
+test("TikTok external closeout session surfaces active Metricool MVP proof blockers before deferred backlog", async () => {
+  const evidenceCsvPath = path.join(rootDir, "evidence-drop/external-closeout-evidence-import.csv");
+  const now = new Date();
+  await utimes(evidenceCsvPath, now, now);
   const validate = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"], {
     cwd: process.cwd(),
     encoding: "utf8",
@@ -1060,32 +1063,46 @@ test("TikTok external closeout session defers non-Metricool TikTok backlog while
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "metricool_mvp_ready_deferred_backlog");
-  assert.equal(output.tiktokTasks, 4);
-  assert.equal(output.firstTask, "account:streamer-pulse:tiktok");
+  assert.equal(output.status, "needs_tiktok_external_closeout");
+  assert.ok(output.tiktokTasks >= 4);
+  assert.equal(output.firstTask, "account-proof:sports-daily:tiktok");
 
   const session = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-external-closeout-session.json"), "utf8"));
-  assert.equal(session.source.metricoolMvpReady, true);
+  assert.equal(session.source.metricoolMvpReady, false);
   assert.deepEqual(session.source.activeMetricoolAccountIds, ["sports-daily", "meme-radar"]);
-  assert.equal(session.totals.activeTasks, 0);
-  assert.equal(session.totals.deferredTasks, 4);
-  assert.equal(session.totals.account, 1);
-  assert.equal(session.totals.developerApp, 1);
-  assert.equal(session.totals.permission, 2);
-  assert.equal(session.totals.blocked, 0);
+  assert.equal(session.source.activeMvpProofRows, 4);
+  assert.ok(session.totals.activeTasks >= 4);
+  assert.ok(session.totals.deferredTasks >= 0);
+  assert.ok(session.totals.account >= 2);
+  assert.ok(session.totals.developerApp >= 0);
+  assert.ok(session.totals.permission >= 0);
+  assert.equal(session.totals.metricoolBridge, 2);
+  assert.ok(session.totals.blocked >= 4);
   assert.ok(session.tasks.every((task) => task.closeoutId.includes("tiktok")));
-  assert.ok(session.tasks.every((task) => task.deferredForMetricoolMvp === true));
+  assert.equal(session.activeTasks.every((task) => task.activeForMetricoolMvp === true), true);
+  assert.equal(session.deferredTasks.every((task) => task.deferredForMetricoolMvp === true), true);
+  assert.equal(session.tasks[0].closeoutId, "account-proof:sports-daily:tiktok");
+  assert.equal(session.tasks.slice(0, 4).every((task) => task.activeForMetricoolMvp === true), true);
+  assert.deepEqual(session.tasks.slice(0, 4).map((task) => task.closeoutId), [
+    "account-proof:sports-daily:tiktok",
+    "metricool-bridge-proof:sports-daily:tiktok",
+    "account-proof:meme-radar:tiktok",
+    "metricool-bridge-proof:meme-radar:tiktok",
+  ]);
+  assert.equal(session.tasks[0].proofType, "account_ownership");
+  assert.equal(session.tasks.find((task) => task.closeoutId === "metricool-bridge-proof:sports-daily:tiktok")?.proofType, "metricool_connection");
+  assert.match(session.tasks.find((task) => task.closeoutId === "metricool-bridge-proof:sports-daily:tiktok")?.nextAction || "", /Preview\/Import the bridge CSV/);
   assert.equal(session.tasks.find((task) => task.lane === "developer_app")?.deferredReason, "direct_api_not_required_for_metricool_mvp");
-  assert.equal(session.tasks[0].closeoutId, "account:streamer-pulse:tiktok");
-  assert.equal(session.tasks[0].deferredReason, "account_not_in_current_metricool_tiktok_mvp");
+  assert.equal(session.tasks.find((task) => task.closeoutId === "account:streamer-pulse:tiktok")?.deferredReason, "account_not_in_current_metricool_tiktok_mvp");
   assert.match(session.tasks[0].copyPacket, /Do not paste passwords/);
-  assert.match(session.tasks[0].csvRowTemplate, /streamer-pulse/);
+  assert.match(session.tasks[0].csvRowTemplate, /sports-daily/);
   assert.equal(/client_secret=|access_token=|refresh_token=|bearer\s+[a-z0-9._-]+/i.test(session.tasks.map((task) => task.csvRowTemplate).join("\n")), false);
-  assert.match(session.nextStep, /SPORT and memes are ready through Metricool/);
+  assert.match(session.nextStep, /account-proof:sports-daily:tiktok/);
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-tiktok-external-closeout-session.md"), "utf8");
   assert.match(markdown, /Clippers TikTok External Closeout Session/);
-  assert.match(markdown, /account:streamer-pulse:tiktok/);
+  assert.match(markdown, /account-proof:sports-daily:tiktok/);
+  assert.match(markdown, /metricool-bridge-proof:sports-daily:tiktok/);
 });
 
 test("TikTok external closeout session blocks stale evidence import reports", async () => {
@@ -2098,6 +2115,10 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-external-task-button"'));
   assert.ok(page.includes('queryKey: ["/api/clippers/tiktok-external-closeout-session"]'));
   assert.ok(page.includes('/api/clippers/prepare-tiktok-external-closeout-session'));
+  assert.ok(page.includes("Bridge:"));
+  assert.ok(page.includes("totals.metricoolBridge"));
+  assert.ok(page.includes("Proof type:"));
+  assert.ok(page.includes("task.proofType"));
   assert.ok(page.includes("priorityPolicy"));
   assert.ok(page.includes("priorityLabel"));
   assert.ok(page.includes("Active first:"));
