@@ -276,6 +276,7 @@ type RevenueSnapshot = {
       mockupUrl: string;
       contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
       contactValue: string;
+      draftStatus: "draft" | "approved" | "blocked";
       estimatedSetupUsd: number;
       depositUsd: number;
       monthlyRetainerUsd: number;
@@ -3604,6 +3605,20 @@ export default function RevenueEnginePage() {
                         </Badge>
                       </div>
                       <p className="mt-1 text-xs leading-5 text-zinc-500">{item.reason}</p>
+                      {item.status === "draft" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={outreachApproveMutation.isPending}
+                          onClick={() => outreachApproveMutation.mutate(item.draftId)}
+                          className="mt-2 h-8 border-sky-700 text-sky-100"
+                          data-testid={`button-approve-manual-outreach-draft-${item.draftId}`}
+                        >
+                          {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-2 h-3.5 w-3.5" />}
+                          Aprobar draft
+                        </Button>
+                      )}
                     </div>
                   ))
                 )}
@@ -5191,13 +5206,25 @@ export default function RevenueEnginePage() {
                             <Button
                               type="button"
                               size="sm"
-                              disabled={websiteOpportunityMutation.isPending || !item.readiness.some((entry) => entry.includes("draft aprobado"))}
+                              variant="outline"
+                              disabled={outreachApproveMutation.isPending || item.draftStatus === "approved"}
+                              onClick={() => outreachApproveMutation.mutate(item.outreachDraftId)}
+                              className="border-sky-700 text-sky-100"
+                              data-testid={`button-approve-website-sales-draft-${item.outreachDraftId}`}
+                            >
+                              {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                              {item.draftStatus === "approved" ? "Draft aprobado" : "Aprobar draft"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={websiteOpportunityMutation.isPending || item.draftStatus !== "approved"}
                               onClick={() => websiteOpportunityMutation.mutate(item)}
                               className="bg-sky-600 text-white hover:bg-sky-500"
                               data-testid={`button-create-website-opportunity-${item.leadId}`}
                             >
                               {websiteOpportunityMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CircleDollarSign className="mr-2 h-4 w-4" />}
-                              {item.readiness.some((entry) => entry.includes("draft aprobado")) ? "Crear oportunidad" : "Aprobar draft"}
+                              Crear oportunidad
                             </Button>
                             {item.mockupUrl && (
                               <a href={item.mockupUrl} target="_blank" rel="noreferrer">

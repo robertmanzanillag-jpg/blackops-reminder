@@ -2267,8 +2267,19 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
   assert.equal(result.snapshot.websiteSalesPacketQueue.readyCount, 1);
+  assert.equal(result.snapshot.websiteSalesPacketQueue.items[0].draftStatus, "draft");
   assert.equal(result.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
   assert.equal(result.snapshot.recentWebsiteOpportunities.length, 0);
+
+  const approval = approveRevenueOutreachDraft({
+    draftId: result.outreachDrafts[0].id,
+    approvedByRobert: true,
+    notes: "Robert approved Sprint Cafe for manual contact.",
+  });
+  assert.equal(approval.status, "approved");
+  assert.equal(approval.snapshot.websiteSalesPacketQueue.items[0].draftStatus, "approved");
+  assert.equal(approval.snapshot.manualOutreachQueue.readyCount, 1);
+  assert.equal(approval.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
 });
 
 test("website delivery handoff queue requires a sold website opportunity", async () => {

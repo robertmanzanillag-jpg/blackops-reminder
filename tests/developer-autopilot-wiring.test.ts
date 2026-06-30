@@ -98,7 +98,8 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /panel-website-build-handoff-queue/);
   assert.match(uiSource, /button-copy-website-build-brief-/);
   assert.match(uiSource, /button-create-website-opportunity-/);
-  assert.match(uiSource, /item\.readiness\.some\(\(entry\) => entry\.includes\("draft aprobado"\)\)/);
+  assert.match(uiSource, /button-approve-website-sales-draft-/);
+  assert.match(uiSource, /item\.draftStatus !== "approved"/);
   assert.match(uiSource, /button-close-website-opportunity-/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
@@ -167,12 +168,16 @@ test("Revenue Engine exposes manual outreach outcome recording", () => {
 
   assert.match(engineSource, /approveRevenueOutreachDraft/);
   assert.match(engineSource, /recordRevenueOutreachOutcome/);
+  assert.match(engineSource, /draftStatus: draft\.status/);
   assert.match(routeSource, /\/api\/revenue-engine\/outreach-drafts\/approve/);
   assert.match(routeSource, /revenueOutreachApproveSchema\.parse/);
   assert.match(routeSource, /\/api\/revenue-engine\/outreach-outcome/);
   assert.match(routeSource, /revenueOutreachOutcomeSchema\.parse/);
   assert.match(uiSource, /outreachApproveMutation/);
   assert.match(uiSource, /button-approve-draft-/);
+  assert.match(uiSource, /button-approve-website-sales-draft-/);
+  assert.match(uiSource, /button-approve-manual-outreach-draft-/);
+  assert.match(uiSource, /item\.draftStatus !== "approved"/);
   assert.match(uiSource, /outreachOutcomeMutation/);
   assert.match(uiSource, /button-record-outreach-reply/);
   assert.match(uiSource, /button-record-outreach-call/);

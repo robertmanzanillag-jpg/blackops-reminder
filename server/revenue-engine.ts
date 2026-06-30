@@ -771,6 +771,7 @@ type RevenueWebsiteSalesPacketQueue = {
     mockupUrl: string;
     contactChannel: RevenueLead["contactChannel"];
     contactValue: string;
+    draftStatus: RevenueOutreachDraft["status"];
     estimatedSetupUsd: number;
     depositUsd: number;
     monthlyRetainerUsd: number;
@@ -4096,6 +4097,7 @@ function buildRevenueWebsiteSalesPacketQueue(limit = 8): RevenueWebsiteSalesPack
       mockupUrl,
       contactChannel: lead.contactChannel,
       contactValue: lead.contactValue,
+      draftStatus: draft.status,
       estimatedSetupUsd: draft.pricing.totalSetupUsd,
       depositUsd: draft.pricing.depositUsd,
       monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
