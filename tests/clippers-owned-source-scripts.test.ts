@@ -3002,7 +3002,9 @@ test("TikTok batch tracker tracks current batch without counting placeholders", 
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "ready_for_metricool_review");
+  assert.equal(output.status, "blocked_verifier");
+  assert.equal(output.sourceStatus, "ready_for_metricool_review");
+  assert.equal(output.verifierGate, "fail");
   assert.equal(output.batch, "metricool-batch-01");
   assert.equal(output.rows, 10);
   assert.equal(output.notStarted, 10);
@@ -3012,7 +3014,10 @@ test("TikTok batch tracker tracks current batch without counting placeholders", 
   assert.equal(output.needsFix, 0);
 
   const tracker = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-batch-tracker.json"), "utf8"));
-  assert.equal(tracker.status, "ready_for_metricool_review");
+  assert.equal(tracker.status, "blocked_verifier");
+  assert.equal(tracker.sourceStatus, "ready_for_metricool_review");
+  assert.equal(tracker.verifierGate.blocking, true);
+  assert.match(tracker.nextStep, /Metricool bridge evidence|proof/i);
   assert.equal(tracker.batch.id, "metricool-batch-01");
   assert.equal(tracker.batch.rows, 10);
   assert.deepEqual(tracker.batch.platforms, ["tiktok"]);
@@ -3033,10 +3038,12 @@ test("TikTok batch tracker tracks current batch without counting placeholders", 
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("public TikTok URL and nonzero 24h metrics")));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("missing or invalid local source files")));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("MP4/MOV signature checks")));
+  assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("verifier must pass before opening Metricool")));
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-tiktok-batch-tracker.md"), "utf8");
   assert.match(markdown, /Clippers TikTok Batch Tracker/);
   assert.match(markdown, /Batch: metricool-batch-01/);
+  assert.match(markdown, /Verifier gate: fail/);
   assert.match(markdown, /Operator Copy Packets/);
   assert.match(markdown, /Ready to import: 0/);
   assert.doesNotMatch(markdown, /autopublish|ready_to_send/i);

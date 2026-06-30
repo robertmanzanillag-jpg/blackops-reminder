@@ -16,16 +16,23 @@ test("TikTok batch tracker completes with local source signature checks", async 
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "ready_for_metricool_review");
+  assert.equal(output.status, "blocked_verifier");
+  assert.equal(output.sourceStatus, "ready_for_metricool_review");
+  assert.equal(output.verifierGate, "fail");
   assert.equal(output.rows, 10);
   assert.equal(output.readyToImport, 0);
 
   const tracker = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-batch-tracker.json"), "utf8"));
+  assert.equal(tracker.status, "blocked_verifier");
+  assert.equal(tracker.sourceStatus, "ready_for_metricool_review");
+  assert.equal(tracker.verifierGate.blocking, true);
+  assert.match(tracker.nextStep, /Metricool bridge evidence|proof/i);
   assert.equal(tracker.totals.readyToImport, 0);
   assert.ok(tracker.rows.every((row) => row.sourceProbe === "mp4_signature"));
   assert.ok(tracker.rows.every((row) => row.sourceVideoValid === true));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("Scheduled rows are not counted as published")));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("MP4/MOV signature checks")));
+  assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("verifier must pass before opening Metricool")));
 });
 
 test("TikTok batch tracker blocks fake text files containing ftyp", async () => {

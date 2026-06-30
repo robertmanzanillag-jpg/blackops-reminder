@@ -713,7 +713,8 @@ interface ClipperGoalCompletionAuditSummary {
 }
 
 interface ClipperTikTokBatchTrackerSummary {
-  status: "ready_for_metricool_review" | "in_progress" | "waiting_live_urls" | "waiting_24h_metrics" | "ready_to_import" | "needs_evidence_fix";
+  status: "ready_for_metricool_review" | "blocked_verifier" | "in_progress" | "waiting_live_urls" | "waiting_24h_metrics" | "ready_to_import" | "needs_evidence_fix";
+  sourceStatus?: "ready_for_metricool_review" | "in_progress" | "waiting_live_urls" | "waiting_24h_metrics" | "ready_to_import" | "needs_evidence_fix";
   generatedAt: string;
   paths: {
     json: string;
@@ -721,7 +722,17 @@ interface ClipperTikTokBatchTrackerSummary {
     csv: string;
     workbook: string;
     session: string;
+    verifier?: string;
     evidenceCsv: string;
+    batchEvidenceCsv?: string;
+    masterEvidenceCsv?: string;
+  };
+  verifierGate?: {
+    status: "pass" | "fail" | "missing";
+    launchDecision: string;
+    blocking: boolean;
+    failed: number;
+    nextStep: string;
   };
   batch: {
     id: string;
@@ -18844,6 +18855,11 @@ export default function ClippersPage() {
                   <Badge className="border border-rose-300/30 bg-rose-300/10 text-rose-100">
                     {tiktokBatchTracker.status}
                   </Badge>
+                  {tiktokBatchTracker.verifierGate?.blocking && (
+                    <Badge className="border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                      verifier blocked
+                    </Badge>
+                  )}
                   <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
                     {tiktokBatchTracker.batch.id}
                   </Badge>
@@ -18853,6 +18869,11 @@ export default function ClippersPage() {
                 </div>
                 <h2 className="mt-2 text-lg font-semibold text-white">TikTok Batch Tracker</h2>
                 <p className="mt-1 text-sm leading-6 text-zinc-400">{tiktokBatchTracker.nextStep}</p>
+                {tiktokBatchTracker.sourceStatus && tiktokBatchTracker.sourceStatus !== tiktokBatchTracker.status && (
+                  <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                    Source gate: {tiktokBatchTracker.sourceStatus}; Metricool gate: {tiktokBatchTracker.verifierGate?.status || "unknown"}.
+                  </p>
+                )}
                 <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{tiktokBatchTracker.paths.markdown}</p>
               </div>
               <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
@@ -18874,7 +18895,8 @@ export default function ClippersPage() {
               <p>Accounts: {tiktokBatchTracker.batch.accounts.join(", ") || "none"}</p>
               <p>Platforms: {tiktokBatchTracker.batch.platforms.join(", ") || "none"}</p>
               <p>Workbook: {tiktokBatchTracker.paths.workbook}</p>
-              <p>Evidence: {tiktokBatchTracker.paths.evidenceCsv}</p>
+              <p>Evidence: {tiktokBatchTracker.paths.evidenceCsv || tiktokBatchTracker.paths.batchEvidenceCsv}</p>
+              {tiktokBatchTracker.paths.verifier && <p>Verifier: {tiktokBatchTracker.paths.verifier}</p>}
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-6">
               {[

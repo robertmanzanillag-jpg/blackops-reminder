@@ -7,6 +7,7 @@ const reportsDir = path.join(rootDir, "reports");
 const workbookPath = path.join(scheduledDir, "metricool-100-current-batch-workbook.json");
 const sessionPath = path.join(scheduledDir, "metricool-100-current-batch-operator-session.json");
 const masterEvidenceCsvPath = path.join(rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv");
+const verifierPath = path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.csv");
@@ -17,6 +18,16 @@ async function readRequiredJson(filePath) {
     return JSON.parse(raw);
   } catch (error) {
     throw new Error(`Could not parse required JSON artifact ${filePath}: ${error.message}`);
+  }
+}
+
+async function readOptionalJson(filePath, fallback = null) {
+  const raw = await readFile(filePath, "utf8").catch(() => null);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
   }
 }
 
@@ -271,6 +282,26 @@ function statusFromTotals(totals) {
   return "in_progress";
 }
 
+function applyVerifierGate(status, verifier) {
+  if (status !== "ready_for_metricool_review") return status;
+  if (!verifier || verifier.status === "pass") return status;
+  return "blocked_verifier";
+}
+
+function nextStepForStatus(status, workbook, session, scheduledDir, verifier) {
+  if (status === "blocked_verifier") {
+    return verifier?.nextStep || "Run TikTok MVP verifier and fix account/Metricool proof blockers before opening Metricool.";
+  }
+  if (status === "ready_for_metricool_review") {
+    return `Process ${workbook.batchId || session.batchId || "metricool-batch-01"} in Metricool using ${path.join(scheduledDir, "metricool-100-current-batch-workbook.csv")}.`;
+  }
+  if (status === "waiting_live_urls") return "Wait for scheduled TikToks to go live, then add public TikTok URLs.";
+  if (status === "waiting_24h_metrics") return "Add 24h metrics for live TikToks before importing analytics.";
+  if (status === "ready_to_import") return "Preview and import Metricool evidence after final review.";
+  if (status === "needs_evidence_fix") return "Fix rejected or invalid evidence rows before continuing.";
+  return "Continue processing remaining rows in Metricool.";
+}
+
 function renderMarkdown(summary) {
   return [
     "# Clippers TikTok Batch Tracker",
@@ -280,6 +311,7 @@ function renderMarkdown(summary) {
     `Status: ${summary.status}`,
     `Generated: ${summary.generatedAt}`,
     `Batch: ${summary.batch.id}`,
+    `Verifier gate: ${summary.verifierGate.status}`,
     `Batch evidence CSV: ${summary.paths.batchEvidenceCsv}`,
     `Master evidence CSV: ${summary.paths.masterEvidenceCsv} (sync target; do not edit directly)`,
     "",
@@ -370,6 +402,7 @@ async function main() {
     readRequiredJson(workbookPath),
     readRequiredJson(sessionPath),
   ]);
+  const verifier = await readOptionalJson(verifierPath, null);
   const batchId = String(workbook.batchId || session.batchId || "metricool-batch-01");
   const batchEvidenceCsvPath = path.join(scheduledDir, "metricool-100-batch-evidence-imports", `${batchId}-evidence-import.csv`);
   const evidenceRaw = await readFile(batchEvidenceCsvPath, "utf8").catch(() => "");
@@ -435,20 +468,12 @@ async function main() {
     if (row.state === "rejected") sum.rejected += 1;
     return sum;
   }, { rows: 0, notStarted: 0, scheduled: 0, waitingMetrics: 0, readyToImport: 0, needsFix: 0, rejected: 0 });
-  const status = statusFromTotals(totals);
-  const nextStep = status === "ready_for_metricool_review"
-    ? `Process ${workbook.batchId || session.batchId || "metricool-batch-01"} in Metricool using ${path.join(scheduledDir, "metricool-100-current-batch-workbook.csv")}.`
-    : status === "waiting_live_urls"
-      ? "Wait for scheduled TikToks to go live, then add public TikTok URLs."
-      : status === "waiting_24h_metrics"
-        ? "Add 24h metrics for live TikToks before importing analytics."
-        : status === "ready_to_import"
-          ? "Preview and import Metricool evidence after final review."
-          : status === "needs_evidence_fix"
-            ? "Fix rejected or invalid evidence rows before continuing."
-            : "Continue processing remaining rows in Metricool.";
+  const sourceStatus = statusFromTotals(totals);
+  const status = applyVerifierGate(sourceStatus, verifier);
+  const nextStep = nextStepForStatus(status, workbook, session, scheduledDir, verifier);
   const summary = {
     status,
+    sourceStatus,
     generatedAt: new Date().toISOString(),
     paths: {
       json: outJsonPath,
@@ -456,8 +481,16 @@ async function main() {
       csv: outCsvPath,
       workbook: workbookPath,
       session: sessionPath,
+      verifier: verifierPath,
       batchEvidenceCsv: batchEvidenceCsvPath,
       masterEvidenceCsv: masterEvidenceCsvPath,
+    },
+    verifierGate: {
+      status: verifier?.status || "missing",
+      launchDecision: verifier?.launchDecision || "unknown",
+      blocking: status === "blocked_verifier",
+      failed: Number(verifier?.totals?.failed || 0),
+      nextStep: verifier?.nextStep || "",
     },
     batch: {
       id: workbook.batchId || session.batchId || "metricool-batch-01",
@@ -473,6 +506,7 @@ async function main() {
       "Published rows require a public TikTok URL and nonzero 24h metrics.",
       "Rows with missing or invalid local source files are blocked before Metricool review.",
       "Rows must pass local extension, size, and MP4/MOV signature checks before Metricool review.",
+      "TikTok MVP verifier must pass before opening Metricool operator review.",
       "Do not paste tokens, cookies, passwords, private URLs, or screenshots with secrets.",
     ],
     nextStep,
@@ -489,6 +523,8 @@ async function main() {
     waitingMetrics: summary.totals.waitingMetrics,
     readyToImport: summary.totals.readyToImport,
     needsFix: summary.totals.needsFix,
+    sourceStatus: summary.sourceStatus,
+    verifierGate: summary.verifierGate.status,
     markdownPath: outMarkdownPath,
     nextStep: summary.nextStep,
   }, null, 2));
