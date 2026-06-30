@@ -337,6 +337,17 @@ export const revenueMoneySprintSchema = z.object({
 
 export type RevenueMoneySprintInput = z.infer<typeof revenueMoneySprintSchema>;
 
+export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
+  missionId: z.string().trim().max(160).optional().default(""),
+  sourceTaskId: z.string().trim().max(160).optional().default(""),
+  verificationStatus: z.enum(["needs_review", "verified_public", "blocked"]).default("needs_review"),
+  publicEvidenceVerified: z.coerce.boolean().default(false),
+  approvalToImport: z.coerce.boolean().default(false),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenuePublicLeadCandidateInput = z.infer<typeof revenuePublicLeadCandidateSchema>;
+
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
   targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
@@ -531,6 +542,23 @@ type RevenueScoutingMission = ReturnType<typeof buildRevenueScoutingMission> & {
   learningNote: string;
 };
 
+type RevenuePublicLeadCandidate = RevenuePublicLeadCandidateInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  qualification: ReturnType<typeof qualifyRevenueLead>;
+  importReady: boolean;
+  blockedReasons: string[];
+  batchRow: string;
+  safety: {
+    allowedAction: string;
+    blockedActions: string[];
+    persistsLead: boolean;
+    sendsOutreach: boolean;
+    writesPreviewFiles: boolean;
+  };
+};
+
 type RevenueDeliveryWorkspace = {
   id: string;
   createdAt: string;
@@ -587,6 +615,7 @@ const revenueAgentRuns: RevenueAgentRun[] = [];
 const revenueAutomationOpportunities: RevenueAutomationOpportunity[] = [];
 const revenueImprovementReviews: RevenueImprovementReview[] = [];
 const revenueScoutingMissions: RevenueScoutingMission[] = [];
+const revenuePublicLeadCandidates: RevenuePublicLeadCandidate[] = [];
 const revenueDeliveryWorkspaces: RevenueDeliveryWorkspace[] = [];
 const revenueApprovalDecisions: RevenueApprovalDecision[] = [];
 const revenueAutomationIntakes: RevenueAutomationIntake[] = [];
@@ -758,6 +787,30 @@ const persistedRevenueScoutingMissionSchema = z.object({
   })),
   nextActions: z.array(z.string()),
 });
+const persistedRevenuePublicLeadCandidateSchema = revenuePublicLeadCandidateSchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  qualification: z.object({
+    grade: z.enum(["A", "B", "C", "D"]),
+    score: z.number(),
+    recommendedStatus: z.enum(["research", "qualified", "mockup_ready", "outreach_ready", "contacted", "proposal_sent", "closed", "disqualified"]),
+    nextAgent: z.string(),
+    guardrail: z.string(),
+    outreachDraft: z.string(),
+    missing: z.array(z.string()),
+  }),
+  importReady: z.boolean(),
+  blockedReasons: z.array(z.string()),
+  batchRow: z.string(),
+  safety: z.object({
+    allowedAction: z.string(),
+    blockedActions: z.array(z.string()),
+    persistsLead: z.boolean(),
+    sendsOutreach: z.boolean(),
+    writesPreviewFiles: z.boolean(),
+  }),
+});
 const persistedRevenueDeliveryWorkspaceSchema = z.object({
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
@@ -826,6 +879,9 @@ let revenueImprovementReviewsPathOverride: string | null = null;
 let revenueScoutingMissionsLoaded = false;
 let revenueScoutingMissionsPersistenceError: string | null = null;
 let revenueScoutingMissionsPathOverride: string | null = null;
+let revenuePublicLeadCandidatesLoaded = false;
+let revenuePublicLeadCandidatesPersistenceError: string | null = null;
+let revenuePublicLeadCandidatesPathOverride: string | null = null;
 let revenueDeliveryWorkspacesLoaded = false;
 let revenueDeliveryWorkspacesPersistenceError: string | null = null;
 let revenueDeliveryWorkspacesPathOverride: string | null = null;
@@ -845,6 +901,7 @@ const REVENUE_ENGINE_DATA_FILES = {
   automationOpportunities: "automation_opportunities.json",
   improvementReviews: "improvement_reviews.json",
   scoutingMissions: "scouting_missions.json",
+  publicLeadCandidates: "public_lead_candidates.json",
   deliveryWorkspaces: "delivery_workspaces.json",
   approvalDecisions: "approval_decisions.json",
   automationIntakes: "automation_intakes.json",
@@ -866,6 +923,7 @@ export function buildRevenueUserDataPaths(userId: string) {
     automationOpportunitiesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationOpportunities),
     improvementReviewsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.improvementReviews),
     scoutingMissionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.scoutingMissions),
+    publicLeadCandidatesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.publicLeadCandidates),
     deliveryWorkspacesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.deliveryWorkspaces),
     approvalDecisionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.approvalDecisions),
     automationIntakesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationIntakes),
@@ -880,6 +938,7 @@ function clearRevenueEngineMemory() {
   revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
   revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
   revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
+  revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length);
   revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length);
   revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length);
   revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length);
@@ -893,6 +952,7 @@ function markRevenueEngineDataUnloaded() {
   revenueAutomationOpportunitiesLoaded = false;
   revenueImprovementReviewsLoaded = false;
   revenueScoutingMissionsLoaded = false;
+  revenuePublicLeadCandidatesLoaded = false;
   revenueDeliveryWorkspacesLoaded = false;
   revenueApprovalDecisionsLoaded = false;
   revenueAutomationIntakesLoaded = false;
@@ -909,6 +969,7 @@ export function setRevenueUserDataScope(userId: string) {
   revenueAutomationOpportunitiesPathOverride = paths.automationOpportunitiesPath;
   revenueImprovementReviewsPathOverride = paths.improvementReviewsPath;
   revenueScoutingMissionsPathOverride = paths.scoutingMissionsPath;
+  revenuePublicLeadCandidatesPathOverride = paths.publicLeadCandidatesPath;
   revenueDeliveryWorkspacesPathOverride = paths.deliveryWorkspacesPath;
   revenueApprovalDecisionsPathOverride = paths.approvalDecisionsPath;
   revenueAutomationIntakesPathOverride = paths.automationIntakesPath;
@@ -1040,6 +1101,10 @@ function getRevenueImprovementReviewsPath() {
 
 function getRevenueScoutingMissionsPath() {
   return revenueScoutingMissionsPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_SCOUTING_MISSIONS_PATH", "scouting_missions.json");
+}
+
+function getRevenuePublicLeadCandidatesPath() {
+  return revenuePublicLeadCandidatesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_PUBLIC_LEAD_CANDIDATES_PATH", "public_lead_candidates.json");
 }
 
 function getRevenueDeliveryWorkspacesPath() {
@@ -1201,6 +1266,27 @@ function loadRevenueScoutingMissions() {
   }
 }
 
+function loadRevenuePublicLeadCandidates() {
+  if (revenuePublicLeadCandidatesLoaded) return;
+  revenuePublicLeadCandidatesLoaded = true;
+  const candidatesPath = getRevenuePublicLeadCandidatesPath();
+
+  if (!fs.existsSync(candidatesPath)) return;
+
+  try {
+    const raw = fs.readFileSync(candidatesPath, "utf8");
+    const parsed = z.array(persistedRevenuePublicLeadCandidateSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenuePublicLeadCandidatesPersistenceError = "Candidatos publicos invalidos; no se cargaron.";
+      return;
+    }
+    revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length, ...(parsed.data as RevenuePublicLeadCandidate[]));
+    revenuePublicLeadCandidatesPersistenceError = null;
+  } catch (error) {
+    revenuePublicLeadCandidatesPersistenceError = error instanceof Error ? error.message : "No se pudo leer candidatos publicos.";
+  }
+}
+
 function loadRevenueDeliveryWorkspaces() {
   if (revenueDeliveryWorkspacesLoaded) return;
   revenueDeliveryWorkspacesLoaded = true;
@@ -1344,6 +1430,18 @@ function persistRevenueScoutingMissions() {
     revenueScoutingMissionsPersistenceError = null;
   } catch (error) {
     revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar mision de scouting.";
+    throw error;
+  }
+}
+
+function persistRevenuePublicLeadCandidates() {
+  const candidatesPath = getRevenuePublicLeadCandidatesPath();
+  try {
+    fs.mkdirSync(path.dirname(candidatesPath), { recursive: true });
+    fs.writeFileSync(candidatesPath, `${JSON.stringify(revenuePublicLeadCandidates, null, 2)}\n`, "utf8");
+    revenuePublicLeadCandidatesPersistenceError = null;
+  } catch (error) {
+    revenuePublicLeadCandidatesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar candidatos publicos.";
     throw error;
   }
 }
@@ -2640,6 +2738,7 @@ export function getRevenueEngineSnapshot() {
   loadRevenueAutomationOpportunities();
   loadRevenueImprovementReviews();
   loadRevenueScoutingMissions();
+  loadRevenuePublicLeadCandidates();
   loadRevenueDeliveryWorkspaces();
   loadRevenueApprovalDecisions();
   loadRevenueAutomationIntakes();
@@ -2798,6 +2897,7 @@ export function getRevenueEngineSnapshot() {
     recentAutomationOpportunities: revenueAutomationOpportunities.slice(-10).reverse(),
     recentImprovementReviews: revenueImprovementReviews.slice(-10).reverse(),
     recentScoutingMissions: revenueScoutingMissions.slice(-10).reverse(),
+    recentPublicLeadCandidates: revenuePublicLeadCandidates.slice(-10).reverse(),
     recentDeliveryWorkspaces: revenueDeliveryWorkspaces.slice(-10).reverse(),
     recentApprovalDecisions: revenueApprovalDecisions.slice(-10).reverse(),
     recentAutomationIntakes: revenueAutomationIntakes.slice(-10).reverse(),
@@ -2810,6 +2910,7 @@ export function getRevenueEngineSnapshot() {
       automationOpportunitiesPath: getRevenueAutomationOpportunitiesPath(),
       improvementReviewsPath: getRevenueImprovementReviewsPath(),
       scoutingMissionsPath: getRevenueScoutingMissionsPath(),
+      publicLeadCandidatesPath: getRevenuePublicLeadCandidatesPath(),
       deliveryWorkspacesPath: getRevenueDeliveryWorkspacesPath(),
       approvalDecisionsPath: getRevenueApprovalDecisionsPath(),
       automationIntakesPath: getRevenueAutomationIntakesPath(),
@@ -2820,6 +2921,7 @@ export function getRevenueEngineSnapshot() {
       automationOpportunitiesStatus: revenueAutomationOpportunitiesPersistenceError ? "warning" : "ok",
       improvementReviewsStatus: revenueImprovementReviewsPersistenceError ? "warning" : "ok",
       scoutingMissionsStatus: revenueScoutingMissionsPersistenceError ? "warning" : "ok",
+      publicLeadCandidatesStatus: revenuePublicLeadCandidatesPersistenceError ? "warning" : "ok",
       deliveryWorkspacesStatus: revenueDeliveryWorkspacesPersistenceError ? "warning" : "ok",
       approvalDecisionsStatus: revenueApprovalDecisionsPersistenceError ? "warning" : "ok",
       automationIntakesStatus: revenueAutomationIntakesPersistenceError ? "warning" : "ok",
@@ -2831,6 +2933,7 @@ export function getRevenueEngineSnapshot() {
         revenueAutomationOpportunitiesPersistenceError ||
         revenueImprovementReviewsPersistenceError ||
         revenueScoutingMissionsPersistenceError ||
+        revenuePublicLeadCandidatesPersistenceError ||
         revenueDeliveryWorkspacesPersistenceError ||
         revenueApprovalDecisionsPersistenceError ||
         revenueAutomationIntakesPersistenceError,
@@ -2893,6 +2996,90 @@ function qualifyRevenueLead(lead: RevenueLeadInput) {
         : "Puede avanzar a mockup o propuesta en draft, sin envio externo hasta aprobacion.",
     outreachDraft:
       `Vi que ${lead.businessName} en ${lead.area} podria convertir mas clientes con una presencia web y automatizaciones mas fuertes. Puedo preparar un mockup rapido basado en informacion publica y mostrarte una version premium sin compromiso.`,
+  };
+}
+
+function revenueBatchCell(value: unknown) {
+  return String(value ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\|/g, "/")
+    .trim();
+}
+
+function revenueCandidateBatchRow(candidate: RevenuePublicLeadCandidateInput) {
+  return [
+    candidate.businessName,
+    candidate.area,
+    candidate.niche,
+    candidate.websiteStatus,
+    candidate.contactChannel,
+    candidate.contactValue,
+    candidate.sourceUrl,
+    candidate.recipientEmail,
+    candidate.evidence,
+    candidate.painPoint,
+    candidate.estimatedOfferUsd,
+    candidate.contactName,
+    candidate.businessSummary,
+  ].map(revenueBatchCell).join("|");
+}
+
+export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandidateInput) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenuePublicLeadCandidateSchema.parse(input);
+  const qualification = qualifyRevenueLead(parsed);
+  const blockedReasons = [
+    parsed.verificationStatus === "blocked" && "candidate blocked by scout",
+    !parsed.publicEvidenceVerified && "public evidence not verified",
+    !parsed.approvalToImport && "approvalToImport false",
+    parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
+    parsed.recipientEmail.trim().length === 0 && "recipientEmail",
+    ...qualification.missing,
+  ].filter((item): item is string => Boolean(item));
+  const importReady = parsed.verificationStatus === "verified_public" && blockedReasons.length === 0;
+  const now = new Date().toISOString();
+  const existingIndex = revenuePublicLeadCandidates.findIndex((candidate) =>
+    candidate.businessName.toLowerCase() === parsed.businessName.toLowerCase()
+    && candidate.area.toLowerCase() === parsed.area.toLowerCase()
+    && candidate.contactValue.toLowerCase() === parsed.contactValue.toLowerCase(),
+  );
+  const candidate: RevenuePublicLeadCandidate = {
+    ...parsed,
+    id: existingIndex >= 0 ? revenuePublicLeadCandidates[existingIndex].id : `candidate-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    createdAt: existingIndex >= 0 ? revenuePublicLeadCandidates[existingIndex].createdAt : now,
+    updatedAt: now,
+    qualification,
+    importReady,
+    blockedReasons,
+    batchRow: revenueCandidateBatchRow(parsed),
+    safety: {
+      allowedAction: "record_public_candidate_for_preview",
+      blockedActions: ["automated scraping", "contact business", "buy data", "send outreach", "publish preview"],
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+    },
+  };
+
+  if (existingIndex >= 0) {
+    revenuePublicLeadCandidates.splice(existingIndex, 1, candidate);
+  } else {
+    revenuePublicLeadCandidates.push(candidate);
+  }
+  persistRevenuePublicLeadCandidates();
+
+  return {
+    status: candidate.importReady ? "ready_for_preview" as const : "needs_review" as const,
+    candidate,
+    importBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      ...(candidate.importReady ? [candidate.batchRow] : []),
+    ].join("\n"),
+    importableCount: candidate.importReady ? 1 : 0,
+    nextAction: candidate.importReady
+      ? "Paste this candidate row into Batch leads and run Preview batch before Money sprint."
+      : `Fix before import: ${blockedReasons.join("; ") || "review candidate"}.`,
+    snapshot: getRevenueEngineSnapshot(),
   };
 }
 
@@ -4219,6 +4406,14 @@ export function setRevenueScoutingMissionsPathForTests(filePath: string) {
   revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
 }
 
+export function setRevenuePublicLeadCandidatesPathForTests(filePath: string) {
+  revenueUserDataScope = null;
+  revenuePublicLeadCandidatesPathOverride = filePath;
+  revenuePublicLeadCandidatesLoaded = false;
+  revenuePublicLeadCandidatesPersistenceError = null;
+  revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length);
+}
+
 export function setRevenueDeliveryWorkspacesPathForTests(filePath: string) {
   revenueUserDataScope = null;
   revenueDeliveryWorkspacesPathOverride = filePath;
@@ -4311,6 +4506,16 @@ export function resetRevenueScoutingMissionsForTests() {
   const missionsPath = getRevenueScoutingMissionsPath();
   if (fs.existsSync(missionsPath)) {
     fs.unlinkSync(missionsPath);
+  }
+}
+
+export function resetRevenuePublicLeadCandidatesForTests() {
+  revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length);
+  revenuePublicLeadCandidatesLoaded = true;
+  revenuePublicLeadCandidatesPersistenceError = null;
+  const candidatesPath = getRevenuePublicLeadCandidatesPath();
+  if (fs.existsSync(candidatesPath)) {
+    fs.unlinkSync(candidatesPath);
   }
 }
 
@@ -5134,6 +5339,77 @@ function buildRevenueScoutQueue(input: RevenueMoneySprintInput) {
   }));
 }
 
+function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: ReturnType<typeof buildRevenueScoutQueue>) {
+  const parsed = revenueMoneySprintSchema.parse(input);
+  const columns = [
+    "business",
+    "area",
+    "niche",
+    "website",
+    "channel",
+    "contact",
+    "sourceUrl",
+    "recipientEmail",
+    "evidence",
+    "painPoint",
+    "offer",
+    "contactName",
+    "summary",
+  ];
+  const targetRows = Math.min(parsed.dailyQualifiedLeadLimit, 10);
+  const safeNiche = parsed.niche.split(",").map((item) => item.trim()).filter(Boolean)[0] || parsed.niche;
+  const placeholderRow = [
+    "REPLACE_BUSINESS_NAME",
+    parsed.area,
+    safeNiche,
+    "no_website",
+    "email",
+    "REPLACE_PUBLIC_CONTACT",
+    "https://REPLACE_PUBLIC_SOURCE_URL",
+    "owner@example.com",
+    "Public listing/profile shows no dedicated website, recent service/product activity and a verifiable contact path.",
+    "Needs a conversion-focused website, inquiry capture and follow-up.",
+    "3500",
+    "Owner",
+    `REPLACE_BUSINESS_NAME in ${parsed.area} has public evidence of a missing or weak website and a clear ${parsed.offerFocus} opportunity.`,
+  ].join("|");
+
+  return {
+    targetRows,
+    batchHeader: columns.join("|"),
+    copyableBatchTemplate: [
+      columns.join("|"),
+      ...Array.from({ length: Math.min(targetRows, 5) }, () => placeholderRow),
+    ].join("\n"),
+    subagentBrief: [
+      `Find ${targetRows} real ${safeNiche} businesses in ${parsed.area} using only public sources.`,
+      "Prioritize no-website or weak-website businesses with a visible contact path and recent activity.",
+      "Do not contact businesses, buy data, scrape at scale, publish previews, or invent evidence.",
+      "Return rows using the exact pipe-delimited batch header so Revenue Engine can preview, qualify and create draft-only outreach.",
+    ].join(" "),
+    importInstructions: [
+      "Open the scout links.",
+      "Capture real public evidence for each business.",
+      "Paste completed rows into Batch leads.",
+      "Run Preview batch before Money sprint.",
+    ],
+    qualityGate: [
+      "Business name is real and area/niche match the mission.",
+      "sourceUrl is a public listing, profile or business page used as evidence.",
+      "website status is no_website or weak_website unless the opportunity is unusually strong.",
+      "contact value and recipientEmail are public or business-provided.",
+      "evidence is specific enough to justify a mockup and draft.",
+    ],
+    safety: {
+      allowedAction: "public_research_only",
+      blockedActions: scoutQueue.flatMap((task) => task.blockedActions).filter((action, index, actions) => actions.indexOf(action) === index),
+      paidDataSpendUsd: 0,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+    },
+  };
+}
+
 function summarizeSeedLead(seed: RevenueMoneySprintSeedLeadInput) {
   if (seed.businessSummary.trim().length >= 40) return seed.businessSummary;
   return [
@@ -5400,6 +5676,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
     estimatedAiCostPerMockupUsd: 0,
   });
   const scoutQueue = buildRevenueScoutQueue(parsed);
+  const scoutWorkPack = buildRevenueScoutWorkPack(parsed, scoutQueue);
   const recordedLeads: Array<ReturnType<typeof recordRevenueLead>> = [];
   const previews: Array<ReturnType<typeof buildRevenueMockupPreview>> = [];
   const outreachDrafts: Array<ReturnType<typeof recordRevenueOutreachDraft>> = [];
@@ -5487,6 +5764,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
     radar,
     templatePack,
     scoutQueue,
+    scoutWorkPack,
     recordedLeads: recordedLeads.map((result) => ({
       lead: result.lead,
       qualification: result.qualification,

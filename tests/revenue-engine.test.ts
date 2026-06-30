@@ -33,6 +33,7 @@ import {
   recordRevenueLead,
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
+  recordRevenuePublicLeadCandidate,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   runRevenueAutomationAgentCommand,
@@ -46,6 +47,7 @@ import {
   resetRevenueLeadsForTests,
   resetRevenueLedgerForTests,
   resetRevenueOutreachForTests,
+  resetRevenuePublicLeadCandidatesForTests,
   resetRevenueScoutingMissionsForTests,
   setRevenueAgentRunsPathForTests,
   setRevenueApprovalDecisionsPathForTests,
@@ -56,6 +58,7 @@ import {
   setRevenueLeadsPathForTests,
   setRevenueLedgerPathForTests,
   setRevenueOutreachPathForTests,
+  setRevenuePublicLeadCandidatesPathForTests,
   setRevenueScoutingMissionsPathForTests,
   setRevenueOutreachSenderForTests,
   sendRevenueOutreachDraft,
@@ -72,6 +75,7 @@ const testAutomationIntakesPath = path.join("/tmp", "revenue-engine-automation-i
 const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automation-opportunities-test.json");
 const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
 const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
+const testPublicLeadCandidatesPath = path.join("/tmp", "revenue-engine-public-lead-candidates-test.json");
 const testDeliveryWorkspacesPath = path.join("/tmp", "revenue-engine-delivery-workspaces-test.json");
 const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
 const originalResendApiKey = process.env.RESEND_API_KEY;
@@ -93,6 +97,7 @@ test.beforeEach(() => {
   setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
   setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
   setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
+  setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
   setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
   resetRevenueLedgerForTests();
   resetRevenueLeadsForTests();
@@ -103,6 +108,7 @@ test.beforeEach(() => {
   resetRevenueAutomationOpportunitiesForTests();
   resetRevenueImprovementReviewsForTests();
   resetRevenueScoutingMissionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
   resetRevenueDeliveryWorkspacesForTests();
 });
 
@@ -117,6 +123,7 @@ test("scopes Revenue Engine JSON paths by authenticated user", () => {
   assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a\/ledger\.json$/);
   assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a\/leads\.json$/);
   assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a\/outreach\.json$/);
+  assert.match(scopedSnapshot.persistence.publicLeadCandidatesPath, /revenue_engine_data\/users\/owner-a\/public_lead_candidates\.json$/);
 });
 
 test.afterEach(() => {
@@ -230,6 +237,86 @@ test("builds an always-on lead radar with contact and mockup limits", () => {
   assert.equal(radar.channelMix[0].channel.includes("Google Maps"), true);
   assert.equal(radar.mockupPolicy.whoCreatesMockups.includes("Codex"), true);
   assert.equal(radar.recommendation.includes("Buscar leads puede correr 24/7"), true);
+});
+
+test("records verified public lead candidates as previewable batch rows without outreach", () => {
+  recordRevenuePublicLeadCandidate({
+    businessName: "Older Orlando Roof",
+    area: "Orlando",
+    niche: "roofers",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@olderroof.example",
+    sourceUrl: "https://example.com/older-roof",
+    recipientEmail: "owner@olderroof.example",
+    evidence: "Public listing has no website, recent roofing photos and verified contact path.",
+    painPoint: "Needs storm repair lead capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Public Scout Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@publicscout.example",
+    sourceUrl: "https://example.com/public-scout-cafe",
+    recipientEmail: "owner@publicscout.example",
+    evidence: "Google listing has no website, public social profile has menu photos and verified contact path.",
+    painPoint: "Needs online menu capture, catering inquiries and follow-up.",
+    estimatedOfferUsd: 3600,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Public Scout Cafe is a verified no-website coffee shop candidate with a visible public contact path.",
+    sourceTaskId: "scout-task-01",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_preview");
+  assert.equal(result.candidate.importReady, true);
+  assert.equal(result.importableCount, 1);
+  assert.match(result.importBatchText, /Public Scout Cafe/);
+  assert.doesNotMatch(result.importBatchText, /Older Orlando Roof/);
+  assert.equal(result.importBatchText.split("\n").length, 2);
+  assert.equal(result.candidate.safety.persistsLead, false);
+  assert.equal(result.candidate.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentPublicLeadCandidates[0].businessName, "Public Scout Cafe");
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("blocks public lead candidates from import until evidence is verified", () => {
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Unverified Salon",
+    area: "Miami",
+    niche: "salon",
+    websiteStatus: "unknown",
+    contactChannel: "unknown",
+    contactValue: "",
+    sourceUrl: "https://example.com/unverified-salon",
+    recipientEmail: "",
+    evidence: "short",
+    painPoint: "Needs review.",
+    estimatedOfferUsd: 1000,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.candidate.importReady, false);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.importBatchText.split("\n").length, 1);
+  assert.match(result.nextAction, /public evidence not verified/);
+  assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
 });
 
 test("lead radar caps paid data spend and requires approval", () => {
