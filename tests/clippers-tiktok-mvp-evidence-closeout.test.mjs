@@ -31,6 +31,14 @@ function runCloseout(args = []) {
   });
 }
 
+function requiredSlice(source, start, end) {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `Missing slice start: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `Missing slice end: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 function cleanAccountCsv() {
   return [
     accountHeader,
@@ -203,9 +211,44 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /tiktokMvpEvidenceCloseout\.status !== "applied"/);
+  const getRoute = requiredSlice(
+    routes,
+    'app.get("/api/clippers/tiktok-mvp-evidence-closeout"',
+    'app.post("/api/clippers/preview-tiktok-mvp-evidence-closeout"',
+  );
+  const previewRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/preview-tiktok-mvp-evidence-closeout"',
+    'app.post("/api/clippers/apply-tiktok-mvp-evidence-closeout"',
+  );
+  const applyRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/apply-tiktok-mvp-evidence-closeout"',
+    'app.get("/api/clippers/operational-readiness"',
+  );
+  assert.match(getRoute, /readClipperTikTokMvpEvidenceCloseout/);
+  assert.doesNotMatch(getRoute, /runClipperTikTokMvpEvidenceCloseout|runClipperNodeJson|--apply/);
+  assert.match(previewRoute, /runClipperTikTokMvpEvidenceCloseout\(false\)/);
+  assert.doesNotMatch(previewRoute, /x-clippers-operator-confirm|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
+  assert.match(applyRoute, /res\.status\(403\)/);
+  assert.match(applyRoute, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
+  assert.match(applyRoute, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
+  assert.match(applyRoute, /tiktokMvpEvidenceCloseout\.status !== "applied"/);
+  assert.match(applyRoute, /res\.status\(400\)/);
+  assert.match(applyRoute, /runClipperOperationalReadiness/);
+  assert.doesNotMatch(applyRoute, /ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
 
   assert.match(page, /preview-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
+  const closeoutPanel = requiredSlice(
+    page,
+    'data-testid="clippers-tiktok-mvp-evidence-closeout-panel"',
+    'data-testid="clippers-metricool-bridge-required-fields"',
+  );
+  assert.match(closeoutPanel, /This does not publish/);
+  assert.match(closeoutPanel, /Account CSV/);
+  assert.match(closeoutPanel, /Bridge CSV/);
+  assert.doesNotMatch(closeoutPanel, /ready to publish/i);
 });
