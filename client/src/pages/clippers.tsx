@@ -1999,6 +1999,45 @@ interface ClipperExternalGoLiveAuditSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpEvidenceCloseoutSummary {
+  status: "ready_to_apply" | "applied" | "applied_but_readiness_blocked" | "blocked_invalid_evidence";
+  mode: "preview" | "apply";
+  generatedAt: string;
+  accountCsvPath: string;
+  bridgeCsvPath: string;
+  reportJsonPath: string;
+  reportMarkdownPath: string;
+  applied: number;
+  totals: {
+    lanes: number;
+    ready: number;
+    rejected: number;
+  };
+  rows: Array<{
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    status: "ready" | "blocked";
+    accountProofStatus: string;
+    bridgeProofStatus: string;
+    evidencePath: string;
+    reasons: string[];
+  }>;
+  rejected: Array<{
+    row: number;
+    lane: string;
+    source: string;
+    reason: string;
+  }>;
+  readinessRefresh?: {
+    status: number;
+    stdout: ClipperAccountPermissionReadinessSummary | null;
+    stderr: string;
+  } | null;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -9820,6 +9859,7 @@ export default function ClippersPage() {
     queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-batch-closeout-verifier"] });
     queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-next-action"] });
     queryClient.invalidateQueries({ queryKey: ["/api/clippers/metricool-current-batch-session-packet"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-mvp-evidence-closeout"] });
     void refetch();
     void refetchLaunchSummary();
     void refetchMetricool100ApprovalRun();
@@ -9835,6 +9875,16 @@ export default function ClippersPage() {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(data.error || "No pude leer account permission readiness");
       return data.accountPermissionReadiness as ClipperAccountPermissionReadinessSummary;
+    },
+  });
+  const { data: tiktokMvpEvidenceCloseout } = useQuery<ClipperTikTokMvpEvidenceCloseoutSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-evidence-closeout"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-evidence-closeout");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP evidence closeout");
+      return data.tiktokMvpEvidenceCloseout as ClipperTikTokMvpEvidenceCloseoutSummary;
     },
   });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
@@ -10297,6 +10347,61 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar readiness", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpEvidenceCloseoutPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-tiktok-mvp-evidence-closeout", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar TikTok MVP evidence closeout");
+      return data as {
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      toast({
+        title: data.tiktokMvpEvidenceCloseout.status === "ready_to_apply" ? "TikTok closeout listo para aplicar" : "TikTok closeout bloqueado",
+        description: `${data.tiktokMvpEvidenceCloseout.totals.ready}/${data.tiktokMvpEvidenceCloseout.totals.lanes} lanes listas; ${data.tiktokMvpEvidenceCloseout.totals.rejected} rechazos.`,
+        variant: data.tiktokMvpEvidenceCloseout.status === "ready_to_apply" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude previsualizar TikTok closeout", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpEvidenceCloseoutApplyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/apply-tiktok-mvp-evidence-closeout", {
+        method: "POST",
+        headers: { "x-clippers-operator-confirm": "apply-tiktok-mvp-evidence-closeout" },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar TikTok MVP evidence closeout");
+      return data as {
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
+        operationalReadiness: ClipperOperationalReadinessSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      queryClient.setQueryData(["/api/clippers/operational-readiness"], data.operationalReadiness);
+      toast({
+        title: "TikTok MVP evidence aplicado",
+        description: `${data.accountPermissionReadiness.activeMvp?.readyLanes ?? 0}/${data.accountPermissionReadiness.activeMvp?.targetLanes ?? 2} TikTok lanes listas para Metricool approval_required.`,
+      });
+      refreshMetricoolCaches();
+    },
+    onError: (error: Error) => {
+      toast({ title: "TikTok closeout no aplicado", description: error.message, variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-mvp-evidence-closeout"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clippers/account-permission-readiness"] });
     },
   });
 
@@ -15857,9 +15962,66 @@ export default function ClippersPage() {
                 Pega las conexiones reales de Metricool para SPORT/memes. Esto registra evidencia submitted; no verifica cuentas, no guarda secretos y no publica.
               </p>
             </div>
-            <Badge className="w-fit border border-teal-300/30 bg-teal-300/10 text-teal-100">
-              approval_required
-            </Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="w-fit border border-teal-300/30 bg-teal-300/10 text-teal-100">
+                approval_required
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpEvidenceCloseoutPreviewMutation.mutate()}
+                disabled={tiktokMvpEvidenceCloseoutPreviewMutation.isPending || isLoading}
+                className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
+                data-testid="preview-clippers-tiktok-mvp-evidence-closeout-button"
+              >
+                {tiktokMvpEvidenceCloseoutPreviewMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
+                Preview closeout
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => tiktokMvpEvidenceCloseoutApplyMutation.mutate()}
+                disabled={tiktokMvpEvidenceCloseoutApplyMutation.isPending || isLoading || tiktokMvpEvidenceCloseout?.status !== "ready_to_apply"}
+                className="h-8 bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+                data-testid="apply-clippers-tiktok-mvp-evidence-closeout-button"
+              >
+                {tiktokMvpEvidenceCloseoutApplyMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Apply closeout
+              </Button>
+            </div>
+          </div>
+          <div className={cn(
+            "mt-3 rounded-md border p-3 text-xs leading-5",
+            tiktokMvpEvidenceCloseout?.status === "ready_to_apply" || tiktokMvpEvidenceCloseout?.status === "applied"
+              ? "border-emerald-300/20 bg-emerald-950/15 text-emerald-100/80"
+              : "border-amber-300/20 bg-amber-950/15 text-amber-100"
+          )} data-testid="clippers-tiktok-mvp-evidence-closeout-panel">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={cn(
+                "border text-[10px]",
+                tiktokMvpEvidenceCloseout?.status === "ready_to_apply" || tiktokMvpEvidenceCloseout?.status === "applied"
+                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+              )}>
+                closeout {tiktokMvpEvidenceCloseout?.status || "not previewed"}
+              </Badge>
+              <span>{tiktokMvpEvidenceCloseout?.totals.ready ?? 0}/{tiktokMvpEvidenceCloseout?.totals.lanes ?? 2} lanes ready</span>
+              <span>{tiktokMvpEvidenceCloseout?.totals.rejected ?? 0} rejected</span>
+            </div>
+            <p className="mt-1">
+              {tiktokMvpEvidenceCloseout?.rows.find((row) => row.reasons.length)?.reasons[0]
+                || tiktokMvpEvidenceCloseout?.nextStep
+                || "Run preview after adding real account proof and Metricool proof rows. This does not publish."}
+            </p>
+            {tiktokMvpEvidenceCloseout && (
+              <div className="mt-2 grid gap-1 text-[11px] text-zinc-500 md:grid-cols-2">
+                <p className="break-all">Account CSV: {tiktokMvpEvidenceCloseout.accountCsvPath}</p>
+                <p className="break-all">Bridge CSV: {tiktokMvpEvidenceCloseout.bridgeCsvPath}</p>
+                <p className="break-all">Report: {tiktokMvpEvidenceCloseout.reportMarkdownPath}</p>
+                <p>Mode: {tiktokMvpEvidenceCloseout.mode}; applied: {tiktokMvpEvidenceCloseout.applied}</p>
+              </div>
+            )}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {tiktokMetricoolBridgeDisplayRows.map((row) => (

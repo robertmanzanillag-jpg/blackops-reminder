@@ -11,6 +11,8 @@ const bridgeCsvPath = path.join(tmpDir, "tiktok-mvp-bridge-proof-test.csv");
 const sportsEvidencePath = path.join(rootDir, "account-evidence/sports-daily-tiktok.json");
 const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
 const metricoolQueuePath = path.join(rootDir, "scheduled/metricool-execution-queue.json");
+const routesPath = path.join(process.cwd(), "server/routes.ts");
+const clippersPagePath = path.join(process.cwd(), "client/src/pages/clippers.tsx");
 
 const accountHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
 const bridgeHeader = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
@@ -190,4 +192,20 @@ test("TikTok MVP evidence closeout does not claim applied when readiness stays b
       encoding: "utf8",
     });
   }
+});
+
+test("TikTok MVP evidence closeout is wired into guarded API routes and UI controls", async () => {
+  const routes = await readFile(routesPath, "utf8");
+  const page = await readFile(clippersPagePath, "utf8");
+
+  assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-evidence-closeout"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-evidence-closeout"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-evidence-closeout"/);
+  assert.match(routes, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
+  assert.match(routes, /tiktokMvpEvidenceCloseout\.status !== "applied"/);
+
+  assert.match(page, /preview-clippers-tiktok-mvp-evidence-closeout-button/);
+  assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
+  assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
+  assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
 });

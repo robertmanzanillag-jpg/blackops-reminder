@@ -341,6 +341,11 @@ export async function registerRoutes(
   const runClipperJsonScript = (scriptPath: string, label: string) => runClipperNodeJson([scriptPath], label);
   const runClipperAccountPermissionReadiness = () => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
   const runClipperOperationalReadiness = () => runClipperJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness");
+  const runClipperTikTokMvpEvidenceCloseout = (apply = false) => {
+    const args = ["script/clippers-tiktok-mvp-evidence-closeout.mjs"];
+    if (apply) args.push("--apply");
+    return runClipperNodeJson(args, apply ? "TikTok MVP evidence closeout apply" : "TikTok MVP evidence closeout preview");
+  };
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -354,6 +359,10 @@ export async function registerRoutes(
   };
   const readClipperOperationalReadiness = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/clippers-operational-readiness.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpEvidenceCloseout = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/clippers-tiktok-mvp-evidence-closeout.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2618,6 +2627,57 @@ export async function registerRoutes(
       res.json({ accountPermissionReadiness: await readClipperAccountPermissionReadiness() });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers account permission readiness" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-evidence-closeout", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP evidence closeout has not been previewed" : "TikTok MVP evidence closeout could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/preview-tiktok-mvp-evidence-closeout", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpEvidenceCloseout(false);
+      res.json({
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview TikTok MVP evidence closeout" });
+    }
+  });
+
+  app.post("/api/clippers/apply-tiktok-mvp-evidence-closeout", async (_req, res) => {
+    try {
+      if (_req.get("x-clippers-operator-confirm") !== "apply-tiktok-mvp-evidence-closeout") {
+        res.status(403).json({ error: "Operator confirmation header required for TikTok MVP evidence closeout apply." });
+        return;
+      }
+      const run = await runClipperTikTokMvpEvidenceCloseout(true);
+      const tiktokMvpEvidenceCloseout = await readClipperTikTokMvpEvidenceCloseout();
+      if (tiktokMvpEvidenceCloseout.status !== "applied") {
+        res.status(400).json({
+          error: "TikTok MVP evidence closeout is not ready. Fix rejected proof rows or readiness blockers first.",
+          tiktokMvpEvidenceCloseout,
+          accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+          run,
+        });
+        return;
+      }
+      await runClipperOperationalReadiness();
+      res.json({
+        tiktokMvpEvidenceCloseout,
+        accountPermissionReadiness: await readClipperAccountPermissionReadiness(),
+        operationalReadiness: await readClipperOperationalReadiness(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to apply TikTok MVP evidence closeout" });
     }
   });
 
