@@ -175,6 +175,47 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  websiteSalesPacketQueue: {
+    status: "ready" | "needs_context" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    items: Array<{
+      leadId: string;
+      outreachDraftId: string;
+      businessName: string;
+      area: string;
+      niche: string;
+      websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+      leadStatus: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+      grade: string;
+      score: number;
+      sourceUrl: string;
+      mockupUrl: string;
+      contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+      contactValue: string;
+      estimatedSetupUsd: number;
+      depositUsd: number;
+      monthlyRetainerUsd: number;
+      primaryOffer: string;
+      copyableSalesPacket: string;
+      readiness: string[];
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      leadId: string;
+      businessName: string;
+      reason: string;
+      nextAction: string;
+    }>;
+    safety: {
+      sendsOutreach: false;
+      publishesWebsite: false;
+      requiresHumanApprovalToContact: true;
+      requiresDepositBeforeBuild: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
   manualOutreachQueue: {
     status: "ready" | "needs_approval" | "empty";
     dailyContactLimit: number;
@@ -4020,6 +4061,108 @@ export default function RevenueEnginePage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4 border-sky-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Paquetes listos para vender website</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.websiteSalesPacketQueue.nextAction || "Cargando paquetes de venta."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.websiteSalesPacketQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.websiteSalesPacketQueue.readyCount ?? 0} listos
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(snapshot?.websiteSalesPacketQueue.items || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin paquetes con mockup + oferta listos todavia.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {(snapshot?.websiteSalesPacketQueue.items || []).map((item) => (
+                        <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {item.niche} · {item.area} · {item.primaryOffer}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">
+                              {item.grade}/{item.score}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Setup</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.estimatedSetupUsd)}</p>
+                            </div>
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Deposito</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.depositUsd)}</p>
+                            </div>
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Retainer</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.monthlyRetainerUsd)}</p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700"
+                              onClick={() => navigator.clipboard.writeText(item.copyableSalesPacket)}
+                              data-testid={`button-copy-website-sales-packet-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy packet
+                            </Button>
+                            {item.mockupUrl && (
+                              <a href={item.mockupUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Mockup
+                                </Button>
+                              </a>
+                            )}
+                            {item.sourceUrl && (
+                              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Fuente
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.readiness.map((ready) => (
+                              <Badge key={ready} variant="outline" className="border-zinc-700 text-zinc-300">
+                                {ready}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(snapshot?.websiteSalesPacketQueue.blocked || []).length > 0 && (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.websiteSalesPacketQueue.blocked || []).slice(0, 4).map((item) => (
+                        <div key={item.leadId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                          <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

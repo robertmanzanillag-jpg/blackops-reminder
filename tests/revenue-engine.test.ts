@@ -1417,6 +1417,14 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   const lead = sprint.recordedLeads[0].lead;
   const draft = sprint.outreachDrafts[0];
   const preview = sprint.previews[0];
+  const preHandoffSnapshot = getRevenueEngineSnapshot();
+
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.readyCount, 1);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].leadId, lead.id);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].mockupUrl, preview.previewUrl);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Handoff Cafe/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Deposito:/);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.safety.sendsOutreach, false);
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,
@@ -1446,6 +1454,245 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
   assert.equal(handoff.snapshot.recentDeliveryWorkspaces[0].input.sourceLeadId, lead.id);
   assert.equal(handoff.snapshot.websiteDeliveryHandoffQueue.items.some((item) => item.leadId === lead.id), false);
+  assert.equal(handoff.snapshot.metrics.appsSold, 1);
+  assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 2100);
+  assert.equal(handoff.snapshot.recentLedger[0].kind, "bundle_sale");
+  assert.equal(handoff.snapshot.recentLedger[0].notes.includes(`website-lead:${lead.id}`), true);
+
+  const duplicateHandoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    mockupUrl: preview.previewUrl,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 2100,
+    publicDataVerified: true,
+  });
+
+  assert.equal(duplicateHandoff.status, "created");
+  assert.equal(duplicateHandoff.snapshot.metrics.appsSold, 1);
+  assert.equal(duplicateHandoff.snapshot.metrics.cashCollectedUsd, 2100);
+});
+
+test("website delivery handoff blocks incomplete deposits before closing or ledger", () => {
+  const lead = recordRevenueLead({
+    businessName: "Partial Deposit Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@partialdeposit.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+    painPoint: "Needs online ordering and catering capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@partialdeposit.example",
+    contactName: "Owner",
+    businessName: "Partial Deposit Cafe",
+    sourceUrl: "https://example.com/partial-deposit-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/partial-deposit-cafe",
+    businessSummary: "Partial Deposit Cafe has public evidence of no dedicated website and needs online ordering.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1,
+    publicDataVerified: true,
+  });
+
+  assert.equal(handoff.status, "blocked");
+  assert.match(handoff.reason, /Deposito incompleto/);
+  assert.equal(handoff.workspace, null);
+  assert.equal(handoff.snapshot.recentLeads.find((item) => item.id === lead.lead.id)?.status, "outreach_ready");
+  assert.equal(handoff.snapshot.metrics.appsSold, 0);
+  assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(handoff.snapshot.recentLedger.length, 0);
+});
+
+test("website delivery ledger notes stay bounded before closing state", () => {
+  const lead = recordRevenueLead({
+    businessName: "Long Notes Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@longnotes.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+    painPoint: "Needs online menu and event inquiry capture.",
+    estimatedOfferUsd: 3600,
+    status: "qualified",
+  });
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@longnotes.example",
+    contactName: "Owner",
+    businessName: "Long Notes Cafe",
+    sourceUrl: "https://example.com/long-notes-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/long-notes-cafe",
+    businessSummary: "Long Notes Cafe has public evidence of no dedicated website and needs menu capture.",
+    websitePriceUsd: 3600,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 500,
+    estimatedInternalMonthlyCostUsd: 44,
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1800,
+    publicDataVerified: true,
+    notes: "x".repeat(1200),
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.equal(handoff.snapshot.recentLeads.find((item) => item.id === lead.lead.id)?.status, "closed");
+  assert.equal(handoff.snapshot.recentLedger[0].notes.length <= 1000, true);
+  assert.equal(handoff.snapshot.recentLedger[0].notes.includes(`website-lead:${lead.lead.id}`), true);
+  assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 1800);
+});
+
+test("website-only handoff uses website deposit when draft also has automation upsell", () => {
+  const lead = recordRevenueLead({
+    businessName: "Website Only Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@websiteonly.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+    painPoint: "Needs a premium website before automation.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@websiteonly.example",
+    contactName: "Owner",
+    businessName: "Website Only Cafe",
+    sourceUrl: "https://example.com/website-only-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/website-only-cafe",
+    businessSummary: "Website Only Cafe has public evidence of no dedicated website and needs a website before automation.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 500,
+    estimatedInternalMonthlyCostUsd: 44,
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1500,
+    publicDataVerified: true,
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.equal(handoff.workspace?.input.projectType, "website");
+  assert.equal(handoff.snapshot.metrics.appsSold, 1);
+  assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 1500);
+  assert.equal(handoff.snapshot.recentLedger[0].kind, "website_sale");
+  assert.equal(handoff.snapshot.recentLedger[0].amountUsd, 3000);
+});
+
+test("website delivery ledger dedupe uses exact lead token not id prefix", () => {
+  const originalDateNow = Date.now;
+  Date.now = () => 1234567890000;
+  try {
+    const leads = Array.from({ length: 10 }, (_, index) => recordRevenueLead({
+      businessName: `Prefix Cafe ${index + 1}`,
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: `owner${index + 1}@prefix.example`,
+      evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+      painPoint: "Needs a conversion website.",
+      estimatedOfferUsd: 3600,
+      status: "qualified",
+    }));
+    const leadOne = leads[0].lead;
+    const leadTen = leads[9].lead;
+    const draftOne = recordRevenueOutreachDraft({
+      leadId: leadOne.id,
+      channel: "email",
+      approvalStatus: "draft",
+      recipientEmail: "owner1@prefix.example",
+      contactName: "Owner",
+      businessName: leadOne.businessName,
+      sourceUrl: "https://example.com/prefix-cafe-1",
+      mockupUrl: "/api/revenue-engine/mockup-previews/prefix-cafe-1",
+      businessSummary: "Prefix Cafe 1 has public evidence of no dedicated website and needs a conversion website.",
+      websitePriceUsd: 3600,
+      automationPriceUsd: 0,
+      monthlyRetainerUsd: 500,
+      estimatedInternalMonthlyCostUsd: 44,
+    });
+    const draftTen = recordRevenueOutreachDraft({
+      leadId: leadTen.id,
+      channel: "email",
+      approvalStatus: "draft",
+      recipientEmail: "owner10@prefix.example",
+      contactName: "Owner",
+      businessName: leadTen.businessName,
+      sourceUrl: "https://example.com/prefix-cafe-10",
+      mockupUrl: "/api/revenue-engine/mockup-previews/prefix-cafe-10",
+      businessSummary: "Prefix Cafe 10 has public evidence of no dedicated website and needs a conversion website.",
+      websitePriceUsd: 3600,
+      automationPriceUsd: 0,
+      monthlyRetainerUsd: 500,
+      estimatedInternalMonthlyCostUsd: 44,
+    });
+
+    createWebsiteDeliveryWorkspaceFromLead({
+      leadId: leadTen.id,
+      outreachDraftId: draftTen.draft.id,
+      projectType: "website",
+      depositPaid: true,
+      scopeApproved: true,
+      cashCollectedUsd: 1800,
+      publicDataVerified: true,
+    });
+    const secondHandoff = createWebsiteDeliveryWorkspaceFromLead({
+      leadId: leadOne.id,
+      outreachDraftId: draftOne.draft.id,
+      projectType: "website",
+      depositPaid: true,
+      scopeApproved: true,
+      cashCollectedUsd: 1800,
+      publicDataVerified: true,
+    });
+
+    assert.equal(leadTen.id.endsWith("-10"), true);
+    assert.equal(leadOne.id.endsWith("-1"), true);
+    assert.equal(secondHandoff.snapshot.metrics.appsSold, 2);
+    assert.equal(secondHandoff.snapshot.metrics.cashCollectedUsd, 3600);
+    assert.equal(secondHandoff.snapshot.recentLedger.length, 2);
+  } finally {
+    Date.now = originalDateNow;
+  }
 });
 
 test("blocks website delivery handoff when outreach draft belongs to another lead", () => {

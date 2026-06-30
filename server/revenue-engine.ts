@@ -561,6 +561,48 @@ type RevenueBusinessScoutQueue = {
   };
 };
 
+type RevenueWebsiteSalesPacketQueue = {
+  status: "ready" | "needs_context" | "empty";
+  readyCount: number;
+  blockedCount: number;
+  items: Array<{
+    leadId: string;
+    outreachDraftId: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: RevenueLead["websiteStatus"];
+    leadStatus: RevenueLead["status"];
+    grade: string;
+    score: number;
+    sourceUrl: string;
+    mockupUrl: string;
+    contactChannel: RevenueLead["contactChannel"];
+    contactValue: string;
+    estimatedSetupUsd: number;
+    depositUsd: number;
+    monthlyRetainerUsd: number;
+    primaryOffer: string;
+    copyableSalesPacket: string;
+    readiness: string[];
+    nextAction: string;
+  }>;
+  blocked: Array<{
+    leadId: string;
+    businessName: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  safety: {
+    sendsOutreach: false;
+    publishesWebsite: false;
+    requiresHumanApprovalToContact: true;
+    requiresDepositBeforeBuild: true;
+    blockedActions: string[];
+  };
+  nextAction: string;
+};
+
 type RevenueWebsiteDeliveryHandoffQueue = {
   status: "ready" | "needs_context" | "empty";
   readyCount: number;
@@ -2828,6 +2870,7 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
 export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeliveryWorkspaceInput) {
   loadRevenueLeads();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const parsed = revenueWebsiteDeliveryWorkspaceSchema.parse(input);
   const lead = revenueLeads.find((item) => item.id === parsed.leadId);
 
@@ -2882,10 +2925,13 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     : Math.max(1500, lead.estimatedOfferUsd);
   const monthlyRetainerUsd = outreachDraft?.monthlyRetainerUsd || parsed.monthlyRetainerUsd;
   const estimatedInternalCostUsd = outreachDraft?.estimatedInternalMonthlyCostUsd || parsed.estimatedInternalCostUsd;
-  const includesAutomation = parsed.projectType === "bundle" || Boolean(outreachDraft && outreachDraft.automationPriceUsd > 0);
+  const includesAutomation = parsed.projectType === "bundle";
   const depositPaid = parsed.depositPaid || parsed.cashCollectedUsd > 0;
   const publicDataVerified = parsed.publicDataVerified;
   const sourceUrl = outreachDraft?.sourceUrl || "";
+  const requiredDepositUsd = Math.round(setupUsd * 0.5);
+  const ledgerTag = `[website-lead:${lead.id}]`;
+  const cashCollectedCoversDeposit = parsed.cashCollectedUsd >= requiredDepositUsd;
   const contextLines = [
     `Lead: ${lead.businessName} (${lead.niche}, ${lead.area})`,
     `Website status: ${lead.websiteStatus}`,
@@ -2900,10 +2946,43 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     "Codex build rule: create a separate branch and PR; do not deploy without Robert approval and App QA.",
   ].filter(Boolean).join("\n");
 
+  if (depositPaid && parsed.scopeApproved && !cashCollectedCoversDeposit) {
+    return {
+      status: "blocked" as const,
+      reason: `Deposito incompleto: falta cobrar $${(requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")} antes de cerrar venta o crear delivery.`,
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
   if (depositPaid && parsed.scopeApproved && lead.status !== "closed") {
     lead.status = strongerRevenueLeadStatus(lead.status, "closed");
     lead.updatedAt = new Date().toISOString();
     persistRevenueLeads();
+  }
+
+  const existingLedgerEntry = revenueLedger.find((entry) =>
+    entry.notes.split("|").map((part) => part.trim()).includes(ledgerTag)
+  );
+  if (depositPaid && parsed.scopeApproved && parsed.cashCollectedUsd > 0 && !existingLedgerEntry) {
+    const ledgerNotes = [
+      ledgerTag,
+      outreachDraft && `outreach:${outreachDraft.id}`,
+      effectiveMockupUrl && `mockup:${effectiveMockupUrl}`,
+      sourceUrl && `source:${sourceUrl}`,
+      parsed.notes,
+    ].filter((item): item is string => Boolean(item && item.trim().length > 0)).join(" | ").slice(0, 1000);
+
+    recordRevenueLedgerEntry({
+      kind: includesAutomation ? "bundle_sale" : "website_sale",
+      clientName: lead.businessName,
+      amountUsd: setupUsd,
+      cashCollectedUsd: parsed.cashCollectedUsd,
+      estimatedInternalCostUsd,
+      notes: ledgerNotes,
+    });
   }
 
   const workspaceResult = recordRevenueDeliveryWorkspace({
@@ -3129,6 +3208,116 @@ function findLatestRevenueOutreachDraftForLead(lead: RevenueLead) {
       draft.leadId === lead.id
       || (!draft.leadId && draft.businessName.toLowerCase() === lead.businessName.toLowerCase())
     ) || null;
+}
+
+function buildRevenueWebsiteSalesPacketQueue(limit = 8): RevenueWebsiteSalesPacketQueue {
+  const visibleLimit = Math.max(0, Math.min(25, limit));
+  const packetStatuses: RevenueLead["status"][] = ["qualified", "mockup_ready", "outreach_ready", "proposal_sent"];
+  const candidates = revenueLeads
+    .filter((lead) => packetStatuses.includes(lead.status))
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const items: RevenueWebsiteSalesPacketQueue["items"] = [];
+  const blocked: RevenueWebsiteSalesPacketQueue["blocked"] = [];
+
+  for (const lead of candidates) {
+    const qualification = qualifyRevenueLead(lead);
+    const draft = findLatestRevenueOutreachDraftForLead(lead);
+    const failedBlockingGate = draft?.qaGates.find((gate) => !gate.passed && gate.gate !== "approval");
+    const sourceUrl = draft?.sourceUrl || "";
+    const mockupUrl = draft?.mockupUrl || "";
+    const blockedReasons = [
+      ...qualification.missing,
+      !draft && "falta propuesta/draft conectado",
+      draft && !mockupUrl && "falta mockup preview",
+      draft && !sourceUrl && "falta sourceUrl publico",
+      draft && failedBlockingGate && failedBlockingGate.fix,
+    ].filter((item): item is string => Boolean(item));
+
+    if (!draft || blockedReasons.length > 0) {
+      blocked.push({
+        leadId: lead.id,
+        businessName: lead.businessName,
+        reason: blockedReasons.join("; ") || "Completar evidencia antes de vender.",
+        nextAction: !draft
+          ? "Correr Money Sprint o crear propuesta con mockup antes de preparar venta."
+          : "Corregir el paquete, luego aprobar manualmente antes de contacto.",
+      });
+      continue;
+    }
+
+    const primaryOffer = draft.automationPriceUsd > 0 ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium";
+    const readiness = [
+      `Grade ${qualification.grade}/${qualification.score}`,
+      "mockup preview listo",
+      draft.status === "approved" ? "draft aprobado para contacto manual" : "draft necesita aprobacion humana antes de contacto",
+      sourceUrl ? "fuente publica enlazada" : "fuente publica pendiente",
+      draft.delivery.sendStatus === "sent" ? "contacto ya enviado" : "contacto no enviado",
+    ];
+    const copyableSalesPacket = [
+      `Negocio: ${lead.businessName}`,
+      `Area/nicho: ${lead.area} / ${lead.niche}`,
+      `Senal website: ${lead.websiteStatus}`,
+      `Evidencia publica: ${lead.evidence}`,
+      `Dolor: ${lead.painPoint}`,
+      `Fuente: ${sourceUrl}`,
+      `Mockup: ${mockupUrl}`,
+      `Oferta: ${primaryOffer}`,
+      `Setup: $${draft.pricing.totalSetupUsd.toLocaleString("en-US")} | Deposito: $${draft.pricing.depositUsd.toLocaleString("en-US")} | Retainer: $${draft.pricing.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
+      `Subject: ${draft.subject}`,
+      "",
+      draft.body,
+      "",
+      "Guardrail: no enviar, publicar ni construir hasta que Robert apruebe contacto y haya deposito/scope para delivery.",
+    ].join("\n");
+
+    items.push({
+      leadId: lead.id,
+      outreachDraftId: draft.id,
+      businessName: lead.businessName,
+      area: lead.area,
+      niche: lead.niche,
+      websiteStatus: lead.websiteStatus,
+      leadStatus: lead.status,
+      grade: qualification.grade,
+      score: qualification.score,
+      sourceUrl,
+      mockupUrl,
+      contactChannel: lead.contactChannel,
+      contactValue: lead.contactValue,
+      estimatedSetupUsd: draft.pricing.totalSetupUsd,
+      depositUsd: draft.pricing.depositUsd,
+      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+      primaryOffer,
+      copyableSalesPacket,
+      readiness,
+      nextAction:
+        draft.status === "approved"
+          ? "Revisar paquete, abrir mockup/fuente y contactar manualmente desde la cola aprobada."
+          : "Revisar paquete y aprobar el draft antes de cualquier contacto externo.",
+    });
+  }
+
+  return {
+    status: items.length > 0 ? "ready" : blocked.length > 0 ? "needs_context" : "empty",
+    readyCount: items.length,
+    blockedCount: blocked.length,
+    items: items.slice(0, visibleLimit),
+    blocked: blocked.slice(0, visibleLimit),
+    safety: {
+      sendsOutreach: false,
+      publishesWebsite: false,
+      requiresHumanApprovalToContact: true,
+      requiresDepositBeforeBuild: true,
+      blockedActions: ["auto-send outreach", "publish mockup", "deploy website", "start client build before deposit", "buy paid data"],
+    },
+    nextAction:
+      items.length > 0
+        ? "Usar paquetes listos para vender websites con mockup y oferta; contacto sigue manual/aprobado."
+        : blocked.length > 0
+          ? "Completar mockup, fuente publica o draft antes de vender websites."
+          : "Importar candidatos publicos y correr Money Sprint para generar paquetes de venta.",
+  };
 }
 
 function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliveryHandoffQueue {
@@ -3398,6 +3587,7 @@ export function getRevenueEngineSnapshot() {
     launchReadiness,
     agentOperatingContract,
     businessScoutQueue: buildRevenueBusinessScoutQueue(),
+    websiteSalesPacketQueue: buildRevenueWebsiteSalesPacketQueue(8),
     manualOutreachQueue: buildRevenueManualOutreachQueue(10),
     publicLeadImportQueue: buildRevenuePublicLeadImportQueue(10),
     websiteDeliveryHandoffQueue: buildRevenueWebsiteDeliveryHandoffQueue(8),
