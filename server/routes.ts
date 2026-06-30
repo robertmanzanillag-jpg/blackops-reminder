@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { readFile as readNodeFile } from "fs/promises";
+import { mkdir as mkdirNode, readFile as readNodeFile, writeFile as writeNodeFile } from "fs/promises";
 import { spawn } from "child_process";
 import { storage } from "./storage";
 import { insertTaskSchema, insertWeeklySummarySchema, insertMonthlyGoalSchema, insertYearlyGoalSchema, insertWeeklyTaskSchema, insertPushSubscriptionSchema } from "@shared/schema";
@@ -348,6 +348,7 @@ export async function registerRoutes(
   };
   const runClipperTikTokMvpProofIntakePack = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-intake-pack.mjs", "TikTok MVP proof intake pack");
   const runClipperTikTokMvpProofDoctor = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-doctor.mjs", "TikTok MVP proof doctor");
+  const runClipperTikTokMvpProofQuickFill = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-quick-fill.mjs", "TikTok MVP proof quick fill");
   const runClipperTikTokMvpProofIntakeImport = (apply: boolean) => {
     const args = ["script/clippers-tiktok-mvp-proof-intake-import.mjs"];
     if (apply) args.push("--apply");
@@ -384,6 +385,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofIntakeImport = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-import.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofQuickFill = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-quick-fill.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperTikTokMvpProofRefresh = async () => {
@@ -2729,6 +2734,42 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply TikTok MVP proof intake import" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-quick-fill", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof quick fill has not been prepared" : "TikTok MVP proof quick fill could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/apply-tiktok-mvp-proof-quick-fill", async (req, res) => {
+    try {
+      const rawQuickFill = typeof req.body?.quickFillText === "string" ? JSON.parse(req.body.quickFillText) : req.body?.quickFill;
+      if (!rawQuickFill || typeof rawQuickFill !== "object") {
+        res.status(400).json({ error: "TikTok MVP proof quick fill requires a quickFill JSON object." });
+        return;
+      }
+      await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+      await writeNodeFile(
+        "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json",
+        JSON.stringify(rawQuickFill, null, 2),
+      );
+      const run = await runClipperTikTokMvpProofQuickFill();
+      res.json({
+        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill(),
+        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh(),
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker(),
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport(),
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to apply TikTok MVP proof quick fill" });
     }
   });
 

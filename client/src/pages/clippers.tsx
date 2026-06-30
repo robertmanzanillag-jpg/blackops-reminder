@@ -2237,6 +2237,38 @@ interface ClipperTikTokMvpProofUnblockerSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofQuickFillSummary {
+  status: "applied_to_combined_intake" | "blocked_invalid_quick_fill";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  appliedToIntake: boolean;
+  issues: string[];
+  lanes: Array<{
+    key: string;
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    handle: string;
+    profileUrl: string;
+    metricoolBrandName: string;
+    updated: boolean;
+  }>;
+  proofRefreshStatus: string;
+  proofUnblockerStatus: string;
+  paths: {
+    json: string;
+    markdown: string;
+    inputJson: string;
+    combinedCsv: string;
+    refreshJson: string;
+    unblockerJson: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -9573,6 +9605,22 @@ const metricoolBridgeEvidenceTemplate = [
   "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
   "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
 ].join("\n");
+const tiktokMvpProofQuickFillTemplate = JSON.stringify({
+  lanes: {
+    "sports-daily:tiktok": {
+      accountOwnershipProofUrl: "<paste real public ownership proof URL>",
+      metricoolConnectionProofUrl: "<paste real https://app.metricool.com proof URL>",
+      accountNotes: "Sports Daily TikTok ownership and 2FA proof reviewed by Robert without secrets.",
+      metricoolNotes: "SPORT TikTok profile is connected in Metricool approval_required mode without secrets.",
+    },
+    "meme-radar:tiktok": {
+      accountOwnershipProofUrl: "<paste real public ownership proof URL>",
+      metricoolConnectionProofUrl: "<paste real https://app.metricool.com proof URL>",
+      accountNotes: "Meme Radar TikTok ownership and 2FA proof reviewed by Robert without secrets.",
+      metricoolNotes: "memes TikTok profile is connected in Metricool approval_required mode without secrets.",
+    },
+  },
+}, null, 2);
 const metricoolBridgeActiveTikTokMvpLanes = new Set(["sports-daily:tiktok", "meme-radar:tiktok"]);
 const metricoolBridgeUnsafeClientPattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
 const googleCredentialEnvTemplate = [
@@ -9771,6 +9819,7 @@ export default function ClippersPage() {
   const [launchEvidenceBatchText, setLaunchEvidenceBatchText] = useState("");
   const [launchEvidenceBatchPreview, setLaunchEvidenceBatchPreview] = useState<ClipperLaunchEvidenceBatchSummary | null>(null);
   const [launchEvidenceStrictImport, setLaunchEvidenceStrictImport] = useState(true);
+  const [tiktokMvpProofQuickFillText, setTiktokMvpProofQuickFillText] = useState(tiktokMvpProofQuickFillTemplate);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -10114,6 +10163,16 @@ export default function ClippersPage() {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof intake import");
       return data.tiktokMvpProofIntakeImport as ClipperTikTokMvpProofIntakeImportSummary;
+    },
+  });
+  const { data: tiktokMvpProofQuickFill } = useQuery<ClipperTikTokMvpProofQuickFillSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-quick-fill"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-quick-fill");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof quick fill");
+      return data.tiktokMvpProofQuickFill as ClipperTikTokMvpProofQuickFillSummary;
     },
   });
   const { data: tiktokMvpProofRefresh } = useQuery<ClipperTikTokMvpProofRefreshSummary | null>({
@@ -10724,6 +10783,42 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude aplicar proof import", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofQuickFillMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/apply-tiktok-mvp-proof-quick-fill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quickFillText: tiktokMvpProofQuickFillText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar TikTok MVP proof quick fill");
+      return data as {
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary;
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: data.tiktokMvpProofQuickFill.appliedToIntake ? "Proof quick fill guardado" : "Proof quick fill bloqueado",
+        description: data.tiktokMvpProofQuickFill.nextStep,
+        variant: data.tiktokMvpProofQuickFill.appliedToIntake ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude guardar proof quick fill", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15232,6 +15327,7 @@ export default function ClippersPage() {
     || tiktokMvpProofDoctorMutation.isPending
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
+    || tiktokMvpProofQuickFillMutation.isPending
     || tiktokMvpProofRefreshMutation.isPending
     || tiktokMvpProofUnblockerMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
@@ -16436,6 +16532,17 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
+                data-testid="apply-clippers-tiktok-mvp-proof-quick-fill-button"
+              >
+                {tiktokMvpProofQuickFillMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Quick fill
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 variant="outline"
                 onClick={() => tiktokMvpProofIntakeImportPreviewMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
@@ -16611,6 +16718,50 @@ export default function ClippersPage() {
                 )}
               </div>
             )}
+            <div className="mt-2 rounded-md border border-violet-300/15 bg-black/20 p-2 text-[11px] leading-4 text-violet-100/80" data-testid="clippers-tiktok-mvp-proof-quick-fill-panel">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={cn(
+                      "border text-[10px]",
+                      tiktokMvpProofQuickFill?.appliedToIntake
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                    )}>
+                      quick fill {tiktokMvpProofQuickFill?.status || "not submitted"}
+                    </Badge>
+                    <span>{tiktokMvpProofQuickFill?.issues.length ?? 0} issues</span>
+                    <span>applied: {tiktokMvpProofQuickFill?.appliedToIntake ? "yes" : "no"}</span>
+                  </div>
+                  <p className="mt-1">{tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste the four real non-secret proof URLs and notes, then run Quick fill."}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTiktokMvpProofQuickFillText(tiktokMvpProofQuickFillTemplate)}
+                  className="h-8 shrink-0 border-violet-300/20 bg-transparent text-violet-100 hover:bg-violet-300/10"
+                  data-testid="reset-clippers-tiktok-mvp-proof-quick-fill-button"
+                >
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  Reset quick fill
+                </Button>
+              </div>
+              <Textarea
+                value={tiktokMvpProofQuickFillText}
+                onChange={(event) => setTiktokMvpProofQuickFillText(event.target.value)}
+                className="mt-2 min-h-44 border-violet-300/20 bg-black/40 font-mono text-xs text-violet-50"
+                data-testid="clippers-tiktok-mvp-proof-quick-fill-textarea"
+              />
+              {tiktokMvpProofQuickFill && (
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p className="break-all">Report: {tiktokMvpProofQuickFill.paths.markdown}</p>
+                  <p className="break-all">Input: {tiktokMvpProofQuickFill.paths.inputJson}</p>
+                  <p className="break-all">Combined intake: {tiktokMvpProofQuickFill.paths.combinedCsv}</p>
+                  <p>Mode: {tiktokMvpProofQuickFill.launchMode}; direct APIs: {tiktokMvpProofQuickFill.directSocialApisRequired ? "required" : "not required"}</p>
+                </div>
+              )}
+            </div>
             {tiktokMvpProofIntakeImport && (
               <div className="mt-2 rounded-md border border-cyan-300/15 bg-black/20 p-2 text-[11px] leading-4 text-cyan-100/80" data-testid="clippers-tiktok-mvp-proof-intake-import-panel">
                 <p>Import: {tiktokMvpProofIntakeImport.status}; preview {tiktokMvpProofIntakeImport.closeoutPreviewStatus}; ready {tiktokMvpProofIntakeImport.closeoutPreview?.ready ?? 0}/{tiktokMvpProofIntakeImport.closeoutPreview?.lanes ?? 2}</p>

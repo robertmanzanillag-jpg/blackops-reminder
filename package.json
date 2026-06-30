@@ -78,6 +78,7 @@
     "clippers:tiktok-mvp-proof-doctor": "node script/clippers-tiktok-mvp-proof-doctor.mjs",
     "clippers:tiktok-mvp-proof-intake-import": "node script/clippers-tiktok-mvp-proof-intake-import.mjs",
     "clippers:tiktok-mvp-proof-intake-pack": "node script/clippers-tiktok-mvp-proof-intake-pack.mjs",
+    "clippers:tiktok-mvp-proof-quick-fill": "node script/clippers-tiktok-mvp-proof-quick-fill.mjs",
     "clippers:tiktok-mvp-proof-refresh": "node script/clippers-tiktok-mvp-proof-refresh.mjs",
     "clippers:tiktok-mvp-proof-unblocker": "node script/clippers-tiktok-mvp-proof-unblocker.mjs",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
