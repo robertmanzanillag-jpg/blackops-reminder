@@ -8867,7 +8867,14 @@ function parseGithubRepoUrl(value: string) {
 function isGithubEvidenceForPr(value: string | undefined, prPrefix: string) {
   if (!value) return false;
   const parsed = parseGithubRepoUrl(value);
-  return Boolean(parsed && parsed.normalizedPrefix === prPrefix);
+  if (!parsed || parsed.normalizedPrefix !== prPrefix) return false;
+  try {
+    const url = new URL(value);
+    const hasAnchor = url.hash.trim().length > 1;
+    return hasAnchor;
+  } catch {
+    return false;
+  }
 }
 
 function validateRevenueReleaseGateEvidence(

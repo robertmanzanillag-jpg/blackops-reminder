@@ -3996,6 +3996,108 @@ test("trusted release gate blocks forged or incomplete release evidence", () => 
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
 });
 
+test("trusted release gate rejects plain PR URL as review QA or approval evidence", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Plain Evidence Cafe",
+    contactEmail: "owner@plainevidence.example",
+    sourceUrl: "https://example.com/plain-evidence-cafe",
+    mockupSlug: "plain-evidence-cafe",
+    projectType: "website",
+  });
+  const plainPrUrl = "https://github.com/robert/plain-evidence-cafe/pull/2";
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/plain-evidence-cafe",
+    branchName: "codex/client-plain-evidence-cafe-website",
+    githubIssueUrl: "https://github.com/robert/plain-evidence-cafe/issues/1",
+    prUrl: plainPrUrl,
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: plainPrUrl,
+    appQaStatus: "pass",
+    appQaEvidenceUrl: plainPrUrl,
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: plainPrUrl,
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-plain-evidence-cafe-website, client Plain Evidence Cafe.`,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /secondReviewEvidenceUrl/);
+  assert.match(releaseGate.reason, /appQaEvidenceUrl/);
+  assert.match(releaseGate.reason, /deploymentApprovalUrl/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.input.secondReviewStatus || "pending", "pending");
+  assert.equal(releaseGate.workspace?.input.appQaStatus || "pending", "pending");
+  assert.equal(releaseGate.workspace?.input.deploymentApprovalStatus || "not_requested", "not_requested");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
+test("trusted release gate rejects PR query URLs without review or comment anchors", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Query Evidence Cafe",
+    contactEmail: "owner@queryevidence.example",
+    sourceUrl: "https://example.com/query-evidence-cafe",
+    mockupSlug: "query-evidence-cafe",
+    projectType: "website",
+  });
+  const prUrl = "https://github.com/robert/query-evidence-cafe/pull/2";
+  const queryPrUrl = `${prUrl}?claimed=review`;
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/query-evidence-cafe",
+    branchName: "codex/client-query-evidence-cafe-website",
+    githubIssueUrl: "https://github.com/robert/query-evidence-cafe/issues/1",
+    prUrl,
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: queryPrUrl,
+    appQaStatus: "pass",
+    appQaEvidenceUrl: queryPrUrl,
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: queryPrUrl,
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-query-evidence-cafe-website, client Query Evidence Cafe.`,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /secondReviewEvidenceUrl/);
+  assert.match(releaseGate.reason, /appQaEvidenceUrl/);
+  assert.match(releaseGate.reason, /deploymentApprovalUrl/);
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
+test("trusted release gate rejects PR tab URLs without review or comment anchors", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Tab Evidence Cafe",
+    contactEmail: "owner@tabevidence.example",
+    sourceUrl: "https://example.com/tab-evidence-cafe",
+    mockupSlug: "tab-evidence-cafe",
+    projectType: "website",
+  });
+  const prUrl = "https://github.com/robert/tab-evidence-cafe/pull/2";
+  const prTabUrl = `${prUrl}/files`;
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/tab-evidence-cafe",
+    branchName: "codex/client-tab-evidence-cafe-website",
+    githubIssueUrl: "https://github.com/robert/tab-evidence-cafe/issues/1",
+    prUrl,
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: prTabUrl,
+    appQaStatus: "pass",
+    appQaEvidenceUrl: prTabUrl,
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: prTabUrl,
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-tab-evidence-cafe-website, client Tab Evidence Cafe.`,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /secondReviewEvidenceUrl/);
+  assert.match(releaseGate.reason, /appQaEvidenceUrl/);
+  assert.match(releaseGate.reason, /deploymentApprovalUrl/);
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
 test("trusted delivery endpoint helper delivers only after trusted release gate approval", () => {
   const created = createSoldWebsiteWorkspaceForTest({
     businessName: "Trusted Delivered Cafe",
