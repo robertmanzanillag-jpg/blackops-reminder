@@ -90,6 +90,17 @@ test("TikTok MVP proof links parser can reuse clean Metricool proof as account c
   assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
 });
 
+test("TikTok MVP proof links parser names Drive or Docs as valid Metricool evidence", () => {
+  const parsed = extractClipperTikTokMvpProofLinksPaste([
+    "SPORT proof https://drive.google.com/file/d/sports-daily-proof/view",
+    "memes proof https://example.com/not-valid",
+  ].join("\n"));
+
+  assert.equal(parsed.status, "needs_review");
+  assert.match(parsed.issues.join("\n"), /Google Drive\/Docs connection proof URL/);
+  assert.equal(parsed.realPublishEnabled, false);
+});
+
 test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "sports-daily:tiktok.accountOwnershipProofUrl=https://drive.google.com/file/d/sports-daily-tiktok-proof/view?token=abc123",

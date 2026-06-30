@@ -191,7 +191,7 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
     const usesMetricoolProofAsAccountControl = Boolean(accountOwnershipProofUrl && accountOwnershipProofUrl === metricoolConnectionProofUrl && !explicitLane.accountOwnershipProofUrl);
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
     if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
-    if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com connection proof URL.`);
+    if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com or Google Drive/Docs connection proof URL.`);
     return [spec.key, {
       accountOwnershipProofUrl,
       metricoolConnectionProofUrl,

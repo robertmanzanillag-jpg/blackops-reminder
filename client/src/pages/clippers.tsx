@@ -16936,8 +16936,14 @@ export default function ClippersPage() {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
     const packetText = [
-      `SPORT Metricool connected proof ${sportUrl}`,
-      `memes Metricool connected proof ${memesUrl}`,
+      `sports-daily:tiktok.accountOwnershipProofUrl=${sportUrl}`,
+      `sports-daily:tiktok.metricoolConnectionProofUrl=${sportUrl}`,
+      "sports-daily:tiktok.accountNotes=SPORT Metricool connection proof verifies Robert-controlled TikTok ownership and security without secrets.",
+      "sports-daily:tiktok.metricoolNotes=SPORT TikTok profile connected in Metricool approval_required mode with non-secret proof reviewed by Robert.",
+      `meme-radar:tiktok.accountOwnershipProofUrl=${memesUrl}`,
+      `meme-radar:tiktok.metricoolConnectionProofUrl=${memesUrl}`,
+      "meme-radar:tiktok.accountNotes=memes Metricool connection proof verifies Robert-controlled TikTok ownership and security without secrets.",
+      "meme-radar:tiktok.metricoolNotes=memes TikTok profile connected in Metricool approval_required mode with non-secret proof reviewed by Robert.",
     ].join("\n");
     setTiktokMvpProofLinksPasteText(packetText);
     setTiktokMvpProofLinksPastePreview(null);
@@ -18631,7 +18637,7 @@ export default function ClippersPage() {
                       </Button>
                     </div>
                     <p className="mt-2 text-[10px] leading-4 text-emerald-100/70">
-                      These two URLs go straight to Preview links. They do not save evidence, apply closeout, schedule, or publish.
+                      These two URLs build explicit account + Metricool proof fields, then go straight to Preview links. They do not save evidence, apply closeout, schedule, or publish.
                     </p>
                   </div>
                   <Textarea

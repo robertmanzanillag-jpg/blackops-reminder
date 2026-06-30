@@ -576,6 +576,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /proofGate\.failedVerifierChecks/);
   assert.match(page, /proofGate\.paths\?\.proofLinksJson/);
   assert.match(page, /proofGate\.paths\?\.bridgeEvidenceCsv/);
+  assert.match(page, /sports-daily:tiktok\.accountOwnershipProofUrl=\$\{sportUrl\}/);
+  assert.match(page, /sports-daily:tiktok\.metricoolConnectionProofUrl=\$\{sportUrl\}/);
+  assert.match(page, /meme-radar:tiktok\.accountOwnershipProofUrl=\$\{memesUrl\}/);
+  assert.match(page, /meme-radar:tiktok\.metricoolConnectionProofUrl=\$\{memesUrl\}/);
+  assert.match(page, /These two URLs build explicit account \+ Metricool proof fields/);
   assert.match(page, /tiktokMvpOperatingRefreshMutation/);
   assert.match(operatingRefreshRoute, /runClipperTikTokMvpOperatingRefresh/);
   assert.match(operatingRefreshRoute, /readClipperTikTokMvpOperatingRefresh/);
