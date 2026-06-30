@@ -190,6 +190,7 @@ function sellWebsiteOpportunityForTest(input: {
     outcome: "deposit_collected",
     outcomeRecordedByRobert: true,
     cashCollectedUsd,
+    paymentConfirmation: "Stripe pi_test_sale_123",
     notes: "Robert confirmed deposit for test sale.",
   });
   assert.equal(depositOutcome.status, "recorded");
@@ -199,7 +200,7 @@ function sellWebsiteOpportunityForTest(input: {
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd,
-    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    paymentConfirmation: "Stripe pi_test_sale_123",
   });
   assert.equal(closeResult.status, "sold");
   assert.ok(closeResult.opportunity);
@@ -2477,6 +2478,7 @@ test("website delivery handoff queue requires a sold website opportunity", async
     outcome: "deposit_collected",
     outcomeRecordedByRobert: true,
     cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Zelle ref scoped-deposit-123",
     notes: "Robert confirmed deposit after scope.",
   });
   assert.equal(depositOutcome.status, "recorded");
@@ -2486,7 +2488,7 @@ test("website delivery handoff queue requires a sold website opportunity", async
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
-    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    paymentConfirmation: "Zelle ref scoped-deposit-123",
   });
 
   assert.equal(closeResult.status, "sold");
@@ -3000,6 +3002,7 @@ test("website delivery ledger notes stay bounded before closing state", () => {
     outcome: "deposit_collected",
     outcomeRecordedByRobert: true,
     cashCollectedUsd: 1800,
+    paymentConfirmation: "Stripe pi_long_notes_123",
     notes: "Robert confirmed deposit before long-notes close.",
   });
   assert.equal(depositOutcome.status, "recorded");
@@ -3008,7 +3011,7 @@ test("website delivery ledger notes stay bounded before closing state", () => {
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1800,
-    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    paymentConfirmation: "Stripe pi_long_notes_123",
     notes: "x".repeat(1000),
   });
   assert.equal(closeResult.status, "sold");
@@ -4282,11 +4285,22 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.equal(blocked.status, "blocked");
   assert.match(blocked.reason, /cashCollectedUsd/);
 
+  const missingPaymentEvidence = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+  });
+  assert.equal(missingPaymentEvidence.status, "blocked");
+  assert.match(missingPaymentEvidence.reason, /referencia|comprobante/);
+  assert.equal(missingPaymentEvidence.gates.some((gate) => gate.gate === "deposit_payment_evidence" && gate.passed === false), true);
+
   const outcome = recordRevenueOutreachOutcome({
     draftId: draftResult.draft.id,
     outcome: "deposit_collected",
     outcomeRecordedByRobert: true,
     cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    paymentConfirmation: "Stripe pi_deposit_ready_123",
     notes: "Deposit received by Robert outside the app.",
   });
 
@@ -4301,6 +4315,7 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.equal(outcome.snapshot.recentLedger.length, 0);
   assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
   assert.equal(outcome.snapshot.recentWebsiteOpportunities[0].depositPaid, true);
+  assert.equal(outcome.snapshot.recentWebsiteOpportunities[0].paymentConfirmation, "Stripe pi_deposit_ready_123");
   assert.equal(outcome.snapshot.dailyMoneyCommand.status, "collect");
   assert.equal(outcome.snapshot.dailyMoneyCommand.funnel.websiteClosuresPending, 1);
 
@@ -4309,12 +4324,24 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
     outreachDraftId: draftResult.draft.id,
     projectType: "bundle",
   });
+
+  const closeWithoutExplicitPaymentConfirmation = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    notes: "Deposit was already recorded in outreach outcome.",
+  });
+  assert.equal(closeWithoutExplicitPaymentConfirmation.status, "blocked");
+  assert.match(closeWithoutExplicitPaymentConfirmation.reason, /confirmacion de pago/);
+  assert.equal(closeWithoutExplicitPaymentConfirmation.snapshot.recentLedger.length, 0);
+
   const closeResult = closeRevenueWebsiteOpportunity({
     opportunityId: opportunityResult.opportunity!.id,
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: draftResult.draft.pricing.depositUsd,
-    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    paymentConfirmation: "Stripe pi_deposit_ready_123",
   });
 
   assert.equal(closeResult.status, "sold");

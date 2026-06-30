@@ -145,6 +145,7 @@ export const revenueOutreachOutcomeSchema = z.object({
   outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]),
   outcomeRecordedByRobert: z.coerce.boolean().default(false),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  paymentConfirmation: z.string().trim().max(500).optional().default(""),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -647,6 +648,7 @@ type RevenueOutreachDraft = RevenueOutreachDraftInput & {
     outcomeAt?: string;
     outcomeNotes?: string;
     outcomeCashCollectedUsd?: number;
+    outcomePaymentConfirmation?: string;
   };
   links: ReturnType<typeof buildProposalEmail>["links"];
   qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
@@ -3807,7 +3809,13 @@ function findRevenueWebsiteOpportunityByLeadOrDraft(leadId: string, draftId: str
   ) || null;
 }
 
-function syncRevenueWebsiteOpportunityFromDepositOutcome(lead: RevenueLead | null, draft: RevenueOutreachDraft, cashCollectedUsd: number, notes: string) {
+function syncRevenueWebsiteOpportunityFromDepositOutcome(
+  lead: RevenueLead | null,
+  draft: RevenueOutreachDraft,
+  cashCollectedUsd: number,
+  paymentConfirmation: string,
+  notes: string,
+) {
   if (!lead || cashCollectedUsd <= 0) return null;
   loadRevenueWebsiteOpportunities();
   const failedBlockingGate = draft.qaGates.find((gate) => !gate.passed && gate.gate !== "approval");
@@ -3852,7 +3860,7 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(lead: RevenueLead | nul
     estimatedInternalCostUsd: existing?.estimatedInternalCostUsd || draft.pricing.estimatedInternalMonthlyCostUsd,
     depositPaid: true,
     scopeApproved: existing?.scopeApproved || false,
-    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    paymentConfirmation,
     qaGates: gates,
     nextAction: status === "sold"
       ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
@@ -3977,8 +3985,9 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const draft = opportunity ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null : null;
   const requiredDepositUsd = opportunity?.requiredDepositUsd || 0;
   const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const recordedDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
   const depositOutcomeCoversRequired = recordedDepositCashUsd >= requiredDepositUsd && requiredDepositUsd > 0;
-  const paymentConfirmed = parsed.paymentConfirmation.trim().length >= 4 || parsed.notes.toLowerCase().includes("payment") || parsed.notes.toLowerCase().includes("deposit");
+  const paymentConfirmed = parsed.paymentConfirmation.trim().length >= 4;
   const blockers = [
     !opportunity && "oportunidad no encontrada",
     opportunity?.status === "blocked" && "oportunidad bloqueada",
@@ -3986,6 +3995,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
     !draft && "draft no encontrado",
     draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
     draft && draft.delivery.outcome === "deposit_collected" && !depositOutcomeCoversRequired && `deposito manual insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
+    depositOutcomeCoversRequired && recordedDepositPaymentConfirmation.trim().length < 4 && "deposito manual sin referencia/comprobante de pago",
     !parsed.scopeApproved && "scope no aprobado",
     !parsed.depositPaid && "deposito no marcado",
     parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
@@ -4002,7 +4012,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
       opportunity.depositPaid = nextDepositPaid;
       opportunity.scopeApproved = nextScopeApproved;
       opportunity.paymentConfirmation = depositOutcomeCoversRequired
-        ? parsed.paymentConfirmation || opportunity.paymentConfirmation || "Manual deposit outcome recorded by Robert."
+        ? parsed.paymentConfirmation || opportunity.paymentConfirmation
         : opportunity.paymentConfirmation;
       opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
       opportunity.updatedAt = new Date().toISOString();
@@ -4023,7 +4033,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   opportunity.cashCollectedUsd = recordedDepositCashUsd;
   opportunity.depositPaid = true;
   opportunity.scopeApproved = true;
-  opportunity.paymentConfirmation = parsed.paymentConfirmation || parsed.notes || "deposit confirmed";
+  opportunity.paymentConfirmation = parsed.paymentConfirmation;
   opportunity.nextAction = "Oportunidad vendida. Crear delivery workspace desde Website handoff queue; no desplegar sin PR/App QA/aprobacion.";
   opportunity.updatedAt = now;
   persistRevenueWebsiteOpportunities();
@@ -7264,6 +7274,7 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de registrar contacto externo." },
     { gate: "human_recorded", passed: parsed.outcomeRecordedByRobert, fix: "Robert debe confirmar que este resultado ocurrio fuera del sistema." },
     { gate: "deposit_amount", passed: parsed.outcome !== "deposit_collected" || parsed.cashCollectedUsd > 0, fix: "Registrar cashCollectedUsd mayor a 0 para deposito cobrado." },
+    { gate: "deposit_payment_evidence", passed: parsed.outcome !== "deposit_collected" || parsed.paymentConfirmation.trim().length >= 4, fix: "Agregar referencia/comprobante de pago antes de marcar deposito cobrado." },
   ];
   const failedGate = gates.find((gate) => !gate.passed);
 
@@ -7302,6 +7313,7 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
   draft.delivery.outcomeAt = now;
   draft.delivery.outcomeNotes = parsed.notes || nextActionByOutcome[parsed.outcome];
   draft.delivery.outcomeCashCollectedUsd = parsed.cashCollectedUsd;
+  draft.delivery.outcomePaymentConfirmation = parsed.paymentConfirmation || undefined;
   draft.nextAction = nextActionByOutcome[parsed.outcome];
   draft.updatedAt = now;
 
@@ -7321,7 +7333,7 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
 
   persistRevenueOutreach();
   const websiteOpportunity = parsed.outcome === "deposit_collected"
-    ? syncRevenueWebsiteOpportunityFromDepositOutcome(lead, draft, parsed.cashCollectedUsd, parsed.notes)
+    ? syncRevenueWebsiteOpportunityFromDepositOutcome(lead, draft, parsed.cashCollectedUsd, parsed.paymentConfirmation, parsed.notes)
     : null;
 
   return {

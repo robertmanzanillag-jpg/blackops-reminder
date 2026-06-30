@@ -1891,6 +1891,12 @@ export default function RevenueEnginePage() {
     repoFullName?: string;
     branchName?: string;
   }>>({});
+  const requestDepositPaymentConfirmation = (businessName: string, amountUsd: number) => {
+    const value = window.prompt(
+      `Referencia de pago para ${businessName} (${money.format(amountUsd)}): Stripe, Zelle, invoice o recibo.`,
+    )?.trim() || "";
+    return value.length >= 4 ? value : null;
+  };
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releasePrUrl, setReleasePrUrl] = useState("");
   const [releaseSecondReviewEvidenceUrl, setReleaseSecondReviewEvidenceUrl] = useState("");
@@ -2577,6 +2583,7 @@ export default function RevenueEnginePage() {
             outcome: "deposit_collected",
             outcomeRecordedByRobert: true,
             cashCollectedUsd,
+            paymentConfirmation,
             notes: paymentConfirmation || notes || "Manual deposit recorded from website opportunity close.",
           }),
         });
@@ -2942,9 +2949,9 @@ export default function RevenueEnginePage() {
   const outreachOutcomeMutation = useMutation<
     OutreachOutcomeResult,
     Error,
-    { draftId: string; outcome: RevenueOutreachOutcome; cashCollectedUsd?: number; notes?: string }
+    { draftId: string; outcome: RevenueOutreachOutcome; cashCollectedUsd?: number; paymentConfirmation?: string; notes?: string }
   >({
-    mutationFn: async ({ draftId, outcome, cashCollectedUsd = 0, notes = "" }) => {
+    mutationFn: async ({ draftId, outcome, cashCollectedUsd = 0, paymentConfirmation = "", notes = "" }) => {
       const response = await fetch("/api/revenue-engine/outreach-outcome", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2953,6 +2960,7 @@ export default function RevenueEnginePage() {
           outcome,
           outcomeRecordedByRobert: true,
           cashCollectedUsd,
+          paymentConfirmation,
           notes,
         }),
       });
@@ -3844,12 +3852,17 @@ export default function RevenueEnginePage() {
                           variant="outline"
                           className="h-8 border-emerald-700 text-emerald-100"
                           disabled={outreachOutcomeMutation.isPending || item.depositUsd <= 0}
-                          onClick={() => outreachOutcomeMutation.mutate({
-                            draftId: item.draftId,
-                            outcome: "deposit_collected",
-                            cashCollectedUsd: item.depositUsd,
-                            notes: "Robert confirmo deposito manual desde la cola diaria; cerrar oportunidad website con scope antes de delivery.",
-                          })}
+                          onClick={() => {
+                            const paymentConfirmation = requestDepositPaymentConfirmation(item.businessName, item.depositUsd);
+                            if (!paymentConfirmation) return;
+                            outreachOutcomeMutation.mutate({
+                              draftId: item.draftId,
+                              outcome: "deposit_collected",
+                              cashCollectedUsd: item.depositUsd,
+                              paymentConfirmation,
+                              notes: "Robert confirmo deposito manual desde la cola diaria; cerrar oportunidad website con scope antes de delivery.",
+                            });
+                          }}
                           data-testid={`button-record-manual-outreach-deposit-${item.draftId}`}
                         >
                           Deposit
@@ -8988,12 +9001,17 @@ export default function RevenueEnginePage() {
                                 variant="outline"
                                 className="border-emerald-700 text-emerald-100"
                                 disabled={outreachOutcomeMutation.isPending || draft.status !== "approved" || draft.pricing.depositUsd <= 0}
-                                onClick={() => outreachOutcomeMutation.mutate({
-                                  draftId: draft.id,
-                                  outcome: "deposit_collected",
-                                  cashCollectedUsd: draft.pricing.depositUsd,
-                                  notes: "Robert confirmo deposito manual; crear delivery workspace para contabilizar venta.",
-                                })}
+                                onClick={() => {
+                                  const paymentConfirmation = requestDepositPaymentConfirmation(draft.businessName, draft.pricing.depositUsd);
+                                  if (!paymentConfirmation) return;
+                                  outreachOutcomeMutation.mutate({
+                                    draftId: draft.id,
+                                    outcome: "deposit_collected",
+                                    cashCollectedUsd: draft.pricing.depositUsd,
+                                    paymentConfirmation,
+                                    notes: "Robert confirmo deposito manual; crear delivery workspace para contabilizar venta.",
+                                  });
+                                }}
                                 data-testid="button-record-outreach-deposit"
                               >
                                 Deposit
