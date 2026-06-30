@@ -2410,6 +2410,20 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
   sourcePath: string;
   bytes: number;
   extractedUrls: number;
+  checklist: Array<{
+    laneKey: string;
+    accountName: string;
+    field: string;
+    label: string;
+    status: "ready" | "missing_or_invalid";
+    required: string;
+  }>;
+  checklistTotals: {
+    ready: number;
+    total: number;
+    missing: number;
+  };
+  nextButton: "create_starter" | "import_drop_file" | "safe_ingest_drop";
   issues: string[];
   guardrails: string[];
   nextStep: string;
@@ -11316,6 +11330,13 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPastePreview(data.tiktokMvpProofLinksPastePreview);
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinksDropImport.proofLinksText);
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksDropImport.proofLinksPreview);
+      const dropChecklist = data.tiktokMvpProofLinksDropImport.proofLinksPreview.lanes.flatMap((lane) => [
+        { laneKey: lane.key, accountName: lane.accountName, field: "accountOwnershipProofUrl", label: "TikTok ownership proof", status: lane.accountProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real safe HTTPS proof URL, non-Metricool, no tokens/cookies/signed params" },
+        { laneKey: lane.key, accountName: lane.accountName, field: "metricoolConnectionProofUrl", label: "Metricool connection proof", status: lane.metricoolProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params" },
+        { laneKey: lane.key, accountName: lane.accountName, field: "accountNotes", label: "ownership notes", status: lane.accountNotesReady ? "ready" as const : "missing_or_invalid" as const, required: "20+ chars mentioning ownership/security proof, no placeholders or secrets" },
+        { laneKey: lane.key, accountName: lane.accountName, field: "metricoolNotes", label: "Metricool notes", status: lane.metricoolNotesReady ? "ready" as const : "missing_or_invalid" as const, required: "20+ chars mentioning Metricool connection proof, no placeholders or secrets" },
+      ]);
+      const dropChecklistReady = dropChecklist.filter((item) => item.status === "ready").length;
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], {
         status: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "ready_for_import" : "needs_review",
         generatedAt: data.tiktokMvpProofLinksDropImport.generatedAt,
@@ -11327,6 +11348,9 @@ export default function ClippersPage() {
         sourcePath: data.tiktokMvpProofLinksDropImport.sourcePath,
         bytes: data.tiktokMvpProofLinksDropImport.bytes,
         extractedUrls: data.tiktokMvpProofLinksDropImport.extractedUrls,
+        checklist: dropChecklist,
+        checklistTotals: { ready: dropChecklistReady, total: dropChecklist.length, missing: dropChecklist.length - dropChecklistReady },
+        nextButton: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "safe_ingest_drop" : "import_drop_file",
         issues: [...data.tiktokMvpProofLinksDropImport.issues, ...data.tiktokMvpProofLinksDropImport.proofLinksPreview.issues],
         guardrails: data.tiktokMvpProofLinksDropImport.guardrails,
         nextStep: data.tiktokMvpProofLinksDropImport.nextStep,
@@ -17719,10 +17743,29 @@ export default function ClippersPage() {
                         <span>{tiktokMvpProofLinksDropStatus.found ? "file detected" : "file missing"}</span>
                         <span>{tiktokMvpProofLinksDropStatus.extractedUrls} URLs</span>
                         <span>{tiktokMvpProofLinksDropStatus.issues.length} issues</span>
+                        <span>{tiktokMvpProofLinksDropStatus.checklistTotals.ready}/{tiktokMvpProofLinksDropStatus.checklistTotals.total} proof fields</span>
+                        <span>next {tiktokMvpProofLinksDropStatus.nextButton}</span>
                         <span>real publish {tiktokMvpProofLinksDropStatus.realPublishEnabled ? "enabled" : "disabled"}</span>
                       </div>
                       <p className="mt-1 break-all">{tiktokMvpProofLinksDropStatus.sourcePath}</p>
                       <p className="mt-1">{tiktokMvpProofLinksDropStatus.issues[0] || tiktokMvpProofLinksDropStatus.nextStep}</p>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-drop-checklist">
+                        {tiktokMvpProofLinksDropStatus.checklist.map((item) => (
+                          <div key={`${item.laneKey}-${item.field}`} className="rounded border border-white/10 bg-black/20 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-[11px] font-medium">{item.accountName}</p>
+                              <Badge className={cn(
+                                "shrink-0 border text-[10px]",
+                                item.status === "ready"
+                                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              )}>{item.status === "ready" ? "ready" : "needed"}</Badge>
+                            </div>
+                            <p className="mt-1 text-[11px]">{item.label}</p>
+                            {item.status !== "ready" && <p className="mt-1 text-[10px] opacity-70">{item.required}</p>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   <Textarea

@@ -173,6 +173,41 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
     const drop = await readClipperTikTokMvpProofLinksDropPaste();
     const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
     const issues = [...parsedPreview.issues, ...parsedPreview.proofLinksPreview.issues];
+    const checklist = parsedPreview.proofLinksPreview.lanes.flatMap((lane: any) => [
+      {
+        laneKey: lane.key,
+        accountName: lane.accountName,
+        field: "accountOwnershipProofUrl",
+        label: "TikTok ownership proof",
+        status: lane.accountProofReady ? "ready" : "missing_or_invalid",
+        required: "real safe HTTPS proof URL, non-Metricool, no tokens/cookies/signed params",
+      },
+      {
+        laneKey: lane.key,
+        accountName: lane.accountName,
+        field: "metricoolConnectionProofUrl",
+        label: "Metricool connection proof",
+        status: lane.metricoolProofReady ? "ready" : "missing_or_invalid",
+        required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params",
+      },
+      {
+        laneKey: lane.key,
+        accountName: lane.accountName,
+        field: "accountNotes",
+        label: "ownership notes",
+        status: lane.accountNotesReady ? "ready" : "missing_or_invalid",
+        required: "20+ chars mentioning ownership/security proof, no placeholders or secrets",
+      },
+      {
+        laneKey: lane.key,
+        accountName: lane.accountName,
+        field: "metricoolNotes",
+        label: "Metricool notes",
+        status: lane.metricoolNotesReady ? "ready" : "missing_or_invalid",
+        required: "20+ chars mentioning Metricool connection proof, no placeholders or secrets",
+      },
+    ]);
+    const readyChecklistItems = checklist.filter((item) => item.status === "ready").length;
     return {
       status: issues.length ? "needs_review" : "ready_for_import",
       generatedAt: parsedPreview.generatedAt,
@@ -184,6 +219,13 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       sourcePath: drop.sourcePath,
       bytes: drop.bytes,
       extractedUrls: parsedPreview.extractedUrls,
+      checklist,
+      checklistTotals: {
+        ready: readyChecklistItems,
+        total: checklist.length,
+        missing: checklist.length - readyChecklistItems,
+      },
+      nextButton: issues.length ? "import_drop_file" : "safe_ingest_drop",
       issues,
       guardrails: [
         "Drop status reads metadata and validated parsed fields only; it does not return raw paste text.",
@@ -205,6 +247,25 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       sourcePath: clipperTikTokMvpProofLinksDropPastePaths[0],
       bytes: 0,
       extractedUrls: 0,
+      checklist: [
+        "sports-daily:tiktok.accountOwnershipProofUrl",
+        "sports-daily:tiktok.metricoolConnectionProofUrl",
+        "sports-daily:tiktok.accountNotes",
+        "sports-daily:tiktok.metricoolNotes",
+        "meme-radar:tiktok.accountOwnershipProofUrl",
+        "meme-radar:tiktok.metricoolConnectionProofUrl",
+        "meme-radar:tiktok.accountNotes",
+        "meme-radar:tiktok.metricoolNotes",
+      ].map((field) => ({
+        laneKey: field.split(".")[0],
+        accountName: field.startsWith("sports-daily") ? "Sports Daily Clips" : "Meme Radar",
+        field: field.split(".")[1],
+        label: field.split(".")[1],
+        status: "missing_or_invalid",
+        required: "create the starter file, then replace placeholders with real public/non-secret proof evidence",
+      })),
+      checklistTotals: { ready: 0, total: 8, missing: 8 },
+      nextButton: "create_starter",
       issues: [error?.message || `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with the four non-secret proof URLs.`],
       guardrails: [
         "Drop status does not create proof files or write evidence.",

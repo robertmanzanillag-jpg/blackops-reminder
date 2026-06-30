@@ -314,6 +314,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     'app.get("/api/clippers/tiktok-mvp-proof-links-drop-status"',
     'app.post("/api/clippers/create-tiktok-mvp-proof-links-drop-starter"',
   );
+  const proofLinksDropStatusHelper = requiredSlice(
+    routes,
+    "async function buildClipperTikTokMvpProofLinksDropStatus()",
+    "export function buildClipperExternalCloseoutEvidenceCsvTemplate",
+  );
   const proofLinksDropStarterRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/create-tiktok-mvp-proof-links-drop-starter"',
@@ -408,6 +413,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksModule, /accountOwnershipProofUrl\|metricoolConnectionProofUrl\|accountNotes\|metricoolNotes/);
   assert.doesNotMatch(proofLinksPasteRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksDropStatusRoute, /buildClipperTikTokMvpProofLinksDropStatus/);
+  assert.match(proofLinksDropStatusHelper, /checklistTotals/);
+  assert.match(proofLinksDropStatusHelper, /nextButton/);
+  assert.match(routes, /TikTok ownership proof/);
+  assert.match(routes, /Metricool connection proof/);
   assert.match(routes, /does not return raw paste text/);
   assert.doesNotMatch(proofLinksDropStatusRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksDropStarterRoute, /create-tiktok-mvp-proof-links-drop-starter/);
@@ -545,6 +554,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-links-editor/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-assistant/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-status/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-drop-checklist/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus\.checklistTotals\.ready/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus\.nextButton/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-links-drop-status"\]/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
   assert.match(page, /import-clippers-tiktok-mvp-proof-links-drop-button/);
