@@ -354,6 +354,7 @@ export async function registerRoutes(
     return runClipperNodeJson(args, apply ? "TikTok MVP proof intake import apply" : "TikTok MVP proof intake import preview");
   };
   const runClipperTikTokMvpProofRefresh = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-refresh.mjs", "TikTok MVP proof refresh");
+  const runClipperTikTokMvpProofUnblocker = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-unblocker.mjs", "TikTok MVP proof unblocker");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -387,6 +388,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofRefresh = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-refresh.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofUnblocker = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-unblocker.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2748,6 +2753,31 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof refresh" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-unblocker", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof unblocker has not been prepared" : "TikTok MVP proof unblocker could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-unblocker", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofUnblocker();
+      res.json({
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker(),
+        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh(),
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport(),
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof unblocker" });
     }
   });
 

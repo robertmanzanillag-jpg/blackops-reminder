@@ -2195,6 +2195,48 @@ interface ClipperTikTokMvpProofRefreshSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofUnblockerSummary {
+  status: "blocked_needs_real_proof" | "unblocked_ready_for_apply_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  readyLanes: number;
+  targetLanes: number;
+  totals: {
+    openFixes: number;
+    importFixes: number;
+    doctorFixes: number;
+  };
+  fixes: Array<{
+    lane: string;
+    sourceReport: string;
+    accountId: string;
+    accountName: string;
+    platform: string;
+    handle: string;
+    metricoolBrandName: string;
+    publicProfileUrl: string;
+    row: string;
+    field: string;
+    requiredValue: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+    html: string;
+    refreshJson: string;
+    combinedCsv: string;
+    importFixQueueCsv: string;
+    doctorFixQueueCsv: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -10084,6 +10126,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofRefresh as ClipperTikTokMvpProofRefreshSummary;
     },
   });
+  const { data: tiktokMvpProofUnblocker } = useQuery<ClipperTikTokMvpProofUnblockerSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-unblocker"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-unblocker");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof unblocker");
+      return data.tiktokMvpProofUnblocker as ClipperTikTokMvpProofUnblockerSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10700,6 +10752,36 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof refresh", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofUnblockerMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-unblocker", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof unblocker");
+      return data as {
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? "Proof unblocker listo" : "Proof unblocker bloqueado",
+        description: data.tiktokMvpProofUnblocker.nextStep,
+        variant: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof unblocker", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15151,6 +15233,7 @@ export default function ClippersPage() {
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
     || tiktokMvpProofRefreshMutation.isPending
+    || tiktokMvpProofUnblockerMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
@@ -16342,6 +16425,18 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofUnblockerMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-violet-300/20 bg-transparent text-violet-100 hover:bg-violet-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-unblocker-button"
+              >
+                {tiktokMvpProofUnblockerMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Proof unblocker
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpProofIntakeImportPreviewMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
@@ -16473,6 +16568,47 @@ export default function ClippersPage() {
                   <p className="break-all">Doctor fix queue: {tiktokMvpProofRefresh.paths.doctorFixQueueCsv}</p>
                   <p>Mode: {tiktokMvpProofRefresh.launchMode}; direct APIs: {tiktokMvpProofRefresh.directSocialApisRequired ? "required" : "not required"}</p>
                 </div>
+              </div>
+            )}
+            {tiktokMvpProofUnblocker && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-violet-300/15 text-violet-100/80"
+              )} data-testid="clippers-tiktok-mvp-proof-unblocker-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                  )}>
+                    unblocker {tiktokMvpProofUnblocker.status}
+                  </Badge>
+                  <span>{tiktokMvpProofUnblocker.readyLanes}/{tiktokMvpProofUnblocker.targetLanes} lanes ready</span>
+                  <span>{tiktokMvpProofUnblocker.totals.openFixes} open fixes</span>
+                </div>
+                <p className="mt-1">{tiktokMvpProofUnblocker.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Import fixes: {tiktokMvpProofUnblocker.totals.importFixes}</p>
+                  <p>Doctor fixes: {tiktokMvpProofUnblocker.totals.doctorFixes}</p>
+                  <p className="break-all">HTML: {tiktokMvpProofUnblocker.paths.html}</p>
+                  <p className="break-all">CSV: {tiktokMvpProofUnblocker.paths.csv}</p>
+                  <p className="break-all">Combined intake: {tiktokMvpProofUnblocker.paths.combinedCsv}</p>
+                  <p>Mode: {tiktokMvpProofUnblocker.launchMode}; direct APIs: {tiktokMvpProofUnblocker.directSocialApisRequired ? "required" : "not required"}</p>
+                </div>
+                {(tiktokMvpProofUnblocker.fixes ?? []).length > 0 && (
+                  <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-unblocker-fixes">
+                    {tiktokMvpProofUnblocker.fixes.slice(0, 4).map((item) => (
+                      <div key={`${item.lane}-${item.field}`} className="rounded border border-violet-300/10 bg-black/20 p-2">
+                        <p className="font-medium text-violet-100">{item.accountName} / {item.field}</p>
+                        <p className="mt-1 break-all text-violet-100/70">{item.requiredValue}</p>
+                        <p className="mt-1 text-violet-100/70">{item.nextAction}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {tiktokMvpProofIntakeImport && (
