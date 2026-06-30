@@ -345,6 +345,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     'app.post("/api/clippers/prepare-tiktok-mvp-closeout-wizard"',
     'app.get("/api/clippers/tiktok-mvp-proof-doctor"',
   );
+  const operatorButtonHelper = requiredSlice(
+    page,
+    "const runTikTokMvpOperatorButton =",
+    "const tiktokMetricoolBlockedRows =",
+  );
   const applyRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/apply-tiktok-mvp-evidence-closeout"',
@@ -476,6 +481,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-steps/);
   assert.match(page, /clippers-tiktok-mvp-operator-session/);
+  assert.match(page, /run-clippers-tiktok-mvp-operator-recommended-button/);
+  assert.match(page, /runTikTokMvpOperatorButton/);
+  assert.match(page, /getTikTokMvpOperatorButtonLabel/);
+  assert.match(page, /case "import_preview"/);
+  assert.match(page, /case "closeout_preview"/);
+  assert.match(page, /case "local_verification"/);
+  assert.match(page, /activeTikTokMvpOperatorButton === "apply_closeout_with_confirmation"/);
+  assert.doesNotMatch(operatorButtonHelper, /tiktokMvpEvidenceCloseoutApplyMutation\.mutate/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-textarea/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-import-panel/);

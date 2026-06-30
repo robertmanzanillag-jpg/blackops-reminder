@@ -15863,6 +15863,51 @@ export default function ClippersPage() {
     || tiktokMvpCloseoutWizardMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
+  const getTikTokMvpOperatorButtonLabel = (button?: string) => {
+    switch (button) {
+      case "quick_fill": return "Run quick fill";
+      case "import_preview": return "Run import preview";
+      case "closeout_preview": return "Preview closeout";
+      case "local_verification": return "Run local verify";
+      case "closeout_wizard": return "Refresh wizard";
+      case "proof_handoff": return "Run proof handoff";
+      case "preview_or_save_proof_links": return "Preview links first";
+      case "apply_closeout_with_confirmation": return "Apply stays guarded";
+      default: return "Refresh wizard";
+    }
+  };
+  const runTikTokMvpOperatorButton = (button?: string) => {
+    switch (button) {
+      case "quick_fill":
+        tiktokMvpProofQuickFillMutation.mutate();
+        break;
+      case "import_preview":
+        tiktokMvpProofIntakeImportPreviewMutation.mutate();
+        break;
+      case "closeout_preview":
+        tiktokMvpEvidenceCloseoutPreviewMutation.mutate();
+        break;
+      case "local_verification":
+        tiktokMvpLocalVerificationMutation.mutate();
+        break;
+      case "proof_handoff":
+        tiktokMvpProofHandoffMutation.mutate();
+        break;
+      case "closeout_wizard":
+        tiktokMvpCloseoutWizardMutation.mutate();
+        break;
+      case "preview_or_save_proof_links":
+        tiktokMvpProofLinksPreviewMutation.mutate();
+        break;
+      default:
+        tiktokMvpCloseoutWizardMutation.mutate();
+    }
+  };
+  const activeTikTokMvpOperatorButton = tiktokMvpCloseoutWizard?.operatorSession?.recommendedButton || "";
+  const tiktokMvpOperatorButtonDisabled = tiktokProofFlowBusy
+    || isLoading
+    || activeTikTokMvpOperatorButton === "apply_closeout_with_confirmation"
+    || (activeTikTokMvpOperatorButton === "preview_or_save_proof_links" && !tiktokMvpProofLinksText.trim());
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
   const metricoolBridgeEvidenceCurrentPreview = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
     ? metricoolBridgeEvidenceBatchPreview.result
@@ -17516,6 +17561,18 @@ export default function ClippersPage() {
                       <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-[10px] text-emerald-100">operator {tiktokMvpCloseoutWizard.operatorSession.status}</Badge>
                       <span>next gate {tiktokMvpCloseoutWizard.operatorSession.nextGateId || "none"}</span>
                       <span>button {tiktokMvpCloseoutWizard.operatorSession.recommendedButton}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runTikTokMvpOperatorButton(tiktokMvpCloseoutWizard.operatorSession?.recommendedButton)}
+                        disabled={tiktokMvpOperatorButtonDisabled}
+                        className="h-7 border-emerald-300/20 bg-transparent px-2 text-[10px] text-emerald-100 hover:bg-emerald-300/10"
+                        data-testid="run-clippers-tiktok-mvp-operator-recommended-button"
+                      >
+                        {tiktokProofFlowBusy ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Play className="mr-1.5 h-3 w-3" />}
+                        {getTikTokMvpOperatorButtonLabel(tiktokMvpCloseoutWizard.operatorSession.recommendedButton)}
+                      </Button>
                     </div>
                     <p className="mt-1 text-emerald-100/80">{tiktokMvpCloseoutWizard.operatorSession.nextAction}</p>
                     <p className="mt-1 whitespace-pre-wrap text-zinc-500">{tiktokMvpCloseoutWizard.operatorSession.copyPacket}</p>
