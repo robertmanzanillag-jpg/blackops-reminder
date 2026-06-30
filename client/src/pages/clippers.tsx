@@ -2299,6 +2299,31 @@ interface ClipperTikTokMvpProofLinksSummary {
   };
 }
 
+interface ClipperTikTokMvpProofLinksPreviewSummary {
+  status: "blocked" | "ready_for_proof_drop";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  readyForProofDrop: boolean;
+  lanes: Array<{
+    key: string;
+    accountName: string;
+    handle: string;
+    metricoolBrandName: string;
+    accountProofReady: boolean;
+    metricoolProofReady: boolean;
+    accountNotesReady: boolean;
+    metricoolNotesReady: boolean;
+    issues: string[];
+    readyForProofDrop: boolean;
+  }>;
+  issues: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -10010,6 +10035,7 @@ export default function ClippersPage() {
   const [tiktokMvpProofQuickFillText, setTiktokMvpProofQuickFillText] = useState(tiktokMvpProofQuickFillTemplate);
   const [tiktokMvpProofLinksText, setTiktokMvpProofLinksText] = useState("");
   const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
+  const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -11020,6 +11046,30 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude guardar proof links", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofLinksPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-tiktok-mvp-proof-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proofLinksText: tiktokMvpProofLinksText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude revisar TikTok MVP proof links");
+      return data.tiktokMvpProofLinksPreview as ClipperTikTokMvpProofLinksPreviewSummary;
+    },
+    onSuccess: (data) => {
+      setTiktokMvpProofLinksPreview(data);
+      toast({
+        title: data.readyForProofDrop ? "Proof links validos" : "Proof links con blockers",
+        description: data.nextStep,
+        variant: data.readyForProofDrop ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude revisar proof links", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15742,6 +15792,7 @@ export default function ClippersPage() {
   ];
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
+    || tiktokMvpProofLinksPreviewMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofHandoffMutation.isPending
     || tiktokMvpProofDoctorMutation.isPending
@@ -17152,6 +17203,18 @@ export default function ClippersPage() {
                       <Button
                         type="button"
                         size="sm"
+                        variant="outline"
+                        onClick={() => tiktokMvpProofLinksPreviewMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim()}
+                        className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                        data-testid="preview-clippers-tiktok-mvp-proof-links-button"
+                      >
+                        {tiktokMvpProofLinksPreviewMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
+                        Preview links
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
                         onClick={() => tiktokMvpProofLinksSaveMutation.mutate()}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim()}
                         className="h-8 bg-sky-200 text-zinc-950 hover:bg-sky-100"
@@ -17169,6 +17232,35 @@ export default function ClippersPage() {
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
                   />
                   <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Do not paste passwords, tokens, cookies, recovery codes, or private keys.</p>
+                  {tiktokMvpProofLinksPreview && (
+                    <div className={cn(
+                      "mt-2 rounded-md border bg-black/20 p-2",
+                      tiktokMvpProofLinksPreview.readyForProofDrop
+                        ? "border-emerald-300/15 text-emerald-100/80"
+                        : "border-amber-300/15 text-amber-100/80"
+                    )} data-testid="clippers-tiktok-mvp-proof-links-preview-panel">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          tiktokMvpProofLinksPreview.readyForProofDrop
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>preview {tiktokMvpProofLinksPreview.status}</Badge>
+                        <span>{tiktokMvpProofLinksPreview.issues.length} issues</span>
+                        <span>real publish {tiktokMvpProofLinksPreview.realPublishEnabled ? "enabled" : "disabled"}</span>
+                      </div>
+                      <p className="mt-1">{tiktokMvpProofLinksPreview.issues[0] || tiktokMvpProofLinksPreview.nextStep}</p>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-preview-lanes">
+                        {tiktokMvpProofLinksPreview.lanes.map((lane) => (
+                          <div key={lane.key} className="rounded border border-amber-300/10 bg-black/20 p-2">
+                            <p className="font-medium text-sky-100">{lane.accountName}</p>
+                            <p className="mt-1 text-zinc-400">Account {lane.accountProofReady ? "ready" : "blocked"} / Metricool {lane.metricoolProofReady ? "ready" : "blocked"}</p>
+                            {lane.issues[0] && <p className="mt-1 text-amber-100/80">{lane.issues[0]}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

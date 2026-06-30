@@ -392,6 +392,30 @@ export async function registerRoutes(
     return { path: "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json", raw, parsed: JSON.parse(raw) };
   };
   const containsClipperSecretLikeText = (value: unknown) => /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || ""));
+  const hasClipperProofPlaceholder = (value: unknown) => /<|>|paste|placeholder|replace this|example\.com|not-real|not-metricool|todo|tbd/i.test(String(value || ""));
+  const safeClipperHttpsProofUrl = (value: unknown) => {
+    const text = String(value || "").trim();
+    if (!text || hasClipperProofPlaceholder(text) || containsClipperSecretLikeText(text)) return false;
+    try {
+      const parsed = new URL(text);
+      return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+    } catch {
+      return false;
+    }
+  };
+  const safeClipperMetricoolProofUrl = (value: unknown) => {
+    if (!safeClipperHttpsProofUrl(value)) return false;
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return /(^|\.)metricool\.com$/i.test(parsed.hostname);
+    } catch {
+      return false;
+    }
+  };
+  const validClipperProofNotes = (value: unknown, pattern: RegExp) => {
+    const text = String(value || "").trim();
+    return text.length >= 20 && !hasClipperProofPlaceholder(text) && !containsClipperSecretLikeText(text) && pattern.test(text);
+  };
   const validateClipperTikTokMvpProofLinks = (value: any) => {
     const raw = JSON.stringify(value);
     if (!value || typeof value !== "object" || Array.isArray(value)) return "proof-links must be a JSON object";
@@ -405,6 +429,54 @@ export async function registerRoutes(
       }
     }
     return "";
+  };
+  const auditClipperTikTokMvpProofLinks = (value: any) => {
+    const structureError = validateClipperTikTokMvpProofLinks(value);
+    const laneSpecs = [
+      { key: "sports-daily:tiktok", accountName: "Sports Daily Clips", handle: "@sportsdaily", metricoolBrandName: "SPORT" },
+      { key: "meme-radar:tiktok", accountName: "Meme Radar", handle: "@memeradar", metricoolBrandName: "memes" },
+    ];
+    const lanes = laneSpecs.map((spec) => {
+      const lane = value?.lanes?.[spec.key] || {};
+      const issues = [
+        safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl) ? null : "accountOwnershipProofUrl must be a real safe HTTPS proof URL",
+        safeClipperMetricoolProofUrl(lane.metricoolConnectionProofUrl) ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com proof URL",
+        validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i) ? null : "accountNotes must be 20+ chars and mention ownership/security proof",
+        validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i) ? null : "metricoolNotes must be 20+ chars and mention Metricool connection proof",
+      ].filter(Boolean);
+      return {
+        ...spec,
+        accountProofReady: safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl),
+        metricoolProofReady: safeClipperMetricoolProofUrl(lane.metricoolConnectionProofUrl),
+        accountNotesReady: validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i),
+        metricoolNotesReady: validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i),
+        issues,
+        readyForProofDrop: issues.length === 0,
+      };
+    });
+    const issues = [
+      structureError || null,
+      ...lanes.flatMap((lane) => lane.issues.map((issue) => `${lane.key}: ${issue}`)),
+    ].filter(Boolean);
+    return {
+      status: issues.length ? "blocked" : "ready_for_proof_drop",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      readyForProofDrop: issues.length === 0,
+      lanes,
+      issues,
+      guardrails: [
+        "This preview does not write proof-links.json.",
+        "This preview never applies evidence, schedules posts, or publishes.",
+        "Metricool remains approval_required and realPublishEnabled remains false.",
+      ],
+      nextStep: issues.length
+        ? "Fix the listed proof-link issues before saving and running Proof drop."
+        : "Save proof links, then run Proof handoff/import preview. Do not apply until closeout preview is ready.",
+    };
   };
   const readClipperTikTokMvpProofDoctor = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-doctor.json", "utf8");
@@ -2755,6 +2827,15 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof drop kit" });
+    }
+  });
+
+  app.post("/api/clippers/preview-tiktok-mvp-proof-links", async (req, res) => {
+    try {
+      const parsed = typeof req.body?.proofLinksText === "string" ? JSON.parse(req.body.proofLinksText) : req.body?.proofLinks;
+      res.json({ tiktokMvpProofLinksPreview: auditClipperTikTokMvpProofLinks(parsed) });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview TikTok MVP proof links" });
     }
   });
 
