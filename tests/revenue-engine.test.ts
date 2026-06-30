@@ -38,6 +38,7 @@ import {
   recordRevenueOutreachOutcome,
   recordRevenuePublicLeadCandidate,
   recordRevenuePublicLeadCandidateBatch,
+  recordRevenuePublicScoutEvidence,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   revenueDeliveryWorkspaceGithubHandoffSchema,
@@ -489,6 +490,90 @@ test("rejects string false values for public lead candidate batch approval gates
 
   assert.equal(getRevenueEngineSnapshot().recentPublicLeadCandidates.length, 0);
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
+});
+
+test("normalizes public scout evidence into candidates without creating leads", () => {
+  const result = recordRevenuePublicScoutEvidence({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Evidence Intake Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @evidenceintakecafe",
+      "Email: owner@evidenceintake.example",
+      "Source: https://instagram.com/evidenceintakecafe",
+      "Evidence: Public Instagram bio has no dedicated website and menu only appears in posts.",
+      "Pain: Needs online menu, catering inquiries and automated follow-up.",
+      "",
+      "Business: Evidence Intake Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @newhandle",
+      "Email: owner@evidenceintake.example",
+      "Source: https://instagram.com/evidenceintakecafe",
+      "Evidence: Same public source was checked again with a normalized contact value.",
+      "Pain: Needs online menu, catering inquiries and automated follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 4200,
+    maxCandidates: 10,
+  });
+
+  assert.equal(result.status, "ready_for_preview");
+  assert.equal(result.parsedCount, 2);
+  assert.equal(result.recordedCount, 1);
+  assert.equal(result.importableCount, 1);
+  assert.match(result.normalizedBatchText, /Evidence Intake Cafe/);
+  assert.equal(result.safety.persistsCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+  assert.equal(result.snapshot.recentPublicLeadCandidates.length, 1);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("blocks public scout evidence from private or local source urls", () => {
+  const privateSources = [
+    "http://localhost:5173/internal-source-cafe",
+    "http://[::1]/internal-source-cafe",
+    "http://169.254.169.254/latest/meta-data",
+    "http://[fd00::1]/internal-source-cafe",
+    "http://[fe80::1]/internal-source-cafe",
+    "http://intranet/internal-source-cafe",
+  ];
+
+  for (const [index, sourceUrl] of privateSources.entries()) {
+    const result = recordRevenuePublicScoutEvidence({
+      area: "Miami",
+      niche: "coffee shop",
+      evidenceText: [
+        `Business: Internal Source Cafe ${index + 1}`,
+        "Website: no website",
+        `Contact: owner${index + 1}@internalsource.example`,
+        `Source: ${sourceUrl}`,
+        "Evidence: Public-looking note pasted from an internal development URL.",
+        "Pain: Needs online menu and lead capture.",
+      ].join("\n"),
+      verificationStatus: "verified_public",
+      publicEvidenceVerified: true,
+      approvalToImport: true,
+      defaultOfferUsd: 4200,
+    });
+
+    assert.equal(result.status, "needs_review");
+    assert.equal(result.importableCount, 0);
+    assert.equal(result.blockedCount, 1);
+    assert.match(result.blockedSeeds[0].reason, /sourceUrl must be public/);
+    assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+    assert.equal(result.snapshot.publicLeadImportQueue.blockedCount, index + 1);
+    assert.equal(result.snapshot.recentLeads.length, 0);
+  }
 });
 
 test("runs money sprint from verified public candidates without copy paste or outreach send", () => {

@@ -1088,6 +1088,11 @@ type RevenuePublicLeadCandidateBatchResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenuePublicScoutEvidenceResult = RevenuePublicLeadCandidateBatchResult & {
+  normalizedBatchText: string;
+  parsedCount: number;
+};
+
 type RevenuePublicCandidateSprintResult = {
   status: "started" | "blocked" | "needs_spend_approval";
   reason: string;
@@ -1558,6 +1563,7 @@ export default function RevenueEnginePage() {
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
   const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
   const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
+  const [publicScoutEvidenceText, setPublicScoutEvidenceText] = useState("");
   const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
   const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
@@ -2542,6 +2548,34 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicScoutEvidenceMutation = useMutation<RevenuePublicScoutEvidenceResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-scout-evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: scoutingArea,
+          niche: scoutingNiche,
+          evidenceText: publicScoutEvidenceText,
+          sourceTaskId: "ui-scout-evidence",
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          defaultOfferUsd: leadEstimatedOfferUsd,
+          maxCandidates: Math.min(scoutingTargetLeadCount, 50),
+          notes: "Normalized from Revenue Engine public scout evidence UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo normalizar evidencia publica");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.normalizedBatchText);
       refetchSnapshot();
     },
   });
@@ -3625,6 +3659,29 @@ export default function RevenueEnginePage() {
                           data-testid="textarea-seed-lead-batch"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-evidence">
+                          Evidencia publica scout
+                        </label>
+                        <Textarea
+                          id="public-scout-evidence"
+                          value={publicScoutEvidenceText}
+                          onChange={(event) => setPublicScoutEvidenceText(event.target.value)}
+                          className="min-h-[150px] border-zinc-800 bg-black"
+                          placeholder={"Business: No Site Cafe\nArea: Miami\nNiche: coffee shop\nWebsite: no website\nContact: @nositecafe\nEmail: owner@example.com\nSource: https://instagram.com/nositecafe\nEvidence: Instagram activo, no website en bio, menu solo en posts publicos.\nPain: Necesita menu online, captura de catering y follow-up."}
+                          data-testid="textarea-public-scout-evidence"
+                        />
+                        <Button
+                          type="button"
+                          disabled={publicScoutEvidenceMutation.isPending || publicScoutEvidenceText.trim().length < 10}
+                          onClick={() => publicScoutEvidenceMutation.mutate()}
+                          className="w-full bg-cyan-700 text-white hover:bg-cyan-600"
+                          data-testid="button-normalize-public-scout-evidence"
+                        >
+                          {publicScoutEvidenceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                          Normalizar evidencia publica
+                        </Button>
+                      </div>
                       <Button
                         type="submit"
                         disabled={scoutingMissionMutation.isPending}
@@ -4272,6 +4329,28 @@ export default function RevenueEnginePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {publicScoutEvidenceMutation.data && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-cyan-100">{publicScoutEvidenceMutation.data.nextAction}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutEvidenceMutation.data.status), "shrink-0")}>
+                          {publicScoutEvidenceMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutEvidenceMutation.data.parsedCount} detectados · {publicScoutEvidenceMutation.data.recordedCount} guardados · {publicScoutEvidenceMutation.data.importableCount} listos · {publicScoutEvidenceMutation.data.blockedCount} bloqueados
+                      </p>
+                      {publicScoutEvidenceMutation.data.blockedSeeds.length > 0 && (
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {publicScoutEvidenceMutation.data.blockedSeeds.slice(0, 4).map((seed) => (
+                            <div key={`${seed.businessName}-${seed.reason}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                              {seed.businessName}: {seed.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {publicLeadCandidateBatchMutation.data && (
                     <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

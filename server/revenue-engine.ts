@@ -447,6 +447,22 @@ export const revenuePublicLeadCandidateBatchSchema = z.object({
 
 export type RevenuePublicLeadCandidateBatchInput = z.infer<typeof revenuePublicLeadCandidateBatchSchema>;
 
+export const revenuePublicScoutEvidenceSchema = z.object({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("med spas"),
+  evidenceText: z.string().trim().min(10).max(30000),
+  missionId: z.string().trim().max(160).optional().default(""),
+  sourceTaskId: z.string().trim().max(160).optional().default("scout-evidence"),
+  verificationStatus: z.enum(["needs_review", "verified_public"]).default("needs_review"),
+  publicEvidenceVerified: z.boolean().default(false),
+  approvalToImport: z.boolean().default(false),
+  defaultOfferUsd: z.coerce.number().min(1500).max(100000).default(3500),
+  maxCandidates: z.coerce.number().int().min(1).max(50).default(25),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenuePublicScoutEvidenceInput = z.infer<typeof revenuePublicScoutEvidenceSchema>;
+
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
   targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
@@ -4019,6 +4035,165 @@ function revenueCandidateBatchRow(candidate: RevenuePublicLeadCandidateInput) {
   ].map(revenueBatchCell).join("|");
 }
 
+function isRevenuePublicSourceUrl(sourceUrl: string) {
+  if (!sourceUrl.trim()) return false;
+  try {
+    const parsed = new URL(sourceUrl);
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    if (!hostname.includes(".") && !hostname.includes(":")) return false;
+    if (hostname === "localhost" || hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
+    if (/^127\./.test(hostname) || /^10\./.test(hostname) || /^192\.168\./.test(hostname)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+    if (/^169\.254\./.test(hostname)) return false;
+    if (hostname === "0.0.0.0" || hostname === "::1") return false;
+    if (/^(fc|fd)[0-9a-f]{2}:/i.test(hostname) || /^fe[89ab][0-9a-f]?:/i.test(hostname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function splitRevenuePublicScoutEvidenceBlocks(evidenceText: string) {
+  const normalized = evidenceText
+    .replace(/\r/g, "")
+    .replace(/\n-{3,}\n/g, "\n\n");
+  const blocks = normalized
+    .split(/\n\s*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  if (blocks.length > 1) return blocks;
+
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  const grouped: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    if (/^(business|business name|negocio|name|nombre)\s*[:=-]/i.test(line) && current.length > 0) {
+      grouped.push(current.join("\n"));
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) grouped.push(current.join("\n"));
+  return grouped.length > 0 ? grouped : [evidenceText.trim()];
+}
+
+function findRevenueScoutField(block: string, aliases: string[]) {
+  const aliasPattern = aliases.map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const match = block.match(new RegExp(`^(?:${aliasPattern})\\s*[:=-]\\s*(.+)$`, "im"));
+  return match?.[1]?.trim() || "";
+}
+
+function findRevenueScoutUrl(block: string) {
+  const explicit = findRevenueScoutField(block, ["source", "source url", "sourceUrl", "fuente", "url", "link"]);
+  const source = explicit || block.match(/https?:\/\/[^\s)]+/i)?.[0] || "";
+  return source.replace(/[.,;]+$/g, "");
+}
+
+function findRevenueScoutEmail(block: string) {
+  return block.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+}
+
+function normalizeRevenueScoutWebsiteStatus(value: string, block: string): RevenueLeadInput["websiteStatus"] {
+  const text = `${value} ${block}`.toLowerCase();
+  if (/\b(no website|without website|sin website|no dedicated website|no site|no_website)\b/.test(text)) return "no_website";
+  if (/\b(weak website|bad website|broken website|outdated website|slow website|website debil|weak_website)\b/.test(text)) return "weak_website";
+  if (/\b(has website|existing website|tiene website|has_website)\b/.test(text)) return "has_website";
+  return "unknown";
+}
+
+function normalizeRevenueScoutContactChannel(value: string, block: string): RevenueLeadInput["contactChannel"] {
+  const text = `${value} ${block}`.toLowerCase();
+  if (findRevenueScoutEmail(text)) return "email";
+  if (/\b(instagram|ig)\b|@[a-z0-9_.]{2,}/i.test(value || block)) return "instagram";
+  if (/\b(contact form|formulario)\b/.test(text)) return "contact_form";
+  if (/\b(phone|telefono|teléfono)\b|\+?\d[\d\s().-]{7,}/.test(text)) return "phone";
+  return "unknown";
+}
+
+function normalizeRevenueScoutContactValue(channel: RevenueLeadInput["contactChannel"], value: string, block: string) {
+  if (channel === "email") return findRevenueScoutEmail(value) || findRevenueScoutEmail(block);
+  if (channel === "instagram") return value.match(/@[A-Za-z0-9_.]{2,}/)?.[0] || block.match(/@[A-Za-z0-9_.]{2,}/)?.[0] || value;
+  if (channel === "phone") return value.match(/\+?\d[\d\s().-]{7,}/)?.[0]?.trim() || block.match(/\+?\d[\d\s().-]{7,}/)?.[0]?.trim() || value;
+  return value;
+}
+
+function normalizeRevenueScoutMoney(value: string, fallback: number) {
+  const match = value.match(/\d[\d,]*/);
+  if (!match) return fallback;
+  const amount = Number(match[0].replace(/,/g, ""));
+  return Number.isFinite(amount) && amount >= 1500 ? amount : fallback;
+}
+
+function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput) {
+  const parsed = revenuePublicScoutEvidenceSchema.parse(input);
+  const blocks = splitRevenuePublicScoutEvidenceBlocks(parsed.evidenceText).slice(0, parsed.maxCandidates);
+  const candidates: RevenuePublicLeadCandidateInput[] = [];
+  const blockedSeeds: Array<{ businessName: string; reason: string }> = [];
+
+  for (const [index, block] of blocks.entries()) {
+    const businessName = findRevenueScoutField(block, ["business", "business name", "negocio", "name", "nombre"]);
+    const sourceUrl = findRevenueScoutUrl(block);
+    const explicitContact = findRevenueScoutField(block, ["contact", "contact value", "contacto", "email", "instagram", "phone", "telefono", "teléfono"]);
+    const contactChannel = normalizeRevenueScoutContactChannel(explicitContact, block);
+    const contactValue = normalizeRevenueScoutContactValue(contactChannel, explicitContact, block);
+    const recipientEmail = findRevenueScoutField(block, ["recipientEmail", "recipient email", "email", "owner email"]) || findRevenueScoutEmail(block);
+    const websiteStatus = normalizeRevenueScoutWebsiteStatus(findRevenueScoutField(block, ["website", "website status", "site", "status"]), block);
+    const evidence = findRevenueScoutField(block, ["evidence", "public evidence", "evidencia", "proof"]) || block.split("\n").slice(0, 4).join(" ");
+    const painPoint = findRevenueScoutField(block, ["pain", "pain point", "painPoint", "need", "needs", "necesidad"]) || (
+      websiteStatus === "no_website" || websiteStatus === "weak_website"
+        ? "Needs a stronger website, lead capture and follow-up."
+        : "Needs review before a website offer."
+    );
+    const area = findRevenueScoutField(block, ["area", "city", "ciudad"]) || parsed.area;
+    const niche = findRevenueScoutField(block, ["niche", "industry", "industria", "vertical"]) || parsed.niche;
+    const contactName = findRevenueScoutField(block, ["contact name", "contactName", "owner", "owner name", "nombre contacto"]) || "Owner";
+    const businessSummary = findRevenueScoutField(block, ["summary", "business summary", "resumen"]) || `${businessName || "Candidate"} has public scouting evidence for a website offer.`;
+    const estimatedOfferUsd = normalizeRevenueScoutMoney(findRevenueScoutField(block, ["offer", "estimated offer", "price", "precio"]), parsed.defaultOfferUsd);
+    const missing = [
+      !businessName && "business name",
+      !sourceUrl && "sourceUrl publico",
+      evidence.trim().length < 12 && "evidencia publica revisable",
+      contactChannel === "unknown" && "contacto verificable",
+      contactValue.trim().length < 3 && "contact value",
+    ].filter(Boolean) as string[];
+
+    if (missing.length > 0) {
+      blockedSeeds.push({
+        businessName: businessName || `scout-block-${index + 1}`,
+        reason: missing.join("; "),
+      });
+      continue;
+    }
+
+    candidates.push({
+      businessName,
+      area,
+      niche,
+      websiteStatus,
+      contactChannel,
+      contactValue,
+      sourceUrl,
+      recipientEmail,
+      evidence,
+      painPoint,
+      estimatedOfferUsd,
+      status: "research",
+      contactName,
+      businessSummary,
+      missionId: parsed.missionId,
+      sourceTaskId: `${parsed.sourceTaskId || "scout-evidence"}-${index + 1}`,
+      verificationStatus: parsed.verificationStatus,
+      publicEvidenceVerified: parsed.publicEvidenceVerified,
+      approvalToImport: parsed.approvalToImport,
+      notes: parsed.notes || "Normalized from public scouting evidence intake.",
+    });
+  }
+
+  return { parsed, candidates, blockedSeeds };
+}
+
 export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandidateInput) {
   loadRevenuePublicLeadCandidates();
   const parsed = revenuePublicLeadCandidateSchema.parse(input);
@@ -4028,6 +4203,7 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     !parsed.publicEvidenceVerified && "public evidence not verified",
     !parsed.approvalToImport && "approvalToImport false",
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
+    parsed.sourceUrl.trim().length > 0 && !isRevenuePublicSourceUrl(parsed.sourceUrl) && "sourceUrl must be public",
     parsed.recipientEmail.trim().length === 0 && "recipientEmail",
     ...qualification.missing,
   ].filter((item): item is string => Boolean(item));
@@ -4036,7 +4212,10 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
   const existingIndex = revenuePublicLeadCandidates.findIndex((candidate) =>
     candidate.businessName.toLowerCase() === parsed.businessName.toLowerCase()
     && candidate.area.toLowerCase() === parsed.area.toLowerCase()
-    && candidate.contactValue.toLowerCase() === parsed.contactValue.toLowerCase(),
+    && (
+      candidate.contactValue.toLowerCase() === parsed.contactValue.toLowerCase()
+      || (candidate.sourceUrl.trim().length > 0 && candidate.sourceUrl.toLowerCase() === parsed.sourceUrl.toLowerCase())
+    ),
   );
   const candidate: RevenuePublicLeadCandidate = {
     ...parsed,
@@ -4130,6 +4309,58 @@ export function recordRevenuePublicLeadCandidateBatch(input: RevenuePublicLeadCa
     nextAction: recorded.some((item) => item.candidate.importReady)
       ? "Review publicLeadImportQueue, then run Money Sprint with verified candidates."
       : "Fix blocked rows or approve verified public evidence before Money Sprint.",
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput) {
+  const { parsed, candidates, blockedSeeds } = parseRevenuePublicScoutEvidence(input);
+  const recorded = candidates.map((candidate) => recordRevenuePublicLeadCandidate(candidate));
+  const uniqueRecorded = Array.from(new Map(recorded.map((item) => [item.candidate.id, item])).values());
+
+  return {
+    status: uniqueRecorded.some((item) => item.status === "ready_for_preview")
+      ? "ready_for_preview" as const
+      : blockedSeeds.length > 0 || uniqueRecorded.length > 0
+        ? "needs_review" as const
+        : "empty" as const,
+    normalizedBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      ...candidates.map((candidate) => revenueCandidateBatchRow(candidate)),
+    ].join("\n"),
+    parsedCount: candidates.length + blockedSeeds.length,
+    recordedCount: uniqueRecorded.length,
+    importableCount: uniqueRecorded.filter((item) => item.candidate.importReady).length,
+    blockedCount: blockedSeeds.length + uniqueRecorded.filter((item) => !item.candidate.importReady).length,
+    recorded: uniqueRecorded.map((item) => ({
+      status: item.status,
+      candidate: item.candidate,
+      nextAction: item.nextAction,
+    })),
+    blockedSeeds: [
+      ...blockedSeeds,
+      ...uniqueRecorded
+        .filter((item) => !item.candidate.importReady)
+        .map((item) => ({
+          businessName: item.candidate.businessName,
+          reason: item.candidate.blockedReasons.join("; ") || "candidate needs review",
+        })),
+    ],
+    safety: {
+      persistsCandidates: uniqueRecorded.length > 0,
+      persistsLeads: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      writesPreviewFiles: false,
+      requiresPublicEvidence: true,
+      source: "operator_or_subagent_public_evidence",
+      blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+    },
+    nextAction: uniqueRecorded.some((item) => item.candidate.importReady)
+      ? "Run Money Sprint with verified public candidates; do not contact until outreach approval."
+      : parsed.publicEvidenceVerified && parsed.approvalToImport
+        ? "Fix blocked evidence fields before Money Sprint."
+        : "Review normalized candidates, verify public evidence, then approve import.",
     snapshot: getRevenueEngineSnapshot(),
   };
 }

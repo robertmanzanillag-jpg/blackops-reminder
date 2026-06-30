@@ -71,6 +71,22 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
 });
 
+test("Revenue Engine exposes public scout evidence intake", () => {
+  const routeSource = readFileSync("server/routes.ts", "utf8");
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
+
+  assert.match(engineSource, /recordRevenuePublicScoutEvidence/);
+  assert.match(engineSource, /sourceUrl must be public/);
+  assert.match(routeSource, /\/api\/revenue-engine\/public-scout-evidence/);
+  assert.match(routeSource, /revenuePublicScoutEvidenceSchema\.parse/);
+  assert.match(uiSource, /publicScoutEvidenceMutation/);
+  assert.match(uiSource, /textarea-public-scout-evidence/);
+  assert.match(uiSource, /button-normalize-public-scout-evidence/);
+  assert.match(uiSource, /const \[publicScoutEvidenceText, setPublicScoutEvidenceText\] = useState\(""\)/);
+  assert.doesNotMatch(uiSource, /useState\(\[\s*"Business: No Site Cafe"/);
+});
+
 test("Revenue Engine exposes manual outreach outcome recording", () => {
   const routeSource = readFileSync("server/routes.ts", "utf8");
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
