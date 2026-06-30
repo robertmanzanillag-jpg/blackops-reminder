@@ -578,7 +578,9 @@ type RevenueSnapshot = {
       githubIssueUrl: string;
       prUrl: string;
       secondReviewStatus: "pending" | "pass" | "blocked";
+      secondReviewEvidenceUrl: string;
       appQaStatus: "pending" | "pass" | "blocked";
+      appQaEvidenceUrl: string;
       deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
       deploymentApprovalUrl: string;
       visualQaPassed: boolean;
@@ -598,7 +600,9 @@ type RevenueSnapshot = {
       githubIssueUrl: string;
       prUrl: string;
       secondReviewStatus: "pending" | "pass" | "blocked";
+      secondReviewEvidenceUrl: string;
       appQaStatus: "pending" | "pass" | "blocked";
+      appQaEvidenceUrl: string;
       deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
       deploymentApprovalUrl: string;
       title: string;
@@ -1633,6 +1637,13 @@ export default function RevenueEnginePage() {
     rollbackPlanReady: false,
   });
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
+  const [releasePrUrl, setReleasePrUrl] = useState("");
+  const [releaseSecondReviewEvidenceUrl, setReleaseSecondReviewEvidenceUrl] = useState("");
+  const [releaseAppQaEvidenceUrl, setReleaseAppQaEvidenceUrl] = useState("");
+  const [releaseDeploymentApprovalUrl, setReleaseDeploymentApprovalUrl] = useState("");
+  const [releaseSecondReviewPassed, setReleaseSecondReviewPassed] = useState(false);
+  const [releaseAppQaPassed, setReleaseAppQaPassed] = useState(false);
+  const [releaseRobertApprovedDeploy, setReleaseRobertApprovedDeploy] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
   const [proposalRecipientEmail, setProposalRecipientEmail] = useState("robert.manzanillag@gmail.com");
   const [proposalContactName, setProposalContactName] = useState("Robert");
@@ -2230,6 +2241,35 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const deliveryWorkspaceReleaseGateMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/release-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...buildDeliveryWorkspaceQaPayload(workspace, reviewChecks),
+          repoFullName: reviewRepoFullName || workspace.input.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          githubIssueUrl: workspace.input.githubIssueUrl,
+          prUrl: releasePrUrl || workspace.input.prUrl,
+          secondReviewStatus: releaseSecondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+          secondReviewEvidenceUrl: releaseSecondReviewEvidenceUrl,
+          appQaStatus: releaseAppQaPassed ? "pass" : workspace.input.appQaStatus,
+          appQaEvidenceUrl: releaseAppQaEvidenceUrl,
+          deploymentApprovalStatus: releaseRobertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
+          deploymentApprovalUrl: releaseDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl,
+          notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${workspace.input.branchName || workspace.codexBuildHandoff.branchName}, client ${workspace.input.clientName}. second review=${releaseSecondReviewPassed ? "pass" : "pending"} app qa=${releaseAppQaPassed ? "pass" : "pending"} Robert approval=${releaseRobertApprovedDeploy ? "approved" : "pending"}.`,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo registrar release gate");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
   const deliveryWorkspaceGithubHandoffMutation = useMutation<DeliveryWorkspaceGithubHandoffResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
     mutationFn: async (workspace) => {
       const response = await fetch("/api/revenue-engine/delivery-workspaces/github-handoff", {
@@ -2252,7 +2292,7 @@ export default function RevenueEnginePage() {
 
   const deliveryWorkspaceDeliverMutation = useMutation<DeliveryWorkspaceDeliverResult, Error, string>({
     mutationFn: async (workspaceId) => {
-      const response = await fetch("/api/revenue-engine/delivery-workspaces/deliver", {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/trusted-deliver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -6553,6 +6593,81 @@ export default function RevenueEnginePage() {
                             data-testid="input-review-repo"
                           />
                         </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-pr-url">
+                              PR URL
+                            </label>
+                            <Input
+                              id="release-pr-url"
+                              value={releasePrUrl}
+                              onChange={(event) => setReleasePrUrl(event.target.value)}
+                              placeholder="https://github.com/owner/repo/pull/1"
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-release-pr-url"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-approval-url">
+                              Approval URL
+                            </label>
+                            <Input
+                              id="release-approval-url"
+                              value={releaseDeploymentApprovalUrl}
+                              onChange={(event) => setReleaseDeploymentApprovalUrl(event.target.value)}
+                              placeholder="PR comment with Robert approval"
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-release-approval-url"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-second-review-url">
+                              Second review URL
+                            </label>
+                            <Input
+                              id="release-second-review-url"
+                              value={releaseSecondReviewEvidenceUrl}
+                              onChange={(event) => setReleaseSecondReviewEvidenceUrl(event.target.value)}
+                              placeholder="PR review/comment URL"
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-release-second-review-url"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-app-qa-url">
+                              App QA URL
+                            </label>
+                            <Input
+                              id="release-app-qa-url"
+                              value={releaseAppQaEvidenceUrl}
+                              onChange={(event) => setReleaseAppQaEvidenceUrl(event.target.value)}
+                              placeholder="PR comment with App QA pass"
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-release-app-qa-url"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          {[
+                            ["second-review", "Second review pass", releaseSecondReviewPassed, setReleaseSecondReviewPassed],
+                            ["app-qa", "App QA pass", releaseAppQaPassed, setReleaseAppQaPassed],
+                            ["robert-approval", "Robert approved", releaseRobertApprovedDeploy, setReleaseRobertApprovedDeploy],
+                          ].map(([key, label, checked, setter]) => (
+                            <label
+                              key={String(key)}
+                              className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(checked)}
+                                onChange={() => (setter as (value: boolean) => void)(!checked)}
+                                className="h-4 w-4 rounded border-zinc-700 bg-black"
+                                data-testid={`checkbox-release-${key}`}
+                              />
+                              {String(label)}
+                            </label>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -6747,13 +6862,13 @@ export default function RevenueEnginePage() {
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={websiteDeliveryHandoffMutation.isPending}
+                                  disabled={websiteDeliveryHandoffMutation.isPending || !reviewChecks.depositPaid || !reviewChecks.clientApprovedScope}
                                   onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
                                   className="bg-sky-600 text-white hover:bg-sky-500"
                                   data-testid={`button-create-website-workspace-${item.leadId}`}
                                 >
                                   {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                  Crear workspace
+                                  {reviewChecks.depositPaid && reviewChecks.clientApprovedScope ? "Crear workspace" : "Deposito + scope"}
                                 </Button>
                               </div>
                             </div>
@@ -6920,6 +7035,28 @@ export default function RevenueEnginePage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
+                                disabled={
+                                  deliveryWorkspaceReleaseGateMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !releasePrUrl
+                                  || !releaseSecondReviewEvidenceUrl
+                                  || !releaseAppQaEvidenceUrl
+                                  || !releaseDeploymentApprovalUrl
+                                  || !releaseSecondReviewPassed
+                                  || !releaseAppQaPassed
+                                  || !releaseRobertApprovedDeploy
+                                }
+                                onClick={() => deliveryWorkspaceReleaseGateMutation.mutate(workspace)}
+                                className="mt-2 w-full border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                data-testid={`button-record-release-gate-${workspace.id}`}
+                              >
+                                {deliveryWorkspaceReleaseGateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                Registrar release gate
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
                                 disabled={deliveryWorkspaceDeliverMutation.isPending}
                                 onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace.id)}
                                 className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
@@ -6946,6 +7083,16 @@ export default function RevenueEnginePage() {
                         {deliveryWorkspaceQaMutation.data && deliveryWorkspaceQaMutation.data.status !== "ready" && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
                             {deliveryWorkspaceQaMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspaceReleaseGateMutation.data && deliveryWorkspaceReleaseGateMutation.data.status !== "ready" && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceReleaseGateMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspaceReleaseGateMutation.data?.status === "ready" && (
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100">
+                            Release gate registrado: PR, review, App QA y aprobacion listos para entrega controlada.
                           </div>
                         )}
                         {deliveryWorkspaceGithubHandoffMutation.data?.status === "created" && deliveryWorkspaceGithubHandoffMutation.data.developerHandoff?.issueUrl && (

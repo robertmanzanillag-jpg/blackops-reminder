@@ -42,6 +42,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   const handoffMutation = uiSource.slice(mutationStart, mutationEnd);
 
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/release-gate/);
+  assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input\)/);
+  assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
+  assert.match(routeSource, /deliverRevenueDeliveryWorkspaceFromTrustedApproval\(input\)/);
+  assert.match(routeSource, /getCurrentUserId\(req\)/);
   assert.match(routeSource, /createDeveloperAutopilotHandoffFromRequest/);
   assert.match(routeSource, /kind: "client_build"/);
   assert.match(routeSource, /repo_mismatch/);
@@ -55,6 +60,13 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(routeSource, /updateRevenueDeliveryWorkspaceQa\(\{/);
   assert.doesNotMatch(routeSource, /workspace\.codexBuildHandoff\.codexBrief/);
   assert.match(uiSource, /button-create-github-handoff/);
+  assert.match(uiSource, /deliveryWorkspaceReleaseGateMutation/);
+  assert.match(uiSource, /button-record-release-gate-/);
+  assert.match(uiSource, /input-release-pr-url/);
+  assert.match(uiSource, /input-release-second-review-url/);
+  assert.match(uiSource, /input-release-app-qa-url/);
+  assert.match(uiSource, /releaseRobertApprovedDeploy/);
+  assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);

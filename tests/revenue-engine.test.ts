@@ -30,6 +30,7 @@ import {
   recordRevenueAutomationIntake,
   recordRevenueAutomationOpportunity,
   recordRevenueDeliveryWorkspace,
+  recordRevenueDeliveryReleaseGate,
   recordRevenueDeliveryWorkspaceImprovementReview,
   recordRevenueImprovementReview,
   recordRevenueLead,
@@ -41,8 +42,10 @@ import {
   recordRevenuePublicScoutEvidence,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
   approveRevenueOutreachDraft,
+  deliverRevenueDeliveryWorkspaceFromTrustedApproval,
   runRevenuePublicScoutAgentCommand,
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
@@ -2017,6 +2020,53 @@ test("website delivery handoff blocks incomplete deposits before closing or ledg
   assert.equal(handoff.snapshot.recentLedger.length, 0);
 });
 
+test("website delivery handoff blocks workspace creation before deposit and scope approval", () => {
+  const lead = recordRevenueLead({
+    businessName: "No Deposit Scope Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@nodepositscope.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+    painPoint: "Needs online menu and catering capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@nodepositscope.example",
+    contactName: "Owner",
+    businessName: "No Deposit Scope Cafe",
+    sourceUrl: "https://example.com/no-deposit-scope-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/no-deposit-scope-cafe",
+    businessSummary: "No Deposit Scope Cafe has public evidence of no dedicated website and needs online menu capture.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "bundle",
+    depositPaid: false,
+    scopeApproved: false,
+    cashCollectedUsd: 0,
+    publicDataVerified: true,
+  });
+
+  assert.equal(handoff.status, "blocked");
+  assert.match(handoff.reason, /deposito y scope/);
+  assert.equal(handoff.workspace, null);
+  assert.equal(handoff.snapshot.recentLeads.find((item) => item.id === lead.lead.id)?.status, "outreach_ready");
+  assert.equal(handoff.snapshot.recentDeliveryWorkspaces.length, 0);
+  assert.equal(handoff.snapshot.recentLedger.length, 0);
+});
+
 test("website delivery ledger notes stay bounded before closing state", () => {
   const lead = recordRevenueLead({
     businessName: "Long Notes Cafe",
@@ -2365,6 +2415,158 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
   assert.equal(untrusted.workspace?.approvalSummary.canLaunch, false);
   assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("GitHub handoff issue PR-first"), true);
   assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("pull request de build"), true);
+});
+
+test("trusted release gate persists PR App QA review and deploy approval for website delivery", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Trusted release website",
+    clientName: "Trusted Release Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    repoFullName: "robert/trusted-release-cafe",
+    branchName: "codex/client-trusted-release-cafe-website",
+    githubIssueUrl: "https://github.com/robert/trusted-release-cafe/issues/1",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    prUrl: "https://github.com/robert/trusted-release-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/trusted-release-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/trusted-release-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/trusted-release-cafe/pull/2#issuecomment-approval",
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-release-cafe-website, client Trusted Release Cafe.`,
+  });
+
+  assert.equal(releaseGate.status, "ready");
+  assert.equal(releaseGate.workspace?.input.prUrl, "https://github.com/robert/trusted-release-cafe/pull/2");
+  assert.equal(releaseGate.workspace?.input.secondReviewStatus, "pass");
+  assert.equal(releaseGate.workspace?.input.secondReviewEvidenceUrl, "https://github.com/robert/trusted-release-cafe/pull/2#pullrequestreview-1");
+  assert.equal(releaseGate.workspace?.input.appQaStatus, "pass");
+  assert.equal(releaseGate.workspace?.input.appQaEvidenceUrl, "https://github.com/robert/trusted-release-cafe/pull/2#issuecomment-app-qa");
+  assert.equal(releaseGate.workspace?.input.deploymentApprovalStatus, "approved");
+  assert.equal(releaseGate.workspace?.codexBuildHandoff.missing.length, 0);
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, true);
+  assert.equal(releaseGate.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+});
+
+test("trusted release gate blocks forged or incomplete release evidence", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Forged release website",
+    clientName: "Forged Release Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    repoFullName: "robert/forged-release-cafe",
+    branchName: "codex/client-forged-release-cafe-website",
+    githubIssueUrl: "https://github.com/robert/forged-release-cafe/issues/1",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    prUrl: "https://github.com/attacker/other-repo/pull/2",
+    secondReviewStatus: "pass",
+    appQaStatus: "pass",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/attacker/other-repo/pull/2#issuecomment-approval",
+    notes: "claimed pass",
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /repo del workspace/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.input.secondReviewStatus || "pending", "pending");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
+test("trusted delivery endpoint helper delivers only after trusted release gate approval", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Trusted delivered website",
+    clientName: "Trusted Delivered Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    repoFullName: "robert/trusted-delivered-cafe",
+    branchName: "codex/client-trusted-delivered-cafe-website",
+    githubIssueUrl: "https://github.com/robert/trusted-delivered-cafe/issues/1",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    prUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2#issuecomment-approval",
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-delivered-cafe-website, client Trusted Delivered Cafe.`,
+  });
+
+  const untrustedDelivery = deliverRevenueDeliveryWorkspace({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+  });
+  const trustedDelivery = deliverRevenueDeliveryWorkspaceFromTrustedApproval({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+    notes: "Robert approved final delivery after PR, second review and App QA.",
+  });
+
+  assert.equal(releaseGate.status, "ready");
+  assert.equal(untrustedDelivery.status, "blocked");
+  assert.match(untrustedDelivery.reason, /gate confiable/);
+  assert.equal(trustedDelivery.status, "delivered");
+  assert.equal(trustedDelivery.handoff?.clientName, "Trusted Delivered Cafe");
+  assert.equal(trustedDelivery.workspace?.learningNote.includes("entregado con QA aprobado"), true);
+});
+
+test("trusted delivery rejects string false Robert approval", () => {
+  assert.throws(
+    () => revenueDeliveryWorkspaceDeliverSchema.parse({
+      workspaceId: "delivery-workspace-1",
+      approvedByRobert: "false",
+    }),
+    /Expected boolean/,
+  );
 });
 
 test("money sprint parses pasted lead batches with partial failures", () => {

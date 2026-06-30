@@ -254,7 +254,9 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   githubIssueUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   prUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   secondReviewStatus: z.enum(["pending", "pass", "blocked"]).default("pending"),
+  secondReviewEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   appQaStatus: z.enum(["pending", "pass", "blocked"]).default("pending"),
+  appQaEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).default("not_requested"),
   deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   visualQaPassed: z.coerce.boolean().default(false),
@@ -302,6 +304,8 @@ export const revenueDeliveryWorkspaceUpdateSchema = z.object({
   appQaStatus: z.enum(["pending", "pass", "blocked"]).optional(),
   deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).optional(),
   deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  secondReviewEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  appQaEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
   notes: z.string().trim().max(1200).optional(),
 });
 
@@ -322,7 +326,7 @@ export type RevenueDeliveryWorkspaceGithubHandoffInput = z.infer<typeof revenueD
 
 export const revenueDeliveryWorkspaceDeliverSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
-  approvedByRobert: z.coerce.boolean().default(false),
+  approvedByRobert: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -2996,7 +3000,9 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     githubIssueUrl: "",
     prUrl: "",
     secondReviewStatus: "pending",
+    secondReviewEvidenceUrl: "",
     appQaStatus: "pending",
+    appQaEvidenceUrl: "",
     deploymentApprovalStatus: "not_requested",
     deploymentApprovalUrl: "",
     clientName: opportunity.businessName,
@@ -3110,6 +3116,17 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     "Codex build rule: create a separate branch and PR; do not deploy without Robert approval and App QA.",
   ].filter(Boolean).join("\n");
 
+  if (!depositPaid || !parsed.scopeApproved) {
+    return {
+      status: "blocked" as const,
+      reason: "Confirmar deposito y scope aprobado antes de crear delivery workspace de website.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
   if (depositPaid && parsed.scopeApproved && !cashCollectedCoversDeposit) {
     return {
       status: "blocked" as const,
@@ -3160,7 +3177,9 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     githubIssueUrl: "",
     prUrl: "",
     secondReviewStatus: "pending",
+    secondReviewEvidenceUrl: "",
     appQaStatus: "pending",
+    appQaEvidenceUrl: "",
     deploymentApprovalStatus: "not_requested",
     deploymentApprovalUrl: "",
     clientName: lead.businessName,
@@ -6314,7 +6333,9 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const githubIssueUrl = (input.githubIssueUrl || "").trim();
   const prUrl = (input.prUrl || "").trim();
   const secondReviewStatus = input.secondReviewStatus || "pending";
+  const secondReviewEvidenceUrl = (input.secondReviewEvidenceUrl || "").trim();
   const appQaStatus = input.appQaStatus || "pending";
+  const appQaEvidenceUrl = (input.appQaEvidenceUrl || "").trim();
   const deploymentApprovalStatus = input.deploymentApprovalStatus || "not_requested";
   const deploymentApprovalUrl = (input.deploymentApprovalUrl || "").trim();
   const missing = [
@@ -6367,7 +6388,9 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     githubIssueUrl,
     prUrl,
     secondReviewStatus,
+    secondReviewEvidenceUrl,
     appQaStatus,
+    appQaEvidenceUrl,
     deploymentApprovalStatus,
     deploymentApprovalUrl,
     title,
@@ -6864,7 +6887,9 @@ export function updateRevenueDeliveryWorkspaceQa(
     githubIssueUrl: allowGithubIssueEvidence ? parsed.githubIssueUrl ?? existing.input.githubIssueUrl : existing.input.githubIssueUrl,
     prUrl: allowReleaseGateEvidence ? parsed.prUrl ?? existing.input.prUrl : existing.input.prUrl,
     secondReviewStatus: allowReleaseGateEvidence ? parsed.secondReviewStatus ?? existing.input.secondReviewStatus : existing.input.secondReviewStatus,
+    secondReviewEvidenceUrl: allowReleaseGateEvidence ? parsed.secondReviewEvidenceUrl ?? existing.input.secondReviewEvidenceUrl : existing.input.secondReviewEvidenceUrl,
     appQaStatus: allowReleaseGateEvidence ? parsed.appQaStatus ?? existing.input.appQaStatus : existing.input.appQaStatus,
+    appQaEvidenceUrl: allowReleaseGateEvidence ? parsed.appQaEvidenceUrl ?? existing.input.appQaEvidenceUrl : existing.input.appQaEvidenceUrl,
     deploymentApprovalStatus: allowReleaseGateEvidence ? parsed.deploymentApprovalStatus ?? existing.input.deploymentApprovalStatus : existing.input.deploymentApprovalStatus,
     deploymentApprovalUrl: allowReleaseGateEvidence ? parsed.deploymentApprovalUrl ?? existing.input.deploymentApprovalUrl : existing.input.deploymentApprovalUrl,
     clientRequest: parsed.notes
@@ -6893,6 +6918,100 @@ export function updateRevenueDeliveryWorkspaceQa(
   };
 }
 
+function parseGithubRepoUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (url.hostname !== "github.com" || parts.length < 3) return null;
+    return {
+      owner: parts[0],
+      repo: parts[1],
+      kind: parts[2],
+      number: parts[3] || "",
+      normalizedRepo: `${parts[0]}/${parts[1]}`.toLowerCase(),
+      normalizedPrefix: `/${parts[0]}/${parts[1]}/${parts[2]}/${parts[3] || ""}`.toLowerCase(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isGithubEvidenceForPr(value: string | undefined, prPrefix: string) {
+  if (!value) return false;
+  const parsed = parseGithubRepoUrl(value);
+  return Boolean(parsed && parsed.normalizedPrefix === prPrefix);
+}
+
+function validateRevenueReleaseGateEvidence(
+  workspace: RevenueDeliveryWorkspace,
+  parsed: RevenueDeliveryWorkspaceUpdateInput,
+) {
+  const repoFullName = (parsed.repoFullName || workspace.input.repoFullName || "").trim();
+  const branchName = (parsed.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName || "").trim();
+  const githubIssueUrl = (parsed.githubIssueUrl || workspace.input.githubIssueUrl || "").trim();
+  const prUrl = (parsed.prUrl || workspace.input.prUrl || "").trim();
+  const secondReviewStatus = parsed.secondReviewStatus || workspace.input.secondReviewStatus;
+  const appQaStatus = parsed.appQaStatus || workspace.input.appQaStatus;
+  const deploymentApprovalStatus = parsed.deploymentApprovalStatus || workspace.input.deploymentApprovalStatus;
+  const deploymentApprovalUrl = (parsed.deploymentApprovalUrl || workspace.input.deploymentApprovalUrl || "").trim();
+  const notes = (parsed.notes || "").toLowerCase();
+  const pr = parseGithubRepoUrl(prUrl);
+  const issue = parseGithubRepoUrl(githubIssueUrl);
+  const blockers = [
+    !repoFullName && "repo GitHub requerido",
+    (!pr || pr.kind !== "pull" || !pr.number) && "prUrl debe ser un pull request de GitHub",
+    pr && repoFullName && pr.normalizedRepo !== repoFullName.toLowerCase() && "prUrl debe pertenecer al repo del workspace",
+    (!issue || issue.kind !== "issues" || !issue.number) && "githubIssueUrl debe ser un issue GitHub PR-first",
+    issue && repoFullName && issue.normalizedRepo !== repoFullName.toLowerCase() && "githubIssueUrl debe pertenecer al repo del workspace",
+    !branchName && "branchName requerido para ligar evidencia al build",
+    workspace.input.branchName && branchName !== workspace.input.branchName && "branchName debe coincidir con el workspace",
+    secondReviewStatus !== "pass" && "secondReviewStatus debe ser pass",
+    appQaStatus !== "pass" && "appQaStatus debe ser pass",
+    deploymentApprovalStatus !== "approved" && "deploymentApprovalStatus debe ser approved",
+    !pr || !isGithubEvidenceForPr(parsed.secondReviewEvidenceUrl, pr.normalizedPrefix) && "secondReviewEvidenceUrl debe apuntar al PR o comentario/review del PR",
+    !pr || !isGithubEvidenceForPr(parsed.appQaEvidenceUrl, pr.normalizedPrefix) && "appQaEvidenceUrl debe apuntar al PR o comentario de App QA del PR",
+    !pr || !isGithubEvidenceForPr(deploymentApprovalUrl, pr.normalizedPrefix) && "deploymentApprovalUrl debe apuntar al PR o comentario de aprobacion del PR",
+    !notes.includes("second review") && "notes debe mencionar evidencia de second review",
+    !notes.includes("app qa") && "notes debe mencionar evidencia de App QA",
+    !notes.includes("robert") && "notes debe mencionar aprobacion de Robert",
+    !notes.includes(workspace.id.toLowerCase()) && "notes debe incluir el workspace id auditado",
+    branchName && !notes.includes(branchName.toLowerCase()) && "notes debe incluir el branch auditado",
+    !notes.includes(workspace.input.clientName.toLowerCase()) && "notes debe incluir el cliente auditado",
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(blockers));
+}
+
+export function recordRevenueDeliveryReleaseGate(input: RevenueDeliveryWorkspaceUpdateInput) {
+  loadRevenueDeliveryWorkspaces();
+  const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
+  const workspace = revenueDeliveryWorkspaces.find((item) => item.id === parsed.workspaceId) || null;
+
+  if (!workspace) {
+    return {
+      status: "not_found" as const,
+      reason: "Workspace no encontrado.",
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const blockers = validateRevenueReleaseGateEvidence(workspace, parsed);
+  if (blockers.length > 0) {
+    return {
+      status: "blocked" as const,
+      reason: `Release gate bloqueado: ${blockers.join("; ")}.`,
+      workspace,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  return updateRevenueDeliveryWorkspaceQa(input, {
+    allowGithubIssueEvidence: true,
+    allowReleaseGateEvidence: true,
+  });
+}
+
 export function getRevenueDeliveryWorkspaceById(workspaceId: string) {
   loadRevenueDeliveryWorkspaces();
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === workspaceId.trim()) || null;
@@ -6902,6 +7021,12 @@ export function getRevenueDeliveryWorkspaceById(workspaceId: string) {
     workspace,
     snapshot: getRevenueEngineSnapshot(),
   };
+}
+
+export function deliverRevenueDeliveryWorkspaceFromTrustedApproval(input: RevenueDeliveryWorkspaceDeliverInput) {
+  return deliverRevenueDeliveryWorkspace(input, {
+    allowRobertApprovalEvidence: true,
+  });
 }
 
 export function deliverRevenueDeliveryWorkspace(
