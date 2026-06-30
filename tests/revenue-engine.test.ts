@@ -858,6 +858,99 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
 });
 
+test("money sprint parses pasted lead batches with partial failures", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "restaurant",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Batch Bistro|Miami|restaurant|no_website|email|owner@batchbistro.example|https://example.com/batch-bistro|owner@batchbistro.example|Google listing has no website and recent menu photos are only on public social profiles.|Needs menu, catering inquiry capture and follow-up.|3500|Owner|Batch Bistro has no dedicated website and a clear catering/menu opportunity.",
+      "Bad Row|Miami|restaurant|no_website|email|owner@badrow.example|notaurl|owner@badrow.example|short|Needs website.|2500|Owner|",
+    ].join("\n"),
+  });
+
+  assert.equal(result.status, "ready_to_start");
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].lead.businessName, "Batch Bistro");
+  assert.equal(result.previews.length, 1);
+  assert.equal(result.previews[0].fileWritten, false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), false);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.outreachDrafts[0].status, "draft");
+  assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.blockedSeeds.length, 1);
+  assert.equal(result.blockedSeeds[0].businessName, "Bad Row");
+});
+
+test("money sprint parses quoted CSV batches with pipes inside evidence", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business,area,niche,website,channel,contact,sourceUrl,recipientEmail,evidence,painPoint,offer",
+      "\"CSV Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@csvsalon.example\",\"https://example.com/csv-salon\",\"owner@csvsalon.example\",\"Google listing has no website | Instagram profile has recent service photos and contact path.\",\"Needs booking capture and follow-up.\",\"3200\"",
+    ].join("\n"),
+  });
+
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].lead.businessName, "CSV Salon");
+  assert.equal(result.recordedLeads[0].lead.evidence.includes("| Instagram"), true);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.blockedSeeds.length, 0);
+});
+
+test("money sprint caps pasted lead batch at remaining seed lead slots", () => {
+  const row = (index: number) => [
+    `Batch Cafe ${index}`,
+    "Miami",
+    "coffee shop",
+    "no_website",
+    "email",
+    `owner${index}@batchcafe.example`,
+    `https://example.com/batch-cafe-${index}`,
+    `owner${index}@batchcafe.example`,
+    "Google listing has no website, public profile has recent products and contact path.",
+    "Needs online ordering inquiry capture and follow-up.",
+    "3000",
+  ].join("|");
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 25,
+    dailyMockupLimit: 25,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      ...Array.from({ length: 27 }, (_, index) => row(index + 1)),
+    ].join("\n"),
+  });
+
+  assert.equal(result.recordedLeads.length, 25);
+  assert.equal(result.blockedSeeds.filter((seed) => seed.reason === "batch limit 25").length, 2);
+  assert.equal(result.outreachDrafts.every((draft) => draft.status === "draft" && draft.delivery.sendStatus === "not_sent"), true);
+});
+
 test("money sprint surfaces paid data approval amount without spending automatically", () => {
   const result = runRevenueMoneySprint({
     area: "Orlando",

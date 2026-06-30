@@ -1143,6 +1143,7 @@ export default function RevenueEnginePage() {
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
   const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
+  const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
@@ -1385,6 +1386,7 @@ export default function RevenueEnginePage() {
           requireRobertApprovalToContact: true,
           writePreviewFiles: true,
           seedLeads,
+          seedLeadBatchText,
         }),
       });
       const data = await response.json();
@@ -2845,6 +2847,19 @@ export default function RevenueEnginePage() {
                           />
                           Incluir websites debiles
                         </label>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="seed-lead-batch">
+                          Batch leads
+                        </label>
+                        <Textarea
+                          id="seed-lead-batch"
+                          value={seedLeadBatchText}
+                          onChange={(event) => setSeedLeadBatchText(event.target.value)}
+                          className="min-h-[110px] border-zinc-800 bg-black"
+                          placeholder="Business | Area | Niche | no_website | email | owner@site.com | https://source-url | owner@site.com | public evidence | pain point | 3500"
+                          data-testid="textarea-seed-lead-batch"
+                        />
                       </div>
                       <Button
                         type="submit"
