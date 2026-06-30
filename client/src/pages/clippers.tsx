@@ -1014,6 +1014,8 @@ interface ClipperTikTokNextActionSummary {
     postScheduleVerifier: string;
     batchCloseout: string;
     goalAudit: string;
+    mvpReadinessVerifier?: string;
+    externalCloseoutSession?: string;
   };
   account: {
     ready: boolean;
@@ -1058,6 +1060,32 @@ interface ClipperTikTokNextActionSummary {
   };
   guardrails: string[];
   nextStep: string;
+  proofBridgeGate?: {
+    status: string;
+    blockedLanes: number;
+    proofLinksFlowStatus: string;
+    checklistSteps: number;
+    checklistReady: boolean;
+    previewGateStatus: string;
+    previewRawStored: boolean;
+    previewExpiresAt: string;
+    paths: {
+      proofLinksPastePacket: string;
+      proofLinksFilledDrop: string;
+      proofLinksJsonDrop: string;
+      bridgeEvidenceCsv: string;
+      previewGate: string;
+    };
+    nextStep: string;
+  } | null;
+  proofLinksChecklist?: Array<{
+    id: string;
+    label: string;
+    owner?: string;
+    target?: string;
+    expectedGate?: string;
+    nextButton?: string;
+  }>;
   tasks: Array<{
     id: string;
     label: string;
@@ -18637,6 +18665,7 @@ export default function ClippersPage() {
                 Import bridge rows
               </Button>
               <div className="mt-3 grid gap-1 text-xs text-zinc-500">
+                <p>Preview only: No escribe evidencia.</p>
                 <p>Preview accepted: {metricoolBridgeEvidenceCurrentPreview?.totals.recorded ?? 0}</p>
                 <p>Preview skipped: {metricoolBridgeEvidenceCurrentPreview?.totals.skipped ?? 0}</p>
                 <p data-testid="clippers-metricool-bridge-preview-gate-status">
@@ -20075,6 +20104,40 @@ export default function ClippersPage() {
                         </Button>
                       )}
                     </div>
+                  </div>
+                )}
+                {tiktokNextAction.proofBridgeGate && (
+                  <div
+                    className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3"
+                    data-testid="clippers-tiktok-next-action-proof-bridge"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-100">
+                        proof bridge {tiktokNextAction.proofBridgeGate.status}
+                      </Badge>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.proofBridgeGate.blockedLanes)} blocked lanes
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        preview {tiktokNextAction.proofBridgeGate.previewGateStatus || "missing"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-amber-50/80">{tiktokNextAction.proofBridgeGate.nextStep}</p>
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                      <p className="break-all">Proof packet: {tiktokNextAction.proofBridgeGate.paths.proofLinksPastePacket || "missing"}</p>
+                      <p className="break-all">Bridge CSV: {tiktokNextAction.proofBridgeGate.paths.bridgeEvidenceCsv || "missing"}</p>
+                      <p className="break-all">Preview gate: {tiktokNextAction.proofBridgeGate.paths.previewGate || "missing"}</p>
+                    </div>
+                    {(tiktokNextAction.proofLinksChecklist || []).length > 0 && (
+                      <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                        {(tiktokNextAction.proofLinksChecklist || []).slice(0, 4).map((step) => (
+                          <div key={step.id} className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
+                            <p className="text-[11px] font-medium leading-4 text-white">{step.label}</p>
+                            <p className="text-[10px] leading-4 text-zinc-500">{step.nextButton || step.expectedGate || "manual"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

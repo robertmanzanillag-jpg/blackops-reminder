@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T12:54:16.975Z",
+  "generatedAt": "2026-06-30T13:00:00.598Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8899
+    "symbols": 8903
   },
   "directories": {
     ".agents/skills": {
@@ -6746,11 +6746,13 @@
         "blockedRows",
         "closeoutPath",
         "csvCell",
+        "externalCloseoutSessionPath",
         "goalAuditPath",
         "header",
         "launchControlPath",
         "lines",
         "main",
+        "mvpReadinessVerifierPath",
         "nextStepFor",
         "operatorGateFor",
         "operatorPacketFor",
@@ -6758,12 +6760,14 @@
         "outJsonPath",
         "outMarkdownPath",
         "postSchedulePath",
+        "proofBridgeLines",
         "raw",
         "readJson",
         "renderCsv",
         "renderMarkdown",
         "reportsDir",
         "rootDir",
+        "rows",
         "safetyBlockers",
         "scheduledDir",
         "statusFor",

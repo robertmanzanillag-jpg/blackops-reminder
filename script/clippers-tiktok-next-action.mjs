@@ -11,6 +11,8 @@ const postSchedulePath = path.join(reportsDir, "clippers-tiktok-post-schedule-ve
 const closeoutPath = path.join(reportsDir, "clippers-tiktok-batch-closeout-verifier.json");
 const goalAuditPath = path.join(reportsDir, "clippers-goal-completion-audit.json");
 const launchControlPath = path.join(reportsDir, "clippers-tiktok-launch-control.json");
+const mvpReadinessVerifierPath = path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json");
+const externalCloseoutSessionPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-next-action.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-next-action.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-next-action.csv");
@@ -56,6 +58,15 @@ function nextStepFor(summary) {
     return `Do not open Metricool scheduling for this batch yet. Clear blocked gates first: ${summary.operatorGate.blockedBy.join(", ")}.`;
   }
   if (summary.status === "blocked_account_or_metricool_connection") {
+    if (summary.proofBridgeGate?.nextStep) {
+      return [
+        summary.proofBridgeGate.nextStep,
+        summary.proofBridgeGate.paths?.bridgeEvidenceCsv
+          ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}.`
+          : "",
+        "Do not use direct social APIs for this TikTok MVP; Metricool proof only needs safe public/non-secret evidence.",
+      ].filter(Boolean).join(" ");
+    }
     const blockedRows = (summary.account.rows || []).filter((row) => row.status !== "ready_for_metricool_tiktok");
     const blockedLabels = blockedRows.map((row) => `${row.accountId || "unknown"}:${row.platform || "tiktok"}=${row.status || "blocked"}`).join(", ");
     return [
@@ -86,7 +97,7 @@ function nextStepFor(summary) {
 }
 
 function taskRowsFor(summary) {
-  return [
+  const rows = [
     {
       id: "account_connection",
       label: "TikTok accounts connected in Metricool",
@@ -127,6 +138,16 @@ function taskRowsFor(summary) {
       nextAction: "Use real nonzero views/likes/comments/shares before import.",
     },
   ];
+  if (summary.proofBridgeGate?.status) {
+    rows.splice(1, 0, {
+      id: "proof_bridge",
+      label: "Metricool proof bridge",
+      status: summary.proofBridgeGate.blockedLanes > 0 ? "blocked" : "next",
+      evidence: `${summary.proofBridgeGate.blockedLanes} blocked lanes; preview ${summary.proofBridgeGate.previewGateStatus || "missing"}`,
+      nextAction: summary.proofBridgeGate.nextStep || "Fill and preview real non-secret Metricool bridge proof before scheduling.",
+    });
+  }
+  return rows;
 }
 
 function operatorGateFor(summary) {
@@ -211,6 +232,9 @@ function operatorPacketFor(summary) {
     `Scheduled: ${summary.batch.scheduled}`,
     `Not started: ${summary.batch.notStarted}`,
     `Ready to import review: ${summary.batch.readyToImport}`,
+    summary.proofBridgeGate?.status ? `Proof bridge gate: ${summary.proofBridgeGate.status}` : "",
+    summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
+    summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
     "",
     "Next steps:",
     ...actionLines,
@@ -226,6 +250,23 @@ function operatorPacketFor(summary) {
 }
 
 function renderMarkdown(summary) {
+  const proofBridgeLines = summary.proofBridgeGate ? [
+    "## Metricool Proof Bridge",
+    "",
+    `- Status: ${summary.proofBridgeGate.status}`,
+    `- Blocked lanes: ${summary.proofBridgeGate.blockedLanes}`,
+    `- Proof links flow: ${summary.proofBridgeGate.proofLinksFlowStatus || "missing"}`,
+    `- Preview gate: ${summary.proofBridgeGate.previewGateStatus || "missing"}`,
+    `- Proof links packet: ${summary.proofBridgeGate.paths?.proofLinksPastePacket || "missing"}`,
+    `- Filled proof drop: ${summary.proofBridgeGate.paths?.proofLinksFilledDrop || "missing"}`,
+    `- Bridge CSV: ${summary.proofBridgeGate.paths?.bridgeEvidenceCsv || "missing"}`,
+    `- Next step: ${summary.proofBridgeGate.nextStep || "missing"}`,
+    "",
+    "### Proof Links Checklist",
+    "",
+    ...(summary.proofLinksChecklist || []).map((step) => `- ${step.label || step.id}: ${step.nextButton || step.expectedGate || "manual"}`),
+    "",
+  ] : [];
   return [
     "# TikTok Metricool Next Action",
     "",
@@ -258,6 +299,7 @@ function renderMarkdown(summary) {
       `- Next action: ${task.nextAction}`,
       "",
     ].join("\n")),
+    ...proofBridgeLines,
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -289,7 +331,17 @@ function renderCsv(summary) {
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, approvalRun, uploadPack, postSchedule, closeout, goalAudit, launchControl] = await Promise.all([
+  const [
+    accountReadiness,
+    approvalRun,
+    uploadPack,
+    postSchedule,
+    closeout,
+    goalAudit,
+    launchControl,
+    mvpReadinessVerifier,
+    externalCloseoutSession,
+  ] = await Promise.all([
     readJson(accountReadinessPath, {}),
     readJson(approvalRunPath, {}),
     readJson(uploadPackPath, {}),
@@ -297,6 +349,8 @@ async function main() {
     readJson(closeoutPath, {}),
     readJson(goalAuditPath, {}),
     readJson(launchControlPath, {}),
+    readJson(mvpReadinessVerifierPath, {}),
+    readJson(externalCloseoutSessionPath, {}),
   ]);
   const accountCloseout = accountReadiness.tiktokMvpAccountCloseout || {};
   const accountReadyLanes = accountCloseout.totals?.ready || 0;
@@ -319,6 +373,8 @@ async function main() {
       batchCloseout: closeoutPath,
       goalAudit: goalAuditPath,
       launchControl: launchControlPath,
+      mvpReadinessVerifier: mvpReadinessVerifierPath,
+      externalCloseoutSession: externalCloseoutSessionPath,
     },
     account: {
       ready: accountCloseout.status === "ready_for_metricool_tiktok" && accountReadyLanes === accountTotalLanes && accountTotalLanes > 0,
@@ -361,6 +417,10 @@ async function main() {
       launchStatus: launchControl.status || "missing",
       approvalRunStatus: approvalRun.status || "missing",
     },
+    proofBridgeGate: mvpReadinessVerifier.proofBridgeGate || null,
+    proofLinksChecklist: Array.isArray(externalCloseoutSession.proofLinksFlow?.checklist)
+      ? externalCloseoutSession.proofLinksFlow.checklist
+      : [],
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",

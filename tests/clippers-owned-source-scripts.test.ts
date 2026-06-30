@@ -5006,8 +5006,11 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /if \(refreshComplete\) refreshMetricoolCaches\(\)/);
   assert.match(page, /prepare-clippers-tiktok-next-action-button/);
   assert.match(page, /clippers-tiktok-next-action-panel/);
+  assert.match(page, /clippers-tiktok-next-action-proof-bridge/);
   assert.match(page, /copy-clippers-tiktok-next-action-operator-packet/);
   assert.match(page, /Metricool operator packet/);
+  assert.match(page, /proofBridgeGate/);
+  assert.match(page, /proofLinksChecklist/);
   assert.match(page, /accountPermissionReadiness: ClipperAccountPermissionReadinessSummary/);
   assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
   assert.match(page, /getMetricoolBridgeEvidenceClientCheck/);
@@ -6877,6 +6880,81 @@ test("TikTok MVP readiness verifier prioritizes Metricool bridge proof when lane
   } finally {
     await writeFile(readinessPath, originalReadiness);
     if (originalVerifier) await writeFile(verifierPath, originalVerifier);
+  }
+});
+
+test("TikTok next action surfaces Metricool proof bridge blocker when account lanes are blocked", async () => {
+  const readinessPath = path.join(rootDir, "account-permission-readiness.json");
+  const verifierPath = path.join(rootDir, "reports/clippers-tiktok-mvp-readiness-verifier.json");
+  const nextActionPath = path.join(rootDir, "reports/clippers-tiktok-next-action.json");
+  const originalReadiness = await readFile(readinessPath, "utf8");
+  const originalVerifier = await readFile(verifierPath, "utf8").catch(() => null);
+  const originalNextAction = await readFile(nextActionPath, "utf8").catch(() => null);
+  try {
+    const readiness = JSON.parse(originalReadiness);
+    readiness.activeMvp = {
+      ...(readiness.activeMvp || {}),
+      status: "blocked",
+      readyLanes: 0,
+      targetLanes: 2,
+      platforms: ["tiktok"],
+      accountIds: ["sports-daily", "meme-radar"],
+    };
+    readiness.tiktokMvpAccountCloseout = {
+      ...(readiness.tiktokMvpAccountCloseout || {}),
+      status: "needs_tiktok_account_evidence",
+      totals: {
+        rows: 2,
+        ready: 0,
+      },
+      rows: [
+        { accountId: "sports-daily", platform: "tiktok", status: "needs_metricool_bridge_evidence" },
+        { accountId: "meme-radar", platform: "tiktok", status: "needs_metricool_bridge_evidence" },
+      ],
+    };
+    readiness.metricoolMvpEvidence = {
+      ...(readiness.metricoolMvpEvidence || {}),
+      bridgeEvidenceCsvPath: path.join(rootDir, "scheduled/metricool-tiktok-bridge-evidence.csv"),
+    };
+    await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const verifierRun = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-readiness-verifier.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(verifierRun.status, 0, verifierRun.stderr || verifierRun.stdout);
+
+    const nextActionRun = spawnSync(process.execPath, ["script/clippers-tiktok-next-action.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(nextActionRun.status, 0, nextActionRun.stderr || nextActionRun.stdout);
+    const output = JSON.parse(nextActionRun.stdout);
+    assert.equal(output.status, "blocked_account_or_metricool_connection");
+    assert.match(output.nextStep, /Paste real non-secret proof URLs/i);
+    assert.match(output.nextStep, /metricool-tiktok-bridge-evidence\.csv/);
+
+    const nextAction = JSON.parse(await readFile(nextActionPath, "utf8"));
+    assert.equal(nextAction.status, "blocked_account_or_metricool_connection");
+    assert.equal(nextAction.proofBridgeGate.status, "blocked_needs_real_proofs");
+    assert.equal(nextAction.proofBridgeGate.blockedLanes, 2);
+    assert.equal(nextAction.proofBridgeGate.proofLinksFlowStatus, "needs_real_proof_links");
+    assert.match(nextAction.proofBridgeGate.paths.proofLinksPastePacket, /proof-links-paste-packet\.txt$/);
+    assert.match(nextAction.proofBridgeGate.paths.bridgeEvidenceCsv, /metricool-tiktok-bridge-evidence\.csv$/);
+    assert.ok(nextAction.proofLinksChecklist.length >= 8);
+    assert.ok(nextAction.tasks.some((task) => task.id === "proof_bridge" && task.status === "blocked"));
+    assert.match(nextAction.operator.copyPacket, /Proof bridge gate: blocked_needs_real_proofs/);
+    assert.match(nextAction.operator.copyPacket, /Bridge CSV:/);
+    assert.doesNotMatch(JSON.stringify(nextAction.proofBridgeGate), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
+
+    const markdown = await readFile(nextAction.paths.markdown, "utf8");
+    assert.match(markdown, /Metricool Proof Bridge/);
+    assert.match(markdown, /Proof Links Checklist/);
+    assert.match(markdown, /Copy proof links packet/);
+  } finally {
+    await writeFile(readinessPath, originalReadiness);
+    if (originalVerifier) await writeFile(verifierPath, originalVerifier);
+    if (originalNextAction) await writeFile(nextActionPath, originalNextAction);
   }
 });
 
