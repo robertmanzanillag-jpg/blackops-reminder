@@ -1266,6 +1266,8 @@ export class DatabaseStorage implements IStorage {
       githubRepo: project.githubRepo || null,
       deploymentProvider: project.deploymentProvider || null,
       deploymentId: project.deploymentId || null,
+      testCommand: project.testCommand || null,
+      buildCommand: project.buildCommand || null,
       sentryProjectId: project.sentryProjectId || null,
       stripeAccountId: project.stripeAccountId || null,
       stripeWebhookEndpointId: project.stripeWebhookEndpointId || null,

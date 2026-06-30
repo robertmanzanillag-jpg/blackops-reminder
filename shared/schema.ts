@@ -483,6 +483,8 @@ export const appProjects = pgTable("app_projects", {
   githubRepo: text("github_repo"),
   deploymentProvider: text("deployment_provider"),
   deploymentId: text("deployment_id"),
+  testCommand: text("test_command"),
+  buildCommand: text("build_command"),
   sentryProjectId: text("sentry_project_id"),
   stripeAccountId: text("stripe_account_id"),
   stripeWebhookEndpointId: text("stripe_webhook_endpoint_id"),

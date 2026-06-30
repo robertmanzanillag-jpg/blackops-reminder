@@ -433,6 +433,8 @@ function githubRepoToAppProjectInput(repo: GithubRepo) {
     githubRepo: repo.full_name,
     deploymentProvider: publicUrl ? "github-homepage" : null,
     deploymentId: null,
+    testCommand: null,
+    buildCommand: null,
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -443,6 +445,8 @@ function githubRepoToAppProjectInput(repo: GithubRepo) {
       "github-import",
       ...(publicUrl ? [] : ["needs-public-url"]),
       "needs-health-url",
+      "needs-test-command",
+      "needs-build-command",
     ],
   };
 }

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T19:15:51.883Z",
+  "generatedAt": "2026-06-30T20:53:49.693Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -85,8 +85,8 @@
     "filesVisible": 400,
     "filesIndexed": 333,
     "imports": 1321,
-    "routes": 452,
-    "symbols": 7156
+    "routes": 454,
+    "symbols": 7176
   },
   "directories": {
     ".agents/skills": {
@@ -7023,10 +7023,14 @@
         "requestWithRepo",
         "risks",
         "safeRequest",
+        "safeTask",
+        "safeTitle",
         "safetyLines",
+        "sanitizeClientBuildPublicText",
         "scoreRepoMatch",
         "scored",
         "selectRepoForRequest",
+        "sensitiveLinePattern",
         "skillHint",
         "strictCostHeavyWork",
         "subscriptionBrief",
@@ -10317,6 +10321,7 @@
         "safe",
         "safePortalUrl",
         "saleGate",
+        "sanitizedBuildBrief",
         "scan",
         "seenRecurringTitles",
         "shop",
@@ -12706,6 +12711,9 @@
         "autopilotIndex",
         "engineSource",
         "genericIndex",
+        "githubHandoffRoute",
+        "githubHandoffRouteEnd",
+        "githubHandoffRouteStart",
         "handoffMutation",
         "modelFallbackIndex",
         "mutationEnd",
@@ -12721,7 +12729,10 @@
         "websiteOpportunityCloseMutation",
         "websiteOpportunityCloseStart"
       ],
-      "routes": []
+      "routes": [
+        "/api/revenue-engine/delivery-workspaces/github-handoff",
+        "/api/revenue-engine/delivery-workspaces/pr-status"
+      ]
     },
     {
       "path": "tests/developer-autopilot.test.ts",
@@ -12735,12 +12746,14 @@
       "symbols": [
         "body",
         "brief",
+        "clientBuildComment",
         "comment",
         "created",
         "gate",
         "handoff",
         "message",
         "request",
+        "safeTitle",
         "title"
       ],
       "routes": []
@@ -13209,6 +13222,7 @@
         "cappedQueue",
         "cashCollectedUsd",
         "closeResult",
+        "closeWithoutExplicitPaymentConfirmation",
         "collectOpportunity",
         "commandInput",
         "contactFormItem",
@@ -13248,10 +13262,18 @@
         "leads",
         "legacyWorkspace",
         "lookup",
+        "missingPaymentEvidence",
         "missingRepoHandoff",
         "mission",
         "mockup",
+        "newer",
+        "newerOpportunity",
         "nextDraft",
+        "oldOpportunity",
+        "oldReady",
+        "older",
+        "olderClosure",
+        "olderPacket",
         "opportunity",
         "opportunityOne",
         "opportunityResult",
@@ -13292,6 +13314,7 @@
         "routeLayer",
         "row",
         "saleGate",
+        "scopedOnly",
         "scopedOnlyResult",
         "scopedSnapshot",
         "second",

@@ -21,6 +21,8 @@ function appProject(overrides: Partial<AppProject> = {}): AppProject {
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -102,6 +104,13 @@ test("improvement scout flags important production apps without health endpoints
 
   assert.equal(report.findings.some((finding) => finding.title === "Agregar health endpoint"), true);
   assert.equal(report.findings.some((finding) => finding.sourceAgent === "improvement-scout"), true);
+});
+
+test("improvement scout flags production apps without release commands", () => {
+  const report = analyzeImprovementIdeas([appProject({ testCommand: null, buildCommand: null })]);
+
+  assert.equal(report.findings.some((finding) => finding.title === "Agregar comandos de test/build"), true);
+  assert.equal(report.findings.some((finding) => finding.area === "Release metadata"), true);
 });
 
 test("error scout turns failed checks and incidents into actionable findings", () => {

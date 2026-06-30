@@ -27,6 +27,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/br-website",
     deploymentProvider: "custom-domain",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -47,6 +49,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/blackops-reminder",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run test:ceo-assistant && npm run test:revenue-engine && npm run test:developer-autopilot && npm run test:app-qa-agent",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -67,6 +71,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/DROPKIT",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -87,6 +93,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "EXPO_PUBLIC_DOMAIN=kong--app.replit.app npm run expo:static:build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -110,12 +118,17 @@ function mergeTags(existing: unknown, incoming: unknown): string[] {
 }
 
 function normalizeKnownAppTags(existing: AppProject, known: InsertAppProject, mergedTags: string[]): string[] {
-  if (known.githubRepo !== "robertmanzanillag-jpg/br-website") return mergedTags;
   const hasPublicUrl = Boolean(known.publicUrl || existing.publicUrl);
   const hasDeploymentProvider = Boolean(known.deploymentProvider || existing.deploymentProvider);
+  const hasHealthUrl = Boolean(known.healthUrl || existing.healthUrl);
+  const hasTestCommand = Boolean(known.testCommand || existing.testCommand);
+  const hasBuildCommand = Boolean(known.buildCommand || existing.buildCommand);
   return mergedTags.filter((tag) => {
     if (hasPublicUrl && tag === "needs-public-url") return false;
     if (hasDeploymentProvider && tag === "needs-deploy-provider") return false;
+    if (hasHealthUrl && tag === "needs-health-url") return false;
+    if (hasTestCommand && tag === "needs-test-command") return false;
+    if (hasBuildCommand && tag === "needs-build-command") return false;
     return true;
   });
 }
@@ -135,6 +148,8 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
     "repoName",
     "githubRepo",
     "deploymentProvider",
+    "testCommand",
+    "buildCommand",
     "priority",
     "ownerLabel",
   ];
@@ -142,6 +157,10 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
   for (const field of fields) {
     const nextValue = known[field];
     if (nextValue === null || nextValue === undefined || nextValue === "") continue;
+    if (field === "deploymentProvider" && existing.deploymentProvider === "github-homepage") {
+      updates.deploymentProvider = String(nextValue);
+      continue;
+    }
     if (["publicUrl", "healthUrl", "deploymentProvider"].includes(field) && (existing as any)[field]) continue;
     if ((existing as any)[field] !== nextValue) {
       (updates as any)[field] = nextValue;

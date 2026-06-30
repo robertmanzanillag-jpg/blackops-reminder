@@ -1060,6 +1060,19 @@ export function analyzeImprovementIdeas(apps: AppProject[], routes = LOCAL_ROUTE
         publicAppUrl(app)
       ));
     }
+
+    if (!app.testCommand || !app.buildCommand) {
+      findings.push(createFinding(
+        app,
+        "improvement-scout",
+        "Release metadata",
+        "medium",
+        "Agregar comandos de test/build",
+        `${app.name} esta en produccion sin testCommand/buildCommand completos para handoffs PR-first.`,
+        "Guardar los comandos exactos de test y build en Developer Health para que Codex/App QA puedan verificar cada release.",
+        publicAppUrl(app)
+      ));
+    }
   }
 
   return {
