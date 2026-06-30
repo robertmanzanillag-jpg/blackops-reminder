@@ -5,6 +5,8 @@ import {
   createIssueComment,
   deleteFile,
   getConfiguredGitHubToken,
+  parseGitHubPullRequestUrl,
+  summarizeGitHubPullRequestReleaseStatus,
   updateFile,
   validateGitHubCommitMessage,
   validateGitHubFilePath,
@@ -14,6 +16,51 @@ import {
   validateGitHubFileWriteInput,
   validateGitHubRepoNamePart,
 } from "../server/github-client";
+
+function buildReleaseStatusInput(overrides: Partial<Parameters<typeof summarizeGitHubPullRequestReleaseStatus>[0]> = {}) {
+  const headSha = "abc123def456";
+  return {
+    pr: {
+      number: 12,
+      title: "Client build",
+      html_url: "https://github.com/owner/repo/pull/12",
+      state: "open",
+      draft: false,
+      merged: false,
+      base: { ref: "main" },
+      head: { ref: "codex/client-build", sha: headSha },
+      user: { login: "codex" },
+      updated_at: "2026-06-30T00:00:00Z",
+    },
+    reviews: [{
+      state: "APPROVED",
+      commit_id: headSha,
+      html_url: "https://github.com/owner/repo/pull/12#pullrequestreview-1",
+      submitted_at: "2026-06-30T00:01:00Z",
+      user: { login: "reviewer" },
+    }],
+    comments: [{
+      body: `App QA passed for ${headSha}. no blockers.`,
+      html_url: "https://github.com/owner/repo/pull/12#issuecomment-1",
+      author_association: "OWNER",
+      user: { login: "robert" },
+    }],
+    checksData: {
+      check_runs: [{
+        status: "completed",
+        conclusion: "success",
+      }],
+    },
+    statusesData: {
+      state: "success",
+      statuses: [{
+        state: "success",
+      }],
+    },
+    expectedBranch: "codex/client-build",
+    ...overrides,
+  };
+}
 
 test("GitHub token fallback uses only real environment tokens", () => {
   assert.equal(getConfiguredGitHubToken({}), null);
@@ -88,6 +135,105 @@ test("GitHub issue and PR numbers are bounded before connector access", () => {
   assert.match(validateGitHubIssueNumber(0) || "", /invalido/);
   assert.match(validateGitHubIssueNumber(1.5) || "", /invalido/);
   assert.match(validateGitHubIssueNumber(1_000_001) || "", /invalido/);
+});
+
+test("GitHub pull request URLs are parsed only from safe GitHub pull links", () => {
+  assert.deepEqual(parseGitHubPullRequestUrl("https://github.com/owner/repo/pull/12"), {
+    owner: "owner",
+    repo: "repo",
+    repoFullName: "owner/repo",
+    pullNumber: 12,
+  });
+  assert.deepEqual(parseGitHubPullRequestUrl("https://www.github.com/owner/repo.name-1/pull/99"), {
+    owner: "owner",
+    repo: "repo.name-1",
+    repoFullName: "owner/repo.name-1",
+    pullNumber: 99,
+  });
+  assert.equal(parseGitHubPullRequestUrl("https://github.com/owner/repo/issues/12"), null);
+  assert.equal(parseGitHubPullRequestUrl("https://evil.example.com/owner/repo/pull/12"), null);
+  assert.equal(parseGitHubPullRequestUrl("https://github.com/owner/repo/pull/0"), null);
+  assert.equal(parseGitHubPullRequestUrl("https://github.com/owner/repo/name/pull/12"), null);
+});
+
+test("GitHub PR release status requires review approval on the current head", () => {
+  const ready = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput());
+  assert.equal(ready.readyForReleaseEvidence, true);
+  assert.equal(ready.secondReviewEvidenceUrl, "https://github.com/owner/repo/pull/12#pullrequestreview-1");
+
+  const staleApproval = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    reviews: [{
+      state: "APPROVED",
+      commit_id: "oldsha",
+      html_url: "https://github.com/owner/repo/pull/12#pullrequestreview-old",
+      submitted_at: "2026-06-30T00:01:00Z",
+      user: { login: "reviewer" },
+    }],
+  }));
+  assert.equal(staleApproval.readyForReleaseEvidence, false);
+  assert.match(staleApproval.blockers.join("\n"), /head actual/);
+  assert.equal(staleApproval.secondReviewEvidenceUrl, "");
+});
+
+test("GitHub PR release status requires trusted App QA evidence tied to the current head", () => {
+  const missingHead = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    comments: [{
+      body: "App QA passed. no blockers.",
+      html_url: "https://github.com/owner/repo/pull/12#issuecomment-1",
+      author_association: "OWNER",
+      user: { login: "robert" },
+    }],
+  }));
+  assert.equal(missingHead.readyForReleaseEvidence, false);
+  assert.match(missingHead.blockers.join("\n"), /App QA pass para el PR head actual/);
+  assert.equal(missingHead.appQaEvidenceUrl, "");
+
+  const untrusted = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    comments: [{
+      body: "App QA passed for abc123def456. no blockers.",
+      html_url: "https://github.com/owner/repo/pull/12#issuecomment-2",
+      author_association: "NONE",
+      user: { login: "drive-by" },
+    }],
+  }));
+  assert.equal(untrusted.readyForReleaseEvidence, false);
+  assert.match(untrusted.blockers.join("\n"), /App QA pass para el PR head actual/);
+  assert.equal(untrusted.appQaEvidenceUrl, "");
+
+  const fakeAppQaLogin = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    comments: [{
+      body: "App QA passed for abc123def456. no blockers.",
+      html_url: "https://github.com/owner/repo/pull/12#issuecomment-3",
+      author_association: "NONE",
+      user: { login: "app-qa-fake" },
+    }],
+  }));
+  assert.equal(fakeAppQaLogin.readyForReleaseEvidence, false);
+  assert.match(fakeAppQaLogin.blockers.join("\n"), /App QA pass para el PR head actual/);
+  assert.equal(fakeAppQaLogin.appQaEvidenceUrl, "");
+});
+
+test("GitHub PR release status blocks pending checks and unverifiable check APIs", () => {
+  const pendingChecks = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    checksData: {
+      check_runs: [{
+        status: "in_progress",
+        conclusion: null,
+      }],
+    },
+  }));
+  assert.equal(pendingChecks.readyForReleaseEvidence, false);
+  assert.match(pendingChecks.blockers.join("\n"), /checks pendientes/);
+
+  const apiFailure = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    checksData: { check_runs: [] },
+    statusesData: { state: "unknown", statuses: [] },
+    checksUnavailable: true,
+    statusesUnavailable: true,
+  }));
+  assert.equal(apiFailure.readyForReleaseEvidence, false);
+  assert.match(apiFailure.blockers.join("\n"), /No se pudo verificar GitHub checks/);
+  assert.match(apiFailure.blockers.join("\n"), /No se pudo verificar GitHub statuses/);
 });
 
 test("GitHub write input rejects oversized or unsafe writes before Octokit", () => {

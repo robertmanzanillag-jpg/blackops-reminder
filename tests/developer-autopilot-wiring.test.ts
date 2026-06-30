@@ -59,6 +59,10 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(routeSource, /revenueWebsiteOpportunitySchema\.parse/);
   assert.match(routeSource, /revenueWebsiteOpportunityCloseSchema\.parse/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/pr-status/);
+  assert.match(routeSource, /parseGitHubPullRequestUrl\(prUrl\)/);
+  assert.match(routeSource, /getGitHubPullRequestReleaseStatus\(\{/);
+  assert.match(routeSource, /Robert deployment approval sigue siendo manual/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/release-gate/);
   assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input\)/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
@@ -88,6 +92,10 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /reviewProjectType !== "automation"/);
   assert.match(uiSource, /Usar website handoff/);
   assert.match(uiSource, /deliveryWorkspaceReleaseGateMutation/);
+  assert.match(uiSource, /deliveryWorkspacePrStatusMutation/);
+  assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/pr-status/);
+  assert.match(uiSource, /button-check-pr-status-/);
+  assert.match(uiSource, /panel-pr-status/);
   assert.match(uiSource, /button-record-release-gate-/);
   assert.match(uiSource, /input-release-pr-url/);
   assert.match(uiSource, /input-release-second-review-url/);

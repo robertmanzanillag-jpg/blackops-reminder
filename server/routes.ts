@@ -21,7 +21,7 @@ import { getPortfolioSummary, analyzeRebalancing, checkPriceOpportunities, gener
 import { listAllActions, executeAction, executeMultipleActions, getActionsByCategory } from "./agent-actions";
 import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTableSchema, executeQuery, getProjectStructure, addColumnToTable, createTable, getTableInfo } from "./code-agent";
 import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
-import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview } from "./github-client";
+import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview, getGitHubPullRequestReleaseStatus, parseGitHubPullRequestUrl } from "./github-client";
 import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-context";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
@@ -5378,6 +5378,86 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to update delivery workspace QA" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/pr-status", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine PR status checks require the configured owner account.",
+      });
+    }
+
+    const prStatusSchema = z.object({
+      workspaceId: z.string().trim().min(1).max(200),
+      prUrl: z.string().trim().url().max(500).or(z.literal("")).optional(),
+    });
+
+    try {
+      const input = prStatusSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const prUrl = input.prUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl;
+      if (!prUrl) {
+        return res.status(422).json({
+          status: "needs_pr",
+          reason: "Guarda el PR URL antes de revisar estado GitHub.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const parsedPr = parseGitHubPullRequestUrl(prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+      });
+
+      return res.json({
+        status: prStatus.readyForReleaseEvidence ? "ready" : "blocked",
+        reason: prStatus.readyForReleaseEvidence
+          ? "PR listo como evidencia tecnica; Robert deployment approval sigue siendo manual."
+          : prStatus.blockers[0] || "PR todavia tiene blockers.",
+        prStatus,
+        workspace,
+        snapshot: lookup.snapshot,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      if (error?.status === 404 || error?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String(error?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: error.message });
+      }
+      res.status(500).json({ error: "Failed to check revenue delivery PR status" });
     }
   });
 

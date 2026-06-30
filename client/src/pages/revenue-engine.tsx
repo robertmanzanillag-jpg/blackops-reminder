@@ -1476,6 +1476,37 @@ type DeliveryWorkspaceGithubHandoffResult = {
   snapshot: RevenueSnapshot;
 };
 
+type DeliveryWorkspacePrStatusResult = {
+  status: "ready" | "blocked" | "needs_pr" | "not_found" | "repo_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  prStatus?: {
+    pr: {
+      number: number;
+      title: string;
+      htmlUrl: string;
+      state: string;
+      draft: boolean;
+      merged: boolean;
+      baseRef: string;
+      headRef: string;
+      headSha: string;
+      author: string;
+      updatedAt: string | null;
+    };
+    checks: { total: number; passed: number; pending: number; failed: number };
+    statuses: { total: number; passed: number; pending: number; failed: number; state: string };
+    approvedReviews: Array<{ reviewer: string; htmlUrl: string; submittedAt: string | null }>;
+    changesRequestedReviews: Array<{ reviewer: string; htmlUrl: string; submittedAt: string | null }>;
+    secondReviewEvidenceUrl: string;
+    appQaEvidenceUrl: string;
+    blockers: string[];
+    warnings: string[];
+    readyForReleaseEvidence: boolean;
+  };
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
 type DeliveryWorkspaceDeliverResult = {
   status: "delivered" | "blocked" | "not_found";
   reason: string;
@@ -2654,6 +2685,33 @@ export default function RevenueEnginePage() {
     },
     onSuccess: () => {
       refetchSnapshot();
+    },
+  });
+
+  const deliveryWorkspacePrStatusMutation = useMutation<DeliveryWorkspacePrStatusResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/pr-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          prUrl: releasePrUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo revisar el PR");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.prStatus?.pr.htmlUrl) setReleasePrUrl(data.prStatus.pr.htmlUrl);
+      if (data.prStatus?.secondReviewEvidenceUrl) {
+        setReleaseSecondReviewEvidenceUrl((current) => current || data.prStatus?.secondReviewEvidenceUrl || "");
+        setReleaseSecondReviewPassed(true);
+      }
+      if (data.prStatus?.appQaEvidenceUrl) {
+        setReleaseAppQaEvidenceUrl((current) => current || data.prStatus?.appQaEvidenceUrl || "");
+        setReleaseAppQaPassed(true);
+      }
     },
   });
 
@@ -8164,6 +8222,22 @@ export default function RevenueEnginePage() {
                                 size="sm"
                                 variant="outline"
                                 disabled={
+                                  deliveryWorkspacePrStatusMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !(releasePrUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl)
+                                }
+                                onClick={() => deliveryWorkspacePrStatusMutation.mutate(workspace)}
+                                className="mt-2 w-full border-indigo-500/30 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
+                                data-testid={`button-check-pr-status-${workspace.id}`}
+                              >
+                                {deliveryWorkspacePrStatusMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
+                                Check PR status
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
                                   deliveryWorkspaceReleaseGateMutation.isPending
                                   || workspace.codexBuildHandoff.status === "not_required"
                                   || !releasePrUrl
@@ -8216,6 +8290,45 @@ export default function RevenueEnginePage() {
                         {deliveryWorkspaceReleaseGateMutation.data && deliveryWorkspaceReleaseGateMutation.data.status !== "ready" && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
                             {deliveryWorkspaceReleaseGateMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspacePrStatusMutation.data?.prStatus && (
+                          <div
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-xs",
+                              deliveryWorkspacePrStatusMutation.data.prStatus.readyForReleaseEvidence
+                                ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100"
+                                : "border-amber-500/20 bg-amber-500/5 text-amber-100",
+                            )}
+                            data-testid="panel-pr-status"
+                          >
+                            <p className="font-medium">
+                              PR #{deliveryWorkspacePrStatusMutation.data.prStatus.pr.number}: {deliveryWorkspacePrStatusMutation.data.reason}
+                            </p>
+                            <p className="mt-1 text-zinc-400">
+                              Checks {deliveryWorkspacePrStatusMutation.data.prStatus.checks.passed}/{deliveryWorkspacePrStatusMutation.data.prStatus.checks.total}
+                              {" "}Status {deliveryWorkspacePrStatusMutation.data.prStatus.statuses.state}
+                              {" "}Reviews {deliveryWorkspacePrStatusMutation.data.prStatus.approvedReviews.length}
+                            </p>
+                            {deliveryWorkspacePrStatusMutation.data.prStatus.blockers.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {deliveryWorkspacePrStatusMutation.data.prStatus.blockers.slice(0, 4).map((blocker) => (
+                                  <p key={blocker}>- {blocker}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deliveryWorkspacePrStatusMutation.data.prStatus.warnings.length > 0 && (
+                              <div className="mt-2 space-y-1 text-zinc-400">
+                                {deliveryWorkspacePrStatusMutation.data.prStatus.warnings.slice(0, 3).map((warning) => (
+                                  <p key={warning}>- {warning}</p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {deliveryWorkspacePrStatusMutation.error && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspacePrStatusMutation.error.message}
                           </div>
                         )}
                         {deliveryWorkspaceReleaseGateMutation.data?.status === "ready" && (
