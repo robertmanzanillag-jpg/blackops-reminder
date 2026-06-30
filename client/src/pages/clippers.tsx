@@ -2536,6 +2536,40 @@ interface ClipperTikTokMvpProofLinksPastePreviewSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksSaveReceiptSummary {
+  status: "saved_refreshed" | "saved_refresh_blocked";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  paths: {
+    json: string;
+    markdown: string;
+    proofLinksJson: string;
+    proofHandoff: string;
+    nextAction: string;
+  };
+  proofLinksPreview: {
+    status: "blocked" | "ready_for_proof_drop";
+    readyForProofDrop: boolean;
+    issues: string[];
+    goalBoardImpact: NonNullable<ClipperTikTokMvpProofLinksPreviewSummary["goalBoardImpact"]>;
+  };
+  refreshedArtifacts: Record<string, string>;
+  gateSummary: {
+    postProofRefreshError: string;
+    activeMvpReady: boolean;
+    operatorGateAllowed: boolean;
+    nextBlockedBy: string[];
+    uploadPackStatus: string;
+    sessionPacketStatus: string;
+  };
+  nextSafeButton: "apply_tiktok_mvp_evidence_closeout" | "prepare_tiktok_mvp_proof_doctor";
+  nextStep: string;
+  guardrails: string[];
+}
+
 interface ClipperTikTokMvpProofLinksDropImportSummary {
   status: "needs_review" | "ready_for_proof_links_preview";
   generatedAt: string;
@@ -10473,6 +10507,7 @@ export default function ClippersPage() {
   const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
   const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
   const [tiktokMvpProofLinksPastePreview, setTiktokMvpProofLinksPastePreview] = useState<ClipperTikTokMvpProofLinksPastePreviewSummary | null>(null);
+  const [tiktokMvpProofLinksSaveReceipt, setTiktokMvpProofLinksSaveReceipt] = useState<ClipperTikTokMvpProofLinksSaveReceiptSummary | null>(null);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -11509,12 +11544,14 @@ export default function ClippersPage() {
         metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary | null;
         metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary | null;
         metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus | null;
+        tiktokMvpProofLinksSaveReceipt: ClipperTikTokMvpProofLinksSaveReceiptSummary;
         postProofRefreshRuns: Record<string, unknown>;
         postProofRefreshError: string;
       };
     },
     onSuccess: (data) => {
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinks.raw);
+      setTiktokMvpProofLinksSaveReceipt(data.tiktokMvpProofLinksSaveReceipt);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links"], data.tiktokMvpProofLinks);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
@@ -11560,7 +11597,7 @@ export default function ClippersPage() {
       }
       toast({
         title: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError ? "Proof links guardados" : "Proof links guardados con blockers",
-        description: data.postProofRefreshError || data.tiktokMvpReadinessVerifier?.nextStep || data.tiktokMvpCloseoutWizard.nextStep,
+        description: data.tiktokMvpProofLinksSaveReceipt.nextStep || data.postProofRefreshError || data.tiktokMvpReadinessVerifier?.nextStep || data.tiktokMvpCloseoutWizard.nextStep,
         variant: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError && data.tiktokMvpReadinessVerifier?.status === "pass" ? undefined : "destructive",
       });
     },
@@ -18322,6 +18359,41 @@ export default function ClippersPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {tiktokMvpProofLinksSaveReceipt && (
+                    <div
+                      className={cn(
+                        "mt-2 rounded-md border bg-black/20 p-2 text-xs",
+                        tiktokMvpProofLinksSaveReceipt.status === "saved_refreshed"
+                          ? "border-emerald-300/15 text-emerald-100/80"
+                          : "border-amber-300/15 text-amber-100/80"
+                      )}
+                      data-testid="clippers-tiktok-mvp-proof-links-save-receipt"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          tiktokMvpProofLinksSaveReceipt.status === "saved_refreshed"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>
+                          receipt {tiktokMvpProofLinksSaveReceipt.status}
+                        </Badge>
+                        <span>next {tiktokMvpProofLinksSaveReceipt.nextSafeButton}</span>
+                        <span>proof {formatNumber(tiktokMvpProofLinksSaveReceipt.proofLinksPreview.goalBoardImpact.readyProofFields)}/{formatNumber(tiktokMvpProofLinksSaveReceipt.proofLinksPreview.goalBoardImpact.totalProofFields)}</span>
+                        <span>publish {tiktokMvpProofLinksSaveReceipt.realPublishEnabled ? "enabled" : "disabled"}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-4">{tiktokMvpProofLinksSaveReceipt.nextStep}</p>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2">
+                        <p className="break-all text-[10px] text-zinc-500">Receipt: {tiktokMvpProofLinksSaveReceipt.paths.markdown}</p>
+                        <p className="break-all text-[10px] text-zinc-500">Proof links: {tiktokMvpProofLinksSaveReceipt.paths.proofLinksJson}</p>
+                        <p className="text-[10px] text-zinc-500">Upload pack: {tiktokMvpProofLinksSaveReceipt.gateSummary.uploadPackStatus}</p>
+                        <p className="text-[10px] text-zinc-500">Session packet: {tiktokMvpProofLinksSaveReceipt.gateSummary.sessionPacketStatus}</p>
+                      </div>
+                      {tiktokMvpProofLinksSaveReceipt.gateSummary.nextBlockedBy.length > 0 && (
+                        <p className="mt-1 text-[10px] text-amber-100/80">Blocked by {tiktokMvpProofLinksSaveReceipt.gateSummary.nextBlockedBy.join(", ")}</p>
+                      )}
                     </div>
                   )}
                 </div>

@@ -506,6 +506,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveRoute, /!audit\.readyForProofDrop/);
   assert.match(proofLinksSaveRoute, /saveClipperTikTokMvpProofLinksAndRefresh/);
   assert.match(proofLinksSaveHelper, /proof-links\.json/);
+  assert.match(proofLinksSaveHelper, /proof-links-save-receipt\.json/);
+  assert.match(proofLinksSaveHelper, /proof-links-save-receipt\.md/);
+  assert.match(proofLinksSaveHelper, /tiktokMvpProofLinksSaveReceipt/);
+  assert.match(proofLinksSaveHelper, /Receipt is informational and does not apply evidence/);
   assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofDropKit/);
   assert.match(proofLinksSaveHelper, /proof-quick-fill-input\.json/);
   assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofQuickFill/);
@@ -707,6 +711,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-impact/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-goal-impact/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-save-receipt/);
+  assert.match(page, /tiktokMvpProofLinksSaveReceipt/);
   assert.match(page, /goalBoardImpact/);
   assert.match(page, /unlocksOperatorActions/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-lanes/);
