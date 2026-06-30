@@ -97,8 +97,8 @@ function renderBridgeCsv() {
       lane.metricoolBrandName,
       "",
       lane.profileUrl,
-      `<paste real public Metricool proof URL for ${lane.metricoolBrandName} ${lane.handle}>`,
-      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret proof reviewed by Robert.`,
+      `<paste real public Metricool proof URL or Drive/Docs evidence URL for ${lane.metricoolBrandName} ${lane.handle}>`,
+      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret Metricool or Drive/Docs proof reviewed by Robert.`,
     ].map(csvCell).join(",")),
     "",
   ].join("\n");
@@ -129,9 +129,9 @@ function renderCombinedCsv() {
       lane.metricoolBrandName,
       lane.profileUrl,
       `<paste real public ownership proof URL for ${lane.handle}>`,
-      `<paste real public Metricool proof URL for ${lane.metricoolBrandName} ${lane.handle}>`,
+      `<paste real public Metricool proof URL or Drive/Docs evidence URL for ${lane.metricoolBrandName} ${lane.handle}>`,
       `${lane.accountName} ${lane.handle} ownership and 2FA/security proof reviewed by Robert for Metricool TikTok MVP without secrets.`,
-      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret proof reviewed by Robert.`,
+      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret Metricool or Drive/Docs proof reviewed by Robert.`,
       accountCsvPath,
       bridgeCsvPath,
     ].map(csvCell).join(",")),
@@ -168,7 +168,19 @@ function renderMarkdown(summary) {
         ? lane.evidenceQuality.issues.map((issue) => `- Current blocker: ${issue}`)
         : ["- Current blockers: none"]),
       `- Account proof: replace the Drive placeholder with a real public/non-secret ownership or security proof URL.`,
-      `- Metricool proof: replace the Metricool placeholder with a real public/non-secret Metricool proof URL.`,
+      `- Metricool proof: replace the Metricool placeholder with a real public/non-secret Metricool URL or Google Drive/Docs evidence URL.`,
+      "- Capture checklist: exact TikTok profile visible, Metricool brand visible, connected TikTok profile visible, no passwords/tokens/cookies/recovery codes visible.",
+      "",
+    ].join("\n")),
+    "## Drive/Docs Evidence Checklist",
+    "",
+    ...summary.driveEvidenceChecklist.map((item) => [
+      `### ${item.accountName}`,
+      `- Account proof file name: ${item.accountProofFileName}`,
+      `- Metricool proof file name: ${item.metricoolProofFileName}`,
+      `- Account proof must show: ${item.accountProofMustShow.join("; ")}`,
+      `- Metricool proof must show: ${item.metricoolProofMustShow.join("; ")}`,
+      `- Redact: ${item.redact.join("; ")}`,
       "",
     ].join("\n")),
     "## Guardrails",
@@ -222,6 +234,22 @@ function renderHtml(summary, accountCsv, bridgeCsv, combinedCsv) {
       </div>`).join("")}
     </section>
     <section>
+      <h2>Drive/Docs Evidence Checklist</h2>
+      <div class="grid">
+        ${summary.driveEvidenceChecklist.map((item) => `<div>
+          <h2>${htmlEscape(item.accountName)}</h2>
+          <p>Account proof file: <code>${htmlEscape(item.accountProofFileName)}</code></p>
+          <p>Metricool proof file: <code>${htmlEscape(item.metricoolProofFileName)}</code></p>
+          <p>Account proof must show:</p>
+          <ul>${item.accountProofMustShow.map((text) => `<li>${htmlEscape(text)}</li>`).join("")}</ul>
+          <p>Metricool proof must show:</p>
+          <ul>${item.metricoolProofMustShow.map((text) => `<li>${htmlEscape(text)}</li>`).join("")}</ul>
+          <p>Redact:</p>
+          <ul>${item.redact.map((text) => `<li>${htmlEscape(text)}</li>`).join("")}</ul>
+        </div>`).join("")}
+      </div>
+    </section>
+    <section>
       <h2>Account Evidence CSV</h2>
       <p>Target: <code>clippers_workspace/account-permission-mvp-account-evidence.csv</code></p>
       <textarea readonly>${htmlEscape(accountCsv)}</textarea>
@@ -269,6 +297,32 @@ async function main() {
       evidencePath: closeoutRow.evidencePath || "",
     };
   });
+  const driveEvidenceChecklist = lanes.map((lane) => ({
+    accountId: lane.accountId,
+    accountName: lane.accountName,
+    handle: lane.handle,
+    metricoolBrandName: lane.metricoolBrandName,
+    accountProofFileName: `${lane.accountId}-tiktok-account-proof`,
+    metricoolProofFileName: `${lane.accountId}-metricool-tiktok-connected-proof`,
+    accountProofMustShow: [
+      `TikTok profile ${lane.handle}`,
+      "ownership/security context such as logged-in profile/settings or 2FA/security screen",
+      "no passwords, tokens, cookies, recovery codes, or private personal data",
+    ],
+    metricoolProofMustShow: [
+      `Metricool brand ${lane.metricoolBrandName}`,
+      `connected TikTok profile ${lane.handle}`,
+      "approval/scheduling context without enabling autopublish",
+    ],
+    redact: [
+      "passwords",
+      "tokens",
+      "cookies",
+      "recovery codes",
+      "client secrets",
+      "unrelated private account details",
+    ],
+  }));
   const accountCsv = renderAccountCsv();
   const bridgeCsv = renderBridgeCsv();
   const combinedCsv = renderCombinedCsv();
@@ -300,6 +354,7 @@ async function main() {
     currentReadiness: readinessRun,
     closeoutPreview: closeoutRun,
     lanes: laneSummaries,
+    driveEvidenceChecklist,
     guardrails: [
       "Do not paste passwords, cookies, access tokens, recovery codes, private keys, or private screenshots.",
       "Use only public/non-secret proof URLs and 20+ character notes.",

@@ -848,6 +848,9 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.equal(pack.paths.targetAccountCsv.endsWith("account-permission-mvp-account-evidence.csv"), true);
   assert.equal(pack.paths.targetBridgeCsv.endsWith("scheduled/metricool-tiktok-bridge-evidence.csv"), true);
   assert.ok(pack.lanes.every((lane) => lane.evidenceQuality));
+  assert.equal(pack.driveEvidenceChecklist.length, 2);
+  assert.ok(pack.driveEvidenceChecklist.every((item) => item.metricoolProofMustShow.some((text) => text.includes("connected TikTok profile"))));
+  assert.ok(pack.driveEvidenceChecklist.every((item) => item.redact.includes("tokens")));
   assert.ok(pack.lanes.some((lane) =>
     lane.accountId === "sports-daily"
     && lane.evidenceQuality.issues.some((issue) => issue.includes("accountProofUrl"))
@@ -863,11 +866,15 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar; change status to verified only after proof is real and reviewed>/);
   assert.doesNotMatch(accountTemplate, /"verified".*<paste real public ownership proof URL/);
   assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
-  assert.match(bridgeTemplate, /<paste real public Metricool proof URL for memes @memeradar>/);
+  assert.match(bridgeTemplate, /<paste real public Metricool proof URL or Drive\/Docs evidence URL for memes @memeradar>/);
   assert.match(markdown, /Evidence quality:/);
   assert.match(markdown, /Current blocker: .*accountProofUrl/);
+  assert.match(markdown, /Drive\/Docs Evidence Checklist/);
+  assert.match(markdown, /connected TikTok profile @sportsdaily/);
   assert.match(html, /Evidence quality:/);
   assert.match(html, /accountProofUrl/);
+  assert.match(html, /Drive\/Docs Evidence Checklist/);
+  assert.match(html, /sports-daily-metricool-tiktok-connected-proof/);
   assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}\n${markdown}\n${html}`, /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
   assert.match(html, /This guide does not publish or schedule posts/);
 });
