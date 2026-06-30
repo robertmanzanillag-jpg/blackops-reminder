@@ -4681,6 +4681,33 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.match(missingPaymentEvidence.reason, /referencia|comprobante/);
   assert.equal(missingPaymentEvidence.gates.some((gate) => gate.gate === "deposit_payment_evidence" && gate.passed === false), true);
 
+  const weakPaymentEvidence = recordRevenueOutreachOutcome({
+    draftId: draftResult.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    paymentConfirmation: "paid",
+  });
+  assert.equal(weakPaymentEvidence.status, "blocked");
+  assert.match(weakPaymentEvidence.reason, /verificable/);
+  assert.equal(weakPaymentEvidence.gates.some((gate) => gate.gate === "deposit_payment_evidence" && gate.passed === false), true);
+  assert.equal(weakPaymentEvidence.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(weakPaymentEvidence.snapshot.recentWebsiteOpportunities.length, 0);
+
+  for (const paymentConfirmation of ["Robert confirmed deposit.", "paid on 6/30", "deposit 2100 received", "payment confirmation 6/30", "invoice 1"]) {
+    const weakNarrativeEvidence = recordRevenueOutreachOutcome({
+      draftId: draftResult.draft.id,
+      outcome: "deposit_collected",
+      outcomeRecordedByRobert: true,
+      cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+      paymentConfirmation,
+    });
+    assert.equal(weakNarrativeEvidence.status, "blocked");
+    assert.match(weakNarrativeEvidence.reason, /verificable/);
+    assert.equal(weakNarrativeEvidence.snapshot.metrics.cashCollectedUsd, 0);
+    assert.equal(weakNarrativeEvidence.snapshot.recentWebsiteOpportunities.length, 0);
+  }
+
   const outcome = recordRevenueOutreachOutcome({
     draftId: draftResult.draft.id,
     outcome: "deposit_collected",
@@ -4719,8 +4746,33 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
     notes: "Deposit was already recorded in outreach outcome.",
   });
   assert.equal(closeWithoutExplicitPaymentConfirmation.status, "blocked");
-  assert.match(closeWithoutExplicitPaymentConfirmation.reason, /confirmacion de pago/);
+  assert.match(closeWithoutExplicitPaymentConfirmation.reason, /referencia|confirmacion/);
   assert.equal(closeWithoutExplicitPaymentConfirmation.snapshot.recentLedger.length, 0);
+
+  const closeWithWeakPaymentConfirmation = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    paymentConfirmation: "paid",
+  });
+  assert.equal(closeWithWeakPaymentConfirmation.status, "blocked");
+  assert.match(closeWithWeakPaymentConfirmation.reason, /verificable/);
+  assert.equal(closeWithWeakPaymentConfirmation.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(closeWithWeakPaymentConfirmation.snapshot.recentLedger.length, 0);
+  assert.equal(closeWithWeakPaymentConfirmation.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+
+  const closeWithWeakNarrativePayment = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    paymentConfirmation: "Robert confirmed deposit.",
+  });
+  assert.equal(closeWithWeakNarrativePayment.status, "blocked");
+  assert.match(closeWithWeakNarrativePayment.reason, /verificable/);
+  assert.equal(closeWithWeakNarrativePayment.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(closeWithWeakNarrativePayment.snapshot.recentLedger.length, 0);
 
   const closeResult = closeRevenueWebsiteOpportunity({
     opportunityId: opportunityResult.opportunity!.id,
@@ -4735,6 +4787,125 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.equal(closeResult.snapshot.recentLedger.length, 1);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, leadResult.lead.id);
+});
+
+test("persists manual deposit payment confirmation across reload before website close", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Reload Deposit Cafe",
+    contactEmail: "owner@reloaddeposit.example",
+    sourceUrl: "https://example.com/reload-deposit-cafe",
+    mockupSlug: "reload-deposit-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "website",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Zelle ref reload-deposit-123",
+  });
+  assert.equal(depositOutcome.status, "recorded");
+
+  setRevenueLeadsPathForTests(testLeadsPath);
+  setRevenueOutreachPathForTests(testOutreachPath);
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
+
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Zelle ref reload-deposit-123",
+  });
+
+  assert.equal(closeResult.status, "sold");
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(closeResult.snapshot.recentLedger.length, 1);
+});
+
+test("website delivery blocks persisted weak payment evidence before workspace and ledger", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Legacy Weak Paid Cafe",
+    contactEmail: "owner@legacyweakpaid.example",
+    sourceUrl: "https://example.com/legacy-weak-paid-cafe",
+    mockupSlug: "legacy-weak-paid-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "bundle",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_legacy_valid_123",
+  });
+  assert.equal(depositOutcome.status, "recorded");
+
+  const opportunities = JSON.parse(readFileSync(testWebsiteOpportunitiesPath, "utf8")) as Array<{
+    id: string;
+    status: string;
+    depositPaid: boolean;
+    scopeApproved: boolean;
+    cashCollectedUsd: number;
+    paymentConfirmation: string;
+  }>;
+  const persistedOpportunity = opportunities.find((item) => item.id === opportunityResult.opportunity!.id);
+  assert.ok(persistedOpportunity);
+  persistedOpportunity.status = "sold";
+  persistedOpportunity.depositPaid = true;
+  persistedOpportunity.scopeApproved = true;
+  persistedOpportunity.cashCollectedUsd = opportunityResult.opportunity!.requiredDepositUsd;
+  persistedOpportunity.paymentConfirmation = "paid";
+  writeFileSync(testWebsiteOpportunitiesPath, `${JSON.stringify(opportunities, null, 2)}\n`, "utf8");
+
+  const drafts = JSON.parse(readFileSync(testOutreachPath, "utf8")) as Array<{
+    id: string;
+    delivery: {
+      outcomePaymentConfirmation?: string;
+    };
+  }>;
+  const persistedDraft = drafts.find((item) => item.id === draft.id);
+  assert.ok(persistedDraft);
+  persistedDraft.delivery.outcomePaymentConfirmation = "paid";
+  writeFileSync(testOutreachPath, `${JSON.stringify(drafts, null, 2)}\n`, "utf8");
+
+  setRevenueLeadsPathForTests(testLeadsPath);
+  setRevenueOutreachPathForTests(testOutreachPath);
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
+  setRevenueLedgerPathForTests(testLedgerPath);
+
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.blockedCount, 1);
+  assert.match(snapshot.websiteDeliveryHandoffQueue.blocked[0].reason, /verificable/);
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunityResult.opportunity!.id,
+    projectType: "bundle",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    publicDataVerified: true,
+    repoFullName: "robertmanzanilla/legacy-weak-paid-cafe",
+  });
+
+  assert.equal(handoff.status, "blocked");
+  assert.match(handoff.reason, /verificable/);
+  assert.equal(handoff.workspace, null);
+  assert.equal(handoff.snapshot.recentLedger.length, 0);
 });
 
 test("runs main revenue agent with subagent reviews and approvals", () => {

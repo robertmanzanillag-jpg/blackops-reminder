@@ -1208,6 +1208,7 @@ const persistedRevenueOutreachDraftSchema = revenueOutreachDraftSchema.extend({
     outcomeAt: z.string().optional(),
     outcomeNotes: z.string().optional(),
     outcomeCashCollectedUsd: z.number().optional(),
+    outcomePaymentConfirmation: z.string().optional(),
   }),
   links: z.object({
     mailto: z.string(),
@@ -1665,6 +1666,51 @@ function slugifyRevenueValue(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "preview";
+}
+
+const GENERIC_REVENUE_PAYMENT_EVIDENCE = new Set([
+  "approved",
+  "cash",
+  "collected",
+  "confirmed",
+  "deposit",
+  "done",
+  "ok",
+  "paid",
+  "payment",
+  "received",
+  "sent",
+  "yes",
+]);
+
+function normalizeRevenuePaymentEvidence(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasRevenuePaymentEvidence(value: string) {
+  const trimmed = value.trim();
+  if (!hasRealValue(trimmed) || trimmed.length < 8) return false;
+
+  const normalized = normalizeRevenuePaymentEvidence(trimmed);
+  if (GENERIC_REVENUE_PAYMENT_EVIDENCE.has(normalized)) return false;
+  if (/^(paid|cash|deposit|payment|received|collected)\s+\$?\d+(\.\d{1,2})?$/.test(normalized)) return false;
+
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("pi_") || lower.includes("ch_")) return true;
+
+  const hasPaymentProvider = /\b(zelle|venmo|cashapp|cash app|paypal|stripe|square|clover|ach|wire|bank transfer)\b/.test(lower);
+  const hasReferenceLabel = /\b(ref|reference|receipt|invoice|txn|transaction|confirmation|confirmacion|comprobante|payment id|charge id)\b/.test(lower);
+  const normalizedTokens = normalized.split(" ");
+  const hasSpecificToken = /\b\d{3,}\b/.test(normalized)
+    || normalizedTokens.some((token) => token.length >= 6 && /[a-z]/.test(token) && /\d/.test(token))
+    || /\b[a-z]{2,}[-_][a-z0-9][a-z0-9_-]{2,}\b/i.test(trimmed);
+
+  return hasSpecificToken && (hasPaymentProvider || hasReferenceLabel);
 }
 
 function escapeHtml(value: unknown): string {
@@ -3450,6 +3496,21 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
   };
 }
 
+function revenueWebsitePaymentEvidenceBlocker(opportunity: RevenueWebsiteOpportunity | null, draft: RevenueOutreachDraft | null) {
+  if (!opportunity) return "oportunidad website no encontrada";
+  if (!hasRevenuePaymentEvidence(opportunity.paymentConfirmation)) {
+    return "oportunidad vendida sin referencia/comprobante verificable de pago";
+  }
+  if (!draft) return "draft de venta no encontrado";
+  const recordedDepositPaymentConfirmation = draft.delivery.outcome === "deposit_collected"
+    ? draft.delivery.outcomePaymentConfirmation || ""
+    : "";
+  if (!hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation)) {
+    return "deposito manual sin referencia/comprobante verificable en draft";
+  }
+  return "";
+}
+
 export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeliveryWorkspaceInput) {
   loadRevenueLeads();
   loadRevenueOutreach();
@@ -3521,6 +3582,17 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     return {
       status: "blocked" as const,
       reason: "La oportunidad website debe estar vendida con deposito y scope aprobados antes de crear delivery.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+  const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(websiteOpportunity, outreachDraft || null);
+  if (paymentEvidenceBlocker) {
+    return {
+      status: "blocked" as const,
+      reason: paymentEvidenceBlocker,
       lead,
       outreachDraft: outreachDraft || null,
       workspace: null,
@@ -4076,7 +4148,8 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
   const recordedDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
   const depositOutcomeCoversRequired = recordedDepositCashUsd >= requiredDepositUsd && requiredDepositUsd > 0;
-  const paymentConfirmed = parsed.paymentConfirmation.trim().length >= 4;
+  const recordedDepositPaymentConfirmed = hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation);
+  const paymentConfirmed = hasRevenuePaymentEvidence(parsed.paymentConfirmation);
   const blockers = [
     !opportunity && "oportunidad no encontrada",
     opportunity?.status === "blocked" && "oportunidad bloqueada",
@@ -4084,12 +4157,12 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
     !draft && "draft no encontrado",
     draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
     draft && draft.delivery.outcome === "deposit_collected" && !depositOutcomeCoversRequired && `deposito manual insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
-    depositOutcomeCoversRequired && recordedDepositPaymentConfirmation.trim().length < 4 && "deposito manual sin referencia/comprobante de pago",
+    depositOutcomeCoversRequired && !recordedDepositPaymentConfirmed && "deposito manual sin referencia/comprobante de pago verificable",
     !parsed.scopeApproved && "scope no aprobado",
     !parsed.depositPaid && "deposito no marcado",
     parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
     depositOutcomeCoversRequired && parsed.cashCollectedUsd !== recordedDepositCashUsd && `cashCollectedUsd debe coincidir con el deposito manual registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
-    !paymentConfirmed && "falta confirmacion de pago/deposito",
+    !paymentConfirmed && "falta referencia/comprobante verificable de pago/deposito",
   ].filter(Boolean) as string[];
 
   if (!opportunity || blockers.length > 0) {
@@ -4100,7 +4173,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
       opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, recordedDepositCashUsd);
       opportunity.depositPaid = nextDepositPaid;
       opportunity.scopeApproved = nextScopeApproved;
-      opportunity.paymentConfirmation = depositOutcomeCoversRequired
+      opportunity.paymentConfirmation = depositOutcomeCoversRequired && paymentConfirmed
         ? parsed.paymentConfirmation || opportunity.paymentConfirmation
         : opportunity.paymentConfirmation;
       opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
@@ -4411,6 +4484,16 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       });
       continue;
     }
+    const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(opportunity, draft);
+    if (paymentEvidenceBlocker) {
+      blocked.push({
+        leadId: opportunity.sourceLeadId,
+        businessName: opportunity.businessName,
+        reason: paymentEvidenceBlocker,
+        nextAction: "Registrar referencia de pago verificable antes de crear delivery.",
+      });
+      continue;
+    }
     items.push({
       opportunityId: opportunity.id,
       leadId: opportunity.sourceLeadId,
@@ -4464,6 +4547,7 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
     ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null
     : null;
   const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(opportunity, draft);
   const blockers = [
     !opportunity && "sourceOpportunityId vendido requerido",
     opportunity && opportunity.status !== "sold" && "oportunidad website no vendida",
@@ -4475,6 +4559,7 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
     draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en draft",
     draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito manual insuficiente",
     opportunity && recordedDepositCashUsd !== opportunity.cashCollectedUsd && "cash de oportunidad no coincide con deposito manual",
+    paymentEvidenceBlocker,
   ].filter(Boolean) as string[];
   return { passed: blockers.length === 0, blockers };
 }
@@ -7592,7 +7677,7 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de registrar contacto externo." },
     { gate: "human_recorded", passed: parsed.outcomeRecordedByRobert, fix: "Robert debe confirmar que este resultado ocurrio fuera del sistema." },
     { gate: "deposit_amount", passed: parsed.outcome !== "deposit_collected" || parsed.cashCollectedUsd > 0, fix: "Registrar cashCollectedUsd mayor a 0 para deposito cobrado." },
-    { gate: "deposit_payment_evidence", passed: parsed.outcome !== "deposit_collected" || parsed.paymentConfirmation.trim().length >= 4, fix: "Agregar referencia/comprobante de pago antes de marcar deposito cobrado." },
+    { gate: "deposit_payment_evidence", passed: parsed.outcome !== "deposit_collected" || hasRevenuePaymentEvidence(parsed.paymentConfirmation), fix: "Agregar referencia/comprobante verificable de pago antes de marcar deposito cobrado." },
   ];
   const failedGate = gates.find((gate) => !gate.passed);
 
