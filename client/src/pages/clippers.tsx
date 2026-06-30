@@ -2237,6 +2237,55 @@ interface ClipperTikTokMvpProofUnblockerSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofDropKitSummary {
+  status: "ready_quick_fill_ran" | "blocked_needs_public_proof_links";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  dropDir: string;
+  proofLinksPath: string;
+  readyForQuickFill: boolean;
+  lanes: Array<{
+    key: string;
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    handle: string;
+    metricoolBrandName: string;
+    expectedFiles: {
+      account: string;
+      metricool: string;
+    };
+    accountFileReady: boolean;
+    metricoolFileReady: boolean;
+    accountProofReady: boolean;
+    metricoolProofReady: boolean;
+    accountNotesReady: boolean;
+    metricoolNotesReady: boolean;
+    readyForQuickFill: boolean;
+    detectedAccountFiles: string[];
+    detectedMetricoolFiles: string[];
+  }>;
+  issues: string[];
+  warnings: string[];
+  quickFillStatus: string;
+  quickFillIssues: number;
+  unblockerStatus: string;
+  openFixes: number;
+  paths: {
+    json: string;
+    markdown: string;
+    html: string;
+    dropDir: string;
+    proofLinksJson: string;
+    quickFillInputJson: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -10184,6 +10233,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofIntakePack as ClipperTikTokMvpProofIntakePackSummary;
     },
   });
+  const { data: tiktokMvpProofDropKit } = useQuery<ClipperTikTokMvpProofDropKitSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-drop-kit"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-drop-kit");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof drop kit");
+      return data.tiktokMvpProofDropKit as ClipperTikTokMvpProofDropKitSummary;
+    },
+  });
   const { data: tiktokMvpProofDoctor } = useQuery<ClipperTikTokMvpProofDoctorSummary | null>({
     queryKey: ["/api/clippers/tiktok-mvp-proof-doctor"],
     queryFn: async () => {
@@ -10754,6 +10813,36 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof intake", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofDropKitMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-drop-kit", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof drop kit");
+      return data as {
+        tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
+      if (data.tiktokMvpProofQuickFill) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      }
+      if (data.tiktokMvpProofUnblocker) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      toast({
+        title: data.tiktokMvpProofDropKit.readyForQuickFill ? "Proof drop procesado" : "Proof drop listo para completar",
+        description: data.tiktokMvpProofDropKit.nextStep,
+        variant: data.tiktokMvpProofDropKit.readyForQuickFill ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof drop", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15399,6 +15488,7 @@ export default function ClippersPage() {
     { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
   ];
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
+    || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofDoctorMutation.isPending
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
@@ -16573,6 +16663,18 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofDropKitMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-drop-kit-button"
+              >
+                {tiktokMvpProofDropKitMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-2 h-3.5 w-3.5" />}
+                Proof drop
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpProofDoctorMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
@@ -16713,6 +16815,44 @@ export default function ClippersPage() {
                 <p className="break-all">Account template: {tiktokMvpProofIntakePack.paths.accountCsv}</p>
                 <p className="break-all">Bridge template: {tiktokMvpProofIntakePack.paths.bridgeCsv}</p>
                 <p className="mt-1 text-amber-100/80">{tiktokMvpProofIntakePack.nextStep}</p>
+              </div>
+            )}
+            {tiktokMvpProofDropKit && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpProofDropKit.readyForQuickFill
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-sky-300/15 text-sky-100/80"
+              )} data-testid="clippers-tiktok-mvp-proof-drop-kit-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpProofDropKit.readyForQuickFill
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                  )}>
+                    proof drop {tiktokMvpProofDropKit.status}
+                  </Badge>
+                  <span>{tiktokMvpProofDropKit.issues.length} issues</span>
+                  <span>{tiktokMvpProofDropKit.warnings?.length ?? 0} warnings</span>
+                  <span>{tiktokMvpProofDropKit.openFixes} open fixes</span>
+                </div>
+                <p className="mt-1">{tiktokMvpProofDropKit.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p className="break-all">Drop folder: {tiktokMvpProofDropKit.paths.dropDir}</p>
+                  <p className="break-all">Links JSON: {tiktokMvpProofDropKit.paths.proofLinksJson}</p>
+                  <p className="break-all">HTML: {tiktokMvpProofDropKit.paths.html}</p>
+                  <p>Real publish: {tiktokMvpProofDropKit.realPublishEnabled ? "enabled" : "disabled"}</p>
+                </div>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-drop-kit-lanes">
+                  {tiktokMvpProofDropKit.lanes.map((lane) => (
+                    <div key={lane.key} className="rounded border border-sky-300/10 bg-black/20 p-2">
+                      <p className="font-medium text-sky-100">{lane.accountName}</p>
+                      <p className="mt-1 text-sky-100/70">Account URL: {lane.accountProofReady ? "ready" : "missing"} / Metricool URL: {lane.metricoolProofReady ? "ready" : "missing"}</p>
+                      <p className="mt-1 text-sky-100/70">Files: {lane.detectedAccountFiles.length + lane.detectedMetricoolFiles.length}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {tiktokMvpProofDoctor && (

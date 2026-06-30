@@ -30,6 +30,13 @@ const commands = [
     required: true,
   },
   {
+    id: "proof_drop_kit",
+    label: "TikTok MVP proof drop kit",
+    command: "npm",
+    args: ["run", "clippers:tiktok-mvp-proof-drop-kit"],
+    required: true,
+  },
+  {
     id: "proof_quick_fill",
     label: "TikTok MVP proof quick fill",
     command: "npm",

@@ -347,6 +347,7 @@ export async function registerRoutes(
     return runClipperNodeJson(args, apply ? "TikTok MVP evidence closeout apply" : "TikTok MVP evidence closeout preview");
   };
   const runClipperTikTokMvpProofIntakePack = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-intake-pack.mjs", "TikTok MVP proof intake pack");
+  const runClipperTikTokMvpProofDropKit = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-drop-kit.mjs", "TikTok MVP proof drop kit");
   const runClipperTikTokMvpProofDoctor = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-doctor.mjs", "TikTok MVP proof doctor");
   const runClipperTikTokMvpProofQuickFill = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-quick-fill.mjs", "TikTok MVP proof quick fill");
   const runClipperTikTokMvpProofIntakeImport = (apply: boolean) => {
@@ -378,6 +379,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofIntakePack = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-pack.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofDropKit = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-drop-kit.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperTikTokMvpProofDoctor = async () => {
@@ -2689,6 +2694,29 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof intake pack" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-drop-kit", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof drop kit has not been prepared" : "TikTok MVP proof drop kit could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-drop-kit", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofDropKit();
+      res.json({
+        tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
+        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof drop kit" });
     }
   });
 
