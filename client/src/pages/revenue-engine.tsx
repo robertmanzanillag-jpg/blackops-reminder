@@ -538,6 +538,14 @@ type RevenueSnapshot = {
       includesAutomation: boolean;
       launchTargetDays: number;
       clientRequest: string;
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      secondReviewStatus: "pending" | "pass" | "blocked";
+      appQaStatus: "pending" | "pass" | "blocked";
+      deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
+      deploymentApprovalUrl: string;
       visualQaPassed: boolean;
       technicalQaPassed: boolean;
       automationQaPassed: boolean;
@@ -548,6 +556,23 @@ type RevenueSnapshot = {
     correctionQueue: Array<{ agent: string; priority: "high" | "medium"; action: string; blocksDelivery: boolean }>;
     runbook: Array<{ phase: string; ownerAgent: string; checklist: string[] }>;
     approvalSummary: { canShowClientPreview: boolean; canLaunch: boolean; requiredBeforeClient: string[] };
+    codexBuildHandoff: {
+      status: "not_required" | "needs_pr" | "ready_for_qa";
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      secondReviewStatus: "pending" | "pass" | "blocked";
+      appQaStatus: "pending" | "pass" | "blocked";
+      deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
+      deploymentApprovalUrl: string;
+      title: string;
+      codexBrief: string;
+      acceptanceCriteria: string[];
+      blockedActions: string[];
+      missing: string[];
+      nextAction: string;
+    };
     learningNote: string;
   }>;
   recentApprovalDecisions: Array<{
@@ -1406,6 +1431,9 @@ function statusTone(status: string) {
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_for_preview") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_qa") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "needs_pr") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "not_required") return "border-zinc-700 bg-zinc-900 text-zinc-300";
   if (status === "needs_spend_approval") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "needs_review") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "needs_lead_evidence") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
@@ -1496,7 +1524,14 @@ export default function RevenueEnginePage() {
     linksChecked: false,
     automationTested: false,
     rollbackPlanReady: false,
+    secondReviewPassed: false,
+    appQaPassed: false,
+    deploymentApproved: false,
   });
+  const [reviewRepoFullName, setReviewRepoFullName] = useState("");
+  const [reviewGithubIssueUrl, setReviewGithubIssueUrl] = useState("");
+  const [reviewPrUrl, setReviewPrUrl] = useState("");
+  const [reviewDeploymentApprovalUrl, setReviewDeploymentApprovalUrl] = useState("");
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
   const [proposalRecipientEmail, setProposalRecipientEmail] = useState("robert.manzanillag@gmail.com");
   const [proposalContactName, setProposalContactName] = useState("Robert");
@@ -1967,6 +2002,13 @@ export default function RevenueEnginePage() {
           includesAutomation: reviewProjectType !== "website",
           launchTargetDays: 7,
           clientRequest: reviewNotes,
+          repoFullName: reviewRepoFullName,
+          githubIssueUrl: reviewGithubIssueUrl,
+          prUrl: reviewPrUrl,
+          secondReviewStatus: reviewChecks.secondReviewPassed ? "pass" : "pending",
+          appQaStatus: reviewChecks.appQaPassed ? "pass" : "pending",
+          deploymentApprovalStatus: reviewChecks.deploymentApproved && reviewDeploymentApprovalUrl ? "approved" : "not_requested",
+          deploymentApprovalUrl: reviewDeploymentApprovalUrl,
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
@@ -2064,7 +2106,16 @@ export default function RevenueEnginePage() {
       const response = await fetch("/api/revenue-engine/delivery-workspaces/qa", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildDeliveryWorkspaceQaPayload(workspace, reviewChecks)),
+        body: JSON.stringify({
+          ...buildDeliveryWorkspaceQaPayload(workspace, reviewChecks),
+          repoFullName: reviewRepoFullName || workspace.input.repoFullName,
+          githubIssueUrl: reviewGithubIssueUrl || workspace.input.githubIssueUrl,
+          prUrl: reviewPrUrl || workspace.input.prUrl,
+          secondReviewStatus: reviewChecks.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+          appQaStatus: reviewChecks.appQaPassed ? "pass" : workspace.input.appQaStatus,
+          deploymentApprovalStatus: reviewChecks.deploymentApproved && (reviewDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl) ? "approved" : workspace.input.deploymentApprovalStatus,
+          deploymentApprovalUrl: reviewDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo revalidar el workspace");
@@ -6019,6 +6070,9 @@ export default function RevenueEnginePage() {
                           ["linksChecked", "Links/formularios OK"],
                           ["automationTested", "Automation probada"],
                           ["rollbackPlanReady", "Rollback listo"],
+                          ["secondReviewPassed", "Review externo OK"],
+                          ["appQaPassed", "App QA OK"],
+                          ["deploymentApproved", "Deploy aprobado"],
                         ].map(([key, label]) => (
                           <label
                             key={key}
@@ -6034,6 +6088,61 @@ export default function RevenueEnginePage() {
                             {label}
                           </label>
                         ))}
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-repo">
+                            Repo
+                          </label>
+                          <Input
+                            id="review-repo"
+                            value={reviewRepoFullName}
+                            onChange={(event) => setReviewRepoFullName(event.target.value)}
+                            placeholder="owner/repo"
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-review-repo"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-issue-url">
+                            Issue PR-first
+                          </label>
+                          <Input
+                            id="review-issue-url"
+                            value={reviewGithubIssueUrl}
+                            onChange={(event) => setReviewGithubIssueUrl(event.target.value)}
+                            placeholder="https://github.com/.../issues/..."
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-review-issue-url"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-pr-url">
+                            PR
+                          </label>
+                          <Input
+                            id="review-pr-url"
+                            value={reviewPrUrl}
+                            onChange={(event) => setReviewPrUrl(event.target.value)}
+                            placeholder="https://github.com/.../pull/..."
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-review-pr-url"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-deploy-approval-url">
+                            Deploy approval
+                          </label>
+                          <Input
+                            id="review-deploy-approval-url"
+                            value={reviewDeploymentApprovalUrl}
+                            onChange={(event) => setReviewDeploymentApprovalUrl(event.target.value)}
+                            placeholder="https://github.com/.../pull/...#issuecomment-..."
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-review-deploy-approval-url"
+                          />
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -6308,6 +6417,66 @@ export default function RevenueEnginePage() {
                                   ))}
                                 </div>
                               )}
+                              <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-sky-200">Codex PR-first</p>
+                                    <p className="mt-1 text-sm leading-5 text-zinc-300">{workspace.codexBuildHandoff.nextAction}</p>
+                                  </div>
+                                  <Badge variant="outline" className={cn(statusTone(workspace.codexBuildHandoff.status), "shrink-0")}>
+                                    {workspace.codexBuildHandoff.status}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {workspace.codexBuildHandoff.repoFullName && (
+                                    <Badge variant="outline" className="border-zinc-700 text-zinc-300">{workspace.codexBuildHandoff.repoFullName}</Badge>
+                                  )}
+                                  {workspace.codexBuildHandoff.prUrl && (
+                                    <a href={workspace.codexBuildHandoff.prUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        PR
+                                      </Button>
+                                    </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.githubIssueUrl && (
+                                    <a href={workspace.codexBuildHandoff.githubIssueUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Issue
+                                      </Button>
+                                    </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.deploymentApprovalUrl && (
+                                    <a href={workspace.codexBuildHandoff.deploymentApprovalUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Approval
+                                      </Button>
+                                    </a>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.codexBrief)}
+                                    data-testid={`button-copy-codex-build-handoff-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy brief
+                                  </Button>
+                                </div>
+                                {workspace.codexBuildHandoff.missing.length > 0 && (
+                                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                    {workspace.codexBuildHandoff.missing.slice(0, 4).map((item) => (
+                                      <div key={`${workspace.id}-${item}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                                        {item}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"

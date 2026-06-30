@@ -230,6 +230,14 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   sourceLeadId: z.string().trim().max(160).optional().default(""),
   sourceOutreachDraftId: z.string().trim().max(160).optional().default(""),
   mockupUrl: revenueMockupUrlSchema.optional().default(""),
+  repoFullName: z.string().trim().max(200).optional().default(""),
+  branchName: z.string().trim().max(200).optional().default(""),
+  githubIssueUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
+  prUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
+  secondReviewStatus: z.enum(["pending", "pass", "blocked"]).default("pending"),
+  appQaStatus: z.enum(["pending", "pass", "blocked"]).default("pending"),
+  deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).default("not_requested"),
+  deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   visualQaPassed: z.coerce.boolean().default(false),
   technicalQaPassed: z.coerce.boolean().default(false),
   automationQaPassed: z.coerce.boolean().default(false),
@@ -267,6 +275,14 @@ export const revenueDeliveryWorkspaceUpdateSchema = z.object({
   technicalQaPassed: z.coerce.boolean().optional(),
   automationQaPassed: z.coerce.boolean().optional(),
   clientHandoffReady: z.coerce.boolean().optional(),
+  repoFullName: z.string().trim().max(200).optional(),
+  branchName: z.string().trim().max(200).optional(),
+  githubIssueUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  prUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  secondReviewStatus: z.enum(["pending", "pass", "blocked"]).optional(),
+  appQaStatus: z.enum(["pending", "pass", "blocked"]).optional(),
+  deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).optional(),
+  deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
   notes: z.string().trim().max(1200).optional(),
 });
 
@@ -799,6 +815,7 @@ type RevenueDeliveryWorkspace = {
     requiredBeforeClient: string[];
   };
   learningNote: string;
+  codexBuildHandoff: ReturnType<typeof buildRevenueCodexBuildHandoff>;
 };
 
 type RevenueApprovalDecision = RevenueApprovalDecisionInput & {
@@ -1050,6 +1067,7 @@ const persistedRevenueDeliveryWorkspaceSchema = z.object({
     canLaunch: z.boolean(),
     requiredBeforeClient: z.array(z.string()),
   }),
+  codexBuildHandoff: z.unknown().optional(),
   learningNote: z.string(),
 });
 const persistedRevenueApprovalDecisionSchema = revenueApprovalDecisionSchema.extend({
@@ -1516,7 +1534,13 @@ function loadRevenueDeliveryWorkspaces() {
       revenueDeliveryWorkspacesPersistenceError = "Delivery workspaces invalidos; no se cargaron para evitar entregas incorrectas.";
       return;
     }
-    revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length, ...(parsed.data as RevenueDeliveryWorkspace[]));
+    const workspaces = (parsed.data as RevenueDeliveryWorkspace[]).map((workspace) => ({
+      ...buildRevenueDeliveryWorkspace(workspace.input),
+      id: workspace.id,
+      createdAt: workspace.createdAt,
+      updatedAt: workspace.updatedAt,
+    }));
+    revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length, ...workspaces);
     revenueDeliveryWorkspacesPersistenceError = null;
   } catch (error) {
     revenueDeliveryWorkspacesPersistenceError = error instanceof Error ? error.message : "No se pudo leer delivery workspaces.";
@@ -2835,6 +2859,14 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     sourceLeadId: "",
     sourceOutreachDraftId: "",
     mockupUrl: "",
+    repoFullName: "",
+    branchName: "",
+    githubIssueUrl: "",
+    prUrl: "",
+    secondReviewStatus: "pending",
+    appQaStatus: "pending",
+    deploymentApprovalStatus: "not_requested",
+    deploymentApprovalUrl: "",
     clientName: opportunity.businessName,
     projectType: "automation",
     packageName: opportunity.quote.scope.packageName,
@@ -2991,6 +3023,14 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     sourceLeadId: lead.id,
     sourceOutreachDraftId: outreachDraft?.id || "",
     mockupUrl: effectiveMockupUrl,
+    repoFullName: "",
+    branchName: "",
+    githubIssueUrl: "",
+    prUrl: "",
+    secondReviewStatus: "pending",
+    appQaStatus: "pending",
+    deploymentApprovalStatus: "not_requested",
+    deploymentApprovalUrl: "",
     clientName: lead.businessName,
     projectType: parsed.projectType,
     packageName: parsed.projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
@@ -5517,6 +5557,89 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
+  const isWebsiteBuild = input.projectType === "website" || input.projectType === "bundle";
+  const repoFullName = (input.repoFullName || "").trim();
+  const branchName = (input.branchName || `codex/client-${slugifyRevenueValue(input.clientName)}-website`).trim();
+  const githubIssueUrl = (input.githubIssueUrl || "").trim();
+  const prUrl = (input.prUrl || "").trim();
+  const secondReviewStatus = input.secondReviewStatus || "pending";
+  const appQaStatus = input.appQaStatus || "pending";
+  const deploymentApprovalStatus = input.deploymentApprovalStatus || "not_requested";
+  const deploymentApprovalUrl = (input.deploymentApprovalUrl || "").trim();
+  const missing = [
+    isWebsiteBuild && !repoFullName && "repo GitHub del website",
+    isWebsiteBuild && !githubIssueUrl && "GitHub handoff issue PR-first",
+    isWebsiteBuild && !prUrl && "pull request de build",
+    isWebsiteBuild && secondReviewStatus !== "pass" && "segundo review independiente",
+    isWebsiteBuild && appQaStatus !== "pass" && "App QA gate aprobado",
+    isWebsiteBuild && deploymentApprovalStatus !== "approved" && "aprobacion humana de deploy",
+    isWebsiteBuild && deploymentApprovalStatus === "approved" && !deploymentApprovalUrl && "URL/evidencia de aprobacion de deploy",
+  ].filter(Boolean) as string[];
+  const title = `[Revenue Website Build] ${input.clientName} - ${input.packageName}`;
+  const codexBrief = [
+    title,
+    "",
+    "Goal",
+    `Build the sold ${input.projectType} delivery for ${input.clientName} using the approved scope, mockup, public evidence, and Revenue Engine workspace.`,
+    "",
+    "Commercial Context",
+    `- Setup: $${input.setupUsd.toLocaleString("en-US")}`,
+    `- Retainer: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
+    `- Deposit paid: ${input.depositPaid ? "yes" : "no"}`,
+    `- Scope approved: ${input.scopeApproved ? "yes" : "no"}`,
+    `- Public data verified: ${input.publicDataVerified ? "yes" : "no"}`,
+    input.mockupUrl && `- Mockup: ${input.mockupUrl}`,
+    "",
+    "Client Request / Evidence",
+    input.clientRequest || "Use Revenue Engine workspace context.",
+    "",
+    "PR-First Rules",
+    "- Create or work only on a separate Codex branch.",
+    "- Open a pull request before merge.",
+    "- Do not commit directly to main.",
+    "- Do not deploy to Replit or custom production without explicit Robert approval.",
+    "- Do not expose secrets, credentials, private customer data, or non-public security details.",
+    "- Run App QA after implementation and include rollback notes.",
+    "",
+    "Acceptance Criteria",
+    "- Website experience matches the approved offer and public business facts.",
+    "- Mobile and desktop layouts are checked.",
+    "- CTA/contact paths work or are clearly stubbed for Robert/client approval.",
+    "- Any automation in scope has test data, failure behavior, and manual fallback.",
+    "- PR includes tests/checks run, QA summary, risks, and rollback.",
+  ].filter(Boolean).join("\n");
+
+  return {
+    status: !isWebsiteBuild ? "not_required" as const : missing.length > 0 ? "needs_pr" as const : "ready_for_qa" as const,
+    repoFullName,
+    branchName,
+    githubIssueUrl,
+    prUrl,
+    secondReviewStatus,
+    appQaStatus,
+    deploymentApprovalStatus,
+    deploymentApprovalUrl,
+    title,
+    codexBrief,
+    acceptanceCriteria: [
+      "PR exists before merge.",
+      "Second-agent review passes.",
+      "App QA passes against the target environment.",
+      "Rollback note is included.",
+      "Deployment waits for explicit Robert approval.",
+    ],
+    blockedActions: ["merge without PR", "direct main commit", "deploy without Robert approval", "skip App QA", "publish unapproved client preview"],
+    missing,
+    nextAction:
+      !isWebsiteBuild
+        ? "Automation-only workspace no requiere build handoff de website."
+        : missing.length > 0
+          ? "Crear/actualizar GitHub issue PR-first, abrir PR de build, correr review independiente y App QA antes de entregar."
+          : "PR-first build listo para QA/deploy approval; no desplegar hasta aprobacion humana.",
+  };
+}
+
 function buildRevenueClarificationGate(input: {
   request: string;
   projectType?: "website" | "automation" | "bundle";
@@ -5871,6 +5994,7 @@ export function buildDeliveryReview(input: DeliveryReviewInput) {
 
 export function buildRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInput) {
   const projectPlan = buildRevenueProjectPlan(input);
+  const codexBuildHandoff = buildRevenueCodexBuildHandoff(input);
   const deliveryReview = buildDeliveryReview({
     projectName: input.workspaceName || input.clientName,
     projectType: input.projectType,
@@ -5904,12 +6028,13 @@ export function buildRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInp
   const status: RevenueDeliveryWorkspace["status"] =
     deliveryReview.status === "blocked" || projectPlan.decision.status === "blocked"
       ? "blocked"
-      : allCorrections.length > 0 || projectPlan.decision.status !== "ready_to_build"
+      : allCorrections.length > 0 || projectPlan.decision.status !== "ready_to_build" || codexBuildHandoff.status === "needs_pr"
         ? "needs_corrections"
         : "ready_to_deliver";
   const requiredBeforeClient = [
     ...projectPlan.decision.missing,
     ...allCorrections.filter((item) => item.blocksDelivery).map((item) => item.action),
+    ...codexBuildHandoff.missing,
     !input.clientHandoffReady && "handoff del cliente listo",
   ].filter(Boolean) as string[];
 
@@ -5925,10 +6050,11 @@ export function buildRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceInp
       checklist: phase.tasks,
     })),
     approvalSummary: {
-      canShowClientPreview: projectPlan.decision.status !== "blocked" && deliveryReview.summary.blocking === 0,
-      canLaunch: status === "ready_to_deliver" && input.clientHandoffReady,
+      canShowClientPreview: projectPlan.decision.status !== "blocked" && deliveryReview.summary.blocking === 0 && codexBuildHandoff.status !== "needs_pr",
+      canLaunch: status === "ready_to_deliver" && input.clientHandoffReady && codexBuildHandoff.status !== "needs_pr",
       requiredBeforeClient,
     },
+    codexBuildHandoff,
     learningNote:
       status === "ready_to_deliver"
         ? `${input.clientName}: entrega lista con QA, costo <= $100/mes y handoff preparado.`
@@ -5978,6 +6104,14 @@ export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspace
     technicalQaPassed: parsed.technicalQaPassed ?? existing.input.technicalQaPassed,
     automationQaPassed: parsed.automationQaPassed ?? existing.input.automationQaPassed,
     clientHandoffReady: parsed.clientHandoffReady ?? existing.input.clientHandoffReady,
+    repoFullName: parsed.repoFullName ?? existing.input.repoFullName,
+    branchName: parsed.branchName ?? existing.input.branchName,
+    githubIssueUrl: parsed.githubIssueUrl ?? existing.input.githubIssueUrl,
+    prUrl: parsed.prUrl ?? existing.input.prUrl,
+    secondReviewStatus: parsed.secondReviewStatus ?? existing.input.secondReviewStatus,
+    appQaStatus: parsed.appQaStatus ?? existing.input.appQaStatus,
+    deploymentApprovalStatus: parsed.deploymentApprovalStatus ?? existing.input.deploymentApprovalStatus,
+    deploymentApprovalUrl: parsed.deploymentApprovalUrl ?? existing.input.deploymentApprovalUrl,
     clientRequest: parsed.notes
       ? `${existing.input.clientRequest}\n\nQA update: ${parsed.notes}`.slice(0, 1200)
       : existing.input.clientRequest,

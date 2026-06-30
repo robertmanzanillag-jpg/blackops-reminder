@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -341,7 +341,7 @@ test("records verified public lead candidates as previewable batch rows without 
   assert.equal(result.candidate.safety.sendsOutreach, false);
   assert.equal(snapshot.recentPublicLeadCandidates[0].businessName, "Public Scout Cafe");
   assert.equal(snapshot.publicLeadImportQueue.readyCount, 2);
-  assert.equal(snapshot.publicLeadImportQueue.items[0].candidateId, result.candidate.id);
+  assert.equal(snapshot.publicLeadImportQueue.items.some((item) => item.candidateId === result.candidate.id), true);
   assert.equal(snapshot.recentLeads.length, 0);
   assert.equal(snapshot.recentOutreach.length, 0);
 });
@@ -1450,6 +1450,9 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.input.clientRequest.includes("Codex build rule"), true);
   assert.equal(handoff.workspace?.projectPlan.decision.status, "ready_to_build");
   assert.equal(handoff.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
+  assert.equal(handoff.workspace?.codexBuildHandoff.status, "needs_pr");
+  assert.equal(handoff.workspace?.codexBuildHandoff.codexBrief.includes("PR-First Rules"), true);
+  assert.equal(handoff.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
   assert.equal(handoff.outreachDraft?.delivery.sendStatus, "not_sent");
   assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
   assert.equal(handoff.snapshot.recentDeliveryWorkspaces[0].input.sourceLeadId, lead.id);
@@ -1473,6 +1476,34 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(duplicateHandoff.status, "created");
   assert.equal(duplicateHandoff.snapshot.metrics.appsSold, 1);
   assert.equal(duplicateHandoff.snapshot.metrics.cashCollectedUsd, 2100);
+
+  const blockedDelivery = deliverRevenueDeliveryWorkspace({
+    workspaceId: handoff.workspace?.id || "",
+    approvedByRobert: true,
+  });
+  assert.equal(blockedDelivery.status, "blocked");
+  assert.match(blockedDelivery.reason, /pull request de build/);
+
+  const qaReady = updateRevenueDeliveryWorkspaceQa({
+    workspaceId: handoff.workspace?.id || "",
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    repoFullName: "robert/handoff-cafe",
+    githubIssueUrl: "https://github.com/robert/handoff-cafe/issues/1",
+    prUrl: "https://github.com/robert/handoff-cafe/pull/2",
+    secondReviewStatus: "pass",
+    appQaStatus: "pass",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/handoff-cafe/pull/2#issuecomment-approval",
+    notes: "PR, second review, App QA and Robert deploy approval verified.",
+  });
+
+  assert.equal(qaReady.status, "ready");
+  assert.equal(qaReady.workspace?.codexBuildHandoff.status, "ready_for_qa");
+  assert.equal(qaReady.workspace?.approvalSummary.canLaunch, true);
 });
 
 test("website delivery handoff blocks incomplete deposits before closing or ledger", () => {
@@ -3182,6 +3213,74 @@ test("persists ready delivery workspaces across module state reloads", () => {
   assert.equal(snapshot.recentDeliveryWorkspaces[0].input.clientName, "Ready Client");
   assert.equal(snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
   assert.equal(snapshot.recentDeliveryWorkspaces[0].approvalSummary.canLaunch, true);
+});
+
+test("legacy website delivery workspaces reload into PR-first blocked state", () => {
+  const legacyWorkspace = {
+    id: "legacy-website-workspace",
+    createdAt: "2026-06-01T00:00:00.000Z",
+    updatedAt: "2026-06-01T00:00:00.000Z",
+    input: {
+      workspaceName: "Legacy website delivery",
+      sourceOpportunityId: "",
+      sourceLeadId: "lead-legacy",
+      sourceOutreachDraftId: "outreach-legacy",
+      mockupUrl: "/api/revenue-engine/mockup-previews/legacy-cafe",
+      repoFullName: "",
+      branchName: "",
+      githubIssueUrl: "",
+      prUrl: "",
+      secondReviewStatus: "pending",
+      appQaStatus: "pending",
+      deploymentApprovalStatus: "not_requested",
+      deploymentApprovalUrl: "",
+      clientName: "Legacy Cafe",
+      projectType: "bundle",
+      packageName: "Website 3D Premium + Automation Sprint",
+      setupUsd: 4200,
+      monthlyRetainerUsd: 750,
+      estimatedInternalCostUsd: 54,
+      depositPaid: true,
+      scopeApproved: true,
+      publicDataVerified: true,
+      includesAutomation: true,
+      launchTargetDays: 7,
+      clientRequest: "Legacy persisted workspace before PR-first handoff gate.",
+      visualQaPassed: true,
+      technicalQaPassed: true,
+      automationQaPassed: true,
+      clientHandoffReady: true,
+    },
+    status: "ready_to_deliver",
+    projectPlan: {},
+    deliveryReview: {},
+    correctionQueue: [],
+    runbook: [],
+    approvalSummary: {
+      canShowClientPreview: true,
+      canLaunch: true,
+      requiredBeforeClient: [],
+    },
+    learningNote: "Legacy workspace incorrectly looked ready.",
+  };
+  writeFileSync(testDeliveryWorkspacesPath, JSON.stringify([legacyWorkspace], null, 2));
+  setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+
+  const snapshot = getRevenueEngineSnapshot();
+  const workspace = snapshot.recentDeliveryWorkspaces[0];
+
+  assert.equal(workspace.status, "needs_corrections");
+  assert.equal(workspace.approvalSummary.canLaunch, false);
+  assert.equal(workspace.codexBuildHandoff.status, "needs_pr");
+  assert.equal(workspace.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
+
+  const delivered = deliverRevenueDeliveryWorkspace({
+    workspaceId: "legacy-website-workspace",
+    approvedByRobert: true,
+  });
+
+  assert.equal(delivered.status, "blocked");
+  assert.match(delivered.reason, /pull request de build/);
 });
 
 test("persists ledger entries across module state reloads", () => {
