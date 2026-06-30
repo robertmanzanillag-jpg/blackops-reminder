@@ -148,6 +148,7 @@ const clipperTikTokMvpProofLinksDropPastePaths = [
   "clippers_workspace/proof-drop/tiktok-mvp/proof-links-drop.txt",
   "clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet.txt",
 ] as const;
+const clipperTikTokMvpProofLinksFilledDropPath = clipperTikTokMvpProofLinksDropPastePaths[0];
 
 async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: string; pasteText: string; bytes: number }> {
   for (const sourcePath of clipperTikTokMvpProofLinksDropPastePaths) {
@@ -2837,6 +2838,55 @@ export async function registerRoutes(
       res.json({ tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus() });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to read TikTok MVP proof links drop status" });
+    }
+  });
+
+  app.post("/api/clippers/create-tiktok-mvp-proof-links-drop-starter", async (_req, res) => {
+    try {
+      await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
+      const existing = await readNodeFile(clipperTikTokMvpProofLinksFilledDropPath, "utf8").catch(() => "");
+      let wroteStarter = false;
+      let starterText = existing;
+      let handoffRun: Record<string, unknown> | null = null;
+      if (!existing.trim()) {
+        let handoff = await readClipperTikTokMvpProofHandoff().catch(() => null);
+        if (!handoff?.pastePacketText) {
+          handoffRun = await runClipperTikTokMvpProofHandoff();
+          handoff = await readClipperTikTokMvpProofHandoff();
+        }
+        starterText = String(handoff?.pastePacketText || "").trimEnd();
+        if (!starterText.trim()) {
+          res.status(400).json({ error: "TikTok MVP proof handoff did not produce a proof links paste packet." });
+          return;
+        }
+        await writeNodeFile(clipperTikTokMvpProofLinksFilledDropPath, `${starterText}\n`);
+        wroteStarter = true;
+      }
+      res.json({
+        tiktokMvpProofLinksDropStarter: {
+          status: wroteStarter ? "created" : "preserved_existing",
+          generatedAt: new Date().toISOString(),
+          scope: "tiktok_only_metricool_mvp",
+          launchMode: "metricool_approval_required",
+          directSocialApisRequired: false,
+          realPublishEnabled: false,
+          sourcePath: clipperTikTokMvpProofLinksFilledDropPath,
+          bytes: Buffer.byteLength(starterText || "", "utf8"),
+          overwritten: false,
+          wroteStarter,
+          guardrails: [
+            "Creates only a local non-secret proof links starter file.",
+            "Does not overwrite an existing filled proof links drop file.",
+            "Does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+          ],
+          nextStep: "Open the starter file, replace every placeholder with real public/non-secret proof URLs, then run Import drop file.",
+        },
+        tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
+        run: handoffRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to create TikTok MVP proof links drop starter" });
     }
   });
 

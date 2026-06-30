@@ -2415,6 +2415,21 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksDropStarterSummary {
+  status: "created" | "preserved_existing";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  sourcePath: string;
+  bytes: number;
+  overwritten: boolean;
+  wroteStarter: boolean;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -11313,6 +11328,33 @@ export default function ClippersPage() {
     },
   });
 
+  const tiktokMvpProofLinksDropStarterMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/create-tiktok-mvp-proof-links-drop-starter", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude crear el proof drop starter");
+      return data as {
+        tiktokMvpProofLinksDropStarter: ClipperTikTokMvpProofLinksDropStarterSummary;
+        tiktokMvpProofLinksDropStatus: ClipperTikTokMvpProofLinksDropStatusSummary;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], data.tiktokMvpProofLinksDropStatus);
+      if (data.tiktokMvpProofHandoff) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      }
+      toast({
+        title: data.tiktokMvpProofLinksDropStarter.status === "created" ? "Starter creado" : "Starter existente preservado",
+        description: data.tiktokMvpProofLinksDropStarter.nextStep,
+        variant: data.tiktokMvpProofLinksDropStarter.status === "created" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude crear proof starter", description: error.message, variant: "destructive" });
+    },
+  });
+
   const tiktokMvpProofHandoffMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-handoff", { method: "POST" });
@@ -16056,6 +16098,7 @@ export default function ClippersPage() {
     || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofLinksPasteMutation.isPending
     || tiktokMvpProofLinksDropImportMutation.isPending
+    || tiktokMvpProofLinksDropStarterMutation.isPending
     || tiktokMvpProofLinksPreviewMutation.isPending
     || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofHandoffMutation.isPending
@@ -17550,6 +17593,18 @@ export default function ClippersPage() {
                     >
                       {tiktokMvpProofLinksDropImportMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-2 h-3.5 w-3.5" />}
                       Import drop file
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => tiktokMvpProofLinksDropStarterMutation.mutate()}
+                      disabled={tiktokProofFlowBusy || isLoading}
+                      className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                      data-testid="create-clippers-tiktok-mvp-proof-links-drop-starter-button"
+                    >
+                      {tiktokMvpProofLinksDropStarterMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-2 h-3.5 w-3.5" />}
+                      Create starter
                     </Button>
                     <Button
                       type="button"
