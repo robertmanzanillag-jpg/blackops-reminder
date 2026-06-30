@@ -369,12 +369,15 @@ type RevenueSnapshot = {
     readyCount: number;
     blockedCount: number;
     items: Array<{
+      opportunityId: string;
       leadId: string;
       outreachDraftId: string;
       businessName: string;
       leadStatus: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
       projectType: "website" | "bundle";
       estimatedSetupUsd: number;
+      requiredDepositUsd: number;
+      cashCollectedUsd: number;
       monthlyRetainerUsd: number;
       mockupUrl: string;
       sourceUrl: string;
@@ -417,7 +420,7 @@ type RevenueSnapshot = {
   };
   approvalQueueItems: Array<{
     id: string;
-    source: "profit_guard" | "outbox" | "agent_run" | "automation_opportunity" | "delivery_workspace";
+    source: "profit_guard" | "outbox" | "agent_run" | "automation_opportunity" | "website_opportunity" | "delivery_workspace";
     title: string;
     status: string;
     priority: "high" | "medium";
@@ -588,6 +591,31 @@ type RevenueSnapshot = {
     clientApprovedScope: boolean;
     depositPaid: boolean;
     quote: AutomationQuote;
+    qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
+    nextAction: string;
+  }>;
+  recentWebsiteOpportunities: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    leadId: string;
+    outreachDraftId: string;
+    projectType: "website" | "bundle";
+    notes: string;
+    status: "quoted" | "scope_approved" | "sold" | "blocked";
+    businessName: string;
+    sourceLeadId: string;
+    sourceOutreachDraftId: string;
+    mockupUrl: string;
+    sourceUrl: string;
+    setupUsd: number;
+    requiredDepositUsd: number;
+    cashCollectedUsd: number;
+    monthlyRetainerUsd: number;
+    estimatedInternalCostUsd: number;
+    depositPaid: boolean;
+    scopeApproved: boolean;
+    paymentConfirmation: string;
     qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
     nextAction: string;
   }>;
@@ -1313,6 +1341,24 @@ type WebsiteDeliveryHandoffResult = {
   snapshot: RevenueSnapshot;
 };
 
+type WebsiteOpportunityResult = {
+  status: "quoted" | "already_sold" | "blocked";
+  reason: string;
+  opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  snapshot: RevenueSnapshot;
+};
+
+type WebsiteOpportunityCloseResult = {
+  status: "sold" | "blocked";
+  reason: string;
+  opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  entry: RevenueLedgerResult["entry"] | null;
+  snapshot: RevenueSnapshot;
+};
+
 type DeliveryWorkspaceQaUpdateResult = {
   status: "ready" | "needs_corrections" | "not_found";
   reason: string;
@@ -1813,6 +1859,16 @@ export default function RevenueEnginePage() {
   const approvalQueue = snapshot?.approvalQueueItems || [];
   const selectedApprovalQueueItem = approvalQueue.find((item) => item.id === selectedApprovalTargetId) || null;
   const approvalActionForSubmit = selectedApprovalQueueItem?.action || approvalAction;
+  const activeScoutArea = snapshot?.latestDailyScoutSprint?.area || snapshot?.businessScoutQueue.area || scoutingArea;
+  const activeScoutNiche = snapshot?.latestDailyScoutSprint?.niche || snapshot?.businessScoutQueue.niche || scoutingNiche;
+  const activeScoutOfferFocus = snapshot?.latestDailyScoutSprint?.offerFocus || snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
+  const activeScoutTarget = snapshot?.latestDailyScoutSprint?.targetRows || snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
+  const activeScoutSourceTaskId = snapshot?.latestDailyScoutSprint?.id || "ui-scout-evidence";
+  const latestDailyScoutSlotText = useMemo(() => (
+    snapshot?.latestDailyScoutSprint?.tasks
+      .flatMap((task) => task.resultSlots.map((slot) => slot.copyableEvidenceBlock))
+      .join("\n\n") || ""
+  ), [snapshot?.latestDailyScoutSprint]);
 
   useEffect(() => {
     if (approvalQueue.length === 0) {
@@ -1869,10 +1925,10 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: snapshot?.businessScoutQueue.area || scoutingArea,
-          niche: snapshot?.businessScoutQueue.niche || scoutingNiche,
-          offerFocus: snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus,
-          targetLeadCount: snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount,
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          offerFocus: activeScoutOfferFocus,
+          targetLeadCount: activeScoutTarget,
           maxTasks: 5,
           resultSlotsPerTask: 2,
           maxPaidDataSpendUsd: 0,
@@ -1944,11 +2000,11 @@ export default function RevenueEnginePage() {
       : [];
 
     return {
-      area: scoutingArea,
-      niche: scoutingNiche,
-      offerFocus: scoutingOfferFocus,
-      dailyResearchTarget: leadRadarDailyResearchTarget,
-      dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+      area: activeScoutArea,
+      niche: activeScoutNiche,
+      offerFocus: activeScoutOfferFocus,
+      dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+      dailyQualifiedLeadLimit: activeScoutTarget,
       dailyMockupLimit: leadRadarMockupLimit,
       dailyContactLimit: leadRadarContactLimit,
       maxPaidDataSpendUsd: scoutingPaidSpendUsd,
@@ -1995,11 +2051,11 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: scoutingArea,
-          niche: scoutingNiche,
-          offerFocus: scoutingOfferFocus,
-          dailyResearchTarget: leadRadarDailyResearchTarget,
-          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          offerFocus: activeScoutOfferFocus,
+          dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+          dailyQualifiedLeadLimit: activeScoutTarget,
           dailyMockupLimit: leadRadarMockupLimit,
           dailyContactLimit: leadRadarContactLimit,
           maxPaidDataSpendUsd: scoutingPaidSpendUsd,
@@ -2263,11 +2319,12 @@ export default function RevenueEnginePage() {
         body: JSON.stringify({
           leadId: item.leadId,
           outreachDraftId: item.outreachDraftId,
+          websiteOpportunityId: item.opportunityId,
           mockupUrl: item.mockupUrl,
           projectType: item.projectType,
           depositPaid: reviewChecks.depositPaid,
           scopeApproved: reviewChecks.clientApprovedScope,
-          cashCollectedUsd: reviewChecks.depositPaid ? Math.round(item.estimatedSetupUsd * 0.5) : 0,
+          cashCollectedUsd: item.cashCollectedUsd,
           publicDataVerified: reviewChecks.publicDataVerified,
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
@@ -2279,6 +2336,50 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde lead");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const websiteOpportunityMutation = useMutation<WebsiteOpportunityResult, Error, RevenueSnapshot["websiteSalesPacketQueue"]["items"][number]>({
+    mutationFn: async (item) => {
+      const response = await fetch("/api/revenue-engine/website-opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: item.leadId,
+          outreachDraftId: item.outreachDraftId,
+          projectType: item.primaryOffer.includes("Automation") ? "bundle" : "website",
+          notes: "Quoted from Revenue Engine website sales packet.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo crear oportunidad website");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const websiteOpportunityCloseMutation = useMutation<WebsiteOpportunityCloseResult, Error, RevenueSnapshot["recentWebsiteOpportunities"][number]>({
+    mutationFn: async (opportunity) => {
+      const response = await fetch("/api/revenue-engine/website-opportunities/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opportunityId: opportunity.id,
+          depositPaid: reviewChecks.depositPaid,
+          scopeApproved: reviewChecks.clientApprovedScope,
+          cashCollectedUsd: reviewChecks.depositPaid ? opportunity.requiredDepositUsd : 0,
+          paymentConfirmation: reviewChecks.depositPaid ? "Robert confirmed deposit in review checks." : "",
+          notes: "Closed from Revenue Engine website opportunity UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo cerrar oportunidad website");
       return data;
     },
     onSuccess: () => {
@@ -2713,10 +2814,10 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: scoutingArea,
-          niche: scoutingNiche,
+          area: activeScoutArea,
+          niche: activeScoutNiche,
           batchText: seedLeadBatchText,
-          sourceTaskId: "ui-batch",
+          sourceTaskId: activeScoutSourceTaskId,
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
@@ -2738,15 +2839,15 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: scoutingArea,
-          niche: scoutingNiche,
+          area: activeScoutArea,
+          niche: activeScoutNiche,
           evidenceText: publicScoutEvidenceText,
-          sourceTaskId: "ui-scout-evidence",
+          sourceTaskId: activeScoutSourceTaskId,
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
-          maxCandidates: Math.min(scoutingTargetLeadCount, 50),
+          maxCandidates: Math.min(activeScoutTarget, 50),
           notes: "Normalized from Revenue Engine public scout evidence UI.",
         }),
       });
@@ -2766,25 +2867,25 @@ export default function RevenueEnginePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          area: scoutingArea,
-          niche: scoutingNiche,
-          offerFocus: scoutingOfferFocus,
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          offerFocus: activeScoutOfferFocus,
           evidenceText: publicScoutEvidenceText,
-          sourceTaskId: "ui-scout-agent-command",
+          sourceTaskId: activeScoutSourceTaskId,
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
-          maxCandidates: Math.min(scoutingTargetLeadCount, 50),
-          dailyResearchTarget: leadRadarDailyResearchTarget,
-          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+          maxCandidates: Math.min(activeScoutTarget, 50),
+          dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+          dailyQualifiedLeadLimit: activeScoutTarget,
           dailyMockupLimit: leadRadarMockupLimit,
           dailyContactLimit: leadRadarContactLimit,
           maxPaidDataSpendUsd: 0,
           requireRobertApprovalToContact: true,
           writePreviewFiles: true,
           runMoneySprintIfReady: true,
-          maxSprintCandidates: Math.min(scoutingTargetLeadCount, 25),
+          maxSprintCandidates: Math.min(activeScoutTarget, 25),
           notes: "Executed from Revenue Engine public scout agent command UI.",
         }),
       });
@@ -3901,6 +4002,16 @@ export default function RevenueEnginePage() {
                         </Button>
                         <Button
                           type="button"
+                          disabled={!latestDailyScoutSlotText}
+                          onClick={() => setPublicScoutEvidenceText(latestDailyScoutSlotText)}
+                          className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                          data-testid="button-load-daily-scout-slots"
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Cargar slots del sprint
+                        </Button>
+                        <Button
+                          type="button"
                           disabled={publicScoutAgentCommandMutation.isPending || publicScoutEvidenceText.trim().length < 10}
                           onClick={() => publicScoutAgentCommandMutation.mutate()}
                           className="w-full bg-emerald-700 text-white hover:bg-emerald-600"
@@ -4832,6 +4943,17 @@ export default function RevenueEnginePage() {
                               <Copy className="mr-2 h-4 w-4" />
                               Copy packet
                             </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={websiteOpportunityMutation.isPending || !item.readiness.some((entry) => entry.includes("draft aprobado"))}
+                              onClick={() => websiteOpportunityMutation.mutate(item)}
+                              className="bg-sky-600 text-white hover:bg-sky-500"
+                              data-testid={`button-create-website-opportunity-${item.leadId}`}
+                            >
+                              {websiteOpportunityMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CircleDollarSign className="mr-2 h-4 w-4" />}
+                              {item.readiness.some((entry) => entry.includes("draft aprobado")) ? "Crear oportunidad" : "Aprobar draft"}
+                            </Button>
                             {item.mockupUrl && (
                               <a href={item.mockupUrl} target="_blank" rel="noreferrer">
                                 <Button type="button" size="sm" variant="outline" className="border-zinc-700">
@@ -4868,6 +4990,77 @@ export default function RevenueEnginePage() {
                           <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Oportunidades website</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Cotizadas hasta que deposito y scope las convierten en delivery.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                      {(snapshot?.recentWebsiteOpportunities || []).filter((item) => item.status === "sold").length} vendidas
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(snapshot?.recentWebsiteOpportunities || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin oportunidades website cotizadas todavia.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {(snapshot?.recentWebsiteOpportunities || []).slice(0, 6).map((opportunity) => (
+                        <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{opportunity.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {opportunity.projectType} · deposito {money.format(opportunity.requiredDepositUsd)} · cash {money.format(opportunity.cashCollectedUsd)}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className={cn(statusTone(opportunity.status), "shrink-0")}>{opportunity.status}</Badge>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">{opportunity.nextAction}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={websiteOpportunityCloseMutation.isPending || opportunity.status === "sold" || !reviewChecks.depositPaid || !reviewChecks.clientApprovedScope}
+                              onClick={() => websiteOpportunityCloseMutation.mutate(opportunity)}
+                              className="bg-emerald-600 text-white hover:bg-emerald-500"
+                              data-testid={`button-close-website-opportunity-${opportunity.id}`}
+                            >
+                              {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                              {reviewChecks.depositPaid && reviewChecks.clientApprovedScope ? "Marcar vendida" : "Deposito + scope"}
+                            </Button>
+                            {opportunity.mockupUrl && (
+                              <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Mockup
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {websiteOpportunityMutation.data && (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                      {websiteOpportunityMutation.data.reason}
+                    </div>
+                  )}
+                  {websiteOpportunityCloseMutation.data && (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                      {websiteOpportunityCloseMutation.data.reason}
                     </div>
                   )}
                 </CardContent>
@@ -6991,7 +7184,7 @@ export default function RevenueEnginePage() {
                         </p>
                         {(snapshot?.websiteDeliveryHandoffQueue.items || []).length === 0 ? (
                           <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
-                            Sin leads con mockup + propuesta listos para workspace.
+                            Sin oportunidades website vendidas listas para workspace.
                           </div>
                         ) : (
                           snapshot?.websiteDeliveryHandoffQueue.items.map((item) => (
@@ -7000,11 +7193,11 @@ export default function RevenueEnginePage() {
                                 <div>
                                   <p className="text-sm font-medium text-white">{item.businessName}</p>
                                   <p className="mt-1 text-xs text-zinc-500">
-                                    {item.projectType} · {item.leadStatus} · {money.format(item.estimatedSetupUsd)}
+                                    {item.projectType} · {item.leadStatus} · cash {money.format(item.cashCollectedUsd)} / deposito {money.format(item.requiredDepositUsd)}
                                   </p>
                                 </div>
                                 <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
-                                  mockup listo
+                                  vendida
                                 </Badge>
                               </div>
                               <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>

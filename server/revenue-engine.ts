@@ -150,6 +150,26 @@ export const revenueOutreachOutcomeSchema = z.object({
 
 export type RevenueOutreachOutcomeInput = z.infer<typeof revenueOutreachOutcomeSchema>;
 
+export const revenueWebsiteOpportunitySchema = z.object({
+  leadId: z.string().trim().min(1).max(160),
+  outreachDraftId: z.string().trim().max(160).optional().default(""),
+  projectType: z.enum(["website", "bundle"]).default("bundle"),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueWebsiteOpportunityInput = z.infer<typeof revenueWebsiteOpportunitySchema>;
+
+export const revenueWebsiteOpportunityCloseSchema = z.object({
+  opportunityId: z.string().trim().min(1).max(160),
+  depositPaid: z.boolean().default(false),
+  scopeApproved: z.boolean().default(false),
+  cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
+  paymentConfirmation: z.string().trim().max(500).optional().default(""),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueWebsiteOpportunityCloseInput = z.infer<typeof revenueWebsiteOpportunityCloseSchema>;
+
 export const improvementReviewSchema = z.object({
   campaignName: z.string().trim().min(2).max(160),
   periodLabel: z.string().trim().min(2).max(80).default("esta semana"),
@@ -284,6 +304,7 @@ export type RevenueDeliveryWorkspaceInput = z.infer<typeof revenueDeliveryWorksp
 export const revenueWebsiteDeliveryWorkspaceSchema = z.object({
   leadId: z.string().trim().min(1).max(200),
   outreachDraftId: z.string().trim().max(200).optional().default(""),
+  websiteOpportunityId: z.string().trim().max(200).optional().default(""),
   mockupUrl: revenueMockupUrlSchema.optional().default(""),
   workspaceName: z.string().trim().min(2).max(180).optional().default("Website delivery workspace"),
   projectType: z.enum(["website", "bundle"]).default("bundle"),
@@ -758,17 +779,48 @@ type RevenueWebsiteSalesPacketQueue = {
   nextAction: string;
 };
 
+type RevenueWebsiteOpportunity = RevenueWebsiteOpportunityInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "quoted" | "scope_approved" | "sold" | "blocked";
+  businessName: string;
+  sourceLeadId: string;
+  sourceOutreachDraftId: string;
+  mockupUrl: string;
+  sourceUrl: string;
+  setupUsd: number;
+  requiredDepositUsd: number;
+  cashCollectedUsd: number;
+  monthlyRetainerUsd: number;
+  estimatedInternalCostUsd: number;
+  depositPaid: boolean;
+  scopeApproved: boolean;
+  paymentConfirmation: string;
+  qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
+  nextAction: string;
+  safety: {
+    sendsOutreach: false;
+    createsWorkspace: false;
+    requiresDepositAndScopeForDelivery: true;
+    blockedActions: string[];
+  };
+};
+
 type RevenueWebsiteDeliveryHandoffQueue = {
   status: "ready" | "needs_context" | "empty";
   readyCount: number;
   blockedCount: number;
   items: Array<{
+    opportunityId: string;
     leadId: string;
     outreachDraftId: string;
     businessName: string;
     leadStatus: RevenueLead["status"];
     projectType: "website" | "bundle";
     estimatedSetupUsd: number;
+    requiredDepositUsd: number;
+    cashCollectedUsd: number;
     monthlyRetainerUsd: number;
     mockupUrl: string;
     sourceUrl: string;
@@ -1015,6 +1067,7 @@ const revenueLeads: RevenueLead[] = [];
 const revenueOutreachDrafts: RevenueOutreachDraft[] = [];
 const revenueAgentRuns: RevenueAgentRun[] = [];
 const revenueAutomationOpportunities: RevenueAutomationOpportunity[] = [];
+const revenueWebsiteOpportunities: RevenueWebsiteOpportunity[] = [];
 const revenueImprovementReviews: RevenueImprovementReview[] = [];
 const revenueScoutingMissions: RevenueScoutingMission[] = [];
 const revenueDailyScoutSprints: RevenueDailyScoutSprint[] = [];
@@ -1119,6 +1172,33 @@ const persistedRevenueAutomationOpportunitySchema = revenueAutomationOpportunity
   quote: z.unknown(),
   qaGates: z.array(z.object({ gate: z.string(), passed: z.boolean(), fix: z.string() })),
   nextAction: z.string(),
+});
+const persistedRevenueWebsiteOpportunitySchema = revenueWebsiteOpportunitySchema.extend({
+  id: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  status: z.enum(["quoted", "scope_approved", "sold", "blocked"]),
+  businessName: z.string().trim().min(1),
+  sourceLeadId: z.string().trim().min(1),
+  sourceOutreachDraftId: z.string().trim().min(1),
+  mockupUrl: z.string(),
+  sourceUrl: z.string(),
+  setupUsd: z.number(),
+  requiredDepositUsd: z.number(),
+  cashCollectedUsd: z.number(),
+  monthlyRetainerUsd: z.number(),
+  estimatedInternalCostUsd: z.number(),
+  depositPaid: z.boolean(),
+  scopeApproved: z.boolean(),
+  paymentConfirmation: z.string(),
+  qaGates: z.array(z.object({ gate: z.string(), passed: z.boolean(), fix: z.string() })),
+  nextAction: z.string(),
+  safety: z.object({
+    sendsOutreach: z.literal(false),
+    createsWorkspace: z.literal(false),
+    requiresDepositAndScopeForDelivery: z.literal(true),
+    blockedActions: z.array(z.string()),
+  }),
 });
 const persistedRevenueImprovementReviewSchema = z.object({
   id: z.string().trim().min(1),
@@ -1330,6 +1410,9 @@ let revenueAgentRunsPathOverride: string | null = null;
 let revenueAutomationOpportunitiesLoaded = false;
 let revenueAutomationOpportunitiesPersistenceError: string | null = null;
 let revenueAutomationOpportunitiesPathOverride: string | null = null;
+let revenueWebsiteOpportunitiesLoaded = false;
+let revenueWebsiteOpportunitiesPersistenceError: string | null = null;
+let revenueWebsiteOpportunitiesPathOverride: string | null = null;
 let revenueImprovementReviewsLoaded = false;
 let revenueImprovementReviewsPersistenceError: string | null = null;
 let revenueImprovementReviewsPathOverride: string | null = null;
@@ -1359,6 +1442,7 @@ const REVENUE_ENGINE_DATA_FILES = {
   outreach: "outreach.json",
   agentRuns: "agent_runs.json",
   automationOpportunities: "automation_opportunities.json",
+  websiteOpportunities: "website_opportunities.json",
   improvementReviews: "improvement_reviews.json",
   scoutingMissions: "scouting_missions.json",
   dailyScoutSprints: "daily_scout_sprints.json",
@@ -1382,6 +1466,7 @@ export function buildRevenueUserDataPaths(userId: string) {
     outreachPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.outreach),
     agentRunsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.agentRuns),
     automationOpportunitiesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationOpportunities),
+    websiteOpportunitiesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.websiteOpportunities),
     improvementReviewsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.improvementReviews),
     scoutingMissionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.scoutingMissions),
     dailyScoutSprintsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.dailyScoutSprints),
@@ -1398,6 +1483,7 @@ function clearRevenueEngineMemory() {
   revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length);
   revenueAgentRuns.splice(0, revenueAgentRuns.length);
   revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
+  revenueWebsiteOpportunities.splice(0, revenueWebsiteOpportunities.length);
   revenueImprovementReviews.splice(0, revenueImprovementReviews.length);
   revenueScoutingMissions.splice(0, revenueScoutingMissions.length);
   revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length);
@@ -1413,6 +1499,7 @@ function markRevenueEngineDataUnloaded() {
   revenueOutreachLoaded = false;
   revenueAgentRunsLoaded = false;
   revenueAutomationOpportunitiesLoaded = false;
+  revenueWebsiteOpportunitiesLoaded = false;
   revenueImprovementReviewsLoaded = false;
   revenueScoutingMissionsLoaded = false;
   revenueDailyScoutSprintsLoaded = false;
@@ -1431,6 +1518,7 @@ export function setRevenueUserDataScope(userId: string) {
   revenueOutreachPathOverride = paths.outreachPath;
   revenueAgentRunsPathOverride = paths.agentRunsPath;
   revenueAutomationOpportunitiesPathOverride = paths.automationOpportunitiesPath;
+  revenueWebsiteOpportunitiesPathOverride = paths.websiteOpportunitiesPath;
   revenueImprovementReviewsPathOverride = paths.improvementReviewsPath;
   revenueScoutingMissionsPathOverride = paths.scoutingMissionsPath;
   revenueDailyScoutSprintsPathOverride = paths.dailyScoutSprintsPath;
@@ -1558,6 +1646,10 @@ function getRevenueAgentRunsPath() {
 
 function getRevenueAutomationOpportunitiesPath() {
   return revenueAutomationOpportunitiesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_AUTOMATION_OPPORTUNITIES_PATH", "automation_opportunities.json");
+}
+
+function getRevenueWebsiteOpportunitiesPath() {
+  return revenueWebsiteOpportunitiesPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_WEBSITE_OPPORTUNITIES_PATH", "website_opportunities.json");
 }
 
 function getRevenueImprovementReviewsPath() {
@@ -1690,6 +1782,27 @@ function loadRevenueAutomationOpportunities() {
     revenueAutomationOpportunitiesPersistenceError = null;
   } catch (error) {
     revenueAutomationOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo leer oportunidades de automatizacion.";
+  }
+}
+
+function loadRevenueWebsiteOpportunities() {
+  if (revenueWebsiteOpportunitiesLoaded) return;
+  revenueWebsiteOpportunitiesLoaded = true;
+  const opportunitiesPath = getRevenueWebsiteOpportunitiesPath();
+
+  if (!fs.existsSync(opportunitiesPath)) return;
+
+  try {
+    const raw = fs.readFileSync(opportunitiesPath, "utf8");
+    const parsed = z.array(persistedRevenueWebsiteOpportunitySchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      revenueWebsiteOpportunitiesPersistenceError = "Website opportunities invalidas; no se cargaron.";
+      return;
+    }
+    revenueWebsiteOpportunities.splice(0, revenueWebsiteOpportunities.length, ...(parsed.data as RevenueWebsiteOpportunity[]));
+    revenueWebsiteOpportunitiesPersistenceError = null;
+  } catch (error) {
+    revenueWebsiteOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo leer website opportunities.";
   }
 }
 
@@ -1902,6 +2015,18 @@ function persistRevenueAutomationOpportunities() {
     revenueAutomationOpportunitiesPersistenceError = null;
   } catch (error) {
     revenueAutomationOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar oportunidad de automatizacion.";
+    throw error;
+  }
+}
+
+function persistRevenueWebsiteOpportunities() {
+  const opportunitiesPath = getRevenueWebsiteOpportunitiesPath();
+  try {
+    fs.mkdirSync(path.dirname(opportunitiesPath), { recursive: true });
+    fs.writeFileSync(opportunitiesPath, `${JSON.stringify(revenueWebsiteOpportunities, null, 2)}\n`, "utf8");
+    revenueWebsiteOpportunitiesPersistenceError = null;
+  } catch (error) {
+    revenueWebsiteOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar website opportunity.";
     throw error;
   }
 }
@@ -3200,6 +3325,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
   loadRevenueLeads();
   loadRevenueOutreach();
   loadRevenueLedger();
+  loadRevenueWebsiteOpportunities();
   const parsed = revenueWebsiteDeliveryWorkspaceSchema.parse(input);
   const lead = revenueLeads.find((item) => item.id === parsed.leadId);
 
@@ -3245,22 +3371,48 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     };
   }
 
+  const websiteOpportunity = parsed.websiteOpportunityId
+    ? revenueWebsiteOpportunities.find((item) => item.id === parsed.websiteOpportunityId) || null
+    : findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, outreachDraft?.id || "");
+  const opportunityMatches = websiteOpportunity
+    && websiteOpportunity.sourceLeadId === lead.id
+    && (!outreachDraft || websiteOpportunity.sourceOutreachDraftId === outreachDraft.id);
+  if (!opportunityMatches) {
+    return {
+      status: "blocked" as const,
+      reason: "Crear y cerrar una oportunidad website vendida para este lead/draft antes de delivery.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+  if (websiteOpportunity.status !== "sold" || !websiteOpportunity.depositPaid || !websiteOpportunity.scopeApproved) {
+    return {
+      status: "blocked" as const,
+      reason: "La oportunidad website debe estar vendida con deposito y scope aprobados antes de crear delivery.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
   const qualification = qualifyRevenueLead(lead);
   const effectiveMockupUrl = parsed.mockupUrl || outreachDraft?.mockupUrl || "";
-  const setupUsd = outreachDraft
-    ? parsed.projectType === "website"
-      ? Math.max(1500, outreachDraft.websitePriceUsd)
-      : outreachDraft.pricing.totalSetupUsd
-    : Math.max(1500, lead.estimatedOfferUsd);
-  const monthlyRetainerUsd = outreachDraft?.monthlyRetainerUsd || parsed.monthlyRetainerUsd;
-  const estimatedInternalCostUsd = outreachDraft?.estimatedInternalMonthlyCostUsd || parsed.estimatedInternalCostUsd;
-  const includesAutomation = parsed.projectType === "bundle";
-  const depositPaid = parsed.depositPaid || parsed.cashCollectedUsd > 0;
+  const setupUsd = websiteOpportunity.setupUsd;
+  const monthlyRetainerUsd = websiteOpportunity.monthlyRetainerUsd || outreachDraft?.monthlyRetainerUsd || parsed.monthlyRetainerUsd;
+  const estimatedInternalCostUsd = websiteOpportunity.estimatedInternalCostUsd || outreachDraft?.estimatedInternalMonthlyCostUsd || parsed.estimatedInternalCostUsd;
+  const projectType = websiteOpportunity.projectType;
+  const includesAutomation = projectType === "bundle";
+  const depositPaid = websiteOpportunity.depositPaid;
   const publicDataVerified = parsed.publicDataVerified;
-  const sourceUrl = outreachDraft?.sourceUrl || "";
-  const requiredDepositUsd = Math.round(setupUsd * 0.5);
-  const ledgerTag = `[website-lead:${lead.id}]`;
-  const cashCollectedCoversDeposit = parsed.cashCollectedUsd >= requiredDepositUsd;
+  const sourceUrl = websiteOpportunity.sourceUrl || outreachDraft?.sourceUrl || "";
+  const requiredDepositUsd = websiteOpportunity.requiredDepositUsd;
+  const cashCollectedUsd = websiteOpportunity.cashCollectedUsd;
+  const ledgerTag = `website-lead:${lead.id}`;
+  const legacyLedgerTag = `[${ledgerTag}]`;
+  const cashCollectedCoversDeposit = cashCollectedUsd >= requiredDepositUsd;
   const contextLines = [
     `Lead: ${lead.businessName} (${lead.niche}, ${lead.area})`,
     `Website status: ${lead.websiteStatus}`,
@@ -3270,12 +3422,12 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     sourceUrl && `Source URL: ${sourceUrl}`,
     effectiveMockupUrl && `Mockup preview: ${effectiveMockupUrl}`,
     outreachDraft && `Outreach draft: ${outreachDraft.subject} (${outreachDraft.status}, ${outreachDraft.delivery.sendStatus})`,
-    parsed.cashCollectedUsd > 0 && `Cash collected for deposit: $${parsed.cashCollectedUsd.toLocaleString("en-US")}`,
+    cashCollectedUsd > 0 && `Cash collected for deposit: $${cashCollectedUsd.toLocaleString("en-US")}`,
     parsed.notes && `Operator notes: ${parsed.notes}`,
     "Codex build rule: create a separate branch and PR; do not deploy without Robert approval and App QA.",
   ].filter(Boolean).join("\n");
 
-  if (!depositPaid || !parsed.scopeApproved) {
+  if (!depositPaid || !websiteOpportunity.scopeApproved) {
     return {
       status: "blocked" as const,
       reason: "Confirmar deposito y scope aprobado antes de crear delivery workspace de website.",
@@ -3286,10 +3438,10 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     };
   }
 
-  if (depositPaid && parsed.scopeApproved && !cashCollectedCoversDeposit) {
+  if (depositPaid && websiteOpportunity.scopeApproved && !cashCollectedCoversDeposit) {
     return {
       status: "blocked" as const,
-      reason: `Deposito incompleto: falta cobrar $${(requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")} antes de cerrar venta o crear delivery.`,
+      reason: `Deposito incompleto: falta cobrar $${(requiredDepositUsd - cashCollectedUsd).toLocaleString("en-US")} antes de cerrar venta o crear delivery.`,
       lead,
       outreachDraft: outreachDraft || null,
       workspace: null,
@@ -3297,16 +3449,16 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     };
   }
 
-  if (depositPaid && parsed.scopeApproved && lead.status !== "closed") {
+  if (depositPaid && websiteOpportunity.scopeApproved && lead.status !== "closed") {
     lead.status = strongerRevenueLeadStatus(lead.status, "closed");
     lead.updatedAt = new Date().toISOString();
     persistRevenueLeads();
   }
 
   const existingLedgerEntry = revenueLedger.find((entry) =>
-    entry.notes.split("|").map((part) => part.trim()).includes(ledgerTag)
+    entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
   );
-  if (depositPaid && parsed.scopeApproved && parsed.cashCollectedUsd > 0 && !existingLedgerEntry) {
+  if (depositPaid && websiteOpportunity.scopeApproved && cashCollectedUsd > 0 && !existingLedgerEntry) {
     const ledgerNotes = [
       ledgerTag,
       outreachDraft && `outreach:${outreachDraft.id}`,
@@ -3319,7 +3471,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
       kind: includesAutomation ? "bundle_sale" : "website_sale",
       clientName: lead.businessName,
       amountUsd: setupUsd,
-      cashCollectedUsd: parsed.cashCollectedUsd,
+      cashCollectedUsd,
       estimatedInternalCostUsd,
       notes: ledgerNotes,
     });
@@ -3327,7 +3479,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
 
   const workspaceResult = recordRevenueDeliveryWorkspace({
     workspaceName: parsed.workspaceName === "Website delivery workspace" ? `${lead.businessName} website delivery` : parsed.workspaceName,
-    sourceOpportunityId: "",
+    sourceOpportunityId: websiteOpportunity.id,
     sourceLeadId: lead.id,
     sourceOutreachDraftId: outreachDraft?.id || "",
     mockupUrl: effectiveMockupUrl,
@@ -3342,13 +3494,13 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     deploymentApprovalStatus: "not_requested",
     deploymentApprovalUrl: "",
     clientName: lead.businessName,
-    projectType: parsed.projectType,
-    packageName: parsed.projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
+    projectType,
+    packageName: projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
     setupUsd,
     monthlyRetainerUsd,
     estimatedInternalCostUsd,
     depositPaid,
-    scopeApproved: parsed.scopeApproved,
+    scopeApproved: websiteOpportunity.scopeApproved,
     publicDataVerified,
     includesAutomation,
     launchTargetDays: parsed.launchTargetDays,
@@ -3560,6 +3712,195 @@ function findLatestRevenueOutreachDraftForLead(lead: RevenueLead) {
     ) || null;
 }
 
+function findRevenueWebsiteOpportunityByLeadOrDraft(leadId: string, draftId: string) {
+  return revenueWebsiteOpportunities.find((opportunity) =>
+    opportunity.sourceLeadId === leadId
+    || (draftId.trim().length > 0 && opportunity.sourceOutreachDraftId === draftId)
+  ) || null;
+}
+
+export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityInput) {
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  loadRevenueWebsiteOpportunities();
+  const parsed = revenueWebsiteOpportunitySchema.parse(input);
+  const lead = revenueLeads.find((item) => item.id === parsed.leadId) || null;
+  const draft = parsed.outreachDraftId
+    ? revenueOutreachDrafts.find((item) => item.id === parsed.outreachDraftId) || null
+    : lead ? findLatestRevenueOutreachDraftForLead(lead) : null;
+  const failedBlockingGate = draft?.qaGates.find((gate) => !gate.passed && gate.gate !== "approval");
+  const gates = [
+    { gate: "lead_found", passed: Boolean(lead), fix: "Seleccionar un lead existente." },
+    { gate: "draft_found", passed: Boolean(draft), fix: "Crear propuesta/draft conectado al lead." },
+    { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de crear oportunidad website." },
+    { gate: "mockup", passed: Boolean(draft?.mockupUrl), fix: "Generar o adjuntar mockup preview." },
+    { gate: "public_source", passed: Boolean(draft?.sourceUrl), fix: "Adjuntar sourceUrl publico del negocio." },
+    { gate: "draft_qa", passed: !failedBlockingGate, fix: failedBlockingGate?.fix || "Corregir QA del draft." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!lead || !draft || failedGate) {
+    return {
+      status: "blocked" as const,
+      reason: failedGate?.fix || "No se pudo crear oportunidad website.",
+      opportunity: null,
+      gates,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existing = findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, draft.id);
+  const now = new Date().toISOString();
+  const projectType = existing?.status === "sold"
+    ? existing.projectType
+    : parsed.projectType === "website" || draft.automationPriceUsd <= 0 ? "website" as const : "bundle" as const;
+  const existingStatus = existing?.status === "sold" || existing?.status === "scope_approved" ? existing.status : "quoted";
+  const quotedSetupUsd = projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd;
+  const setupUsd = existing?.status === "sold" ? existing.setupUsd : quotedSetupUsd;
+  const requiredDepositUsd = existing?.status === "sold" ? existing.requiredDepositUsd : Math.round(setupUsd * 0.5);
+  const opportunity: RevenueWebsiteOpportunity = {
+    ...parsed,
+    outreachDraftId: draft.id,
+    projectType,
+    id: existing?.id || `website-opportunity-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    status: existingStatus,
+    businessName: lead.businessName,
+    sourceLeadId: lead.id,
+    sourceOutreachDraftId: draft.id,
+    mockupUrl: draft.mockupUrl || "",
+    sourceUrl: draft.sourceUrl || "",
+    setupUsd,
+    requiredDepositUsd,
+    cashCollectedUsd: existing?.cashCollectedUsd || 0,
+    monthlyRetainerUsd: existing?.status === "sold" ? existing.monthlyRetainerUsd : draft.pricing.monthlyRetainerUsd,
+    estimatedInternalCostUsd: existing?.status === "sold" ? existing.estimatedInternalCostUsd : draft.pricing.estimatedInternalMonthlyCostUsd,
+    depositPaid: existing?.depositPaid || false,
+    scopeApproved: existing?.scopeApproved || false,
+    paymentConfirmation: existing?.paymentConfirmation || "",
+    qaGates: gates,
+    nextAction: existingStatus === "sold"
+      ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
+      : existingStatus === "scope_approved"
+        ? "Scope aprobado; falta confirmar deposito/pago antes de delivery."
+        : "Cerrar solo cuando deposito, scope y confirmacion de pago esten registrados.",
+    safety: {
+      sendsOutreach: false,
+      createsWorkspace: false,
+      requiresDepositAndScopeForDelivery: true,
+      blockedActions: ["send outreach", "create delivery workspace before sold", "deploy website", "record sale without deposit/scope"],
+    },
+  };
+
+  if (existing) {
+    revenueWebsiteOpportunities.splice(revenueWebsiteOpportunities.indexOf(existing), 1, opportunity);
+  } else {
+    revenueWebsiteOpportunities.push(opportunity);
+  }
+  persistRevenueWebsiteOpportunities();
+
+  return {
+    status: opportunity.status === "sold" ? "already_sold" as const : "quoted" as const,
+    reason: opportunity.nextAction,
+    opportunity,
+    gates,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityCloseInput) {
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  loadRevenueLedger();
+  loadRevenueWebsiteOpportunities();
+  const parsed = revenueWebsiteOpportunityCloseSchema.parse(input);
+  const opportunity = revenueWebsiteOpportunities.find((item) => item.id === parsed.opportunityId) || null;
+  const lead = opportunity ? revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null : null;
+  const draft = opportunity ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null : null;
+  const requiredDepositUsd = opportunity?.requiredDepositUsd || 0;
+  const paymentConfirmed = parsed.paymentConfirmation.trim().length >= 4 || parsed.notes.toLowerCase().includes("payment") || parsed.notes.toLowerCase().includes("deposit");
+  const blockers = [
+    !opportunity && "oportunidad no encontrada",
+    opportunity?.status === "blocked" && "oportunidad bloqueada",
+    !lead && "lead no encontrado",
+    !draft && "draft no encontrado",
+    !parsed.scopeApproved && "scope no aprobado",
+    !parsed.depositPaid && "deposito no marcado",
+    parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
+    !paymentConfirmed && "falta confirmacion de pago/deposito",
+  ].filter(Boolean) as string[];
+
+  if (!opportunity || blockers.length > 0) {
+    if (opportunity) {
+      const nextScopeApproved = opportunity.scopeApproved || parsed.scopeApproved;
+      const nextDepositPaid = opportunity.depositPaid || parsed.depositPaid;
+      opportunity.status = nextScopeApproved ? "scope_approved" : "quoted";
+      opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, parsed.cashCollectedUsd);
+      opportunity.depositPaid = nextDepositPaid;
+      opportunity.scopeApproved = nextScopeApproved;
+      opportunity.paymentConfirmation = parsed.paymentConfirmation || opportunity.paymentConfirmation;
+      opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
+      opportunity.updatedAt = new Date().toISOString();
+      persistRevenueWebsiteOpportunities();
+    }
+    return {
+      status: "blocked" as const,
+      reason: blockers.join("; ") || "No se pudo cerrar oportunidad.",
+      opportunity,
+      lead,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const now = new Date().toISOString();
+  opportunity.status = "sold";
+  opportunity.cashCollectedUsd = parsed.cashCollectedUsd;
+  opportunity.depositPaid = true;
+  opportunity.scopeApproved = true;
+  opportunity.paymentConfirmation = parsed.paymentConfirmation || parsed.notes || "deposit confirmed";
+  opportunity.nextAction = "Oportunidad vendida. Crear delivery workspace desde Website handoff queue; no desplegar sin PR/App QA/aprobacion.";
+  opportunity.updatedAt = now;
+  persistRevenueWebsiteOpportunities();
+
+  if (lead && lead.status !== "closed") {
+    lead.status = "closed";
+    lead.updatedAt = now;
+    persistRevenueLeads();
+  }
+
+  const ledgerTag = `website-lead:${opportunity.sourceLeadId}`;
+  const legacyLedgerTag = `[${ledgerTag}]`;
+  const existingEntry = revenueLedger.find((entry) =>
+    entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
+  );
+  const entry = existingEntry || recordRevenueLedgerEntry({
+    kind: opportunity.projectType === "bundle" ? "bundle_sale" : "website_sale",
+    clientName: opportunity.businessName,
+    amountUsd: opportunity.setupUsd,
+    cashCollectedUsd: parsed.cashCollectedUsd,
+    estimatedInternalCostUsd: opportunity.estimatedInternalCostUsd,
+    notes: [
+      ledgerTag,
+      `website-opportunity:${opportunity.id}`,
+      `outreach:${opportunity.sourceOutreachDraftId}`,
+      opportunity.mockupUrl && `mockup:${opportunity.mockupUrl}`,
+      parsed.notes,
+    ].filter((item): item is string => Boolean(item && item.trim().length > 0)).join(" | ").slice(0, 1000),
+  }).entry;
+
+  return {
+    status: "sold" as const,
+    reason: "Website opportunity vendida con deposito/scope; delivery handoff queda habilitado.",
+    opportunity,
+    lead,
+    draft,
+    entry,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 function buildRevenueWebsiteSalesPacketQueue(limit = 8): RevenueWebsiteSalesPacketQueue {
   const visibleLimit = Math.max(0, Math.min(25, limit));
   const packetStatuses: RevenueLead["status"][] = ["qualified", "mockup_ready", "outreach_ready", "proposal_sent"];
@@ -3676,48 +4017,51 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       .map((workspace) => workspace.input.sourceLeadId || "")
       .filter((sourceLeadId) => sourceLeadId.trim().length > 0),
   );
-  const handoffStatuses: RevenueLead["status"][] = ["qualified", "mockup_ready", "outreach_ready", "proposal_sent", "closed"];
-  const candidates = revenueLeads
-    .filter((lead) => handoffStatuses.includes(lead.status) && !existingWorkspaceLeadIds.has(lead.id))
+  const opportunities = revenueWebsiteOpportunities
     .slice()
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const items: RevenueWebsiteDeliveryHandoffQueue["items"] = [];
   const blocked: RevenueWebsiteDeliveryHandoffQueue["blocked"] = [];
 
-  for (const lead of candidates) {
-    const draft = findLatestRevenueOutreachDraftForLead(lead);
-    const mockupUrl = draft?.mockupUrl || "";
-    if (!draft) {
+  for (const opportunity of opportunities) {
+    const lead = revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null;
+    const draft = revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null;
+    if (opportunity.status !== "sold" || !opportunity.depositPaid || !opportunity.scopeApproved) {
       blocked.push({
-        leadId: lead.id,
-        businessName: lead.businessName,
-        reason: "Falta outreach/propuesta conectada al lead.",
-        nextAction: "Crear draft de propuesta con mockup antes de abrir delivery workspace.",
+        leadId: opportunity.sourceLeadId,
+        businessName: opportunity.businessName,
+        reason: opportunity.status === "sold"
+          ? "Falta confirmar deposito/scope en oportunidad vendida."
+          : "Oportunidad website aun no esta vendida.",
+        nextAction: "Cerrar oportunidad con deposito, scope y confirmacion de pago antes de delivery.",
       });
       continue;
     }
-    if (!mockupUrl) {
+    if (existingWorkspaceLeadIds.has(opportunity.sourceLeadId)) continue;
+    if (!lead || !draft) {
       blocked.push({
-        leadId: lead.id,
-        businessName: lead.businessName,
-        reason: "Falta mockup preview enlazado al draft.",
-        nextAction: "Generar preview desde Money Sprint o pegar mockupUrl antes del handoff.",
+        leadId: opportunity.sourceLeadId,
+        businessName: opportunity.businessName,
+        reason: "Falta lead o draft conectado a la oportunidad vendida.",
+        nextAction: "Revisar integridad antes de crear workspace de delivery.",
       });
       continue;
     }
-    const projectType = draft.automationPriceUsd > 0 ? "bundle" as const : "website" as const;
     items.push({
-      leadId: lead.id,
-      outreachDraftId: draft.id,
-      businessName: lead.businessName,
+      opportunityId: opportunity.id,
+      leadId: opportunity.sourceLeadId,
+      outreachDraftId: opportunity.sourceOutreachDraftId,
+      businessName: opportunity.businessName,
       leadStatus: lead.status,
-      projectType,
-      estimatedSetupUsd: draft.pricing.totalSetupUsd,
-      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
-      mockupUrl,
-      sourceUrl: draft.sourceUrl || "",
-      nextAction: "Si deposito/scope estan marcados, crear delivery workspace QA-gated; no desplegar sin App QA y aprobacion.",
+      projectType: opportunity.projectType,
+      estimatedSetupUsd: opportunity.setupUsd,
+      requiredDepositUsd: opportunity.requiredDepositUsd,
+      cashCollectedUsd: opportunity.cashCollectedUsd,
+      monthlyRetainerUsd: opportunity.monthlyRetainerUsd,
+      mockupUrl: opportunity.mockupUrl,
+      sourceUrl: opportunity.sourceUrl,
+      nextAction: "Crear delivery workspace QA-gated; no desplegar sin PR, second review, App QA y aprobacion de Robert.",
     });
   }
 
@@ -3739,10 +4083,10 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
     },
     nextAction:
       items.length > 0
-        ? "Convertir solo leads con deposito/scope verificados usando los checks de entrega."
+        ? "Convertir solo oportunidades website vendidas en delivery workspace QA-gated."
         : blocked.length > 0
-          ? "Completar mockup/propuesta antes de crear workspace de delivery."
-          : "Cerrar o avanzar leads desde Money Sprint para activar handoff de websites.",
+          ? "Cerrar oportunidad con deposito/scope antes de crear delivery."
+          : "Crear y cerrar oportunidades website desde paquetes de venta antes de delivery.",
   };
 }
 
@@ -4114,6 +4458,7 @@ export function getRevenueEngineSnapshot() {
   loadRevenueOutreach();
   loadRevenueAgentRuns();
   loadRevenueAutomationOpportunities();
+  loadRevenueWebsiteOpportunities();
   loadRevenueImprovementReviews();
   loadRevenueScoutingMissions();
   loadRevenueDailyScoutSprints();
@@ -4136,8 +4481,11 @@ export function getRevenueEngineSnapshot() {
   const pendingAutomationApprovals = revenueAutomationOpportunities.filter((opportunity) =>
     opportunity.status === "blocked" || opportunity.qaGates.some((gate) => !gate.passed),
   ).length;
+  const pendingWebsiteOpportunityApprovals = revenueWebsiteOpportunities.filter((opportunity) =>
+    opportunity.status === "blocked" || (opportunity.status !== "sold" && (!opportunity.depositPaid || !opportunity.scopeApproved)),
+  ).length;
   const pendingDeliveryApprovals = revenueDeliveryWorkspaces.filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections").length;
-  const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingDeliveryApprovals;
+  const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingWebsiteOpportunityApprovals + pendingDeliveryApprovals;
   const profitGuard = buildRevenueProfitGuard({ cashCollectedUsd, estimatedSpendUsd, profitUsd, approvalQueue });
   const latestImprovementReview = revenueImprovementReviews.at(-1);
   const nextBatchPlan = buildRevenueNextBatchPlan({ profitGuard, latestReview: latestImprovementReview, approvalQueue });
@@ -4226,6 +4574,17 @@ export function getRevenueEngineSnapshot() {
         priority: opportunity.status === "blocked" ? "high" : "medium",
         action: opportunity.qaGates.find((gate) => !gate.passed)?.fix || opportunity.nextAction,
       })),
+    ...revenueWebsiteOpportunities
+      .filter((opportunity) => opportunity.status === "blocked" || (opportunity.status !== "sold" && (!opportunity.depositPaid || !opportunity.scopeApproved)))
+      .slice(-5)
+      .map((opportunity) => ({
+        id: opportunity.id,
+        source: "website_opportunity",
+        title: opportunity.businessName,
+        status: opportunity.status,
+        priority: opportunity.status === "blocked" ? "high" : "medium",
+        action: opportunity.nextAction,
+      })),
     ...revenueDeliveryWorkspaces
       .filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections")
       .slice(-5)
@@ -4296,6 +4655,7 @@ export function getRevenueEngineSnapshot() {
     recentOutreach: revenueOutreachDrafts.slice(-10).reverse(),
     recentAgentRuns: revenueAgentRuns.slice(-10).reverse(),
     recentAutomationOpportunities: revenueAutomationOpportunities.slice(-10).reverse(),
+    recentWebsiteOpportunities: revenueWebsiteOpportunities.slice(-10).reverse(),
     recentImprovementReviews: revenueImprovementReviews.slice(-10).reverse(),
     recentScoutingMissions: revenueScoutingMissions.slice(-10).reverse(),
     recentPublicLeadCandidates: revenuePublicLeadCandidates.slice(-10).reverse(),
@@ -4309,6 +4669,7 @@ export function getRevenueEngineSnapshot() {
       outreachPath: getRevenueOutreachPath(),
       agentRunsPath: getRevenueAgentRunsPath(),
       automationOpportunitiesPath: getRevenueAutomationOpportunitiesPath(),
+      websiteOpportunitiesPath: getRevenueWebsiteOpportunitiesPath(),
       improvementReviewsPath: getRevenueImprovementReviewsPath(),
       scoutingMissionsPath: getRevenueScoutingMissionsPath(),
       dailyScoutSprintsPath: getRevenueDailyScoutSprintsPath(),
@@ -4321,6 +4682,7 @@ export function getRevenueEngineSnapshot() {
       outreachStatus: revenueOutreachPersistenceError ? "warning" : "ok",
       agentRunsStatus: revenueAgentRunsPersistenceError ? "warning" : "ok",
       automationOpportunitiesStatus: revenueAutomationOpportunitiesPersistenceError ? "warning" : "ok",
+      websiteOpportunitiesStatus: revenueWebsiteOpportunitiesPersistenceError ? "warning" : "ok",
       improvementReviewsStatus: revenueImprovementReviewsPersistenceError ? "warning" : "ok",
       scoutingMissionsStatus: revenueScoutingMissionsPersistenceError ? "warning" : "ok",
       dailyScoutSprintsStatus: revenueDailyScoutSprintsPersistenceError ? "warning" : "ok",
@@ -4334,6 +4696,7 @@ export function getRevenueEngineSnapshot() {
         revenueOutreachPersistenceError ||
         revenueAgentRunsPersistenceError ||
         revenueAutomationOpportunitiesPersistenceError ||
+        revenueWebsiteOpportunitiesPersistenceError ||
         revenueImprovementReviewsPersistenceError ||
         revenueScoutingMissionsPersistenceError ||
         revenueDailyScoutSprintsPersistenceError ||
@@ -6479,6 +6842,14 @@ export function setRevenueAutomationOpportunitiesPathForTests(filePath: string) 
   revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length);
 }
 
+export function setRevenueWebsiteOpportunitiesPathForTests(filePath: string) {
+  revenueUserDataScope = null;
+  revenueWebsiteOpportunitiesPathOverride = filePath;
+  revenueWebsiteOpportunitiesLoaded = false;
+  revenueWebsiteOpportunitiesPersistenceError = null;
+  revenueWebsiteOpportunities.splice(0, revenueWebsiteOpportunities.length);
+}
+
 export function setRevenueImprovementReviewsPathForTests(filePath: string) {
   revenueUserDataScope = null;
   revenueImprovementReviewsPathOverride = filePath;
@@ -6581,6 +6952,16 @@ export function resetRevenueAutomationOpportunitiesForTests() {
   revenueAutomationOpportunitiesLoaded = true;
   revenueAutomationOpportunitiesPersistenceError = null;
   const opportunitiesPath = getRevenueAutomationOpportunitiesPath();
+  if (fs.existsSync(opportunitiesPath)) {
+    fs.unlinkSync(opportunitiesPath);
+  }
+}
+
+export function resetRevenueWebsiteOpportunitiesForTests() {
+  revenueWebsiteOpportunities.splice(0, revenueWebsiteOpportunities.length);
+  revenueWebsiteOpportunitiesLoaded = true;
+  revenueWebsiteOpportunitiesPersistenceError = null;
+  const opportunitiesPath = getRevenueWebsiteOpportunitiesPath();
   if (fs.existsSync(opportunitiesPath)) {
     fs.unlinkSync(opportunitiesPath);
   }

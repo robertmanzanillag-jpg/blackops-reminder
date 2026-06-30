@@ -37,10 +37,21 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
 test("Revenue Engine exposes GitHub handoff route for sold website workspaces", () => {
   const routeSource = readFileSync("server/routes.ts", "utf8");
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
   const mutationStart = uiSource.indexOf("const deliveryWorkspaceGithubHandoffMutation");
   const mutationEnd = uiSource.indexOf("const deliveryWorkspaceDeliverMutation");
   const handoffMutation = uiSource.slice(mutationStart, mutationEnd);
 
+  assert.match(engineSource, /RevenueWebsiteOpportunity/);
+  assert.match(engineSource, /recordRevenueWebsiteOpportunity/);
+  assert.match(engineSource, /closeRevenueWebsiteOpportunity/);
+  assert.match(engineSource, /status === "sold"/);
+  assert.match(engineSource, /depositPaid/);
+  assert.match(engineSource, /scopeApproved/);
+  assert.match(routeSource, /\/api\/revenue-engine\/website-opportunities/);
+  assert.match(routeSource, /\/api\/revenue-engine\/website-opportunities\/close/);
+  assert.match(routeSource, /revenueWebsiteOpportunitySchema\.parse/);
+  assert.match(routeSource, /revenueWebsiteOpportunityCloseSchema\.parse/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/release-gate/);
   assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input\)/);
@@ -68,6 +79,12 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /releaseRobertApprovedDeploy/);
   assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
+  assert.match(uiSource, /recentWebsiteOpportunities/);
+  assert.match(uiSource, /websiteOpportunityMutation/);
+  assert.match(uiSource, /websiteOpportunityCloseMutation/);
+  assert.match(uiSource, /button-create-website-opportunity-/);
+  assert.match(uiSource, /item\.readiness\.some\(\(entry\) => entry\.includes\("draft aprobado"\)\)/);
+  assert.match(uiSource, /button-close-website-opportunity-/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });
@@ -85,9 +102,11 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /dailyScoutSprintMutation/);
   assert.match(uiSource, /button-start-daily-scout-sprint/);
   assert.match(uiSource, /panel-latest-daily-scout-sprint/);
-  assert.match(uiSource, /area: snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);
-  assert.match(uiSource, /niche: snapshot\?\.businessScoutQueue\.niche \|\| scoutingNiche/);
-  assert.match(uiSource, /targetLeadCount: snapshot\?\.businessScoutQueue\.dailyResearchTarget \|\| scoutingTargetLeadCount/);
+  assert.match(uiSource, /const activeScoutArea = snapshot\?\.latestDailyScoutSprint\?\.area \|\| snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);
+  assert.match(uiSource, /const activeScoutNiche = snapshot\?\.latestDailyScoutSprint\?\.niche \|\| snapshot\?\.businessScoutQueue\.niche \|\| scoutingNiche/);
+  assert.match(uiSource, /targetLeadCount: activeScoutTarget/);
+  assert.match(uiSource, /sourceTaskId: activeScoutSourceTaskId/);
+  assert.match(uiSource, /button-load-daily-scout-slots/);
   assert.match(uiSource, /dailyMoneyCommand\.primaryAction/);
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
 });

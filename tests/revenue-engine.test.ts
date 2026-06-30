@@ -16,6 +16,7 @@ import {
   buildRevenueProjectPlan,
   buildRevenueScoutingMission,
   closeRevenueAutomationOpportunity,
+  closeRevenueWebsiteOpportunity,
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
   createWebsiteDeliveryWorkspaceFromLead,
@@ -42,6 +43,7 @@ import {
   recordRevenuePublicScoutEvidence,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  recordRevenueWebsiteOpportunity,
   revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
   approveRevenueOutreachDraft,
@@ -55,6 +57,7 @@ import {
   resetRevenueApprovalDecisionsForTests,
   resetRevenueAutomationIntakesForTests,
   resetRevenueAutomationOpportunitiesForTests,
+  resetRevenueWebsiteOpportunitiesForTests,
   resetRevenueDailyScoutSprintsForTests,
   resetRevenueDeliveryWorkspacesForTests,
   resetRevenueImprovementReviewsForTests,
@@ -67,6 +70,7 @@ import {
   setRevenueApprovalDecisionsPathForTests,
   setRevenueAutomationIntakesPathForTests,
   setRevenueAutomationOpportunitiesPathForTests,
+  setRevenueWebsiteOpportunitiesPathForTests,
   setRevenueDailyScoutSprintsPathForTests,
   setRevenueDeliveryWorkspacesPathForTests,
   setRevenueImprovementReviewsPathForTests,
@@ -88,6 +92,7 @@ const testAgentRunsPath = path.join("/tmp", "revenue-engine-agent-runs-test.json
 const testApprovalDecisionsPath = path.join("/tmp", "revenue-engine-approval-decisions-test.json");
 const testAutomationIntakesPath = path.join("/tmp", "revenue-engine-automation-intakes-test.json");
 const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automation-opportunities-test.json");
+const testWebsiteOpportunitiesPath = path.join("/tmp", "revenue-engine-website-opportunities-test.json");
 const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
 const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
 const testDailyScoutSprintsPath = path.join("/tmp", "revenue-engine-daily-scout-sprints-test.json");
@@ -111,6 +116,7 @@ test.beforeEach(() => {
   setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
   setRevenueAutomationIntakesPathForTests(testAutomationIntakesPath);
   setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
   setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
   setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
   setRevenueDailyScoutSprintsPathForTests(testDailyScoutSprintsPath);
@@ -124,6 +130,7 @@ test.beforeEach(() => {
   resetRevenueApprovalDecisionsForTests();
   resetRevenueAutomationIntakesForTests();
   resetRevenueAutomationOpportunitiesForTests();
+  resetRevenueWebsiteOpportunitiesForTests();
   resetRevenueImprovementReviewsForTests();
   resetRevenueScoutingMissionsForTests();
   resetRevenueDailyScoutSprintsForTests();
@@ -155,6 +162,32 @@ test.afterEach(() => {
   if (originalRevenueMockupsDir === undefined) delete process.env.REVENUE_MOCKUPS_DIR;
   else process.env.REVENUE_MOCKUPS_DIR = originalRevenueMockupsDir;
 });
+
+function sellWebsiteOpportunityForTest(input: {
+  leadId: string;
+  outreachDraftId: string;
+  projectType?: "website" | "bundle";
+  cashCollectedUsd?: number;
+}) {
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: input.leadId,
+    outreachDraftId: input.outreachDraftId,
+    projectType: input.projectType || "bundle",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  assert.ok(opportunityResult.opportunity);
+
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: input.cashCollectedUsd ?? opportunityResult.opportunity.requiredDepositUsd,
+    paymentConfirmation: "Robert confirmed deposit.",
+  });
+  assert.equal(closeResult.status, "sold");
+  assert.ok(closeResult.opportunity);
+  return closeResult.opportunity;
+}
 
 test("caps lead plan spend at the starting monthly budget", () => {
   const plan = buildRevenueEnginePlan({
@@ -1876,13 +1909,12 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
   assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
-  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
-  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, result.recordedLeads[0].lead.id);
-  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, result.outreachDrafts[0].id);
-  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].mockupUrl, result.previews[0].previewUrl);
+  assert.equal(result.snapshot.websiteSalesPacketQueue.readyCount, 1);
+  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(result.snapshot.recentWebsiteOpportunities.length, 0);
 });
 
-test("website delivery handoff queue does not hide older ready leads behind newer blocked leads", async () => {
+test("website delivery handoff queue requires a sold website opportunity", async () => {
   const readyLead = recordRevenueLead({
     businessName: "Older Ready Cafe",
     area: "Miami",
@@ -1898,7 +1930,7 @@ test("website delivery handoff queue does not hide older ready leads behind newe
   const readyDraft = recordRevenueOutreachDraft({
     leadId: readyLead.lead.id,
     channel: "gmail",
-    approvalStatus: "draft",
+    approvalStatus: "approved",
     recipientEmail: "owner@olderready.example",
     contactName: "Owner",
     businessName: "Older Ready Cafe",
@@ -1931,11 +1963,55 @@ test("website delivery handoff queue does not hide older ready leads behind newe
 
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
-  assert.equal(snapshot.websiteDeliveryHandoffQueue.blockedCount, 9);
-  assert.equal(snapshot.websiteDeliveryHandoffQueue.items.length, 1);
-  assert.equal(snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
-  assert.equal(snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, readyDraft.draft.id);
+  assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 1);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.blockedCount, 0);
+
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: readyLead.lead.id,
+    outreachDraftId: readyDraft.draft.id,
+    projectType: "bundle",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  assert.equal(opportunityResult.opportunity?.depositPaid, false);
+  assert.equal(opportunityResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(opportunityResult.snapshot.websiteDeliveryHandoffQueue.blockedCount, 1);
+
+  const scopedOnlyResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: false,
+    scopeApproved: true,
+    cashCollectedUsd: 0,
+    notes: "Scope approved by Robert; deposit still pending.",
+  });
+
+  assert.equal(scopedOnlyResult.status, "blocked");
+  assert.equal(scopedOnlyResult.opportunity?.status, "scope_approved");
+  assert.equal(scopedOnlyResult.opportunity?.scopeApproved, true);
+  assert.equal(scopedOnlyResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+
+  const preservedOpportunity = recordRevenueWebsiteOpportunity({
+    leadId: readyLead.lead.id,
+    outreachDraftId: readyDraft.draft.id,
+    projectType: "bundle",
+  });
+  assert.equal(preservedOpportunity.opportunity?.status, "scope_approved");
+
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Robert confirmed deposit.",
+  });
+
+  assert.equal(closeResult.status, "sold");
+  assert.equal(closeResult.opportunity?.status, "sold");
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].opportunityId, opportunityResult.opportunity?.id);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, readyDraft.draft.id);
+  assert.equal(closeResult.snapshot.metrics.appsSold, 1);
 });
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
@@ -1972,6 +2048,12 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   const lead = sprint.recordedLeads[0].lead;
   const draft = sprint.outreachDrafts[0];
   const preview = sprint.previews[0];
+  const approval = approveRevenueOutreachDraft({
+    draftId: draft.id,
+    approvedByRobert: true,
+    notes: "Robert approved website opportunity follow-up.",
+  });
+  assert.equal(approval.status, "approved");
   const preHandoffSnapshot = getRevenueEngineSnapshot();
 
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.readyCount, 1);
@@ -1981,9 +2063,16 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Deposito:/);
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.safety.sendsOutreach, false);
 
+  const opportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "bundle",
+    cashCollectedUsd: 2100,
+  });
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,
     outreachDraftId: draft.id,
+    websiteOpportunityId: opportunity.id,
     mockupUrl: preview.previewUrl,
     projectType: "bundle",
     depositPaid: true,
@@ -2000,6 +2089,7 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.status, "created");
   assert.equal(handoff.workspace?.input.sourceLeadId, lead.id);
   assert.equal(handoff.workspace?.input.sourceOutreachDraftId, draft.id);
+  assert.equal(handoff.workspace?.input.sourceOpportunityId, opportunity.id);
   assert.equal(handoff.workspace?.input.mockupUrl, preview.previewUrl);
   assert.equal(handoff.workspace?.input.clientRequest.includes("Mockup preview:"), true);
   assert.equal(handoff.workspace?.input.clientRequest.includes("Codex build rule"), true);
@@ -2020,6 +2110,7 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   const duplicateHandoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,
     outreachDraftId: draft.id,
+    websiteOpportunityId: opportunity.id,
     mockupUrl: preview.previewUrl,
     projectType: "bundle",
     depositPaid: true,
@@ -2080,7 +2171,7 @@ test("website delivery handoff blocks incomplete deposits before closing or ledg
   const draft = recordRevenueOutreachDraft({
     leadId: lead.lead.id,
     channel: "email",
-    approvalStatus: "draft",
+    approvalStatus: "approved",
     recipientEmail: "owner@partialdeposit.example",
     contactName: "Owner",
     businessName: "Partial Deposit Cafe",
@@ -2092,19 +2183,36 @@ test("website delivery handoff blocks incomplete deposits before closing or ledg
     monthlyRetainerUsd: 750,
     estimatedInternalMonthlyCostUsd: 54,
   });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "bundle",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  assert.ok(opportunityResult.opportunity);
+
+  const incompleteClose = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1,
+    paymentConfirmation: "Robert confirmed partial deposit.",
+  });
+  assert.equal(incompleteClose.status, "blocked");
+  assert.match(incompleteClose.reason, /deposito incompleto/);
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.lead.id,
     outreachDraftId: draft.draft.id,
+    websiteOpportunityId: opportunityResult.opportunity.id,
     projectType: "bundle",
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1,
     publicDataVerified: true,
   });
-
   assert.equal(handoff.status, "blocked");
-  assert.match(handoff.reason, /Deposito incompleto/);
+  assert.match(handoff.reason, /oportunidad website debe estar vendida/);
   assert.equal(handoff.workspace, null);
   assert.equal(handoff.snapshot.recentLeads.find((item) => item.id === lead.lead.id)?.status, "outreach_ready");
   assert.equal(handoff.snapshot.metrics.appsSold, 0);
@@ -2152,7 +2260,7 @@ test("website delivery handoff blocks workspace creation before deposit and scop
   });
 
   assert.equal(handoff.status, "blocked");
-  assert.match(handoff.reason, /deposito y scope/);
+  assert.match(handoff.reason, /oportunidad website vendida/);
   assert.equal(handoff.workspace, null);
   assert.equal(handoff.snapshot.recentLeads.find((item) => item.id === lead.lead.id)?.status, "outreach_ready");
   assert.equal(handoff.snapshot.recentDeliveryWorkspaces.length, 0);
@@ -2175,7 +2283,7 @@ test("website delivery ledger notes stay bounded before closing state", () => {
   const draft = recordRevenueOutreachDraft({
     leadId: lead.lead.id,
     channel: "email",
-    approvalStatus: "draft",
+    approvalStatus: "approved",
     recipientEmail: "owner@longnotes.example",
     contactName: "Owner",
     businessName: "Long Notes Cafe",
@@ -2187,10 +2295,27 @@ test("website delivery ledger notes stay bounded before closing state", () => {
     monthlyRetainerUsd: 500,
     estimatedInternalMonthlyCostUsd: 44,
   });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "website",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  assert.ok(opportunityResult.opportunity);
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 1800,
+    paymentConfirmation: "Robert confirmed deposit.",
+    notes: "x".repeat(1000),
+  });
+  assert.equal(closeResult.status, "sold");
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.lead.id,
     outreachDraftId: draft.draft.id,
+    websiteOpportunityId: opportunityResult.opportunity.id,
     projectType: "website",
     depositPaid: true,
     scopeApproved: true,
@@ -2222,7 +2347,7 @@ test("website-only handoff uses website deposit when draft also has automation u
   const draft = recordRevenueOutreachDraft({
     leadId: lead.lead.id,
     channel: "email",
-    approvalStatus: "draft",
+    approvalStatus: "approved",
     recipientEmail: "owner@websiteonly.example",
     contactName: "Owner",
     businessName: "Website Only Cafe",
@@ -2234,10 +2359,17 @@ test("website-only handoff uses website deposit when draft also has automation u
     monthlyRetainerUsd: 500,
     estimatedInternalMonthlyCostUsd: 44,
   });
+  const opportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "website",
+    cashCollectedUsd: 1500,
+  });
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.lead.id,
     outreachDraftId: draft.draft.id,
+    websiteOpportunityId: opportunity.id,
     projectType: "website",
     depositPaid: true,
     scopeApproved: true,
@@ -2274,7 +2406,7 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
     const draftOne = recordRevenueOutreachDraft({
       leadId: leadOne.id,
       channel: "email",
-      approvalStatus: "draft",
+      approvalStatus: "approved",
       recipientEmail: "owner1@prefix.example",
       contactName: "Owner",
       businessName: leadOne.businessName,
@@ -2289,7 +2421,7 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
     const draftTen = recordRevenueOutreachDraft({
       leadId: leadTen.id,
       channel: "email",
-      approvalStatus: "draft",
+      approvalStatus: "approved",
       recipientEmail: "owner10@prefix.example",
       contactName: "Owner",
       businessName: leadTen.businessName,
@@ -2301,10 +2433,23 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
       monthlyRetainerUsd: 500,
       estimatedInternalMonthlyCostUsd: 44,
     });
+    const opportunityTen = sellWebsiteOpportunityForTest({
+      leadId: leadTen.id,
+      outreachDraftId: draftTen.draft.id,
+      projectType: "website",
+      cashCollectedUsd: 1800,
+    });
+    const opportunityOne = sellWebsiteOpportunityForTest({
+      leadId: leadOne.id,
+      outreachDraftId: draftOne.draft.id,
+      projectType: "website",
+      cashCollectedUsd: 1800,
+    });
 
     createWebsiteDeliveryWorkspaceFromLead({
       leadId: leadTen.id,
       outreachDraftId: draftTen.draft.id,
+      websiteOpportunityId: opportunityTen.id,
       projectType: "website",
       depositPaid: true,
       scopeApproved: true,
@@ -2314,6 +2459,7 @@ test("website delivery ledger dedupe uses exact lead token not id prefix", () =>
     const secondHandoff = createWebsiteDeliveryWorkspaceFromLead({
       leadId: leadOne.id,
       outreachDraftId: draftOne.draft.id,
+      websiteOpportunityId: opportunityOne.id,
       projectType: "website",
       depositPaid: true,
       scopeApproved: true,
@@ -2400,9 +2546,32 @@ test("website delivery handoff keeps data gate explicit before build readiness",
     estimatedOfferUsd: 3800,
     status: "qualified",
   });
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@explicitdata.example",
+    contactName: "Owner",
+    businessName: "Explicit Data Cafe",
+    sourceUrl: "https://example.com/explicit-data-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/explicit-data-cafe",
+    businessSummary: "Explicit Data Cafe has public evidence of no dedicated website and needs online menu capture.",
+    websitePriceUsd: 3800,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 500,
+    estimatedInternalMonthlyCostUsd: 44,
+  });
+  const opportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    projectType: "website",
+    cashCollectedUsd: 1900,
+  });
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.lead.id,
+    outreachDraftId: draft.draft.id,
+    websiteOpportunityId: opportunity.id,
     projectType: "website",
     depositPaid: true,
     scopeApproved: true,
@@ -3355,8 +3524,26 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.equal(outcome.draft?.delivery.outcomeCashCollectedUsd, draftResult.draft.pricing.depositUsd);
   assert.equal(outcome.snapshot.metrics.cashCollectedUsd, 0);
   assert.equal(outcome.snapshot.recentLedger.length, 0);
-  assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
-  assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, leadResult.lead.id);
+  assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: leadResult.lead.id,
+    outreachDraftId: draftResult.draft.id,
+    projectType: "bundle",
+  });
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Robert confirmed deposit.",
+  });
+
+  assert.equal(closeResult.status, "sold");
+  assert.equal(closeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(closeResult.snapshot.recentLedger.length, 1);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, leadResult.lead.id);
 });
 
 test("runs main revenue agent with subagent reviews and approvals", () => {
