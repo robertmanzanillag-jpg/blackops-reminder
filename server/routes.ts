@@ -353,6 +353,7 @@ export async function registerRoutes(
     if (apply) args.push("--apply");
     return runClipperNodeJson(args, apply ? "TikTok MVP proof intake import apply" : "TikTok MVP proof intake import preview");
   };
+  const runClipperTikTokMvpProofRefresh = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-refresh.mjs", "TikTok MVP proof refresh");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -382,6 +383,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofIntakeImport = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-import.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofRefresh = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-refresh.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2719,6 +2724,30 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to apply TikTok MVP proof intake import" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-refresh", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof refresh has not been prepared" : "TikTok MVP proof refresh could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-refresh", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofRefresh();
+      res.json({
+        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh(),
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport(),
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof refresh" });
     }
   });
 

@@ -2171,6 +2171,30 @@ interface ClipperTikTokMvpProofIntakeImportSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofRefreshSummary {
+  status: "ready_to_apply" | "blocked";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  importStatus: string;
+  doctorStatus: string;
+  readyLanes: number;
+  targetLanes: number;
+  importFixQueue: number;
+  doctorFixQueue: number;
+  paths: {
+    json: string;
+    markdown: string;
+    importJson: string;
+    doctorJson: string;
+    importFixQueueCsv: string;
+    doctorFixQueueCsv: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -10050,6 +10074,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofIntakeImport as ClipperTikTokMvpProofIntakeImportSummary;
     },
   });
+  const { data: tiktokMvpProofRefresh } = useQuery<ClipperTikTokMvpProofRefreshSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-refresh"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-refresh");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof refresh");
+      return data.tiktokMvpProofRefresh as ClipperTikTokMvpProofRefreshSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10638,6 +10672,34 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude aplicar proof import", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-refresh", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof refresh");
+      return data as {
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? "Proof refresh listo" : "Proof refresh bloqueado",
+        description: data.tiktokMvpProofRefresh.nextStep,
+        variant: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof refresh", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15088,6 +15150,7 @@ export default function ClippersPage() {
     || tiktokMvpProofDoctorMutation.isPending
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
+    || tiktokMvpProofRefreshMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
@@ -16267,6 +16330,18 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofRefreshMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-violet-300/20 bg-transparent text-violet-100 hover:bg-violet-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-refresh-button"
+              >
+                {tiktokMvpProofRefreshMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+                Proof refresh
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpProofIntakeImportPreviewMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
@@ -16367,6 +16442,37 @@ export default function ClippersPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {tiktokMvpProofRefresh && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpProofRefresh.status === "ready_to_apply"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-violet-300/15 text-violet-100/80"
+              )} data-testid="clippers-tiktok-mvp-proof-refresh-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpProofRefresh.status === "ready_to_apply"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                  )}>
+                    refresh {tiktokMvpProofRefresh.status}
+                  </Badge>
+                  <span>import {tiktokMvpProofRefresh.importStatus}</span>
+                  <span>doctor {tiktokMvpProofRefresh.doctorStatus}</span>
+                  <span>{tiktokMvpProofRefresh.readyLanes}/{tiktokMvpProofRefresh.targetLanes} lanes ready</span>
+                </div>
+                <p className="mt-1">{tiktokMvpProofRefresh.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Import fixes: {tiktokMvpProofRefresh.importFixQueue}</p>
+                  <p>Doctor fixes: {tiktokMvpProofRefresh.doctorFixQueue}</p>
+                  <p className="break-all">Refresh report: {tiktokMvpProofRefresh.paths.markdown}</p>
+                  <p className="break-all">Import fix queue: {tiktokMvpProofRefresh.paths.importFixQueueCsv}</p>
+                  <p className="break-all">Doctor fix queue: {tiktokMvpProofRefresh.paths.doctorFixQueueCsv}</p>
+                  <p>Mode: {tiktokMvpProofRefresh.launchMode}; direct APIs: {tiktokMvpProofRefresh.directSocialApisRequired ? "required" : "not required"}</p>
+                </div>
               </div>
             )}
             {tiktokMvpProofIntakeImport && (
