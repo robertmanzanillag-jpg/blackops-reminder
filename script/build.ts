@@ -12,10 +12,16 @@ function pipInstallEnv(): NodeJS.ProcessEnv {
   };
 }
 
-function runCommand(command: string, args: string[], timeoutMs: number, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+  env: NodeJS.ProcessEnv = process.env,
+  stdio: "inherit" | "ignore" = "inherit",
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      stdio: "inherit",
+      stdio,
       env,
     });
     let didTimeout = false;
@@ -43,9 +49,26 @@ function runCommand(command: string, args: string[], timeoutMs: number, env: Nod
   });
 }
 
+async function canRunPythonPip(): Promise<boolean> {
+  try {
+    await runCommand("python3", [
+      "-c",
+      "import pip; import xml.parsers.expat",
+    ], 30 * 1000, pipInstallEnv(), "ignore");
+    return true;
+  } catch (error) {
+    console.warn(
+      "[build] skipping bundled yt-dlp: python3 cannot import pip/xml.parsers.expat in this environment.",
+      error instanceof Error ? error.message : error,
+    );
+    return false;
+  }
+}
+
 async function bundleFreshYtDlp() {
   const targetDir = "dist/yt-dlp-python";
   await mkdir(targetDir, { recursive: true });
+  if (!(await canRunPythonPip())) return;
   try {
     console.log("installing fresh yt-dlp for production...");
     await runCommand("python3", [
