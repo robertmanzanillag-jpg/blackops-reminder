@@ -95,7 +95,8 @@ async function withFutureCurrentBatchSchedule(callback: () => Promise<void>) {
       accountId: "sports-daily",
       platform: "tiktok",
       profileUrl: "https://www.tiktok.com/@sportsdaily",
-      proofUrl: "https://app.metricool.com/brands/6431687",
+      accountProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+      metricoolProofUrl: "https://app.metricool.com/brands/6431687",
       recordedAt,
       source: "test-fixture",
     }, null, 2));
@@ -105,7 +106,8 @@ async function withFutureCurrentBatchSchedule(callback: () => Promise<void>) {
       accountId: "meme-radar",
       platform: "tiktok",
       profileUrl: "https://www.tiktok.com/@memeradar",
-      proofUrl: "https://app.metricool.com/brands/6431685",
+      accountProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+      metricoolProofUrl: "https://app.metricool.com/brands/6431685",
       recordedAt,
       source: "test-fixture",
     }, null, 2));
@@ -485,6 +487,68 @@ test("account permission readiness writes active TikTok MVP account evidence row
     assert.match(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","verified"/);
     assert.match(mvpAccountEvidenceCsv, /active TikTok MVP account proof/);
     assert.doesNotMatch(mvpAccountEvidenceCsv, /"instagram"|"youtube"|developer_app|permission|client_secret|refresh_token|access_token|password=/);
+  } finally {
+    if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
+    else await writeFile(sportsEvidencePath, originalSportsEvidence);
+    if (originalMemesEvidence === null) await unlink(memesEvidencePath).catch(() => undefined);
+    else await writeFile(memesEvidencePath, originalMemesEvidence);
+    spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("account permission readiness rejects shallow verified TikTok MVP evidence", async () => {
+  const sportsEvidencePath = path.join(rootDir, "account-evidence/sports-daily-tiktok.json");
+  const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
+  const originalSportsEvidence = await readFile(sportsEvidencePath, "utf8").catch(() => null);
+  const originalMemesEvidence = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(sportsEvidencePath), { recursive: true });
+    const recordedAt = new Date().toISOString();
+    await writeFile(sportsEvidencePath, JSON.stringify({
+      status: "verified",
+      notes: "Shallow verified fixture has a profile and generic proof URL but no required ownership or Metricool evidence fields.",
+      accountId: "sports-daily",
+      platform: "tiktok",
+      profileUrl: "https://www.tiktok.com/@sportsdaily",
+      proofUrl: "https://app.metricool.com/brands/6431687",
+      recordedAt,
+    }, null, 2));
+    await writeFile(memesEvidencePath, JSON.stringify({
+      status: "verified",
+      notes: "Shallow verified fixture has a profile and generic proof URL but no required ownership or Metricool evidence fields.",
+      accountId: "meme-radar",
+      platform: "tiktok",
+      profileUrl: "https://www.tiktok.com/@memeradar",
+      proofUrl: "https://app.metricool.com/brands/6431685",
+      recordedAt,
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked");
+    assert.equal(output.activeMvpReadyLanes, 0);
+    assert.equal(output.tiktokMvpCloseoutStatus, "needs_tiktok_account_evidence");
+
+    const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
+    const sportsRow = readiness.accountRows.find((row) => row.accountId === "sports-daily" && row.platform === "tiktok");
+    assert.equal(sportsRow.accountStatus, "rejected");
+    assert.equal(sportsRow.readyForMetricoolApproval, false);
+    assert.equal(sportsRow.evidenceQuality.status, "rejected");
+    assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("accountProofUrl")));
+    assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("metricoolProofUrl")));
+    assert.match(sportsRow.nextStep, /accountProofUrl|metricoolProofUrl/);
+
+    const closeout = JSON.parse(await readFile(path.join(rootDir, "tiktok-mvp-account-closeout.json"), "utf8"));
+    assert.equal(closeout.status, "needs_tiktok_account_evidence");
+    assert.equal(closeout.totals.ready, 0);
+    assert.ok(closeout.rows.every((row) => row.status === "needs_account_proof"));
   } finally {
     if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
     else await writeFile(sportsEvidencePath, originalSportsEvidence);
@@ -3988,8 +4052,8 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "ready_for_metricool_operator");
-  assert.equal(output.accountReady, 2);
+  assert.equal(output.status, "in_progress");
+  assert.equal(output.accountReady, 0);
   assert.equal(output.accountRows, 2);
   assert.equal(output.batchRows, 10);
   assert.equal(output.notStarted, 10);
@@ -4003,22 +4067,22 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.equal(output.nextQueueItem, "53467d8f7dad");
 
   const packet = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.json"), "utf8"));
-  assert.equal(packet.status, "ready_for_metricool_operator");
+  assert.equal(packet.status, "in_progress");
   assert.equal(packet.launchMode, "metricool_approval_required");
   assert.equal(packet.operatingMode.scope, "tiktok_only_metricool_mvp");
   assert.deepEqual(packet.operatingMode.activePlatforms, ["tiktok"]);
   assert.deepEqual(packet.operatingMode.deferredLanes, ["instagram", "youtube", "streamers"]);
-  assert.equal(packet.operatingMode.batchOnlyUsesActiveTikTokAccounts, true);
-  assert.equal(packet.operatingMode.batchPlatformCheck, "pass");
+  assert.equal(packet.operatingMode.batchOnlyUsesActiveTikTokAccounts, false);
+  assert.equal(packet.operatingMode.batchPlatformCheck, "blocked_non_tiktok_or_inactive_account");
   assert.deepEqual(packet.operatingMode.batchPlatforms, ["tiktok"]);
   assert.deepEqual(packet.operatingMode.batchAccountIds, ["meme-radar", "sports-daily"]);
-  assert.deepEqual(packet.operatingMode.activeMetricoolBrands, ["SPORT", "memes"]);
-  assert.equal(packet.operatingMode.activeAccounts.length, 2);
+  assert.deepEqual(packet.operatingMode.activeMetricoolBrands, []);
+  assert.equal(packet.operatingMode.activeAccounts.length, 0);
   assert.equal(packet.directSocialApisRequired, false);
   assert.equal(packet.realPublishEnabled, false);
-  assert.equal(packet.totals.accountReady, 2);
+  assert.equal(packet.totals.accountReady, 0);
   assert.equal(packet.totals.accountRows, 2);
-  assert.equal(packet.totals.activeTikTokAccounts, 2);
+  assert.equal(packet.totals.activeTikTokAccounts, 0);
   assert.equal(packet.totals.readyToImport, 0);
   assert.equal(packet.totals.evidenceMissingApproval, 10);
   assert.equal(packet.totals.evidenceReadyForImportPreview, 0);
@@ -4036,12 +4100,13 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.equal(packet.metricool100.currentBatchId, "metricool-batch-01");
   assert.equal(packet.metricool100.currentBatchSourceGateTotals.ready, 10);
   assert.equal(packet.metricool100.ready, true);
-  assert.match(packet.nextStep, /fill scheduled evidence/);
-  assert.match(packet.nextStep, /public TikTok URLs and 24h metrics only after posts are live/);
-  assert.doesNotMatch(packet.nextStep, /keep evidence blank/);
+  assert.match(packet.nextStep, /Finish TikTok account ownership\/security evidence/);
+  assert.match(packet.nextStep, /Metricool connection proof/);
+  assert.doesNotMatch(packet.nextStep, /public TikTok URLs and 24h metrics only after posts are live/);
+  assert.equal(packet.sourceStatuses.accountCloseout, "needs_tiktok_account_evidence");
   assert.equal(packet.sourceStatuses.evidenceChecklist, "ready_for_metricool_operator");
   assert.equal(packet.sourceStatuses.metricool100Handoff, "ready_for_operator");
-  assert.ok(packet.operatorSteps.some((step) => step.id === "metricool-batch" && step.action.includes("Open Metricool")));
+  assert.ok(packet.operatorSteps.some((step) => step.id === "account-closeout" && step.blocker === "tiktok_account_closeout_not_ready"));
   assert.ok(packet.operatorSteps.some((step) => step.id === "live-evidence" && step.action.includes("evidence checklist")));
   assert.ok(packet.guardrails.some((guardrail) => guardrail.includes("realPublishEnabled remains false")));
   assert.ok(packet.guardrails.some((guardrail) => guardrail.includes("Scheduled rows are not counted as published")));
@@ -4052,7 +4117,7 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.match(markdown, /Scope: tiktok_only_metricool_mvp/);
   assert.match(markdown, /Active platforms: tiktok/);
   assert.match(markdown, /Deferred lanes: instagram, youtube, streamers/);
-  assert.match(markdown, /Batch platform check: pass/);
+  assert.match(markdown, /Batch platform check: blocked_non_tiktok_or_inactive_account/);
   assert.match(markdown, /Metricool remains approval_required/);
   assert.match(markdown, /Scheduled proof missing: 10/);
   assert.match(markdown, /Metricool 100 Run/);
@@ -4066,6 +4131,7 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.match(csv, /"section","step","status","owner","scope","active_platforms","active_metricool_brands","deferred_lanes","action","proof","blocker"/);
   assert.match(csv, /tiktok_only_metricool_mvp/);
   assert.match(csv, /instagram\|youtube\|streamers/);
+  assert.match(csv, /blocked_non_tiktok_or_inactive_account/);
   assert.match(csv, /metricool-batch/);
 
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
@@ -4075,7 +4141,7 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.match(routes, /script\/clippers-tiktok-evidence-checklist\.mjs/);
   const goLiveGetRoute = routes.slice(
     routes.indexOf('app.get("/api/clippers/tiktok-mvp-go-live-packet"'),
-    routes.indexOf('app.get("/api/clippers/metricool-approval-quick-run"'),
+    routes.indexOf('app.get("/api/clippers/tiktok-mvp-readiness-verifier"'),
   );
   assert.doesNotMatch(goLiveGetRoute, /clippers-tiktok-batch-evidence-sync\.mjs/);
   assert.doesNotMatch(goLiveGetRoute, /runClipperJsonScript|runClipperNodeJson|clippers-tiktok-mvp-go-live-packet\.mjs|clippers-tiktok-evidence-checklist\.mjs/);
@@ -4159,12 +4225,12 @@ test("TikTok MVP go-live packet refreshes stale account closeout before reportin
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    assert.equal(output.status, "ready_for_metricool_operator");
-    assert.equal(output.accountReady, 2);
+    assert.equal(output.status, "in_progress");
+    assert.equal(output.accountReady, 0);
 
     const refreshedCloseout = JSON.parse(await readFile(accountCloseoutPath, "utf8"));
-    assert.equal(refreshedCloseout.status, "ready_for_metricool_tiktok");
-    assert.equal(refreshedCloseout.totals.ready, 2);
+    assert.equal(refreshedCloseout.status, "needs_tiktok_account_evidence");
+    assert.equal(refreshedCloseout.totals.ready, 0);
   } finally {
     await writeFile(accountCloseoutPath, originalAccountCloseout);
     spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
@@ -4212,24 +4278,25 @@ test("TikTok MVP go-live packet refreshes stale non-TikTok or inactive-account b
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    assert.equal(output.status, "ready_for_metricool_operator");
+    assert.equal(output.status, "in_progress");
 
     const packet = JSON.parse(await readFile(packetPath, "utf8"));
-    assert.equal(packet.status, "ready_for_metricool_operator");
+    assert.equal(packet.status, "in_progress");
     assert.equal(packet.operatingMode.scope, "tiktok_only_metricool_mvp");
-    assert.equal(packet.operatingMode.batchOnlyUsesActiveTikTokAccounts, true);
-    assert.equal(packet.operatingMode.batchPlatformCheck, "pass");
+    assert.equal(packet.operatingMode.batchOnlyUsesActiveTikTokAccounts, false);
+    assert.equal(packet.operatingMode.batchPlatformCheck, "blocked_non_tiktok_or_inactive_account");
     assert.deepEqual(packet.operatingMode.batchPlatforms, ["tiktok"]);
     assert.ok(!packet.operatingMode.batchAccountIds.includes("instagram-later"));
-    assert.ok(packet.nextStep.includes("metricool-batch-01"));
+    assert.ok(packet.nextStep.includes("TikTok account ownership/security evidence"));
 
     const markdown = await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.md"), "utf8");
-    assert.match(markdown, /Batch platform check: pass/);
+    assert.match(markdown, /Batch platform check: blocked_non_tiktok_or_inactive_account/);
 
     const csv = await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.csv"), "utf8");
     assert.match(csv, /"section","step","status","owner","scope","active_platforms","active_metricool_brands","deferred_lanes","action","proof","blocker"/);
     assert.match(csv, /tiktok_only_metricool_mvp/);
-    assert.doesNotMatch(csv, /instagram-later|blocked_non_tiktok_or_inactive_account/);
+    assert.doesNotMatch(csv, /instagram-later/);
+    assert.match(csv, /blocked_non_tiktok_or_inactive_account/);
 
     const inactiveRunbook = JSON.parse(originalRunbook);
     const inactiveTracker = JSON.parse(originalTracker);
@@ -4256,12 +4323,12 @@ test("TikTok MVP go-live packet refreshes stale non-TikTok or inactive-account b
     });
     assert.equal(inactiveResult.status, 0, inactiveResult.stderr || inactiveResult.stdout);
     const inactiveOutput = JSON.parse(inactiveResult.stdout);
-    assert.equal(inactiveOutput.status, "ready_for_metricool_operator");
+    assert.equal(inactiveOutput.status, "in_progress");
 
     const inactivePacket = JSON.parse(await readFile(packetPath, "utf8"));
-    assert.equal(inactivePacket.status, "ready_for_metricool_operator");
-    assert.equal(inactivePacket.operatingMode.batchOnlyUsesActiveTikTokAccounts, true);
-    assert.equal(inactivePacket.operatingMode.batchPlatformCheck, "pass");
+    assert.equal(inactivePacket.status, "in_progress");
+    assert.equal(inactivePacket.operatingMode.batchOnlyUsesActiveTikTokAccounts, false);
+    assert.equal(inactivePacket.operatingMode.batchPlatformCheck, "blocked_non_tiktok_or_inactive_account");
     assert.deepEqual(inactivePacket.operatingMode.batchPlatforms, ["tiktok"]);
     assert.ok(!inactivePacket.operatingMode.batchAccountIds.includes("inactive-tiktok-account"));
   } finally {

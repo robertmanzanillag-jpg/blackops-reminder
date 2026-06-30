@@ -20,6 +20,9 @@ const metricoolMvpLaunchPackPath = path.join(rootDir, "scheduled", "metricool-mv
 const externalCloseoutProofTodoPath = path.join(rootDir, "reports", "clippers-external-closeout-proof-todo.json");
 const activeMetricoolMvpAccountIds = new Set(["sports-daily", "meme-radar"]);
 const activeMetricoolMvpPlatforms = new Set(["tiktok"]);
+const weakEvidenceNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);
+const unsafeEvidencePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
+const unsafeEvidenceParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
 
 const accounts = [
   { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdaily" },
@@ -88,6 +91,74 @@ function csvCell(value) {
 
 function evidencePathFor(accountId, platform) {
   return path.join(accountEvidenceDir, `${accountId}-${platform}.json`);
+}
+
+function isSafeEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !unsafeEvidencePattern.test(url.hostname)
+      && !unsafeEvidenceParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    return isSafeEvidenceUrl(value)
+      && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"));
+  } catch {
+    return false;
+  }
+}
+
+function exactTikTokProfileUrlFor(handle) {
+  return `https://www.tiktok.com/${String(handle || "").startsWith("@") ? handle : `@${handle}`}`;
+}
+
+function isExactTikTokProfileUrl(value, handle) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const expected = new URL(exactTikTokProfileUrlFor(handle));
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && url.hostname.toLowerCase() === expected.hostname.toLowerCase()
+      && url.pathname.replace(/\/$/, "").toLowerCase() === expected.pathname.replace(/\/$/, "").toLowerCase()
+      && !unsafeEvidenceParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function evidenceNotesIssue(notes) {
+  const text = String(notes || "").trim();
+  const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (text.length < 20) return "evidence notes must be at least 20 characters";
+  if (weakEvidenceNotes.has(normalized)) return "evidence notes are too generic";
+  if (unsafeEvidencePattern.test(text) || unsafeEvidenceParamPattern.test(text)) return "evidence notes contain placeholder or secret-like text";
+  return "";
+}
+
+function activeTikTokMvpEvidenceIssues(account, platform, evidence) {
+  if (!activeMetricoolMvpAccountIds.has(account.accountId) || platform !== "tiktok") return [];
+  const notes = evidence?.notes || "";
+  const profileUrl = evidence?.profileUrl || evidence?.profileLink || "";
+  const accountProofUrl = evidence?.accountProofUrl || evidence?.ownershipProofUrl || "";
+  const metricoolProofUrl = evidence?.metricoolProofUrl || "";
+  const combined = JSON.stringify(evidence || {});
+  return [
+    !isExactTikTokProfileUrl(profileUrl, account.handle) ? `profileUrl must be the exact public TikTok profile ${exactTikTokProfileUrlFor(account.handle)}` : null,
+    !isSafeEvidenceUrl(accountProofUrl) ? "accountProofUrl must be a real safe HTTPS ownership/security proof URL" : null,
+    !isMetricoolEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL" : null,
+    evidenceNotesIssue(notes),
+    unsafeEvidencePattern.test(combined) || unsafeEvidenceParamPattern.test(combined) ? "evidence contains placeholder or secret-like text" : null,
+  ].filter(Boolean);
 }
 
 function permissionStatusFor(permissionTracker, platform, scopes) {
@@ -972,7 +1043,12 @@ async function main() {
       const metricool = metricoolConnectionFor(queue, account, platform.platform);
       const permissionRow = permissionRows.find((row) => row.platform === platform.platform);
       const developerRow = developerRows.find((row) => row.platform === platform.platform);
-      const accountStatus = evidence?.status === "verified" ? "verified" : evidence?.status || "missing";
+      const evidenceIssues = evidence?.status === "verified"
+        ? activeTikTokMvpEvidenceIssues(account, platform.platform, evidence)
+        : [];
+      const accountStatus = evidence?.status === "verified"
+        ? evidenceIssues.length === 0 ? "verified" : "rejected"
+        : evidence?.status || "missing";
       const readyForMetricoolApproval = accountStatus === "verified"
         && metricool.connected
         && metricool.rightsReadyAssets > 0
@@ -981,7 +1057,7 @@ async function main() {
         && developerRow?.status === "approved"
         && permissionRow?.status === "approved";
       const metricoolBlockers = [
-        accountStatus !== "verified" ? "account evidence not verified" : null,
+        evidenceIssues[0] || (accountStatus !== "verified" ? "account evidence not verified" : null),
         !metricool.connected ? "not connected in Metricool for this platform" : null,
         metricool.connected && metricool.rightsReadyAssets <= 0 ? "no rights-ready source assets for this category" : null,
         metricool.connected && !metricoolGuard.safe ? metricoolGuard.blockers[0] || "Metricool queue guard is blocked" : null,
@@ -998,6 +1074,12 @@ async function main() {
         label: platform.label,
         handle: account.handle,
         accountStatus,
+        evidenceQuality: {
+          status: evidence?.status === "verified" && evidenceIssues.length === 0 ? "accepted" : evidence?.status === "verified" ? "rejected" : "missing",
+          issues: evidenceIssues,
+          requiresAccountProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
+          requiresMetricoolProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
+        },
         evidencePath,
         profileUrl: evidence?.profileUrl || evidence?.profileLink || null,
         metricoolConnected: metricool.connected,

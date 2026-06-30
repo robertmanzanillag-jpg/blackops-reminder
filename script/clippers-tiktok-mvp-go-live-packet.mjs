@@ -366,7 +366,9 @@ async function main() {
       ? metricool100.ready
         ? `Open Metricool and process ${metricool100.currentBatchId || "metricool-batch-01"} first; after scheduling, fill scheduled evidence. Add public TikTok URLs and 24h metrics only after posts are live.`
         : "Prepare or repair the Metricool 100 operator handoff before processing the weekly run."
-      : batchOnlyUsesActiveTikTokAccounts
+      : accountCloseout.status !== "ready_for_metricool_tiktok" || accountReady < accountRows
+        ? "Finish TikTok account ownership/security evidence and Metricool connection proof for SPORT and memes before processing the batch."
+        : batchOnlyUsesActiveTikTokAccounts
         ? operatorSteps.find((step) => step.blocker)?.action || "Review packet blockers."
         : "Fix the batch so it contains only active TikTok Metricool accounts before operating.",
   };
