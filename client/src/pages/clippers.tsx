@@ -17343,7 +17343,7 @@ export default function ClippersPage() {
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
                   />
-                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, or private keys.</p>
+                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private keys.</p>
                   {tiktokMvpProofLinksPreview && (
                     <div className={cn(
                       "mt-2 rounded-md border bg-black/20 p-2",

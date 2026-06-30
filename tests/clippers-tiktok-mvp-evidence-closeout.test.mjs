@@ -462,6 +462,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /save-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /!tiktokMvpProofLinksPreview\?\.readyForProofDrop/);
   assert.match(page, /Preview must be clean before Save links turns on/);
+  assert.match(page, /signed\/temporary URLs/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-refresh-panel/);
@@ -1202,6 +1203,8 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /proof-handoff-collection-packets\.csv/);
   assert.match(source, /renderCollectionCsv/);
   assert.match(source, /Must be a real HTTPS metricool\.com URL/);
+  assert.match(source, /signed\/temporary URLs/);
+  assert.match(source, /x-amz\/signature\/expires query params/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-drop-kit\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-intake-import\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-closeout-wizard\.mjs/);
@@ -1231,6 +1234,8 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(csv, /meme-radar-account-ownership/);
   assert.match(csv, /meme-radar-metricool-connection/);
   assert.match(csv, /Must be a real HTTPS metricool\.com URL/);
+  assert.match(csv, /signed\/temporary URLs/);
+  assert.match(csv, /x-amz\/signature\/expires query params/);
   assert.doesNotMatch(csv, /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i);
 });
 
@@ -1249,6 +1254,7 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.match(source, /metricool\.com/);
   assert.match(source, /unsafeProofQueryParamPattern/);
   assert.match(source, /x-amz-signature/);
+  assert.match(source, /URLs with x-amz\/signature\/expires\/session\/token query params are blocked/);
   assert.match(source, /Local files are inventory only; closeout still requires real public\/non-secret HTTPS proof URLs/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);

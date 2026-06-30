@@ -194,7 +194,7 @@ function buildOperatorSession(summary) {
     : nextGate?.nextAction || summary.nextStep;
   const steps = [
     "Open Proof handoff and review collection packets.",
-    "Paste real non-secret SPORT/memes TikTok and Metricool proof links.",
+    "Paste real non-secret SPORT/memes TikTok and Metricool proof links; signed/temporary URLs are blocked.",
     "Run Preview links before saving.",
     "Save proof links only after preview has no blockers.",
     "Run Proof handoff, Import preview, Preview closeout, and Local verify.",
@@ -212,7 +212,7 @@ function buildOperatorSession(summary) {
       `Next gate: ${nextGate?.id || "none"}`,
       `Action: ${action}`,
       `Apply gate CSV: ${summary.paths.applyGateCsv}`,
-      "Guardrails: no auto publish, no direct social APIs, Metricool approval_required, no applied evidence unless guarded apply is intentionally confirmed.",
+      "Guardrails: no auto publish, no direct social APIs, Metricool approval_required, no signed/temporary proof URLs, no applied evidence unless guarded apply is intentionally confirmed.",
     ].join("\n"),
   };
 }

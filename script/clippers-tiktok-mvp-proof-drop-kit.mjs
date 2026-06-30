@@ -143,7 +143,7 @@ async function ensureDropKitFiles() {
   await writeFile(path.join(dropDir, "README.md"), [
     "# TikTok MVP Proof Drop",
     "",
-    "Put non-secret proof files here for SPORT and memes. Do not put passwords, tokens, cookies, recovery codes, or private API keys in this folder.",
+    "Put non-secret proof files here for SPORT and memes. Do not put passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private API keys in this folder.",
     "",
     "Expected optional file names:",
     "",
@@ -152,7 +152,7 @@ async function ensureDropKitFiles() {
       `- ${lane.expectedFiles.metricool}.png/pdf/jpg/etc for ${lane.metricoolBrandName} Metricool connection proof`,
     ]),
     "",
-    "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof must be a metricool.com HTTPS URL.",
+    "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof must be a metricool.com HTTPS URL. URLs with x-amz/signature/expires/session/token query params are blocked.",
     "This kit never applies final evidence, publishes, schedules, or enables real publishing.",
     "",
   ].join("\n"));

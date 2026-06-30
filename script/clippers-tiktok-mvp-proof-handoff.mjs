@@ -125,7 +125,7 @@ function buildCollectionPackets(proofDrop) {
         handle: lane.handle,
         field: "accountOwnershipProofUrl",
         status: state.accountProofReady && state.accountNotesReady ? "ready" : "needed",
-        proofUrlRule: "Real safe HTTPS URL; no passwords, tokens, cookies, recovery codes, signed URLs, or private keys.",
+        proofUrlRule: "Real safe HTTPS URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
         acceptedProof: [
           `Public/non-secret proof that Robert controls ${lane.handle}.`,
           "Ownership or security screen/ticket stored as a non-secret Drive/doc URL.",
@@ -133,7 +133,7 @@ function buildCollectionPackets(proofDrop) {
         ],
         rejectIf: [
           "The URL is a placeholder, example.com, search result, password-protected link, or contains credentials.",
-          "The proof exposes tokens, cookies, recovery codes, private screenshots, or API keys.",
+          "The proof exposes tokens, cookies, recovery codes, private screenshots, API keys, signed URLs, or temporary query params.",
         ],
         copyPrompt: `Collect ${lane.accountName} TikTok ownership proof for ${lane.handle}. Paste only a real non-secret HTTPS proof URL into accountOwnershipProofUrl and keep accountNotes at 20+ characters.`,
       },
@@ -146,7 +146,7 @@ function buildCollectionPackets(proofDrop) {
         handle: lane.handle,
         field: "metricoolConnectionProofUrl",
         status: state.metricoolProofReady && state.metricoolNotesReady ? "ready" : "needed",
-        proofUrlRule: "Must be a real HTTPS metricool.com URL; no passwords, tokens, cookies, recovery codes, signed URLs, or private keys.",
+        proofUrlRule: "Must be a real HTTPS metricool.com URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
         acceptedProof: [
           `Metricool brand/profile ${lane.metricoolBrandName} shows TikTok connected to ${lane.handle}.`,
           "Metricool planner/profile proof URL that does not expose secret account data.",
@@ -154,7 +154,7 @@ function buildCollectionPackets(proofDrop) {
         ],
         rejectIf: [
           "The URL is not on metricool.com.",
-          "The proof is a placeholder, private credential page, screenshot with secrets, or contains auth material.",
+          "The proof is a placeholder, private credential page, screenshot with secrets, signed URL, temporary URL, or contains auth material.",
         ],
         copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
       },
