@@ -386,6 +386,25 @@ export async function registerRoutes(
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-drop-kit.json", "utf8");
     return JSON.parse(raw);
   };
+  const readClipperTikTokMvpProofLinks = async () => {
+    const raw = await readNodeFile("clippers_workspace/proof-drop/tiktok-mvp/proof-links.json", "utf8");
+    return { path: "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json", raw, parsed: JSON.parse(raw) };
+  };
+  const containsClipperSecretLikeText = (value: unknown) => /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || ""));
+  const validateClipperTikTokMvpProofLinks = (value: any) => {
+    const raw = JSON.stringify(value);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return "proof-links must be a JSON object";
+    if (containsClipperSecretLikeText(raw)) return "proof-links cannot contain passwords, tokens, cookies, keys, or recovery codes";
+    if (!value.lanes || typeof value.lanes !== "object" || Array.isArray(value.lanes)) return "proof-links must contain a lanes object";
+    for (const laneKey of ["sports-daily:tiktok", "meme-radar:tiktok"]) {
+      const lane = value.lanes[laneKey];
+      if (!lane || typeof lane !== "object" || Array.isArray(lane)) return `proof-links is missing ${laneKey}`;
+      for (const field of ["accountOwnershipProofUrl", "metricoolConnectionProofUrl", "accountNotes", "metricoolNotes"]) {
+        if (typeof lane[field] !== "string") return `${laneKey}.${field} must be a string`;
+      }
+    }
+    return "";
+  };
   const readClipperTikTokMvpProofDoctor = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-doctor.json", "utf8");
     return JSON.parse(raw);
@@ -2711,6 +2730,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/clippers/tiktok-mvp-proof-links", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof links have not been prepared" : "TikTok MVP proof links could not be read") });
+    }
+  });
+
   app.post("/api/clippers/prepare-tiktok-mvp-proof-drop-kit", async (_req, res) => {
     try {
       const run = await runClipperTikTokMvpProofDropKit();
@@ -2722,6 +2750,35 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof drop kit" });
+    }
+  });
+
+  app.post("/api/clippers/save-tiktok-mvp-proof-links", async (req, res) => {
+    try {
+      const parsed = typeof req.body?.proofLinksText === "string" ? JSON.parse(req.body.proofLinksText) : req.body?.proofLinks;
+      const validationError = validateClipperTikTokMvpProofLinks(parsed);
+      if (validationError) {
+        res.status(400).json({ error: validationError });
+        return;
+      }
+      await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
+      await writeNodeFile(
+        "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json",
+        `${JSON.stringify(parsed, null, 2)}\n`,
+      );
+      const proofDropRun = await runClipperTikTokMvpProofDropKit();
+      const wizardRun = await runClipperTikTokMvpCloseoutWizard();
+      res.json({
+        tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks(),
+        tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard(),
+        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        proofDropRun,
+        wizardRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to save TikTok MVP proof links" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -2284,6 +2284,19 @@ interface ClipperTikTokMvpProofDropKitSummary {
   };
   guardrails: string[];
   nextStep: string;
+}
+
+interface ClipperTikTokMvpProofLinksSummary {
+  path: string;
+  raw: string;
+  parsed: {
+    lanes: Record<string, {
+      accountOwnershipProofUrl: string;
+      metricoolConnectionProofUrl: string;
+      accountNotes: string;
+      metricoolNotes: string;
+    }>;
+  };
 }
 
 interface ClipperTikTokMvpLocalVerificationSummary {
@@ -9947,6 +9960,8 @@ export default function ClippersPage() {
   const [launchEvidenceBatchPreview, setLaunchEvidenceBatchPreview] = useState<ClipperLaunchEvidenceBatchSummary | null>(null);
   const [launchEvidenceStrictImport, setLaunchEvidenceStrictImport] = useState(true);
   const [tiktokMvpProofQuickFillText, setTiktokMvpProofQuickFillText] = useState(tiktokMvpProofQuickFillTemplate);
+  const [tiktokMvpProofLinksText, setTiktokMvpProofLinksText] = useState("");
+  const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -10282,6 +10297,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofDropKit as ClipperTikTokMvpProofDropKitSummary;
     },
   });
+  const { data: tiktokMvpProofLinks } = useQuery<ClipperTikTokMvpProofLinksSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-links"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-links");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof links");
+      return data.tiktokMvpProofLinks as ClipperTikTokMvpProofLinksSummary;
+    },
+  });
   const { data: tiktokMvpProofDoctor } = useQuery<ClipperTikTokMvpProofDoctorSummary | null>({
     queryKey: ["/api/clippers/tiktok-mvp-proof-doctor"],
     queryFn: async () => {
@@ -10442,6 +10467,12 @@ export default function ClippersPage() {
       return data.externalCloseoutNextWorkRun as ClipperExternalNextWorkRunSummary;
     },
   });
+  useEffect(() => {
+    if (tiktokMvpProofLinks?.raw && !tiktokMvpProofLinksLoaded) {
+      setTiktokMvpProofLinksText(tiktokMvpProofLinks.raw);
+      setTiktokMvpProofLinksLoaded(true);
+    }
+  }, [tiktokMvpProofLinks?.raw, tiktokMvpProofLinksLoaded]);
   const visibleExternalCloseoutOperatorRows = externalCloseoutOperatorQueue
     ? externalCloseoutOperatorQueue.rows
     : externalCloseoutProofTodo
@@ -10892,6 +10923,45 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof drop", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofLinksSaveMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/save-tiktok-mvp-proof-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proofLinksText: tiktokMvpProofLinksText }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude guardar TikTok MVP proof links");
+      return data as {
+        tiktokMvpProofLinks: ClipperTikTokMvpProofLinksSummary;
+        tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      setTiktokMvpProofLinksText(data.tiktokMvpProofLinks.raw);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links"], data.tiktokMvpProofLinks);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      if (data.tiktokMvpProofQuickFill) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      }
+      if (data.tiktokMvpProofUnblocker) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      toast({
+        title: data.tiktokMvpProofDropKit.readyForQuickFill ? "Proof links guardados" : "Proof links guardados con blockers",
+        description: data.tiktokMvpCloseoutWizard.nextStep,
+        variant: data.tiktokMvpProofDropKit.readyForQuickFill ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude guardar proof links", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15572,6 +15642,7 @@ export default function ClippersPage() {
   ];
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
+    || tiktokMvpProofLinksSaveMutation.isPending
     || tiktokMvpProofDoctorMutation.isPending
     || tiktokMvpProofIntakeImportPreviewMutation.isPending
     || tiktokMvpProofIntakeImportApplyMutation.isPending
@@ -16948,6 +17019,43 @@ export default function ClippersPage() {
                       <p className="mt-1 text-sky-100/70">Files: {lane.detectedAccountFiles.length + lane.detectedMetricoolFiles.length}</p>
                     </div>
                   ))}
+                </div>
+                <div className="mt-2 rounded-md border border-sky-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-proof-links-editor">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sky-100">Edit proof-links.json</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setTiktokMvpProofLinksText(tiktokMvpProofLinks?.raw || "")}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinks?.raw}
+                        className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                        data-testid="reset-clippers-tiktok-mvp-proof-links-button"
+                      >
+                        <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                        Reset links
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => tiktokMvpProofLinksSaveMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim()}
+                        className="h-8 bg-sky-200 text-zinc-950 hover:bg-sky-100"
+                        data-testid="save-clippers-tiktok-mvp-proof-links-button"
+                      >
+                        {tiktokMvpProofLinksSaveMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                        Save links
+                      </Button>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={tiktokMvpProofLinksText}
+                    onChange={(event) => setTiktokMvpProofLinksText(event.target.value)}
+                    className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
+                    data-testid="clippers-tiktok-mvp-proof-links-textarea"
+                  />
+                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Do not paste passwords, tokens, cookies, recovery codes, or private keys.</p>
                 </div>
               </div>
             )}
