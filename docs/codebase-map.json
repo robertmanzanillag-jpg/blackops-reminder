@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T14:13:11.447Z",
+  "generatedAt": "2026-06-30T14:21:35.364Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8936
+    "symbols": 8945
   },
   "directories": {
     ".agents/skills": {
@@ -4650,7 +4650,9 @@
       ],
       "exports": [],
       "symbols": [
+        "accountId",
         "accountProfiles",
+        "accountRows",
         "activeMvp",
         "activeMvpReady",
         "allAccountsVerified",
@@ -4659,6 +4661,7 @@
         "approvalOnlyQueueReady",
         "approvalRunPublishMode",
         "approvalRunRealPublishEnabled",
+        "buildOperatorNextActions",
         "cells",
         "char",
         "csvCell",
@@ -4687,6 +4690,8 @@
         "main",
         "metricsTotal",
         "numberValue",
+        "oneScreenProofPath",
+        "operatorNextActions",
         "parseCsv",
         "parseCsvLine",
         "parsed",
@@ -4695,16 +4700,20 @@
         "pendingProfiles",
         "permissionGroups",
         "permissionGroupsApproved",
+        "proofHandoffDir",
+        "proofRows",
         "publishedPostUrl",
         "raw",
         "readJson",
         "renderCsv",
         "renderMarkdown",
+        "renderNextActionsCsv",
         "reportsDir",
         "requirement",
         "requirements",
         "rightsReadyAssets",
         "rootDir",
+        "rows",
         "scheduledDir",
         "status",
         "strictTikTokSession",

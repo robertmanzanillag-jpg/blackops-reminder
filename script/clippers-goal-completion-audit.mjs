@@ -17,6 +17,7 @@ const paths = {
   outJson: path.join(reportsDir, "clippers-goal-completion-audit.json"),
   outMarkdown: path.join(reportsDir, "clippers-goal-completion-audit.md"),
   outCsv: path.join(reportsDir, "clippers-goal-completion-audit.csv"),
+  outNextActionsCsv: path.join(reportsDir, "clippers-goal-completion-next-actions.csv"),
 };
 
 async function readJson(filePath, fallback = {}) {
@@ -138,6 +139,21 @@ function renderMarkdown(summary) {
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
+    `- Operator next actions: ${summary.operatorNextActions.length}`,
+    `- Operator next actions CSV: ${summary.paths.outNextActionsCsv}`,
+    "",
+    "## Operator Next Actions",
+    "",
+    ...summary.operatorNextActions.map((row) => [
+      `### ${row.priority}. ${row.title}`,
+      `- Status: ${row.status}`,
+      `- Owner: ${row.owner}`,
+      `- Button/file: ${row.buttonOrFile}`,
+      `- Proof line: ${row.proofLine || "n/a"}`,
+      `- Guardrail: ${row.guardrail}`,
+      `- Next: ${row.nextAction}`,
+      "",
+    ].join("\n")),
     "",
     "## Requirements",
     "",
@@ -163,6 +179,101 @@ function renderCsv(summary) {
       row.nextAction,
     ].map(csvCell).join(",")),
   ].join("\n") + "\n";
+}
+
+function renderNextActionsCsv(summary) {
+  const header = ["priority", "title", "status", "owner", "button_or_file", "proof_line", "guardrail", "next_action"];
+  return [
+    header.map(csvCell).join(","),
+    ...summary.operatorNextActions.map((row) => [
+      row.priority,
+      row.title,
+      row.status,
+      row.owner,
+      row.buttonOrFile,
+      row.proofLine,
+      row.guardrail,
+      row.nextAction,
+    ].map(csvCell).join(",")),
+  ].join("\n") + "\n";
+}
+
+function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, currentBatchId, currentBatchReady, allPublishedEvidenceReady }) {
+  const proofHandoffDir = path.join(reportsDir, "tiktok-mvp-proof-intake");
+  const oneScreenProofPath = path.join(proofHandoffDir, "proof-fill-one-screen.txt");
+  const rows = [];
+  const accountRows = Array.isArray(accountReadiness.tiktokMvpAccountCloseout?.rows)
+    ? accountReadiness.tiktokMvpAccountCloseout.rows
+    : [];
+  const proofRows = accountRows.length
+    ? accountRows
+    : [
+      { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", handle: "@sportsdaily", status: "needs_account_proof" },
+      { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", handle: "@memeradar", status: "needs_account_proof" },
+    ];
+  let priority = 1;
+  for (const row of proofRows) {
+    const accountId = row.accountId || "unknown";
+    rows.push({
+      priority: priority++,
+      title: `${row.accountName || accountId} TikTok ownership proof`,
+      status: activeMvpReady ? "done" : "blocked_needs_real_proof",
+      owner: "Robert",
+      buttonOrFile: oneScreenProofPath,
+      proofLine: `${accountId}:tiktok.accountOwnershipProofUrl=`,
+      guardrail: "Use only a safe HTTPS proof URL; no passwords, cookies, tokens, recovery codes, signed URLs, or private screenshots.",
+      nextAction: activeMvpReady
+        ? "Already covered by applied TikTok MVP evidence."
+        : `Paste real ownership/security proof for ${row.handle || accountId}, then preview/save proof links.`,
+    });
+    rows.push({
+      priority: priority++,
+      title: `${row.accountName || accountId} Metricool connection proof`,
+      status: activeMvpReady ? "done" : "blocked_needs_real_metricool_proof",
+      owner: "Robert",
+      buttonOrFile: oneScreenProofPath,
+      proofLine: `${accountId}:tiktok.metricoolConnectionProofUrl=`,
+      guardrail: "Metricool proof must be a real HTTPS metricool.com URL; keep Metricool approval_required.",
+      nextAction: activeMvpReady
+        ? "Already covered by applied TikTok MVP evidence."
+        : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, then preview/save proof links.`,
+    });
+  }
+  rows.push({
+    priority: priority++,
+    title: "Apply TikTok MVP evidence closeout",
+    status: activeMvpReady ? "done" : "locked_until_proof_links_pass",
+    owner: "Robert",
+    buttonOrFile: "apply-clippers-tiktok-mvp-evidence-closeout-button",
+    proofLine: "",
+    guardrail: "Requires explicit operator confirmation; does not publish, schedule, or enable direct social APIs.",
+    nextAction: activeMvpReady
+      ? "Evidence closeout is applied for the active TikTok MVP lanes."
+      : "Only click Apply after proof preview/doctor are clean and every proof URL is real.",
+  });
+  rows.push({
+    priority: priority++,
+    title: "Prepare current Metricool batch upload/session pack",
+    status: currentBatchReady && activeMvpReady ? "ready_for_metricool_operator" : "locked_until_account_metricool_gate",
+    owner: "App",
+    buttonOrFile: "prepare-metricool-current-batch-upload-pack + prepare-metricool-current-batch-session-packet",
+    proofLine: "",
+    guardrail: "Prepares local MP4/session artifacts only; no automatic scheduling or publishing.",
+    nextAction: currentBatchReady && activeMvpReady
+      ? `Open ${currentBatchId} in Metricool approval_required mode.`
+      : "This will unlock after TikTok account/Metricool proof is applied and gates pass.",
+  });
+  rows.push({
+    priority: priority++,
+    title: "Record public TikTok URLs and 24h metrics",
+    status: allPublishedEvidenceReady ? "done" : "waiting_metricool_work",
+    owner: "Robert",
+    buttonOrFile: path.join(paths.batchEvidenceDir, `${currentBatchId}-evidence-import.csv`),
+    proofLine: "",
+    guardrail: "Only exact public TikTok video URLs with real 24h metrics count; no search/profile URLs.",
+    nextAction: "After posts are live, fill the current batch evidence CSV and run the import/closeout verifier.",
+  });
+  return rows;
 }
 
 async function main() {
@@ -311,6 +422,14 @@ async function main() {
       "After Metricool work, fill only the current batch evidence CSV; sync will update the master evidence CSV.",
     ),
   ];
+  const operatorNextActions = buildOperatorNextActions({
+    accountReadiness,
+    activeMvp,
+    activeMvpReady,
+    currentBatchId,
+    currentBatchReady,
+    allPublishedEvidenceReady,
+  });
 
   const totals = requirements.reduce((sum, row) => {
     sum.requirements += 1;
@@ -359,6 +478,7 @@ async function main() {
       allDirectApiPermissionsReady,
       allPublishedEvidenceReady,
     },
+    operatorNextActions,
     requirements,
     totals,
     nextStep: status === "tiktok_mvp_ready_external_work_remaining"
@@ -374,6 +494,7 @@ async function main() {
   await writeFile(paths.outJson, JSON.stringify(summary, null, 2));
   await writeFile(paths.outMarkdown, renderMarkdown(summary));
   await writeFile(paths.outCsv, renderCsv(summary));
+  await writeFile(paths.outNextActionsCsv, renderNextActionsCsv(summary));
   console.log(JSON.stringify({
     status: summary.status,
     requirements: totals.requirements,
@@ -386,6 +507,8 @@ async function main() {
     externalProofFilesNeedRealEvidence: summary.fullGoal.externalProofFilesNeedRealEvidence,
     fullReadinessMissing: summary.fullGoal.fullReadinessMissing,
     nextStep: summary.nextStep,
+    operatorNextActions: summary.operatorNextActions.length,
+    nextActionsCsvPath: paths.outNextActionsCsv,
     markdownPath: paths.outMarkdown,
   }, null, 2));
 }

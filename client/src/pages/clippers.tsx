@@ -707,6 +707,7 @@ interface ClipperGoalCompletionAuditSummary {
     outJson: string;
     outMarkdown: string;
     outCsv: string;
+    outNextActionsCsv?: string;
   };
   fullGoal?: {
     metricoolMvpReady: boolean;
@@ -722,6 +723,16 @@ interface ClipperGoalCompletionAuditSummary {
     label: string;
     status: "ready" | "ready_for_tiktok_mvp" | "waiting_metricool_work" | "needs_external_action" | "deferred";
     evidence: string;
+    nextAction: string;
+  }>;
+  operatorNextActions?: Array<{
+    priority: number;
+    title: string;
+    status: string;
+    owner: string;
+    buttonOrFile: string;
+    proofLine: string;
+    guardrail: string;
     nextAction: string;
   }>;
   totals: {
@@ -21222,7 +21233,10 @@ export default function ClippersPage() {
                     </div>
                   </div>
                 )}
-                <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{goalCompletionAudit.paths.outMarkdown}</p>
+                <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                  <p className="break-all">Audit: {goalCompletionAudit.paths.outMarkdown}</p>
+                  {goalCompletionAudit.paths.outNextActionsCsv && <p className="break-all">Next actions CSV: {goalCompletionAudit.paths.outNextActionsCsv}</p>}
+                </div>
               </div>
               <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
                 <div className="rounded-md border border-white/10 bg-black/25 p-2">
@@ -21239,6 +21253,43 @@ export default function ClippersPage() {
                 </div>
               </div>
             </div>
+            {goalCompletionAudit.operatorNextActions && goalCompletionAudit.operatorNextActions.length > 0 && (
+              <div className="mt-3 rounded-md border border-lime-300/10 bg-lime-950/10 p-3" data-testid="clippers-goal-operator-next-actions">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-lime-100">Operator next actions</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-400">Orden seguro para destrabar TikTok + Metricool sin publicar automatico.</p>
+                  </div>
+                  <Badge className="w-fit border border-lime-300/20 bg-lime-300/10 text-[10px] text-lime-100">
+                    {formatNumber(goalCompletionAudit.operatorNextActions.length)} steps
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {goalCompletionAudit.operatorNextActions.slice(0, 8).map((action) => (
+                    <div key={`${action.priority}-${action.title}`} className="rounded-md border border-white/10 bg-black/25 p-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-white">{action.priority}. {action.title}</p>
+                          {action.proofLine && <p className="mt-1 break-all font-mono text-[11px] text-lime-100/80">{action.proofLine}</p>}
+                        </div>
+                        <Badge className={cn(
+                          "shrink-0 border text-[10px]",
+                          action.status === "done" || action.status === "ready_for_metricool_operator"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : action.status.startsWith("waiting")
+                              ? "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100"
+                              : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>
+                          {action.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-zinc-400">{action.nextAction}</p>
+                      <p className="mt-1 break-all text-[10px] leading-4 text-zinc-500">{action.buttonOrFile}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {goalCompletionAudit.requirements.map((requirement) => (
                 <div key={requirement.id} className="rounded-md border border-lime-300/10 bg-black/25 p-3">
