@@ -4136,7 +4136,38 @@ test("trusted delivery endpoint helper delivers only after trusted release gate 
   assert.match(untrustedDelivery.reason, /gate confiable/);
   assert.equal(trustedDelivery.status, "delivered");
   assert.equal(trustedDelivery.handoff?.clientName, "Trusted Delivered Cafe");
+  assert.equal(trustedDelivery.opportunity?.id, created.opportunity.id);
+  assert.equal(trustedDelivery.opportunity?.status, "delivered");
   assert.equal(trustedDelivery.workspace?.learningNote.includes("entregado con QA aprobado"), true);
+  assert.equal(
+    trustedDelivery.snapshot.recentWebsiteOpportunities.find((item) => item.id === created.opportunity.id)?.status,
+    "delivered",
+  );
+  assert.equal(
+    trustedDelivery.snapshot.websiteDeliveryHandoffQueue.items.some((item) => item.opportunityId === created.opportunity.id),
+    false,
+  );
+
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
+  const reloadedSnapshot = getRevenueEngineSnapshot();
+  assert.equal(
+    reloadedSnapshot.recentWebsiteOpportunities.find((item) => item.id === created.opportunity.id)?.status,
+    "delivered",
+  );
+  assert.equal(
+    reloadedSnapshot.websiteDeliveryHandoffQueue.items.some((item) => item.opportunityId === created.opportunity.id),
+    false,
+  );
+
+  const retriedDelivery = deliverRevenueDeliveryWorkspaceFromTrustedApproval({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+    notes: "Retry after persisted delivery state.",
+  });
+
+  assert.equal(retriedDelivery.status, "delivered");
+  assert.equal(retriedDelivery.opportunity?.status, "delivered");
+  assert.doesNotMatch(retriedDelivery.reason, /oportunidad website no vendida/);
 });
 
 test("trusted delivery blocks direct ready website workspace without sold opportunity chain", () => {

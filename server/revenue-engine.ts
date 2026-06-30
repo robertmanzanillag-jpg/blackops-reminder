@@ -853,7 +853,7 @@ type RevenueWebsiteOpportunity = RevenueWebsiteOpportunityInput & {
   id: string;
   createdAt: string;
   updatedAt: string;
-  status: "quoted" | "scope_approved" | "sold" | "blocked";
+  status: "quoted" | "scope_approved" | "sold" | "delivered" | "blocked";
   businessName: string;
   sourceLeadId: string;
   sourceOutreachDraftId: string;
@@ -1276,7 +1276,7 @@ const persistedRevenueWebsiteOpportunitySchema = revenueWebsiteOpportunitySchema
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
-  status: z.enum(["quoted", "scope_approved", "sold", "blocked"]),
+  status: z.enum(["quoted", "scope_approved", "sold", "delivered", "blocked"]),
   businessName: z.string().trim().min(1),
   sourceLeadId: z.string().trim().min(1),
   sourceOutreachDraftId: z.string().trim().min(1),
@@ -3984,6 +3984,12 @@ function findRevenueWebsiteOpportunityByLeadOrDraft(leadId: string, draftId: str
   ) || null;
 }
 
+function isClosedRevenueWebsiteOpportunity(
+  opportunity: RevenueWebsiteOpportunity | null | undefined,
+): opportunity is RevenueWebsiteOpportunity & { status: "sold" | "delivered" } {
+  return opportunity?.status === "sold" || opportunity?.status === "delivered";
+}
+
 function syncRevenueWebsiteOpportunityFromDepositOutcome(
   lead: RevenueLead | null,
   draft: RevenueOutreachDraft,
@@ -4006,17 +4012,20 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(
 
   const existing = findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, draft.id);
   const now = new Date().toISOString();
+  const preserveClosedChain = isClosedRevenueWebsiteOpportunity(existing);
   const projectType = existing?.projectType || (draft.automationPriceUsd > 0 ? "bundle" as const : "website" as const);
   const setupUsd = existing?.setupUsd || (projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd);
   const requiredDepositUsd = existing?.requiredDepositUsd || Math.round(setupUsd * 0.5);
-  const status = existing?.status === "sold"
-    ? "sold" as const
+  const status = existing?.status === "delivered"
+    ? "delivered" as const
+    : existing?.status === "sold"
+      ? "sold" as const
     : existing?.scopeApproved
       ? "scope_approved" as const
       : "quoted" as const;
   const opportunity: RevenueWebsiteOpportunity = {
-    leadId: lead.id,
-    outreachDraftId: draft.id,
+    leadId: preserveClosedChain ? existing.leadId : lead.id,
+    outreachDraftId: preserveClosedChain ? existing.outreachDraftId : draft.id,
     projectType,
     notes: notes || "Manual deposit outcome recorded from outreach.",
     id: existing?.id || `website-opportunity-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
@@ -4024,10 +4033,10 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(
     updatedAt: now,
     status,
     businessName: lead.businessName,
-    sourceLeadId: lead.id,
-    sourceOutreachDraftId: draft.id,
-    mockupUrl: draft.mockupUrl || "",
-    sourceUrl: draft.sourceUrl || "",
+    sourceLeadId: preserveClosedChain ? existing.sourceLeadId : lead.id,
+    sourceOutreachDraftId: preserveClosedChain ? existing.sourceOutreachDraftId : draft.id,
+    mockupUrl: preserveClosedChain ? existing.mockupUrl : draft.mockupUrl || "",
+    sourceUrl: preserveClosedChain ? existing.sourceUrl : draft.sourceUrl || "",
     setupUsd,
     requiredDepositUsd,
     cashCollectedUsd: Math.max(existing?.cashCollectedUsd || 0, cashCollectedUsd),
@@ -4036,9 +4045,11 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(
     depositPaid: true,
     scopeApproved: existing?.scopeApproved || false,
     paymentConfirmation,
-    qaGates: gates,
-    nextAction: status === "sold"
-      ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
+    qaGates: preserveClosedChain ? existing.qaGates : gates,
+    nextAction: status === "delivered"
+      ? "Website entregado; medir resultados y correr review semanal."
+      : status === "sold"
+        ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
       : existing?.scopeApproved
         ? "Deposito y scope registrados; cerrar oportunidad para habilitar delivery."
         : "Deposito registrado; falta aprobar scope antes de convertir a delivery.",
@@ -4091,14 +4102,14 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
 
   const existing = findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, draft.id);
   const now = new Date().toISOString();
-  const preserveSoldChain = existing?.status === "sold";
-  const projectType = existing?.status === "sold"
+  const preserveSoldChain = isClosedRevenueWebsiteOpportunity(existing);
+  const projectType = isClosedRevenueWebsiteOpportunity(existing)
     ? existing.projectType
     : parsed.projectType === "website" || draft.automationPriceUsd <= 0 ? "website" as const : "bundle" as const;
-  const existingStatus = existing?.status === "sold" || existing?.status === "scope_approved" ? existing.status : "quoted";
+  const existingStatus = isClosedRevenueWebsiteOpportunity(existing) || existing?.status === "scope_approved" ? existing.status : "quoted";
   const quotedSetupUsd = projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd;
-  const setupUsd = existing?.status === "sold" ? existing.setupUsd : quotedSetupUsd;
-  const requiredDepositUsd = existing?.status === "sold" ? existing.requiredDepositUsd : Math.round(setupUsd * 0.5);
+  const setupUsd = isClosedRevenueWebsiteOpportunity(existing) ? existing.setupUsd : quotedSetupUsd;
+  const requiredDepositUsd = isClosedRevenueWebsiteOpportunity(existing) ? existing.requiredDepositUsd : Math.round(setupUsd * 0.5);
   const opportunity: RevenueWebsiteOpportunity = {
     ...parsed,
     leadId: preserveSoldChain ? existing.leadId : lead.id,
@@ -4116,14 +4127,16 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
     setupUsd,
     requiredDepositUsd,
     cashCollectedUsd: existing?.cashCollectedUsd || 0,
-    monthlyRetainerUsd: existing?.status === "sold" ? existing.monthlyRetainerUsd : draft.pricing.monthlyRetainerUsd,
-    estimatedInternalCostUsd: existing?.status === "sold" ? existing.estimatedInternalCostUsd : draft.pricing.estimatedInternalMonthlyCostUsd,
+    monthlyRetainerUsd: isClosedRevenueWebsiteOpportunity(existing) ? existing.monthlyRetainerUsd : draft.pricing.monthlyRetainerUsd,
+    estimatedInternalCostUsd: isClosedRevenueWebsiteOpportunity(existing) ? existing.estimatedInternalCostUsd : draft.pricing.estimatedInternalMonthlyCostUsd,
     depositPaid: existing?.depositPaid || false,
     scopeApproved: existing?.scopeApproved || false,
     paymentConfirmation: existing?.paymentConfirmation || "",
     qaGates: preserveSoldChain ? existing.qaGates : gates,
-    nextAction: existingStatus === "sold"
-      ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
+    nextAction: existingStatus === "delivered"
+      ? "Website entregado; medir resultados y correr review semanal."
+      : existingStatus === "sold"
+        ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
       : existingStatus === "scope_approved"
         ? "Scope aprobado; falta confirmar deposito/pago antes de delivery."
         : "Cerrar solo cuando deposito, scope y confirmacion de pago esten registrados.",
@@ -4143,7 +4156,7 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
   persistRevenueWebsiteOpportunities();
 
   return {
-    status: opportunity.status === "sold" ? "already_sold" as const : "quoted" as const,
+    status: isClosedRevenueWebsiteOpportunity(opportunity) ? "already_sold" as const : "quoted" as const,
     reason: opportunity.nextAction,
     opportunity,
     gates,
@@ -4169,6 +4182,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const blockers = [
     !opportunity && "oportunidad no encontrada",
     opportunity?.status === "blocked" && "oportunidad bloqueada",
+    opportunity?.status === "delivered" && "oportunidad ya entregada",
     !lead && "lead no encontrado",
     !draft && "draft no encontrado",
     draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
@@ -4182,7 +4196,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   ].filter(Boolean) as string[];
 
   if (!opportunity || blockers.length > 0) {
-    if (opportunity) {
+    if (opportunity && opportunity.status !== "delivered") {
       const nextScopeApproved = opportunity.scopeApproved || parsed.scopeApproved;
       const nextDepositPaid = opportunity.depositPaid || depositOutcomeCoversRequired;
       opportunity.status = nextScopeApproved ? "scope_approved" : "quoted";
@@ -4255,7 +4269,11 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
 
 function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
   const closureOpportunities = revenueWebsiteOpportunities
-    .filter((opportunity) => opportunity.status !== "sold" && (!opportunity.depositPaid || !opportunity.scopeApproved))
+    .filter((opportunity) =>
+      opportunity.status !== "sold"
+      && opportunity.status !== "delivered"
+      && (!opportunity.depositPaid || !opportunity.scopeApproved)
+    )
     .slice()
     .sort((a, b) => {
       const priorityScore = (item: RevenueWebsiteOpportunity) =>
@@ -4479,6 +4497,7 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
   for (const opportunity of opportunities) {
     const lead = revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null;
     const draft = revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null;
+    if (opportunity.status === "delivered") continue;
     if (opportunity.status !== "sold" || !opportunity.depositPaid || !opportunity.scopeApproved) {
       blocked.push({
         leadId: opportunity.sourceLeadId,
@@ -4566,7 +4585,7 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
   const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(opportunity, draft);
   const blockers = [
     !opportunity && "sourceOpportunityId vendido requerido",
-    opportunity && opportunity.status !== "sold" && "oportunidad website no vendida",
+    opportunity && !isClosedRevenueWebsiteOpportunity(opportunity) && "oportunidad website no vendida",
     opportunity && !opportunity.depositPaid && "deposito no marcado en oportunidad vendida",
     opportunity && !opportunity.scopeApproved && "scope no aprobado en oportunidad vendida",
     opportunity && workspace.input.sourceLeadId !== opportunity.sourceLeadId && "sourceLeadId no coincide con oportunidad vendida",
@@ -5312,7 +5331,8 @@ export function getRevenueEngineSnapshot() {
     opportunity.status === "blocked" || opportunity.qaGates.some((gate) => !gate.passed),
   ).length;
   const pendingWebsiteOpportunityApprovals = revenueWebsiteOpportunities.filter((opportunity) =>
-    opportunity.status === "blocked" || (opportunity.status !== "sold" && (!opportunity.depositPaid || !opportunity.scopeApproved)),
+    opportunity.status === "blocked"
+    || (opportunity.status !== "sold" && opportunity.status !== "delivered" && (!opportunity.depositPaid || !opportunity.scopeApproved)),
   ).length;
   const pendingDeliveryApprovals = revenueDeliveryWorkspaces.filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections").length;
   const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingWebsiteOpportunityApprovals + pendingDeliveryApprovals;
@@ -5405,7 +5425,10 @@ export function getRevenueEngineSnapshot() {
         action: opportunity.qaGates.find((gate) => !gate.passed)?.fix || opportunity.nextAction,
       })),
     ...revenueWebsiteOpportunities
-      .filter((opportunity) => opportunity.status === "blocked" || (opportunity.status !== "sold" && (!opportunity.depositPaid || !opportunity.scopeApproved)))
+      .filter((opportunity) =>
+        opportunity.status === "blocked"
+        || (opportunity.status !== "sold" && opportunity.status !== "delivered" && (!opportunity.depositPaid || !opportunity.scopeApproved))
+      )
       .slice(-5)
       .map((opportunity) => ({
         id: opportunity.id,
@@ -9014,19 +9037,30 @@ export function deliverRevenueDeliveryWorkspace(
     };
   }
 
-  const opportunity = workspace.input.sourceOpportunityId
+  const deliveredAt = new Date().toISOString();
+  const automationOpportunity = workspace.input.projectType === "automation" && workspace.input.sourceOpportunityId
     ? revenueAutomationOpportunities.find((item) => item.id === workspace.input.sourceOpportunityId) || null
     : null;
-  if (opportunity) {
-    opportunity.status = "delivered";
-    opportunity.nextAction = "Entrega marcada como completada. Medir resultados y correr review semanal.";
-    opportunity.updatedAt = new Date().toISOString();
+  const websiteOpportunity = workspace.input.projectType !== "automation" && workspace.input.sourceOpportunityId
+    ? revenueWebsiteOpportunities.find((item) => item.id === workspace.input.sourceOpportunityId) || null
+    : null;
+  const opportunity = automationOpportunity || websiteOpportunity;
+  if (automationOpportunity) {
+    automationOpportunity.status = "delivered";
+    automationOpportunity.nextAction = "Entrega marcada como completada. Medir resultados y correr review semanal.";
+    automationOpportunity.updatedAt = deliveredAt;
     persistRevenueAutomationOpportunities();
+  }
+  if (websiteOpportunity) {
+    websiteOpportunity.status = "delivered";
+    websiteOpportunity.nextAction = "Website entregado; medir resultados y correr review semanal.";
+    websiteOpportunity.updatedAt = deliveredAt;
+    persistRevenueWebsiteOpportunities();
   }
 
   const updatedWorkspace: RevenueDeliveryWorkspace = {
     ...workspace,
-    updatedAt: new Date().toISOString(),
+    updatedAt: deliveredAt,
     learningNote: `${workspace.input.clientName}: entregado con QA aprobado; medir resultados en review semanal.`,
   };
   revenueDeliveryWorkspaces[workspaceIndex] = updatedWorkspace;
