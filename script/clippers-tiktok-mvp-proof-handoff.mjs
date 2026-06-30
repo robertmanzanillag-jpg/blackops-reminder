@@ -7,6 +7,27 @@ const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 
+const lanes = [
+  {
+    key: "sports-daily:tiktok",
+    accountId: "sports-daily",
+    accountName: "Sports Daily Clips",
+    platform: "tiktok",
+    handle: "@sportsdaily",
+    profileUrl: "https://www.tiktok.com/@sportsdaily",
+    metricoolBrandName: "SPORT",
+  },
+  {
+    key: "meme-radar:tiktok",
+    accountId: "meme-radar",
+    accountName: "Meme Radar",
+    platform: "tiktok",
+    handle: "@memeradar",
+    profileUrl: "https://www.tiktok.com/@memeradar",
+    metricoolBrandName: "memes",
+  },
+];
+
 function runJson(args) {
   const result = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
@@ -86,6 +107,60 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   };
 }
 
+function laneProofState(proofDrop, lane) {
+  return (proofDrop?.lanes || []).find((item) => item.key === lane.key) || {};
+}
+
+function buildCollectionPackets(proofDrop) {
+  return lanes.flatMap((lane) => {
+    const state = laneProofState(proofDrop, lane);
+    return [
+      {
+        id: `${lane.accountId}-account-ownership`,
+        lane: lane.key,
+        accountId: lane.accountId,
+        accountName: lane.accountName,
+        platform: lane.platform,
+        handle: lane.handle,
+        field: "accountOwnershipProofUrl",
+        status: state.accountProofReady && state.accountNotesReady ? "ready" : "needed",
+        proofUrlRule: "Real safe HTTPS URL; no passwords, tokens, cookies, recovery codes, signed URLs, or private keys.",
+        acceptedProof: [
+          `Public/non-secret proof that Robert controls ${lane.handle}.`,
+          "Ownership or security screen/ticket stored as a non-secret Drive/doc URL.",
+          "Notes must be 20+ characters and mention ownership/security verification.",
+        ],
+        rejectIf: [
+          "The URL is a placeholder, example.com, search result, password-protected link, or contains credentials.",
+          "The proof exposes tokens, cookies, recovery codes, private screenshots, or API keys.",
+        ],
+        copyPrompt: `Collect ${lane.accountName} TikTok ownership proof for ${lane.handle}. Paste only a real non-secret HTTPS proof URL into accountOwnershipProofUrl and keep accountNotes at 20+ characters.`,
+      },
+      {
+        id: `${lane.accountId}-metricool-connection`,
+        lane: lane.key,
+        accountId: lane.accountId,
+        accountName: lane.accountName,
+        platform: lane.platform,
+        handle: lane.handle,
+        field: "metricoolConnectionProofUrl",
+        status: state.metricoolProofReady && state.metricoolNotesReady ? "ready" : "needed",
+        proofUrlRule: "Must be a real HTTPS metricool.com URL; no passwords, tokens, cookies, recovery codes, signed URLs, or private keys.",
+        acceptedProof: [
+          `Metricool brand/profile ${lane.metricoolBrandName} shows TikTok connected to ${lane.handle}.`,
+          "Metricool planner/profile proof URL that does not expose secret account data.",
+          "Notes must be 20+ characters and mention Metricool connection proof.",
+        ],
+        rejectIf: [
+          "The URL is not on metricool.com.",
+          "The proof is a placeholder, private credential page, screenshot with secrets, or contains auth material.",
+        ],
+        copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
+      },
+    ];
+  });
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Handoff",
@@ -102,6 +177,15 @@ function renderMarkdown(summary) {
     "",
     ...summary.gates.map((gate) => `- ${gate.id}: ${gate.status} - ${gate.detail}`),
     "",
+    "## Collection Packets",
+    "",
+    ...summary.collectionPackets.map((packet) => [
+      `### ${packet.accountName} / ${packet.field}`,
+      `- Status: ${packet.status}`,
+      `- Rule: ${packet.proofUrlRule}`,
+      `- Copy: ${packet.copyPrompt}`,
+      "",
+    ].join("\n")),
     "## Guardrails",
     "",
     ...summary.guardrails.map((item) => `- ${item}`),
@@ -120,6 +204,7 @@ async function main() {
   const closeout = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"), {});
   const wizard = await readJson(path.join(reportsDir, "closeout-wizard.json"), {});
   const decision = decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, wizard });
+  const collectionPackets = buildCollectionPackets(proofDrop);
   const summary = {
     ...decision,
     generatedAt: new Date().toISOString(),
@@ -159,11 +244,13 @@ async function main() {
         detail: "This handoff did not apply evidence, publish, schedule, or enable direct social APIs.",
       },
     ],
+    collectionPackets,
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
       quickFillIssues: Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0,
       importFixes: Array.isArray(importPreview?.fixQueue) ? importPreview.fixQueue.length : 0,
       closeoutRejected: Number(closeout?.totals?.rejected || 0),
+      proofPacketsNeeded: collectionPackets.filter((packet) => packet.status !== "ready").length,
     },
     paths: {
       json: outJsonPath,
@@ -191,6 +278,7 @@ async function main() {
     quickFillIssues: summary.totals.quickFillIssues,
     importFixes: summary.totals.importFixes,
     closeoutRejected: summary.totals.closeoutRejected,
+    proofPacketsNeeded: summary.totals.proofPacketsNeeded,
     reportJsonPath: outJsonPath,
     nextAction: summary.nextAction,
   }, null, 2));

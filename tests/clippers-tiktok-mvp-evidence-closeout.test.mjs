@@ -434,6 +434,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-fixes/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-gates/);
+  assert.match(page, /clippers-tiktok-mvp-proof-handoff-collection-packets/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-panel/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-commands/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);
@@ -1125,6 +1126,11 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /blocked_needs_proof_links/);
   assert.match(source, /blocked_needs_import_preview/);
   assert.match(source, /ready_for_operator_apply_review/);
+  assert.match(source, /buildCollectionPackets/);
+  assert.match(source, /accountOwnershipProofUrl/);
+  assert.match(source, /metricoolConnectionProofUrl/);
+  assert.match(source, /proofPacketsNeeded/);
+  assert.match(source, /Must be a real HTTPS metricool\.com URL/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-drop-kit\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-intake-import\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-closeout-wizard\.mjs/);

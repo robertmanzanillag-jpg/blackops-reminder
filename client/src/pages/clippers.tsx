@@ -2357,7 +2357,22 @@ interface ClipperTikTokMvpProofHandoffSummary {
     quickFillIssues: number;
     importFixes: number;
     closeoutRejected: number;
+    proofPacketsNeeded: number;
   };
+  collectionPackets: Array<{
+    id: string;
+    lane: string;
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    handle: string;
+    field: "accountOwnershipProofUrl" | "metricoolConnectionProofUrl";
+    status: "ready" | "needed";
+    proofUrlRule: string;
+    acceptedProof: string[];
+    rejectIf: string[];
+    copyPrompt: string;
+  }>;
   paths: {
     json: string;
     markdown: string;
@@ -17299,6 +17314,7 @@ export default function ClippersPage() {
                   </Badge>
                   <span>next: {tiktokMvpProofHandoff.nextButton}</span>
                   <span>proof issues {tiktokMvpProofHandoff.totals.proofIssues}</span>
+                  <span>packets needed {tiktokMvpProofHandoff.totals.proofPacketsNeeded}</span>
                   <span>import fixes {tiktokMvpProofHandoff.totals.importFixes}</span>
                 </div>
                 <p className="mt-1">{tiktokMvpProofHandoff.nextAction}</p>
@@ -17307,6 +17323,24 @@ export default function ClippersPage() {
                     <div key={gate.id} className="rounded border border-amber-300/10 bg-black/20 p-2">
                       <p className={cn("font-medium", gate.status === "pass" ? "text-emerald-100" : "text-amber-100")}>{gate.id}: {gate.status}</p>
                       <p className="mt-1 text-zinc-400">{gate.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-handoff-collection-packets">
+                  {tiktokMvpProofHandoff.collectionPackets.map((packet) => (
+                    <div key={packet.id} className="rounded border border-emerald-300/10 bg-black/20 p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={cn("font-medium", packet.status === "ready" ? "text-emerald-100" : "text-amber-100")}>{packet.accountName}</p>
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          packet.status === "ready"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                        )}>{packet.field}</Badge>
+                      </div>
+                      <p className="mt-1 text-zinc-400">{packet.proofUrlRule}</p>
+                      <p className="mt-1 text-emerald-100/70">{packet.copyPrompt}</p>
+                      {packet.acceptedProof[0] && <p className="mt-1 text-zinc-500">{packet.acceptedProof[0]}</p>}
                     </div>
                   ))}
                 </div>
