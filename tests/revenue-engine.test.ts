@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   answerRevenueAutomationIntake,
+  approveRevenuePublicLeadCandidate,
   buildAutomationQuote,
   buildRevenueUserDataPaths,
   buildImprovementReview,
@@ -800,6 +801,84 @@ test("blocks public lead candidates from import until evidence is verified", () 
   assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
+});
+
+test("approves reviewed public lead candidate without creating leads or outreach", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Review Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@reviewready.example",
+    sourceUrl: "https://example.com/review-ready-cafe",
+    recipientEmail: "owner@reviewready.example",
+    evidence: "Public listing shows no website, current menu photos and verified owner email.",
+    painPoint: "Needs menu website, catering inquiry capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Review Ready Cafe has public no-website evidence and a clear website opportunity.",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  assert.equal(candidate.status, "needs_review");
+  assert.equal(candidate.candidate.importReady, false);
+  assert.equal(candidate.snapshot.publicLeadImportQueue.blockedCount, 1);
+
+  const approved = approveRevenuePublicLeadCandidate({
+    candidateId: candidate.candidate.id,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Robert verified public source and approved import.",
+  });
+
+  assert.equal(approved.status, "approved");
+  assert.equal(approved.candidate?.id, candidate.candidate.id);
+  assert.equal(approved.candidate?.importReady, true);
+  assert.equal(approved.importableCount, 1);
+  assert.equal(approved.safety.persistsLeads, false);
+  assert.equal(approved.safety.sendsOutreach, false);
+  assert.equal(approved.snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(approved.snapshot.publicLeadImportQueue.blockedCount, 0);
+  assert.equal(approved.snapshot.recentLeads.length, 0);
+  assert.equal(approved.snapshot.recentOutreach.length, 0);
+});
+
+test("public candidate approval keeps incomplete candidates blocked", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Still Missing Contact Spa",
+    area: "Miami",
+    niche: "spa",
+    websiteStatus: "unknown",
+    contactChannel: "unknown",
+    contactValue: "",
+    sourceUrl: "https://example.com/still-missing-contact-spa",
+    recipientEmail: "",
+    evidence: "Public listing exists but does not show enough contact or website evidence.",
+    painPoint: "Needs review before a website offer.",
+    estimatedOfferUsd: 2500,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  const approved = approveRevenuePublicLeadCandidate({
+    candidateId: candidate.candidate.id,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Operator tried to approve before contact was fixed.",
+  });
+
+  assert.equal(approved.status, "needs_review");
+  assert.match(approved.reason, /recipientEmail|contact/);
+  assert.equal(approved.candidate?.importReady, false);
+  assert.equal(approved.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(approved.snapshot.publicLeadImportQueue.blockedCount, 1);
+  assert.equal(approved.snapshot.recentLeads.length, 0);
 });
 
 test("records verified public lead candidate batch without creating leads or outreach", () => {

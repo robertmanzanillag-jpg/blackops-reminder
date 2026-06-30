@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T15:53:37.779Z",
+  "generatedAt": "2026-06-30T16:06:33.819Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -85,8 +85,8 @@
     "filesVisible": 400,
     "filesIndexed": 333,
     "imports": 1318,
-    "routes": 448,
-    "symbols": 7096
+    "routes": 449,
+    "symbols": 7097
   },
   "directories": {
     ".agents/skills": {
@@ -10672,6 +10672,7 @@
         "/api/revenue-engine/project-plan",
         "/api/revenue-engine/proposal-email",
         "/api/revenue-engine/public-lead-candidates",
+        "/api/revenue-engine/public-lead-candidates/approve",
         "/api/revenue-engine/public-lead-candidates/batch",
         "/api/revenue-engine/public-scout-agent-command",
         "/api/revenue-engine/public-scout-evidence",
@@ -13134,6 +13135,7 @@
       "symbols": [
         "answered",
         "approval",
+        "approved",
         "baseInput",
         "blocked",
         "blockedDelivery",

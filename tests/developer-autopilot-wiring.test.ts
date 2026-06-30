@@ -133,15 +133,18 @@ test("Revenue Engine exposes public scout evidence intake", () => {
 
   assert.match(engineSource, /recordRevenuePublicScoutEvidence/);
   assert.match(engineSource, /submitRevenueDailyScoutSprintEvidence/);
+  assert.match(engineSource, /approveRevenuePublicLeadCandidate/);
   assert.match(engineSource, /recordRevenueDailyScoutSprintEvidenceProgress/);
   assert.match(engineSource, /runRevenuePublicScoutAgentCommand/);
   assert.match(engineSource, /requireRobertApprovalToContact: z\.literal\(true\)/);
   assert.match(engineSource, /maxPaidDataSpendUsd: z\.coerce\.number\(\)\.min\(0\)\.max\(0\)/);
   assert.match(engineSource, /sourceUrl must be public/);
   assert.match(routeSource, /\/api\/revenue-engine\/daily-scout-sprint\/submit/);
+  assert.match(routeSource, /\/api\/revenue-engine\/public-lead-candidates\/approve/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-scout-evidence/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-scout-agent-command/);
   assert.match(routeSource, /revenueDailyScoutSprintSubmitSchema\.parse/);
+  assert.match(routeSource, /revenuePublicLeadCandidateApproveSchema\.parse/);
   assert.match(routeSource, /revenuePublicScoutEvidenceSchema\.parse/);
   assert.match(routeSource, /revenuePublicScoutAgentCommandSchema\.parse/);
   assert.match(uiSource, /publicScoutEvidenceMutation/);
@@ -149,6 +152,9 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(uiSource, /textarea-public-scout-evidence/);
   assert.match(uiSource, /button-normalize-public-scout-evidence/);
   assert.match(uiSource, /Submitir slot del sprint/);
+  assert.match(uiSource, /checkbox-public-scout-evidence-verified/);
+  assert.match(uiSource, /checkbox-public-scout-approval-import/);
+  assert.match(uiSource, /button-approve-public-candidate/);
   assert.match(uiSource, /button-run-public-scout-agent-command/);
   assert.match(uiSource, /const \[publicScoutEvidenceText, setPublicScoutEvidenceText\] = useState\(""\)/);
   assert.doesNotMatch(uiSource, /useState\(\[\s*"Business: No Site Cafe"/);

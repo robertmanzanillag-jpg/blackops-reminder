@@ -494,6 +494,15 @@ export const revenuePublicLeadCandidateBatchSchema = z.object({
 
 export type RevenuePublicLeadCandidateBatchInput = z.infer<typeof revenuePublicLeadCandidateBatchSchema>;
 
+export const revenuePublicLeadCandidateApproveSchema = z.object({
+  candidateId: z.string().trim().min(1).max(160),
+  publicEvidenceVerified: z.literal(true),
+  approvalToImport: z.literal(true),
+  notes: z.string().trim().max(1000).optional().default("Approved from public candidate review queue."),
+});
+
+export type RevenuePublicLeadCandidateApproveInput = z.infer<typeof revenuePublicLeadCandidateApproveSchema>;
+
 export const revenuePublicScoutEvidenceSchema = z.object({
   area: z.string().trim().min(2).max(120).default("Miami"),
   niche: z.string().trim().min(2).max(120).default("med spas"),
@@ -5430,6 +5439,70 @@ export function recordRevenuePublicLeadCandidateBatch(input: RevenuePublicLeadCa
       ? "Review publicLeadImportQueue, then run Money Sprint with verified candidates."
       : "Fix blocked rows or approve verified public evidence before Money Sprint.",
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function approveRevenuePublicLeadCandidate(input: RevenuePublicLeadCandidateApproveInput) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenuePublicLeadCandidateApproveSchema.parse(input);
+  const candidate = revenuePublicLeadCandidates.find((item) => item.id === parsed.candidateId) || null;
+
+  if (!candidate) {
+    return {
+      status: "not_found" as const,
+      reason: "Candidato publico no encontrado.",
+      candidate: null,
+      importableCount: 0,
+      safety: {
+        persistsCandidates: false,
+        persistsLeads: false,
+        sendsOutreach: false,
+        spendsMoney: false,
+        writesPreviewFiles: false,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: candidate.businessName,
+    area: candidate.area,
+    niche: candidate.niche,
+    websiteStatus: candidate.websiteStatus,
+    contactChannel: candidate.contactChannel,
+    contactValue: candidate.contactValue,
+    sourceUrl: candidate.sourceUrl,
+    recipientEmail: candidate.recipientEmail,
+    evidence: candidate.evidence,
+    painPoint: candidate.painPoint,
+    estimatedOfferUsd: candidate.estimatedOfferUsd,
+    status: candidate.status,
+    contactName: candidate.contactName,
+    businessSummary: candidate.businessSummary,
+    missionId: candidate.missionId,
+    sourceTaskId: candidate.sourceTaskId,
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: parsed.publicEvidenceVerified,
+    approvalToImport: parsed.approvalToImport,
+    notes: parsed.notes,
+  });
+
+  return {
+    status: result.status === "ready_for_preview" ? "approved" as const : "needs_review" as const,
+    reason: result.status === "ready_for_preview"
+      ? "Candidato aprobado para Money Sprint; no se creo lead ni outreach."
+      : result.nextAction,
+    candidate: result.candidate,
+    importableCount: result.importableCount,
+    importBatchText: result.importBatchText,
+    safety: {
+      persistsCandidates: true,
+      persistsLeads: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      writesPreviewFiles: false,
+    },
+    snapshot: result.snapshot,
   };
 }
 

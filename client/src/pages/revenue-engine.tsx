@@ -1199,6 +1199,22 @@ type RevenuePublicLeadCandidateResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenuePublicLeadCandidateApproveResult = {
+  status: "approved" | "needs_review" | "not_found";
+  reason: string;
+  candidate: RevenueSnapshot["recentPublicLeadCandidates"][number] | null;
+  importableCount: number;
+  importBatchText?: string;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+  };
+  snapshot: RevenueSnapshot;
+};
+
 type RevenuePublicLeadCandidateBatchResult = {
   status: "ready_for_preview" | "needs_review" | "empty";
   recordedCount: number;
@@ -2861,6 +2877,28 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicLeadCandidateApproveMutation = useMutation<RevenuePublicLeadCandidateApproveResult, Error, string>({
+    mutationFn: async (candidateId) => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateId,
+          publicEvidenceVerified: true,
+          approvalToImport: true,
+          notes: "Approved from Revenue Engine public candidate queue.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo aprobar candidato publico");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.importBatchText) setSeedLeadBatchText(data.importBatchText);
+      refetchSnapshot();
+    },
+  });
+
   const publicLeadCandidateBatchMutation = useMutation<RevenuePublicLeadCandidateBatchResult>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/public-lead-candidates/batch", {
@@ -4059,6 +4097,28 @@ export default function RevenueEnginePage() {
                           placeholder={"Business: No Site Cafe\nArea: Miami\nNiche: coffee shop\nWebsite: no website\nContact: @nositecafe\nEmail: owner@example.com\nSource: https://instagram.com/nositecafe\nEvidence: Instagram activo, no website en bio, menu solo en posts publicos.\nPain: Necesita menu online, captura de catering y follow-up."}
                           data-testid="textarea-public-scout-evidence"
                         />
+                        <div className="grid gap-2 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300 md:grid-cols-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidatePublicEvidenceVerified}
+                              onChange={(event) => setCandidatePublicEvidenceVerified(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-evidence-verified"
+                            />
+                            Evidencia publica verificada
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidateApprovalToImport}
+                              onChange={(event) => setCandidateApprovalToImport(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-approval-import"
+                            />
+                            Aprobar import a Money Sprint
+                          </label>
+                        </div>
                         <Button
                           type="button"
                           disabled={publicScoutEvidenceMutation.isPending || publicScoutEvidenceText.trim().length < 10}
@@ -5018,8 +5078,33 @@ export default function RevenueEnginePage() {
                         <div key={item.candidateId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                           <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
                           <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={publicLeadCandidateApproveMutation.isPending}
+                            onClick={() => publicLeadCandidateApproveMutation.mutate(item.candidateId)}
+                            className="mt-2 h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
+                            data-testid={`button-approve-public-candidate-${item.candidateId}`}
+                          >
+                            {publicLeadCandidateApproveMutation.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+                            Aprobar import
+                          </Button>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {publicLeadCandidateApproveMutation.data && (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-emerald-100">{publicLeadCandidateApproveMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicLeadCandidateApproveMutation.data.status), "shrink-0")}>
+                          {publicLeadCandidateApproveMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        Leads {publicLeadCandidateApproveMutation.data.safety.persistsLeads ? "creados" : "no creados"} · Outreach {publicLeadCandidateApproveMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"} · Spend {publicLeadCandidateApproveMutation.data.safety.spendsMoney ? "activo" : "cero"}
+                      </p>
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
