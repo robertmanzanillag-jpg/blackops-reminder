@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T11:06:34.099Z",
+  "generatedAt": "2026-06-30T11:13:59.912Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,23 +95,9 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 87,
-    "symbols": 8823
+    "symbols": 8841
   },
   "directories": {
-    "server": {
-      "files": 95,
-      "indexed": 91,
-      "kinds": {
-        "server": 95
-      }
-    },
-    "tests": {
-      "files": 61,
-      "indexed": 58,
-      "kinds": {
-        "test": 61
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -183,6 +169,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 95,
+      "indexed": 91,
+      "kinds": {
+        "server": 95
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -202,6 +195,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 61,
+      "indexed": 58,
+      "kinds": {
+        "test": 61
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6307,36 +6307,53 @@
       ],
       "exports": [],
       "symbols": [
+        "blockedBatches",
+        "blockedGates",
         "buildCollectionPackets",
+        "buildUnblockBoard",
         "closeout",
         "collectionPackets",
         "csvCell",
         "decision",
         "decisionFromArtifacts",
+        "gates",
+        "goLivePacket",
         "header",
         "importPreview",
         "importPreviewRun",
         "laneProofState",
         "lanes",
+        "linePrefix",
         "main",
+        "metricool100",
+        "metricoolTotals",
+        "missingPackets",
         "outCollectionCsvPath",
         "outJsonPath",
         "outMarkdownPath",
         "outPastePacketPath",
+        "outUnblockBoardCsvPath",
         "proofDrop",
         "proofDropRun",
         "quickFill",
         "raw",
         "readJson",
+        "readyBatches",
+        "readyRows",
         "renderCollectionCsv",
         "renderMarkdown",
         "renderProofLinksPastePacket",
+        "renderUnblockBoardCsv",
         "reportsDir",
         "result",
         "rootDir",
+        "rows",
+        "rowsCount",
         "runJson",
+        "sourceReadyBatches",
         "state",
         "summary",
+        "unblockBoard",
         "wizard",
         "wizardRun"
       ],
@@ -14491,6 +14508,7 @@
         "targetAccountCsvPath",
         "targetBridgeCsvPath",
         "tmpDir",
+        "unblockCsv",
         "unblockerRoute",
         "wizard"
       ],

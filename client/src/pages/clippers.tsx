@@ -2457,11 +2457,44 @@ interface ClipperTikTokMvpProofHandoffSummary {
     rejectIf: string[];
     copyPrompt: string;
   }>;
+  unblockBoard: {
+    status: "blocked_needs_operator_proof" | "ready_for_proof_drop";
+    generatedAt: string;
+    missingProofs: number;
+    readyProofs: number;
+    totalProofs: number;
+    blockedGates: string[];
+    rows: Array<{
+      id: string;
+      priority: number;
+      lane: string;
+      accountName: string;
+      handle: string;
+      field: "accountOwnershipProofUrl" | "metricoolConnectionProofUrl";
+      exactPasteLine: string;
+      status: "ready" | "needed";
+      proofUrlRule: string;
+      acceptedProof: string[];
+      rejectIf: string[];
+      unlocks: string[];
+      operatorAction: string;
+    }>;
+    impact: {
+      metricool100Rows: number;
+      metricool100SourceReadyBatches: number;
+      metricool100OperatorReadyBatches: number;
+      metricool100BlockedBatches: number;
+      note: string;
+    };
+    nextAction: string;
+    guardrails: string[];
+  };
   paths: {
     json: string;
     markdown: string;
     collectionCsv: string;
     pastePacketTxt: string;
+    unblockBoardCsv: string;
     proofDropJson: string;
     quickFillJson: string;
     importJson: string;
@@ -17699,6 +17732,40 @@ export default function ClippersPage() {
                   <span>import fixes {tiktokMvpProofHandoff.totals.importFixes}</span>
                 </div>
                 <p className="mt-1">{tiktokMvpProofHandoff.nextAction}</p>
+                <div className="mt-2 rounded-md border border-orange-300/15 bg-orange-950/10 p-2" data-testid="clippers-tiktok-mvp-proof-unblock-board">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={cn(
+                      "border text-[10px]",
+                      tiktokMvpProofHandoff.unblockBoard.status === "ready_for_proof_drop"
+                        ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                        : "border-orange-300/30 bg-orange-300/10 text-orange-100"
+                    )}>
+                      unblock {tiktokMvpProofHandoff.unblockBoard.status}
+                    </Badge>
+                    <span>missing {tiktokMvpProofHandoff.unblockBoard.missingProofs}/{tiktokMvpProofHandoff.unblockBoard.totalProofs}</span>
+                    <span>rows {tiktokMvpProofHandoff.unblockBoard.impact.metricool100Rows}</span>
+                    <span>source batches {tiktokMvpProofHandoff.unblockBoard.impact.metricool100SourceReadyBatches}</span>
+                    <span>operator batches {tiktokMvpProofHandoff.unblockBoard.impact.metricool100OperatorReadyBatches}</span>
+                    <span>blocked batches {tiktokMvpProofHandoff.unblockBoard.impact.metricool100BlockedBatches}</span>
+                  </div>
+                  <p className="mt-1 text-orange-100/80">{tiktokMvpProofHandoff.unblockBoard.nextAction}</p>
+                  <p className="mt-1 text-zinc-500">{tiktokMvpProofHandoff.unblockBoard.impact.note}</p>
+                  {tiktokMvpProofHandoff.unblockBoard.rows.length > 0 && (
+                    <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-unblock-board-rows">
+                      {tiktokMvpProofHandoff.unblockBoard.rows.map((row) => (
+                        <div key={row.id} className="rounded border border-orange-300/10 bg-black/20 p-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-orange-100">#{row.priority} {row.accountName}</p>
+                            <Badge className="border border-orange-300/30 bg-orange-300/10 text-[10px] text-orange-100">{row.field}</Badge>
+                          </div>
+                          <p className="mt-1 font-mono text-[10px] text-zinc-300">{row.exactPasteLine}</p>
+                          <p className="mt-1 text-zinc-400">{row.proofUrlRule}</p>
+                          <p className="mt-1 text-emerald-100/70">{row.unlocks.join(" + ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-handoff-gates">
                   {tiktokMvpProofHandoff.gates.map((gate) => (
                     <div key={gate.id} className="rounded border border-amber-300/10 bg-black/20 p-2">
@@ -17731,6 +17798,7 @@ export default function ClippersPage() {
                   <p>Direct APIs: {tiktokMvpProofHandoff.directSocialApisRequired ? "required" : "not required"}</p>
                   <p className="break-all">Report: {tiktokMvpProofHandoff.paths.markdown}</p>
                   <p className="break-all">Collection CSV: {tiktokMvpProofHandoff.paths.collectionCsv}</p>
+                  <p className="break-all">Unblock CSV: {tiktokMvpProofHandoff.paths.unblockBoardCsv}</p>
                   <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
                 </div>
               </div>

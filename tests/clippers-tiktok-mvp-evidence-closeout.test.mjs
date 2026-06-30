@@ -490,6 +490,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-fixes/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-unblock-board/);
+  assert.match(page, /clippers-tiktok-mvp-proof-unblock-board-rows/);
+  assert.match(page, /unblockBoard\.impact\.metricool100SourceReadyBatches/);
+  assert.match(page, /paths\.unblockBoardCsv/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-gates/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-collection-packets/);
   assert.match(page, /paths\.pastePacketTxt/);
@@ -1277,6 +1281,14 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(output.proofPacketsNeeded, 4);
 
   const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff.json"), "utf8"));
+  assert.equal(report.unblockBoard.status, "blocked_needs_operator_proof");
+  assert.equal(report.unblockBoard.missingProofs, 4);
+  assert.equal(report.unblockBoard.impact.metricool100Rows, 100);
+  assert.equal(report.unblockBoard.impact.metricool100SourceReadyBatches, 10);
+  assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
+  assert.equal(report.unblockBoard.impact.metricool100BlockedBatches, 10);
+  assert.match(report.unblockBoard.rows[0].exactPasteLine, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
+  assert.doesNotMatch(JSON.stringify(report.unblockBoard), /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(report.pastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.doesNotMatch(report.pastePacketText, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
@@ -1290,6 +1302,13 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(csv, /signed\/temporary URLs/);
   assert.match(csv, /x-amz\/signature\/expires query params/);
   assert.doesNotMatch(csv, /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i);
+
+  const unblockCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-unblock-board.csv"), "utf8");
+  assert.match(unblockCsv, /exact_paste_line/);
+  assert.match(unblockCsv, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(unblockCsv, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(unblockCsv, /Metricool bridge evidence preview/);
+  assert.doesNotMatch(unblockCsv, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
 
   const pastePacket = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-paste-packet.txt"), "utf8");
   assert.match(pastePacket, /sports-daily:tiktok\.accountOwnershipProofUrl=/);

@@ -8,6 +8,7 @@ const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
 const outPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
+const outUnblockBoardCsvPath = path.join(reportsDir, "proof-unblock-board.csv");
 
 const lanes = [
   {
@@ -202,6 +203,98 @@ function renderCollectionCsv(packets) {
   ].join("\n");
 }
 
+function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
+  const blockedGates = gates.filter((gate) => gate.status !== "pass").map((gate) => gate.id);
+  const missingPackets = collectionPackets.filter((packet) => packet.status !== "ready");
+  const metricool100 = goLivePacket?.metricool100 || {};
+  const metricoolTotals = goLivePacket?.totals || {};
+  const sourceReadyBatches = Number(metricool100.sourceReadyBatches ?? metricoolTotals.metricool100SourceReadyBatches ?? 0);
+  const readyBatches = Number(metricool100.readyBatches ?? metricoolTotals.metricool100ReadyBatches ?? 0);
+  const blockedBatches = Number(metricool100.blockedBatches ?? metricoolTotals.metricool100BlockedBatches ?? 0);
+  const rowsCount = Number(metricool100.rows ?? metricoolTotals.metricool100Rows ?? 0);
+  const rows = missingPackets.map((packet, index) => {
+    const linePrefix = `${packet.lane}.${packet.field}=`;
+    return {
+      id: packet.id,
+      priority: index + 1,
+      lane: packet.lane,
+      accountName: packet.accountName,
+      handle: packet.handle,
+      field: packet.field,
+      exactPasteLine: linePrefix,
+      status: packet.status,
+      proofUrlRule: packet.proofUrlRule,
+      acceptedProof: packet.acceptedProof,
+      rejectIf: packet.rejectIf,
+      unlocks: packet.field === "metricoolConnectionProofUrl"
+        ? ["Metricool bridge evidence preview", "TikTok MVP readiness verifier account gate"]
+        : ["Account ownership evidence preview", "TikTok MVP proof drop quick-fill"],
+      operatorAction: packet.copyPrompt,
+    };
+  });
+  const readyRows = collectionPackets.filter((packet) => packet.status === "ready").length;
+  return {
+    status: rows.length ? "blocked_needs_operator_proof" : "ready_for_proof_drop",
+    generatedAt: new Date().toISOString(),
+    missingProofs: rows.length,
+    readyProofs: readyRows,
+    totalProofs: collectionPackets.length,
+    blockedGates,
+    rows,
+    impact: {
+      metricool100Rows: rowsCount,
+      metricool100SourceReadyBatches: sourceReadyBatches,
+      metricool100OperatorReadyBatches: readyBatches,
+      metricool100BlockedBatches: blockedBatches,
+      note: rows.length
+        ? `${rowsCount || "TikTok"} rows are source-ready, but Metricool approval queue stays blocked until these proof links are real and validated.`
+        : "All proof links are present; run the proof drop/import preview before any operator apply step.",
+    },
+    nextAction: rows.length
+      ? "Fill the exactPasteLine rows with real public/non-secret HTTPS proof URLs, paste them into the app paste assistant, preview, then save only if validation stays clean."
+      : "Run Proof drop and Import preview; Metricool still stays approval_required.",
+    guardrails: [
+      "Do not paste passwords, tokens, cookies, recovery codes, client secrets, API keys, signed URLs, or private screenshots.",
+      "Do not use search/explore/example/placeholder URLs as proof.",
+      "Metricool connection proof must be a real HTTPS metricool.com URL.",
+      "This board does not apply evidence, schedule posts, publish, or enable direct social APIs.",
+    ],
+  };
+}
+
+function renderUnblockBoardCsv(board) {
+  const header = [
+    "priority",
+    "id",
+    "lane",
+    "account_name",
+    "handle",
+    "field",
+    "status",
+    "exact_paste_line",
+    "proof_url_rule",
+    "unlocks",
+    "operator_action",
+  ];
+  return [
+    header.join(","),
+    ...board.rows.map((row) => [
+      row.priority,
+      row.id,
+      row.lane,
+      row.accountName,
+      row.handle,
+      row.field,
+      row.status,
+      row.exactPasteLine,
+      row.proofUrlRule,
+      row.unlocks.join(" | "),
+      row.operatorAction,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
 function renderProofLinksPastePacket() {
   return [
     "# TikTok MVP proof-links paste packet",
@@ -243,6 +336,20 @@ function renderMarkdown(summary) {
       `- Copy: ${packet.copyPrompt}`,
       "",
     ].join("\n")),
+    "## Unblock Board",
+    "",
+    `- Missing proofs: ${summary.unblockBoard.missingProofs}/${summary.unblockBoard.totalProofs}`,
+    `- Source-ready batches: ${summary.unblockBoard.impact.metricool100SourceReadyBatches}`,
+    `- Operator-ready batches: ${summary.unblockBoard.impact.metricool100OperatorReadyBatches}`,
+    `- Board CSV: ${summary.paths.unblockBoardCsv}`,
+    "",
+    ...summary.unblockBoard.rows.map((row) => [
+      `### ${row.accountName} / ${row.field}`,
+      `- Paste line: \`${row.exactPasteLine}\``,
+      `- Rule: ${row.proofUrlRule}`,
+      `- Unlocks: ${row.unlocks.join(", ")}`,
+      "",
+    ].join("\n")),
     "## Paste Packet",
     "",
     `- Proof links paste packet: ${summary.paths.pastePacketTxt}`,
@@ -265,8 +372,37 @@ async function main() {
   const importPreview = await readJson(path.join(reportsDir, "proof-intake-import.json"), {});
   const closeout = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"), {});
   const wizard = await readJson(path.join(reportsDir, "closeout-wizard.json"), {});
+  const goLivePacket = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-go-live-packet.json"), {});
   const decision = decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, wizard });
   const collectionPackets = buildCollectionPackets(proofDrop);
+  const gates = [
+    {
+      id: "proof_links",
+      status: proofDrop?.readyForQuickFill ? "pass" : "blocked",
+      detail: `${proofDrop?.lanes?.filter((lane) => lane.readyForQuickFill).length || 0}/${proofDrop?.lanes?.length || 2} lanes have real proof links.`,
+    },
+    {
+      id: "quick_fill",
+      status: quickFill?.appliedToIntake ? "pass" : "blocked",
+      detail: `${Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0} quick-fill issues.`,
+    },
+    {
+      id: "import_preview",
+      status: importPreview?.status === "ready_to_apply" || importPreview?.status === "applied" ? "pass" : "blocked",
+      detail: `status=${importPreview?.status || "not_run"}, fixQueue=${Array.isArray(importPreview?.fixQueue) ? importPreview.fixQueue.length : 0}.`,
+    },
+    {
+      id: "closeout_preview",
+      status: closeout?.status === "ready_to_apply" || closeout?.status === "applied" ? "pass" : "blocked",
+      detail: `status=${closeout?.status || "not_run"}, ready=${closeout?.totals?.ready || 0}/${closeout?.totals?.lanes || 2}.`,
+    },
+    {
+      id: "safety",
+      status: "pass",
+      detail: "This handoff did not apply evidence, publish, schedule, or enable direct social APIs.",
+    },
+  ];
+  const unblockBoard = buildUnblockBoard(collectionPackets, gates, goLivePacket);
   const summary = {
     ...decision,
     generatedAt: new Date().toISOString(),
@@ -279,34 +415,9 @@ async function main() {
       importPreviewRun,
       wizardRun,
     },
-    gates: [
-      {
-        id: "proof_links",
-        status: proofDrop?.readyForQuickFill ? "pass" : "blocked",
-        detail: `${proofDrop?.lanes?.filter((lane) => lane.readyForQuickFill).length || 0}/${proofDrop?.lanes?.length || 2} lanes have real proof links.`,
-      },
-      {
-        id: "quick_fill",
-        status: quickFill?.appliedToIntake ? "pass" : "blocked",
-        detail: `${Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0} quick-fill issues.`,
-      },
-      {
-        id: "import_preview",
-        status: importPreview?.status === "ready_to_apply" || importPreview?.status === "applied" ? "pass" : "blocked",
-        detail: `status=${importPreview?.status || "not_run"}, fixQueue=${Array.isArray(importPreview?.fixQueue) ? importPreview.fixQueue.length : 0}.`,
-      },
-      {
-        id: "closeout_preview",
-        status: closeout?.status === "ready_to_apply" || closeout?.status === "applied" ? "pass" : "blocked",
-        detail: `status=${closeout?.status || "not_run"}, ready=${closeout?.totals?.ready || 0}/${closeout?.totals?.lanes || 2}.`,
-      },
-      {
-        id: "safety",
-        status: "pass",
-        detail: "This handoff did not apply evidence, publish, schedule, or enable direct social APIs.",
-      },
-    ],
+    gates,
     collectionPackets,
+    unblockBoard,
     pastePacketText: renderProofLinksPastePacket(),
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
@@ -320,6 +431,7 @@ async function main() {
       markdown: outMarkdownPath,
       collectionCsv: outCollectionCsvPath,
       pastePacketTxt: outPastePacketPath,
+      unblockBoardCsv: outUnblockBoardCsvPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
       importJson: path.join(reportsDir, "proof-intake-import.json"),
@@ -338,6 +450,7 @@ async function main() {
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
   await writeFile(outPastePacketPath, renderProofLinksPastePacket());
+  await writeFile(outUnblockBoardCsvPath, renderUnblockBoardCsv(summary.unblockBoard));
   console.log(JSON.stringify({
     status: summary.status,
     nextButton: summary.nextButton,
