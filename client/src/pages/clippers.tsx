@@ -2149,12 +2149,21 @@ interface ClipperTikTokMvpProofIntakeImportSummary {
   } | null;
   missingLanes: string[];
   intakeErrors: string[];
+  fixQueue: Array<{
+    lane: string;
+    row: number | string;
+    column: string;
+    requiredValue: string;
+    reason: string;
+    nextAction: string;
+  }>;
   paths: {
     json: string;
     markdown: string;
     combinedCsv: string;
     previewAccountCsv: string;
     previewBridgeCsv: string;
+    fixQueueCsv: string;
     targetAccountCsv: string;
     targetBridgeCsv: string;
   };
@@ -15075,6 +15084,12 @@ export default function ClippersPage() {
     { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "SPORT", operatorAction: "Record non-secret SPORT TikTok Metricool bridge proof." },
     { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
   ];
+  const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
+    || tiktokMvpProofDoctorMutation.isPending
+    || tiktokMvpProofIntakeImportPreviewMutation.isPending
+    || tiktokMvpProofIntakeImportApplyMutation.isPending
+    || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
+    || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
   const metricoolBridgeEvidenceCurrentPreview = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
     ? metricoolBridgeEvidenceBatchPreview.result
@@ -16229,7 +16244,7 @@ export default function ClippersPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => tiktokMvpProofIntakePackMutation.mutate()}
-                disabled={tiktokMvpProofIntakePackMutation.isPending || isLoading}
+                disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
                 data-testid="prepare-clippers-tiktok-mvp-proof-intake-pack-button"
               >
@@ -16241,7 +16256,7 @@ export default function ClippersPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => tiktokMvpProofDoctorMutation.mutate()}
-                disabled={tiktokMvpProofDoctorMutation.isPending || isLoading}
+                disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
                 data-testid="prepare-clippers-tiktok-mvp-proof-doctor-button"
               >
@@ -16253,7 +16268,7 @@ export default function ClippersPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => tiktokMvpProofIntakeImportPreviewMutation.mutate()}
-                disabled={tiktokMvpProofIntakeImportPreviewMutation.isPending || isLoading}
+                disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
                 data-testid="preview-clippers-tiktok-mvp-proof-intake-import-button"
               >
@@ -16264,7 +16279,7 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 onClick={() => tiktokMvpProofIntakeImportApplyMutation.mutate()}
-                disabled={tiktokMvpProofIntakeImportApplyMutation.isPending || isLoading || tiktokMvpProofIntakeImport?.status !== "ready_to_apply"}
+                disabled={tiktokProofFlowBusy || isLoading || tiktokMvpProofIntakeImport?.status !== "ready_to_apply"}
                 className="h-8 bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
                 data-testid="apply-clippers-tiktok-mvp-proof-intake-import-button"
               >
@@ -16276,7 +16291,7 @@ export default function ClippersPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => tiktokMvpEvidenceCloseoutPreviewMutation.mutate()}
-                disabled={tiktokMvpEvidenceCloseoutPreviewMutation.isPending || isLoading}
+                disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
                 data-testid="preview-clippers-tiktok-mvp-evidence-closeout-button"
               >
@@ -16287,7 +16302,7 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 onClick={() => tiktokMvpEvidenceCloseoutApplyMutation.mutate()}
-                disabled={tiktokMvpEvidenceCloseoutApplyMutation.isPending || isLoading || tiktokMvpEvidenceCloseout?.status !== "ready_to_apply"}
+                disabled={tiktokProofFlowBusy || isLoading || tiktokMvpEvidenceCloseout?.status !== "ready_to_apply"}
                 className="h-8 bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
                 data-testid="apply-clippers-tiktok-mvp-evidence-closeout-button"
               >
@@ -16358,8 +16373,20 @@ export default function ClippersPage() {
               <div className="mt-2 rounded-md border border-cyan-300/15 bg-black/20 p-2 text-[11px] leading-4 text-cyan-100/80" data-testid="clippers-tiktok-mvp-proof-intake-import-panel">
                 <p>Import: {tiktokMvpProofIntakeImport.status}; preview {tiktokMvpProofIntakeImport.closeoutPreviewStatus}; ready {tiktokMvpProofIntakeImport.closeoutPreview?.ready ?? 0}/{tiktokMvpProofIntakeImport.closeoutPreview?.lanes ?? 2}</p>
                 <p className="mt-1 break-all">Combined: {tiktokMvpProofIntakeImport.paths.combinedCsv}</p>
+                <p className="mt-1 break-all">Fix queue: {tiktokMvpProofIntakeImport.paths.fixQueueCsv}</p>
                 <p className="mt-1 break-all">Targets: {tiktokMvpProofIntakeImport.paths.targetAccountCsv} / {tiktokMvpProofIntakeImport.paths.targetBridgeCsv}</p>
                 <p className="mt-1">{tiktokMvpProofIntakeImport.nextStep}</p>
+                {(tiktokMvpProofIntakeImport.fixQueue ?? []).length > 0 && (
+                  <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-intake-import-fix-queue">
+                    {(tiktokMvpProofIntakeImport.fixQueue ?? []).slice(0, 4).map((item) => (
+                      <div key={`${item.lane}-${item.row}-${item.column}`} className="rounded border border-cyan-300/10 bg-black/20 p-2">
+                        <p className="font-medium text-cyan-100">{item.lane} row {item.row || "new"}</p>
+                        <p className="mt-1 break-all text-cyan-100/70">{item.column}: {item.requiredValue}</p>
+                        <p className="mt-1 text-cyan-100/70">{item.nextAction}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

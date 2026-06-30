@@ -300,10 +300,13 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /preview-clippers-tiktok-mvp-proof-intake-import-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-proof-intake-import-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
+  assert.match(page, /const tiktokProofFlowBusy =/);
+  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-pack-paths/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-import-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-intake-import-fix-queue/);
   assert.match(page, /clippers-tiktok-mvp-proof-fix-queue/);
   assert.match(page, /fixQueueCsv/);
   assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
@@ -382,7 +385,14 @@ test("TikTok MVP proof intake import blocks placeholder combined rows without wr
     assert.equal(report.launchMode, "metricool_approval_required");
     assert.equal(report.directSocialApisRequired, false);
     assert.equal(report.applied, false);
+    assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "account_ownership_proof_url"));
+    assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "metricool_connection_proof_url"));
+    assert.match(report.paths.fixQueueCsv, /proof-intake-import-fix-queue\.csv$/);
     assert.match(report.nextStep, /do not apply/i);
+    const fixQueueCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import-fix-queue.csv"), "utf8");
+    assert.match(fixQueueCsv, /account_ownership_proof_url/);
+    assert.match(fixQueueCsv, /metricool_connection_proof_url/);
+    assert.doesNotMatch(fixQueueCsv, /access_token=|refresh_token=|client_secret=|cookie=|password=/i);
   } finally {
     if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
     else await writeFile(targetAccountCsvPath, previousAccount);
@@ -421,6 +431,9 @@ test("TikTok MVP proof intake import blocks mismatched combined identity fields"
     assert.match(report.intakeErrors.join("\n"), /handle must be @sportsdaily/);
     assert.match(report.intakeErrors.join("\n"), /metricool_brand_name must be SPORT/);
     assert.match(report.intakeErrors.join("\n"), /public_profile_url must be https:\/\/www\.tiktok\.com\/@sportsdaily/);
+    assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "handle"));
+    assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "metricool_brand_name"));
+    assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "public_profile_url"));
   } finally {
     spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
       cwd: process.cwd(),
@@ -475,6 +488,7 @@ test("TikTok MVP proof intake import previews and applies clean combined proof C
 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
     assert.equal(report.status, "applied");
+    assert.equal(report.fixQueue.length, 0);
     assert.match(report.nextStep, /evidence closeout apply/i);
   } finally {
     if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);

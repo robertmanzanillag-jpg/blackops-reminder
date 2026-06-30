@@ -11,6 +11,7 @@ const previewAccountCsvPath = path.join(reportsDir, "generated-account-evidence-
 const previewBridgeCsvPath = path.join(reportsDir, "generated-metricool-bridge-preview.csv");
 const outJsonPath = path.join(reportsDir, "proof-intake-import.json");
 const outMarkdownPath = path.join(reportsDir, "proof-intake-import.md");
+const outFixQueuePath = path.join(reportsDir, "proof-intake-import-fix-queue.csv");
 
 const lanes = [
   {
@@ -115,6 +116,16 @@ function normalize(value) {
   return String(value || "").trim();
 }
 
+async function readJson(filePath, fallback = null) {
+  const raw = await readFile(filePath, "utf8").catch(() => null);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizeHandle(value) {
   return normalize(value).toLowerCase();
 }
@@ -146,10 +157,116 @@ function validateCombinedIdentity(row, lane) {
   return issues;
 }
 
+function combinedColumnForCloseoutIssue(item) {
+  if (item.source === "account") {
+    if (/notes/i.test(item.reason)) return "account_notes";
+    return "account_ownership_proof_url";
+  }
+  if (item.source === "bridge") {
+    if (/notes/i.test(item.reason)) return "metricool_notes";
+    if (/profile_url/i.test(item.reason)) return "public_profile_url";
+    if (/metricool_brand_name/i.test(item.reason)) return "metricool_brand_name";
+    return "metricool_connection_proof_url";
+  }
+  return "unknown";
+}
+
+function requiredValueForCloseoutIssue(item) {
+  if (item.source === "account") {
+    if (/notes/i.test(item.reason)) return "20+ character ownership/security verification note without placeholders or secrets";
+    return "real safe HTTPS ownership/security proof URL";
+  }
+  if (item.source === "bridge") {
+    if (/notes/i.test(item.reason)) return "20+ character Metricool connection note without placeholders or secrets";
+    if (/profile_url/i.test(item.reason)) return "exact public TikTok profile URL for the active lane";
+    if (/metricool_brand_name/i.test(item.reason)) return "exact active Metricool brand name";
+    return "real HTTPS metricool.com proof URL";
+  }
+  return "real non-secret proof value";
+}
+
+function nextActionForCloseoutIssue(item) {
+  if (item.source === "account") {
+    return "Fix the combined account proof fields, then rerun Import preview.";
+  }
+  if (item.source === "bridge") {
+    return "Fix the combined Metricool proof fields, then rerun Import preview.";
+  }
+  return "Fix the combined proof row, then rerun Import preview.";
+}
+
+function identityFixQueueItem(error, rowNumbers) {
+  const match = error.match(/^row\s+(\d+)\s+([a-z0-9-]+):\s+([^ ]+)\s+must be\s+(.+)$/i);
+  const row = match?.[1] || "";
+  const accountId = match?.[2] || "";
+  const column = match?.[3] || "identity";
+  const requiredValue = match?.[4] || "exact active lane identity value";
+  return {
+    lane: accountId ? `${accountId}:tiktok` : "",
+    row: row || rowNumbers.get(`${accountId}:tiktok`) || "",
+    column,
+    requiredValue,
+    reason: error,
+    nextAction: "Fix the combined identity fields so the row matches the active TikTok MVP lane.",
+  };
+}
+
+function buildImportFixQueue({ generated, closeoutReport }) {
+  const rows = [];
+  for (const lane of generated.missing) {
+    rows.push({
+      lane,
+      row: "",
+      column: "account_id",
+      requiredValue: "one combined proof row for this active lane",
+      reason: "missing combined proof row",
+      nextAction: "Add the missing lane row to combined-proof-intake.csv.",
+    });
+  }
+  for (const error of generated.intakeErrors) {
+    rows.push(identityFixQueueItem(error, generated.rowNumbers));
+  }
+  const rejected = Array.isArray(closeoutReport?.rejected) ? closeoutReport.rejected : [];
+  for (const item of rejected) {
+    rows.push({
+      lane: item.lane,
+      row: generated.rowNumbers.get(item.lane) || item.row || "",
+      column: combinedColumnForCloseoutIssue(item),
+      requiredValue: requiredValueForCloseoutIssue(item),
+      reason: item.reason,
+      nextAction: nextActionForCloseoutIssue(item),
+    });
+  }
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = `${row.lane}:${row.column}:${row.reason}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function renderFixQueueCsv(fixQueue) {
+  const header = ["lane", "row", "column", "required_value", "reason", "next_action"];
+  return [
+    header.join(","),
+    ...fixQueue.map((row) => [
+      row.lane,
+      row.row,
+      row.column,
+      row.requiredValue,
+      row.reason,
+      row.nextAction,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
 function buildGeneratedCsvs(rows) {
   const byLane = new Map(rows.map((row) => [`${normalize(row.record.account_id)}:${normalize(row.record.platform).toLowerCase()}`, row]));
   const missing = [];
   const intakeErrors = [];
+  const rowNumbers = new Map();
   const accountHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
   const bridgeHeader = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
   const accountRows = [accountHeader];
@@ -162,6 +279,7 @@ function buildGeneratedCsvs(rows) {
       continue;
     }
     const record = row.record;
+    rowNumbers.set(`${lane.accountId}:${lane.platform}`, row.rowNumber);
     intakeErrors.push(...validateCombinedIdentity(row, lane));
     accountRows.push([
       "account",
@@ -191,6 +309,7 @@ function buildGeneratedCsvs(rows) {
   return {
     missing,
     intakeErrors,
+    rowNumbers,
     accountCsv: `${accountRows.join("\n")}\n`,
     bridgeCsv: `${bridgeRows.join("\n")}\n`,
   };
@@ -211,8 +330,13 @@ function renderMarkdown(summary) {
     `- Combined intake CSV: ${summary.paths.combinedCsv}`,
     `- Preview account CSV: ${summary.paths.previewAccountCsv}`,
     `- Preview bridge CSV: ${summary.paths.previewBridgeCsv}`,
+    `- Fix queue CSV: ${summary.paths.fixQueueCsv}`,
     `- Target account CSV: ${summary.paths.targetAccountCsv}`,
     `- Target bridge CSV: ${summary.paths.targetBridgeCsv}`,
+    "",
+    "## Fix Queue",
+    "",
+    ...(summary.fixQueue.length ? summary.fixQueue.map((row) => `- ${row.lane} row ${row.row}, ${row.column}: ${row.nextAction}`) : ["- none"]),
     "",
     "## Guardrails",
     "",
@@ -241,6 +365,10 @@ async function main() {
     "--bridge-csv",
     previewBridgeCsvPath,
   ]);
+  const previewCloseoutReport = closeoutRun.ok
+    ? await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"), {})
+    : {};
+  const fixQueue = buildImportFixQueue({ generated, closeoutReport: previewCloseoutReport });
   const intakeClean = generated.missing.length === 0 && generated.intakeErrors.length === 0;
   const closeoutReady = intakeClean && closeoutRun.ok && closeoutRun.data?.status === "ready_to_apply";
   const applied = Boolean(args.apply && closeoutReady);
@@ -273,12 +401,14 @@ async function main() {
     } : null,
     missingLanes: generated.missing,
     intakeErrors: generated.intakeErrors,
+    fixQueue,
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,
       combinedCsv: args.combinedCsvPath,
       previewAccountCsv: previewAccountCsvPath,
       previewBridgeCsv: previewBridgeCsvPath,
+      fixQueueCsv: outFixQueuePath,
       targetAccountCsv: targetAccountCsvPath,
       targetBridgeCsv: targetBridgeCsvPath,
     },
@@ -297,6 +427,7 @@ async function main() {
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
+  await writeFile(outFixQueuePath, renderFixQueueCsv(fixQueue));
   console.log(JSON.stringify({
     status: summary.status,
     mode: summary.mode,
@@ -306,6 +437,8 @@ async function main() {
     rejected: summary.closeoutPreview?.rejected || 0,
     missingLanes: summary.missingLanes.length,
     intakeErrors: summary.intakeErrors.length,
+    fixQueue: summary.fixQueue.length,
+    fixQueuePath: outFixQueuePath,
     reportJsonPath: outJsonPath,
     nextStep: summary.nextStep,
   }, null, 2));
