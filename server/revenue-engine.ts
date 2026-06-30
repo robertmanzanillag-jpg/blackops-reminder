@@ -3538,14 +3538,18 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     };
   }
 
-  const outreachDraft = parsed.outreachDraftId
-    ? revenueOutreachDrafts.find((draft) => draft.id === parsed.outreachDraftId)
+  const selectedWebsiteOpportunity = parsed.websiteOpportunityId
+    ? revenueWebsiteOpportunities.find((item) => item.id === parsed.websiteOpportunityId) || null
+    : null;
+  const effectiveOutreachDraftId = parsed.outreachDraftId || selectedWebsiteOpportunity?.sourceOutreachDraftId || "";
+  const outreachDraft = effectiveOutreachDraftId
+    ? revenueOutreachDrafts.find((draft) => draft.id === effectiveOutreachDraftId)
     : revenueOutreachDrafts
       .slice()
       .reverse()
       .find((draft) => draft.leadId === lead.id || draft.businessName.toLowerCase() === lead.businessName.toLowerCase());
 
-  if (parsed.outreachDraftId && !outreachDraft) {
+  if (effectiveOutreachDraftId && !outreachDraft) {
     return {
       status: "blocked" as const,
       reason: "Outreach draft no encontrado para este handoff.",
@@ -3570,7 +3574,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
   }
 
   const websiteOpportunity = parsed.websiteOpportunityId
-    ? revenueWebsiteOpportunities.find((item) => item.id === parsed.websiteOpportunityId) || null
+    ? selectedWebsiteOpportunity
     : findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, outreachDraft?.id || "");
   const opportunityMatches = websiteOpportunity
     && websiteOpportunity.sourceLeadId === lead.id
@@ -4087,6 +4091,7 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
 
   const existing = findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, draft.id);
   const now = new Date().toISOString();
+  const preserveSoldChain = existing?.status === "sold";
   const projectType = existing?.status === "sold"
     ? existing.projectType
     : parsed.projectType === "website" || draft.automationPriceUsd <= 0 ? "website" as const : "bundle" as const;
@@ -4096,17 +4101,18 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
   const requiredDepositUsd = existing?.status === "sold" ? existing.requiredDepositUsd : Math.round(setupUsd * 0.5);
   const opportunity: RevenueWebsiteOpportunity = {
     ...parsed,
-    outreachDraftId: draft.id,
+    leadId: preserveSoldChain ? existing.leadId : lead.id,
+    outreachDraftId: preserveSoldChain ? existing.outreachDraftId : draft.id,
     projectType,
     id: existing?.id || `website-opportunity-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     status: existingStatus,
     businessName: lead.businessName,
-    sourceLeadId: lead.id,
-    sourceOutreachDraftId: draft.id,
-    mockupUrl: draft.mockupUrl || "",
-    sourceUrl: draft.sourceUrl || "",
+    sourceLeadId: preserveSoldChain ? existing.sourceLeadId : lead.id,
+    sourceOutreachDraftId: preserveSoldChain ? existing.sourceOutreachDraftId : draft.id,
+    mockupUrl: preserveSoldChain ? existing.mockupUrl : draft.mockupUrl || "",
+    sourceUrl: preserveSoldChain ? existing.sourceUrl : draft.sourceUrl || "",
     setupUsd,
     requiredDepositUsd,
     cashCollectedUsd: existing?.cashCollectedUsd || 0,
@@ -4115,7 +4121,7 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
     depositPaid: existing?.depositPaid || false,
     scopeApproved: existing?.scopeApproved || false,
     paymentConfirmation: existing?.paymentConfirmation || "",
-    qaGates: gates,
+    qaGates: preserveSoldChain ? existing.qaGates : gates,
     nextAction: existingStatus === "sold"
       ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
       : existingStatus === "scope_approved"
@@ -5188,6 +5194,94 @@ function buildRevenueDailyMoneyCommand(input: {
   };
 }
 
+function applyRevenueProductionPersistenceGate(input: {
+  launchReadiness: ReturnType<typeof buildRevenueLaunchReadiness>;
+  dailyMoneyCommand: RevenueDailyMoneyCommand;
+  systemReadiness: ReturnType<typeof buildRevenueSystemReadiness>;
+}) {
+  const persistenceItem = input.systemReadiness.items.find((item) => item.id === "production_persistence");
+  if (!persistenceItem || persistenceItem.status === "ready") {
+    return {
+      launchReadiness: input.launchReadiness,
+      dailyMoneyCommand: input.dailyMoneyCommand,
+    };
+  }
+
+  const blockedLaunchItem = {
+    id: "production_persistence",
+    label: "Persistencia de produccion",
+    status: "blocked" as const,
+    evidence: persistenceItem.evidence,
+    nextStep: persistenceItem.nextStep,
+  };
+  const launchItems = [
+    ...input.launchReadiness.items.filter((item) => item.id !== blockedLaunchItem.id),
+    blockedLaunchItem,
+  ];
+  const ready = launchItems.filter((item) => item.status === "ready").length;
+  const pendingAllowed = launchItems.filter((item) => item.status === "pending_allowed").length;
+  const blocked = launchItems.filter((item) => item.status === "blocked").length;
+  const dailyMoneyCommand: RevenueDailyMoneyCommand = persistenceItem.status === "blocked"
+    ? {
+        ...input.dailyMoneyCommand,
+        status: "blocked",
+        headline: "Dinero pausado hasta configurar persistencia",
+        primaryAction: "Configurar DATABASE_URL real antes de operar con leads, cobros o entregas reales.",
+        target: "Persistencia real antes de money mode",
+        steps: input.dailyMoneyCommand.steps.map((step) => ({
+          ...step,
+          status: "blocked" as const,
+          nextAction: step.id === "search"
+            ? "Configurar DATABASE_URL real; solo hacer dry-run local sin contacto ni cobros."
+            : step.nextAction,
+        })),
+        copyableOperatorBrief: [
+          "Revenue Engine daily money command",
+          "",
+          "Status: blocked",
+          "Primary action: Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+          `Persistence evidence: ${persistenceItem.evidence}`,
+          "",
+          input.dailyMoneyCommand.copyableOperatorBrief,
+        ].join("\n"),
+        safety: {
+          ...input.dailyMoneyCommand.safety,
+          blockedActions: Array.from(new Set([
+            "real-money operation before production persistence",
+            "contact business before production persistence",
+            "record deposit before production persistence",
+            ...input.dailyMoneyCommand.safety.blockedActions,
+          ])),
+        },
+      }
+    : input.dailyMoneyCommand;
+
+  return {
+    launchReadiness: {
+      ...input.launchReadiness,
+      status: "blocked" as const,
+      summary: "No arrancar money mode real hasta configurar DATABASE_URL/persistencia de produccion.",
+      launchScore: Math.round((ready / launchItems.length) * 100),
+      ready,
+      pendingAllowed,
+      blocked,
+      items: launchItems,
+      todayExecutionPack: {
+        ...input.launchReadiness.todayExecutionPack,
+        status: "blocked" as const,
+        mission: "Configurar persistencia real antes de buscar/contactar/cobrar negocios reales.",
+        copyableAgentCommand: "Do not run real-money lead, outreach, payment or delivery workflows until production DATABASE_URL is configured. Dry-run local research only.",
+        nextApiAction: "/api/revenue-engine",
+        approvalRequiredBefore: Array.from(new Set([
+          "production DATABASE_URL",
+          ...input.launchReadiness.todayExecutionPack.approvalRequiredBefore,
+        ])),
+      },
+    },
+    dailyMoneyCommand,
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -5260,7 +5354,7 @@ export function getRevenueEngineSnapshot() {
     nextBatchPlan,
     agentOperatingContract,
   });
-  const launchReadiness = buildRevenueLaunchReadiness({
+  const baseLaunchReadiness = buildRevenueLaunchReadiness({
     area: "Miami",
     niche: "med spas / aesthetics",
     dailyResearchTarget: 120,
@@ -5340,7 +5434,7 @@ export function getRevenueEngineSnapshot() {
   const websiteClosureQueue = buildRevenueWebsiteClosureQueue();
   const websiteDeliveryHandoffQueue = buildRevenueWebsiteDeliveryHandoffQueue(8);
   const websiteBuildHandoffQueue = buildRevenueWebsiteBuildHandoffQueue(5);
-  const dailyMoneyCommand = buildRevenueDailyMoneyCommand({
+  const baseDailyMoneyCommand = buildRevenueDailyMoneyCommand({
     businessScoutQueue,
     publicLeadImportQueue,
     websiteSalesPacketQueue,
@@ -5350,6 +5444,11 @@ export function getRevenueEngineSnapshot() {
     websiteClosureQueue,
     cashCollectedUsd,
     profitGuard,
+  });
+  const { launchReadiness, dailyMoneyCommand } = applyRevenueProductionPersistenceGate({
+    launchReadiness: baseLaunchReadiness,
+    dailyMoneyCommand: baseDailyMoneyCommand,
+    systemReadiness,
   });
 
   return {

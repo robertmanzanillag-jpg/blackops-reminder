@@ -198,7 +198,7 @@ type RevenueSnapshot = {
     }>;
     manualStartPlan: string[];
     todayExecutionPack: {
-      status: "ready";
+      status: "ready" | "blocked";
       ownerAgent: string;
       mission: string;
       copyableAgentCommand: string;

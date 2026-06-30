@@ -1731,12 +1731,30 @@ test("launch readiness is ready to start with only email pending", () => {
 test("snapshot exposes launch readiness without blocking on email provider", () => {
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
-  assert.equal(snapshot.launchReadiness.blocked, 0);
+  assert.equal(snapshot.launchReadiness.status, "blocked");
+  assert.equal(snapshot.launchReadiness.blocked, 1);
+  assert.equal(snapshot.launchReadiness.items.find((item) => item.id === "production_persistence")?.status, "blocked");
   assert.equal(snapshot.launchReadiness.emailPending.isPending, true);
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.status, "blocked");
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.approvalRequiredBefore.includes("production DATABASE_URL"), true);
   assert.equal(snapshot.launchReadiness.todayExecutionPack.runLimits.maxPaidSpendUsd, 0);
   assert.equal(snapshot.launchReadiness.todayExecutionPack.approvalRequiredBefore.includes("deployment"), true);
+  assert.equal(snapshot.dailyMoneyCommand.status, "search");
+  assert.match(snapshot.dailyMoneyCommand.primaryAction, /Buscar negocios publicos/);
   assert.equal(snapshot.emailProvider.configured, false);
+});
+
+test("snapshot launch readiness starts only with production persistence ready", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.systemReadiness.items.find((item) => item.id === "production_persistence")?.status, "ready");
+  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
+  assert.equal(snapshot.launchReadiness.blocked, 0);
+  assert.equal(snapshot.launchReadiness.items.some((item) => item.id === "production_persistence"), false);
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.status, "ready");
 });
 
 test("records sold apps and automations into revenue metrics", () => {
@@ -1826,6 +1844,8 @@ test("system readiness blocks production money mode without real database url", 
   assert.equal(persistenceItem?.status, "blocked");
   assert.match(persistenceItem?.evidence || "", /DATABASE_URL is required in production/);
   assert.equal(snapshot.systemReadiness.blocked > 0, true);
+  assert.equal(snapshot.launchReadiness.status, "blocked");
+  assert.equal(snapshot.dailyMoneyCommand.status, "blocked");
 });
 
 test("system readiness accepts a real database url for production persistence", () => {
@@ -2855,6 +2875,112 @@ test("website closure queue keeps older money-ready opportunities visible", () =
   assert.match(olderClosure.copyableClosurePacket, /Deposit required/);
   assert.equal(snapshot.dailyMoneyCommand.status, "collect");
   assert.equal(snapshot.dailyMoneyCommand.funnel.websiteClosuresPending, 30);
+});
+
+test("sold website opportunity keeps original paid draft identity when a newer draft exists", () => {
+  const { lead, draft: originalDraft } = createApprovedWebsiteDraftForTest({
+    businessName: "Stable Sold Draft Cafe",
+    contactEmail: "owner@stablesolddraft.example",
+    sourceUrl: "https://example.com/stable-sold-draft-cafe-original",
+    mockupSlug: "stable-sold-draft-original",
+  });
+  const soldOpportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.id,
+    outreachDraftId: originalDraft.id,
+    projectType: "website",
+  });
+
+  const newerDraft = recordRevenueOutreachDraft({
+    leadId: lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@stablesolddraft.example",
+    contactName: "Owner",
+    businessName: "Stable Sold Draft Cafe",
+    sourceUrl: "https://example.com/stable-sold-draft-cafe-newer",
+    mockupUrl: "/api/revenue-engine/mockup-previews/stable-sold-draft-newer",
+    businessSummary: "Stable Sold Draft Cafe has a revised package after the original sale.",
+    websitePriceUsd: 2200,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 400,
+    estimatedInternalMonthlyCostUsd: 40,
+    notes: "Later revised draft should not replace the paid sale chain.",
+  });
+  assert.equal(newerDraft.draft.status, "approved");
+
+  const reboundAttempt = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: newerDraft.draft.id,
+    projectType: "website",
+  });
+  const snapshot = reboundAttempt.snapshot;
+  const handoffItem = snapshot.websiteDeliveryHandoffQueue.items.find((item) => item.opportunityId === soldOpportunity.id);
+
+  assert.equal(reboundAttempt.status, "already_sold");
+  assert.equal(reboundAttempt.opportunity?.id, soldOpportunity.id);
+  assert.equal(reboundAttempt.opportunity?.sourceOutreachDraftId, originalDraft.id);
+  assert.equal(reboundAttempt.opportunity?.outreachDraftId, originalDraft.id);
+  assert.equal(reboundAttempt.opportunity?.mockupUrl, originalDraft.mockupUrl);
+  assert.equal(reboundAttempt.opportunity?.sourceUrl, originalDraft.sourceUrl);
+  assert.notEqual(reboundAttempt.opportunity?.sourceOutreachDraftId, newerDraft.draft.id);
+  assert.ok(handoffItem);
+  assert.equal(handoffItem.outreachDraftId, originalDraft.id);
+  assert.equal(handoffItem.mockupUrl, originalDraft.mockupUrl);
+});
+
+test("website delivery handoff uses sold opportunity draft when outreach draft id is omitted", () => {
+  const { lead, draft: originalDraft } = createApprovedWebsiteDraftForTest({
+    businessName: "Implicit Sold Draft Cafe",
+    contactEmail: "owner@implicitsolddraft.example",
+    sourceUrl: "https://example.com/implicit-sold-draft-cafe-original",
+    mockupSlug: "implicit-sold-draft-original",
+  });
+  const soldOpportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.id,
+    outreachDraftId: originalDraft.id,
+    projectType: "website",
+  });
+
+  const newerDraft = recordRevenueOutreachDraft({
+    leadId: lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@implicitsolddraft.example",
+    contactName: "Owner",
+    businessName: "Implicit Sold Draft Cafe",
+    sourceUrl: "https://example.com/implicit-sold-draft-cafe-newer",
+    mockupUrl: "/api/revenue-engine/mockup-previews/implicit-sold-draft-newer",
+    businessSummary: "Implicit Sold Draft Cafe has a later revised package after the original sale.",
+    websitePriceUsd: 2200,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 400,
+    estimatedInternalMonthlyCostUsd: 40,
+    notes: "Later revised draft should not become the delivery chain.",
+  });
+  assert.equal(newerDraft.draft.status, "approved");
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    websiteOpportunityId: soldOpportunity.id,
+    projectType: "website",
+    repoFullName: "robert/implicit-sold-draft-cafe",
+    branchName: "codex/client-implicit-sold-draft-cafe-website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: soldOpportunity.requiredDepositUsd,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.equal(handoff.outreachDraft?.id, originalDraft.id);
+  assert.notEqual(handoff.outreachDraft?.id, newerDraft.draft.id);
+  assert.equal(handoff.workspace?.input.outreachDraftId, undefined);
+  assert.equal(handoff.workspace?.input.sourceOpportunityId, soldOpportunity.id);
+  assert.equal(handoff.workspace?.input.mockupUrl, originalDraft.mockupUrl);
 });
 
 test("website sales packet queue keeps older ready packages visible", () => {
