@@ -11471,6 +11471,7 @@ export default function ClippersPage() {
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
         metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus | null;
         postProofRefreshRuns: Record<string, unknown>;
         postProofRefreshError: string;
@@ -11505,6 +11506,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpReadinessVerifier) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       if (data.metricoolBridgeEvidenceCsvStatus) {
         queryClient.setQueryData(["/api/clippers/metricool-bridge-evidence-csv-status"], data.metricoolBridgeEvidenceCsvStatus);
@@ -11668,6 +11672,7 @@ export default function ClippersPage() {
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
         metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus | null;
         postProofRefreshError: string;
       };
@@ -11689,6 +11694,7 @@ export default function ClippersPage() {
       if (data.tiktokMvpEvidenceCloseout) queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
       if (data.tiktokMvpGoLivePacket) queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
       if (data.tiktokMvpReadinessVerifier) queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      if (data.tiktokNextAction) queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       if (data.metricoolBridgeEvidenceCsvStatus) queryClient.setQueryData(["/api/clippers/metricool-bridge-evidence-csv-status"], data.metricoolBridgeEvidenceCsvStatus);
       toast({
         title: data.postProofRefreshError ? "Drop guardado con blockers" : "Drop ingerido y refrescado",

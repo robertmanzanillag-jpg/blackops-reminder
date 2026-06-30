@@ -508,14 +508,20 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofIntakeImport\(false\)/);
   assert.match(proofLinksSaveHelper, /runClipperTikTokMvpCloseoutWizard/);
   assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofHandoff/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokExternalCloseoutSession/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofDoctor/);
+  assert.match(proofLinksSaveHelper, /runClipperTikTokMvpProofUnblocker/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpProofHandoff/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpProofIntakeImport/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpEvidenceCloseout/);
   assert.match(proofLinksSaveHelper, /postProofRefreshRuns/);
   assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-mvp-go-live-packet\.mjs/);
   assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
+  assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-next-action\.mjs/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpGoLivePacket/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpReadinessVerifier/);
+  assert.match(proofLinksSaveHelper, /readClipperTikTokNextAction/);
+  assert.match(proofLinksSaveHelper, /tiktokNextAction/);
   assert.match(proofLinksSaveHelper, /buildClipperMetricoolBridgeEvidenceCsvStatus/);
   assert.match(proofLinksSaveHelper, /metricoolBridgeEvidenceCsvStatus/);
   assert.doesNotMatch(proofLinksRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
@@ -647,6 +653,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-evidence-closeout"\], data\.tiktokMvpEvidenceCloseout/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-go-live-packet"\], data\.tiktokMvpGoLivePacket/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-readiness-verifier"\], data\.tiktokMvpReadinessVerifier/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-next-action"\], data\.tiktokNextAction/);
   assert.match(page, /postProofRefreshError/);
   assert.match(page, /parse-clippers-tiktok-mvp-proof-links-paste-button/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-preview/);

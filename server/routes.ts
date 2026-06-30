@@ -898,9 +898,13 @@ export async function registerRoutes(
       postProofRefreshRuns.checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
       postProofRefreshRuns.metricoolHandoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
       postProofRefreshRuns.launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+      postProofRefreshRuns.externalCloseoutSessionRun = await runClipperTikTokExternalCloseoutSession();
+      postProofRefreshRuns.proofDoctorRun = await runClipperTikTokMvpProofDoctor();
+      postProofRefreshRuns.proofUnblockerRun = await runClipperTikTokMvpProofUnblocker();
       postProofRefreshRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       postProofRefreshRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
       postProofRefreshRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      postProofRefreshRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
     } catch (refreshError: any) {
       postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
     }
@@ -917,6 +921,7 @@ export async function registerRoutes(
       tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
       tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
       tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
+      tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
       metricoolBridgeEvidenceCsvStatus: await buildClipperMetricoolBridgeEvidenceCsvStatus().catch(() => null),
       proofDropRun,
       quickFillRun,
