@@ -356,6 +356,7 @@ export async function registerRoutes(
   };
   const runClipperTikTokMvpProofRefresh = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-refresh.mjs", "TikTok MVP proof refresh");
   const runClipperTikTokMvpProofUnblocker = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-unblocker.mjs", "TikTok MVP proof unblocker");
+  const runClipperTikTokMvpLocalVerification = () => runClipperJsonScript("script/clippers-tiktok-mvp-local-verification.mjs", "TikTok MVP local verification");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -397,6 +398,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofUnblocker = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-unblocker.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpLocalVerification = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/local-verification.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2819,6 +2824,29 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof unblocker" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-local-verification", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP local verification has not been prepared" : "TikTok MVP local verification could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-local-verification", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpLocalVerification();
+      res.json({
+        tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification(),
+        tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill(),
+        tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP local verification" });
     }
   });
 

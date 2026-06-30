@@ -2237,6 +2237,45 @@ interface ClipperTikTokMvpProofUnblockerSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpLocalVerificationSummary {
+  status: "pass" | "blocked";
+  launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  commands: Array<{
+    id: string;
+    label: string;
+    command: string;
+    required: boolean;
+    status: "pass" | "fail";
+    exitCode: number | null;
+    signal: string;
+    startedAt: string;
+    durationMs: number;
+    stdoutTail: string;
+    stderrTail: string;
+  }>;
+  proofState: {
+    quickFillStatus: string;
+    quickFillIssues: number;
+    unblockerStatus: string;
+    openFixes: number;
+    readyLanes: number;
+    targetLanes: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+  paths: {
+    json: string;
+    markdown: string;
+    quickFillJson: string;
+    unblockerJson: string;
+  };
+}
+
 interface ClipperTikTokMvpProofQuickFillSummary {
   status: "applied_to_combined_intake" | "blocked_invalid_quick_fill";
   generatedAt: string;
@@ -10195,6 +10234,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofUnblocker as ClipperTikTokMvpProofUnblockerSummary;
     },
   });
+  const { data: tiktokMvpLocalVerification } = useQuery<ClipperTikTokMvpLocalVerificationSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-local-verification"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-local-verification");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP local verification");
+      return data.tiktokMvpLocalVerification as ClipperTikTokMvpLocalVerificationSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10877,6 +10926,32 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof unblocker", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpLocalVerificationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-local-verification", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP local verification");
+      return data as {
+        tiktokMvpLocalVerification: ClipperTikTokMvpLocalVerificationSummary;
+        tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary;
+        tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-local-verification"], data.tiktokMvpLocalVerification);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      toast({
+        title: data.tiktokMvpLocalVerification.status === "pass" ? "TikTok MVP verificado" : "TikTok MVP bloqueado",
+        description: data.tiktokMvpLocalVerification.nextStep,
+        variant: data.tiktokMvpLocalVerification.status === "pass" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude correr local verification", description: error.message, variant: "destructive" });
     },
   });
 
@@ -15330,6 +15405,7 @@ export default function ClippersPage() {
     || tiktokMvpProofQuickFillMutation.isPending
     || tiktokMvpProofRefreshMutation.isPending
     || tiktokMvpProofUnblockerMutation.isPending
+    || tiktokMvpLocalVerificationMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
@@ -16532,6 +16608,18 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpLocalVerificationMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-local-verification-button"
+              >
+                {tiktokMvpLocalVerificationMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ListChecks className="mr-2 h-3.5 w-3.5" />}
+                Local verify
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
@@ -16716,6 +16804,45 @@ export default function ClippersPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {tiktokMvpLocalVerification && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpLocalVerification.status === "pass"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-sky-300/15 text-sky-100/80"
+              )} data-testid="clippers-tiktok-mvp-local-verification-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpLocalVerification.status === "pass"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-sky-300/30 bg-sky-300/10 text-sky-100"
+                  )}>
+                    local verify {tiktokMvpLocalVerification.status}
+                  </Badge>
+                  <span>{tiktokMvpLocalVerification.commands.filter((row) => row.status === "pass").length}/{tiktokMvpLocalVerification.commands.length} commands passed</span>
+                  <span>{tiktokMvpLocalVerification.proofState.quickFillIssues} quick-fill issues</span>
+                  <span>{tiktokMvpLocalVerification.proofState.openFixes} open fixes</span>
+                </div>
+                <p className="mt-1">{tiktokMvpLocalVerification.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Decision: {tiktokMvpLocalVerification.launchDecision}</p>
+                  <p>Mode: {tiktokMvpLocalVerification.launchMode}</p>
+                  <p>Real publish: {tiktokMvpLocalVerification.realPublishEnabled ? "enabled" : "disabled"}</p>
+                  <p>Direct APIs: {tiktokMvpLocalVerification.directSocialApisRequired ? "required" : "not required"}</p>
+                  <p className="break-all">Report: {tiktokMvpLocalVerification.paths.markdown}</p>
+                  <p className="break-all">JSON: {tiktokMvpLocalVerification.paths.json}</p>
+                </div>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-local-verification-commands">
+                  {tiktokMvpLocalVerification.commands.map((row) => (
+                    <div key={row.id} className="rounded border border-sky-300/10 bg-black/20 p-2">
+                      <p className="font-medium text-sky-100">{row.label}: {row.status}</p>
+                      <p className="mt-1 text-sky-100/70">{row.durationMs}ms</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             <div className="mt-2 rounded-md border border-violet-300/15 bg-black/20 p-2 text-[11px] leading-4 text-violet-100/80" data-testid="clippers-tiktok-mvp-proof-quick-fill-panel">
