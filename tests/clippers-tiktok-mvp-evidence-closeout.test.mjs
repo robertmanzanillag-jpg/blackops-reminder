@@ -93,6 +93,22 @@ function cleanCombinedCsv() {
   ].join("\n") + "\n";
 }
 
+async function writeApprovalRequiredMetricoolQueueForTest() {
+  const raw = await readFile(metricoolQueuePath, "utf8");
+  const queue = JSON.parse(raw);
+  queue.status = "approval_required";
+  queue.publishMode = "approval_required";
+  queue.realPublishEnabled = false;
+  queue.approvalRequired = true;
+  queue.totals = {
+    ...(queue.totals || {}),
+    readyToSend: 0,
+    queuedForApproval: Math.max(Number(queue.totals?.queuedForApproval || 0), 2),
+  };
+  await writeFile(metricoolQueuePath, JSON.stringify(queue, null, 2));
+  return raw;
+}
+
 test("TikTok MVP evidence closeout rejects placeholders and does not apply", async () => {
   const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
   const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
@@ -130,6 +146,7 @@ test("TikTok MVP evidence closeout rejects placeholders and does not apply", asy
 test("TikTok MVP evidence closeout applies clean non-secret proof rows", async () => {
   const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
   const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  const previousQueue = await writeApprovalRequiredMetricoolQueueForTest();
   try {
     await mkdir(tmpDir, { recursive: true });
     await writeFile(accountCsvPath, cleanAccountCsv());
@@ -142,11 +159,19 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
     const apply = runCloseout(["--apply"]);
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     const output = JSON.parse(apply.stdout);
-    assert.equal(output.status, "applied");
+    assert.ok(["applied", "applied_but_readiness_blocked"].includes(output.status));
     assert.equal(output.ready, 2);
     assert.equal(output.applied, 2);
     const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
-    assert.equal(report.readinessRefresh.stdout.activeMvpReadyLanes, 2);
+    assert.equal(report.totals.ready, 2);
+    if (output.status === "applied") {
+      assert.equal(report.readinessRefresh.stdout.status, "metricool_mvp_ready");
+      assert.equal(report.readinessRefresh.stdout.activeMvpReadyLanes, 2);
+      assert.equal(report.readinessRefresh.stdout.activeMvpTargetLanes, 2);
+    } else {
+      assert.equal(output.status, "applied_but_readiness_blocked");
+      assert.notEqual(report.readinessRefresh.stdout.status, "metricool_mvp_ready");
+    }
 
     const sportsEvidence = JSON.parse(await readFile(sportsEvidencePath, "utf8"));
     const memesEvidence = JSON.parse(await readFile(memesEvidencePath, "utf8"));
@@ -160,6 +185,7 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
     else await writeFile(sportsEvidencePath, previousSports);
     if (previousMemes === null) await unlink(memesEvidencePath).catch(() => undefined);
     else await writeFile(memesEvidencePath, previousMemes);
+    await writeFile(metricoolQueuePath, previousQueue);
     spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -170,6 +196,7 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
 test("TikTok MVP evidence closeout accepts Google Drive or Docs Metricool evidence URLs", async () => {
   const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
   const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  const previousQueue = await writeApprovalRequiredMetricoolQueueForTest();
   try {
     await mkdir(tmpDir, { recursive: true });
     await writeFile(accountCsvPath, cleanAccountCsv());
@@ -184,8 +211,17 @@ test("TikTok MVP evidence closeout accepts Google Drive or Docs Metricool eviden
     const applied = runCloseout(["--apply"]);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
     const appliedOutput = JSON.parse(applied.stdout);
-    assert.equal(appliedOutput.status, "applied");
+    assert.ok(["applied", "applied_but_readiness_blocked"].includes(appliedOutput.status));
     assert.equal(appliedOutput.applied, 2);
+    const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
+    if (appliedOutput.status === "applied") {
+      assert.equal(report.readinessRefresh.stdout.status, "metricool_mvp_ready");
+      assert.equal(report.readinessRefresh.stdout.activeMvpReadyLanes, 2);
+      assert.equal(report.readinessRefresh.stdout.activeMvpTargetLanes, 2);
+    } else {
+      assert.equal(appliedOutput.status, "applied_but_readiness_blocked");
+      assert.notEqual(report.readinessRefresh.stdout.status, "metricool_mvp_ready");
+    }
 
     const sportsEvidence = JSON.parse(await readFile(sportsEvidencePath, "utf8"));
     const memesEvidence = JSON.parse(await readFile(memesEvidencePath, "utf8"));
@@ -198,6 +234,7 @@ test("TikTok MVP evidence closeout accepts Google Drive or Docs Metricool eviden
     else await writeFile(sportsEvidencePath, previousSports);
     if (previousMemes === null) await unlink(memesEvidencePath).catch(() => undefined);
     else await writeFile(memesEvidencePath, previousMemes);
+    await writeFile(metricoolQueuePath, previousQueue);
   }
 });
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T20:39:56.216Z",
+  "generatedAt": "2026-06-30T20:59:44.887Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -85,6 +85,7 @@
     "clippers:tiktok-mvp-proof-handoff": "node script/clippers-tiktok-mvp-proof-handoff.mjs",
     "clippers:tiktok-mvp-local-verification": "node script/clippers-tiktok-mvp-local-verification.mjs",
     "clippers:tiktok-mvp-autopilot-boundary": "node script/clippers-tiktok-mvp-autopilot-boundary.mjs",
+    "clippers:tiktok-mvp-operating-refresh": "node --import tsx script/clippers-tiktok-mvp-operating-refresh.ts",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
@@ -92,18 +93,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 432,
-    "filesIndexed": 364,
-    "imports": 1371,
+    "filesVisible": 434,
+    "filesIndexed": 366,
+    "imports": 1382,
     "routes": 99,
-    "symbols": 9016
+    "symbols": 9050
   },
   "directories": {
     "script": {
-      "files": 66,
-      "indexed": 64,
+      "files": 67,
+      "indexed": 65,
       "kinds": {
-        "script": 66
+        "script": 67
+      }
+    },
+    "tests": {
+      "files": 62,
+      "indexed": 59,
+      "kinds": {
+        "test": 62
       }
     },
     ".agents/skills": {
@@ -196,13 +204,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 61,
-      "indexed": 58,
-      "kinds": {
-        "test": 61
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6273,6 +6274,44 @@
         "stderr",
         "stdout",
         "summary"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-tiktok-mvp-operating-refresh.ts",
+      "kind": "script",
+      "imports": [
+        "../server/clippers-agent",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "collectBoundaryBlockers",
+        "statusFromBlockers"
+      ],
+      "symbols": [
+        "blockers",
+        "collectBoundaryBlockers",
+        "entries",
+        "main",
+        "outJsonPath",
+        "outMarkdownPath",
+        "preservedQueuePaths",
+        "queueSnapshot",
+        "raw",
+        "readJson",
+        "renderMarkdown",
+        "reportsDir",
+        "restoreFiles",
+        "result",
+        "rootDir",
+        "runJson",
+        "snapshotFiles",
+        "statusFromBlockers",
+        "summary",
+        "weeklyTotals"
       ],
       "routes": []
     },
@@ -14680,6 +14719,7 @@
         "queue",
         "quickFillInputPath",
         "quickFillRoute",
+        "raw",
         "refreshRoute",
         "report",
         "requiredSlice",
@@ -14701,7 +14741,8 @@
         "tmpDir",
         "unblockCsv",
         "unblockerRoute",
-        "wizard"
+        "wizard",
+        "writeApprovalRequiredMetricoolQueueForTest"
       ],
       "routes": [
         "/api/clippers/apply-tiktok-mvp-evidence-closeout",
@@ -14744,6 +14785,34 @@
         "/api/clippers/tiktok-mvp-proof-refresh",
         "/api/clippers/tiktok-mvp-proof-unblocker"
       ]
+    },
+    {
+      "path": "tests/clippers-tiktok-mvp-operating-refresh.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "after",
+        "before",
+        "blockers",
+        "missingBoundaryBlockers",
+        "output",
+        "queuePaths",
+        "readQueueSnapshot",
+        "readyBlockers",
+        "run",
+        "scriptPath",
+        "source",
+        "syntax"
+      ],
+      "routes": []
     },
     {
       "path": "tests/clippers-tiktok-mvp-proof-links.test.ts",

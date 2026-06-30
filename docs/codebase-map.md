@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T20:39:56.216Z
+Generated: 2026-06-30T20:59:44.887Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 432 | 364 | 1371 | 99 | 9016 |
+| 434 | 366 | 1382 | 99 | 9050 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `client/src` | 108 | 107 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
 | `server` | 95 | 91 | server:95 |
-| `script` | 66 | 64 | script:66 |
-| `tests` | 61 | 58 | test:61 |
+| `script` | 67 | 65 | script:67 |
+| `tests` | 62 | 59 | test:62 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
@@ -176,6 +176,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 68 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 46 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-local-verification.mjs` (script; 25 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-operating-refresh.ts` (script; 20 symbols, 5 imports)
 - `script/clippers-tiktok-mvp-proof-doctor.mjs` (script; 49 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-handoff.mjs` (script; 55 symbols, 3 imports)
@@ -196,7 +197,6 @@ Package: `rest-express`
 - `script/create-local-user.ts` (script; 5 symbols, 3 imports)
 - `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
 - `script/import-developer-health-inventory.ts` (script; 14 symbols, 4 imports)
-- `script/metricool-plan.ts` (script; 3 symbols, 1 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
