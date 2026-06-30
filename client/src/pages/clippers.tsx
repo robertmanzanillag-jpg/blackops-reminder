@@ -2238,6 +2238,17 @@ interface ClipperTikTokMvpProofIntakePackSummary {
     blockers?: string[];
     evidencePath?: string;
   }>;
+  driveEvidenceChecklist?: Array<{
+    accountId: string;
+    accountName: string;
+    handle: string;
+    metricoolBrandName: string;
+    accountProofFileName: string;
+    metricoolProofFileName: string;
+    accountProofMustShow: string[];
+    metricoolProofMustShow: string[];
+    redact: string[];
+  }>;
   guardrails: string[];
   nextStep: string;
 }
@@ -18047,6 +18058,36 @@ export default function ClippersPage() {
                     </div>
                   ))}
                 </div>
+                {(tiktokMvpProofIntakePack.driveEvidenceChecklist || []).length > 0 && (
+                  <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="clippers-tiktok-mvp-drive-evidence-checklist">
+                    {tiktokMvpProofIntakePack.driveEvidenceChecklist!.map((item) => (
+                      <div key={`${item.accountId}-drive-checklist`} className="rounded border border-cyan-300/15 bg-black/30 p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-cyan-100">{item.accountName}</p>
+                            <p className="mt-1 text-[10px] text-zinc-500">{item.metricoolBrandName} {item.handle}</p>
+                          </div>
+                          <Badge className="shrink-0 border border-cyan-300/20 bg-cyan-300/10 text-[10px] text-cyan-100">
+                            Drive/Docs
+                          </Badge>
+                        </div>
+                        <div className="mt-2 space-y-1 text-[10px] leading-4 text-zinc-500">
+                          <p className="break-all">Account proof: {item.accountProofFileName}</p>
+                          <p className="break-all">Metricool proof: {item.metricoolProofFileName}</p>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[10px] uppercase tracking-wide text-cyan-100/70">Must show</p>
+                          {[...item.accountProofMustShow, ...item.metricoolProofMustShow].slice(0, 4).map((text) => (
+                            <p key={`${item.accountId}-${text}`} className="text-[11px] leading-4 text-cyan-100/80">{text}</p>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[10px] leading-4 text-amber-100/80">
+                          Redact: {item.redact.slice(0, 4).join(", ")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {tiktokMvpProofDropKit && (
