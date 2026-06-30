@@ -8,6 +8,7 @@ const closeoutJsonPath = path.join(rootDir, "reports", "clippers-tiktok-mvp-evid
 const outJsonPath = path.join(reportsDir, "closeout-wizard.json");
 const outMarkdownPath = path.join(reportsDir, "closeout-wizard.md");
 const outHtmlPath = path.join(reportsDir, "closeout-wizard.html");
+const outApplyGateCsvPath = path.join(reportsDir, "closeout-apply-gate.csv");
 
 function runJson(args) {
   const result = spawnSync(process.execPath, args, {
@@ -165,6 +166,26 @@ function renderMarkdown(summary) {
   ].join("\n");
 }
 
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function renderApplyGateCsv(summary) {
+  const header = ["gate_id", "label", "status", "ready_to_apply", "evidence", "next_action"];
+  return [
+    header.join(","),
+    ...summary.steps.map((item) => [
+      item.id,
+      item.label,
+      item.status,
+      item.status === "done" ? "yes" : "no",
+      item.path || item.statusValue || item.launchDecision || "",
+      item.nextAction,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
 function htmlEscape(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -233,6 +254,7 @@ async function main() {
       importJson: path.join(reportsDir, "proof-intake-import.json"),
       closeoutJson: closeoutJsonPath,
       localVerificationJson: path.join(reportsDir, "local-verification.json"),
+      applyGateCsv: outApplyGateCsvPath,
     },
     guardrails: [
       "Closeout wizard never applies final evidence.",
@@ -247,12 +269,14 @@ async function main() {
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outHtmlPath, renderHtml(summary));
+  await writeFile(outApplyGateCsvPath, renderApplyGateCsv(summary));
   console.log(JSON.stringify({
     status: summary.status,
     launchDecision: summary.launchDecision,
     nextBlockedStep: blocker?.id || "",
     nextStep: summary.nextStep,
     reportJsonPath: outJsonPath,
+    applyGateCsvPath: outApplyGateCsvPath,
   }, null, 2));
 }
 

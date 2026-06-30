@@ -2449,6 +2449,7 @@ interface ClipperTikTokMvpCloseoutWizardSummary {
     importJson: string;
     closeoutJson: string;
     localVerificationJson: string;
+    applyGateCsv: string;
   };
   guardrails: string[];
   nextStep: string;
@@ -17399,6 +17400,7 @@ export default function ClippersPage() {
                 </div>
                 <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
                   <p className="break-all">Wizard: {tiktokMvpCloseoutWizard.paths.markdown}</p>
+                  <p className="break-all">Apply gate CSV: {tiktokMvpCloseoutWizard.paths.applyGateCsv}</p>
                   <p>Real publish: {tiktokMvpCloseoutWizard.realPublishEnabled ? "enabled" : "disabled"}</p>
                 </div>
               </div>

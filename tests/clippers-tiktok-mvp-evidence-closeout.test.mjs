@@ -1124,6 +1124,8 @@ test("TikTok MVP closeout wizard consolidates gates without applying evidence", 
   assert.match(source, /Import preview/);
   assert.match(source, /Closeout preview/);
   assert.match(source, /Apply closeout remains separately guarded by the operator confirmation header/);
+  assert.match(source, /closeout-apply-gate\.csv/);
+  assert.match(source, /renderApplyGateCsv/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
   assert.doesNotMatch(source, /video\.publish/);
@@ -1131,6 +1133,25 @@ test("TikTok MVP closeout wizard consolidates gates without applying evidence", 
   assert.doesNotMatch(source, /ready_to_send/);
   assert.match(source, /realPublishEnabled:\s*false/);
   assert.match(source, /directSocialApisRequired:\s*false/);
+});
+
+test("TikTok MVP closeout wizard writes an apply gate CSV without applying", async () => {
+  const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-closeout-wizard.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.match(output.applyGateCsvPath, /closeout-apply-gate\.csv$/);
+  assert.notEqual(output.status, "ready_to_send");
+
+  const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/closeout-apply-gate.csv"), "utf8");
+  assert.match(csv, /proof_drop_links/);
+  assert.match(csv, /quick_fill/);
+  assert.match(csv, /import_preview/);
+  assert.match(csv, /closeout_preview/);
+  assert.match(csv, /ready_to_apply/);
+  assert.doesNotMatch(csv, /realPublishEnabled\s*=\s*true|ready_to_send|video\.publish/i);
 });
 
 test("TikTok MVP proof handoff refreshes previews without applying evidence", async () => {
