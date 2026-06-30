@@ -11130,6 +11130,10 @@ export default function ClippersPage() {
         tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+        tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
+        tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        postProofRefreshRuns: Record<string, unknown>;
+        postProofRefreshError: string;
       };
     },
     onSuccess: (data) => {
@@ -11144,10 +11148,16 @@ export default function ClippersPage() {
       if (data.tiktokMvpProofUnblocker) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
       }
+      if (data.tiktokMvpGoLivePacket) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      }
+      if (data.tiktokMvpReadinessVerifier) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      }
       toast({
-        title: data.tiktokMvpProofDropKit.readyForQuickFill ? "Proof links guardados" : "Proof links guardados con blockers",
-        description: data.tiktokMvpCloseoutWizard.nextStep,
-        variant: data.tiktokMvpProofDropKit.readyForQuickFill ? undefined : "destructive",
+        title: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError ? "Proof links guardados" : "Proof links guardados con blockers",
+        description: data.postProofRefreshError || data.tiktokMvpReadinessVerifier?.nextStep || data.tiktokMvpCloseoutWizard.nextStep,
+        variant: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError && data.tiktokMvpReadinessVerifier?.status === "pass" ? undefined : "destructive",
       });
     },
     onError: (error: Error) => {

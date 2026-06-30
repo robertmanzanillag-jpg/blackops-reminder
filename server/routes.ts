@@ -2785,6 +2785,22 @@ export async function registerRoutes(
       const proofDropRun = await runClipperTikTokMvpProofDropKit();
       const wizardRun = await runClipperTikTokMvpCloseoutWizard();
       const proofHandoffRun = await runClipperTikTokMvpProofHandoff();
+      const postProofRefreshRuns: Record<string, any> = {};
+      let postProofRefreshError = "";
+      try {
+        postProofRefreshRuns.accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
+        postProofRefreshRuns.syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
+        postProofRefreshRuns.trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
+        postProofRefreshRuns.runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
+        postProofRefreshRuns.checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
+        postProofRefreshRuns.metricoolHandoffRun = await runClipperJsonScript("script/clippers-metricool-operator-handoff.mjs", "Metricool 100 operator handoff");
+        postProofRefreshRuns.launchRun = await runClipperJsonScript("script/clippers-tiktok-launch-control.mjs", "TikTok launch control");
+        postProofRefreshRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+        postProofRefreshRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
+        postProofRefreshRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+      } catch (refreshError: any) {
+        postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
+      }
       res.json({
         tiktokMvpProofLinks: await readClipperTikTokMvpProofLinks(),
         tiktokMvpProofDropKit: await readClipperTikTokMvpProofDropKit(),
@@ -2792,9 +2808,13 @@ export async function registerRoutes(
         tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
+        tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
         proofDropRun,
         wizardRun,
         proofHandoffRun,
+        postProofRefreshRuns,
+        postProofRefreshError,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to save TikTok MVP proof links" });
