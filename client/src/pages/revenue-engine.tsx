@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Copy,
+  Eye,
   ExternalLink,
   FileCheck2,
   Gauge,
@@ -724,6 +725,40 @@ type RevenueMoneySprint = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenueMoneySprintPreview = {
+  status: "ready_to_import" | "needs_spend_approval" | "needs_lead_evidence" | "empty";
+  acceptedSeeds: Array<{
+    rowNumber: number;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    estimatedOfferUsd: number;
+    qualification: RevenueLeadResult["qualification"];
+    mockupReady: boolean;
+    draftReady: boolean;
+    missingForDraft: string[];
+  }>;
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  totals: {
+    accepted: number;
+    blocked: number;
+    mockupReady: number;
+    draftReady: number;
+    maxImportable: number;
+  };
+  safety: {
+    persistsData: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    nextAction: string;
+  };
+};
+
 type RevenueMockupTemplatePack = {
   status: "ready" | "needs_spend_approval";
   pack: {
@@ -1087,6 +1122,10 @@ function statusTone(status: string) {
   if (status === "collect_first") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "scale_carefully") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "needs_spend_approval") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_lead_evidence") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "empty") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "pending_allowed") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "iterate_small_batch") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "sent") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -1341,53 +1380,71 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const buildMoneySprintPayload = () => {
+    const seedLeadReady = Boolean(
+      includeLeadInMoneySprint
+      && leadBusinessName.trim()
+      && leadArea.trim()
+      && leadNiche.trim()
+      && leadEvidence.trim().length >= 12
+      && leadPainPoint.trim()
+      && leadContactChannel !== "unknown"
+      && leadContactValue.trim()
+    );
+    const seedLeads = seedLeadReady
+      ? [{
+        businessName: leadBusinessName,
+        area: leadArea,
+        niche: leadNiche,
+        websiteStatus: leadWebsiteStatus,
+        contactChannel: leadContactChannel,
+        contactValue: leadContactValue,
+        evidence: leadEvidence,
+        painPoint: leadPainPoint,
+        estimatedOfferUsd: leadEstimatedOfferUsd,
+        status: "research",
+        sourceUrl: leadSourceUrl,
+        recipientEmail: leadRecipientEmail,
+        contactName: leadContactName,
+        businessSummary: leadBusinessSummary,
+      }]
+      : [];
+
+    return {
+      area: scoutingArea,
+      niche: scoutingNiche,
+      offerFocus: scoutingOfferFocus,
+      dailyResearchTarget: leadRadarDailyResearchTarget,
+      dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+      dailyMockupLimit: leadRadarMockupLimit,
+      dailyContactLimit: leadRadarContactLimit,
+      maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+      requireRobertApprovalToContact: true,
+      writePreviewFiles: true,
+      seedLeads,
+      seedLeadBatchText,
+    };
+  };
+
+  const moneySprintPreviewMutation = useMutation<RevenueMoneySprintPreview>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildMoneySprintPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo previsualizar money sprint");
+      return data;
+    },
+  });
+
   const moneySprintMutation = useMutation<RevenueMoneySprint>({
     mutationFn: async () => {
-      const seedLeadReady = Boolean(
-        includeLeadInMoneySprint
-        && leadBusinessName.trim()
-        && leadArea.trim()
-        && leadNiche.trim()
-        && leadEvidence.trim().length >= 12
-        && leadPainPoint.trim()
-        && leadContactChannel !== "unknown"
-        && leadContactValue.trim()
-      );
-      const seedLeads = seedLeadReady
-        ? [{
-          businessName: leadBusinessName,
-          area: leadArea,
-          niche: leadNiche,
-          websiteStatus: leadWebsiteStatus,
-          contactChannel: leadContactChannel,
-          contactValue: leadContactValue,
-          evidence: leadEvidence,
-          painPoint: leadPainPoint,
-          estimatedOfferUsd: leadEstimatedOfferUsd,
-          status: "research",
-          sourceUrl: leadSourceUrl,
-          recipientEmail: leadRecipientEmail,
-          contactName: leadContactName,
-          businessSummary: leadBusinessSummary,
-        }]
-        : [];
       const response = await fetch("/api/revenue-engine/money-sprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          area: scoutingArea,
-          niche: scoutingNiche,
-          offerFocus: scoutingOfferFocus,
-          dailyResearchTarget: leadRadarDailyResearchTarget,
-          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
-          dailyMockupLimit: leadRadarMockupLimit,
-          dailyContactLimit: leadRadarContactLimit,
-          maxPaidDataSpendUsd: scoutingPaidSpendUsd,
-          requireRobertApprovalToContact: true,
-          writePreviewFiles: true,
-          seedLeads,
-          seedLeadBatchText,
-        }),
+        body: JSON.stringify(buildMoneySprintPayload()),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo correr money sprint");
@@ -2882,6 +2939,16 @@ export default function RevenueEnginePage() {
                       </Button>
                       <Button
                         type="button"
+                        disabled={moneySprintPreviewMutation.isPending}
+                        onClick={() => moneySprintPreviewMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-preview-money-sprint"
+                      >
+                        {moneySprintPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                        Preview batch
+                      </Button>
+                      <Button
+                        type="button"
                         disabled={moneySprintMutation.isPending}
                         onClick={() => moneySprintMutation.mutate()}
                         className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
@@ -3076,6 +3143,84 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
                         <p className="mt-3 text-xs leading-5 text-zinc-500">{leadRadarMutation.data.mockupPolicy.qualityBar}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {moneySprintPreviewMutation.data && (
+                <Card className="mb-4 border-zinc-700 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Eye className="h-4 w-4 text-zinc-200" />
+                          Batch preview
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">{moneySprintPreviewMutation.data.safety.nextAction}</p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintPreviewMutation.data.status), "shrink-0")}>
+                        {moneySprintPreviewMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_320px]">
+                    <div className="space-y-3">
+                      {moneySprintPreviewMutation.data.acceptedSeeds.slice(0, 8).map((seed) => (
+                        <div key={`${seed.rowNumber}-${seed.businessName}`} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-white">{seed.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{seed.area} · {seed.niche} · {seed.contactChannel}</p>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-100">
+                              Grade {seed.qualification.grade} · {seed.qualification.score}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            <span className={cn("rounded border px-2 py-1", seed.mockupReady ? "border-emerald-500/30 text-emerald-100" : "border-zinc-700 text-zinc-400")}>
+                              mockup {seed.mockupReady ? "ready" : "blocked"}
+                            </span>
+                            <span className={cn("rounded border px-2 py-1", seed.draftReady ? "border-sky-500/30 text-sky-100" : "border-zinc-700 text-zinc-400")}>
+                              draft {seed.draftReady ? "ready" : "blocked"}
+                            </span>
+                          </div>
+                          {seed.missingForDraft.length > 0 && (
+                            <p className="mt-2 text-xs leading-5 text-amber-100">{seed.missingForDraft.join(" · ")}</p>
+                          )}
+                        </div>
+                      ))}
+                      {moneySprintPreviewMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Blocked rows</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintPreviewMutation.data.blockedSeeds.slice(0, 8).map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Totals</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-zinc-300">
+                          <p>Accepted: {moneySprintPreviewMutation.data.totals.accepted}</p>
+                          <p>Blocked: {moneySprintPreviewMutation.data.totals.blocked}</p>
+                          <p>Mockups: {moneySprintPreviewMutation.data.totals.mockupReady}</p>
+                          <p>Drafts: {moneySprintPreviewMutation.data.totals.draftReady}</p>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Safety</p>
+                        <div className="mt-2 space-y-2 text-sm text-zinc-300">
+                          <p>Persist: {moneySprintPreviewMutation.data.safety.persistsData ? "yes" : "no"}</p>
+                          <p>Preview files: {moneySprintPreviewMutation.data.safety.writesPreviewFiles ? "yes" : "no"}</p>
+                          <p>Outreach send: {moneySprintPreviewMutation.data.safety.sendsOutreach ? "yes" : "no"}</p>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
