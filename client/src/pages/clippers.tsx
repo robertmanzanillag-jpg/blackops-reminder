@@ -2123,6 +2123,10 @@ interface ClipperTikTokMvpProofDoctorSummary {
     accountCsv: string;
     bridgeCsv: string;
     proofIntakeHtml: string;
+    proofLinksPastePacket?: string;
+    proofLinksFilledDrop?: string;
+    proofLinksJsonDrop?: string;
+    metricoolBridgePreviewGate?: string;
   };
   totals: {
     lanes: number;
@@ -2164,6 +2168,14 @@ interface ClipperTikTokMvpProofDoctorSummary {
     }>;
   }>;
   rejected: Array<{ row: number; lane: string; source: string; reason: string }>;
+  requiredProofLinks?: Array<{
+    key: string;
+    description: string;
+  }>;
+  recommendedProofFlow?: {
+    title: string;
+    steps: string[];
+  };
   guardrails: string[];
   nextStep: string;
 }
@@ -18051,7 +18063,28 @@ export default function ClippersPage() {
                 <p>Doctor: {tiktokMvpProofDoctor.status}; ready {tiktokMvpProofDoctor.totals.ready}/{tiktokMvpProofDoctor.totals.lanes}; blocked {tiktokMvpProofDoctor.totals.blocked}; fixes {tiktokMvpProofDoctor.totals.fixQueue ?? tiktokMvpProofDoctor.fixQueue?.length ?? 0}</p>
                 <p className="mt-1 break-all">Report: {tiktokMvpProofDoctor.paths.markdown}</p>
                 {tiktokMvpProofDoctor.paths.fixQueueCsv && <p className="mt-1 break-all">Fix queue: {tiktokMvpProofDoctor.paths.fixQueueCsv}</p>}
+                {tiktokMvpProofDoctor.paths.proofLinksFilledDrop && <p className="mt-1 break-all">Proof links drop: {tiktokMvpProofDoctor.paths.proofLinksFilledDrop}</p>}
                 <p className="mt-1">{tiktokMvpProofDoctor.lanes.find((lane) => lane.status !== "ready")?.nextAction || tiktokMvpProofDoctor.nextStep}</p>
+                {(tiktokMvpProofDoctor.requiredProofLinks ?? []).length > 0 && (
+                  <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-required-proof-links">
+                    {(tiktokMvpProofDoctor.requiredProofLinks ?? []).map((item) => (
+                      <div key={item.key} className="rounded border border-sky-300/10 bg-black/20 p-2">
+                        <p className="font-medium text-sky-100">{item.key}</p>
+                        <p className="mt-1 text-sky-100/70">{item.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(tiktokMvpProofDoctor.recommendedProofFlow?.steps ?? []).length > 0 && (
+                  <div className="mt-2 rounded border border-emerald-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-recommended-proof-flow">
+                    <p className="font-medium text-emerald-100">{tiktokMvpProofDoctor.recommendedProofFlow?.title || "TikTok Metricool proof flow"}</p>
+                    <div className="mt-1 grid gap-1 text-emerald-100/70">
+                      {(tiktokMvpProofDoctor.recommendedProofFlow?.steps ?? []).slice(0, 5).map((step, index) => (
+                        <p key={`${index}-${step}`} className="break-words">{index + 1}. {step}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {(tiktokMvpProofDoctor.fixQueue ?? []).length > 0 && (
                   <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-fix-queue">
                     {(tiktokMvpProofDoctor.fixQueue ?? []).slice(0, 4).map((item) => (

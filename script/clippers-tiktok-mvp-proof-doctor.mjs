@@ -7,6 +7,11 @@ const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const outJsonPath = path.join(reportsDir, "proof-doctor.json");
 const outMarkdownPath = path.join(reportsDir, "proof-doctor.md");
 const outFixQueuePath = path.join(reportsDir, "proof-fix-queue.csv");
+const proofDropDir = path.join(rootDir, "proof-drop", "tiktok-mvp");
+const proofLinksPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
+const proofLinksFilledDropPath = path.join(proofDropDir, "proof-links-paste-packet-filled.txt");
+const proofLinksJsonDropPath = path.join(proofDropDir, "proof-links.json");
+const metricoolBridgePreviewGatePath = path.join(reportsDir, "metricool-bridge-preview-gate.json");
 
 function parseArgs(argv = process.argv.slice(2)) {
   const parsed = {
@@ -199,6 +204,14 @@ function renderMarkdown(summary) {
     "",
     ...(summary.fixQueue.length ? summary.fixQueue.map((row) => `- ${row.lane}: edit ${row.filePath} row ${row.row}, column ${row.column}; ${row.nextAction}`) : ["- none"]),
     "",
+    "## Recommended Proof Flow",
+    "",
+    ...summary.recommendedProofFlow.steps.map((step) => `- ${step}`),
+    "",
+    "## Required Proof Links",
+    "",
+    ...summary.requiredProofLinks.map((item) => `- ${item.key}: ${item.description}`),
+    "",
     "## Guardrails",
     "",
     ...summary.guardrails.map((item) => `- ${item}`),
@@ -231,6 +244,10 @@ async function main() {
     accountCsv: closeout?.accountCsvPath || path.join(rootDir, "account-permission-mvp-account-evidence.csv"),
     bridgeCsv: closeout?.bridgeCsvPath || path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv"),
     proofIntakeHtml: proofIntake?.paths?.html || proofIntake?.htmlPath || path.join(reportsDir, "proof-intake-pack.html"),
+    proofLinksPastePacket: proofLinksPastePacketPath,
+    proofLinksFilledDrop: proofLinksFilledDropPath,
+    proofLinksJsonDrop: proofLinksJsonDropPath,
+    metricoolBridgePreviewGate: metricoolBridgePreviewGatePath,
   };
   const rawRows = Array.isArray(closeout?.rows) ? closeout.rows : [];
   const fixQueue = previewFailed ? [] : buildFixQueue(rejected, rawRows, paths);
@@ -260,6 +277,34 @@ async function main() {
     lanes,
     rejected,
     fixQueue,
+    requiredProofLinks: [
+      {
+        key: "sports-daily:tiktok.accountOwnershipProofUrl",
+        description: "Real public/non-secret HTTPS proof that the Sports Daily TikTok account is controlled by Robert/the team.",
+      },
+      {
+        key: "sports-daily:tiktok.metricoolConnectionProofUrl",
+        description: "Real public/non-secret HTTPS Metricool proof URL showing Sports Daily TikTok is connected in Metricool.",
+      },
+      {
+        key: "meme-radar:tiktok.accountOwnershipProofUrl",
+        description: "Real public/non-secret HTTPS proof that the Meme Radar TikTok account is controlled by Robert/the team.",
+      },
+      {
+        key: "meme-radar:tiktok.metricoolConnectionProofUrl",
+        description: "Real public/non-secret HTTPS Metricool proof URL showing Meme Radar TikTok is connected in Metricool.",
+      },
+    ],
+    recommendedProofFlow: {
+      title: "TikTok Metricool proof-links bridge",
+      steps: [
+        `Fill ${proofLinksPastePacketPath} and save the completed copy as ${proofLinksFilledDropPath}, or write the same four URLs to ${proofLinksJsonDropPath}.`,
+        "Use Safe ingest drop or Save proof links so the app validates proof URLs and notes before touching any bridge CSV.",
+        `Let quick-fill generate the Metricool bridge CSV at ${paths.bridgeCsv} only from accepted non-secret proof links.`,
+        "Use Load bridge CSV, then Preview bridge rows; Import bridge rows stays blocked until the preview gate is clean and current.",
+        "After import, rerun proof doctor/readiness verifier before any closeout apply step.",
+      ],
+    },
     guardrails: [
       "Doctor runs preview only; it never applies evidence.",
       "Metricool remains approval_required and direct social APIs remain unnecessary for this TikTok MVP.",
@@ -270,7 +315,7 @@ async function main() {
       ? "Run TikTok MVP evidence closeout apply only after manually confirming every proof URL is real and non-secret."
       : previewFailed
         ? "Fix the closeout preview command, then rerun proof doctor; stale reports are ignored."
-        : "Open the proof intake HTML, replace blocked proof rows, then rerun this doctor before applying closeout.",
+        : "Fill the proof links drop with four real non-secret proof URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));

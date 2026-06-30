@@ -970,6 +970,15 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
   assert.equal(doctor.totals.blocked, 2);
   assert.equal(doctor.totals.fixQueue, 4);
   assert.match(doctor.paths.fixQueueCsv, /proof-fix-queue\.csv$/);
+  assert.match(doctor.paths.proofLinksFilledDrop, /proof-links-paste-packet-filled\.txt$/);
+  assert.match(doctor.paths.proofLinksJsonDrop, /proof-links\.json$/);
+  assert.match(doctor.paths.metricoolBridgePreviewGate, /metricool-bridge-preview-gate\.json$/);
+  assert.equal(doctor.recommendedProofFlow.title, "TikTok Metricool proof-links bridge");
+  assert.ok(doctor.recommendedProofFlow.steps.some((step) => step.includes("Safe ingest drop")));
+  assert.ok(doctor.recommendedProofFlow.steps.some((step) => step.includes("Preview bridge rows")));
+  assert.ok(doctor.requiredProofLinks.some((item) => item.key === "sports-daily:tiktok.metricoolConnectionProofUrl"));
+  assert.ok(doctor.requiredProofLinks.some((item) => item.key === "meme-radar:tiktok.accountOwnershipProofUrl"));
+  assert.match(doctor.nextStep, /proof links drop with four real non-secret proof URLs/);
   assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.requiredValue.includes("metricool.com")));
   assert.ok(doctor.lanes.every((lane) => lane.nextAction && lane.status === "blocked"));
   assert.doesNotMatch(JSON.stringify(doctor), /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
@@ -1260,6 +1269,7 @@ test("TikTok MVP proof doctor creates fix queue for missing account and bridge r
     const doctor = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-doctor.json"), "utf8"));
     assert.equal(doctor.totals.closeoutRejected, 2);
     assert.equal(doctor.totals.fixQueue, 4);
+    assert.ok(doctor.recommendedProofFlow.steps.some((step) => step.includes("Metricool bridge CSV")));
     assert.ok(doctor.fixQueue.some((row) => row.lane === "meme-radar:tiktok" && row.source === "account" && row.reason === "missing accepted account ownership/security proof"));
     assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.reason === "missing accepted Metricool bridge proof"));
   } finally {
@@ -1335,6 +1345,10 @@ test("TikTok MVP proof doctor UI tolerates pre-fix-queue reports", async () => {
   assert.match(page, /tiktokMvpProofDoctor\.totals\.fixQueue \?\? tiktokMvpProofDoctor\.fixQueue\?\.length \?\? 0/);
   assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.length > 0/);
   assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.slice\(0, 4\)/);
+  assert.match(page, /clippers-tiktok-mvp-required-proof-links/);
+  assert.match(page, /clippers-tiktok-mvp-recommended-proof-flow/);
+  assert.match(page, /tiktokMvpProofDoctor\.paths\.proofLinksFilledDrop/);
+  assert.match(page, /tiktokMvpProofDoctor\.recommendedProofFlow\?\.steps/);
 });
 
 test("TikTok MVP local verification is wired as a blocked guardrail check", async () => {
