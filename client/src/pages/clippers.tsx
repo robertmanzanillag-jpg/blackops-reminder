@@ -18189,7 +18189,7 @@ export default function ClippersPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-cyan-100">Paste proof packet</p>
-                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes, each with TikTok ownership proof plus Metricool URL.</p>
+                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes. A clean Metricool/Drive proof can count as ownership/control when it shows the TikTok profile connected.</p>
                     </div>
                     <Button
                       type="button"
@@ -18304,7 +18304,7 @@ export default function ClippersPage() {
                   <Textarea
                     value={tiktokMvpProofLinksPasteText}
                     onChange={(event) => setTiktokMvpProofLinksPasteText(event.target.value)}
-                    placeholder={"SPORT ownership: https://...\nSPORT Metricool: https://app.metricool.com/...\nmemes ownership: https://...\nmemes Metricool: https://app.metricool.com/..."}
+                    placeholder={"SPORT Metricool: https://app.metricool.com/...\nmemes Metricool: https://app.metricool.com/...\nOptional ownership URLs can be separate Drive/Docs proof links."}
                     className="mt-2 min-h-28 border-cyan-300/20 bg-black/40 font-mono text-xs text-cyan-50"
                     data-testid="clippers-tiktok-mvp-proof-links-paste-textarea"
                   />
@@ -18398,7 +18398,7 @@ export default function ClippersPage() {
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
                   />
-                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private keys.</p>
+                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL or Google Drive/Docs evidence URL. It can also satisfy ownership/control when the proof clearly shows the TikTok profile connected. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private keys.</p>
                   {tiktokMvpProofLinksPreview && (
                     <div className={cn(
                       "mt-2 rounded-md border bg-black/20 p-2",

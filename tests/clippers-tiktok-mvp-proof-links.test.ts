@@ -60,6 +60,36 @@ test("TikTok MVP proof links parser accepts explicit packet fields", () => {
   assert.doesNotMatch(parsed.proofLinksText, /ready_to_send|realPublishEnabled\s*:\s*true|publish/i);
 });
 
+test("TikTok MVP proof links parser can reuse clean Metricool proof as account control proof", () => {
+  const parsed = extractClipperTikTokMvpProofLinksPaste([
+    "SPORT Metricool connected proof https://app.metricool.com/planner/sports-daily-tiktok-proof",
+    "memes Metricool connected proof https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+  ].join("\n"));
+
+  assert.equal(parsed.status, "ready_for_proof_links_preview");
+  assert.equal(parsed.directSocialApisRequired, false);
+  assert.equal(parsed.realPublishEnabled, false);
+  assert.equal(parsed.proofLinksPreview.readyForProofDrop, true);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.readyProofFields, 8);
+  assert.equal(
+    parsed.proofLinks.lanes["sports-daily:tiktok"].accountOwnershipProofUrl,
+    "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+  );
+  assert.equal(
+    parsed.proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl,
+    "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+  );
+  assert.match(
+    parsed.proofLinks.lanes["sports-daily:tiktok"].accountNotes,
+    /Metricool connection proof verifies Robert-controlled TikTok ownership/i,
+  );
+  assert.equal(
+    parsed.proofLinks.lanes["meme-radar:tiktok"].accountOwnershipProofUrl,
+    "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+  );
+  assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
+});
+
 test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "sports-daily:tiktok.accountOwnershipProofUrl=https://drive.google.com/file/d/sports-daily-tiktok-proof/view?token=abc123",

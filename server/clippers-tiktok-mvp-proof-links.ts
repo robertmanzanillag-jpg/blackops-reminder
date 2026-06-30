@@ -183,15 +183,21 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
     const laneText = laneLines.join("\n");
     const scopedUrls = Array.from(laneText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
     const candidateUrls = scopedUrls.length ? scopedUrls : allUrls;
-    const accountOwnershipProofUrl = explicitLane.accountOwnershipProofUrl || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolProofUrl(url)) || "";
-    const metricoolConnectionProofUrl = explicitLane.metricoolConnectionProofUrl || candidateUrls.find((url) => safeClipperMetricoolConnectionProofUrl(url) && url !== accountOwnershipProofUrl) || "";
+    const metricoolConnectionProofUrl = explicitLane.metricoolConnectionProofUrl || candidateUrls.find((url) => safeClipperMetricoolConnectionProofUrl(url)) || "";
+    const accountOwnershipProofUrl = explicitLane.accountOwnershipProofUrl
+      || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolConnectionProofUrl(url))
+      || metricoolConnectionProofUrl
+      || "";
+    const usesMetricoolProofAsAccountControl = Boolean(accountOwnershipProofUrl && accountOwnershipProofUrl === metricoolConnectionProofUrl && !explicitLane.accountOwnershipProofUrl);
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
     if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
     if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com connection proof URL.`);
     return [spec.key, {
       accountOwnershipProofUrl,
       metricoolConnectionProofUrl,
-      accountNotes: explicitLane.accountNotes || `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`,
+      accountNotes: explicitLane.accountNotes || (usesMetricoolProofAsAccountControl
+        ? `${spec.metricoolBrandName} Metricool connection proof verifies Robert-controlled TikTok ownership for ${spec.accountName} without secrets.`
+        : `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`),
       metricoolNotes: explicitLane.metricoolNotes || `${spec.metricoolBrandName} TikTok profile connected in Metricool approval_required mode without secrets.`,
     }];
   }));

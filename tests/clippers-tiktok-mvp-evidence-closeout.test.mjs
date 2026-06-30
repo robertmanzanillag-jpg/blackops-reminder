@@ -1663,6 +1663,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(pastePacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(pastePacket, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
   assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com\/\.\.\. or Google Drive\/Docs evidence URLs/);
   assert.doesNotMatch(pastePacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 
@@ -1670,6 +1671,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(oneScreen, /TikTok MVP proof fill - one screen/);
   assert.match(oneScreen, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(oneScreen, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
   assert.match(oneScreen, /Next safe button: save_proof_links/);
   assert.match(oneScreen, /This file does not apply evidence, schedule posts, publish, or enable direct social APIs/);
   assert.doesNotMatch(oneScreen, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);

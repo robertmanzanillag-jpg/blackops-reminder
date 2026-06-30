@@ -132,6 +132,7 @@ function buildCollectionPackets(proofDrop) {
         acceptedProof: [
           `Public/non-secret proof that Robert controls ${lane.handle}.`,
           "Ownership or security screen/ticket stored as a non-secret Drive/doc URL.",
+          `Fast path: the same Metricool/Drive proof can be used here if it clearly shows ${lane.metricoolBrandName} connected to ${lane.handle} under Robert control.`,
           "Notes must be 20+ characters and mention ownership/security verification.",
         ],
         rejectIf: [
@@ -301,6 +302,7 @@ function renderProofLinksPastePacket() {
     "# TikTok MVP proof-links paste packet",
     "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
     "# Metricool proof URLs must be https://*.metricool.com/... or Google Drive/Docs evidence URLs",
+    "# Fast path: if the Metricool/Drive proof clearly shows the TikTok profile connected under Robert control, you may fill only metricoolConnectionProofUrl and the app will reuse it as ownership/control proof.",
     "",
     ...lanes.flatMap((lane) => [
       `${lane.key}.accountOwnershipProofUrl=`,
@@ -324,6 +326,7 @@ function renderOneScreenProofFill(summary) {
     "Required:",
     "- Account ownership proof can be a safe HTTPS Drive/doc/proof URL showing account ownership/security review.",
     "- Metricool connection proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL showing the TikTok profile connected in Metricool.",
+    "- Fast path: if the Metricool/Drive proof clearly shows the TikTok profile connected under Robert control, fill the metricoolConnectionProofUrl line and the app can reuse it as ownership/control proof.",
     "- Notes already exist in the paste packet; keep them concrete and 20+ characters.",
     "",
     "Never paste:",
