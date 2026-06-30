@@ -2804,6 +2804,49 @@ interface ClipperTikTokMvpProofHandoffSummary {
   guardrails: string[];
 }
 
+interface ClipperTikTokMvpAutopilotBoundarySummary {
+  status: "blocked_external_account_proof" | "ready_for_operator_apply_review" | "needs_internal_followup";
+  launchDecision: "blocked_before_metricool" | "ready_for_metricool_approval_review" | "blocked_internal_followup";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  codexCanCreateExternalAccounts: boolean;
+  codexCanInventPermissions: boolean;
+  codexDeliverables: Array<{
+    id: string;
+    status: "done" | "needs_review" | "blocked_or_not_run";
+    evidence: string;
+    note: string;
+  }>;
+  externalActionsRequired: Array<{
+    id: string;
+    owner: string;
+    status: "needs_real_external_proof" | "waiting_manual_confirmation";
+    lane?: string;
+    field?: string;
+    action: string;
+    evidenceNeeded: string;
+    exactPasteLine?: string;
+  }>;
+  totals: {
+    codexDeliverables: number;
+    codexDeliverablesDone: number;
+    externalActionsRequired: number;
+    minimumProofUrlsNeeded: number;
+    openProofFixes: number;
+    refreshFailures: number;
+  };
+  guardrails: string[];
+  nextStep: string;
+  paths: {
+    json: string;
+    markdown: string;
+    csv: string;
+  };
+}
+
 interface ClipperTikTokMvpCloseoutWizardSummary {
   status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence";
   launchDecision: "ready_for_confirmed_apply_only" | "blocked_before_apply";
@@ -10998,6 +11041,16 @@ export default function ClippersPage() {
       return data.tiktokMvpCloseoutWizard as ClipperTikTokMvpCloseoutWizardSummary;
     },
   });
+  const { data: tiktokMvpAutopilotBoundary } = useQuery<ClipperTikTokMvpAutopilotBoundarySummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-autopilot-boundary"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-autopilot-boundary");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP autopilot boundary");
+      return data.tiktokMvpAutopilotBoundary as ClipperTikTokMvpAutopilotBoundarySummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -12147,6 +12200,44 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar closeout wizard", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpAutopilotBoundaryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-autopilot-boundary", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP autopilot boundary");
+      return data as {
+        tiktokMvpAutopilotBoundary: ClipperTikTokMvpAutopilotBoundarySummary;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary | null;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
+        tiktokMvpLocalVerification: ClipperTikTokMvpLocalVerificationSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-autopilot-boundary"], data.tiktokMvpAutopilotBoundary);
+      if (data.tiktokMvpProofHandoff) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      }
+      if (data.tiktokMvpCloseoutWizard) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
+      if (data.tiktokMvpLocalVerification) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-local-verification"], data.tiktokMvpLocalVerification);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
+      toast({
+        title: data.tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review" ? "Boundary listo" : "Boundary bloqueado",
+        description: data.tiktokMvpAutopilotBoundary.nextStep,
+        variant: data.tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar autopilot boundary", description: error.message, variant: "destructive" });
     },
   });
 
@@ -16677,6 +16768,7 @@ export default function ClippersPage() {
     || tiktokMvpProofUnblockerMutation.isPending
     || tiktokMvpLocalVerificationMutation.isPending
     || tiktokMvpCloseoutWizardMutation.isPending
+    || tiktokMvpAutopilotBoundaryMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const buildTikTokMvpMetricoolFastPathPaste = () => {
@@ -17986,6 +18078,18 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpAutopilotBoundaryMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-orange-300/20 bg-transparent text-orange-100 hover:bg-orange-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-autopilot-boundary-button"
+              >
+                {tiktokMvpAutopilotBoundaryMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                Boundary
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
@@ -18832,6 +18936,57 @@ export default function ClippersPage() {
                   <p className="break-all">Unblock CSV: {tiktokMvpProofHandoff.paths.unblockBoardCsv}</p>
                   {tiktokMvpProofHandoff.paths.oneScreenTxt && <p className="break-all">One-screen guide: {tiktokMvpProofHandoff.paths.oneScreenTxt}</p>}
                   <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
+                </div>
+              </div>
+            )}
+            {tiktokMvpAutopilotBoundary && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-orange-300/15 text-orange-100/80"
+              )} data-testid="clippers-tiktok-mvp-autopilot-boundary-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-orange-300/30 bg-orange-300/10 text-orange-100"
+                  )}>
+                    boundary {tiktokMvpAutopilotBoundary.status}
+                  </Badge>
+                  <span>decision {tiktokMvpAutopilotBoundary.launchDecision}</span>
+                  <span>Codex {tiktokMvpAutopilotBoundary.totals.codexDeliverablesDone}/{tiktokMvpAutopilotBoundary.totals.codexDeliverables}</span>
+                  <span>external {tiktokMvpAutopilotBoundary.totals.externalActionsRequired}</span>
+                  <span>URLs {tiktokMvpAutopilotBoundary.totals.minimumProofUrlsNeeded}</span>
+                  <span>fixes {tiktokMvpAutopilotBoundary.totals.openProofFixes}</span>
+                  {tiktokMvpAutopilotBoundary.totals.refreshFailures > 0 && <span>refresh failures {tiktokMvpAutopilotBoundary.totals.refreshFailures}</span>}
+                </div>
+                <p className="mt-1">{tiktokMvpAutopilotBoundary.nextStep}</p>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-autopilot-boundary-deliverables">
+                  {tiktokMvpAutopilotBoundary.codexDeliverables.map((item) => (
+                    <div key={item.id} className="rounded border border-white/10 bg-black/20 p-2">
+                      <p className={cn("font-medium", item.status === "done" ? "text-emerald-100" : "text-orange-100")}>{item.id}: {item.status}</p>
+                      <p className="mt-1 text-zinc-400">{item.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-autopilot-boundary-external-actions">
+                  {tiktokMvpAutopilotBoundary.externalActionsRequired.slice(0, 4).map((item) => (
+                    <div key={item.id} className="rounded border border-orange-300/10 bg-black/20 p-2">
+                      <p className="font-medium text-orange-100">{item.id}: {item.status}</p>
+                      {item.exactPasteLine && <p className="mt-1 font-mono text-[10px] text-zinc-300">{item.exactPasteLine}</p>}
+                      <p className="mt-1 text-zinc-400">{item.evidenceNeeded}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Creates external accounts: {tiktokMvpAutopilotBoundary.codexCanCreateExternalAccounts ? "yes" : "no"}</p>
+                  <p>Invents permissions: {tiktokMvpAutopilotBoundary.codexCanInventPermissions ? "yes" : "no"}</p>
+                  <p>Real publish: {tiktokMvpAutopilotBoundary.realPublishEnabled ? "enabled" : "disabled"}</p>
+                  <p>Direct APIs: {tiktokMvpAutopilotBoundary.directSocialApisRequired ? "required" : "not required"}</p>
+                  <p className="break-all">Report: {tiktokMvpAutopilotBoundary.paths.markdown}</p>
+                  <p className="break-all">CSV: {tiktokMvpAutopilotBoundary.paths.csv}</p>
                 </div>
               </div>
             )}

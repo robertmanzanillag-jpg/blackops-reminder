@@ -886,6 +886,7 @@ export async function registerRoutes(
   const runClipperTikTokMvpProofHandoff = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-handoff.mjs", "TikTok MVP proof handoff");
   const runClipperTikTokMvpLocalVerification = () => runClipperJsonScript("script/clippers-tiktok-mvp-local-verification.mjs", "TikTok MVP local verification");
   const runClipperTikTokMvpCloseoutWizard = () => runClipperJsonScript("script/clippers-tiktok-mvp-closeout-wizard.mjs", "TikTok MVP closeout wizard");
+  const runClipperTikTokMvpAutopilotBoundary = () => runClipperJsonScript("script/clippers-tiktok-mvp-autopilot-boundary.mjs", "TikTok MVP autopilot boundary");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -947,6 +948,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpCloseoutWizard = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/closeout-wizard.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpAutopilotBoundary = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/autopilot-boundary.json", "utf8");
     return JSON.parse(raw);
   };
   const saveClipperTikTokMvpProofLinksAndRefresh = async (parsed: any) => {
@@ -3901,6 +3906,33 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP closeout wizard" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-autopilot-boundary", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpAutopilotBoundary: await readClipperTikTokMvpAutopilotBoundary() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP autopilot boundary has not been prepared" : "TikTok MVP autopilot boundary could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-autopilot-boundary", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpAutopilotBoundary();
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      res.json({
+        tiktokMvpAutopilotBoundary: await readClipperTikTokMvpAutopilotBoundary(),
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
+        tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification().catch(() => null),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
+        run,
+        tiktokNextActionRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP autopilot boundary" });
     }
   });
 

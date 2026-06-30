@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T20:24:36.656Z",
+  "generatedAt": "2026-06-30T20:39:56.216Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -84,6 +84,7 @@
     "clippers:tiktok-mvp-proof-unblocker": "node script/clippers-tiktok-mvp-proof-unblocker.mjs",
     "clippers:tiktok-mvp-proof-handoff": "node script/clippers-tiktok-mvp-proof-handoff.mjs",
     "clippers:tiktok-mvp-local-verification": "node script/clippers-tiktok-mvp-local-verification.mjs",
+    "clippers:tiktok-mvp-autopilot-boundary": "node script/clippers-tiktok-mvp-autopilot-boundary.mjs",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
@@ -91,13 +92,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 431,
-    "filesIndexed": 363,
-    "imports": 1368,
-    "routes": 97,
-    "symbols": 8970
+    "filesVisible": 432,
+    "filesIndexed": 364,
+    "imports": 1371,
+    "routes": 99,
+    "symbols": 9016
   },
   "directories": {
+    "script": {
+      "files": 66,
+      "indexed": 64,
+      "kinds": {
+        "script": 66
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -153,13 +161,6 @@
       "indexed": 10,
       "kinds": {
         "docs": 11
-      }
-    },
-    "script": {
-      "files": 65,
-      "indexed": 63,
-      "kinds": {
-        "script": 65
       }
     },
     "scripts": {
@@ -5979,6 +5980,63 @@
         "totals",
         "validateOperatorNotes",
         "workbookById"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-tiktok-mvp-autopilot-boundary.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "boardRows",
+        "buildDeliverables",
+        "buildExternalActions",
+        "codexDeliverables",
+        "codexReady",
+        "collectionCsv",
+        "commands",
+        "commandsPass",
+        "countValue",
+        "csvCell",
+        "deliverables",
+        "doctorFixQueue",
+        "external",
+        "externalActionsRequired",
+        "fallbackRows",
+        "header",
+        "launchDecision",
+        "main",
+        "missingByHandoff",
+        "missingProof",
+        "numeric",
+        "oneScreen",
+        "openFixes",
+        "opsBlocked",
+        "pastePacket",
+        "paths",
+        "proofMissing",
+        "proofReportsDir",
+        "raw",
+        "readJson",
+        "readinessFailed",
+        "refreshFailed",
+        "refreshHasFailure",
+        "refreshRuns",
+        "renderCsv",
+        "renderMarkdown",
+        "reportsDir",
+        "result",
+        "rootDir",
+        "rows",
+        "runJson",
+        "scopeIsTikTokOnly",
+        "status",
+        "summary"
       ],
       "routes": []
     },
@@ -14531,6 +14589,8 @@
         "apply",
         "applyOutput",
         "applyRoute",
+        "autopilotBoundaryPath",
+        "autopilotBoundaryRoute",
         "before",
         "bridge",
         "bridgeAfter",
@@ -14656,6 +14716,7 @@
         "/api/clippers/operational-readiness",
         "/api/clippers/parse-tiktok-mvp-proof-links-paste",
         "/api/clippers/prepare-publisher-execution-queue",
+        "/api/clippers/prepare-tiktok-mvp-autopilot-boundary",
         "/api/clippers/prepare-tiktok-mvp-closeout-wizard",
         "/api/clippers/prepare-tiktok-mvp-local-verification",
         "/api/clippers/prepare-tiktok-mvp-proof-doctor",
@@ -14670,6 +14731,7 @@
         "/api/clippers/preview-tiktok-mvp-proof-links",
         "/api/clippers/record-metricool-bridge-evidence-batch",
         "/api/clippers/save-tiktok-mvp-proof-links",
+        "/api/clippers/tiktok-mvp-autopilot-boundary",
         "/api/clippers/tiktok-mvp-closeout-wizard",
         "/api/clippers/tiktok-mvp-evidence-closeout",
         "/api/clippers/tiktok-mvp-local-verification",

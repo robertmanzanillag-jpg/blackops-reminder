@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T20:24:36.656Z
+Generated: 2026-06-30T20:39:56.216Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 97 | 8970 |
+| 432 | 364 | 1371 | 99 | 9016 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `client/src` | 108 | 107 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
 | `server` | 95 | 91 | server:95 |
-| `script` | 65 | 63 | script:65 |
+| `script` | 66 | 64 | script:66 |
 | `tests` | 61 | 58 | test:61 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
@@ -53,7 +53,7 @@ Package: `rest-express`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
 - `server/shopify-routes.ts`: `/api/shopify/install`, `/api/shopify/oauth/callback`, `/api/shopify/oauth/start`, `/api/shopify/oauth/status`
 - `server/telegram-routes.ts`: `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/go-live/evidence`, `/api/ceo/readiness`, `/api/telegram/configure`, `/api/telegram/disconnect`, `/api/telegram/health`, `/api/telegram/setup-webhook`, `/api/telegram/status`, `/api/telegram/test`, `/api/telegram/test-ceo-brief`, `/api/telegram/toggle`, `/api/telegram/webhook`, `/api/telegram/webhook-status`
-- `tests/clippers-tiktok-mvp-evidence-closeout.test.mjs`: `/api/clippers/apply-tiktok-mvp-evidence-closeout`, `/api/clippers/apply-tiktok-mvp-proof-intake-import`, `/api/clippers/apply-tiktok-mvp-proof-quick-fill`, `/api/clippers/create-tiktok-mvp-proof-links-drop-starter`, `/api/clippers/import-tiktok-mvp-proof-links-drop`, `/api/clippers/ingest-tiktok-mvp-proof-links-drop`, `/api/clippers/load-metricool-bridge-evidence-csv`, `/api/clippers/metricool-bridge-evidence-csv-status`, `/api/clippers/metricool-bridge-preview-gate`, `/api/clippers/operational-readiness`, `/api/clippers/parse-tiktok-mvp-proof-links-paste`, `/api/clippers/prepare-publisher-execution-queue`, `/api/clippers/prepare-tiktok-mvp-closeout-wizard`, `/api/clippers/prepare-tiktok-mvp-local-verification`, `/api/clippers/prepare-tiktok-mvp-proof-doctor`, `/api/clippers/prepare-tiktok-mvp-proof-drop-kit`, `/api/clippers/prepare-tiktok-mvp-proof-handoff`, `/api/clippers/prepare-tiktok-mvp-proof-intake-pack`, `/api/clippers/prepare-tiktok-mvp-proof-refresh`, `/api/clippers/prepare-tiktok-mvp-proof-unblocker`, `/api/clippers/preview-metricool-bridge-evidence-batch`, `/api/clippers/preview-tiktok-mvp-evidence-closeout`, `/api/clippers/preview-tiktok-mvp-proof-intake-import`, `/api/clippers/preview-tiktok-mvp-proof-links`, `/api/clippers/record-metricool-bridge-evidence-batch`, `/api/clippers/save-tiktok-mvp-proof-links`, `/api/clippers/tiktok-mvp-closeout-wizard`, `/api/clippers/tiktok-mvp-evidence-closeout`, `/api/clippers/tiktok-mvp-local-verification`, `/api/clippers/tiktok-mvp-proof-doctor`, `/api/clippers/tiktok-mvp-proof-drop-kit`, `/api/clippers/tiktok-mvp-proof-handoff`, `/api/clippers/tiktok-mvp-proof-intake-import`, `/api/clippers/tiktok-mvp-proof-links-drop-status`, `/api/clippers/tiktok-mvp-proof-quick-fill`, `/api/clippers/tiktok-mvp-proof-refresh`, `/api/clippers/tiktok-mvp-proof-unblocker`
+- `tests/clippers-tiktok-mvp-evidence-closeout.test.mjs`: `/api/clippers/apply-tiktok-mvp-evidence-closeout`, `/api/clippers/apply-tiktok-mvp-proof-intake-import`, `/api/clippers/apply-tiktok-mvp-proof-quick-fill`, `/api/clippers/create-tiktok-mvp-proof-links-drop-starter`, `/api/clippers/import-tiktok-mvp-proof-links-drop`, `/api/clippers/ingest-tiktok-mvp-proof-links-drop`, `/api/clippers/load-metricool-bridge-evidence-csv`, `/api/clippers/metricool-bridge-evidence-csv-status`, `/api/clippers/metricool-bridge-preview-gate`, `/api/clippers/operational-readiness`, `/api/clippers/parse-tiktok-mvp-proof-links-paste`, `/api/clippers/prepare-publisher-execution-queue`, `/api/clippers/prepare-tiktok-mvp-autopilot-boundary`, `/api/clippers/prepare-tiktok-mvp-closeout-wizard`, `/api/clippers/prepare-tiktok-mvp-local-verification`, `/api/clippers/prepare-tiktok-mvp-proof-doctor`, `/api/clippers/prepare-tiktok-mvp-proof-drop-kit`, `/api/clippers/prepare-tiktok-mvp-proof-handoff`, `/api/clippers/prepare-tiktok-mvp-proof-intake-pack`, `/api/clippers/prepare-tiktok-mvp-proof-refresh`, `/api/clippers/prepare-tiktok-mvp-proof-unblocker`, `/api/clippers/preview-metricool-bridge-evidence-batch`, `/api/clippers/preview-tiktok-mvp-evidence-closeout`, `/api/clippers/preview-tiktok-mvp-proof-intake-import`, `/api/clippers/preview-tiktok-mvp-proof-links`, `/api/clippers/record-metricool-bridge-evidence-batch`, `/api/clippers/save-tiktok-mvp-proof-links`, `/api/clippers/tiktok-mvp-autopilot-boundary`, `/api/clippers/tiktok-mvp-closeout-wizard`, `/api/clippers/tiktok-mvp-evidence-closeout`, `/api/clippers/tiktok-mvp-local-verification`, `/api/clippers/tiktok-mvp-proof-doctor`, `/api/clippers/tiktok-mvp-proof-drop-kit`, `/api/clippers/tiktok-mvp-proof-handoff`, `/api/clippers/tiktok-mvp-proof-intake-import`, `/api/clippers/tiktok-mvp-proof-links-drop-status`, `/api/clippers/tiktok-mvp-proof-quick-fill`, `/api/clippers/tiktok-mvp-proof-refresh`, `/api/clippers/tiktok-mvp-proof-unblocker`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
@@ -171,6 +171,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-evidence-checklist.mjs` (script; 38 symbols, 2 imports)
 - `script/clippers-tiktok-external-closeout-session.mjs` (script; 56 symbols, 2 imports)
 - `script/clippers-tiktok-launch-control.mjs` (script; 63 symbols, 2 imports)
+- `script/clippers-tiktok-mvp-autopilot-boundary.mjs` (script; 44 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 45 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 68 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 46 symbols, 3 imports)
@@ -196,7 +197,6 @@ Package: `rest-express`
 - `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
 - `script/import-developer-health-inventory.ts` (script; 14 symbols, 4 imports)
 - `script/metricool-plan.ts` (script; 3 symbols, 1 imports)
-- `script/migrate-user.ts` (script; 16 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -25,6 +25,7 @@ const proofUnblockerPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-
 const proofQuickFillPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-quick-fill.mjs");
 const proofHandoffPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-handoff.mjs");
 const localVerificationPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-local-verification.mjs");
+const autopilotBoundaryPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-autopilot-boundary.mjs");
 const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json");
 const combinedProofCsvPath = path.join(tmpDir, "tiktok-mvp-combined-proof-test.csv");
 const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/combined-proof-intake.csv");
@@ -318,6 +319,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-local-verification"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-closeout-wizard"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-closeout-wizard"/);
+  assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-autopilot-boundary"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-autopilot-boundary"/);
+  assert.equal(await readFile(autopilotBoundaryPath, "utf8").then((source) => source.includes("Authorization from Robert is not treated as account ownership")), true);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-evidence-closeout"/);
@@ -452,6 +456,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   const closeoutWizardRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/prepare-tiktok-mvp-closeout-wizard"',
+    'app.get("/api/clippers/tiktok-mvp-autopilot-boundary"',
+  );
+  const autopilotBoundaryRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/prepare-tiktok-mvp-autopilot-boundary"',
     'app.get("/api/clippers/tiktok-mvp-proof-doctor"',
   );
   const operatorButtonHelper = requiredSlice(
@@ -653,6 +662,13 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(closeoutWizardRoute, /script\/clippers-tiktok-next-action\.mjs/);
   assert.match(closeoutWizardRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(closeoutWizardRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
+  assert.match(autopilotBoundaryRoute, /runClipperTikTokMvpAutopilotBoundary/);
+  assert.match(autopilotBoundaryRoute, /readClipperTikTokMvpAutopilotBoundary/);
+  assert.match(autopilotBoundaryRoute, /readClipperTikTokMvpProofHandoff/);
+  assert.match(autopilotBoundaryRoute, /readClipperTikTokMvpCloseoutWizard/);
+  assert.match(autopilotBoundaryRoute, /readClipperTikTokMvpLocalVerification/);
+  assert.match(autopilotBoundaryRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.doesNotMatch(autopilotBoundaryRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   const doctorRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/prepare-tiktok-mvp-proof-doctor"',
@@ -699,6 +715,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /prepare-clippers-tiktok-mvp-proof-handoff-button/);
   assert.match(page, /prepare-clippers-tiktok-mvp-local-verification-button/);
   assert.match(page, /prepare-clippers-tiktok-mvp-closeout-wizard-button/);
+  assert.match(page, /prepare-clippers-tiktok-mvp-autopilot-boundary-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-proof-quick-fill-button/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-quick-fill-button/);
   assert.match(page, /preview-clippers-tiktok-mvp-proof-intake-import-button/);
@@ -709,6 +726,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /ClipperTikTokMvpEvidenceCloseoutPreviewGateSummary/);
   assert.match(page, /tiktokMvpEvidenceCloseoutPreviewGate/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
+  assert.match(page, /clippers-tiktok-mvp-autopilot-boundary-panel/);
+  assert.match(page, /clippers-tiktok-mvp-autopilot-boundary-deliverables/);
+  assert.match(page, /clippers-tiktok-mvp-autopilot-boundary-external-actions/);
+  assert.match(page, /codexCanCreateExternalAccounts/);
+  assert.match(page, /codexCanInventPermissions/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-preview-gate/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-pack-paths/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-current-blockers/);
@@ -1782,4 +1804,61 @@ test("TikTok MVP local verification cannot apply evidence or enable publishing",
   assert.doesNotMatch(source, /ready_to_send/);
   assert.match(source, /realPublishEnabled:\s*false/);
   assert.match(source, /directSocialApisRequired:\s*false/);
+});
+
+test("TikTok MVP autopilot boundary separates Codex-ready work from external proof work", async () => {
+  const syntaxResult = spawnSync(process.execPath, ["--check", autopilotBoundaryPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(syntaxResult.status, 0, syntaxResult.stderr || syntaxResult.stdout);
+
+  const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-autopilot-boundary.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "blocked_external_account_proof");
+  assert.equal(output.launchDecision, "blocked_before_metricool");
+  assert.equal(output.minimumProofUrlsNeeded, 2);
+  assert.ok(output.externalActionsRequired >= 2);
+
+  const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/autopilot-boundary.json"), "utf8"));
+  assert.equal(report.realPublishEnabled, false);
+  assert.equal(report.directSocialApisRequired, false);
+  assert.equal(report.codexCanCreateExternalAccounts, false);
+  assert.equal(report.codexCanInventPermissions, false);
+  assert.equal(report.launchDecision === "ready_for_metricool_approval_review", report.status === "ready_for_operator_apply_review");
+  assert.equal(report.codexDeliverables.find((item) => item.id === "tiktok_only_metricool_scope")?.status, "done");
+  assert.equal(report.totals.refreshFailures, 0);
+  assert.match(report.guardrails.join("\n"), /Authorization from Robert is not treated as account ownership/);
+  assert.match(report.guardrails.join("\n"), /does not create external TikTok\/Metricool accounts/);
+  assert.match(report.nextStep, /real SPORT and memes TikTok Metricool proof URLs/);
+  assert.ok(report.codexDeliverables.some((item) => item.id === "proof_collection_packets" && item.status === "done"));
+  assert.ok(report.externalActionsRequired.some((item) => item.status === "needs_real_external_proof"));
+  assert.doesNotMatch(JSON.stringify(report), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+
+  const markdown = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/autopilot-boundary.md"), "utf8");
+  assert.match(markdown, /External Actions Required/);
+  assert.match(markdown, /authorization from being treated as proof/i);
+  assert.doesNotMatch(markdown, /ready_to_send|realPublishEnabled=true|video\.publish/i);
+
+  const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/autopilot-boundary.csv"), "utf8");
+  assert.match(csv, /codex_deliverable/);
+  assert.match(csv, /external_action/);
+  assert.match(csv, /needs_real_external_proof/);
+  assert.doesNotMatch(csv, /ready_to_send|realPublishEnabled=true|video\.publish/i);
+});
+
+test("TikTok MVP autopilot boundary fails closed in source", async () => {
+  const source = await readFile(autopilotBoundaryPath, "utf8");
+  assert.match(source, /function refreshFailed/);
+  assert.match(source, /const refreshHasFailure = refreshFailed\(refreshRuns\)/);
+  assert.match(source, /const missingProof = refreshHasFailure \|\| proofMissing/);
+  assert.match(source, /refreshFailures: Object\.values\(refreshRuns\)\.filter/);
+  assert.match(source, /function scopeIsTikTokOnly/);
+  assert.match(source, /status: scopeIsTikTokOnly\(readinessVerifier\) \? "done" : "needs_review"/);
+  assert.doesNotMatch(source, /readinessVerifier\?\.scope === "tiktok_only_metricool_mvp" \|\| operationalReadiness\?\.mvp\?\.directSocialApisRequired === false/);
+  assert.match(source, /status === "ready_for_operator_apply_review"[\s\S]*\? "ready_for_metricool_approval_review"[\s\S]*: status === "needs_internal_followup"[\s\S]*\? "blocked_internal_followup"[\s\S]*: "blocked_before_metricool"/);
 });
