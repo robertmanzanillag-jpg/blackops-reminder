@@ -1709,6 +1709,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   const output = JSON.parse(result.stdout);
   assert.match(output.collectionCsvPath, /proof-handoff-collection-packets\.csv$/);
   assert.match(output.pastePacketPath, /proof-links-paste-packet\.txt$/);
+  assert.match(output.jsonStarterPath, /proof-links-json-starter\.json$/);
   assert.match(output.oneScreenPath, /proof-fill-one-screen\.txt$/);
   assert.equal(output.proofPacketsNeeded, 4);
   assert.equal(output.minimumProofUrlsNeeded, 2);
@@ -1729,7 +1730,16 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.doesNotMatch(JSON.stringify(report.unblockBoard), /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(report.pastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(report.paths.jsonStarter, /proof-links-json-starter\.json$/);
+  assert.deepEqual(Object.keys(report.jsonStarter.lanes).sort(), ["meme-radar:tiktok", "sports-daily:tiktok"]);
+  for (const lane of Object.values(report.jsonStarter.lanes)) {
+    assert.equal(lane.accountOwnershipProofUrl, "");
+    assert.equal(lane.metricoolConnectionProofUrl, "");
+    assert.match(lane.accountNotes, /ownership|2FA|security/i);
+    assert.match(lane.metricoolNotes, /Metricool connection/i);
+  }
   assert.match(report.paths.oneScreenTxt, /proof-fill-one-screen\.txt$/);
+  assert.doesNotMatch(JSON.stringify(report.jsonStarter), /https:\/\/example\.com|placeholder|ready_to_send|realPublishEnabled=true|video\.publish/i);
   assert.doesNotMatch(report.pastePacketText, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
 
   const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff-collection-packets.csv"), "utf8");
@@ -1757,6 +1767,15 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(pastePacket, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
   assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com\/\.\.\. or Google Drive\/Docs evidence URLs/);
   assert.doesNotMatch(pastePacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
+
+  const jsonStarter = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-json-starter.json"), "utf8"));
+  assert.deepEqual(jsonStarter, report.jsonStarter);
+  assert.deepEqual(Object.keys(jsonStarter.lanes).sort(), ["meme-radar:tiktok", "sports-daily:tiktok"]);
+  assert.equal(jsonStarter.lanes["sports-daily:tiktok"].accountOwnershipProofUrl, "");
+  assert.equal(jsonStarter.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl, "");
+  assert.equal(jsonStarter.lanes["meme-radar:tiktok"].accountOwnershipProofUrl, "");
+  assert.equal(jsonStarter.lanes["meme-radar:tiktok"].metricoolConnectionProofUrl, "");
+  assert.doesNotMatch(JSON.stringify(jsonStarter), /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|https:\/\/example\.com|placeholder|ready_to_send|realPublishEnabled=true|video\.publish/i);
 
   const oneScreen = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fill-one-screen.txt"), "utf8");
   assert.match(oneScreen, /TikTok MVP proof fill - one screen/);

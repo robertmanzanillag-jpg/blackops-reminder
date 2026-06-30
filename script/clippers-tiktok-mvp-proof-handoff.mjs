@@ -8,6 +8,7 @@ const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
 const outPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
+const outJsonStarterPath = path.join(reportsDir, "proof-links-json-starter.json");
 const outUnblockBoardCsvPath = path.join(reportsDir, "proof-unblock-board.csv");
 const outOneScreenPath = path.join(reportsDir, "proof-fill-one-screen.txt");
 
@@ -322,6 +323,17 @@ function renderProofLinksPastePacket() {
   ].join("\n");
 }
 
+function buildProofLinksJsonStarter() {
+  return {
+    lanes: Object.fromEntries(lanes.map((lane) => [lane.key, {
+      accountOwnershipProofUrl: "",
+      metricoolConnectionProofUrl: "",
+      accountNotes: `${lane.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
+      metricoolNotes: `${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+    }])),
+  };
+}
+
 function renderOneScreenProofFill(summary) {
   const rows = summary.unblockBoard.rows.length ? summary.unblockBoard.rows : buildUnblockBoard(summary.collectionPackets, summary.gates).rows;
   return [
@@ -397,8 +409,9 @@ function renderMarkdown(summary) {
     "## Paste Packet",
     "",
     `- Proof links paste packet: ${summary.paths.pastePacketTxt}`,
+    `- Proof links JSON starter: ${summary.paths.jsonStarter}`,
     `- One-screen fill guide: ${summary.paths.oneScreenTxt}`,
-    "- Paste this packet into the app paste assistant after filling real proof URLs.",
+    "- Use either the paste packet or JSON starter after filling real proof URLs.",
     "",
     "## Guardrails",
     "",
@@ -464,6 +477,7 @@ async function main() {
     collectionPackets,
     unblockBoard,
     pastePacketText: renderProofLinksPastePacket(),
+    jsonStarter: buildProofLinksJsonStarter(),
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
       quickFillIssues: Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0,
@@ -478,6 +492,7 @@ async function main() {
       markdown: outMarkdownPath,
       collectionCsv: outCollectionCsvPath,
       pastePacketTxt: outPastePacketPath,
+      jsonStarter: outJsonStarterPath,
       oneScreenTxt: outOneScreenPath,
       unblockBoardCsv: outUnblockBoardCsvPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
@@ -498,6 +513,7 @@ async function main() {
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
   await writeFile(outPastePacketPath, renderProofLinksPastePacket());
+  await writeFile(outJsonStarterPath, `${JSON.stringify(summary.jsonStarter, null, 2)}\n`);
   await writeFile(outOneScreenPath, renderOneScreenProofFill(summary));
   await writeFile(outUnblockBoardCsvPath, renderUnblockBoardCsv(summary.unblockBoard));
   console.log(JSON.stringify({
@@ -513,6 +529,7 @@ async function main() {
     reportJsonPath: outJsonPath,
     collectionCsvPath: outCollectionCsvPath,
     pastePacketPath: outPastePacketPath,
+    jsonStarterPath: outJsonStarterPath,
     oneScreenPath: outOneScreenPath,
     nextAction: summary.nextAction,
   }, null, 2));
