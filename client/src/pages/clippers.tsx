@@ -2073,6 +2073,42 @@ interface ClipperTikTokMvpProofIntakePackSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofDoctorSummary {
+  status: "ready_to_apply" | "needs_proof_fix";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  closeoutStatus: string;
+  paths: {
+    json: string;
+    markdown: string;
+    accountCsv: string;
+    bridgeCsv: string;
+    proofIntakeHtml: string;
+  };
+  totals: {
+    lanes: number;
+    ready: number;
+    rejected: number;
+    blocked: number;
+  };
+  lanes: Array<{
+    accountId: string;
+    accountName: string;
+    platform: "tiktok";
+    status: "ready" | "blocked";
+    accountProofStatus: string;
+    bridgeProofStatus: string;
+    evidencePath: string;
+    reasons: string[];
+    nextAction: string;
+  }>;
+  rejected: Array<{ row: number; lane: string; source: string; reason: string }>;
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -9932,6 +9968,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofIntakePack as ClipperTikTokMvpProofIntakePackSummary;
     },
   });
+  const { data: tiktokMvpProofDoctor } = useQuery<ClipperTikTokMvpProofDoctorSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-doctor"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-doctor");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof doctor");
+      return data.tiktokMvpProofDoctor as ClipperTikTokMvpProofDoctorSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10442,6 +10488,32 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof intake", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofDoctorMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-proof-doctor", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP proof doctor");
+      return data as {
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+        tiktokMvpProofIntakePack: ClipperTikTokMvpProofIntakePackSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-pack"], data.tiktokMvpProofIntakePack);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? "Proof doctor listo" : "Proof doctor encontro blockers",
+        description: `${data.tiktokMvpProofDoctor.totals.ready}/${data.tiktokMvpProofDoctor.totals.lanes} lanes listas; ${data.tiktokMvpProofDoctor.totals.blocked} bloqueadas.`,
+        variant: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar proof doctor", description: error.message, variant: "destructive" });
     },
   });
 
@@ -16053,6 +16125,18 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofDoctorMutation.mutate()}
+                disabled={tiktokMvpProofDoctorMutation.isPending || isLoading}
+                className="h-8 border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-proof-doctor-button"
+              >
+                {tiktokMvpProofDoctorMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                Proof doctor
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpEvidenceCloseoutPreviewMutation.mutate()}
                 disabled={tiktokMvpEvidenceCloseoutPreviewMutation.isPending || isLoading}
                 className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
@@ -16111,6 +16195,13 @@ export default function ClippersPage() {
                 <p className="break-all">Account template: {tiktokMvpProofIntakePack.paths.accountCsv}</p>
                 <p className="break-all">Bridge template: {tiktokMvpProofIntakePack.paths.bridgeCsv}</p>
                 <p className="mt-1 text-amber-100/80">{tiktokMvpProofIntakePack.nextStep}</p>
+              </div>
+            )}
+            {tiktokMvpProofDoctor && (
+              <div className="mt-2 rounded-md border border-amber-300/15 bg-black/20 p-2 text-[11px] leading-4 text-amber-100/80" data-testid="clippers-tiktok-mvp-proof-doctor-panel">
+                <p>Doctor: {tiktokMvpProofDoctor.status}; ready {tiktokMvpProofDoctor.totals.ready}/{tiktokMvpProofDoctor.totals.lanes}; blocked {tiktokMvpProofDoctor.totals.blocked}</p>
+                <p className="mt-1 break-all">Report: {tiktokMvpProofDoctor.paths.markdown}</p>
+                <p className="mt-1">{tiktokMvpProofDoctor.lanes.find((lane) => lane.status !== "ready")?.nextAction || tiktokMvpProofDoctor.nextStep}</p>
               </div>
             )}
           </div>

@@ -14,6 +14,8 @@ const metricoolQueuePath = path.join(rootDir, "scheduled/metricool-execution-que
 const routesPath = path.join(process.cwd(), "server/routes.ts");
 const clippersPagePath = path.join(process.cwd(), "client/src/pages/clippers.tsx");
 const proofIntakePath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-intake-pack.mjs");
+const proofDoctorPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-doctor.mjs");
+const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json");
 
 const accountHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
 const bridgeHeader = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
@@ -78,7 +80,7 @@ test("TikTok MVP evidence closeout rejects placeholders and does not apply", asy
     assert.equal(output.status, "blocked_invalid_evidence");
     assert.equal(output.applied, 0);
 
-    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json"), "utf8"));
+    const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
     assert.equal(report.mode, "preview");
     assert.equal(report.totals.ready, 0);
     assert.ok(JSON.stringify(report).includes("placeholder") || JSON.stringify(report).includes("Metricool HTTPS"));
@@ -108,7 +110,7 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
     assert.equal(output.status, "applied");
     assert.equal(output.ready, 2);
     assert.equal(output.applied, 2);
-    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json"), "utf8"));
+    const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
     assert.equal(report.readinessRefresh.stdout.activeMvpReadyLanes, 2);
 
     const sportsEvidence = JSON.parse(await readFile(sportsEvidencePath, "utf8"));
@@ -144,7 +146,7 @@ test("TikTok MVP evidence closeout rejects mismatched TikTok handles", async () 
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "blocked_invalid_evidence");
 
-  const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json"), "utf8"));
+  const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
   assert.equal(report.totals.ready, 1);
   assert.ok(JSON.stringify(report).includes("profile_url must match @sportsdaily"));
 });
@@ -167,7 +169,7 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "blocked_invalid_evidence");
 
-  const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json"), "utf8"));
+  const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
   assert.equal(report.totals.ready, 0);
   assert.ok(JSON.stringify(report).includes("safe HTTPS proof URL") || JSON.stringify(report).includes("public TikTok profile URL"));
 });
@@ -210,6 +212,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-intake-pack"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-intake-pack"/);
+  assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-doctor"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
@@ -241,6 +245,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(intakeRoute, /runClipperTikTokMvpProofIntakePack/);
   assert.match(intakeRoute, /readClipperTikTokMvpProofIntakePack/);
   assert.doesNotMatch(intakeRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
+  const doctorRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/prepare-tiktok-mvp-proof-doctor"',
+    'app.get("/api/clippers/tiktok-mvp-evidence-closeout"',
+  );
+  assert.match(doctorRoute, /runClipperTikTokMvpProofDoctor/);
+  assert.match(doctorRoute, /readClipperTikTokMvpProofDoctor/);
+  assert.doesNotMatch(doctorRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
   assert.match(applyRoute, /res\.status\(403\)/);
   assert.match(applyRoute, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-evidence-closeout"/);
   assert.match(applyRoute, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
@@ -251,9 +263,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
 
   assert.match(page, /preview-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /prepare-clippers-tiktok-mvp-proof-intake-pack-button/);
+  assert.match(page, /prepare-clippers-tiktok-mvp-proof-doctor-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-pack-paths/);
+  assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
   assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
   const closeoutPanel = requiredSlice(
     page,
@@ -296,4 +310,82 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.match(bridgeTemplate, /<paste real public Metricool proof URL for memes @memeradar>/);
   assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}\n${html}`, /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
   assert.match(html, /This guide does not publish or schedule posts/);
+});
+
+test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evidence", async () => {
+  const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "needs_proof_fix");
+  assert.equal(output.ready, 0);
+  assert.match(output.markdownPath, /proof-doctor\.md$/);
+
+  const source = await readFile(proofDoctorPath, "utf8");
+  assert.doesNotMatch(source, /--apply|ready_to_send|video\.publish|directSocialApisRequired:\s*true/);
+  assert.match(source, /Doctor runs preview only; it never applies evidence/);
+
+  const doctor = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-doctor.json"), "utf8"));
+  assert.equal(doctor.launchMode, "metricool_approval_required");
+  assert.equal(doctor.directSocialApisRequired, false);
+  assert.equal(doctor.totals.lanes, 2);
+  assert.equal(doctor.totals.blocked, 2);
+  assert.ok(doctor.lanes.every((lane) => lane.nextAction && lane.status === "blocked"));
+  assert.doesNotMatch(JSON.stringify(doctor), /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
+});
+
+test("TikTok MVP proof doctor ignores stale ready reports when closeout preview fails", async () => {
+  const previousReport = await readFile(closeoutReportPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(closeoutReportPath), { recursive: true });
+    await writeFile(closeoutReportPath, JSON.stringify({
+      status: "ready_to_apply",
+      totals: {
+        lanes: 2,
+        ready: 2,
+        rejected: 0,
+      },
+      rows: [
+        {
+          accountId: "sports-daily",
+          status: "ready",
+          reasons: [],
+          accountProofStatus: "ready",
+          bridgeProofStatus: "ready",
+        },
+        {
+          accountId: "meme-radar",
+          status: "ready",
+          reasons: [],
+          accountProofStatus: "ready",
+          bridgeProofStatus: "ready",
+        },
+      ],
+      rejected: [],
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-doctor.mjs",
+      "--closeout-script",
+      "script/missing-tiktok-closeout-preview.mjs",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "needs_proof_fix");
+    assert.equal(output.closeoutStatus, "preview_failed");
+    assert.equal(output.ready, 0);
+    assert.equal(output.blocked, 2);
+
+    const doctor = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-doctor.json"), "utf8"));
+    assert.equal(doctor.closeoutStatus, "preview_failed");
+    assert.match(doctor.nextStep, /stale reports are ignored/);
+  } finally {
+    if (previousReport === null) await unlink(closeoutReportPath).catch(() => undefined);
+    else await writeFile(closeoutReportPath, previousReport);
+  }
 });

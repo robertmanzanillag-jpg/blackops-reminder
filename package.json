@@ -75,6 +75,7 @@
     "clippers:record-owned-source-rights": "node script/clippers-record-owned-source-rights.mjs",
     "clippers:sync-metricool-source-readiness": "node script/clippers-sync-metricool-source-readiness.mjs",
     "clippers:tiktok-mvp-evidence-closeout": "node script/clippers-tiktok-mvp-evidence-closeout.mjs",
+    "clippers:tiktok-mvp-proof-doctor": "node script/clippers-tiktok-mvp-proof-doctor.mjs",
     "clippers:tiktok-mvp-proof-intake-pack": "node script/clippers-tiktok-mvp-proof-intake-pack.mjs",
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",

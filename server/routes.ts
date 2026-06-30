@@ -347,6 +347,7 @@ export async function registerRoutes(
     return runClipperNodeJson(args, apply ? "TikTok MVP evidence closeout apply" : "TikTok MVP evidence closeout preview");
   };
   const runClipperTikTokMvpProofIntakePack = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-intake-pack.mjs", "TikTok MVP proof intake pack");
+  const runClipperTikTokMvpProofDoctor = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-doctor.mjs", "TikTok MVP proof doctor");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -368,6 +369,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofIntakePack = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-pack.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofDoctor = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-doctor.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2655,6 +2660,29 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof intake pack" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-doctor", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof doctor has not been prepared" : "TikTok MVP proof doctor could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-proof-doctor", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofDoctor();
+      res.json({
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        tiktokMvpProofIntakePack: await readClipperTikTokMvpProofIntakePack(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof doctor" });
     }
   });
 
