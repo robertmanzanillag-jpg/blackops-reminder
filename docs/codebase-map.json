@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T15:35:52.521Z",
+  "generatedAt": "2026-06-30T15:53:37.779Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -85,8 +85,8 @@
     "filesVisible": 400,
     "filesIndexed": 333,
     "imports": 1318,
-    "routes": 447,
-    "symbols": 7092
+    "routes": 448,
+    "symbols": 7096
   },
   "directories": {
     ".agents/skills": {
@@ -10644,6 +10644,7 @@
         "/api/revenue-engine/automation-opportunities/delivery-workspace",
         "/api/revenue-engine/automation-quote",
         "/api/revenue-engine/daily-scout-sprint",
+        "/api/revenue-engine/daily-scout-sprint/submit",
         "/api/revenue-engine/delivery-review",
         "/api/revenue-engine/delivery-workspaces",
         "/api/revenue-engine/delivery-workspaces/deliver",
@@ -13161,7 +13162,9 @@
         "draftResult",
         "draftTen",
         "duplicate",
+        "duplicateDifferentTask",
         "duplicateHandoff",
+        "duplicateSubmit",
         "fakeClose",
         "first",
         "handoff",
@@ -13226,6 +13229,7 @@
         "snapshot",
         "sprint",
         "statusBeforeApproval",
+        "taskId",
         "testAgentRunsPath",
         "testApprovalDecisionsPath",
         "testAutomationIntakesPath",
@@ -13244,6 +13248,7 @@
         "untrusted",
         "untrustedDelivery",
         "updated",
+        "updatedSprint",
         "workspace",
         "workspaceId"
       ],

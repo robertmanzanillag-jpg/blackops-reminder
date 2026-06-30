@@ -1223,9 +1223,30 @@ type RevenuePublicLeadCandidateBatchResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenueScoutSprintProgress = {
+  sprintId: string;
+  taskId: string;
+  status: "open" | "completed" | "blocked";
+  filledSlots: number;
+  newlyFilledSlots: number;
+  rejectedSlots: number;
+  openSlots: number;
+  targetRows: number;
+  nextAction: string;
+};
+
 type RevenuePublicScoutEvidenceResult = RevenuePublicLeadCandidateBatchResult & {
   normalizedBatchText: string;
   parsedCount: number;
+  sprintProgress?: RevenueScoutSprintProgress | null;
+};
+
+type RevenueDailyScoutSprintSubmitResult = {
+  status: "submitted" | "needs_review" | "not_found" | "blocked";
+  reason: string;
+  evidenceResult: RevenuePublicScoutEvidenceResult | null;
+  sprintProgress: RevenueScoutSprintProgress | null;
+  snapshot: RevenueSnapshot;
 };
 
 type RevenuePublicCandidateSprintResult = {
@@ -1892,12 +1913,15 @@ export default function RevenueEnginePage() {
   const activeScoutNiche = snapshot?.latestDailyScoutSprint?.niche || snapshot?.businessScoutQueue.niche || scoutingNiche;
   const activeScoutOfferFocus = snapshot?.latestDailyScoutSprint?.offerFocus || snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
   const activeScoutTarget = snapshot?.latestDailyScoutSprint?.targetRows || snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
-  const activeScoutSourceTaskId = snapshot?.latestDailyScoutSprint?.id || "ui-scout-evidence";
+  const activeScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open"))
+    || snapshot?.latestDailyScoutSprint?.tasks[0]
+    || null;
+  const activeScoutSourceTaskId = activeScoutTask?.taskId || snapshot?.latestDailyScoutSprint?.id || "ui-scout-evidence";
   const latestDailyScoutSlotText = useMemo(() => (
-    snapshot?.latestDailyScoutSprint?.tasks
-      .flatMap((task) => task.resultSlots.map((slot) => slot.copyableEvidenceBlock))
+    (activeScoutTask ? [activeScoutTask] : snapshot?.latestDailyScoutSprint?.tasks || [])
+      .flatMap((task) => task.resultSlots.filter((slot) => slot.status === "open").map((slot) => slot.copyableEvidenceBlock))
       .join("\n\n") || ""
-  ), [snapshot?.latestDailyScoutSprint]);
+  ), [activeScoutTask, snapshot?.latestDailyScoutSprint]);
 
   useEffect(() => {
     if (approvalQueue.length === 0) {
@@ -2862,15 +2886,18 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const publicScoutEvidenceMutation = useMutation<RevenuePublicScoutEvidenceResult>({
+  const publicScoutEvidenceMutation = useMutation<RevenuePublicScoutEvidenceResult | RevenueDailyScoutSprintSubmitResult>({
     mutationFn: async () => {
-      const response = await fetch("/api/revenue-engine/public-scout-evidence", {
+      const hasActiveSprint = Boolean(snapshot?.latestDailyScoutSprint?.id);
+      const response = await fetch(hasActiveSprint ? "/api/revenue-engine/daily-scout-sprint/submit" : "/api/revenue-engine/public-scout-evidence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(hasActiveSprint ? { sprintId: snapshot?.latestDailyScoutSprint?.id, taskId: activeScoutSourceTaskId } : {}),
           area: activeScoutArea,
           niche: activeScoutNiche,
           evidenceText: publicScoutEvidenceText,
+          missionId: snapshot?.latestDailyScoutSprint?.id || "",
           sourceTaskId: activeScoutSourceTaskId,
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
@@ -2881,11 +2908,12 @@ export default function RevenueEnginePage() {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No se pudo normalizar evidencia publica");
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo normalizar evidencia publica");
       return data;
     },
     onSuccess: (data) => {
-      setSeedLeadBatchText(data.normalizedBatchText);
+      const evidenceResult = "evidenceResult" in data ? data.evidenceResult : data;
+      setSeedLeadBatchText(evidenceResult?.normalizedBatchText || "");
       refetchSnapshot();
     },
   });
@@ -2900,6 +2928,7 @@ export default function RevenueEnginePage() {
           niche: activeScoutNiche,
           offerFocus: activeScoutOfferFocus,
           evidenceText: publicScoutEvidenceText,
+          missionId: snapshot?.latestDailyScoutSprint?.id || "",
           sourceTaskId: activeScoutSourceTaskId,
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
@@ -3085,6 +3114,17 @@ export default function RevenueEnginePage() {
       ? { run: salesAutopilot.agentRun, snapshot: salesAutopilot.snapshot }
       : undefined
   );
+  const publicScoutEvidenceResult = publicScoutEvidenceMutation.data
+    ? "evidenceResult" in publicScoutEvidenceMutation.data
+      ? publicScoutEvidenceMutation.data.evidenceResult
+      : publicScoutEvidenceMutation.data
+    : null;
+  const publicScoutEvidenceSummary = publicScoutEvidenceMutation.data
+    ? "evidenceResult" in publicScoutEvidenceMutation.data
+      ? publicScoutEvidenceMutation.data.reason
+      : publicScoutEvidenceMutation.data.nextAction
+    : "";
+  const publicScoutEvidenceStatus = publicScoutEvidenceMutation.data?.status || "review";
 
   function toggleReviewCheck(key: keyof typeof reviewChecks) {
     setReviewChecks((current) => ({ ...current, [key]: !current[key] }));
@@ -4027,7 +4067,7 @@ export default function RevenueEnginePage() {
                           data-testid="button-normalize-public-scout-evidence"
                         >
                           {publicScoutEvidenceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                          Normalizar evidencia publica
+                          {snapshot?.latestDailyScoutSprint ? "Submitir slot del sprint" : "Normalizar evidencia publica"}
                         </Button>
                         <Button
                           type="button"
@@ -4501,9 +4541,18 @@ export default function RevenueEnginePage() {
                             <div key={task.taskId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
                               <div className="flex items-start justify-between gap-2">
                                 <p className="text-xs font-medium text-white">{task.taskId} · {task.ownerAgent}</p>
-                                <span className="text-xs text-zinc-500">{task.resultSlots.length} slots</span>
+                                <span className="text-xs text-zinc-500">
+                                  {task.resultSlots.filter((slot) => slot.status === "filled").length} filled · {task.resultSlots.filter((slot) => slot.status === "open").length} open
+                                </span>
                               </div>
                               <p className="mt-1 text-xs text-zinc-500">{task.query}</p>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {task.resultSlots.map((slot) => (
+                                  <Badge key={slot.slotId} variant="outline" className={cn("text-[10px]", statusTone(slot.status === "filled" ? "ready" : slot.status === "rejected" ? "blocked" : "review"))}>
+                                    {slot.status}
+                                  </Badge>
+                                ))}
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
@@ -4858,20 +4907,20 @@ export default function RevenueEnginePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {publicScoutEvidenceMutation.data && (
+                  {publicScoutEvidenceResult && (
                     <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <p className="text-sm font-medium text-cyan-100">{publicScoutEvidenceMutation.data.nextAction}</p>
-                        <Badge variant="outline" className={cn(statusTone(publicScoutEvidenceMutation.data.status), "shrink-0")}>
-                          {publicScoutEvidenceMutation.data.status}
+                        <p className="text-sm font-medium text-cyan-100">{publicScoutEvidenceSummary}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutEvidenceStatus), "shrink-0")}>
+                          {publicScoutEvidenceStatus}
                         </Badge>
                       </div>
                       <p className="mt-2 text-xs leading-5 text-zinc-300">
-                        {publicScoutEvidenceMutation.data.parsedCount} detectados · {publicScoutEvidenceMutation.data.recordedCount} guardados · {publicScoutEvidenceMutation.data.importableCount} listos · {publicScoutEvidenceMutation.data.blockedCount} bloqueados
+                        {publicScoutEvidenceResult.parsedCount} detectados · {publicScoutEvidenceResult.recordedCount} guardados · {publicScoutEvidenceResult.importableCount} listos · {publicScoutEvidenceResult.blockedCount} bloqueados
                       </p>
-                      {publicScoutEvidenceMutation.data.blockedSeeds.length > 0 && (
+                      {publicScoutEvidenceResult.blockedSeeds.length > 0 && (
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
-                          {publicScoutEvidenceMutation.data.blockedSeeds.slice(0, 4).map((seed) => (
+                          {publicScoutEvidenceResult.blockedSeeds.slice(0, 4).map((seed) => (
                             <div key={`${seed.businessName}-${seed.reason}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
                               {seed.businessName}: {seed.reason}
                             </div>

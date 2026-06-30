@@ -510,6 +510,13 @@ export const revenuePublicScoutEvidenceSchema = z.object({
 
 export type RevenuePublicScoutEvidenceInput = z.infer<typeof revenuePublicScoutEvidenceSchema>;
 
+export const revenueDailyScoutSprintSubmitSchema = revenuePublicScoutEvidenceSchema.extend({
+  sprintId: z.string().trim().min(1).max(160),
+  taskId: z.string().trim().max(160).optional().default(""),
+});
+
+export type RevenueDailyScoutSprintSubmitInput = z.infer<typeof revenueDailyScoutSprintSubmitSchema>;
+
 export const revenuePublicScoutAgentCommandSchema = revenuePublicScoutEvidenceSchema.extend({
   offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
   dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
@@ -4388,7 +4395,7 @@ export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailySco
     niche,
     offerFocus,
     dailyResearchTarget: Math.max(targetRows, 10),
-    dailyQualifiedLeadLimit: targetRows,
+    dailyQualifiedLeadLimit: Math.max(targetRows, 5),
     dailyMockupLimit: 5,
     dailyContactLimit: 10,
     maxPaidDataSpendUsd: 0,
@@ -4515,6 +4522,107 @@ export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailySco
     safety: sprint.safety,
     nextAction: sprint.nextAction,
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function recordRevenueDailyScoutSprintEvidenceProgress(input: {
+  missionId?: string;
+  sourceTaskId?: string;
+  candidateIds?: string[];
+  area?: string;
+  niche?: string;
+  filledCount: number;
+  rejectedCount: number;
+}) {
+  loadRevenueDailyScoutSprints();
+  const sourceTaskId = (input.sourceTaskId || "").trim();
+  const missionId = (input.missionId || "").trim();
+  const matchingSprint = revenueDailyScoutSprints
+    .slice()
+    .reverse()
+    .find((sprint) =>
+      (missionId && sprint.id === missionId)
+      || (sourceTaskId && sprint.id === sourceTaskId)
+      || (
+        sourceTaskId
+        && sprint.tasks.some((task) => task.taskId === sourceTaskId)
+        && (!input.area || sprint.area.toLowerCase() === input.area.toLowerCase())
+        && (!input.niche || sprint.niche.toLowerCase() === input.niche.toLowerCase())
+      )
+    ) || null;
+
+  if (!matchingSprint) return null;
+
+  const targetTask = matchingSprint.tasks.find((task) => task.taskId === sourceTaskId)
+    || matchingSprint.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open"))
+    || matchingSprint.tasks[0]
+    || null;
+  if (!targetTask) return null;
+
+  const existingFilledSlotKeys = new Set(
+    matchingSprint.tasks
+      .flatMap((task) => task.resultSlots)
+      .filter((slot) => slot.status === "filled")
+      .map((slot) => {
+        const match = slot.copyableEvidenceBlock.match(/Candidate:\s*([^\n]+)/i);
+        return match?.[1]?.trim() || "";
+      })
+      .filter(Boolean),
+  );
+  const newCandidateIds = (input.candidateIds || []).filter((candidateId) => !existingFilledSlotKeys.has(candidateId));
+  const filledSlotsBefore = matchingSprint.tasks.flatMap((task) => task.resultSlots).filter((slot) => slot.status === "filled").length;
+  let remainingFilled = Math.max(0, input.candidateIds ? newCandidateIds.length : input.filledCount);
+  let remainingRejected = Math.max(0, input.rejectedCount);
+  for (const slot of targetTask.resultSlots) {
+    if (slot.status !== "open") continue;
+    if (remainingFilled > 0) {
+      const candidateId = newCandidateIds.shift() || "";
+      slot.status = "filled";
+      if (candidateId) {
+        slot.copyableEvidenceBlock = `${slot.copyableEvidenceBlock}\nCandidate: ${candidateId}`;
+      }
+      remainingFilled -= 1;
+      continue;
+    }
+    if (remainingRejected > 0) {
+      slot.status = "rejected";
+      remainingRejected -= 1;
+    }
+  }
+
+  const taskFilled = targetTask.resultSlots.filter((slot) => slot.status === "filled").length;
+  const taskOpen = targetTask.resultSlots.some((slot) => slot.status === "open");
+  targetTask.status = taskFilled > 0 ? "submitted" : taskOpen ? "open" : "blocked";
+
+  const filledSlots = matchingSprint.tasks.flatMap((task) => task.resultSlots).filter((slot) => slot.status === "filled").length;
+  const rejectedSlots = matchingSprint.tasks.flatMap((task) => task.resultSlots).filter((slot) => slot.status === "rejected").length;
+  const openSlots = matchingSprint.tasks.flatMap((task) => task.resultSlots).filter((slot) => slot.status === "open").length;
+  matchingSprint.status = filledSlots >= matchingSprint.targetRows
+    ? "completed"
+    : openSlots === 0 && filledSlots === 0
+      ? "blocked"
+      : "open";
+  matchingSprint.updatedAt = new Date().toISOString();
+  matchingSprint.nextAction = matchingSprint.status === "completed"
+    ? "Sprint completo: correr Money Sprint con candidatos verificados y revisar paquetes de venta."
+    : filledSlots > 0
+      ? `Sprint en progreso: ${filledSlots}/${matchingSprint.targetRows} slots verificados; seguir llenando evidencia publica.`
+      : rejectedSlots > 0
+        ? "Sprint necesita mas evidencia publica real; reemplazar slots rechazados antes de Money Sprint."
+        : matchingSprint.nextAction;
+
+  persistRevenueDailyScoutSprints();
+
+  return {
+    sprintId: matchingSprint.id,
+    taskId: targetTask.taskId,
+    status: matchingSprint.status,
+    filledSlots,
+    newlyFilledSlots: filledSlots - filledSlotsBefore,
+    rejectedSlots,
+    openSlots,
+    targetRows: matchingSprint.targetRows,
+    nextAction: matchingSprint.nextAction,
   };
 }
 
@@ -5329,9 +5437,20 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
   const { parsed, candidates, blockedSeeds } = parseRevenuePublicScoutEvidence(input);
   const recorded = candidates.map((candidate) => recordRevenuePublicLeadCandidate(candidate));
   const uniqueRecorded = Array.from(new Map(recorded.map((item) => [item.candidate.id, item])).values());
+  const importReadyCount = uniqueRecorded.filter((item) => item.candidate.importReady).length;
+  const blockedCount = blockedSeeds.length + uniqueRecorded.filter((item) => !item.candidate.importReady).length;
+  const sprintProgress = recordRevenueDailyScoutSprintEvidenceProgress({
+    missionId: parsed.missionId,
+    sourceTaskId: parsed.sourceTaskId,
+    candidateIds: uniqueRecorded.filter((item) => item.candidate.importReady).map((item) => item.candidate.id),
+    area: parsed.area,
+    niche: parsed.niche,
+    filledCount: importReadyCount,
+    rejectedCount: parsed.publicEvidenceVerified && parsed.approvalToImport ? blockedCount : 0,
+  });
 
   return {
-    status: uniqueRecorded.some((item) => item.status === "ready_for_preview")
+    status: importReadyCount > 0
       ? "ready_for_preview" as const
       : blockedSeeds.length > 0 || uniqueRecorded.length > 0
         ? "needs_review" as const
@@ -5342,8 +5461,9 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
     ].join("\n"),
     parsedCount: candidates.length + blockedSeeds.length,
     recordedCount: uniqueRecorded.length,
-    importableCount: uniqueRecorded.filter((item) => item.candidate.importReady).length,
-    blockedCount: blockedSeeds.length + uniqueRecorded.filter((item) => !item.candidate.importReady).length,
+    importableCount: importReadyCount,
+    blockedCount,
+    sprintProgress,
     recorded: uniqueRecorded.map((item) => ({
       status: item.status,
       candidate: item.candidate,
@@ -5374,6 +5494,63 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
         ? "Fix blocked evidence fields before Money Sprint."
         : "Review normalized candidates, verify public evidence, then approve import.",
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function submitRevenueDailyScoutSprintEvidence(input: RevenueDailyScoutSprintSubmitInput) {
+  loadRevenueDailyScoutSprints();
+  const parsed = revenueDailyScoutSprintSubmitSchema.parse(input);
+  const sprint = revenueDailyScoutSprints.find((item) => item.id === parsed.sprintId) || null;
+
+  if (!sprint) {
+    return {
+      status: "not_found" as const,
+      reason: "Daily scout sprint no encontrado.",
+      evidenceResult: null,
+      sprintProgress: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const taskId = parsed.taskId || parsed.sourceTaskId || sprint.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open"))?.taskId || "";
+  const task = taskId ? sprint.tasks.find((item) => item.taskId === taskId) || null : null;
+  if (!task) {
+    return {
+      status: "blocked" as const,
+      reason: "Task del daily scout sprint no encontrado.",
+      evidenceResult: null,
+      sprintProgress: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+  const openSlotCount = task.resultSlots.filter((slot) => slot.status === "open").length;
+  if (openSlotCount === 0) {
+    return {
+      status: "blocked" as const,
+      reason: "Task del daily scout sprint no tiene slots abiertos.",
+      evidenceResult: null,
+      sprintProgress: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const evidenceResult = recordRevenuePublicScoutEvidence({
+    ...parsed,
+    missionId: parsed.sprintId,
+    sourceTaskId: task.taskId,
+    maxCandidates: Math.min(parsed.maxCandidates, openSlotCount),
+  });
+
+  return {
+    status: (evidenceResult.sprintProgress?.newlyFilledSlots || 0) > 0 ? "submitted" as const : "needs_review" as const,
+    reason: (evidenceResult.sprintProgress?.newlyFilledSlots || 0) > 0
+      ? "Evidencia publica aceptada; slot del sprint marcado como lleno y candidato listo para Money Sprint."
+      : evidenceResult.importableCount > 0
+        ? "Candidato ya estaba registrado; el sprint no avanzo para evitar duplicar slots."
+        : "Evidencia registrada, pero el slot no queda completo hasta tener candidato verificado e importable.",
+    evidenceResult,
+    sprintProgress: evidenceResult.sprintProgress,
+    snapshot: evidenceResult.snapshot,
   };
 }
 

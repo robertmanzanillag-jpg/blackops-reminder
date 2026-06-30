@@ -54,6 +54,7 @@ import {
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
+  submitRevenueDailyScoutSprintEvidence,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
   resetRevenueAutomationIntakesForTests,
@@ -522,6 +523,115 @@ test("public scout intake accepts valid Spanish evidence containing todo", () =>
   assert.equal(result.importableCount, 1);
   assert.equal(result.blockedCount, 0);
   assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("daily scout sprint submit records candidates and updates slot progress", () => {
+  const sprint = runRevenueDailyScoutSprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    targetLeadCount: 6,
+    maxTasks: 3,
+    resultSlotsPerTask: 1,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+  });
+  const taskId = sprint.sprint.tasks[0].taskId;
+
+  const result = submitRevenueDailyScoutSprintEvidence({
+    sprintId: sprint.sprint.id,
+    taskId,
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Sprint Slot Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @sprintslotcafe",
+      "Email: owner@sprintslotcafe.example",
+      "Source: https://instagram.com/sprintslotcafe",
+      "Evidence: Public Instagram profile has active menu posts, no dedicated website link and a visible contact path.",
+      "Pain: Needs online menu, catering capture and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+    maxCandidates: 1,
+  });
+
+  const updatedSprint = result.snapshot.latestDailyScoutSprint;
+
+  assert.equal(result.status, "submitted");
+  assert.equal(result.evidenceResult?.importableCount, 1);
+  assert.equal(result.sprintProgress?.sprintId, sprint.sprint.id);
+  assert.equal(result.sprintProgress?.taskId, taskId);
+  assert.equal(result.sprintProgress?.filledSlots, 1);
+  assert.equal(result.sprintProgress?.newlyFilledSlots, 1);
+  assert.equal(updatedSprint?.tasks[0].status, "submitted");
+  assert.equal(updatedSprint?.tasks[0].resultSlots[0].status, "filled");
+  assert.equal(updatedSprint?.status, "open");
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+
+  const duplicateSubmit = submitRevenueDailyScoutSprintEvidence({
+    sprintId: sprint.sprint.id,
+    taskId,
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Duplicate Slot Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @duplicateslotcafe",
+      "Email: owner@duplicateslotcafe.example",
+      "Source: https://instagram.com/duplicateslotcafe",
+      "Evidence: Public Instagram profile has active menu posts, no dedicated website link and a visible contact path.",
+      "Pain: Needs online menu, catering capture and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+    maxCandidates: 1,
+  });
+
+  assert.equal(duplicateSubmit.status, "blocked");
+  assert.match(duplicateSubmit.reason, /no tiene slots abiertos/);
+  assert.equal(duplicateSubmit.snapshot.publicLeadImportQueue.readyCount, 1);
+
+  const duplicateDifferentTask = submitRevenueDailyScoutSprintEvidence({
+    sprintId: sprint.sprint.id,
+    taskId: sprint.sprint.tasks[1].taskId,
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Sprint Slot Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @sprintslotcafe",
+      "Email: owner@sprintslotcafe.example",
+      "Source: https://instagram.com/sprintslotcafe",
+      "Evidence: Public Instagram profile has active menu posts, no dedicated website link and a visible contact path.",
+      "Pain: Needs online menu, catering capture and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+    maxCandidates: 1,
+  });
+
+  assert.equal(duplicateDifferentTask.status, "needs_review");
+  assert.match(duplicateDifferentTask.reason, /ya estaba registrado/);
+  assert.equal(duplicateDifferentTask.sprintProgress?.filledSlots, 1);
+  assert.equal(duplicateDifferentTask.sprintProgress?.newlyFilledSlots, 0);
+  assert.equal(duplicateDifferentTask.snapshot.latestDailyScoutSprint?.tasks[1].resultSlots[0].status, "open");
+  assert.equal(duplicateDifferentTask.snapshot.publicLeadImportQueue.readyCount, 1);
 });
 
 test("money sprint preview blocks unfilled scout batch templates", () => {
