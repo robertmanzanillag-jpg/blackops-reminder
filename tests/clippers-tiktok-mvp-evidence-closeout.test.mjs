@@ -544,17 +544,23 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(quickFillRoute, /proof-quick-fill-input\.json/);
   assert.match(quickFillRoute, /readClipperTikTokMvpProofQuickFill/);
   assert.match(quickFillRoute, /readClipperTikTokMvpProofUnblocker/);
+  assert.match(quickFillRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(quickFillRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(quickFillRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(refreshRoute, /runClipperTikTokMvpProofRefresh/);
   assert.match(refreshRoute, /readClipperTikTokMvpProofRefresh/);
   assert.match(refreshRoute, /readClipperTikTokMvpProofIntakeImport/);
   assert.match(refreshRoute, /readClipperTikTokMvpProofDoctor/);
+  assert.match(refreshRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(refreshRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(refreshRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(unblockerRoute, /runClipperTikTokMvpProofUnblocker/);
   assert.match(unblockerRoute, /readClipperTikTokMvpProofUnblocker/);
   assert.match(unblockerRoute, /readClipperTikTokMvpProofRefresh/);
   assert.match(unblockerRoute, /readClipperTikTokMvpProofIntakeImport/);
   assert.match(unblockerRoute, /readClipperTikTokMvpProofDoctor/);
+  assert.match(unblockerRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(unblockerRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(unblockerRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(handoffRoute, /runClipperTikTokMvpProofHandoff/);
   assert.match(handoffRoute, /readClipperTikTokMvpProofHandoff/);
@@ -563,17 +569,23 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(handoffRoute, /readClipperTikTokMvpProofIntakeImport/);
   assert.match(handoffRoute, /readClipperTikTokMvpEvidenceCloseout/);
   assert.match(handoffRoute, /readClipperTikTokMvpCloseoutWizard/);
+  assert.match(handoffRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(handoffRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(handoffRoute, /--apply|runClipperTikTokMvpProofIntakeImport\(true\)|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(localVerificationRoute, /runClipperTikTokMvpLocalVerification/);
   assert.match(localVerificationRoute, /readClipperTikTokMvpLocalVerification/);
   assert.match(localVerificationRoute, /readClipperTikTokMvpCloseoutWizard/);
   assert.match(localVerificationRoute, /readClipperTikTokMvpProofQuickFill/);
   assert.match(localVerificationRoute, /readClipperTikTokMvpProofUnblocker/);
+  assert.match(localVerificationRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(localVerificationRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(localVerificationRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(closeoutWizardRoute, /runClipperTikTokMvpCloseoutWizard/);
   assert.match(closeoutWizardRoute, /readClipperTikTokMvpCloseoutWizard/);
   assert.match(closeoutWizardRoute, /readClipperTikTokMvpProofDropKit/);
   assert.match(closeoutWizardRoute, /readClipperTikTokMvpProofUnblocker/);
+  assert.match(closeoutWizardRoute, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(closeoutWizardRoute, /readClipperTikTokNextAction/);
   assert.doesNotMatch(closeoutWizardRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   const doctorRoute = requiredSlice(
     routes,

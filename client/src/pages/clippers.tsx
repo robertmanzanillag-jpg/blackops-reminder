@@ -11719,6 +11719,7 @@ export default function ClippersPage() {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary | null;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11737,6 +11738,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpCloseoutWizard) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
         title: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? "Proof handoff listo" : "Proof handoff actualizado",
@@ -11858,6 +11862,7 @@ export default function ClippersPage() {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11867,6 +11872,9 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpProofQuickFill.appliedToIntake ? "Proof quick fill guardado" : "Proof quick fill bloqueado",
         description: data.tiktokMvpProofQuickFill.nextStep,
@@ -11888,6 +11896,7 @@ export default function ClippersPage() {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11895,6 +11904,9 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? "Proof refresh listo" : "Proof refresh bloqueado",
         description: data.tiktokMvpProofRefresh.nextStep,
@@ -11917,6 +11929,7 @@ export default function ClippersPage() {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11925,6 +11938,9 @@ export default function ClippersPage() {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? "Proof unblocker listo" : "Proof unblocker bloqueado",
         description: data.tiktokMvpProofUnblocker.nextStep,
@@ -11946,6 +11962,7 @@ export default function ClippersPage() {
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11955,6 +11972,9 @@ export default function ClippersPage() {
       }
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
       toast({
         title: data.tiktokMvpLocalVerification.status === "pass" ? "TikTok MVP verificado" : "TikTok MVP bloqueado",
         description: data.tiktokMvpLocalVerification.nextStep,
@@ -11975,6 +11995,7 @@ export default function ClippersPage() {
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
         tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary | null;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
     },
     onSuccess: (data) => {
@@ -11984,6 +12005,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpProofUnblocker) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
         title: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? "Closeout wizard listo" : "Closeout wizard bloqueado",
