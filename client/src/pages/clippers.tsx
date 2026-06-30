@@ -2083,6 +2083,7 @@ interface ClipperTikTokMvpProofDoctorSummary {
   paths: {
     json: string;
     markdown: string;
+    fixQueueCsv: string;
     accountCsv: string;
     bridgeCsv: string;
     proofIntakeHtml: string;
@@ -2091,8 +2092,20 @@ interface ClipperTikTokMvpProofDoctorSummary {
     lanes: number;
     ready: number;
     rejected: number;
+    closeoutRejected?: number;
+    fixQueue: number;
     blocked: number;
   };
+  fixQueue: Array<{
+    lane: string;
+    source: "account" | "bridge" | string;
+    filePath: string;
+    row: number;
+    column: string;
+    requiredValue: string;
+    reason: string;
+    nextAction: string;
+  }>;
   lanes: Array<{
     accountId: string;
     accountName: string;
@@ -2103,6 +2116,16 @@ interface ClipperTikTokMvpProofDoctorSummary {
     evidencePath: string;
     reasons: string[];
     nextAction: string;
+    fixQueue: Array<{
+      lane: string;
+      source: "account" | "bridge" | string;
+      filePath: string;
+      row: number;
+      column: string;
+      requiredValue: string;
+      reason: string;
+      nextAction: string;
+    }>;
   }>;
   rejected: Array<{ row: number; lane: string; source: string; reason: string }>;
   guardrails: string[];
@@ -16199,9 +16222,21 @@ export default function ClippersPage() {
             )}
             {tiktokMvpProofDoctor && (
               <div className="mt-2 rounded-md border border-amber-300/15 bg-black/20 p-2 text-[11px] leading-4 text-amber-100/80" data-testid="clippers-tiktok-mvp-proof-doctor-panel">
-                <p>Doctor: {tiktokMvpProofDoctor.status}; ready {tiktokMvpProofDoctor.totals.ready}/{tiktokMvpProofDoctor.totals.lanes}; blocked {tiktokMvpProofDoctor.totals.blocked}</p>
+                <p>Doctor: {tiktokMvpProofDoctor.status}; ready {tiktokMvpProofDoctor.totals.ready}/{tiktokMvpProofDoctor.totals.lanes}; blocked {tiktokMvpProofDoctor.totals.blocked}; fixes {tiktokMvpProofDoctor.totals.fixQueue ?? tiktokMvpProofDoctor.fixQueue?.length ?? 0}</p>
                 <p className="mt-1 break-all">Report: {tiktokMvpProofDoctor.paths.markdown}</p>
+                {tiktokMvpProofDoctor.paths.fixQueueCsv && <p className="mt-1 break-all">Fix queue: {tiktokMvpProofDoctor.paths.fixQueueCsv}</p>}
                 <p className="mt-1">{tiktokMvpProofDoctor.lanes.find((lane) => lane.status !== "ready")?.nextAction || tiktokMvpProofDoctor.nextStep}</p>
+                {(tiktokMvpProofDoctor.fixQueue ?? []).length > 0 && (
+                  <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-fix-queue">
+                    {(tiktokMvpProofDoctor.fixQueue ?? []).slice(0, 4).map((item) => (
+                      <div key={`${item.source}-${item.lane}-${item.row}`} className="rounded border border-amber-300/10 bg-black/20 p-2">
+                        <p className="font-medium text-amber-100">{item.lane} / {item.source} row {item.row}</p>
+                        <p className="mt-1 break-all text-amber-100/70">{item.column}: {item.requiredValue}</p>
+                        <p className="mt-1 text-amber-100/70">{item.nextAction}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

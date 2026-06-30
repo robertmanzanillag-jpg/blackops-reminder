@@ -6,15 +6,24 @@ const rootDir = path.join(process.cwd(), "clippers_workspace");
 const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const outJsonPath = path.join(reportsDir, "proof-doctor.json");
 const outMarkdownPath = path.join(reportsDir, "proof-doctor.md");
+const outFixQueuePath = path.join(reportsDir, "proof-fix-queue.csv");
 
 function parseArgs(argv = process.argv.slice(2)) {
   const parsed = {
     closeoutScript: "script/clippers-tiktok-mvp-evidence-closeout.mjs",
+    accountCsvPath: "",
+    bridgeCsvPath: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--closeout-script") {
       parsed.closeoutScript = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--account-csv") {
+      parsed.accountCsvPath = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--bridge-csv") {
+      parsed.bridgeCsvPath = argv[index + 1] || "";
       index += 1;
     }
   }
@@ -65,6 +74,102 @@ function laneNextAction(row) {
   return row.reasons[0] || "Run proof intake pack, replace placeholders, then preview closeout again.";
 }
 
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function rejectedColumn(row) {
+  if (row.source === "account") return "proof";
+  if (row.source === "bridge") return "proof";
+  return "unknown";
+}
+
+function rejectedFilePath(row, paths) {
+  if (row.source === "account") return paths.accountCsv;
+  if (row.source === "bridge") return paths.bridgeCsv;
+  return "";
+}
+
+function rejectedNextAction(row) {
+  if (row.source === "account") {
+    return "Paste a real public/non-secret ownership or 2FA/security proof URL, then keep notes at 20+ characters.";
+  }
+  if (row.source === "bridge") {
+    return "Paste the real HTTPS metricool.com proof URL for the connected TikTok profile, then keep notes at 20+ characters.";
+  }
+  return "Replace the rejected placeholder with real non-secret evidence and rerun proof doctor.";
+}
+
+function normalizeFixQueueItem(row, paths) {
+  return {
+    lane: row.lane,
+    source: row.source,
+    filePath: rejectedFilePath(row, paths),
+    row: row.row || "",
+    column: rejectedColumn(row),
+    reason: row.reason,
+    requiredValue: row.source === "bridge"
+      ? "real HTTPS metricool.com proof URL"
+      : "real safe HTTPS ownership/security proof URL",
+    nextAction: rejectedNextAction(row),
+  };
+}
+
+function missingFixQueueItems(rows) {
+  return rows.flatMap((row) => {
+    if (row.status === "ready") return [];
+    const lane = `${row.accountId}:${row.platform}`;
+    const fixes = [];
+    if (row.accountProofStatus !== "accepted") {
+      fixes.push({
+        lane,
+        source: "account",
+        row: "",
+        reason: "missing accepted account ownership/security proof",
+      });
+    }
+    if (row.bridgeProofStatus !== "accepted") {
+      fixes.push({
+        lane,
+        source: "bridge",
+        row: "",
+        reason: "missing accepted Metricool bridge proof",
+      });
+    }
+    return fixes;
+  });
+}
+
+function buildFixQueue(rejected, rows, paths) {
+  const seen = new Set();
+  return [...rejected, ...missingFixQueueItems(rows)]
+    .map((row) => normalizeFixQueueItem(row, paths))
+    .filter((row) => {
+      const key = `${row.lane}:${row.source}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function renderFixQueueCsv(fixQueue) {
+  const header = ["lane", "source", "file_path", "row", "column", "required_value", "reason", "next_action"];
+  return [
+    header.join(","),
+    ...fixQueue.map((row) => [
+      row.lane,
+      row.source,
+      row.filePath,
+      row.row,
+      row.column,
+      row.requiredValue,
+      row.reason,
+      row.nextAction,
+    ].map(csvCell).join(",")),
+    "",
+  ].join("\n");
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Doctor",
@@ -90,6 +195,10 @@ function renderMarkdown(summary) {
     "",
     ...(summary.rejected.length ? summary.rejected.map((row) => `- ${row.source} row ${row.row} ${row.lane}: ${row.reason}`) : ["- none"]),
     "",
+    "## Fix Queue",
+    "",
+    ...(summary.fixQueue.length ? summary.fixQueue.map((row) => `- ${row.lane}: edit ${row.filePath} row ${row.row}, column ${row.column}; ${row.nextAction}`) : ["- none"]),
+    "",
     "## Guardrails",
     "",
     ...summary.guardrails.map((item) => `- ${item}`),
@@ -104,18 +213,32 @@ function renderMarkdown(summary) {
 async function main() {
   const args = parseArgs();
   await mkdir(reportsDir, { recursive: true });
-  const closeoutPreview = runJson([args.closeoutScript]);
+  const closeoutArgs = [args.closeoutScript];
+  if (args.accountCsvPath) closeoutArgs.push("--account-csv", args.accountCsvPath);
+  if (args.bridgeCsvPath) closeoutArgs.push("--bridge-csv", args.bridgeCsvPath);
+  const closeoutPreview = runJson(closeoutArgs);
   const closeoutReportPath = path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json");
   const closeout = closeoutPreview.ok ? await readJson(closeoutReportPath, {}) : {};
   const proofIntake = runJson(["script/clippers-tiktok-mvp-proof-intake-pack.mjs"]);
-  const lanes = (Array.isArray(closeout?.rows) ? closeout.rows : []).map((row) => ({
-    ...row,
-    nextAction: laneNextAction(row),
-  }));
   const previewFailed = !closeoutPreview.ok;
   const ready = previewFailed ? 0 : closeout?.totals?.ready || 0;
   const laneCount = closeout?.totals?.lanes || 2;
   const rejected = Array.isArray(closeout?.rejected) ? closeout.rejected : [];
+  const paths = {
+    json: outJsonPath,
+    markdown: outMarkdownPath,
+    fixQueueCsv: outFixQueuePath,
+    accountCsv: closeout?.accountCsvPath || path.join(rootDir, "account-permission-mvp-account-evidence.csv"),
+    bridgeCsv: closeout?.bridgeCsvPath || path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv"),
+    proofIntakeHtml: proofIntake.data?.htmlPath || path.join(reportsDir, "proof-intake-pack.html"),
+  };
+  const rawRows = Array.isArray(closeout?.rows) ? closeout.rows : [];
+  const fixQueue = previewFailed ? [] : buildFixQueue(rejected, rawRows, paths);
+  const lanes = rawRows.map((row) => ({
+    ...row,
+    nextAction: laneNextAction(row),
+    fixQueue: fixQueue.filter((item) => item.lane === `${row.accountId}:${row.platform}`),
+  }));
   const status = !previewFailed && ready >= laneCount && rejected.length === 0 ? "ready_to_apply" : "needs_proof_fix";
   const summary = {
     status,
@@ -125,21 +248,18 @@ async function main() {
     directSocialApisRequired: false,
     closeoutStatus: previewFailed ? "preview_failed" : closeout?.status || closeoutPreview.data?.status || "unknown",
     closeoutPreviewError: previewFailed ? closeoutPreview.error : undefined,
-    paths: {
-      json: outJsonPath,
-      markdown: outMarkdownPath,
-      accountCsv: closeout?.accountCsvPath || path.join(rootDir, "account-permission-mvp-account-evidence.csv"),
-      bridgeCsv: closeout?.bridgeCsvPath || path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv"),
-      proofIntakeHtml: proofIntake.data?.htmlPath || path.join(reportsDir, "proof-intake-pack.html"),
-    },
+    paths,
     totals: {
       lanes: laneCount,
       ready,
-      rejected: closeout?.totals?.rejected || rejected.length,
+      rejected: rejected.length,
+      closeoutRejected: closeout?.totals?.rejected || rejected.length,
+      fixQueue: fixQueue.length,
       blocked: Math.max(0, laneCount - ready),
     },
     lanes,
     rejected,
+    fixQueue,
     guardrails: [
       "Doctor runs preview only; it never applies evidence.",
       "Metricool remains approval_required and direct social APIs remain unnecessary for this TikTok MVP.",
@@ -155,13 +275,16 @@ async function main() {
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
+  await writeFile(outFixQueuePath, renderFixQueueCsv(fixQueue));
   console.log(JSON.stringify({
     status: summary.status,
     closeoutStatus: summary.closeoutStatus,
     ready: summary.totals.ready,
     blocked: summary.totals.blocked,
     rejected: summary.totals.rejected,
+    fixQueue: summary.totals.fixQueue,
     markdownPath: outMarkdownPath,
+    fixQueuePath: outFixQueuePath,
     nextStep: summary.nextStep,
   }, null, 2));
 }

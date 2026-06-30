@@ -268,6 +268,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-pack-paths/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-fix-queue/);
+  assert.match(page, /fixQueueCsv/);
   assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
   const closeoutPanel = requiredSlice(
     page,
@@ -321,7 +323,9 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "needs_proof_fix");
   assert.equal(output.ready, 0);
+  assert.equal(output.fixQueue, 4);
   assert.match(output.markdownPath, /proof-doctor\.md$/);
+  assert.match(output.fixQueuePath, /proof-fix-queue\.csv$/);
 
   const source = await readFile(proofDoctorPath, "utf8");
   assert.doesNotMatch(source, /--apply|ready_to_send|video\.publish|directSocialApisRequired:\s*true/);
@@ -332,8 +336,51 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
   assert.equal(doctor.directSocialApisRequired, false);
   assert.equal(doctor.totals.lanes, 2);
   assert.equal(doctor.totals.blocked, 2);
+  assert.equal(doctor.totals.fixQueue, 4);
+  assert.match(doctor.paths.fixQueueCsv, /proof-fix-queue\.csv$/);
+  assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.requiredValue.includes("metricool.com")));
   assert.ok(doctor.lanes.every((lane) => lane.nextAction && lane.status === "blocked"));
   assert.doesNotMatch(JSON.stringify(doctor), /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
+
+  const fixQueueCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fix-queue.csv"), "utf8");
+  assert.match(fixQueueCsv, /sports-daily:tiktok/);
+  assert.match(fixQueueCsv, /real HTTPS metricool.com proof URL/);
+  assert.doesNotMatch(fixQueueCsv, /ready_to_send|video\.publish|access_token=|refresh_token=|client_secret=/i);
+});
+
+test("TikTok MVP proof doctor creates fix queue for missing account and bridge rows", async () => {
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(accountCsvPath, `${accountHeader}\n`);
+    await writeFile(bridgeCsvPath, `${bridgeHeader}\n`);
+
+    const result = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-doctor.mjs",
+      "--account-csv",
+      accountCsvPath,
+      "--bridge-csv",
+      bridgeCsvPath,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "needs_proof_fix");
+    assert.equal(output.rejected, 0);
+    assert.equal(output.fixQueue, 4);
+
+    const doctor = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-doctor.json"), "utf8"));
+    assert.equal(doctor.totals.closeoutRejected, 2);
+    assert.equal(doctor.totals.fixQueue, 4);
+    assert.ok(doctor.fixQueue.some((row) => row.lane === "meme-radar:tiktok" && row.source === "account" && row.reason === "missing accepted account ownership/security proof"));
+    assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.reason === "missing accepted Metricool bridge proof"));
+  } finally {
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
 });
 
 test("TikTok MVP proof doctor ignores stale ready reports when closeout preview fails", async () => {
@@ -380,12 +427,25 @@ test("TikTok MVP proof doctor ignores stale ready reports when closeout preview 
     assert.equal(output.closeoutStatus, "preview_failed");
     assert.equal(output.ready, 0);
     assert.equal(output.blocked, 2);
+    assert.equal(output.fixQueue, 0);
 
     const doctor = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-doctor.json"), "utf8"));
     assert.equal(doctor.closeoutStatus, "preview_failed");
+    assert.deepEqual(doctor.fixQueue, []);
     assert.match(doctor.nextStep, /stale reports are ignored/);
   } finally {
     if (previousReport === null) await unlink(closeoutReportPath).catch(() => undefined);
     else await writeFile(closeoutReportPath, previousReport);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
   }
+});
+
+test("TikTok MVP proof doctor UI tolerates pre-fix-queue reports", async () => {
+  const page = await readFile(clippersPagePath, "utf8");
+  assert.match(page, /tiktokMvpProofDoctor\.totals\.fixQueue \?\? tiktokMvpProofDoctor\.fixQueue\?\.length \?\? 0/);
+  assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.length > 0/);
+  assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.slice\(0, 4\)/);
 });
