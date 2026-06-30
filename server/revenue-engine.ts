@@ -74,6 +74,7 @@ export const revenueAutomationOpportunitySchema = automationQuoteSchema.extend({
   status: z.enum(["intake", "quoted", "approved", "sold", "in_delivery", "delivered", "blocked"]).default("intake"),
   clientApprovedScope: z.boolean().default(false),
   depositPaid: z.boolean().default(false),
+  paymentConfirmation: z.string().trim().max(500).optional().default(""),
 });
 
 export type RevenueAutomationOpportunityInput = z.infer<typeof revenueAutomationOpportunitySchema>;
@@ -588,6 +589,7 @@ export const revenueAutomationAgentCommandSchema = revenueAutomationIntakeSchema
   clientApprovedScope: z.boolean().default(false),
   depositPaid: z.boolean().default(false),
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
+  paymentConfirmation: z.string().trim().max(500).optional().default(""),
   createDeliveryWorkspaceIfSold: z.boolean().default(false),
   workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
   publicDataVerified: z.boolean().default(false),
@@ -616,6 +618,7 @@ export type RevenueAutomationOpportunityDeliveryInput = z.infer<typeof revenueAu
 export const revenueAutomationOpportunityCloseSchema = z.object({
   opportunityId: z.string().trim().min(1).max(200),
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
+  paymentConfirmation: z.string().trim().max(500).optional().default(""),
   markScopeApproved: z.boolean().default(true),
   notes: z.string().trim().max(800).optional().default(""),
 });
@@ -3168,6 +3171,7 @@ export function convertRevenueAutomationIntakeToOpportunity(input: RevenueAutoma
     status: parsed.status,
     clientApprovedScope: parsed.clientApprovedScope,
     depositPaid: parsed.depositPaid,
+    paymentConfirmation: "",
   });
 
   intake.nextAction = `Oportunidad creada: ${result.opportunity.id}. Pedir aprobacion de scope y deposito antes de construir.`;
@@ -3289,6 +3293,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
     status: parsed.lifecycleTarget === "sale" || parsed.lifecycleTarget === "delivery" ? "approved" : "quoted",
     clientApprovedScope: parsed.clientApprovedScope,
     depositPaid: parsed.depositPaid,
+    paymentConfirmation: parsed.paymentConfirmation,
   });
 
   intake.nextAction = `Agente creo oportunidad: ${opportunityResult.opportunity.id}. Pedir aprobacion de scope y deposito antes de construir.`;
@@ -3317,6 +3322,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
   const saleBlockers = [
     !parsed.clientApprovedScope && "falta aprobacion escrita del scope",
     !parsed.depositPaid && !parsed.cashCollectedUsd && "falta deposito/cash cobrado",
+    (parsed.depositPaid || parsed.cashCollectedUsd) && !hasRevenuePaymentEvidence(parsed.paymentConfirmation) && "falta comprobante/referencia verificable de pago",
   ].filter(Boolean) as string[];
 
   if (saleBlockers.length > 0) {
@@ -3335,8 +3341,8 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
       blockedUntilAnswered: [],
       nextActions: [
         "Conseguir aprobacion escrita del scope.",
-        "Cobrar deposito antes de registrar venta o construir.",
-        "Volver a correr el agente con depositPaid/cashCollectedUsd.",
+        "Cobrar deposito y guardar referencia de Stripe/Zelle/recibo antes de registrar venta o construir.",
+        "Volver a correr el agente con depositPaid/cashCollectedUsd/paymentConfirmation.",
       ],
       snapshot: getRevenueEngineSnapshot(),
     };
@@ -3345,6 +3351,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
   const closeResult = closeRevenueAutomationOpportunity({
     opportunityId: opportunityResult.opportunity.id,
     cashCollectedUsd: parsed.cashCollectedUsd,
+    paymentConfirmation: parsed.paymentConfirmation,
     markScopeApproved: parsed.clientApprovedScope,
     notes: `${automationSaleFingerprint} | Cierre ejecutado por automation agent command con guardrails.`,
   });
@@ -3787,6 +3794,7 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
     opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de cerrar",
     cashCollectedUsd <= 0 && "falta cash/deposito cobrado",
     cashCollectedUsd > 0 && cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${(requiredDepositUsd - cashCollectedUsd).toLocaleString("en-US")}`,
+    !hasRevenuePaymentEvidence(parsed.paymentConfirmation || opportunity.paymentConfirmation) && "falta comprobante/referencia verificable de pago",
     opportunity.quote.pricing.estimatedInternalMonthlyCostUsd > 100 && "costo interno supera $100/mes",
     opportunity.quote.pricing.grossMarginPercent < 65 && "margen mensual menor a 65%",
   ].filter(Boolean) as string[];
@@ -3808,6 +3816,7 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
   opportunity.status = "sold";
   opportunity.clientApprovedScope = parsed.markScopeApproved || opportunity.clientApprovedScope;
   opportunity.depositPaid = true;
+  opportunity.paymentConfirmation = parsed.paymentConfirmation || opportunity.paymentConfirmation;
   opportunity.nextAction = "Venta registrada en ledger. Crear delivery workspace y mantener QA antes de entregar.";
   opportunity.updatedAt = new Date().toISOString();
   persistRevenueAutomationOpportunities();
@@ -3821,6 +3830,7 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
     notes: [
       `Automation opportunity:${opportunity.id}`,
       opportunity.quote.scope.packageName,
+      opportunity.paymentConfirmation && `Payment confirmation:${opportunity.paymentConfirmation}`,
       parsed.notes,
     ].filter((item) => item.trim().length > 0).join(" | "),
   });
@@ -5597,6 +5607,27 @@ function revenueSourceUrlMatchesCandidate(input: Pick<RevenuePublicLeadCandidate
     .match(/[a-z0-9._%+-]+(?=@)/g) || [];
   const contactHandleTokens = contactTokens.filter((token) => token.length >= 6 && sourceText.includes(token));
   return matchingBusinessTokens.length >= 2 || contactLocalParts.some((token) => token.length >= 6 && sourceText.includes(token)) || contactHandleTokens.length > 0;
+}
+
+function revenueSourceUrlStrictlyMatchesCandidate(input: Pick<RevenuePublicLeadCandidateInput, "businessName" | "contactValue" | "recipientEmail" | "sourceUrl">) {
+  if (!isRevenuePublicSourceUrl(input.sourceUrl)) return false;
+  const parsed = new URL(input.sourceUrl);
+  const sourceText = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.toLowerCase();
+  const businessTokens = revenueEvidenceTokens(input.businessName);
+  const contactTokens = revenueEvidenceTokens(`${input.contactValue} ${input.recipientEmail}`);
+  const matchingBusinessTokens = businessTokens.filter((token) => sourceText.includes(token));
+  const contactLocalParts = `${input.contactValue} ${input.recipientEmail}`
+    .toLowerCase()
+    .match(/[a-z0-9._%+-]+(?=@)/g) || [];
+  const contactHandleTokens = contactTokens.filter((token) => token.length >= 6 && sourceText.includes(token));
+  return matchingBusinessTokens.length >= 2 || contactLocalParts.some((token) => token.length >= 6 && sourceText.includes(token)) || contactHandleTokens.length > 0;
+}
+
+function revenueSeedLeadSourceBlocker(input: Pick<RevenueMoneySprintSeedLeadInput, "businessName" | "contactValue" | "recipientEmail" | "sourceUrl">) {
+  if (input.sourceUrl.trim().length === 0) return "sourceUrl publico";
+  if (!isRevenuePublicSourceUrl(input.sourceUrl)) return "sourceUrl must be public";
+  if (!revenueSourceUrlStrictlyMatchesCandidate(input)) return "sourceUrl must match business/contact evidence";
+  return "";
 }
 
 function isRevenueManualContactChannel(channel: RevenueLeadInput["contactChannel"] | RevenueOutreachDraftInput["channel"]) {
@@ -9365,6 +9396,14 @@ export function parseRevenueMoneySprintSeedLeadBatch(
         });
         continue;
       }
+      const sourceBlocker = revenueSeedLeadSourceBlocker(parsed.data);
+      if (sourceBlocker) {
+        blockedSeeds.push({
+          businessName: parsed.data.businessName || "batch row",
+          reason: sourceBlocker,
+        });
+        continue;
+      }
       seedLeads.push(parsed.data);
       continue;
     }
@@ -9393,7 +9432,15 @@ export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
     })),
   ];
   let previewMockupCount = 0;
-  const acceptedSeeds = sprintSeedLeads.map((seed, index) => {
+  const acceptedSeeds = sprintSeedLeads.flatMap((seed, index) => {
+    const sourceBlocker = revenueSeedLeadSourceBlocker(seed);
+    if (sourceBlocker) {
+      blockedSeeds.push({
+        businessName: seed.businessName,
+        reason: sourceBlocker,
+      });
+      return [];
+    }
     const qualification = qualifyRevenueLead(seed);
     const hasSource = seed.sourceUrl.trim().length > 0;
     const hasDraftContactPath = revenueLeadHasDraftContactPath(seed);
@@ -9401,7 +9448,7 @@ export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
     const mockupReady = mockupEligible && previewMockupCount < parsed.dailyMockupLimit;
     if (mockupReady) previewMockupCount += 1;
     const draftReady = hasSource && hasDraftContactPath && qualification.missing.length === 0;
-    return {
+    return [{
       rowNumber: index + 1,
       businessName: seed.businessName,
       area: seed.area,
@@ -9420,7 +9467,7 @@ export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
         !hasDraftContactPath && "recipientEmail or manual contact URL",
         ...qualification.missing,
       ].filter((item): item is string => Boolean(item)),
-    };
+    }];
   });
   const paidSpendBlocked = parsed.maxPaidDataSpendUsd > 0;
 
@@ -9501,6 +9548,15 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
   ];
 
   for (const seed of sprintSeedLeads) {
+    const sourceBlocker = revenueSeedLeadSourceBlocker(seed);
+    if (sourceBlocker) {
+      blockedSeeds.push({
+        businessName: seed.businessName,
+        reason: sourceBlocker,
+      });
+      continue;
+    }
+
     const leadResult = recordRevenueLead({
       businessName: seed.businessName,
       area: seed.area,

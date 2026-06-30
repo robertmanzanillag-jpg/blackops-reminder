@@ -4010,7 +4010,7 @@ test("money sprint parses quoted CSV batches with pipes inside evidence", () => 
     writePreviewFiles: false,
     seedLeadBatchText: [
       "business,area,niche,website,channel,contact,sourceUrl,recipientEmail,evidence,painPoint,offer",
-      "\"CSV Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@csvsalon.example\",\"https://example.com/csv-salon\",\"owner@csvsalon.example\",\"Google listing has no website | Instagram profile has recent service photos and contact path.\",\"Needs booking capture and follow-up.\",\"3200\"",
+      "\"CSV Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@csvsalon.example\",\"https://example.com/csv-salon-csvsalon\",\"owner@csvsalon.example\",\"Google listing has no website | Instagram profile has recent service photos and contact path.\",\"Needs booking capture and follow-up.\",\"3200\"",
     ].join("\n"),
   });
 
@@ -4042,12 +4042,14 @@ test("money sprint preview parses batch without persisting leads drafts or previ
   const snapshot = getRevenueEngineSnapshot();
 
   assert.equal(result.status, "ready_to_import");
-  assert.equal(result.totals.accepted, 2);
+  assert.equal(result.totals.accepted, 1);
+  assert.equal(result.totals.blocked, 1);
   assert.equal(result.totals.mockupReady, 1);
   assert.equal(result.totals.draftReady, 1);
   assert.equal(result.acceptedSeeds[0].businessName, "Preview Salon");
   assert.equal(result.acceptedSeeds[0].draftReady, true);
-  assert.equal(result.acceptedSeeds[1].draftReady, false);
+  assert.equal(result.blockedSeeds[0].businessName, "Weak Row");
+  assert.match(result.blockedSeeds[0].reason, /sourceUrl publico/);
   assert.equal(result.safety.persistsData, false);
   assert.equal(result.safety.writesPreviewFiles, false);
   assert.equal(result.safety.sendsOutreach, false);
@@ -4081,6 +4083,64 @@ test("money sprint preview treats manual-channel leads as draft-ready without em
   assert.equal(result.acceptedSeeds[0].recipientEmail, "");
   assert.equal(result.safety.sendsOutreach, false);
   assert.equal(getRevenueEngineSnapshot().recentOutreach.length, 0);
+});
+
+test("money sprint blocks generic or unrelated source urls before persisting leads", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Generic Search Cafe|Miami|coffee shop|no_website|email|owner@genericsearch.example|https://www.google.com/search?q=coffee+shops+miami|owner@genericsearch.example|Google search result mentions coffee shops but does not prove this specific business contact path.|Needs online menu.|3500|Owner|Generic row should not persist from a search results page.",
+      "Unrelated Source Cafe|Miami|coffee shop|no_website|email|owner@unrelatedsource.example|https://example.com/best-cafes-miami|owner@unrelatedsource.example|Directory article is generic and does not tie the URL to this business contact path.|Needs online menu.|3500|Owner|Unrelated row should not persist from a generic article.",
+    ].join("\n"),
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "needs_lead_evidence");
+  assert.equal(result.recordedLeads.length, 0);
+  assert.equal(result.previews.length, 0);
+  assert.equal(result.outreachDrafts.length, 0);
+  assert.equal(result.blockedSeeds.length, 2);
+  assert.equal(result.blockedSeeds.every((seed) => seed.reason.includes("sourceUrl must match")), true);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("money sprint blocks generic platform urls before persisting leads", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Generic Instagram Cafe|Miami|coffee shop|no_website|instagram|https://instagram.com/genericinstagramcafe|https://instagram.com/explore/tags/coffee|owner@genericinstagram.example|Instagram hashtag page mentions coffee but not this business profile.|Needs online menu.|3500|Owner|Generic platform URL should not persist.",
+      "Generic Yelp Cafe|Miami|coffee shop|no_website|contact_form|https://genericyelpcafe.example/contact|https://www.yelp.com/search?find_desc=coffee&find_loc=Miami|owner@genericyelp.example|Yelp category search is public but not tied to this specific business.|Needs online menu.|3500|Owner|Generic platform URL should not persist.",
+    ].join("\n"),
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "needs_lead_evidence");
+  assert.equal(result.recordedLeads.length, 0);
+  assert.equal(result.blockedSeeds.length, 2);
+  assert.equal(result.blockedSeeds.every((seed) => seed.reason.includes("sourceUrl must match")), true);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
 });
 
 test("money sprint preview respects daily mockup limit", () => {
@@ -5302,6 +5362,7 @@ test("automation agent command records sale and creates delivery workspace when 
     clientApprovedScope: true,
     depositPaid: true,
     cashCollectedUsd: 2500,
+    paymentConfirmation: "Stripe pi_lifecycle_2500",
     publicDataVerified: true,
     visualQaPassed: true,
     technicalQaPassed: false,
@@ -5327,6 +5388,40 @@ test("automation agent command records sale and creates delivery workspace when 
   assert.equal(retry.snapshot.metrics.automationsSold, 1);
   assert.equal(retry.snapshot.metrics.cashCollectedUsd, 2500);
   assert.equal(retry.snapshot.recentLedger.filter((entry) => entry.kind === "automation_sale").length, 1);
+});
+
+test("automation agent command blocks sale lifecycle without payment evidence", () => {
+  const result = runRevenueAutomationAgentCommand({
+    businessName: "Lifecycle Weak Payment Spa",
+    industry: "spa",
+    request: "Automate website booking requests into Google Sheets, notify the owner, send approved appointment follow-up, and report booked appointments weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 800,
+    urgency: "this_month",
+    contactName: "Owner",
+    contactEmail: "",
+    knownAnswers: "Trigger is website booking request. Data goes to Google Sheets. Goal is booked appointments. Follow-up is approved email only.",
+    source: "manual",
+    lifecycleTarget: "delivery",
+    clientApprovedScope: true,
+    depositPaid: true,
+    cashCollectedUsd: 2500,
+    paymentConfirmation: "paid",
+    createDeliveryWorkspaceIfSold: true,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  assert.equal(result.status, "sale_blocked");
+  assert.equal(result.closeResult, null);
+  assert.equal(result.workspaceResult, null);
+  assert.equal(result.reason.includes("comprobante"), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
 });
 
 test("blocks automation intake conversion until clarification is complete", () => {
@@ -5447,6 +5542,7 @@ test("closes automation opportunity into ledger and updates money metrics", () =
   const result = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_automation_2500",
     markScopeApproved: true,
     notes: "Deposit paid by client.",
   });
@@ -5454,11 +5550,50 @@ test("closes automation opportunity into ledger and updates money metrics", () =
   assert.equal(result.status, "recorded");
   assert.equal(result.opportunity?.status, "sold");
   assert.equal(result.opportunity?.depositPaid, true);
+  assert.equal(result.opportunity?.paymentConfirmation, "Stripe pi_automation_2500");
   assert.equal(result.entry?.kind, "automation_sale");
+  assert.equal(result.entry?.notes.includes("Stripe pi_automation_2500"), true);
   assert.equal(result.entry?.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
   assert.equal(result.snapshot.metrics.automationsSold, 1);
   assert.equal(result.snapshot.metrics.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
   assert.equal(result.snapshot.profitGuard.status, "scale_carefully");
+});
+
+test("blocks automation opportunity close without verifiable payment evidence", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Weak Evidence Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const missingEvidence = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+  });
+  const weakNarrativeEvidence = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Robert confirmed the client paid.",
+    markScopeApproved: true,
+  });
+
+  assert.equal(missingEvidence.status, "blocked");
+  assert.equal(missingEvidence.reason.includes("comprobante"), true);
+  assert.equal(weakNarrativeEvidence.status, "blocked");
+  assert.equal(weakNarrativeEvidence.reason.includes("comprobante"), true);
+  assert.equal(weakNarrativeEvidence.entry, null);
+  assert.equal(weakNarrativeEvidence.opportunity?.status, "quoted");
+  assert.equal(weakNarrativeEvidence.opportunity?.depositPaid, false);
+  assert.equal(weakNarrativeEvidence.snapshot.metrics.automationsSold, 0);
+  assert.equal(weakNarrativeEvidence.snapshot.metrics.cashCollectedUsd, 0);
 });
 
 test("blocks automation opportunity close when deposit is incomplete", () => {
@@ -5508,11 +5643,13 @@ test("does not double count automation opportunity already recorded in ledger", 
   const first = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Zelle ref duplicate-ledger-2500",
     markScopeApproved: true,
   });
   const second = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Zelle ref duplicate-ledger-2500",
     markScopeApproved: true,
   });
 

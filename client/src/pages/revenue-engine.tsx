@@ -679,6 +679,7 @@ type RevenueSnapshot = {
     status: "intake" | "quoted" | "approved" | "sold" | "in_delivery" | "delivered" | "blocked";
     clientApprovedScope: boolean;
     depositPaid: boolean;
+    paymentConfirmation: string;
     quote: AutomationQuote;
     qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
     nextAction: string;
@@ -1923,6 +1924,7 @@ export default function RevenueEnginePage() {
   const [automationDepositPaid, setAutomationDepositPaid] = useState(false);
   const [automationLifecycleTarget, setAutomationLifecycleTarget] = useState<"quote" | "opportunity" | "sale" | "delivery">("opportunity");
   const [automationCashCollectedUsd, setAutomationCashCollectedUsd] = useState(0);
+  const [automationPaymentConfirmation, setAutomationPaymentConfirmation] = useState("");
   const [automationIntakeAnswers, setAutomationIntakeAnswers] = useState("Trigger, accion, herramienta actual y resultado esperado del cliente.");
   const [reviewProjectName, setReviewProjectName] = useState("Prospect Restaurant launch");
   const [reviewProjectType, setReviewProjectType] = useState<"website" | "automation" | "bundle">("bundle");
@@ -2413,6 +2415,7 @@ export default function RevenueEnginePage() {
           clientApprovedScope: automationScopeApproved,
           depositPaid: automationDepositPaid,
           cashCollectedUsd: automationCashCollectedUsd > 0 ? automationCashCollectedUsd : undefined,
+          paymentConfirmation: automationPaymentConfirmation,
           createDeliveryWorkspaceIfSold: automationLifecycleTarget === "delivery",
           workspaceName: `${automationBusinessName} automation delivery`,
           publicDataVerified: reviewChecks.publicDataVerified,
@@ -2447,6 +2450,7 @@ export default function RevenueEnginePage() {
           status: automationOpportunityStatus,
           clientApprovedScope: automationScopeApproved,
           depositPaid: automationDepositPaid,
+          paymentConfirmation: automationPaymentConfirmation,
         }),
       });
       const data = await response.json();
@@ -2684,14 +2688,15 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number }>({
-    mutationFn: async ({ opportunityId, cashCollectedUsd }) => {
+  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; paymentConfirmation: string }>({
+    mutationFn: async ({ opportunityId, cashCollectedUsd, paymentConfirmation }) => {
       const response = await fetch("/api/revenue-engine/automation-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunityId,
           cashCollectedUsd,
+          paymentConfirmation,
           markScopeApproved: true,
           notes: "Registrado desde Revenue Engine opportunities.",
         }),
@@ -7179,6 +7184,19 @@ export default function RevenueEnginePage() {
                             data-testid="input-automation-cash-collected"
                           />
                         </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="automation-payment-confirmation">
+                          Referencia de pago
+                        </label>
+                        <Input
+                          id="automation-payment-confirmation"
+                          value={automationPaymentConfirmation}
+                          onChange={(event) => setAutomationPaymentConfirmation(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          placeholder="Stripe pi_..., Zelle ref..., recibo..."
+                          data-testid="input-automation-payment-confirmation"
+                        />
                       </div>
                       <div className="grid gap-2">
                         {[
