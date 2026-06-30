@@ -108,7 +108,8 @@ function markdown(summary) {
     `- Sync conflicts: ${summary.totals.conflicts}`,
     `- Goal audit waiting Metricool work: ${summary.totals.waitingMetricoolWork}`,
     `- Metricool 100 rows ready: ${summary.totals.metricool100Rows}`,
-    `- Metricool 100 ready batches: ${summary.totals.metricool100ReadyBatches}`,
+    `- Metricool 100 operator-ready batches: ${summary.totals.metricool100ReadyBatches}`,
+    `- Metricool 100 source-ready batches: ${summary.totals.metricool100SourceReadyBatches}`,
     `- Metricool 100 blocked batches: ${summary.totals.metricool100BlockedBatches}`,
     "",
     "## Metricool 100 Run",
@@ -119,7 +120,8 @@ function markdown(summary) {
     `- Batches: ${summary.metricool100.batches}`,
     `- Sports rows: ${summary.metricool100.sports}`,
     `- Meme rows: ${summary.metricool100.memes}`,
-    `- Ready batches: ${summary.metricool100.readyBatches}`,
+    `- Operator-ready batches: ${summary.metricool100.readyBatches}`,
+    `- Source-ready batches: ${summary.metricool100.sourceReadyBatches}`,
     `- Blocked batches: ${summary.metricool100.blockedBatches}`,
     `- Ready to send: ${summary.metricool100.readyToSend}`,
     `- Published rows counted: ${summary.metricool100.publishedRowsCounted}`,
@@ -225,7 +227,11 @@ async function main() {
     && Number(trackerTotals.readyToImport || 0) === 0
     && Number(syncConsistency.conflicts || 0) === 0;
   const nextRow = (runbook.rows || []).find((row) => row.state === "not_started") || (runbook.rows || [])[0] || null;
-  const metricool100Ready = metricool100Handoff?.status === "ready_for_operator"
+  const metricool100SourceReadyBatches = (metricool100Handoff?.batches || []).filter((batch) => batch.status === "ready_for_metricool_review").length;
+  const metricool100SourceBlockedBatches = (metricool100Handoff?.batches || []).filter((batch) => batch.status === "blocked_source_verification").length;
+  const metricool100OperatorGateOpen = readyForOperator;
+  const metricool100Ready = metricool100OperatorGateOpen
+    && metricool100Handoff?.status === "ready_for_operator"
     && metricool100Handoff?.operatorConsole?.status === "ready_for_metricool_review"
     && Number(metricool100Handoff?.totals?.rows || 0) === 100
     && Number(metricool100Handoff?.totals?.readyToSend || 0) === 0
@@ -240,8 +246,10 @@ async function main() {
     sports: Number(metricool100Handoff?.totals?.sports || 0),
     memes: Number(metricool100Handoff?.totals?.memes || 0),
     streamers: Number(metricool100Handoff?.totals?.streamers || 0),
-    readyBatches: (metricool100Handoff?.batches || []).filter((batch) => batch.status === "ready_for_metricool_review").length,
-    blockedBatches: (metricool100Handoff?.batches || []).filter((batch) => batch.status === "blocked_source_verification").length,
+    sourceReadyBatches: metricool100SourceReadyBatches,
+    readyBatches: metricool100OperatorGateOpen ? metricool100SourceReadyBatches : 0,
+    blockedBatches: metricool100SourceBlockedBatches + (metricool100OperatorGateOpen ? 0 : metricool100SourceReadyBatches),
+    operatorGateOpen: metricool100OperatorGateOpen,
     readyToSend: Number(metricool100Handoff?.totals?.readyToSend || 0),
     publishedRowsCounted: Number(metricool100Handoff?.operatorConsole?.publishedRowsCounted || 0),
     currentBatchId: metricool100Handoff?.operatorConsole?.currentBatchId || "",
@@ -350,6 +358,7 @@ async function main() {
       waitingMetricoolWork: Number(goalAudit.totals?.waitingMetricoolWork || 0),
       metricool100Rows: metricool100.rows,
       metricool100ReadyBatches: metricool100.readyBatches,
+      metricool100SourceReadyBatches: metricool100.sourceReadyBatches,
       metricool100BlockedBatches: metricool100.blockedBatches,
     },
     nextRow,
@@ -388,6 +397,7 @@ async function main() {
     evidenceReadyForImportPreview: summary.totals.evidenceReadyForImportPreview,
     metricool100Rows: summary.totals.metricool100Rows,
     metricool100ReadyBatches: summary.totals.metricool100ReadyBatches,
+    metricool100SourceReadyBatches: summary.totals.metricool100SourceReadyBatches,
     metricool100BlockedBatches: summary.totals.metricool100BlockedBatches,
     conflicts: summary.totals.conflicts,
     nextQueueItem: summary.nextRow?.metricoolQueueItemId || null,

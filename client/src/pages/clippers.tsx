@@ -1298,8 +1298,10 @@ interface ClipperTikTokMvpGoLivePacketSummary {
     sports: number;
     memes: number;
     streamers: number;
+    sourceReadyBatches?: number;
     readyBatches: number;
     blockedBatches: number;
+    operatorGateOpen?: boolean;
     readyToSend: number;
     publishedRowsCounted: number;
     currentBatchId: string;
@@ -1333,6 +1335,7 @@ interface ClipperTikTokMvpGoLivePacketSummary {
     waitingMetricoolWork: number;
     metricool100Rows?: number;
     metricool100ReadyBatches?: number;
+    metricool100SourceReadyBatches?: number;
     metricool100BlockedBatches?: number;
   };
   nextRow: null | {
@@ -19731,8 +19734,13 @@ export default function ClippersPage() {
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">Metricool 100 run</p>
                     <p className="mt-1 text-sm font-medium text-white">
-                      {formatNumber(tiktokMvpGoLivePacket.metricool100.rows)} rows · {formatNumber(tiktokMvpGoLivePacket.metricool100.readyBatches)}/{formatNumber(tiktokMvpGoLivePacket.metricool100.batches)} batches ready
+                      {formatNumber(tiktokMvpGoLivePacket.metricool100.rows)} rows · {formatNumber(tiktokMvpGoLivePacket.metricool100.readyBatches)}/{formatNumber(tiktokMvpGoLivePacket.metricool100.batches)} operator-ready
                     </p>
+                    {tiktokMvpGoLivePacket.metricool100.sourceReadyBatches !== undefined && tiktokMvpGoLivePacket.metricool100.sourceReadyBatches !== tiktokMvpGoLivePacket.metricool100.readyBatches && (
+                      <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                        Source-ready batches: {formatNumber(tiktokMvpGoLivePacket.metricool100.sourceReadyBatches)}; operator gate {tiktokMvpGoLivePacket.metricool100.operatorGateOpen ? "open" : "blocked"}.
+                      </p>
+                    )}
                     <p className="mt-1 break-all text-[11px] leading-4 text-emerald-100/70">
                       Current batch evidence: {tiktokMvpGoLivePacket.metricool100.currentBatchEvidenceCsv || "n/a"}
                     </p>
