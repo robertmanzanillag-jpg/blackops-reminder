@@ -10284,8 +10284,8 @@ const sourceIntakeBatchHeader = "category,title,url,source,platform,target_file_
 const sourceScoutIntakeBatchHeader = "candidate_id,title,category,platform,url,source,status,evidence_type,proof,notes,target_file_name,source_drop_path,recreate_plan,views,likes,comments,shares";
 const metricoolBridgeEvidenceTemplate = [
   "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
-  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
-  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
+  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL or Drive/Docs evidence URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
+  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL or Drive/Docs evidence URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
 ].join("\n");
 const tiktokMvpProofQuickFillTemplate = JSON.stringify({
   lanes: {
@@ -18848,7 +18848,7 @@ export default function ClippersPage() {
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" data-testid="clippers-metricool-bridge-required-fields">
             {[
               "Public TikTok profile URL",
-              "Real HTTPS Metricool proof URL",
+              "Real HTTPS Metricool proof URL or Google Drive/Docs evidence URL",
               "20+ character operator notes",
               "No passwords, tokens, cookies or private screenshots",
             ].map((item) => (

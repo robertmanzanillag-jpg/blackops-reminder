@@ -389,7 +389,7 @@ async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
       ],
       nextStep: readyRows === rows.length
         ? "Load the CSV into the bridge evidence box, preview rows, then import only after review."
-        : "Edit the local bridge CSV with real public/non-secret Metricool proof URLs and notes.",
+        : "Edit the local bridge CSV with real public/non-secret Metricool proof URLs or Google Drive/Docs evidence URLs and notes.",
     };
   } catch (error: any) {
     return {
@@ -586,7 +586,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
         "Drop status does not create proof files or write evidence.",
         "It does not apply evidence, queue Metricool, create calendar rows, or send posts.",
       ],
-      nextStep: `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with SPORT and memes ownership plus Metricool proof URLs.`,
+      nextStep: `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with SPORT and memes ownership plus Metricool proof URLs or Google Drive/Docs evidence URLs.`,
     };
   }
 }

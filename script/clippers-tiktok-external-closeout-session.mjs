@@ -59,7 +59,7 @@ async function evidenceImportFreshness() {
 
 function taskAction(row) {
   if (row.lane === "metricool_bridge") {
-    return "Add the real non-secret Metricool proof URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
+    return "Add the real non-secret Metricool proof URL or Google Drive/Docs evidence URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
   }
   if (row.lane === "account") {
     return "Confirm the TikTok account/profile is real and connected, then add non-secret ownership/security proof and update the CSV row.";
@@ -116,7 +116,7 @@ function copyPacketFor(row) {
 
 function mvpProofTaskCsvRow(row, proofType) {
   if (proofType === "metricool_bridge") {
-    return `"${row.accountId}","tiktok","${metricoolBrandNameFor(row)}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
+    return `"${row.accountId}","tiktok","${metricoolBrandNameFor(row)}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL or Drive/Docs evidence URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
   }
   return `"account","${row.accountId}","tiktok","verified","","","","","https://www.tiktok.com/signup","","<paste real public/non-secret ownership proof URL>","Replace with a real 20+ character note confirming the TikTok account ownership and safety setup."`;
 }
