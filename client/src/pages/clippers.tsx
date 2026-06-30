@@ -7241,6 +7241,24 @@ interface ClipperMetricoolBridgeEvidenceBatchResult {
   nextStep: string;
 }
 
+interface ClipperMetricoolBridgePreviewGate {
+  status: "ready_for_import" | "blocked_preview_not_clean" | "blocked_missing_or_stale_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  rawHash: string;
+  totals?: {
+    rows: number;
+    recorded: number;
+    skipped: number;
+  };
+  issues?: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperMetricoolBridgeEvidenceCsvStatus {
   status: "missing" | "needs_review" | "ready_for_preview";
   generatedAt: string;
@@ -10337,7 +10355,7 @@ export default function ClippersPage() {
   const [tiktokBatchEvidenceBatchPreview, setTikTokBatchEvidenceBatchPreview] = useState<ClipperTikTokBatchEvidenceBatchSummary | null>(null);
   const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState(metricoolBridgeEvidenceTemplate);
   const [metricoolBridgeEvidenceBatch, setMetricoolBridgeEvidenceBatch] = useState<ClipperMetricoolBridgeEvidenceBatchResult | null>(null);
-  const [metricoolBridgeEvidenceBatchPreview, setMetricoolBridgeEvidenceBatchPreview] = useState<{ raw: string; result: ClipperMetricoolBridgeEvidenceBatchResult } | null>(null);
+  const [metricoolBridgeEvidenceBatchPreview, setMetricoolBridgeEvidenceBatchPreview] = useState<{ raw: string; result: ClipperMetricoolBridgeEvidenceBatchResult; previewGate: ClipperMetricoolBridgePreviewGate | null } | null>(null);
   const metricoolBridgeEvidenceClientCheck = useMemo(
     () => getMetricoolBridgeEvidenceClientCheck(metricoolBridgeEvidenceBatchText),
     [metricoolBridgeEvidenceBatchText]
@@ -13722,10 +13740,13 @@ export default function ClippersPage() {
       if (!metricoolBridgeEvidenceCurrentPreview || metricoolBridgeEvidenceCurrentPreview.totals.recorded <= 0) {
         throw new Error("Preview the current Metricool bridge rows before importing evidence.");
       }
+      if (metricoolBridgeEvidenceCurrentPreviewGate?.status !== "ready_for_import") {
+        throw new Error(metricoolBridgeEvidenceCurrentPreviewGate?.nextStep || "Metricool bridge preview must be clean before import.");
+      }
       const response = await fetch("/api/clippers/record-metricool-bridge-evidence-batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ raw: metricoolBridgeEvidenceBatchText }),
+        body: JSON.stringify({ raw: metricoolBridgeEvidenceBatchText, previewHash: metricoolBridgeEvidenceCurrentPreviewGate?.rawHash }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude registrar batch Metricool bridge");
@@ -13852,14 +13873,14 @@ export default function ClippersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude previsualizar batch Metricool bridge");
-      return { ...(data as { metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult }), raw: metricoolBridgeEvidenceBatchText };
+      return { ...(data as { metricoolBridgeEvidenceBatch: ClipperMetricoolBridgeEvidenceBatchResult; metricoolBridgePreviewGate: ClipperMetricoolBridgePreviewGate }), raw: metricoolBridgeEvidenceBatchText };
     },
     onSuccess: (data) => {
-      setMetricoolBridgeEvidenceBatchPreview({ raw: data.raw, result: data.metricoolBridgeEvidenceBatch });
+      setMetricoolBridgeEvidenceBatchPreview({ raw: data.raw, result: data.metricoolBridgeEvidenceBatch, previewGate: data.metricoolBridgePreviewGate });
       toast({
         title: "Preview bridge Metricool listo",
-        description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} filas aceptadas; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. No escribe evidencia.`,
-        variant: data.metricoolBridgeEvidenceBatch.totals.recorded > 0 ? undefined : "destructive",
+        description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} filas aceptadas; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. ${data.metricoolBridgePreviewGate.nextStep}`,
+        variant: data.metricoolBridgePreviewGate.status === "ready_for_import" ? undefined : "destructive",
       });
     },
     onError: (error: Error) => {
@@ -16352,6 +16373,9 @@ export default function ClippersPage() {
   const metricoolBridgeEvidenceCurrentPreview = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
     ? metricoolBridgeEvidenceBatchPreview.result
     : null;
+  const metricoolBridgeEvidenceCurrentPreviewGate = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
+    ? metricoolBridgeEvidenceBatchPreview.previewGate
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6 text-white md:px-8" data-testid="clippers-page">
@@ -18512,7 +18536,7 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
-                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit || !metricoolBridgeEvidenceCurrentPreview || metricoolBridgeEvidenceCurrentPreview.totals.recorded <= 0}
+                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit || !metricoolBridgeEvidenceCurrentPreview || metricoolBridgeEvidenceCurrentPreview.totals.recorded <= 0 || metricoolBridgeEvidenceCurrentPreviewGate?.status !== "ready_for_import"}
                 className="w-full bg-teal-200 text-zinc-950 hover:bg-teal-100"
                 data-testid="submit-clippers-metricool-bridge-evidence-batch-button"
               >

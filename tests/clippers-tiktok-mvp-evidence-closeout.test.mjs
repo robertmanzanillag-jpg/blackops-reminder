@@ -306,6 +306,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     'app.post("/api/clippers/preview-tiktok-mvp-proof-links"',
     'app.post("/api/clippers/parse-tiktok-mvp-proof-links-paste"',
   );
+  const metricoolBridgePreviewRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/preview-metricool-bridge-evidence-batch"',
+    'app.get("/api/clippers/metricool-bridge-evidence-csv-status"',
+  );
   const metricoolBridgeCsvStatusRoute = requiredSlice(
     routes,
     'app.get("/api/clippers/metricool-bridge-evidence-csv-status"',
@@ -315,6 +320,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     routes,
     'app.post("/api/clippers/load-metricool-bridge-evidence-csv"',
     'app.post("/api/clippers/record-metricool-bridge-evidence-batch"',
+  );
+  const metricoolBridgeRecordRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/record-metricool-bridge-evidence-batch"',
+    'app.post("/api/clippers/prepare-publisher-execution-queue"',
   );
   const proofLinksPasteRoute = requiredSlice(
     routes,
@@ -421,6 +431,15 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksRoute, /auditClipperTikTokMvpProofLinks/);
   assert.doesNotMatch(proofLinksRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(metricoolBridgeCsvStatusRoute, /buildClipperMetricoolBridgeEvidenceCsvStatus/);
+  assert.match(metricoolBridgePreviewRoute, /writeClipperMetricoolBridgePreviewGate/);
+  assert.match(metricoolBridgePreviewRoute, /metricoolBridgePreviewGate/);
+  assert.match(metricoolBridgeRecordRoute, /validateClipperMetricoolBridgePreviewGate/);
+  assert.match(metricoolBridgeRecordRoute, /previewHash/);
+  assert.match(metricoolBridgeRecordRoute, /blocked_missing_or_stale_preview/);
+  assert.match(routes, /clipperMetricoolBridgePreviewGatePath/);
+  assert.match(routes, /hashClipperMetricoolBridgeRaw/);
+  assert.match(routes, /createHash\("sha256"\)/);
+  assert.match(routes, /Stores only a SHA-256 hash and preview totals/);
   assert.match(metricoolBridgeCsvLoadRoute, /loadClipperMetricoolBridgeEvidenceCsv/);
   assert.match(routes, /async function loadClipperMetricoolBridgeEvidenceCsv/);
   assert.match(routes, /readNodeFile\(clipperMetricoolBridgeEvidenceCsvPath/);
@@ -433,6 +452,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /realPublishEnabled:\s*false/);
   assert.doesNotMatch(metricoolBridgeCsvStatusRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule|send posts/i);
   assert.doesNotMatch(metricoolBridgeCsvLoadRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true/);
+  assert.doesNotMatch(metricoolBridgePreviewRoute, /recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule|send posts/i);
   assert.match(proofLinksPasteRoute, /extractClipperTikTokMvpProofLinksPaste/);
   assert.match(proofLinksModule, /explicitFields/);
   assert.match(proofLinksModule, /accountOwnershipProofUrl\|metricoolConnectionProofUrl\|accountNotes\|metricoolNotes/);
@@ -584,6 +604,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /metricoolBridgeEvidenceCsvLoadMutation/);
   assert.match(page, /setMetricoolBridgeEvidenceBatchText\(data\.metricoolBridgeEvidenceCsvLoad\.raw\)/);
   assert.match(page, /Preview the current Metricool bridge rows before importing evidence/);
+  assert.match(page, /previewHash: metricoolBridgeEvidenceCurrentPreviewGate\?\.rawHash/);
+  assert.match(page, /metricoolBridgePreviewGate: ClipperMetricoolBridgePreviewGate/);
+  assert.match(page, /metricoolBridgeEvidenceCurrentPreviewGate\?\.status !== "ready_for_import"/);
   assert.match(page, /!metricoolBridgeEvidenceCurrentPreview \|\| metricoolBridgeEvidenceCurrentPreview\.totals\.recorded <= 0/);
   assert.match(page, /\["\/api\/clippers\/metricool-bridge-evidence-csv-status"\]/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-editor/);

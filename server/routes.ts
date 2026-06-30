@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { mkdir as mkdirNode, readFile as readNodeFile, writeFile as writeNodeFile } from "fs/promises";
 import { spawn } from "child_process";
+import { createHash } from "crypto";
 import { storage } from "./storage";
 import { insertTaskSchema, insertWeeklySummarySchema, insertMonthlyGoalSchema, insertYearlyGoalSchema, insertWeeklyTaskSchema, insertPushSubscriptionSchema } from "@shared/schema";
 import { z } from "zod";
@@ -144,6 +145,7 @@ function clipperUniqueStrings(values: unknown[]): string[] {
 }
 
 const clipperMetricoolBridgeEvidenceCsvPath = "clippers_workspace/scheduled/metricool-tiktok-bridge-evidence.csv";
+const clipperMetricoolBridgePreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/metricool-bridge-preview-gate.json";
 const clipperMetricoolBridgeRequiredRows = [
   { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdaily", accountName: "Sports Daily Clips" },
   { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradar", accountName: "Meme Radar" },
@@ -217,6 +219,65 @@ function isClipperMetricoolProofUrl(value: unknown): boolean {
 function isClipperBridgeNotesReady(value: unknown): boolean {
   const text = String(value || "").trim();
   return text.length >= 20 && !/<|>|placeholder|paste|replace|todo|tbd/i.test(text) && !containsClipperSecretLikeText(text);
+}
+
+function hashClipperMetricoolBridgeRaw(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+async function writeClipperMetricoolBridgePreviewGate(raw: string, batch: any) {
+  const rawHash = hashClipperMetricoolBridgeRaw(raw);
+  const recorded = Number(batch?.totals?.recorded || 0);
+  const skipped = Number(batch?.totals?.skipped || 0);
+  const rows = Number(batch?.totals?.rows || 0);
+  const gate = {
+    status: recorded > 0 && skipped === 0 ? "ready_for_import" : "blocked_preview_not_clean",
+    generatedAt: new Date().toISOString(),
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    rawHash,
+    totals: { rows, recorded, skipped },
+    guardrails: [
+      "Stores only a SHA-256 hash and preview totals; it does not store raw CSV text.",
+      "Does not record evidence, queue Metricool, create calendar rows, schedule, or send posts.",
+      "Import requires this preview gate to match the current bridge CSV text.",
+    ],
+    nextStep: recorded > 0 && skipped === 0
+      ? "Import is allowed for the currently previewed bridge rows only."
+      : "Fix skipped rows and preview again before importing bridge evidence.",
+  };
+  await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+  await writeNodeFile(clipperMetricoolBridgePreviewGatePath, `${JSON.stringify(gate, null, 2)}\n`);
+  return gate;
+}
+
+async function readClipperMetricoolBridgePreviewGate() {
+  const raw = await readNodeFile(clipperMetricoolBridgePreviewGatePath, "utf8");
+  return JSON.parse(raw);
+}
+
+async function validateClipperMetricoolBridgePreviewGate(raw: string, previewHash: unknown) {
+  const currentHash = hashClipperMetricoolBridgeRaw(raw);
+  const requestedHash = String(previewHash || "").trim();
+  const gate = await readClipperMetricoolBridgePreviewGate().catch(() => null);
+  const ageMs = gate?.generatedAt ? Date.now() - new Date(gate.generatedAt).getTime() : Number.POSITIVE_INFINITY;
+  const issues = [
+    gate ? null : "Run Preview bridge rows before importing evidence.",
+    gate?.status === "ready_for_import" ? null : "Latest bridge preview is not clean.",
+    requestedHash && requestedHash === currentHash ? null : "Preview hash does not match the current bridge rows.",
+    gate?.rawHash === currentHash ? null : "Latest preview gate does not match the current bridge rows.",
+    ageMs <= 30 * 60 * 1000 ? null : "Latest bridge preview gate expired; preview again.",
+    Number(gate?.totals?.recorded || 0) > 0 ? null : "Latest bridge preview accepted zero rows.",
+    Number(gate?.totals?.skipped || 0) === 0 ? null : "Latest bridge preview had skipped rows.",
+  ].filter(Boolean) as string[];
+  return {
+    ok: issues.length === 0,
+    currentHash,
+    gate,
+    issues,
+  };
 }
 
 async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
@@ -4944,8 +5005,10 @@ export async function registerRoutes(
 
   app.post("/api/clippers/preview-metricool-bridge-evidence-batch", async (req, res) => {
     try {
-      const result = await previewClipperMetricoolBridgeEvidenceBatch(req.body || {});
-      res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch });
+      const raw = typeof req.body?.raw === "string" ? req.body.raw : "";
+      const result = await previewClipperMetricoolBridgeEvidenceBatch({ raw });
+      const metricoolBridgePreviewGate = await writeClipperMetricoolBridgePreviewGate(raw, result.metricoolBridgeEvidenceBatch);
+      res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, metricoolBridgePreviewGate });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to preview Clippers Metricool bridge evidence batch" });
     }
@@ -4974,6 +5037,29 @@ export async function registerRoutes(
 
   app.post("/api/clippers/record-metricool-bridge-evidence-batch", async (req, res) => {
     try {
+      const raw = typeof req.body?.raw === "string" ? req.body.raw : "";
+      const previewGate = await validateClipperMetricoolBridgePreviewGate(raw, req.body?.previewHash);
+      if (!previewGate.ok) {
+        res.status(400).json({
+          error: previewGate.issues[0] || "Preview bridge rows before importing evidence.",
+          metricoolBridgePreviewGate: {
+            status: "blocked_missing_or_stale_preview",
+            generatedAt: new Date().toISOString(),
+            scope: "tiktok_only_metricool_mvp",
+            launchMode: "metricool_approval_required",
+            directSocialApisRequired: false,
+            realPublishEnabled: false,
+            rawHash: previewGate.currentHash,
+            issues: previewGate.issues,
+            guardrails: [
+              "Blocked before recording evidence because the current rows do not match a clean preview gate.",
+              "Does not queue Metricool, create calendar rows, schedule, or send posts.",
+            ],
+            nextStep: "Run Preview bridge rows again, then import without editing the bridge rows.",
+          },
+        });
+        return;
+      }
       const result = await recordClipperMetricoolBridgeEvidenceBatch(req.body || {}, getCurrentUserId(req));
       if (result.metricoolBridgeEvidenceBatch.totals.recorded <= 0) {
         res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, status: result.status, bridgeRefreshStatus: "skipped_no_recorded_rows" });
