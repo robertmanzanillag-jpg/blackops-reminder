@@ -863,6 +863,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /signed\/temporary URLs/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-starter-button/);
+  assert.match(page, /tiktokMvpProofHandoffJsonStarterText/);
+  assert.match(page, /tiktokMvpProofHandoff\?\.jsonStarter/);
+  assert.match(page, /JSON\.stringify\(tiktokMvpProofHandoff\.jsonStarter, null, 2\)/);
+  assert.match(page, /Load JSON starter/);
   assert.match(page, /tiktokMvpProofDropKit\.proofLinksStarterText/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-refresh-panel/);
@@ -878,6 +882,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-gates/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-collection-packets/);
   assert.match(page, /paths\.pastePacketTxt/);
+  assert.match(page, /paths\.jsonStarter/);
+  assert.match(page, /JSON starter/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-panel/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-commands/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);

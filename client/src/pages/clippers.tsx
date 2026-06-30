@@ -2746,6 +2746,14 @@ interface ClipperTikTokMvpProofHandoffSummary {
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
   pastePacketText: string;
+  jsonStarter?: {
+    lanes: Record<string, {
+      accountOwnershipProofUrl: string;
+      metricoolConnectionProofUrl: string;
+      accountNotes: string;
+      metricoolNotes: string;
+    }>;
+  };
   gates: Array<{
     id: string;
     status: "pass" | "blocked";
@@ -2813,6 +2821,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
     markdown: string;
     collectionCsv: string;
     pastePacketTxt: string;
+    jsonStarter?: string;
     oneScreenTxt?: string;
     unblockBoardCsv: string;
     proofDropJson: string;
@@ -16851,6 +16860,9 @@ export default function ClippersPage() {
   const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
   const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
   const tiktokMetricoolBridgeRows = accountPermissionReadiness?.tiktokMvpAccountCloseout?.rows || [];
+  const tiktokMvpProofHandoffJsonStarterText = tiktokMvpProofHandoff?.jsonStarter
+    ? `${JSON.stringify(tiktokMvpProofHandoff.jsonStarter, null, 2)}\n`
+    : "";
   const activeTikTokMvp = accountPermissionReadiness?.activeMvp || null;
   const activeTikTokMvpSafetyBlockers = activeTikTokMvp?.safetyBlockers || [];
   const activeTikTokMvpSafetyClear = Boolean(
@@ -18661,15 +18673,15 @@ export default function ClippersPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setTiktokMvpProofLinksText(tiktokMvpProofDropKit.proofLinksStarterText || "");
+                          setTiktokMvpProofLinksText(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText || "");
                           setTiktokMvpProofLinksPreview(null);
                         }}
-                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofDropKit.proofLinksStarterText}
+                        disabled={tiktokProofFlowBusy || isLoading || !(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText)}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
                         data-testid="load-clippers-tiktok-mvp-proof-links-starter-button"
                       >
                         <FileText className="mr-2 h-3.5 w-3.5" />
-                        Load starter
+                        Load JSON starter
                       </Button>
                       <Button
                         type="button"
@@ -19070,6 +19082,7 @@ export default function ClippersPage() {
                   <p className="break-all">Unblock CSV: {tiktokMvpProofHandoff.paths.unblockBoardCsv}</p>
                   {tiktokMvpProofHandoff.paths.oneScreenTxt && <p className="break-all">One-screen guide: {tiktokMvpProofHandoff.paths.oneScreenTxt}</p>}
                   <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
+                  {tiktokMvpProofHandoff.paths.jsonStarter && <p className="break-all">JSON starter: {tiktokMvpProofHandoff.paths.jsonStarter}</p>}
                 </div>
               </div>
             )}
