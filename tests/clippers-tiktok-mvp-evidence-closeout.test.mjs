@@ -372,6 +372,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksRoute, /auditClipperTikTokMvpProofLinks/);
   assert.doesNotMatch(proofLinksRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksPasteRoute, /extractClipperTikTokMvpProofLinksPaste/);
+  assert.match(routes, /explicitFields/);
+  assert.match(routes, /accountOwnershipProofUrl\|metricoolConnectionProofUrl\|accountNotes\|metricoolNotes/);
   assert.doesNotMatch(proofLinksPasteRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksSaveRoute, /validateClipperTikTokMvpProofLinks/);
   assert.match(proofLinksSaveRoute, /auditClipperTikTokMvpProofLinks/);

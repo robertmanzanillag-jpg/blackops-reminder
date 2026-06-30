@@ -505,21 +505,32 @@ export async function registerRoutes(
     const issues: string[] = [];
     if (!raw.trim()) issues.push("Paste text with SPORT and memes TikTok ownership proof plus Metricool proof URLs.");
     if (containsClipperSecretLikeText(raw)) issues.push("Paste text cannot contain passwords, tokens, cookies, keys, or recovery codes.");
+    const explicitFields = new Map<string, Record<string, string>>();
+    for (const line of lines) {
+      if (line.startsWith("#")) continue;
+      const match = line.match(/^([a-z0-9-]+:tiktok)\.(accountOwnershipProofUrl|metricoolConnectionProofUrl|accountNotes|metricoolNotes)\s*=\s*(.*)$/i);
+      if (!match) continue;
+      const laneKey = match[1].toLowerCase();
+      const field = match[2];
+      const value = match[3].trim();
+      explicitFields.set(laneKey, { ...(explicitFields.get(laneKey) || {}), [field]: value });
+    }
     const lanes = Object.fromEntries(clipperTikTokMvpProofLaneSpecs.map((spec) => {
+      const explicitLane = explicitFields.get(spec.key) || {};
       const laneLines = lines.filter((line) => spec.aliases.some((alias) => line.toLowerCase().includes(alias)));
       const laneText = laneLines.join("\n");
       const scopedUrls = Array.from(laneText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
       const candidateUrls = scopedUrls.length ? scopedUrls : allUrls;
-      const accountOwnershipProofUrl = candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolProofUrl(url)) || "";
-      const metricoolConnectionProofUrl = candidateUrls.find((url) => safeClipperMetricoolProofUrl(url)) || "";
-      if (!laneLines.length) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
+      const accountOwnershipProofUrl = explicitLane.accountOwnershipProofUrl || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolProofUrl(url)) || "";
+      const metricoolConnectionProofUrl = explicitLane.metricoolConnectionProofUrl || candidateUrls.find((url) => safeClipperMetricoolProofUrl(url)) || "";
+      if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
       if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
       if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com connection proof URL.`);
       return [spec.key, {
         accountOwnershipProofUrl,
         metricoolConnectionProofUrl,
-        accountNotes: `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`,
-        metricoolNotes: `${spec.metricoolBrandName} TikTok profile connected in Metricool approval_required mode without secrets.`,
+        accountNotes: explicitLane.accountNotes || `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`,
+        metricoolNotes: explicitLane.metricoolNotes || `${spec.metricoolBrandName} TikTok profile connected in Metricool approval_required mode without secrets.`,
       }];
     }));
     const proofLinks = { lanes };
