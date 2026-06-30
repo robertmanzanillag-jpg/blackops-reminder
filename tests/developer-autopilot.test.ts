@@ -132,6 +132,69 @@ test("developer autopilot detects developer bugs but ignores generic work reques
   assert.equal(request?.replitRequested, false);
 });
 
+test("developer autopilot accepts sold client website build handoffs", async () => {
+  const request = parseDeveloperAutopilotRequest(
+    "construye el website vendido para Handoff Cafe en robert/handoff-cafe con el mockup aprobado",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "client_build");
+  assert.equal(request?.repoFullName, "robert/handoff-cafe");
+  assert.match(request?.title || "", /website vendido/);
+
+  const created = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "construye el website vendido para Handoff Cafe en robert/handoff-cafe con el mockup aprobado",
+    "web_chat",
+    {
+      getAppProjects: async () => [],
+      listRepositories: async () => [{
+        full_name: "robert/handoff-cafe",
+        name: "handoff-cafe",
+        private: true,
+      }],
+      createIssue: async (owner, repo, title, body) => {
+        assert.equal(owner, "robert");
+        assert.equal(repo, "handoff-cafe");
+        assert.match(title, /\[Codex PR-first\]\[client-build\]/);
+        assert.match(body, /Type: client_build/);
+        assert.match(body, /approved scope, public business facts/);
+        assert.match(body, /Do not deploy to Replit/);
+        assert.match(body, /App QA/);
+        return { number: 31, html_url: "https://github.com/robert/handoff-cafe/issues/31" };
+      },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
+      },
+    },
+  );
+
+  assert.equal(created.status, "created");
+  assert.equal(created.handoffType, "developer_pr");
+  assert.equal(created.repoFullName, "robert/handoff-cafe");
+  assert.equal(created.issueNumber, 31);
+  assert.match(created.codexBrief || "", /Type: client_build/);
+});
+
+test("developer autopilot keeps security precedence over client website build wording", () => {
+  const request = parseDeveloperAutopilotRequest(
+    "implementa un fix de security para el website en robert/public-app: token=sk-secret1234567890",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "security");
+  assert.equal(request?.severity, "high");
+
+  const body = buildCodexGitHubIssueBody(request!, {
+    full_name: "robert/public-app",
+    name: "public-app",
+    private: false,
+  });
+
+  assert.match(body, /Security details withheld/);
+  assert.doesNotMatch(body, /sk-secret/);
+});
+
 test("subscription handoff routes heavy manual work to ChatGPT/Codex Pro instead of API spend", async () => {
   const request = parseSubscriptionHandoffRequest(
     "usa mi membresia Pro para una campana completa de marketing de clippers sin gastar API",

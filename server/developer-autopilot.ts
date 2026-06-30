@@ -3,7 +3,7 @@ import { createIssue, createIssueComment, listRepositories } from "./github-clie
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
 
-export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa";
+export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa" | "client_build";
 export type SubscriptionHandoffKind = "marketing" | "design" | "strategy" | "analysis" | "business_ops";
 export type DeveloperAutopilotSource = "web_chat" | "telegram" | "app_qa" | "cybersecurity" | "health_monitor" | "manual";
 
@@ -130,11 +130,15 @@ function inferFixKind(message: string): DeveloperFixKind | null {
   const hasIssueTerm = /\b(bug|error|fallo|amenaza|vulnerabilidad|security|seguridad|hack|ataque|exploit|token|secreto|secret|qa|caido|caida|incidente|incident)\b/.test(text);
   const hasFixVerb = /\b(arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa)\b/.test(text);
   const hasDeveloperTarget = /\b(codigo|code|github|repo|repositorio|app|website|site|api|deploy|replit|pr|pull request)\b/.test(text) || Boolean(extractExplicitRepo(message));
-  const mentionsWork = hasIssueTerm || (hasFixVerb && hasDeveloperTarget);
-  if (!mentionsWork) return null;
   if (/\b(amenaza|vulnerabilidad|security|seguridad|hack|ataque|exploit|token|secreto|secret)\b/.test(text)) return "security";
   if (/\b(caido|caida|incidente|incident|produccion rota|production down)\b/.test(text)) return "incident";
   if (/\b(qa|patrulla|check|chequeo)\b/.test(text)) return "qa";
+  const hasClientBuildIntent = /\b(build|construye|construir|crea|crear|haz|hacer|levanta|monta|desarrolla|implementa)\b/.test(text)
+    && /\b(website|site|sitio|pagina|landing|web|client|cliente|negocio|business|mockup)\b/.test(text)
+    && (hasDeveloperTarget || /\b(github|repo|repositorio|pr|pull request|codex)\b/.test(text));
+  if (hasClientBuildIntent) return "client_build";
+  const mentionsWork = hasIssueTerm || (hasFixVerb && hasDeveloperTarget);
+  if (!mentionsWork) return null;
   return "bug";
 }
 
@@ -225,9 +229,13 @@ function selectRepoForRequest(
 function titleFromMessage(message: string, kind: DeveloperFixKind): string {
   const cleaned = redactSensitiveText(message)
     .replace(/\s+/g, " ")
-    .replace(/^.*?\b(?:arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa)\b[:\s-]*/i, "")
+    .replace(/^.*?\b(?:arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa|build|construye|construir|crea|crear|haz|hacer|levanta|monta|desarrolla|implementa)\b[:\s-]*/i, "")
     .trim();
-  const fallback = kind === "security" || kind === "threat" ? "Security fix request" : "Bug fix request";
+  const fallback = kind === "security" || kind === "threat"
+    ? "Security fix request"
+    : kind === "client_build"
+      ? "Client website build request"
+      : "Bug fix request";
   return (cleaned || fallback).slice(0, 120);
 }
 
@@ -280,6 +288,10 @@ function safetyLines(kind: DeveloperFixKind): string[] {
 
   if (kind === "security" || kind === "threat") {
     lines.push("Keep exploit details private or sanitized; do not publish secrets, tokens, private URLs, or customer data in public issue/PR text.");
+  }
+  if (kind === "client_build") {
+    lines.push("For client website builds, use only approved scope, public business facts, and Robert/client-approved assets before publishing previews.");
+    lines.push("Treat launch as blocked until the PR, independent review, App QA, and Robert's explicit deploy approval are recorded.");
   }
 
   return lines;
@@ -380,6 +392,8 @@ export function buildSubscriptionHandoffBrief(request: SubscriptionHandoffReques
 export function buildCodexGitHubIssueTitle(request: DeveloperAutopilotRequest, repo?: MinimalRepo): string {
   const prefix = request.kind === "security" || request.kind === "threat"
     ? "[Codex PR-first][security]"
+    : request.kind === "client_build"
+      ? "[Codex PR-first][client-build]"
     : "[Codex PR-first]";
   const isPublicSecurity = (request.kind === "security" || request.kind === "threat") && repo?.private === false;
   const title = isPublicSecurity ? "Security-sensitive fix request" : request.title;
@@ -403,7 +417,7 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
   return [
     "## Codex PR-first handoff",
     "",
-    "This issue is a handoff for Codex using the signed-in ChatGPT/Codex subscription workflow. Do not use OpenAI API spend for this repair.",
+    "This issue is a handoff for Codex using the signed-in ChatGPT/Codex subscription workflow. Do not use OpenAI API spend for this work.",
     "",
     "## Task brief",
     "",
