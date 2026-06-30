@@ -841,6 +841,33 @@ type RevenueWebsiteDeliveryHandoffQueue = {
   nextAction: string;
 };
 
+type RevenueWebsiteBuildHandoffQueue = {
+  status: "ready" | "empty";
+  openCount: number;
+  items: Array<{
+    workspaceId: string;
+    clientName: string;
+    projectType: "website" | "bundle";
+    packageName: string;
+    setupUsd: number;
+    repoFullName: string;
+    branchName: string;
+    githubIssueUrl: string;
+    prUrl: string;
+    codexBrief: string;
+    missing: string[];
+    blockedActions: string[];
+    nextAction: string;
+  }>;
+  safety: {
+    createsPrOnly: true;
+    deploys: false;
+    requiresSecondReviewAndAppQa: true;
+    blockedActions: string[];
+  };
+  nextAction: string;
+};
+
 type RevenueDailyMoneyCommand = {
   status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
   headline: string;
@@ -4090,6 +4117,47 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
   };
 }
 
+function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHandoffQueue {
+  const visibleLimit = Math.max(0, Math.min(25, limit));
+  const openWorkspaces = revenueDeliveryWorkspaces
+    .filter((workspace) =>
+      (workspace.input.projectType === "website" || workspace.input.projectType === "bundle")
+      && workspace.codexBuildHandoff.status === "needs_pr"
+    )
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const items: RevenueWebsiteBuildHandoffQueue["items"] = openWorkspaces.slice(0, visibleLimit).map((workspace) => ({
+    workspaceId: workspace.id,
+    clientName: workspace.input.clientName,
+    projectType: workspace.input.projectType === "bundle" ? "bundle" : "website",
+    packageName: workspace.input.packageName,
+    setupUsd: workspace.input.setupUsd,
+    repoFullName: workspace.codexBuildHandoff.repoFullName,
+    branchName: workspace.codexBuildHandoff.branchName,
+    githubIssueUrl: workspace.codexBuildHandoff.githubIssueUrl,
+    prUrl: workspace.codexBuildHandoff.prUrl,
+    codexBrief: workspace.codexBuildHandoff.codexBrief,
+    missing: workspace.codexBuildHandoff.missing,
+    blockedActions: workspace.codexBuildHandoff.blockedActions,
+    nextAction: workspace.codexBuildHandoff.nextAction,
+  }));
+
+  return {
+    status: openWorkspaces.length > 0 ? "ready" : "empty",
+    openCount: openWorkspaces.length,
+    items,
+    safety: {
+      createsPrOnly: true,
+      deploys: false,
+      requiresSecondReviewAndAppQa: true,
+      blockedActions: ["direct main commit", "merge without PR", "deploy without Robert approval", "skip App QA", "publish unapproved client preview"],
+    },
+    nextAction: items.length > 0
+      ? `Abrir PR-first build para ${items[0].clientName} desde workspace ${items[0].workspaceId}.`
+      : "Sin builds pagados esperando PR-first; seguir buscando, vendiendo o cobrando.",
+  };
+}
+
 function buildRevenueBusinessScoutQueue(): RevenueBusinessScoutQueue {
   const latestMission = revenueScoutingMissions.at(-1);
   const area = latestMission?.mission.area || "Miami";
@@ -4326,13 +4394,11 @@ function buildRevenueDailyMoneyCommand(input: {
   websiteSalesPacketQueue: RevenueWebsiteSalesPacketQueue;
   manualOutreachQueue: RevenueManualOutreachQueue;
   websiteDeliveryHandoffQueue: RevenueWebsiteDeliveryHandoffQueue;
+  websiteBuildHandoffQueue: RevenueWebsiteBuildHandoffQueue;
   cashCollectedUsd: number;
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
 }): RevenueDailyMoneyCommand {
-  const buildHandoffsOpen = revenueDeliveryWorkspaces.filter((workspace) =>
-    (workspace.input.projectType === "website" || workspace.input.projectType === "bundle")
-    && workspace.codexBuildHandoff.status === "needs_pr"
-  ).length;
+  const buildHandoffsOpen = input.websiteBuildHandoffQueue.openCount;
   const funnel = {
     researchTarget: input.businessScoutQueue.dailyResearchTarget,
     candidatesReady: input.publicLeadImportQueue.readyCount,
@@ -4404,7 +4470,7 @@ function buildRevenueDailyMoneyCommand(input: {
       id: "collect",
       label: "Cobrar y construir",
       metric: `${funnel.deliveryHandoffsReady} delivery / ${funnel.buildHandoffsOpen} PR`,
-      nextAction: input.websiteDeliveryHandoffQueue.nextAction,
+      nextAction: funnel.deliveryHandoffsReady > 0 ? input.websiteDeliveryHandoffQueue.nextAction : input.websiteBuildHandoffQueue.nextAction,
       status: funnel.deliveryHandoffsReady > 0 || funnel.buildHandoffsOpen > 0 ? "ready" : "waiting",
     },
   ];
@@ -4426,13 +4492,21 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Delivery handoffs ready: ${funnel.deliveryHandoffsReady}`,
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
     `- Cash collected: $${funnel.cashCollectedUsd.toLocaleString("en-US")}`,
+    input.websiteBuildHandoffQueue.items[0] ? "" : null,
+    input.websiteBuildHandoffQueue.items[0] ? "Top build handoff:" : null,
+    input.websiteBuildHandoffQueue.items[0] ? `- Workspace: ${input.websiteBuildHandoffQueue.items[0].workspaceId}` : null,
+    input.websiteBuildHandoffQueue.items[0] ? `- Client: ${input.websiteBuildHandoffQueue.items[0].clientName}` : null,
+    input.websiteBuildHandoffQueue.items[0] ? `- Branch: ${input.websiteBuildHandoffQueue.items[0].branchName}` : null,
+    input.websiteBuildHandoffQueue.items[0] ? `- Missing: ${input.websiteBuildHandoffQueue.items[0].missing.join("; ") || "none"}` : null,
+    input.websiteBuildHandoffQueue.items[0] ? "" : null,
+    input.websiteBuildHandoffQueue.items[0] ? input.websiteBuildHandoffQueue.items[0].codexBrief : null,
     "",
     "Rules:",
     "- Use public research only.",
     "- Do not auto-send outreach.",
     "- Do not spend money without Robert approval.",
     "- Do not deploy or publish client previews until PR, review, App QA, and Robert approval are recorded.",
-  ].join("\n");
+  ].filter((line): line is string => line !== null).join("\n");
 
   return {
     status,
@@ -4602,12 +4676,14 @@ export function getRevenueEngineSnapshot() {
   const manualOutreachQueue = buildRevenueManualOutreachQueue(10);
   const publicLeadImportQueue = buildRevenuePublicLeadImportQueue(10);
   const websiteDeliveryHandoffQueue = buildRevenueWebsiteDeliveryHandoffQueue(8);
+  const websiteBuildHandoffQueue = buildRevenueWebsiteBuildHandoffQueue(5);
   const dailyMoneyCommand = buildRevenueDailyMoneyCommand({
     businessScoutQueue,
     publicLeadImportQueue,
     websiteSalesPacketQueue,
     manualOutreachQueue,
     websiteDeliveryHandoffQueue,
+    websiteBuildHandoffQueue,
     cashCollectedUsd,
     profitGuard,
   });
@@ -4636,6 +4712,7 @@ export function getRevenueEngineSnapshot() {
     manualOutreachQueue,
     publicLeadImportQueue,
     websiteDeliveryHandoffQueue,
+    websiteBuildHandoffQueue,
     profitGuard,
     nextBatchPlan,
     approvalQueueItems,
@@ -4882,6 +4959,33 @@ function normalizeRevenueScoutMoney(value: string, fallback: number) {
   return Number.isFinite(amount) && amount >= 1500 ? amount : fallback;
 }
 
+function revenuePlaceholderFieldNames(input: Pick<
+  RevenuePublicLeadCandidateInput,
+  "businessName" | "contactValue" | "sourceUrl" | "recipientEmail" | "evidence" | "painPoint" | "contactName" | "businessSummary"
+>) {
+  const fields = [
+    ["businessName", input.businessName],
+    ["contactValue", input.contactValue],
+    ["sourceUrl", input.sourceUrl],
+    ["recipientEmail", input.recipientEmail],
+    ["evidence", input.evidence],
+    ["painPoint", input.painPoint],
+    ["contactName", input.contactName],
+    ["businessSummary", input.businessSummary],
+  ] as const;
+  const replacementPlaceholderPattern = /\b(?:REPLACE|PLACEHOLDER)[A-Z0-9_\s:-]*\b|replace with specific/i;
+  const uppercaseTodoPlaceholderPattern = /\b(?:TODO|TBD)(?:[:\s_-]|$)/;
+  return fields
+    .filter(([field, value]) => {
+      const normalized = value.trim().toLowerCase();
+      return replacementPlaceholderPattern.test(value)
+        || uppercaseTodoPlaceholderPattern.test(value)
+        || (field === "recipientEmail" && normalized === "owner@example.com")
+        || (field === "sourceUrl" && /^https?:\/\/replace/i.test(value));
+    })
+    .map(([field]) => field);
+}
+
 function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput) {
   const parsed = revenuePublicScoutEvidenceSchema.parse(input);
   const blocks = splitRevenuePublicScoutEvidenceBlocks(parsed.evidenceText).slice(0, parsed.maxCandidates);
@@ -4923,7 +5027,7 @@ function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput)
       continue;
     }
 
-    candidates.push({
+    const candidate = {
       businessName,
       area,
       niche,
@@ -4935,7 +5039,7 @@ function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput)
       evidence,
       painPoint,
       estimatedOfferUsd,
-      status: "research",
+      status: "research" as const,
       contactName,
       businessSummary,
       missionId: parsed.missionId,
@@ -4944,7 +5048,17 @@ function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput)
       publicEvidenceVerified: parsed.publicEvidenceVerified,
       approvalToImport: parsed.approvalToImport,
       notes: parsed.notes || "Normalized from public scouting evidence intake.",
-    });
+    };
+    const placeholderFields = revenuePlaceholderFieldNames(candidate);
+    if (placeholderFields.length > 0) {
+      blockedSeeds.push({
+        businessName: businessName || `scout-block-${index + 1}`,
+        reason: `placeholder fields: ${placeholderFields.join(", ")}`,
+      });
+      continue;
+    }
+
+    candidates.push(candidate);
   }
 
   return { parsed, candidates, blockedSeeds };
@@ -4961,6 +5075,7 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
     parsed.sourceUrl.trim().length > 0 && !isRevenuePublicSourceUrl(parsed.sourceUrl) && "sourceUrl must be public",
     parsed.recipientEmail.trim().length === 0 && "recipientEmail",
+    ...revenuePlaceholderFieldNames(parsed).map((field) => `placeholder ${field}`),
     ...qualification.missing,
   ].filter((item): item is string => Boolean(item));
   const importReady = parsed.verificationStatus === "verified_public" && blockedReasons.length === 0;
@@ -8298,6 +8413,14 @@ export function parseRevenueMoneySprintSeedLeadBatch(
     };
     const parsed = revenueMoneySprintSeedLeadSchema.safeParse(candidate);
     if (parsed.success) {
+      const placeholderFields = revenuePlaceholderFieldNames(parsed.data);
+      if (placeholderFields.length > 0) {
+        blockedSeeds.push({
+          businessName: parsed.data.businessName || "batch row",
+          reason: `placeholder fields: ${placeholderFields.join(", ")}`,
+        });
+        continue;
+      }
       seedLeads.push(parsed.data);
       continue;
     }

@@ -45,6 +45,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(engineSource, /RevenueWebsiteOpportunity/);
   assert.match(engineSource, /recordRevenueWebsiteOpportunity/);
   assert.match(engineSource, /closeRevenueWebsiteOpportunity/);
+  assert.match(engineSource, /buildRevenueWebsiteBuildHandoffQueue/);
+  assert.match(engineSource, /websiteBuildHandoffQueue/);
+  assert.match(engineSource, /Top build handoff/);
   assert.match(engineSource, /status === "sold"/);
   assert.match(engineSource, /depositPaid/);
   assert.match(engineSource, /scopeApproved/);
@@ -82,6 +85,8 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /recentWebsiteOpportunities/);
   assert.match(uiSource, /websiteOpportunityMutation/);
   assert.match(uiSource, /websiteOpportunityCloseMutation/);
+  assert.match(uiSource, /panel-website-build-handoff-queue/);
+  assert.match(uiSource, /button-copy-website-build-brief-/);
   assert.match(uiSource, /button-create-website-opportunity-/);
   assert.match(uiSource, /item\.readiness\.some\(\(entry\) => entry\.includes\("draft aprobado"\)\)/);
   assert.match(uiSource, /button-close-website-opportunity-/);

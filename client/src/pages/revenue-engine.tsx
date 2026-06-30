@@ -397,6 +397,32 @@ type RevenueSnapshot = {
     };
     nextAction: string;
   };
+  websiteBuildHandoffQueue: {
+    status: "ready" | "empty";
+    openCount: number;
+    items: Array<{
+      workspaceId: string;
+      clientName: string;
+      projectType: "website" | "bundle";
+      packageName: string;
+      setupUsd: number;
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      codexBrief: string;
+      missing: string[];
+      blockedActions: string[];
+      nextAction: string;
+    }>;
+    safety: {
+      createsPrOnly: true;
+      deploys: false;
+      requiresSecondReviewAndAppQa: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
   profitGuard: {
     status: "pause_spend" | "collect_first" | "review_queue" | "scale_carefully";
     monthlyCapUsd: number;
@@ -4263,6 +4289,84 @@ export default function RevenueEnginePage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {(snapshot?.websiteBuildHandoffQueue.openCount ?? 0) > 0 && (
+                <Card className="mb-4 border-sky-500/20 bg-zinc-950/80" data-testid="panel-website-build-handoff-queue">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="text-base">Builds website PR-first</CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {snapshot?.websiteBuildHandoffQueue.nextAction}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">
+                        {snapshot?.websiteBuildHandoffQueue.openCount ?? 0} abiertos
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 xl:grid-cols-2">
+                    {(snapshot?.websiteBuildHandoffQueue.items || []).map((item) => (
+                      <div key={item.workspaceId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">{item.clientName}</p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {item.projectType} · {money.format(item.setupUsd)} · {item.workspaceId}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">needs PR</Badge>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline" className="border-zinc-700 text-zinc-300">{item.branchName}</Badge>
+                          {item.repoFullName && (
+                            <Badge variant="outline" className="border-zinc-700 text-zinc-300">{item.repoFullName}</Badge>
+                          )}
+                        </div>
+                        {item.missing.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {item.missing.slice(0, 4).map((missing) => (
+                              <p key={`${item.workspaceId}-${missing}`} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1 text-xs text-amber-100">
+                                {missing}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-zinc-700"
+                            onClick={() => navigator.clipboard.writeText(item.codexBrief)}
+                            data-testid={`button-copy-website-build-brief-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy brief
+                          </Button>
+                          {item.githubIssueUrl && (
+                            <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Issue
+                              </Button>
+                            </a>
+                          )}
+                          {item.prUrl && (
+                            <a href={item.prUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                PR
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
                 <CardHeader>

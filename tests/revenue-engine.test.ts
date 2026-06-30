@@ -380,6 +380,88 @@ test("daily scout sprint rejects paid spend and string false contact approval", 
   assert.equal(getRevenueEngineSnapshot().recentDailyScoutSprints.length, 0);
 });
 
+test("public scout intake blocks unfilled daily scout placeholders", () => {
+  const sprint = runRevenueDailyScoutSprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    targetLeadCount: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+  });
+
+  const result = recordRevenuePublicScoutEvidence({
+    area: sprint.sprint.area,
+    niche: sprint.sprint.niche,
+    evidenceText: sprint.sprint.tasks[0].resultSlots[0].copyableEvidenceBlock,
+    sourceTaskId: sprint.sprint.id,
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.recordedCount, 0);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.blockedCount, 1);
+  assert.match(result.blockedSeeds[0].reason, /placeholder fields/);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(result.snapshot.recentPublicLeadCandidates.length, 0);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+});
+
+test("public scout intake accepts valid Spanish evidence containing todo", () => {
+  const result = recordRevenuePublicScoutEvidence({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Cafecito Coral",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @cafecitocoral",
+      "Email: owner@cafecitocoral.example",
+      "Source: https://instagram.com/cafecitocoral",
+      "Evidence: Todo el menu esta en posts publicos de Instagram, la bio no muestra website dedicado y hay actividad reciente.",
+      "Pain: Necesita menu online, reservas de catering y seguimiento.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+  });
+
+  assert.equal(result.status, "ready_for_preview");
+  assert.equal(result.importableCount, 1);
+  assert.equal(result.blockedCount, 0);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("money sprint preview blocks unfilled scout batch templates", () => {
+  const snapshot = getRevenueEngineSnapshot();
+  const result = previewRevenueMoneySprintSeeds({
+    area: snapshot.businessScoutQueue.area,
+    niche: snapshot.businessScoutQueue.niche,
+    offerFocus: snapshot.businessScoutQueue.offerFocus,
+    dailyResearchTarget: 25,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 5,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: snapshot.businessScoutQueue.workPack.copyableBatchTemplate,
+  });
+
+  assert.equal(result.status, "empty");
+  assert.equal(result.totals.accepted, 0);
+  assert.equal(result.blockedSeeds.length > 0, true);
+  assert.match(result.blockedSeeds[0].reason, /placeholder fields/);
+  assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
+  assert.equal(getRevenueEngineSnapshot().recentOutreach.length, 0);
+});
+
 test("daily money command prioritizes verified public candidates before more searching", () => {
   recordRevenuePublicLeadCandidateBatch({
     source: "google_maps",
@@ -2097,6 +2179,12 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.status, "needs_pr");
   assert.equal(handoff.workspace?.codexBuildHandoff.codexBrief.includes("PR-First Rules"), true);
+  assert.equal(handoff.snapshot.dailyMoneyCommand.status, "build");
+  assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
+  assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].workspaceId, handoff.workspace?.id);
+  assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].codexBrief.includes("PR-First Rules"), true);
+  assert.equal(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief.includes(handoff.workspace?.id || ""), true);
+  assert.equal(handoff.snapshot.dailyMoneyCommand.steps.find((step) => step.id === "collect")?.nextAction.includes(handoff.workspace?.id || ""), true);
   assert.equal(handoff.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
   assert.equal(handoff.outreachDraft?.delivery.sendStatus, "not_sent");
   assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
