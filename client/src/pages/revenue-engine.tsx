@@ -684,6 +684,46 @@ type RevenueLeadRadar = {
   nextActions: string[];
 };
 
+type RevenueMoneySprint = {
+  status: "ready_to_start" | "needs_spend_approval" | "needs_lead_evidence";
+  mode: string;
+  scoutQueue: Array<{
+    id: string;
+    source: string;
+    query: string;
+    url: string;
+    ownerAgent: string;
+    allowedAction: string;
+    evidenceToCapture: string[];
+    blockedActions: string[];
+  }>;
+  recordedLeads: Array<{
+    lead: RevenueSnapshot["recentLeads"][number];
+    qualification: RevenueLeadResult["qualification"];
+    deduped: boolean;
+  }>;
+  previews: Array<{
+    status: "mockup_ready" | "needs_evidence";
+    slug: string;
+    previewUrl: string;
+    fileWritten: boolean;
+    htmlBytes: number;
+    nextAction: string;
+  }>;
+  outreachDrafts: RevenueSnapshot["recentOutreach"];
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  operatingLimits: {
+    maxQualifiedLeadsToday: number;
+    maxMockupsToday: number;
+    maxContactsToday: number;
+    maxPaidDataSpendUsd: number;
+    externalContactMode: string;
+  };
+  approvalGates: string[];
+  nextActions: string[];
+  snapshot: RevenueSnapshot;
+};
+
 type RevenueMockupTemplatePack = {
   status: "ready" | "needs_spend_approval";
   pack: {
@@ -1292,6 +1332,33 @@ export default function RevenueEnginePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear el radar de leads");
       return data;
+    },
+  });
+
+  const moneySprintMutation = useMutation<RevenueMoneySprint>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: scoutingArea,
+          niche: scoutingNiche,
+          offerFocus: scoutingOfferFocus,
+          dailyResearchTarget: leadRadarDailyResearchTarget,
+          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+          dailyMockupLimit: leadRadarMockupLimit,
+          dailyContactLimit: leadRadarContactLimit,
+          maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+          requireRobertApprovalToContact: true,
+          writePreviewFiles: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr money sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
     },
   });
 
@@ -2764,6 +2831,16 @@ export default function RevenueEnginePage() {
                         {leadRadarMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
                         Radar 24/7
                       </Button>
+                      <Button
+                        type="button"
+                        disabled={moneySprintMutation.isPending}
+                        onClick={() => moneySprintMutation.mutate()}
+                        className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                        data-testid="button-run-money-sprint"
+                      >
+                        {moneySprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                        Money sprint
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
@@ -2951,6 +3028,108 @@ export default function RevenueEnginePage() {
                         </div>
                         <p className="mt-3 text-xs leading-5 text-zinc-500">{leadRadarMutation.data.mockupPolicy.qualityBar}</p>
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {moneySprintMutation.data && (
+                <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <BadgeDollarSign className="h-4 w-4 text-emerald-200" />
+                          Money sprint
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {moneySprintMutation.data.operatingLimits.maxQualifiedLeadsToday} leads · {moneySprintMutation.data.operatingLimits.maxMockupsToday} previews · {moneySprintMutation.data.operatingLimits.externalContactMode}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintMutation.data.status), "shrink-0")}>
+                        {moneySprintMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_360px]">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Scout queue</p>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutQueue.slice(0, 8).map((task) => (
+                            <a
+                              key={task.id}
+                              href={task.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-zinc-800 bg-black p-3 transition hover:border-emerald-500/40"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{task.query}</p>
+                                  <p className="mt-1 text-xs text-zinc-500">{task.ownerAgent} · {task.source}</p>
+                                </div>
+                                <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{task.evidenceToCapture.join(" · ")}</p>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                      {moneySprintMutation.data.previews.length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Previews</p>
+                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            {moneySprintMutation.data.previews.map((preview) => (
+                              <a
+                                key={preview.slug}
+                                href={preview.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 transition hover:border-emerald-400/50"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white">{preview.slug}</p>
+                                  <ExternalLink className="h-4 w-4 shrink-0 text-emerald-200" />
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-zinc-400">{preview.nextAction}</p>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Approval gates</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.approvalGates.map((gate) => (
+                            <div key={gate} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                              {gate}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Next actions</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.nextActions.map((action) => (
+                            <div key={action} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                              {action}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(moneySprintMutation.data.recordedLeads.length > 0 || moneySprintMutation.data.outreachDrafts.length > 0) && (
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Created</p>
+                          <p className="mt-2 text-sm text-zinc-300">
+                            {moneySprintMutation.data.recordedLeads.length} leads · {moneySprintMutation.data.outreachDrafts.length} drafts
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
