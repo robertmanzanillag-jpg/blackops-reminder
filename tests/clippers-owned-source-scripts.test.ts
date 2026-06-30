@@ -494,8 +494,10 @@ test("account permission readiness writes active TikTok MVP account evidence row
     assert.ok(readiness.tiktokMvpAccountCloseout.rows.every((row) => row.evidenceQuality.issues.length > 0));
 
     const mvpAccountEvidenceCsv = await readFile(path.join(rootDir, "account-permission-mvp-account-evidence.csv"), "utf8");
-    assert.match(mvpAccountEvidenceCsv, /"account","sports-daily","tiktok","verified"/);
-    assert.match(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","verified"/);
+    assert.match(mvpAccountEvidenceCsv, /"account","sports-daily","tiktok","submitted"/);
+    assert.match(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","submitted"/);
+    assert.doesNotMatch(mvpAccountEvidenceCsv, /"account","sports-daily","tiktok","verified","[^"]*","[^"]*","[^"]*","[^"]*","https:\/\/www\.tiktok\.com\/signup","[^"]*","[^"]*","<real/);
+    assert.doesNotMatch(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","verified","[^"]*","[^"]*","[^"]*","[^"]*","https:\/\/www\.tiktok\.com\/signup","[^"]*","[^"]*","<real/);
     assert.match(mvpAccountEvidenceCsv, /active TikTok MVP account proof/);
     assert.doesNotMatch(mvpAccountEvidenceCsv, /"instagram"|"youtube"|developer_app|permission|client_secret|refresh_token|access_token|password=/);
   } finally {

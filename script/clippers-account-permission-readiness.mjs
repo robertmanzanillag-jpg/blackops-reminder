@@ -446,7 +446,7 @@ function mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack = {}) {
       "account",
       row.accountId,
       row.platform,
-      "verified",
+      "submitted",
       "",
       "",
       "",
@@ -454,7 +454,7 @@ function mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack = {}) {
       platforms.find((platform) => platform.platform === row.platform)?.accountUrl || "",
       "",
       "",
-      `<real ${row.handle} profile URL + ownership/security proof + Metricool-ready account proof from ${sourceHint}>`,
+      `<real ${row.handle} profile URL + ownership/security proof + Metricool-ready account proof from ${sourceHint}; change status to verified only after proof is real and reviewed>`,
     ].map(csvCell).join(","));
   }
   return `${rows.join("\n")}\n`;

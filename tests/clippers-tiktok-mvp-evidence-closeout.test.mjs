@@ -756,8 +756,11 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   const bridgeTemplate = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/metricool-bridge-evidence-template.csv"), "utf8");
   const markdown = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-pack.md"), "utf8");
   const html = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-pack.html"), "utf8");
-  assert.match(accountTemplate, /<paste real public ownership proof URL for @sportsdaily>/);
-  assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar>/);
+  assert.match(accountTemplate, /sports-daily","tiktok","submitted"/);
+  assert.match(accountTemplate, /meme-radar","tiktok","submitted"/);
+  assert.match(accountTemplate, /<paste real public ownership proof URL for @sportsdaily; change status to verified only after proof is real and reviewed>/);
+  assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar; change status to verified only after proof is real and reviewed>/);
+  assert.doesNotMatch(accountTemplate, /"verified".*<paste real public ownership proof URL/);
   assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
   assert.match(bridgeTemplate, /<paste real public Metricool proof URL for memes @memeradar>/);
   assert.match(markdown, /Evidence quality:/);
