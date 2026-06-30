@@ -46,6 +46,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
+    "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
     "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",

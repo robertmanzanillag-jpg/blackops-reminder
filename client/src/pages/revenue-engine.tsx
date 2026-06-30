@@ -31,6 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
 
 type RevenueSnapshot = {
   metrics: {
@@ -1773,28 +1774,10 @@ export default function RevenueEnginePage() {
 
   const deliveryWorkspaceQaMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
     mutationFn: async (workspace) => {
-      const depositVerified = workspace.input.depositPaid || reviewChecks.depositPaid;
-      const rollbackVerified = reviewChecks.rollbackPlanReady || workspace.input.clientHandoffReady;
-      const automationQaPassed = workspace.input.automationQaPassed || (reviewChecks.automationTested && rollbackVerified);
       const response = await fetch("/api/revenue-engine/delivery-workspaces/qa", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: workspace.id,
-          publicDataVerified: workspace.input.publicDataVerified || reviewChecks.publicDataVerified,
-          visualQaPassed: workspace.input.visualQaPassed || reviewChecks.responsiveChecked,
-          technicalQaPassed: workspace.input.technicalQaPassed || reviewChecks.linksChecked,
-          automationQaPassed,
-          clientHandoffReady: workspace.input.clientHandoffReady || (depositVerified && rollbackVerified),
-          notes: [
-            "Revalidacion con evidencia marcada en el panel QA.",
-            `data=${workspace.input.publicDataVerified || reviewChecks.publicDataVerified ? "ok" : "pending"}`,
-            `responsive=${workspace.input.visualQaPassed || reviewChecks.responsiveChecked ? "ok" : "pending"}`,
-            `technical=${workspace.input.technicalQaPassed || reviewChecks.linksChecked ? "ok" : "pending"}`,
-            `automation=${automationQaPassed ? "ok" : "pending"}`,
-            `handoff=${workspace.input.clientHandoffReady || (depositVerified && rollbackVerified) ? "ok" : "pending"}`,
-          ].join(" "),
-        }),
+        body: JSON.stringify(buildDeliveryWorkspaceQaPayload(workspace, reviewChecks)),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo revalidar el workspace");
