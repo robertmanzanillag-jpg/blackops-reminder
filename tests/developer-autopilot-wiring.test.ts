@@ -41,6 +41,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   const mutationStart = uiSource.indexOf("const deliveryWorkspaceGithubHandoffMutation");
   const mutationEnd = uiSource.indexOf("const deliveryWorkspaceDeliverMutation");
   const handoffMutation = uiSource.slice(mutationStart, mutationEnd);
+  const websiteOpportunityCloseStart = uiSource.indexOf("const websiteOpportunityCloseMutation");
+  const websiteOpportunityCloseEnd = uiSource.indexOf("const automationOpportunityCloseMutation");
+  const websiteOpportunityCloseMutation = uiSource.slice(websiteOpportunityCloseStart, websiteOpportunityCloseEnd);
 
   assert.match(engineSource, /RevenueWebsiteOpportunity/);
   assert.match(engineSource, /recordRevenueWebsiteOpportunity/);
@@ -101,8 +104,22 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /button-approve-website-sales-draft-/);
   assert.match(uiSource, /item\.draftStatus !== "approved"/);
   assert.match(uiSource, /checkbox-website-opportunity-scope-/);
+  assert.match(uiSource, /const \[websiteOpportunityScopeApprovals, setWebsiteOpportunityScopeApprovals\] = useState<Record<string, boolean>>\(\{\}\)/);
+  assert.match(uiSource, /Boolean\(websiteOpportunityScopeApprovals\[opportunity\.id\]\)/);
+  assert.match(uiSource, /\[opportunity\.id\]: !scopeApprovedForClose/);
   assert.match(uiSource, /scopeApproved: scopeApprovedForClose/);
+  assert.match(uiSource, /websiteOpportunityCloseInputs/);
+  assert.match(uiSource, /input-website-opportunity-cash-/);
+  assert.match(uiSource, /input-website-opportunity-payment-/);
+  assert.match(uiSource, /input-website-opportunity-close-notes-/);
+  assert.match(websiteOpportunityCloseMutation, /\/api\/revenue-engine\/outreach-outcome/);
+  assert.match(websiteOpportunityCloseMutation, /outcome: "deposit_collected"/);
+  assert.match(websiteOpportunityCloseMutation, /outcomeRecordedByRobert: true/);
+  assert.match(websiteOpportunityCloseMutation, /outcomeData\.status === "blocked"/);
   assert.match(uiSource, /button-close-website-opportunity-/);
+  assert.doesNotMatch(websiteOpportunityCloseMutation, /reviewChecks\.clientApprovedScope/);
+  assert.match(uiSource, /const shouldRecordDepositOutcome = closeDepositCoversRequired &&/);
+  assert.match(uiSource, /\|\| !closeDepositCoversRequired/);
   assert.match(uiSource, /depositPaid: item\.cashCollectedUsd >= item\.requiredDepositUsd/);
   assert.match(uiSource, /scopeApproved: true/);
   assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff\}/);

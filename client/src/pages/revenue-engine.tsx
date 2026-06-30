@@ -1810,6 +1810,11 @@ export default function RevenueEnginePage() {
     rollbackPlanReady: false,
   });
   const [websiteOpportunityScopeApprovals, setWebsiteOpportunityScopeApprovals] = useState<Record<string, boolean>>({});
+  const [websiteOpportunityCloseInputs, setWebsiteOpportunityCloseInputs] = useState<Record<string, {
+    cashCollectedUsd?: string;
+    paymentConfirmation?: string;
+    notes?: string;
+  }>>({});
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releasePrUrl, setReleasePrUrl] = useState("");
   const [releaseSecondReviewEvidenceUrl, setReleaseSecondReviewEvidenceUrl] = useState("");
@@ -2439,19 +2444,43 @@ export default function RevenueEnginePage() {
   const websiteOpportunityCloseMutation = useMutation<
     WebsiteOpportunityCloseResult,
     Error,
-    { opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number]; scopeApproved: boolean }
+    {
+      opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number];
+      scopeApproved: boolean;
+      cashCollectedUsd: number;
+      paymentConfirmation: string;
+      notes: string;
+      recordDepositOutcome: boolean;
+    }
   >({
-    mutationFn: async ({ opportunity, scopeApproved }) => {
+    mutationFn: async ({ opportunity, scopeApproved, cashCollectedUsd, paymentConfirmation, notes, recordDepositOutcome }) => {
+      if (recordDepositOutcome) {
+        const outcomeResponse = await fetch("/api/revenue-engine/outreach-outcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            draftId: opportunity.sourceOutreachDraftId,
+            outcome: "deposit_collected",
+            outcomeRecordedByRobert: true,
+            cashCollectedUsd,
+            notes: paymentConfirmation || notes || "Manual deposit recorded from website opportunity close.",
+          }),
+        });
+        const outcomeData = await outcomeResponse.json();
+        if (!outcomeResponse.ok || outcomeData.status === "blocked") {
+          throw new Error(outcomeData.error || outcomeData.reason || "No se pudo registrar deposito manual");
+        }
+      }
       const response = await fetch("/api/revenue-engine/website-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunityId: opportunity.id,
-          depositPaid: opportunity.depositPaid,
+          depositPaid: cashCollectedUsd > 0,
           scopeApproved,
-          cashCollectedUsd: opportunity.cashCollectedUsd,
-          paymentConfirmation: opportunity.paymentConfirmation || "Using recorded manual deposit outcome.",
-          notes: "Closed from Revenue Engine website opportunity UI.",
+          cashCollectedUsd,
+          paymentConfirmation,
+          notes: notes || "Closed from Revenue Engine website opportunity UI.",
         }),
       });
       const data = await response.json();
@@ -2465,6 +2494,13 @@ export default function RevenueEnginePage() {
           delete next[data.opportunity!.id];
           return next;
         });
+        if (data.status === "sold") {
+          setWebsiteOpportunityCloseInputs((current) => {
+            const next = { ...current };
+            delete next[data.opportunity!.id];
+            return next;
+          });
+        }
       }
       refetchSnapshot();
     },
@@ -5389,6 +5425,19 @@ export default function RevenueEnginePage() {
                     <div className="grid gap-3 xl:grid-cols-2">
                       {(snapshot?.recentWebsiteOpportunities || []).slice(0, 6).map((opportunity) => {
                         const scopeApprovedForClose = opportunity.scopeApproved || Boolean(websiteOpportunityScopeApprovals[opportunity.id]);
+                        const closeInput = websiteOpportunityCloseInputs[opportunity.id] || {};
+                        const closeCashValue = closeInput.cashCollectedUsd ?? String(opportunity.cashCollectedUsd || opportunity.requiredDepositUsd || 0);
+                        const closeCashCollectedUsd = Number(closeCashValue) || 0;
+                        const closePaymentConfirmation = closeInput.paymentConfirmation ?? opportunity.paymentConfirmation;
+                        const closeNotes = closeInput.notes ?? "";
+                        const closeHasPaymentConfirmation = closePaymentConfirmation.trim().length >= 4;
+                        const closeHasCash = closeCashCollectedUsd > 0;
+                        const closeDepositCoversRequired = closeCashCollectedUsd >= opportunity.requiredDepositUsd;
+                        const shouldRecordDepositOutcome = closeDepositCoversRequired && (
+                          !opportunity.depositPaid
+                          || closeCashCollectedUsd !== opportunity.cashCollectedUsd
+                          || !opportunity.paymentConfirmation
+                        );
                         return (
                           <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-black p-3">
                             <div className="flex items-start justify-between gap-3">
@@ -5404,6 +5453,9 @@ export default function RevenueEnginePage() {
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Badge variant="outline" className={cn(opportunity.depositPaid ? statusTone("ready") : statusTone("blocked"))}>
                                 {opportunity.depositPaid ? "deposito registrado" : "falta deposito"}
+                              </Badge>
+                              <Badge variant="outline" className={cn(closeDepositCoversRequired ? statusTone("ready") : statusTone("blocked"))}>
+                                {closeDepositCoversRequired ? "monto suficiente" : "monto parcial"}
                               </Badge>
                               <label className="flex h-8 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs text-zinc-300">
                                 <input
@@ -5421,6 +5473,83 @@ export default function RevenueEnginePage() {
                                 Scope aprobado
                               </label>
                             </div>
+                            {opportunity.status !== "sold" && (
+                              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-cash-${opportunity.id}`}>
+                                    Deposito cobrado
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-cash-${opportunity.id}`}
+                                    type="number"
+                                    min={0}
+                                    value={closeCashValue}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          cashCollectedUsd: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    data-testid={`input-website-opportunity-cash-${opportunity.id}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-payment-${opportunity.id}`}>
+                                    Confirmacion
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-payment-${opportunity.id}`}
+                                    value={closePaymentConfirmation}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          paymentConfirmation: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    placeholder="Stripe/CashApp/Zelle confirmado"
+                                    data-testid={`input-website-opportunity-payment-${opportunity.id}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-notes-${opportunity.id}`}>
+                                    Nota de cierre
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-notes-${opportunity.id}`}
+                                    value={closeNotes}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          notes: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    placeholder="Scope y deposito aprobados por Robert"
+                                    data-testid={`input-website-opportunity-close-notes-${opportunity.id}`}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {opportunity.status !== "sold" && (
+                              <div className="mt-3 grid gap-1 text-xs text-zinc-500">
+                                {!scopeApprovedForClose && <p>Falta aprobar scope.</p>}
+                                {!closeHasCash && <p>Falta monto de deposito.</p>}
+                                {closeHasCash && !closeDepositCoversRequired && <p>El monto capturado no cubre el deposito requerido.</p>}
+                                {!closeHasPaymentConfirmation && <p>Falta confirmacion de pago.</p>}
+                                {shouldRecordDepositOutcome && <p>El cierre registrara primero el deposito manual en el outreach.</p>}
+                              </div>
+                            )}
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Button
                                 type="button"
@@ -5428,19 +5557,24 @@ export default function RevenueEnginePage() {
                                 disabled={
                                   websiteOpportunityCloseMutation.isPending
                                   || opportunity.status === "sold"
-                                  || !opportunity.depositPaid
-                                  || opportunity.cashCollectedUsd < opportunity.requiredDepositUsd
                                   || !scopeApprovedForClose
+                                  || !closeHasCash
+                                  || !closeDepositCoversRequired
+                                  || !closeHasPaymentConfirmation
                                 }
                                 onClick={() => websiteOpportunityCloseMutation.mutate({
                                   opportunity,
                                   scopeApproved: scopeApprovedForClose,
+                                  cashCollectedUsd: closeCashCollectedUsd,
+                                  paymentConfirmation: closePaymentConfirmation,
+                                  notes: closeNotes,
+                                  recordDepositOutcome: shouldRecordDepositOutcome,
                                 })}
                                 className="bg-emerald-600 text-white hover:bg-emerald-500"
                                 data-testid={`button-close-website-opportunity-${opportunity.id}`}
                               >
                                 {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                {opportunity.depositPaid && scopeApprovedForClose ? "Marcar vendida" : "Deposito manual + scope"}
+                                {closeDepositCoversRequired && scopeApprovedForClose ? "Registrar deposito y vender" : "Deposito completo + scope"}
                               </Button>
                               {opportunity.mockupUrl && (
                                 <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
