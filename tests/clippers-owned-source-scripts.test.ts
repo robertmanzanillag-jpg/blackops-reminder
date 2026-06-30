@@ -7167,7 +7167,10 @@ test("Metricool current batch upload pack stages the 10 TikTok source files", as
   assert.equal(pack.batchId, "metricool-batch-01");
   assert.equal(pack.totals.rows, 10);
   assert.equal(pack.totals.copied, 10);
+  assert.equal(pack.totals.prepared, 10);
   assert.equal(pack.totals.blocked, 0);
+  assert.equal(pack.totals.gateBlocked, 0);
+  assert.equal(pack.totals.sourceBlocked, 0);
   assert.equal(pack.totals.staleFiles, 0);
   assert.match(pack.paths.uploadDir, /metricool-current-batch-upload-pack$/);
   assert.match(pack.paths.html, /metricool-current-batch-upload-pack\/index\.html$/);
@@ -7225,6 +7228,8 @@ test("Metricool current batch upload pack stages the 10 TikTok source files", as
   assert.match(page, /prepare-clippers-metricool-current-batch-upload-pack-button/);
   assert.match(page, /clippers-metricool-current-batch-upload-pack-panel/);
   assert.match(page, /Metricool Current Batch Upload Pack/);
+  assert.match(page, /Gate locked/);
+  assert.match(page, /Source block/);
   assert.match(page, /Evidence checklist:/);
   assert.match(page, /Console:/);
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-upload-pack"\]/);
@@ -7292,7 +7297,10 @@ test("Metricool current batch upload pack can stage files while verifier or pref
     const blockedPack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json"), "utf8"));
     assert.equal(blockedPack.status, "prepared_blocked_account_or_metricool_connection");
     assert.equal(blockedPack.totals.copied, 10);
+    assert.equal(blockedPack.totals.prepared, 10);
     assert.equal(blockedPack.totals.blocked, 10);
+    assert.equal(blockedPack.totals.gateBlocked, 10);
+    assert.equal(blockedPack.totals.sourceBlocked, 0);
     assert.equal(blockedPack.rows[0].status, "prepared_blocked_gate");
     assert.equal(blockedPack.rows[0].blocker, "verifier_or_preflight_not_ready");
     assert.match(blockedPack.nextStep, /do not open Metricool scheduling/i);

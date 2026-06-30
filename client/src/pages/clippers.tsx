@@ -576,7 +576,7 @@ interface ClipperMetricoolMcpPreflightSummary {
 }
 
 interface ClipperMetricoolCurrentBatchUploadPackSummary {
-  status: "ready_for_metricool_upload" | "blocked";
+  status: "ready_for_metricool_upload" | "prepared_blocked_account_or_metricool_connection" | "blocked";
   generatedAt: string;
   batchId: string;
   paths: {
@@ -595,7 +595,10 @@ interface ClipperMetricoolCurrentBatchUploadPackSummary {
   totals: {
     rows: number;
     copied: number;
+    prepared?: number;
     blocked: number;
+    gateBlocked?: number;
+    sourceBlocked?: number;
     bytes: number;
     staleFiles?: number;
   };
@@ -613,7 +616,8 @@ interface ClipperMetricoolCurrentBatchUploadPackSummary {
     uploadFileName: string;
     uploadFilePath: string;
     captionSeed: string;
-    status: "ready_to_upload" | "blocked_source_file";
+    resolvedSourcePath?: string;
+    status: "ready_to_upload" | "prepared_blocked_gate" | "blocked_source_file";
     blocker: string;
   }>;
   guardrails: string[];
@@ -19575,18 +19579,22 @@ export default function ClippersPage() {
                 <p className="mt-1 text-sm leading-6 text-zinc-400">{metricoolCurrentBatchUploadPack.nextStep}</p>
                 <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">{metricoolCurrentBatchUploadPack.paths.uploadDir}</p>
               </div>
-              <div className="grid min-w-[280px] grid-cols-3 gap-2 text-center">
+              <div className="grid min-w-[320px] grid-cols-4 gap-2 text-center">
                 <div className="rounded-md border border-white/10 bg-black/25 p-2">
                   <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rows</p>
                   <p className="mt-1 text-xl font-semibold text-white">{formatNumber(metricoolCurrentBatchUploadPack.totals.rows)}</p>
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/25 p-2">
-                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Copied</p>
-                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(metricoolCurrentBatchUploadPack.totals.copied)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Prepared</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-200">{formatNumber(metricoolCurrentBatchUploadPack.totals.prepared ?? metricoolCurrentBatchUploadPack.totals.copied)}</p>
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/25 p-2">
-                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Blocked</p>
-                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(metricoolCurrentBatchUploadPack.totals.blocked)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Gate locked</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-100">{formatNumber(metricoolCurrentBatchUploadPack.totals.gateBlocked ?? metricoolCurrentBatchUploadPack.totals.blocked)}</p>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Source block</p>
+                  <p className="mt-1 text-xl font-semibold text-red-100">{formatNumber(metricoolCurrentBatchUploadPack.totals.sourceBlocked ?? 0)}</p>
                 </div>
               </div>
             </div>
@@ -19609,7 +19617,7 @@ export default function ClippersPage() {
                     </div>
                     <Badge className={cn(
                       "shrink-0 border text-[10px]",
-                      row.status === "ready_to_upload"
+                      row.status === "ready_to_upload" || row.status === "prepared_blocked_gate"
                         ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
                         : "border-amber-300/30 bg-amber-300/10 text-amber-100"
                     )}>

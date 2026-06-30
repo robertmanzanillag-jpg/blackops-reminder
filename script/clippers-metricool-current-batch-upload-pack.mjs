@@ -144,7 +144,9 @@ function renderMarkdown(summary) {
     "",
     `- Rows: ${summary.totals.rows}`,
     `- Copied files: ${summary.totals.copied}`,
-    `- Blocked files: ${summary.totals.blocked}`,
+    `- Prepared files: ${summary.totals.prepared || summary.totals.copied}`,
+    `- Gate-blocked files: ${summary.totals.gateBlocked || 0}`,
+    `- Source-blocked files: ${summary.totals.sourceBlocked || 0}`,
     `- Total bytes: ${summary.totals.bytes}`,
     "",
     "## Upload Order",
@@ -288,7 +290,8 @@ function renderHtml(summary) {
     <div class="stats">
       <div class="stat">Rows <b>${htmlEscape(summary.totals.rows)}</b></div>
       <div class="stat">Copied <b>${htmlEscape(summary.totals.copied)}</b></div>
-      <div class="stat">Blocked <b>${htmlEscape(summary.totals.blocked)}</b></div>
+      <div class="stat">Prepared <b>${htmlEscape(summary.totals.prepared || summary.totals.copied)}</b></div>
+      <div class="stat">Gate locked <b>${htmlEscape(summary.totals.gateBlocked || 0)}</b></div>
       <div class="stat">Stale files <b>${htmlEscape(summary.totals.staleFiles)}</b></div>
     </div>
     <div class="guardrails">${summary.guardrails.map((guardrail) => `<div>${htmlEscape(guardrail)}</div>`).join("")}</div>
@@ -404,7 +407,10 @@ async function writeBlockedSummary({ workbook, batchId, batchEvidenceCsv, blocke
     totals: {
       rows: rows.length,
       copied: 0,
+      prepared: 0,
       blocked: rows.length,
+      gateBlocked: 0,
+      sourceBlocked: rows.length,
       bytes: 0,
       staleFiles: 0,
     },
@@ -504,9 +510,12 @@ async function main() {
     sum.rows += 1;
     sum.bytes += row.sourceBytes;
     if (["ready_to_upload", "prepared_blocked_gate"].includes(row.status)) sum.copied += 1;
+    if (["ready_to_upload", "prepared_blocked_gate"].includes(row.status)) sum.prepared += 1;
+    if (row.status === "prepared_blocked_gate") sum.gateBlocked += 1;
+    if (row.status === "blocked_source_file") sum.sourceBlocked += 1;
     if (row.status !== "ready_to_upload") sum.blocked += 1;
     return sum;
-  }, { rows: 0, copied: 0, blocked: 0, bytes: 0 });
+  }, { rows: 0, copied: 0, prepared: 0, blocked: 0, gateBlocked: 0, sourceBlocked: 0, bytes: 0 });
   totals.staleFiles = staleFiles.length;
   const sourceFilesReady = totals.rows === 10 && totals.copied === 10 && totals.staleFiles === 0;
   const status = sourceFilesReady && totals.blocked === 0
