@@ -321,6 +321,7 @@ type RevenueSnapshot = {
       estimatedSetupUsd: number;
       depositUsd: number;
       monthlyRetainerUsd: number;
+      copyableContactPacket: string;
       nextAction: string;
     }>;
     blocked: Array<{
@@ -3771,6 +3772,17 @@ export default function RevenueEnginePage() {
                             Mailto
                           </Button>
                         </a>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-zinc-700"
+                          onClick={() => navigator.clipboard.writeText(item.copyableContactPacket)}
+                          data-testid={`button-copy-manual-outreach-packet-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy message
+                        </Button>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300">

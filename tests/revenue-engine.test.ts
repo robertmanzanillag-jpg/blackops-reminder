@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
+import express from "express";
 import {
   answerRevenueAutomationIntake,
   approveRevenuePublicLeadCandidate,
@@ -88,6 +90,7 @@ import {
   setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
 } from "../server/revenue-engine";
+import { registerRoutes } from "../server/routes";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -1903,6 +1906,61 @@ test("writes a local revenue mockup preview without publishing externally", () =
   assert.equal(preview.guardrails.some((item) => item.includes("No requiere hosting pagado")), true);
 });
 
+test("serves revenue mockup previews over the generated route", async () => {
+  const preview = buildRevenueMockupPreview({
+    businessName: "Route Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    evidence: "Instagram active weekly, no website in bio, and catering requests are handled in comments.",
+    painPoint: "Needs a previewable menu and inquiry funnel.",
+    primaryOffer: "Website 3D Premium + Automation Sprint",
+    estimatedOfferUsd: 3500,
+    includeAutomation: true,
+  });
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  const routeLayer = (app as any)._router.stack.find((layer: any) =>
+    layer.route?.path === "/api/revenue-engine/mockup-previews/:slug" && layer.route.methods.get
+  );
+  assert.ok(routeLayer, "mockup preview route should be registered");
+  const handler = routeLayer.route.stack[0].handle;
+  const invoke = async (slug: string) => {
+    const result = { statusCode: 200, contentType: "", body: "" };
+    const res = {
+      status(code: number) {
+        result.statusCode = code;
+        return res;
+      },
+      json(payload: unknown) {
+        result.body = JSON.stringify(payload);
+        return res;
+      },
+      type(value: string) {
+        result.contentType = value;
+        return res;
+      },
+      send(payload: unknown) {
+        result.body = String(payload);
+        return res;
+      },
+    };
+    await handler({ params: { slug } }, res);
+    return result;
+  };
+
+  const response = await invoke(preview.slug);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.contentType, "html");
+  assert.match(response.body, /Route Ready Cafe/);
+  assert.match(response.body, /QA gates before contact/);
+
+  const invalid = await invoke("../bad");
+  assert.equal(invalid.statusCode, 400);
+});
+
 test("builds production plan only when commercial and cost gates pass", () => {
   const plan = buildRevenueProjectPlan({
     clientName: "No Site Cafe",
@@ -2152,6 +2210,8 @@ test("snapshot builds a capped manual outreach queue from approved drafts", () =
   assert.equal(queue.items.every((item) => item.contactUrl.includes("mail.google.com")), true);
   assert.equal(queue.items.every((item) => item.depositUsd > 0), true);
   assert.equal(queue.items.every((item) => item.nextAction.includes("registrar contacted/reply/call/deposito")), true);
+  assert.equal(queue.items.every((item) => item.copyableContactPacket.includes("Manual outreach packet")), true);
+  assert.equal(queue.items.every((item) => item.copyableContactPacket.includes("Do not auto-send")), true);
   assert.equal(queue.blocked.some((item) => item.businessName === "Needs Approval Cafe" && item.reason.includes("Robert")), true);
   assert.equal(queue.blocked.filter((item) => item.reason.includes("Daily contact limit reached")).length, 2);
 });
@@ -2218,8 +2278,11 @@ test("manual outreach queue uses public source URLs for non-email channels and c
 
   assert.equal(instagramItem.contactUrl, "https://instagram.com/instaqueuestudio");
   assert.equal(instagramItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.match(instagramItem.copyableContactPacket, /Open: https:\/\/instagram\.com\/instaqueuestudio/);
+  assert.match(instagramItem.copyableContactPacket, /Subject:/);
   assert.equal(contactFormItem.contactUrl, "https://example.com/form-queue/contact");
   assert.equal(contactFormItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.match(contactFormItem.copyableContactPacket, /Open: https:\/\/example\.com\/form-queue\/contact/);
   assert.equal(queue.items.some((item) => item.businessName === "Mockup Only Form"), false);
   assert.equal(queue.blockedCount, 13);
   assert.equal(queue.blocked.length, 10);

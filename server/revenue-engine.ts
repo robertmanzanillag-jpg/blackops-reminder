@@ -671,6 +671,7 @@ type RevenueManualOutreachQueue = {
     estimatedSetupUsd: number;
     depositUsd: number;
     monthlyRetainerUsd: number;
+    copyableContactPacket: string;
     nextAction: string;
   }>;
   blocked: Array<{
@@ -3739,20 +3740,41 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
     readyCount: readyToday.length,
     blockedCount: blockedAll.length,
     overflowCount: overflow.length,
-    items: readyToday.map((draft) => ({
-      draftId: draft.id,
-      businessName: draft.businessName,
-      channel: draft.channel,
-      subject: draft.subject,
-      manualAction: manualActionForRevenueDraft(draft),
-      priority: draft.pricing.totalSetupUsd >= 3500 ? "high" as const : "medium" as const,
-      contactUrl: contactUrlForRevenueDraft(draft),
-      fallbackUrl: draft.links.mailto,
-      estimatedSetupUsd: draft.pricing.totalSetupUsd,
-      depositUsd: draft.pricing.depositUsd,
-      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
-      nextAction: "Revisar evidencia, abrir enlace manual y registrar contacted/reply/call/deposito desde esta cola.",
-    })),
+    items: readyToday.map((draft) => {
+      const contactUrl = contactUrlForRevenueDraft(draft);
+      const manualAction = manualActionForRevenueDraft(draft);
+      return {
+        draftId: draft.id,
+        businessName: draft.businessName,
+        channel: draft.channel,
+        subject: draft.subject,
+        manualAction,
+        priority: draft.pricing.totalSetupUsd >= 3500 ? "high" as const : "medium" as const,
+        contactUrl,
+        fallbackUrl: draft.links.mailto,
+        estimatedSetupUsd: draft.pricing.totalSetupUsd,
+        depositUsd: draft.pricing.depositUsd,
+        monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+        copyableContactPacket: [
+          `Manual outreach packet: ${draft.businessName}`,
+          `Channel: ${draft.channel}`,
+          `Open: ${contactUrl}`,
+          `Fallback: ${draft.links.mailto}`,
+          `Subject: ${draft.subject}`,
+          "",
+          draft.body,
+          "",
+          `Offer: setup $${draft.pricing.totalSetupUsd.toLocaleString("en-US")} + retainer $${draft.pricing.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
+          `Deposit to collect before build: $${draft.pricing.depositUsd.toLocaleString("en-US")}`,
+          "",
+          "After manual action:",
+          "- Record Contacted/Reply/Call/Deposit/Lost in Revenue Engine.",
+          "- Do not auto-send, bulk DM, submit forms automatically, or publish previews from this packet.",
+          `Next action: ${manualAction}`,
+        ].join("\n"),
+        nextAction: "Revisar evidencia, abrir enlace manual y registrar contacted/reply/call/deposito desde esta cola.",
+      };
+    }),
     blocked: blockedSample,
     nextAction:
       readyToday.length > 0

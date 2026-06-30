@@ -56,6 +56,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(engineSource, /scopeApproved/);
   assert.match(routeSource, /\/api\/revenue-engine\/website-opportunities/);
   assert.match(routeSource, /\/api\/revenue-engine\/website-opportunities\/close/);
+  assert.match(routeSource, /\/api\/revenue-engine\/mockup-previews\/:slug/);
+  assert.match(routeSource, /getRevenueMockupPreviewPath\(String\(req\.params\.slug \|\| ""\)\)/);
+  assert.match(routeSource, /res\.type\("html"\)\.send\(html\)/);
   assert.match(routeSource, /revenueWebsiteOpportunitySchema\.parse/);
   assert.match(routeSource, /revenueWebsiteOpportunityCloseSchema\.parse/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
@@ -108,6 +111,8 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /websiteOpportunityCloseMutation/);
   assert.match(uiSource, /panel-website-build-handoff-queue/);
   assert.match(uiSource, /button-copy-website-build-brief-/);
+  assert.match(uiSource, /button-copy-manual-outreach-packet-/);
+  assert.match(uiSource, /copyableContactPacket/);
   assert.match(uiSource, /button-create-website-opportunity-/);
   assert.match(uiSource, /button-approve-website-sales-draft-/);
   assert.match(uiSource, /item\.draftStatus !== "approved"/);
