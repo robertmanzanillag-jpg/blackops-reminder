@@ -468,6 +468,24 @@ export async function registerRoutes(
       readyForProofDrop: issues.length === 0,
       lanes,
       issues,
+      impact: {
+        unlocks: issues.length === 0
+          ? [
+              "Proof links can be saved to proof-links.json.",
+              "Proof drop can run quick-fill and unblocker checks.",
+              "Import preview can evaluate whether target evidence CSVs are ready.",
+            ]
+          : [
+              "No production gate is unlocked until these proof-link issues are fixed.",
+            ],
+        doesNotUnlock: [
+          "Does not apply account or Metricool evidence.",
+          "Does not prove legal rights to third-party content.",
+          "Does not schedule or publish TikTok posts.",
+          "Does not mark Metricool queue items as published or ready_to_send.",
+          "Does not enable direct social APIs or real publishing.",
+        ],
+      },
       guardrails: [
         "This preview does not write proof-links.json.",
         "This preview never applies evidence, schedules posts, or publishes.",

@@ -2320,6 +2320,10 @@ interface ClipperTikTokMvpProofLinksPreviewSummary {
     readyForProofDrop: boolean;
   }>;
   issues: string[];
+  impact: {
+    unlocks: string[];
+    doesNotUnlock: string[];
+  };
   guardrails: string[];
   nextStep: string;
 }
@@ -17250,6 +17254,16 @@ export default function ClippersPage() {
                         <span>real publish {tiktokMvpProofLinksPreview.realPublishEnabled ? "enabled" : "disabled"}</span>
                       </div>
                       <p className="mt-1">{tiktokMvpProofLinksPreview.issues[0] || tiktokMvpProofLinksPreview.nextStep}</p>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-preview-impact">
+                        <div className="rounded border border-emerald-300/10 bg-black/20 p-2">
+                          <p className="font-medium text-emerald-100">Unlocks</p>
+                          <p className="mt-1 text-zinc-400">{tiktokMvpProofLinksPreview.impact.unlocks[0]}</p>
+                        </div>
+                        <div className="rounded border border-red-300/10 bg-black/20 p-2">
+                          <p className="font-medium text-red-100">Still blocked</p>
+                          <p className="mt-1 text-zinc-400">{tiktokMvpProofLinksPreview.impact.doesNotUnlock[0]}</p>
+                        </div>
+                      </div>
                       <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-preview-lanes">
                         {tiktokMvpProofLinksPreview.lanes.map((lane) => (
                           <div key={lane.key} className="rounded border border-amber-300/10 bg-black/20 p-2">

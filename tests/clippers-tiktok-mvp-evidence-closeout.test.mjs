@@ -241,6 +241,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/save-tiktok-mvp-proof-links"/);
   assert.match(routes, /containsClipperSecretLikeText/);
   assert.match(routes, /auditClipperTikTokMvpProofLinks/);
+  assert.match(routes, /doesNotUnlock/);
+  assert.match(routes, /Does not apply account or Metricool evidence/);
+  assert.match(routes, /Does not schedule or publish TikTok posts/);
+  assert.match(routes, /Does not enable direct social APIs or real publishing/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-intake-import"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-proof-intake-import"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-proof-intake-import"/);
@@ -437,6 +441,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-links-textarea/);
   assert.match(page, /preview-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-preview-impact/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-lanes/);
   assert.match(page, /save-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
