@@ -14,11 +14,17 @@ const metricoolQueuePath = path.join(rootDir, "scheduled/metricool-execution-que
 const routesPath = path.join(process.cwd(), "server/routes.ts");
 const clippersPagePath = path.join(process.cwd(), "client/src/pages/clippers.tsx");
 const proofIntakePath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-intake-pack.mjs");
+const proofImportPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-intake-import.mjs");
 const proofDoctorPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-doctor.mjs");
 const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json");
+const combinedProofCsvPath = path.join(tmpDir, "tiktok-mvp-combined-proof-test.csv");
+const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/combined-proof-intake.csv");
+const targetAccountCsvPath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
+const targetBridgeCsvPath = path.join(rootDir, "scheduled/metricool-tiktok-bridge-evidence.csv");
 
 const accountHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
 const bridgeHeader = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
+const combinedHeader = "account_id,account_name,platform,handle,metricool_brand_name,public_profile_url,account_ownership_proof_url,metricool_connection_proof_url,account_notes,metricool_notes,copy_to_account_csv,copy_to_bridge_csv";
 
 function runCloseout(args = []) {
   return spawnSync(process.execPath, [
@@ -55,6 +61,14 @@ function cleanBridgeCsv() {
     bridgeHeader,
     "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
     "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+  ].join("\n") + "\n";
+}
+
+function cleanCombinedCsv() {
+  return [
+    combinedHeader,
+    "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,https://app.metricool.com/planner/sports-daily-tiktok-proof,Sports Daily TikTok account ownership and 2FA security proof verified by Robert without secrets,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+    "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
   ].join("\n") + "\n";
 }
 
@@ -212,6 +226,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-evidence-closeout"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-intake-pack"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-intake-pack"/);
+  assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-intake-import"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-proof-intake-import"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/apply-tiktok-mvp-proof-intake-import"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-evidence-closeout"/);
@@ -231,7 +248,17 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   const intakeRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/prepare-tiktok-mvp-proof-intake-pack"',
-    'app.get("/api/clippers/tiktok-mvp-evidence-closeout"',
+    'app.get("/api/clippers/tiktok-mvp-proof-intake-import"',
+  );
+  const importPreviewRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/preview-tiktok-mvp-proof-intake-import"',
+    'app.post("/api/clippers/apply-tiktok-mvp-proof-intake-import"',
+  );
+  const importApplyRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/apply-tiktok-mvp-proof-intake-import"',
+    'app.get("/api/clippers/tiktok-mvp-proof-doctor"',
   );
   const applyRoute = requiredSlice(
     routes,
@@ -245,6 +272,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(intakeRoute, /runClipperTikTokMvpProofIntakePack/);
   assert.match(intakeRoute, /readClipperTikTokMvpProofIntakePack/);
   assert.doesNotMatch(intakeRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
+  assert.match(importPreviewRoute, /runClipperTikTokMvpProofIntakeImport\(false\)/);
+  assert.doesNotMatch(importPreviewRoute, /x-clippers-operator-confirm|runClipperTikTokMvpProofIntakeImport\(true\)|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
+  assert.match(importApplyRoute, /x-clippers-operator-confirm"\) !== "apply-tiktok-mvp-proof-intake-import"/);
+  assert.match(importApplyRoute, /runClipperTikTokMvpProofIntakeImport\(true\)/);
+  assert.match(importApplyRoute, /tiktokMvpProofIntakeImport\.status !== "applied"/);
+  assert.doesNotMatch(importApplyRoute, /runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   const doctorRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/prepare-tiktok-mvp-proof-doctor"',
@@ -264,10 +297,13 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /preview-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /prepare-clippers-tiktok-mvp-proof-intake-pack-button/);
   assert.match(page, /prepare-clippers-tiktok-mvp-proof-doctor-button/);
+  assert.match(page, /preview-clippers-tiktok-mvp-proof-intake-import-button/);
+  assert.match(page, /apply-clippers-tiktok-mvp-proof-intake-import-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-pack-paths/);
   assert.match(page, /clippers-tiktok-mvp-proof-doctor-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-intake-import-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-fix-queue/);
   assert.match(page, /fixQueueCsv/);
   assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
@@ -312,6 +348,180 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.match(bridgeTemplate, /<paste real public Metricool proof URL for memes @memeradar>/);
   assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}\n${html}`, /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
   assert.match(html, /This guide does not publish or schedule posts/);
+});
+
+test("TikTok MVP proof intake import blocks placeholder combined rows without writing targets", async () => {
+  const previousAccount = await readFile(targetAccountCsvPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(combinedProofCsvPath, [
+      combinedHeader,
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
+    ].join("\n") + "\n");
+
+    const result = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-intake-import.mjs",
+      "--combined-csv",
+      combinedProofCsvPath,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_intake");
+    assert.equal(output.applied, false);
+
+    const source = await readFile(proofImportPath, "utf8");
+    assert.doesNotMatch(source, /ready_to_send|video\.publish|directSocialApisRequired:\s*true/);
+    assert.match(source, /Metricool remains approval_required/);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
+    assert.equal(report.launchMode, "metricool_approval_required");
+    assert.equal(report.directSocialApisRequired, false);
+    assert.equal(report.applied, false);
+    assert.match(report.nextStep, /do not apply/i);
+  } finally {
+    if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
+    else await writeFile(targetAccountCsvPath, previousAccount);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("TikTok MVP proof intake import blocks mismatched combined identity fields", async () => {
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(combinedProofCsvPath, [
+      combinedHeader,
+      "sports-daily,Sports Daily Clips,tiktok,@someoneelse,WRONG,https://www.tiktok.com/@someoneelse,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,https://app.metricool.com/planner/sports-daily-tiktok-proof,Sports Daily TikTok account ownership and 2FA security proof verified by Robert without secrets,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+    ].join("\n") + "\n");
+
+    const result = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-intake-import.mjs",
+      "--combined-csv",
+      combinedProofCsvPath,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_invalid_intake");
+    assert.ok(output.intakeErrors >= 3);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
+    assert.match(report.intakeErrors.join("\n"), /handle must be @sportsdaily/);
+    assert.match(report.intakeErrors.join("\n"), /metricool_brand_name must be SPORT/);
+    assert.match(report.intakeErrors.join("\n"), /public_profile_url must be https:\/\/www\.tiktok\.com\/@sportsdaily/);
+  } finally {
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("TikTok MVP proof intake import previews and applies clean combined proof CSVs only to target CSVs", async () => {
+  const previousAccount = await readFile(targetAccountCsvPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(combinedProofCsvPath, cleanCombinedCsv());
+
+    const preview = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-intake-import.mjs",
+      "--combined-csv",
+      combinedProofCsvPath,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const previewOutput = JSON.parse(preview.stdout);
+    assert.equal(previewOutput.status, "ready_to_apply");
+    assert.equal(previewOutput.applied, false);
+    assert.equal(previewOutput.ready, 2);
+    const restoredCloseout = JSON.parse(await readFile(closeoutReportPath, "utf8"));
+    assert.notEqual(restoredCloseout.status, "ready_to_apply");
+    assert.equal(restoredCloseout.accountCsvPath, targetAccountCsvPath);
+
+    const apply = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-intake-import.mjs",
+      "--combined-csv",
+      combinedProofCsvPath,
+      "--apply",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const applyOutput = JSON.parse(apply.stdout);
+    assert.equal(applyOutput.status, "applied");
+    assert.equal(applyOutput.applied, true);
+
+    const accountTarget = await readFile(targetAccountCsvPath, "utf8");
+    const bridgeTarget = await readFile(targetBridgeCsvPath, "utf8");
+    assert.match(accountTarget, /sports-daily/);
+    assert.match(bridgeTarget, /https:\/\/app\.metricool\.com\/planner\/meme-radar-tiktok-proof/);
+    assert.doesNotMatch(`${accountTarget}\n${bridgeTarget}`, /<paste|example\.com|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
+    assert.equal(report.status, "applied");
+    assert.match(report.nextStep, /evidence closeout apply/i);
+  } finally {
+    if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
+    else await writeFile(targetAccountCsvPath, previousAccount);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("TikTok MVP proof intake import apply preserves the default combined proof sheet", async () => {
+  const previousCombined = await readFile(defaultCombinedProofCsvPath, "utf8").catch(() => null);
+  const previousAccount = await readFile(targetAccountCsvPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(defaultCombinedProofCsvPath), { recursive: true });
+    await writeFile(defaultCombinedProofCsvPath, cleanCombinedCsv());
+
+    const apply = spawnSync(process.execPath, [
+      "script/clippers-tiktok-mvp-proof-intake-import.mjs",
+      "--apply",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const output = JSON.parse(apply.stdout);
+    assert.equal(output.status, "applied");
+
+    const combinedAfter = await readFile(defaultCombinedProofCsvPath, "utf8");
+    assert.match(combinedAfter, /https:\/\/app\.metricool\.com\/planner\/sports-daily-tiktok-proof/);
+    assert.doesNotMatch(combinedAfter, /<paste real public Metricool proof URL/);
+  } finally {
+    if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
+    else await writeFile(defaultCombinedProofCsvPath, previousCombined);
+    if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
+    else await writeFile(targetAccountCsvPath, previousAccount);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-doctor.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
 });
 
 test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evidence", async () => {

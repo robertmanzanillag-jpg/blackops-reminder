@@ -219,7 +219,7 @@ async function main() {
   const closeoutPreview = runJson(closeoutArgs);
   const closeoutReportPath = path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json");
   const closeout = closeoutPreview.ok ? await readJson(closeoutReportPath, {}) : {};
-  const proofIntake = runJson(["script/clippers-tiktok-mvp-proof-intake-pack.mjs"]);
+  const proofIntake = await readJson(path.join(reportsDir, "proof-intake-pack.json"), {});
   const previewFailed = !closeoutPreview.ok;
   const ready = previewFailed ? 0 : closeout?.totals?.ready || 0;
   const laneCount = closeout?.totals?.lanes || 2;
@@ -230,7 +230,7 @@ async function main() {
     fixQueueCsv: outFixQueuePath,
     accountCsv: closeout?.accountCsvPath || path.join(rootDir, "account-permission-mvp-account-evidence.csv"),
     bridgeCsv: closeout?.bridgeCsvPath || path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv"),
-    proofIntakeHtml: proofIntake.data?.htmlPath || path.join(reportsDir, "proof-intake-pack.html"),
+    proofIntakeHtml: proofIntake?.paths?.html || proofIntake?.htmlPath || path.join(reportsDir, "proof-intake-pack.html"),
   };
   const rawRows = Array.isArray(closeout?.rows) ? closeout.rows : [];
   const fixQueue = previewFailed ? [] : buildFixQueue(rejected, rawRows, paths);

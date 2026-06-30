@@ -2132,6 +2132,36 @@ interface ClipperTikTokMvpProofDoctorSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofIntakeImportSummary {
+  status: "ready_to_apply" | "blocked_invalid_intake" | "applied";
+  mode: "preview" | "apply";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  applied: boolean;
+  closeoutPreviewStatus: string;
+  closeoutPreview: {
+    ready: number;
+    rejected: number;
+    lanes: number;
+    reportJsonPath?: string;
+  } | null;
+  missingLanes: string[];
+  intakeErrors: string[];
+  paths: {
+    json: string;
+    markdown: string;
+    combinedCsv: string;
+    previewAccountCsv: string;
+    previewBridgeCsv: string;
+    targetAccountCsv: string;
+    targetBridgeCsv: string;
+  };
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperExternalCloseoutPackSummary {
   status: ClipperExternalCloseoutPackStatus;
   generatedAt: string;
@@ -10001,6 +10031,16 @@ export default function ClippersPage() {
       return data.tiktokMvpProofDoctor as ClipperTikTokMvpProofDoctorSummary;
     },
   });
+  const { data: tiktokMvpProofIntakeImport } = useQuery<ClipperTikTokMvpProofIntakeImportSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-intake-import"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-intake-import");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof intake import");
+      return data.tiktokMvpProofIntakeImport as ClipperTikTokMvpProofIntakeImportSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -10537,6 +10577,58 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar proof doctor", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofIntakeImportPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/preview-tiktok-mvp-proof-intake-import", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude previsualizar proof intake import");
+      return data as {
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      toast({
+        title: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? "Proof import listo" : "Proof import bloqueado",
+        description: data.tiktokMvpProofIntakeImport.nextStep,
+        variant: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude previsualizar proof import", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofIntakeImportApplyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/apply-tiktok-mvp-proof-intake-import", {
+        method: "POST",
+        headers: { "x-clippers-operator-confirm": "apply-tiktok-mvp-proof-intake-import" },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude aplicar proof intake import");
+      return data as {
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      toast({
+        title: "Proof import aplicado",
+        description: "Los CSVs objetivo quedaron listos para closeout; esto no publica ni agenda.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude aplicar proof import", description: error.message, variant: "destructive" });
     },
   });
 
@@ -16160,6 +16252,29 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => tiktokMvpProofIntakeImportPreviewMutation.mutate()}
+                disabled={tiktokMvpProofIntakeImportPreviewMutation.isPending || isLoading}
+                className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                data-testid="preview-clippers-tiktok-mvp-proof-intake-import-button"
+              >
+                {tiktokMvpProofIntakeImportPreviewMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
+                Import preview
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => tiktokMvpProofIntakeImportApplyMutation.mutate()}
+                disabled={tiktokMvpProofIntakeImportApplyMutation.isPending || isLoading || tiktokMvpProofIntakeImport?.status !== "ready_to_apply"}
+                className="h-8 bg-cyan-200 text-zinc-950 hover:bg-cyan-100"
+                data-testid="apply-clippers-tiktok-mvp-proof-intake-import-button"
+              >
+                {tiktokMvpProofIntakeImportApplyMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
+                Apply import
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => tiktokMvpEvidenceCloseoutPreviewMutation.mutate()}
                 disabled={tiktokMvpEvidenceCloseoutPreviewMutation.isPending || isLoading}
                 className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
@@ -16237,6 +16352,14 @@ export default function ClippersPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {tiktokMvpProofIntakeImport && (
+              <div className="mt-2 rounded-md border border-cyan-300/15 bg-black/20 p-2 text-[11px] leading-4 text-cyan-100/80" data-testid="clippers-tiktok-mvp-proof-intake-import-panel">
+                <p>Import: {tiktokMvpProofIntakeImport.status}; preview {tiktokMvpProofIntakeImport.closeoutPreviewStatus}; ready {tiktokMvpProofIntakeImport.closeoutPreview?.ready ?? 0}/{tiktokMvpProofIntakeImport.closeoutPreview?.lanes ?? 2}</p>
+                <p className="mt-1 break-all">Combined: {tiktokMvpProofIntakeImport.paths.combinedCsv}</p>
+                <p className="mt-1 break-all">Targets: {tiktokMvpProofIntakeImport.paths.targetAccountCsv} / {tiktokMvpProofIntakeImport.paths.targetBridgeCsv}</p>
+                <p className="mt-1">{tiktokMvpProofIntakeImport.nextStep}</p>
               </div>
             )}
           </div>

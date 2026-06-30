@@ -348,6 +348,11 @@ export async function registerRoutes(
   };
   const runClipperTikTokMvpProofIntakePack = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-intake-pack.mjs", "TikTok MVP proof intake pack");
   const runClipperTikTokMvpProofDoctor = () => runClipperJsonScript("script/clippers-tiktok-mvp-proof-doctor.mjs", "TikTok MVP proof doctor");
+  const runClipperTikTokMvpProofIntakeImport = (apply: boolean) => {
+    const args = ["script/clippers-tiktok-mvp-proof-intake-import.mjs"];
+    if (apply) args.push("--apply");
+    return runClipperNodeJson(args, apply ? "TikTok MVP proof intake import apply" : "TikTok MVP proof intake import preview");
+  };
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -373,6 +378,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpProofDoctor = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-doctor.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpProofIntakeImport = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/proof-intake-import.json", "utf8");
     return JSON.parse(raw);
   };
   const readClipperExternalCloseoutPack = async () => {
@@ -2660,6 +2669,56 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP proof intake pack" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-intake-import", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP proof intake import has not been previewed" : "TikTok MVP proof intake import could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/preview-tiktok-mvp-proof-intake-import", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpProofIntakeImport(false);
+      res.json({
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport(),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to preview TikTok MVP proof intake import" });
+    }
+  });
+
+  app.post("/api/clippers/apply-tiktok-mvp-proof-intake-import", async (_req, res) => {
+    try {
+      if (_req.get("x-clippers-operator-confirm") !== "apply-tiktok-mvp-proof-intake-import") {
+        res.status(403).json({ error: "Operator confirmation header required for TikTok MVP proof intake import apply." });
+        return;
+      }
+      const run = await runClipperTikTokMvpProofIntakeImport(true);
+      const tiktokMvpProofIntakeImport = await readClipperTikTokMvpProofIntakeImport();
+      if (tiktokMvpProofIntakeImport.status !== "applied") {
+        res.status(400).json({
+          error: "TikTok MVP proof intake import is not ready. Fix combined proof rows before applying.",
+          tiktokMvpProofIntakeImport,
+          tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+          run,
+        });
+        return;
+      }
+      res.json({
+        tiktokMvpProofIntakeImport,
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout(),
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
+        run,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to apply TikTok MVP proof intake import" });
     }
   });
 
