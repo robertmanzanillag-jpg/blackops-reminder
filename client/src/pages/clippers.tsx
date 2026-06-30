@@ -10539,6 +10539,8 @@ export default function ClippersPage() {
   const [tiktokMvpProofQuickFillText, setTiktokMvpProofQuickFillText] = useState(tiktokMvpProofQuickFillTemplate);
   const [tiktokMvpProofLinksText, setTiktokMvpProofLinksText] = useState("");
   const [tiktokMvpProofLinksPasteText, setTiktokMvpProofLinksPasteText] = useState("");
+  const [tiktokMvpFastPathSportProofUrl, setTiktokMvpFastPathSportProofUrl] = useState("");
+  const [tiktokMvpFastPathMemesProofUrl, setTiktokMvpFastPathMemesProofUrl] = useState("");
   const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
   const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
   const [tiktokMvpProofLinksPastePreview, setTiktokMvpProofLinksPastePreview] = useState<ClipperTikTokMvpProofLinksPastePreviewSummary | null>(null);
@@ -16677,6 +16679,15 @@ export default function ClippersPage() {
     || tiktokMvpCloseoutWizardMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
+  const buildTikTokMvpMetricoolFastPathPaste = () => {
+    const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
+    const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
+    setTiktokMvpProofLinksPasteText([
+      `SPORT Metricool connected proof ${sportUrl}`,
+      `memes Metricool connected proof ${memesUrl}`,
+    ].join("\n"));
+    setTiktokMvpProofLinksPastePreview(null);
+  };
   const getTikTokMvpOperatorButtonLabel = (button?: string) => {
     switch (button) {
       case "quick_fill": return "Run quick fill";
@@ -18305,6 +18316,45 @@ export default function ClippersPage() {
                       </div>
                     </div>
                   )}
+                  <div className="mt-2 rounded-md border border-emerald-300/10 bg-emerald-950/10 p-2" data-testid="clippers-tiktok-mvp-metricool-fast-path-panel">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end">
+                      <div className="min-w-0 flex-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">SPORT Metricool/Drive proof</Label>
+                        <Input
+                          value={tiktokMvpFastPathSportProofUrl}
+                          onChange={(event) => setTiktokMvpFastPathSportProofUrl(event.target.value)}
+                          className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
+                          placeholder="https://app.metricool.com/... or https://drive.google.com/..."
+                          data-testid="clippers-tiktok-mvp-fast-path-sport-input"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">memes Metricool/Drive proof</Label>
+                        <Input
+                          value={tiktokMvpFastPathMemesProofUrl}
+                          onChange={(event) => setTiktokMvpFastPathMemesProofUrl(event.target.value)}
+                          className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
+                          placeholder="https://app.metricool.com/... or https://docs.google.com/..."
+                          data-testid="clippers-tiktok-mvp-fast-path-memes-input"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={buildTikTokMvpMetricoolFastPathPaste}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathSportProofUrl.trim() || !tiktokMvpFastPathMemesProofUrl.trim()}
+                        className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                        data-testid="build-clippers-tiktok-mvp-metricool-fast-path-button"
+                      >
+                        <Wand2 className="mr-2 h-3.5 w-3.5" />
+                        Build 2 URL packet
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[10px] leading-4 text-emerald-100/70">
+                      These two URLs still go through Preview links. They do not save evidence, apply closeout, schedule, or publish.
+                    </p>
+                  </div>
                   <Textarea
                     value={tiktokMvpProofLinksPasteText}
                     onChange={(event) => setTiktokMvpProofLinksPasteText(event.target.value)}
