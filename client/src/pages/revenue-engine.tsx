@@ -1815,6 +1815,7 @@ export default function RevenueEnginePage() {
   const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
   const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
   const [publicScoutEvidenceText, setPublicScoutEvidenceText] = useState("");
+  const [selectedDailyScoutTaskId, setSelectedDailyScoutTaskId] = useState("");
   const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
   const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
@@ -1984,9 +1985,12 @@ export default function RevenueEnginePage() {
   const dispatchScoutNiche = snapshot?.businessScoutQueue.niche || scoutingNiche;
   const dispatchScoutOfferFocus = snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
   const dispatchScoutTarget = snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
-  const activeScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open"))
-    || snapshot?.latestDailyScoutSprint?.tasks[0]
-    || null;
+  const selectedDailyScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.taskId === selectedDailyScoutTaskId) || null;
+  const selectedDailyScoutTaskHasOpenSlots = Boolean(selectedDailyScoutTask?.resultSlots.some((slot) => slot.status === "open"));
+  const firstOpenDailyScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open")) || null;
+  const activeScoutTask = selectedDailyScoutTaskHasOpenSlots
+    ? selectedDailyScoutTask
+    : firstOpenDailyScoutTask || snapshot?.latestDailyScoutSprint?.tasks[0] || null;
   const activeScoutSourceTaskId = activeScoutTask?.taskId || snapshot?.latestDailyScoutSprint?.id || "ui-scout-evidence";
   const latestDailyScoutSlotText = useMemo(() => (
     (activeScoutTask ? [activeScoutTask] : snapshot?.latestDailyScoutSprint?.tasks || [])
@@ -4360,7 +4364,10 @@ export default function RevenueEnginePage() {
                         <Button
                           type="button"
                           disabled={!latestDailyScoutSlotText}
-                          onClick={() => setPublicScoutEvidenceText(latestDailyScoutSlotText)}
+                          onClick={() => {
+                            setSelectedDailyScoutTaskId(activeScoutSourceTaskId);
+                            setPublicScoutEvidenceText(latestDailyScoutSlotText);
+                          }}
                           className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
                           data-testid="button-load-daily-scout-slots"
                         >
@@ -4888,35 +4895,69 @@ export default function RevenueEnginePage() {
                           </Button>
                         </div>
                         <div className="mt-3 space-y-2">
-                          {snapshot.latestDailyScoutSprint.tasks.slice(0, 3).map((task) => (
-                            <div key={task.taskId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-xs font-medium text-white">{task.taskId} · {task.ownerAgent}</p>
-                                <span className="text-xs text-zinc-500">
-                                  {task.resultSlots.filter((slot) => slot.status === "filled").length} filled · {task.resultSlots.filter((slot) => slot.status === "open").length} open
-                                </span>
+                          {snapshot.latestDailyScoutSprint.tasks.map((task) => {
+                            const openSlotText = task.resultSlots
+                              .filter((slot) => slot.status === "open")
+                              .map((slot) => slot.copyableEvidenceBlock)
+                              .join("\n\n");
+                            return (
+                              <div key={task.taskId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-medium text-white">{task.taskId} · {task.ownerAgent}</p>
+                                  <span className="text-xs text-zinc-500">
+                                    {task.resultSlots.filter((slot) => slot.status === "filled").length} filled · {task.resultSlots.filter((slot) => slot.status === "open").length} open
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-zinc-500">{task.query}</p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {task.resultSlots.map((slot) => (
+                                    <Badge key={slot.slotId} variant="outline" className={cn("text-[10px]", statusTone(slot.status === "filled" ? "ready" : slot.status === "rejected" ? "blocked" : "review"))}>
+                                      {slot.status}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Button
+                                    asChild
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                  >
+                                    <a href={task.url} target="_blank" rel="noreferrer" data-testid={`link-open-daily-scout-task-${task.taskId}`}>
+                                      <ExternalLink className="mr-1.5 h-3 w-3" />
+                                      Open search
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                    disabled={!openSlotText}
+                                    onClick={() => {
+                                      setSelectedDailyScoutTaskId(task.taskId);
+                                      setPublicScoutEvidenceText(openSlotText);
+                                    }}
+                                    data-testid={`button-load-daily-scout-task-slots-${task.taskId}`}
+                                  >
+                                    <FileCheck2 className="mr-1.5 h-3 w-3" />
+                                    Load open slots
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                    onClick={() => navigator.clipboard.writeText(task.resultSlots.map((slot) => slot.copyableEvidenceBlock).join("\n\n"))}
+                                    data-testid={`button-copy-daily-scout-slots-${task.taskId}`}
+                                  >
+                                    <Copy className="mr-1.5 h-3 w-3" />
+                                    Copy slots
+                                  </Button>
+                                </div>
                               </div>
-                              <p className="mt-1 text-xs text-zinc-500">{task.query}</p>
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {task.resultSlots.map((slot) => (
-                                  <Badge key={slot.slotId} variant="outline" className={cn("text-[10px]", statusTone(slot.status === "filled" ? "ready" : slot.status === "rejected" ? "blocked" : "review"))}>
-                                    {slot.status}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="mt-2 h-7 border-zinc-700 bg-zinc-950 text-xs"
-                                onClick={() => navigator.clipboard.writeText(task.resultSlots.map((slot) => slot.copyableEvidenceBlock).join("\n\n"))}
-                                data-testid={`button-copy-daily-scout-slots-${task.taskId}`}
-                              >
-                                <Copy className="mr-1.5 h-3 w-3" />
-                                Copy slots
-                              </Button>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
