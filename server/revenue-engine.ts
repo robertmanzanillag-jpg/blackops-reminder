@@ -518,6 +518,37 @@ type RevenueManualOutreachQueue = {
   };
 };
 
+type RevenueWebsiteDeliveryHandoffQueue = {
+  status: "ready" | "needs_context" | "empty";
+  readyCount: number;
+  blockedCount: number;
+  items: Array<{
+    leadId: string;
+    outreachDraftId: string;
+    businessName: string;
+    leadStatus: RevenueLead["status"];
+    projectType: "website" | "bundle";
+    estimatedSetupUsd: number;
+    monthlyRetainerUsd: number;
+    mockupUrl: string;
+    sourceUrl: string;
+    nextAction: string;
+  }>;
+  blocked: Array<{
+    leadId: string;
+    businessName: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  safety: {
+    createsWorkspaceOnly: true;
+    doesNotDeploy: true;
+    requiresDepositAndScopeForBuild: true;
+    blockedActions: string[];
+  };
+  nextAction: string;
+};
+
 type RevenueEmailProviderStatus = {
   provider: "resend";
   configured: boolean;
@@ -3012,6 +3043,92 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
   };
 }
 
+function findLatestRevenueOutreachDraftForLead(lead: RevenueLead) {
+  return revenueOutreachDrafts
+    .slice()
+    .reverse()
+    .find((draft) =>
+      draft.leadId === lead.id
+      || (!draft.leadId && draft.businessName.toLowerCase() === lead.businessName.toLowerCase())
+    ) || null;
+}
+
+function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliveryHandoffQueue {
+  const existingWorkspaceLeadIds = new Set(
+    revenueDeliveryWorkspaces
+      .map((workspace) => workspace.input.sourceLeadId || "")
+      .filter((sourceLeadId) => sourceLeadId.trim().length > 0),
+  );
+  const handoffStatuses: RevenueLead["status"][] = ["qualified", "mockup_ready", "outreach_ready", "proposal_sent", "closed"];
+  const candidates = revenueLeads
+    .filter((lead) => handoffStatuses.includes(lead.status) && !existingWorkspaceLeadIds.has(lead.id))
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const items: RevenueWebsiteDeliveryHandoffQueue["items"] = [];
+  const blocked: RevenueWebsiteDeliveryHandoffQueue["blocked"] = [];
+
+  for (const lead of candidates) {
+    const draft = findLatestRevenueOutreachDraftForLead(lead);
+    const mockupUrl = draft?.mockupUrl || "";
+    if (!draft) {
+      blocked.push({
+        leadId: lead.id,
+        businessName: lead.businessName,
+        reason: "Falta outreach/propuesta conectada al lead.",
+        nextAction: "Crear draft de propuesta con mockup antes de abrir delivery workspace.",
+      });
+      continue;
+    }
+    if (!mockupUrl) {
+      blocked.push({
+        leadId: lead.id,
+        businessName: lead.businessName,
+        reason: "Falta mockup preview enlazado al draft.",
+        nextAction: "Generar preview desde Money Sprint o pegar mockupUrl antes del handoff.",
+      });
+      continue;
+    }
+    const projectType = draft.automationPriceUsd > 0 ? "bundle" as const : "website" as const;
+    items.push({
+      leadId: lead.id,
+      outreachDraftId: draft.id,
+      businessName: lead.businessName,
+      leadStatus: lead.status,
+      projectType,
+      estimatedSetupUsd: draft.pricing.totalSetupUsd,
+      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+      mockupUrl,
+      sourceUrl: draft.sourceUrl || "",
+      nextAction: "Si deposito/scope estan marcados, crear delivery workspace QA-gated; no desplegar sin App QA y aprobacion.",
+    });
+  }
+
+  const visibleLimit = Math.max(0, Math.min(25, limit));
+  const visibleItems = items.slice(0, visibleLimit);
+  const visibleBlocked = blocked.slice(0, visibleLimit);
+
+  return {
+    status: items.length > 0 ? "ready" : blocked.length > 0 ? "needs_context" : "empty",
+    readyCount: items.length,
+    blockedCount: blocked.length,
+    items: visibleItems,
+    blocked: visibleBlocked,
+    safety: {
+      createsWorkspaceOnly: true,
+      doesNotDeploy: true,
+      requiresDepositAndScopeForBuild: true,
+      blockedActions: ["deploy", "publish client preview", "send outreach", "charge card", "merge without PR"],
+    },
+    nextAction:
+      items.length > 0
+        ? "Convertir solo leads con deposito/scope verificados usando los checks de entrega."
+        : blocked.length > 0
+          ? "Completar mockup/propuesta antes de crear workspace de delivery."
+          : "Cerrar o avanzar leads desde Money Sprint para activar handoff de websites.",
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -3159,6 +3276,7 @@ export function getRevenueEngineSnapshot() {
     launchReadiness,
     agentOperatingContract,
     manualOutreachQueue: buildRevenueManualOutreachQueue(10),
+    websiteDeliveryHandoffQueue: buildRevenueWebsiteDeliveryHandoffQueue(8),
     profitGuard,
     nextBatchPlan,
     approvalQueueItems,

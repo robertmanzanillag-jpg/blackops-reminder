@@ -1062,6 +1062,66 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
   assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
+  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, result.recordedLeads[0].lead.id);
+  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, result.outreachDrafts[0].id);
+  assert.equal(result.snapshot.websiteDeliveryHandoffQueue.items[0].mockupUrl, result.previews[0].previewUrl);
+});
+
+test("website delivery handoff queue does not hide older ready leads behind newer blocked leads", async () => {
+  const readyLead = recordRevenueLead({
+    businessName: "Older Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@olderready.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner email.",
+    painPoint: "Needs menu capture and catering inquiry follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const readyDraft = recordRevenueOutreachDraft({
+    leadId: readyLead.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@olderready.example",
+    contactName: "Owner",
+    businessName: "Older Ready Cafe",
+    sourceUrl: "https://example.com/older-ready-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/older-ready-cafe",
+    businessSummary: "Older Ready Cafe has public evidence of no website and a clear need for menu capture.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "Draft only; no outreach sent.",
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 2));
+
+  for (let index = 0; index < 9; index += 1) {
+    recordRevenueLead({
+      businessName: `Newer Blocked Cafe ${index + 1}`,
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: `owner${index + 1}@blocked.example`,
+      evidence: "Public listing has no website, recent menu photos and verified owner contact.",
+      painPoint: "Needs online menu.",
+      estimatedOfferUsd: 3000,
+      status: "qualified",
+    });
+  }
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.blockedCount, 9);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.items.length, 1);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
+  assert.equal(snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, readyDraft.draft.id);
 });
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
@@ -1126,6 +1186,7 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.outreachDraft?.delivery.sendStatus, "not_sent");
   assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
   assert.equal(handoff.snapshot.recentDeliveryWorkspaces[0].input.sourceLeadId, lead.id);
+  assert.equal(handoff.snapshot.websiteDeliveryHandoffQueue.items.some((item) => item.leadId === lead.id), false);
 });
 
 test("blocks website delivery handoff when outreach draft belongs to another lead", () => {

@@ -166,6 +166,36 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  websiteDeliveryHandoffQueue: {
+    status: "ready" | "needs_context" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    items: Array<{
+      leadId: string;
+      outreachDraftId: string;
+      businessName: string;
+      leadStatus: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+      projectType: "website" | "bundle";
+      estimatedSetupUsd: number;
+      monthlyRetainerUsd: number;
+      mockupUrl: string;
+      sourceUrl: string;
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      leadId: string;
+      businessName: string;
+      reason: string;
+      nextAction: string;
+    }>;
+    safety: {
+      createsWorkspaceOnly: true;
+      doesNotDeploy: true;
+      requiresDepositAndScopeForBuild: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
   profitGuard: {
     status: "pause_spend" | "collect_first" | "review_queue" | "scale_carefully";
     monthlyCapUsd: number;
@@ -941,6 +971,15 @@ type AutomationOpportunityDeliveryResult = {
   status: "created" | "blocked" | "not_found";
   reason: string;
   opportunity: RevenueSnapshot["recentAutomationOpportunities"][number] | null;
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type WebsiteDeliveryHandoffResult = {
+  status: "created" | "blocked" | "not_found";
+  reason: string;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
+  outreachDraft: RevenueSnapshot["recentOutreach"][number] | null;
   workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
   snapshot: RevenueSnapshot;
 };
@@ -1776,6 +1815,37 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde oportunidad");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const websiteDeliveryHandoffMutation = useMutation<WebsiteDeliveryHandoffResult, Error, RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number]>({
+    mutationFn: async (item) => {
+      const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: item.leadId,
+          outreachDraftId: item.outreachDraftId,
+          mockupUrl: item.mockupUrl,
+          projectType: item.projectType,
+          depositPaid: reviewChecks.depositPaid,
+          scopeApproved: reviewChecks.clientApprovedScope,
+          cashCollectedUsd: reviewChecks.depositPaid ? Math.round(item.estimatedSetupUsd * 0.5) : 0,
+          publicDataVerified: reviewChecks.publicDataVerified,
+          visualQaPassed: reviewChecks.responsiveChecked,
+          technicalQaPassed: reviewChecks.linksChecked,
+          automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
+          clientHandoffReady: false,
+          launchTargetDays: projectLaunchTargetDays,
+          notes: "Created from Revenue Engine website handoff queue.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde lead");
       return data;
     },
     onSuccess: () => {
@@ -5601,6 +5671,91 @@ export default function RevenueEnginePage() {
                         </Card>
                       </div>
                     </div>
+
+                    <Card className="border-zinc-800 bg-zinc-950/80">
+                      <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <CardTitle className="text-base">Handoff website</CardTitle>
+                          <Badge variant="outline" className={cn(statusTone(snapshot?.websiteDeliveryHandoffQueue.status || "review"), "shrink-0")}>
+                            {snapshot?.websiteDeliveryHandoffQueue.readyCount ?? 0} listos
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm leading-6 text-zinc-500">
+                          {snapshot?.websiteDeliveryHandoffQueue.nextAction || "Cargando handoffs de website."}
+                        </p>
+                        {(snapshot?.websiteDeliveryHandoffQueue.items || []).length === 0 ? (
+                          <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                            Sin leads con mockup + propuesta listos para workspace.
+                          </div>
+                        ) : (
+                          snapshot?.websiteDeliveryHandoffQueue.items.map((item) => (
+                            <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{item.businessName}</p>
+                                  <p className="mt-1 text-xs text-zinc-500">
+                                    {item.projectType} · {item.leadStatus} · {money.format(item.estimatedSetupUsd)}
+                                  </p>
+                                </div>
+                                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                                  mockup listo
+                                </Badge>
+                              </div>
+                              <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <a href={item.mockupUrl} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Mockup
+                                  </Button>
+                                </a>
+                                {item.sourceUrl && (
+                                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                    <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                      <ExternalLink className="mr-2 h-4 w-4" />
+                                      Fuente
+                                    </Button>
+                                  </a>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={websiteDeliveryHandoffMutation.isPending}
+                                  onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
+                                  className="bg-sky-600 text-white hover:bg-sky-500"
+                                  data-testid={`button-create-website-workspace-${item.leadId}`}
+                                >
+                                  {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                                  Crear workspace
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {(snapshot?.websiteDeliveryHandoffQueue.blocked || []).length > 0 && (
+                          <div className="space-y-2">
+                            {(snapshot?.websiteDeliveryHandoffQueue.blocked || []).slice(0, 3).map((item) => (
+                              <div key={item.leadId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                                <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                                <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason} {item.nextAction}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data && websiteDeliveryHandoffMutation.data.status !== "created" && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {websiteDeliveryHandoffMutation.data.reason}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data?.status === "created" && websiteDeliveryHandoffMutation.data.workspace && (
+                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100">
+                            Workspace creado: {websiteDeliveryHandoffMutation.data.workspace.input.clientName}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
 
                     <Card className="border-zinc-800 bg-zinc-950/80">
                       <CardHeader>
