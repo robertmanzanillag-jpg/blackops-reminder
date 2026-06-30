@@ -19,6 +19,7 @@ const proofDoctorPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-pro
 const proofRefreshPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-refresh.mjs");
 const proofUnblockerPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-unblocker.mjs");
 const proofQuickFillPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-quick-fill.mjs");
+const localVerificationPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-local-verification.mjs");
 const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json");
 const combinedProofCsvPath = path.join(tmpDir, "tiktok-mvp-combined-proof-test.csv");
 const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/combined-proof-intake.csv");
@@ -960,4 +961,39 @@ test("TikTok MVP proof doctor UI tolerates pre-fix-queue reports", async () => {
   assert.match(page, /tiktokMvpProofDoctor\.totals\.fixQueue \?\? tiktokMvpProofDoctor\.fixQueue\?\.length \?\? 0/);
   assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.length > 0/);
   assert.match(page, /\(tiktokMvpProofDoctor\.fixQueue \?\? \[\]\)\.slice\(0, 4\)/);
+});
+
+test("TikTok MVP local verification is wired as a blocked guardrail check", async () => {
+  const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
+  assert.equal(
+    packageJson.scripts["clippers:tiktok-mvp-local-verification"],
+    "node script/clippers-tiktok-mvp-local-verification.mjs",
+  );
+
+  const result = spawnSync(process.execPath, ["--check", localVerificationPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const source = await readFile(localVerificationPath, "utf8");
+  assert.match(source, /npm",\s*args: \["run", "check"\]/);
+  assert.match(source, /npm",\s*args: \["run", "build"\]/);
+  assert.match(source, /tests\/clippers-tiktok-mvp-evidence-closeout\.test\.mjs/);
+  assert.match(source, /clippers:tiktok-mvp-proof-quick-fill/);
+  assert.match(source, /clippers:tiktok-mvp-proof-unblocker/);
+  assert.match(source, /blocked_before_metricool_approval_review/);
+  assert.match(source, /Metricool remains approval_required/);
+  assert.match(source, /Published counts remain zero until real public TikTok post evidence is imported/);
+});
+
+test("TikTok MVP local verification cannot apply evidence or enable publishing", async () => {
+  const source = await readFile(localVerificationPath, "utf8");
+  assert.doesNotMatch(source, /--apply/);
+  assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
+  assert.doesNotMatch(source, /video\.publish/);
+  assert.doesNotMatch(source, /realPublishEnabled:\s*true/);
+  assert.doesNotMatch(source, /ready_to_send/);
+  assert.match(source, /realPublishEnabled:\s*false/);
+  assert.match(source, /directSocialApisRequired:\s*false/);
 });
