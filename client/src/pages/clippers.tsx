@@ -13719,6 +13719,9 @@ export default function ClippersPage() {
       if (!metricoolBridgeEvidenceClientCheck.canSubmit) {
         throw new Error(metricoolBridgeEvidenceClientCheck.issues[0] || "Metricool bridge rows need real https proof URLs before import.");
       }
+      if (!metricoolBridgeEvidenceCurrentPreview || metricoolBridgeEvidenceCurrentPreview.totals.recorded <= 0) {
+        throw new Error("Preview the current Metricool bridge rows before importing evidence.");
+      }
       const response = await fetch("/api/clippers/record-metricool-bridge-evidence-batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -18509,7 +18512,7 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 onClick={() => metricoolBridgeEvidenceBatchMutation.mutate()}
-                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit}
+                disabled={metricoolBridgeEvidenceBatchMutation.isPending || isLoading || !metricoolBridgeEvidenceClientCheck.canSubmit || !metricoolBridgeEvidenceCurrentPreview || metricoolBridgeEvidenceCurrentPreview.totals.recorded <= 0}
                 className="w-full bg-teal-200 text-zinc-950 hover:bg-teal-100"
                 data-testid="submit-clippers-metricool-bridge-evidence-batch-button"
               >

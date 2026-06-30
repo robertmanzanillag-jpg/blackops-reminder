@@ -583,6 +583,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /load-clippers-metricool-bridge-evidence-csv-button/);
   assert.match(page, /metricoolBridgeEvidenceCsvLoadMutation/);
   assert.match(page, /setMetricoolBridgeEvidenceBatchText\(data\.metricoolBridgeEvidenceCsvLoad\.raw\)/);
+  assert.match(page, /Preview the current Metricool bridge rows before importing evidence/);
+  assert.match(page, /!metricoolBridgeEvidenceCurrentPreview \|\| metricoolBridgeEvidenceCurrentPreview\.totals\.recorded <= 0/);
   assert.match(page, /\["\/api\/clippers\/metricool-bridge-evidence-csv-status"\]/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-editor/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-assistant/);
