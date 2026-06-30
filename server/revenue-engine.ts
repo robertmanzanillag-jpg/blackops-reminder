@@ -288,6 +288,14 @@ export const revenueDeliveryWorkspaceUpdateSchema = z.object({
 
 export type RevenueDeliveryWorkspaceUpdateInput = z.infer<typeof revenueDeliveryWorkspaceUpdateSchema>;
 
+export const revenueDeliveryWorkspaceGithubHandoffSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(200),
+  repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
+  branchName: z.string().trim().max(200).optional(),
+});
+
+export type RevenueDeliveryWorkspaceGithubHandoffInput = z.infer<typeof revenueDeliveryWorkspaceGithubHandoffSchema>;
+
 export const revenueDeliveryWorkspaceDeliverSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
   approvedByRobert: z.coerce.boolean().default(false),
@@ -790,7 +798,7 @@ type RevenuePublicLeadImportQueue = {
   nextAction: string;
 };
 
-type RevenueDeliveryWorkspace = {
+export type RevenueDeliveryWorkspace = {
   id: string;
   createdAt: string;
   updatedAt: string;
@@ -6134,6 +6142,17 @@ export function updateRevenueDeliveryWorkspaceQa(input: RevenueDeliveryWorkspace
         ? "Workspace listo para entrega: QA, handoff, deposito, scope, costo y margen verificados."
         : "Workspace revalidado; aun quedan correcciones antes de mostrar, lanzar o entregar.",
     workspace: updated,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function getRevenueDeliveryWorkspaceById(workspaceId: string) {
+  loadRevenueDeliveryWorkspaces();
+  const workspace = revenueDeliveryWorkspaces.find((item) => item.id === workspaceId.trim()) || null;
+
+  return {
+    status: workspace ? "found" as const : "not_found" as const,
+    workspace,
     snapshot: getRevenueEngineSnapshot(),
   };
 }

@@ -12,6 +12,7 @@ import {
   ExternalLink,
   FileCheck2,
   Gauge,
+  GitPullRequest,
   Loader2,
   MessageSquareText,
   Rocket,
@@ -1171,6 +1172,19 @@ type DeliveryWorkspaceQaUpdateResult = {
   snapshot: RevenueSnapshot;
 };
 
+type DeliveryWorkspaceGithubHandoffResult = {
+  status: "created" | "already_created" | "needs_repo" | "not_required" | "not_found" | "repo_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  developerHandoff?: {
+    status: string;
+    issueUrl?: string;
+    repoFullName?: string;
+    message: string;
+  };
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
 type DeliveryWorkspaceDeliverResult = {
   status: "delivered" | "blocked" | "not_found";
   reason: string;
@@ -2119,6 +2133,26 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo revalidar el workspace");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const deliveryWorkspaceGithubHandoffMutation = useMutation<DeliveryWorkspaceGithubHandoffResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/github-handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          repoFullName: workspace.input.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo crear el handoff GitHub");
       return data;
     },
     onSuccess: () => {
@@ -6466,6 +6500,23 @@ export default function RevenueEnginePage() {
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy brief
                                   </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={
+                                      deliveryWorkspaceGithubHandoffMutation.isPending
+                                      || workspace.codexBuildHandoff.status === "not_required"
+                                      || Boolean(workspace.input.githubIssueUrl)
+                                      || !workspace.input.repoFullName
+                                    }
+                                    className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                    onClick={() => deliveryWorkspaceGithubHandoffMutation.mutate(workspace)}
+                                    data-testid={`button-create-github-handoff-${workspace.id}`}
+                                  >
+                                    {deliveryWorkspaceGithubHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
+                                    Create issue
+                                  </Button>
                                 </div>
                                 {workspace.codexBuildHandoff.missing.length > 0 && (
                                   <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -6519,6 +6570,21 @@ export default function RevenueEnginePage() {
                         {deliveryWorkspaceQaMutation.data && deliveryWorkspaceQaMutation.data.status !== "ready" && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
                             {deliveryWorkspaceQaMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.data?.status === "created" && deliveryWorkspaceGithubHandoffMutation.data.developerHandoff?.issueUrl && (
+                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100">
+                            GitHub issue creado: {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl}
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.data && deliveryWorkspaceGithubHandoffMutation.data.status !== "created" && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceGithubHandoffMutation.data.reason || deliveryWorkspaceGithubHandoffMutation.data.developerHandoff?.message || "No se pudo crear el handoff GitHub."}
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.error && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceGithubHandoffMutation.error.message}
                           </div>
                         )}
                         {deliveryWorkspaceDeliverMutation.data && deliveryWorkspaceDeliverMutation.data.status !== "delivered" && (

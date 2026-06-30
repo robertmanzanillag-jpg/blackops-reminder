@@ -34,6 +34,24 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
   assert.match(source, /evaluateDeveloperReleaseGate\(scan, \{ prUrl \}\)/);
 });
 
+test("Revenue Engine exposes GitHub handoff route for sold website workspaces", () => {
+  const routeSource = readFileSync("server/routes.ts", "utf8");
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const mutationStart = uiSource.indexOf("const deliveryWorkspaceGithubHandoffMutation");
+  const mutationEnd = uiSource.indexOf("const deliveryWorkspaceDeliverMutation");
+  const handoffMutation = uiSource.slice(mutationStart, mutationEnd);
+
+  assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.match(routeSource, /createDeveloperAutopilotHandoffFromRequest/);
+  assert.match(routeSource, /kind: "client_build"/);
+  assert.match(routeSource, /repo_mismatch/);
+  assert.match(routeSource, /updateRevenueDeliveryWorkspaceQa\(\{/);
+  assert.match(uiSource, /button-create-github-handoff/);
+  assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
+  assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
+  assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
+});
+
 test("Dashboard chat exposes a subscription handoff prompt", () => {
   const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
 

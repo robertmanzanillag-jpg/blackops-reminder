@@ -9,6 +9,7 @@ import {
   buildReadyForApprovalMessage,
   buildSubscriptionHandoffBrief,
   createDeveloperAutopilotHandoff,
+  createDeveloperAutopilotHandoffFromRequest,
   evaluateDeveloperReleaseGate,
   parseDeveloperAutopilotRequest,
   parseSubscriptionHandoffRequest,
@@ -173,6 +174,47 @@ test("developer autopilot accepts sold client website build handoffs", async () 
   assert.equal(created.handoffType, "developer_pr");
   assert.equal(created.repoFullName, "robert/handoff-cafe");
   assert.equal(created.issueNumber, 31);
+  assert.match(created.codexBrief || "", /Type: client_build/);
+});
+
+test("developer autopilot creates client build handoff from structured Revenue Engine request", async () => {
+  const created = await createDeveloperAutopilotHandoffFromRequest(
+    "user-1",
+    {
+      source: "manual",
+      repoFullName: "robert/handoff-cafe",
+      appName: "Handoff Cafe",
+      kind: "client_build",
+      title: "[Revenue Website Build] Handoff Cafe - Website 3D Premium",
+      description: "Build the sold website delivery from the approved Revenue Engine workspace. Target branch: codex/client-handoff-cafe-website",
+      severity: "medium",
+      evidence: ["Revenue workspace: delivery-workspace-1", "Package: Website 3D Premium"],
+    },
+    {
+      getAppProjects: async () => [],
+      listRepositories: async () => [{
+        full_name: "robert/handoff-cafe",
+        name: "handoff-cafe",
+        private: true,
+      }],
+      createIssue: async (owner, repo, title, body) => {
+        assert.equal(owner, "robert");
+        assert.equal(repo, "handoff-cafe");
+        assert.match(title, /\[Codex PR-first\]\[client-build\]/);
+        assert.match(body, /Revenue workspace: delivery-workspace-1/);
+        assert.match(body, /Target branch: codex\/client-handoff-cafe-website/);
+        assert.match(body, /Robert must approve Replit deployment explicitly/);
+        return { number: 41, html_url: "https://github.com/robert/handoff-cafe/issues/41" };
+      },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
+      },
+    },
+  );
+
+  assert.equal(created.status, "created");
+  assert.equal(created.repoFullName, "robert/handoff-cafe");
+  assert.equal(created.issueUrl, "https://github.com/robert/handoff-cafe/issues/41");
   assert.match(created.codexBrief || "", /Type: client_build/);
 });
 

@@ -20,6 +20,7 @@ import {
   createDeliveryWorkspaceFromAutomationOpportunity,
   createWebsiteDeliveryWorkspaceFromLead,
   deliverRevenueDeliveryWorkspace,
+  getRevenueDeliveryWorkspaceById,
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
   preflightRevenueExpense,
@@ -38,6 +39,7 @@ import {
   recordRevenuePublicLeadCandidateBatch,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  revenueDeliveryWorkspaceGithubHandoffSchema,
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
@@ -1809,6 +1811,55 @@ test("website delivery handoff keeps data gate explicit before build readiness",
   assert.equal(handoff.workspace?.projectPlan.decision.status, "needs_scope");
   assert.equal(handoff.workspace?.projectPlan.decision.missing.includes("data publica verificada"), true);
   assert.equal(handoff.workspace?.input.publicDataVerified, false);
+});
+
+test("delivery workspace records GitHub handoff issue without bypassing PR-first gates", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Handoff Cafe delivery",
+    clientName: "Handoff Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build the approved public website mockup.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  const workspaceId = created.workspace.id;
+
+  const parsed = revenueDeliveryWorkspaceGithubHandoffSchema.parse({
+    workspaceId,
+    repoFullName: "robert/handoff-cafe",
+    branchName: "codex/client-handoff-cafe-website",
+  });
+  assert.equal(parsed.repoFullName, "robert/handoff-cafe");
+
+  const lookup = getRevenueDeliveryWorkspaceById(workspaceId);
+  assert.equal(lookup.status, "found");
+  assert.equal(lookup.workspace?.codexBuildHandoff.status, "needs_pr");
+
+  const updated = updateRevenueDeliveryWorkspaceQa({
+    workspaceId,
+    repoFullName: parsed.repoFullName,
+    branchName: parsed.branchName,
+    githubIssueUrl: "https://github.com/robert/handoff-cafe/issues/41",
+    notes: "GitHub handoff issue creado desde Revenue Engine.",
+  });
+
+  assert.equal(updated.workspace?.input.githubIssueUrl, "https://github.com/robert/handoff-cafe/issues/41");
+  assert.equal(updated.workspace?.codexBuildHandoff.githubIssueUrl, "https://github.com/robert/handoff-cafe/issues/41");
+  assert.equal(updated.workspace?.codexBuildHandoff.branchName, "codex/client-handoff-cafe-website");
+  assert.equal(updated.workspace?.codexBuildHandoff.status, "needs_pr");
+  assert.equal(updated.workspace?.approvalSummary.canLaunch, false);
+  assert.equal(updated.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
 });
 
 test("money sprint parses pasted lead batches with partial failures", () => {

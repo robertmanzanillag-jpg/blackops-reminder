@@ -448,48 +448,24 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
   ].join("\n");
 }
 
-export async function createDeveloperAutopilotHandoff(
+export async function createDeveloperAutopilotHandoffFromRequest(
   userId: string,
-  message: string,
-  source: DeveloperAutopilotSource,
+  request: DeveloperAutopilotRequest,
   deps: DeveloperAutopilotDeps = defaultDeveloperAutopilotDeps,
 ): Promise<DeveloperAutopilotHandoff> {
-  const request = parseDeveloperAutopilotRequest(message, source);
-  if (!request) {
-    const subscriptionRequest = parseSubscriptionHandoffRequest(message, source);
-    if (!subscriptionRequest) {
-      return {
-        status: "invalid_request",
-        request: null,
-        message: "No detecte un bug, amenaza, solicitud de fix o trabajo pesado para handoff de membresia.",
-      };
-    }
-
-    const subscriptionBrief = buildSubscriptionHandoffBrief(subscriptionRequest);
-    return {
-      status: "subscription_brief",
-      request: null,
-      subscriptionRequest,
-      subscriptionBrief,
-      handoffType: "subscription_work",
-      message: [
-        "Listo. Prepare un brief para trabajarlo con tu membresia ChatGPT/Codex Pro, sin quemar API del app.",
-        "",
-        "Pegalo en Codex/ChatGPT Pro cuando quieras usar el cerebro fuerte:",
-        "",
-        "```text",
-        subscriptionBrief,
-        "```",
-      ].join("\n"),
-    };
-  }
+  const repoSelectionText = [
+    request.repoFullName || "",
+    request.appName || "",
+    request.title,
+    request.description,
+  ].filter(Boolean).join("\n");
 
   try {
     const [projects, repos] = await Promise.all([
       deps.getAppProjects(userId),
       deps.listRepositories(),
     ]);
-    const repo = selectRepoForRequest(message, repos, projects);
+    const repo = selectRepoForRequest(repoSelectionText, repos, projects);
     if (!repo) {
       return {
         status: "needs_repo",
@@ -560,6 +536,45 @@ export async function createDeveloperAutopilotHandoff(
       message: `No pude crear el handoff en GitHub: ${error?.message || "GitHub no disponible"}`,
     };
   }
+}
+
+export async function createDeveloperAutopilotHandoff(
+  userId: string,
+  message: string,
+  source: DeveloperAutopilotSource,
+  deps: DeveloperAutopilotDeps = defaultDeveloperAutopilotDeps,
+): Promise<DeveloperAutopilotHandoff> {
+  const request = parseDeveloperAutopilotRequest(message, source);
+  if (!request) {
+    const subscriptionRequest = parseSubscriptionHandoffRequest(message, source);
+    if (!subscriptionRequest) {
+      return {
+        status: "invalid_request",
+        request: null,
+        message: "No detecte un bug, amenaza, solicitud de fix o trabajo pesado para handoff de membresia.",
+      };
+    }
+
+    const subscriptionBrief = buildSubscriptionHandoffBrief(subscriptionRequest);
+    return {
+      status: "subscription_brief",
+      request: null,
+      subscriptionRequest,
+      subscriptionBrief,
+      handoffType: "subscription_work",
+      message: [
+        "Listo. Prepare un brief para trabajarlo con tu membresia ChatGPT/Codex Pro, sin quemar API del app.",
+        "",
+        "Pegalo en Codex/ChatGPT Pro cuando quieras usar el cerebro fuerte:",
+        "",
+        "```text",
+        subscriptionBrief,
+        "```",
+      ].join("\n"),
+    };
+  }
+
+  return createDeveloperAutopilotHandoffFromRequest(userId, request, deps);
 }
 
 export function evaluateDeveloperReleaseGate(
