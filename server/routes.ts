@@ -2968,6 +2968,7 @@ export async function registerRoutes(
       await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
       await runClipperTikTokExternalCloseoutSession();
       await runClipperTikTokMvpProofDoctor();
+      await runClipperTikTokMvpProofUnblocker();
       await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
       await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
@@ -4418,6 +4419,7 @@ export async function registerRoutes(
       const closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
       const externalCloseoutSessionRun = await runClipperTikTokExternalCloseoutSession();
       const proofDoctorRun = await runClipperTikTokMvpProofDoctor();
+      const proofUnblockerRun = await runClipperTikTokMvpProofUnblocker();
       const readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
       const goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       const run = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
@@ -4426,7 +4428,7 @@ export async function registerRoutes(
       const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
       const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
       const goalCompletionAudit = await readClipperGoalCompletionAudit();
-      res.json({ tiktokNextAction, accountPermissionReadiness, tiktokPostScheduleVerifier, tiktokBatchCloseoutVerifier, goalCompletionAudit, run, accountRun, trackerRun, checklistRun, postScheduleVerifierRun, closeoutRun, externalCloseoutSessionRun, proofDoctorRun, readinessVerifierRun, goalAuditRun });
+      res.json({ tiktokNextAction, accountPermissionReadiness, tiktokPostScheduleVerifier, tiktokBatchCloseoutVerifier, goalCompletionAudit, run, accountRun, trackerRun, checklistRun, postScheduleVerifierRun, closeoutRun, externalCloseoutSessionRun, proofDoctorRun, proofUnblockerRun, readinessVerifierRun, goalAuditRun });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok next action" });
     }

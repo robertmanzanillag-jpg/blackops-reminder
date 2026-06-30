@@ -14,6 +14,7 @@ const launchControlPath = path.join(reportsDir, "clippers-tiktok-launch-control.
 const mvpReadinessVerifierPath = path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json");
 const externalCloseoutSessionPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
 const proofDoctorPath = path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-doctor.json");
+const proofUnblockerPath = path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-unblocker.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-next-action.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-next-action.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-next-action.csv");
@@ -170,6 +171,15 @@ function taskRowsFor(summary) {
       nextAction: summary.proofDoctor.nextStep || "Fix proof doctor queue before scheduling in Metricool.",
     });
   }
+  if ((summary.proofUnblocker?.openFixes || 0) > 0) {
+    rows.splice(4, 0, {
+      id: "proof_unblocker_packet",
+      label: "Proof unblocker packet",
+      status: "blocked",
+      evidence: `${summary.proofUnblocker.openFixes} open fixes; ${summary.proofUnblocker.readyLanes}/${summary.proofUnblocker.targetLanes} lanes ready`,
+      nextAction: summary.proofUnblocker.nextStep || "Complete the proof unblocker CSV/HTML before scheduling.",
+    });
+  }
   return rows;
 }
 
@@ -223,6 +233,37 @@ function proofDoctorFor(report = {}) {
       accountCsv: report.paths?.accountCsv || "",
       bridgeCsv: report.paths?.bridgeCsv || "",
       proofLinksFilledDrop: report.paths?.proofLinksFilledDrop || "",
+    },
+    nextStep: report.nextStep || "",
+  };
+}
+
+function proofUnblockerFor(report = {}) {
+  const fixes = Array.isArray(report.fixes) ? report.fixes : [];
+  const firstFix = fixes[0] || null;
+  return {
+    status: report.status || "missing",
+    readyLanes: Number(report.readyLanes || 0),
+    targetLanes: Number(report.targetLanes || 0),
+    openFixes: Number(report.totals?.openFixes ?? fixes.length ?? 0),
+    importFixes: Number(report.totals?.importFixes || 0),
+    doctorFixes: Number(report.totals?.doctorFixes || 0),
+    firstFix: firstFix ? {
+      lane: firstFix.lane || "",
+      accountName: firstFix.accountName || "",
+      handle: firstFix.handle || "",
+      metricoolBrandName: firstFix.metricoolBrandName || "",
+      field: firstFix.field || "",
+      requiredValue: firstFix.requiredValue || "",
+      reason: firstFix.reason || "",
+      nextAction: firstFix.nextAction || "",
+    } : null,
+    paths: {
+      html: report.paths?.html || "",
+      csv: report.paths?.csv || "",
+      combinedCsv: report.paths?.combinedCsv || "",
+      importFixQueueCsv: report.paths?.importFixQueueCsv || "",
+      doctorFixQueueCsv: report.paths?.doctorFixQueueCsv || "",
     },
     nextStep: report.nextStep || "",
   };
@@ -371,6 +412,19 @@ function renderMarkdown(summary) {
     `- Next step: ${summary.proofDoctor.nextStep || "missing"}`,
     "",
   ] : [];
+  const proofUnblockerLines = summary.proofUnblocker?.status ? [
+    "## Proof Unblocker",
+    "",
+    `- Status: ${summary.proofUnblocker.status}`,
+    `- Ready lanes: ${summary.proofUnblocker.readyLanes}/${summary.proofUnblocker.targetLanes}`,
+    `- Open fixes: ${summary.proofUnblocker.openFixes}`,
+    `- First fix: ${summary.proofUnblocker.firstFix ? `${summary.proofUnblocker.firstFix.lane} ${summary.proofUnblocker.firstFix.field}` : "none"}`,
+    `- HTML: ${summary.proofUnblocker.paths.html || "missing"}`,
+    `- CSV: ${summary.proofUnblocker.paths.csv || "missing"}`,
+    `- Combined CSV: ${summary.proofUnblocker.paths.combinedCsv || "missing"}`,
+    `- Next step: ${summary.proofUnblocker.nextStep || "missing"}`,
+    "",
+  ] : [];
   return [
     "# TikTok Metricool Next Action",
     "",
@@ -406,6 +460,7 @@ function renderMarkdown(summary) {
     ...proofBridgeLines,
     ...externalCloseoutLines,
     ...proofDoctorLines,
+    ...proofUnblockerLines,
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -448,6 +503,7 @@ async function main() {
     mvpReadinessVerifier,
     externalCloseoutSession,
     proofDoctor,
+    proofUnblocker,
   ] = await Promise.all([
     readJson(accountReadinessPath, {}),
     readJson(approvalRunPath, {}),
@@ -459,6 +515,7 @@ async function main() {
     readJson(mvpReadinessVerifierPath, {}),
     readJson(externalCloseoutSessionPath, {}),
     readJson(proofDoctorPath, {}),
+    readJson(proofUnblockerPath, {}),
   ]);
   const accountCloseout = accountReadiness.tiktokMvpAccountCloseout || {};
   const accountReadyLanes = accountCloseout.totals?.ready || 0;
@@ -484,6 +541,7 @@ async function main() {
       mvpReadinessVerifier: mvpReadinessVerifierPath,
       externalCloseoutSession: externalCloseoutSessionPath,
       proofDoctor: proofDoctorPath,
+      proofUnblocker: proofUnblockerPath,
     },
     account: {
       ready: accountCloseout.status === "ready_for_metricool_tiktok" && accountReadyLanes === accountTotalLanes && accountTotalLanes > 0,
@@ -532,6 +590,7 @@ async function main() {
       : [],
     externalCloseout: externalCloseoutFor(externalCloseoutSession),
     proofDoctor: proofDoctorFor(proofDoctor),
+    proofUnblocker: proofUnblockerFor(proofUnblocker),
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",

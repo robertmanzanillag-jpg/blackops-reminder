@@ -1130,6 +1130,32 @@ interface ClipperTikTokNextActionSummary {
     };
     nextStep: string;
   };
+  proofUnblocker?: {
+    status: string;
+    readyLanes: number;
+    targetLanes: number;
+    openFixes: number;
+    importFixes: number;
+    doctorFixes: number;
+    firstFix: {
+      lane: string;
+      accountName: string;
+      handle: string;
+      metricoolBrandName: string;
+      field: string;
+      requiredValue: string;
+      reason: string;
+      nextAction: string;
+    } | null;
+    paths: {
+      html: string;
+      csv: string;
+      combinedCsv: string;
+      importFixQueueCsv: string;
+      doctorFixQueueCsv: string;
+    };
+    nextStep: string;
+  };
   tasks: Array<{
     id: string;
     label: string;
@@ -20243,6 +20269,37 @@ export default function ClippersPage() {
                     <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">
                       Fix queue: {tiktokNextAction.proofDoctor.paths.fixQueueCsv || "missing"}
                     </p>
+                  </div>
+                )}
+                {tiktokNextAction.proofUnblocker && tiktokNextAction.proofUnblocker.openFixes > 0 && (
+                  <div
+                    className="mt-3 rounded-md border border-fuchsia-300/15 bg-fuchsia-950/10 p-3"
+                    data-testid="clippers-tiktok-next-action-proof-unblocker"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-fuchsia-300/25 bg-fuchsia-300/10 text-fuchsia-100">
+                        unblocker {tiktokNextAction.proofUnblocker.status}
+                      </Badge>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.proofUnblocker.readyLanes)}/{formatNumber(tiktokNextAction.proofUnblocker.targetLanes)} ready
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.proofUnblocker.openFixes)} open fixes
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-fuchsia-50/80">{tiktokNextAction.proofUnblocker.nextStep}</p>
+                    {tiktokNextAction.proofUnblocker.firstFix && (
+                      <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                        <p>{tiktokNextAction.proofUnblocker.firstFix.accountName} / {tiktokNextAction.proofUnblocker.firstFix.field}</p>
+                        <p>{tiktokNextAction.proofUnblocker.firstFix.requiredValue}</p>
+                        <p>{tiktokNextAction.proofUnblocker.firstFix.nextAction}</p>
+                      </div>
+                    )}
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                      <p className="break-all">HTML: {tiktokNextAction.proofUnblocker.paths.html || "missing"}</p>
+                      <p className="break-all">CSV: {tiktokNextAction.proofUnblocker.paths.csv || "missing"}</p>
+                      <p className="break-all">Combined: {tiktokNextAction.proofUnblocker.paths.combinedCsv || "missing"}</p>
+                    </div>
                   </div>
                 )}
               </div>
