@@ -70,7 +70,7 @@ function buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerifi
       proofDropReady ? "done" : "blocked",
       proofDropReady
         ? "Run Quick fill or Import preview."
-        : "Add the four real public/non-secret proof URLs to proof-links.json, then rerun Proof drop.",
+        : "Add two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, to proof-links.json, then rerun Proof drop.",
       {
         issues: proofDrop?.issues || [],
         warnings: proofDrop?.warnings || [],
@@ -204,7 +204,7 @@ function buildOperatorSession(summary) {
     : nextGate?.nextAction || summary.nextStep;
   const steps = [
     "Open Proof handoff and review collection packets.",
-    "Paste real non-secret SPORT/memes TikTok and Metricool proof links; signed/temporary URLs are blocked.",
+    "Paste real non-secret SPORT/memes Metricool proof links; optional separate TikTok ownership links are accepted, and signed/temporary URLs are blocked.",
     "Run Preview links before saving.",
     "Save proof links only after preview has no blockers.",
     "Run Proof handoff, Import preview, Preview closeout, and Local verify.",

@@ -1110,7 +1110,7 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
   assert.ok(doctor.recommendedProofFlow.steps.some((step) => step.includes("Preview bridge rows")));
   assert.ok(doctor.requiredProofLinks.some((item) => item.key === "sports-daily:tiktok.metricoolConnectionProofUrl"));
   assert.ok(doctor.requiredProofLinks.some((item) => item.key === "meme-radar:tiktok.accountOwnershipProofUrl"));
-  assert.match(doctor.nextStep, /proof links drop with four real non-secret proof URLs/);
+  assert.match(doctor.nextStep, /proof links drop with two real Metricool\/Drive proof URLs/);
   assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.requiredValue.includes("metricool.com")));
   assert.ok(doctor.lanes.every((lane) => lane.nextAction && lane.status === "blocked"));
   assert.doesNotMatch(JSON.stringify(doctor), /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
@@ -1626,10 +1626,16 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(output.pastePacketPath, /proof-links-paste-packet\.txt$/);
   assert.match(output.oneScreenPath, /proof-fill-one-screen\.txt$/);
   assert.equal(output.proofPacketsNeeded, 4);
+  assert.equal(output.minimumProofUrlsNeeded, 2);
+  assert.equal(output.fastPathAvailable, true);
 
   const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff.json"), "utf8"));
   assert.equal(report.unblockBoard.status, "blocked_needs_operator_proof");
   assert.equal(report.unblockBoard.missingProofs, 4);
+  assert.equal(report.unblockBoard.minimumProofUrlsNeeded, 2);
+  assert.equal(report.unblockBoard.fastPathAvailable, true);
+  assert.equal(report.totals.minimumProofUrlsNeeded, 2);
+  assert.equal(report.totals.fastPathAvailable, true);
   assert.equal(report.unblockBoard.impact.metricool100Rows, 100);
   assert.equal(report.unblockBoard.impact.metricool100SourceReadyBatches, 10);
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
@@ -1671,6 +1677,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(oneScreen, /TikTok MVP proof fill - one screen/);
   assert.match(oneScreen, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(oneScreen, /Minimum real proof URLs needed: 2/);
   assert.match(oneScreen, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
   assert.match(oneScreen, /Next safe button: save_proof_links/);
   assert.match(oneScreen, /This file does not apply evidence, schedule posts, publish, or enable direct social APIs/);

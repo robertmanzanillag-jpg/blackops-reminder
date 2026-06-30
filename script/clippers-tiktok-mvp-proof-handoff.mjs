@@ -73,7 +73,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
     return {
       status: "blocked_needs_proof_links",
       nextButton: "save_proof_links",
-      nextAction: proofDrop?.nextStep || "Paste the four real SPORT/memes TikTok and Metricool proof URLs, then save proof links.",
+      nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes Metricool proof URLs, or separate ownership plus Metricool URLs, then save proof links.",
     };
   }
   if (!quickFill?.appliedToIntake) {
@@ -208,6 +208,12 @@ function renderCollectionCsv(packets) {
 function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
   const blockedGates = gates.filter((gate) => gate.status !== "pass").map((gate) => gate.id);
   const missingPackets = collectionPackets.filter((packet) => packet.status !== "ready");
+  const missingMetricoolPackets = missingPackets.filter((packet) => packet.field === "metricoolConnectionProofUrl");
+  const missingAccountPackets = missingPackets.filter((packet) => packet.field === "accountOwnershipProofUrl");
+  const fastPathAvailable = missingPackets.length > 0
+    && missingAccountPackets.length === missingMetricoolPackets.length
+    && missingMetricoolPackets.length > 0;
+  const minimumProofUrlsNeeded = fastPathAvailable ? missingMetricoolPackets.length : missingPackets.length;
   const metricool100 = goLivePacket?.metricool100 || {};
   const metricoolTotals = goLivePacket?.totals || {};
   const sourceReadyBatches = Number(metricool100.sourceReadyBatches ?? metricoolTotals.metricool100SourceReadyBatches ?? 0);
@@ -239,6 +245,8 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
     status: rows.length ? "blocked_needs_operator_proof" : "ready_for_proof_drop",
     generatedAt: new Date().toISOString(),
     missingProofs: rows.length,
+    minimumProofUrlsNeeded,
+    fastPathAvailable,
     readyProofs: readyRows,
     totalProofs: collectionPackets.length,
     blockedGates,
@@ -249,11 +257,11 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
       metricool100OperatorReadyBatches: readyBatches,
       metricool100BlockedBatches: blockedBatches,
       note: rows.length
-        ? `${rowsCount || "TikTok"} rows are source-ready, but Metricool approval queue stays blocked until these proof links are real and validated.`
+        ? `${rowsCount || "TikTok"} rows are source-ready, but Metricool approval queue stays blocked until ${minimumProofUrlsNeeded} real proof URL(s) are validated.`
         : "All proof links are present; run the proof drop/import preview before any operator apply step.",
     },
     nextAction: rows.length
-      ? "Fill the exactPasteLine rows with real public/non-secret HTTPS proof URLs, paste them into the app paste assistant, preview, then save only if validation stays clean."
+      ? "Fast path: paste one real Metricool/Drive proof URL per active TikTok lane; the app can reuse it as ownership/control proof when it clearly shows the connected profile. Preview, then save only if validation stays clean."
       : "Run Proof drop and Import preview; Metricool still stays approval_required.",
     guardrails: [
       "Do not paste passwords, tokens, cookies, recovery codes, client secrets, API keys, signed URLs, or private screenshots.",
@@ -320,6 +328,8 @@ function renderOneScreenProofFill(summary) {
     "TikTok MVP proof fill - one screen",
     "",
     "Fill these exact lines with real non-secret HTTPS proof URLs:",
+    `Minimum real proof URLs needed: ${summary.unblockBoard.minimumProofUrlsNeeded}`,
+    `Fast path available: ${summary.unblockBoard.fastPathAvailable}`,
     "",
     ...rows.map((row) => `${row.priority}. ${row.exactPasteLine}    # ${row.accountName} / ${row.field}`),
     "",
@@ -371,6 +381,8 @@ function renderMarkdown(summary) {
     "## Unblock Board",
     "",
     `- Missing proofs: ${summary.unblockBoard.missingProofs}/${summary.unblockBoard.totalProofs}`,
+    `- Minimum real proof URLs needed: ${summary.unblockBoard.minimumProofUrlsNeeded}`,
+    `- Fast path available: ${summary.unblockBoard.fastPathAvailable}`,
     `- Source-ready batches: ${summary.unblockBoard.impact.metricool100SourceReadyBatches}`,
     `- Operator-ready batches: ${summary.unblockBoard.impact.metricool100OperatorReadyBatches}`,
     `- Board CSV: ${summary.paths.unblockBoardCsv}`,
@@ -458,6 +470,8 @@ async function main() {
       importFixes: Array.isArray(importPreview?.fixQueue) ? importPreview.fixQueue.length : 0,
       closeoutRejected: Number(closeout?.totals?.rejected || 0),
       proofPacketsNeeded: collectionPackets.filter((packet) => packet.status !== "ready").length,
+      minimumProofUrlsNeeded: unblockBoard.minimumProofUrlsNeeded,
+      fastPathAvailable: unblockBoard.fastPathAvailable,
     },
     paths: {
       json: outJsonPath,
@@ -494,6 +508,8 @@ async function main() {
     importFixes: summary.totals.importFixes,
     closeoutRejected: summary.totals.closeoutRejected,
     proofPacketsNeeded: summary.totals.proofPacketsNeeded,
+    minimumProofUrlsNeeded: summary.totals.minimumProofUrlsNeeded,
+    fastPathAvailable: summary.totals.fastPathAvailable,
     reportJsonPath: outJsonPath,
     collectionCsvPath: outCollectionCsvPath,
     pastePacketPath: outPastePacketPath,

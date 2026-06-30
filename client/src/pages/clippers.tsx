@@ -2737,6 +2737,8 @@ interface ClipperTikTokMvpProofHandoffSummary {
     importFixes: number;
     closeoutRejected: number;
     proofPacketsNeeded: number;
+    minimumProofUrlsNeeded: number;
+    fastPathAvailable: boolean;
   };
   collectionPackets: Array<{
     id: string;
@@ -2756,6 +2758,8 @@ interface ClipperTikTokMvpProofHandoffSummary {
     status: "blocked_needs_operator_proof" | "ready_for_proof_drop";
     generatedAt: string;
     missingProofs: number;
+    minimumProofUrlsNeeded: number;
+    fastPathAvailable: boolean;
     readyProofs: number;
     totalProofs: number;
     blockedGates: string[];
@@ -18687,6 +18691,8 @@ export default function ClippersPage() {
                   <span>next: {tiktokMvpProofHandoff.nextButton}</span>
                   <span>proof issues {tiktokMvpProofHandoff.totals.proofIssues}</span>
                   <span>packets needed {tiktokMvpProofHandoff.totals.proofPacketsNeeded}</span>
+                  <span>URLs needed {tiktokMvpProofHandoff.totals.minimumProofUrlsNeeded}</span>
+                  {tiktokMvpProofHandoff.totals.fastPathAvailable && <span>fast path on</span>}
                   <span>import fixes {tiktokMvpProofHandoff.totals.importFixes}</span>
                 </div>
                 <p className="mt-1">{tiktokMvpProofHandoff.nextAction}</p>
@@ -18701,6 +18707,8 @@ export default function ClippersPage() {
                       unblock {tiktokMvpProofHandoff.unblockBoard.status}
                     </Badge>
                     <span>missing {tiktokMvpProofHandoff.unblockBoard.missingProofs}/{tiktokMvpProofHandoff.unblockBoard.totalProofs}</span>
+                    <span>minimum URLs {tiktokMvpProofHandoff.unblockBoard.minimumProofUrlsNeeded}</span>
+                    {tiktokMvpProofHandoff.unblockBoard.fastPathAvailable && <span>Metricool proof fast path</span>}
                     <span>rows {tiktokMvpProofHandoff.unblockBoard.impact.metricool100Rows}</span>
                     <span>source batches {tiktokMvpProofHandoff.unblockBoard.impact.metricool100SourceReadyBatches}</span>
                     <span>operator batches {tiktokMvpProofHandoff.unblockBoard.impact.metricool100OperatorReadyBatches}</span>
@@ -18816,7 +18824,7 @@ export default function ClippersPage() {
                     <span>{tiktokMvpProofQuickFill?.issues.length ?? 0} issues</span>
                     <span>applied: {tiktokMvpProofQuickFill?.appliedToIntake ? "yes" : "no"}</span>
                   </div>
-                  <p className="mt-1">{tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste the four real non-secret proof URLs and notes, then run Quick fill."}</p>
+                  <p className="mt-1">{tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill."}</p>
                 </div>
                 <Button
                   type="button"

@@ -298,7 +298,7 @@ async function main() {
     recommendedProofFlow: {
       title: "TikTok Metricool proof-links bridge",
       steps: [
-        `Fill ${proofLinksPastePacketPath} and save the completed copy as ${proofLinksFilledDropPath}, or write the same four URLs to ${proofLinksJsonDropPath}.`,
+        `Fill ${proofLinksPastePacketPath} and save the completed copy as ${proofLinksFilledDropPath}, or write two Metricool/Drive fast-path URLs plus optional separate ownership URLs to ${proofLinksJsonDropPath}.`,
         "Use Safe ingest drop or Save proof links so the app validates proof URLs and notes before touching any bridge CSV.",
         `Let quick-fill generate the Metricool bridge CSV at ${paths.bridgeCsv} only from accepted non-secret proof links.`,
         "Use Load bridge CSV, then Preview bridge rows; Import bridge rows stays blocked until the preview gate is clean and current.",
@@ -315,7 +315,7 @@ async function main() {
       ? "Run TikTok MVP evidence closeout apply only after manually confirming every proof URL is real and non-secret."
       : previewFailed
         ? "Fix the closeout preview command, then rerun proof doctor; stale reports are ignored."
-        : "Fill the proof links drop with four real non-secret proof URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",
+        : "Fill the proof links drop with two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
