@@ -110,8 +110,12 @@ const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
+const originalDatabaseUrl = process.env.DATABASE_URL;
+const originalNodeEnv = process.env.NODE_ENV;
 
 test.beforeEach(() => {
+  delete process.env.DATABASE_URL;
+  delete process.env.NODE_ENV;
   delete process.env.RESEND_API_KEY;
   delete process.env.REVENUE_ENGINE_FROM_EMAIL;
   delete process.env.RESEND_FROM_EMAIL;
@@ -168,6 +172,10 @@ test.afterEach(() => {
   else process.env.RESEND_FROM_EMAIL = originalResendFromEmail;
   if (originalRevenueMockupsDir === undefined) delete process.env.REVENUE_MOCKUPS_DIR;
   else process.env.REVENUE_MOCKUPS_DIR = originalRevenueMockupsDir;
+  if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+  else process.env.DATABASE_URL = originalDatabaseUrl;
+  if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnv;
 });
 
 function sellWebsiteOpportunityForTest(input: {
@@ -1803,7 +1811,31 @@ test("profit guard collects first before any external spend", () => {
   assert.equal(snapshot.operatorConsole.moneyLine.includes("0 apps/websites"), true);
   assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "separate_area" && item.status === "ready"), true);
   assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "ask_when_unclear" && item.status === "ready"), true);
+  assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "production_persistence" && item.status === "needs_data"), true);
   assert.equal(snapshot.systemReadiness.items.some((item) => item.id === "continuous_improvement" && item.status === "needs_data"), true);
+});
+
+test("system readiness blocks production money mode without real database url", () => {
+  process.env.NODE_ENV = "production";
+  delete process.env.DATABASE_URL;
+
+  const snapshot = getRevenueEngineSnapshot();
+  const persistenceItem = snapshot.systemReadiness.items.find((item) => item.id === "production_persistence");
+
+  assert.equal(persistenceItem?.status, "blocked");
+  assert.match(persistenceItem?.evidence || "", /DATABASE_URL is required in production/);
+  assert.equal(snapshot.systemReadiness.blocked > 0, true);
+});
+
+test("system readiness accepts a real database url for production persistence", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+
+  const snapshot = getRevenueEngineSnapshot();
+  const persistenceItem = snapshot.systemReadiness.items.find((item) => item.id === "production_persistence");
+
+  assert.equal(persistenceItem?.status, "ready");
+  assert.match(persistenceItem?.evidence || "", /DATABASE_URL real/);
 });
 
 test("profit guard allows small scale only when cash covers spend", () => {

@@ -3,6 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hasRealValue } from "./ceo-doctor-cli";
+import { resolveDatabaseConnectionString } from "./database-url";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -2595,6 +2596,29 @@ function buildRevenueSystemReadiness(input: {
   nextBatchPlan: ReturnType<typeof buildRevenueNextBatchPlan>;
   agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
 }) {
+  const productionPersistence = (() => {
+    try {
+      const databaseUrl = resolveDatabaseConnectionString();
+      if (databaseUrl) {
+        return {
+          status: "ready" as const,
+          evidence: "DATABASE_URL real configurado; server puede usar Postgres para entorno persistente.",
+          nextStep: "Mantener backups/rollback y no exponer credenciales.",
+        };
+      }
+      return {
+        status: "needs_data" as const,
+        evidence: "Modo local_file activo para desarrollo; falta DATABASE_URL real antes de operar produccion con dinero.",
+        nextStep: "Configurar Postgres/DATABASE_URL real en Replit antes de deploy o ventas reales.",
+      };
+    } catch (error: any) {
+      return {
+        status: "blocked" as const,
+        evidence: error?.message || "DATABASE_URL invalido o faltante.",
+        nextStep: "Corregir DATABASE_URL real antes de arrancar produccion o desplegar.",
+      };
+    }
+  })();
   const items = [
     {
       id: "separate_area",
@@ -2630,6 +2654,13 @@ function buildRevenueSystemReadiness(input: {
       status: "ready" as const,
       evidence: "Delivery workspaces bloquean por deposito, scope, QA visual/tecnica/automation, rollback, costo y margen.",
       nextStep: "Entregar solo cuando canLaunch=true y Robert apruebe.",
+    },
+    {
+      id: "production_persistence",
+      label: "Persistencia production-ready",
+      status: productionPersistence.status,
+      evidence: productionPersistence.evidence,
+      nextStep: productionPersistence.nextStep,
     },
     {
       id: "continuous_improvement",
