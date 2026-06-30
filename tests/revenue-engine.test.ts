@@ -227,6 +227,12 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(initial.businessScoutQueue.safety.sendsOutreach, false);
   assert.equal(initial.businessScoutQueue.safety.persistsCandidates, false);
   assert.match(initial.businessScoutQueue.workPack.copyableBatchTemplate, /business\|area\|niche/);
+  assert.equal(initial.dailyMoneyCommand.status, "search");
+  assert.match(initial.dailyMoneyCommand.primaryAction, /Buscar negocios publicos/);
+  assert.equal(initial.dailyMoneyCommand.funnel.researchTarget, initial.businessScoutQueue.dailyResearchTarget);
+  assert.equal(initial.dailyMoneyCommand.safety.sendsOutreach, false);
+  assert.equal(initial.dailyMoneyCommand.safety.spendsMoney, false);
+  assert.equal(initial.dailyMoneyCommand.safety.deploys, false);
 
   recordRevenueScoutingMission({
     area: "Orlando",
@@ -244,6 +250,7 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(updated.businessScoutQueue.niche, "roofers");
   assert.equal(updated.businessScoutQueue.offerFocus, "websites");
   assert.equal(updated.businessScoutQueue.tasks.some((task) => task.query.includes("roofers")), true);
+  assert.match(updated.dailyMoneyCommand.copyableOperatorBrief, /Revenue Engine daily money command/);
 });
 
 test("business scout queue handles minimum-size scouting missions without snapshot crash", () => {
@@ -264,6 +271,39 @@ test("business scout queue handles minimum-size scouting missions without snapsh
   assert.equal(snapshot.businessScoutQueue.tasks.length >= 3, true);
   assert.equal(snapshot.businessScoutQueue.safety.persistsCandidates, false);
   assert.match(snapshot.businessScoutQueue.nextAction, /Guardar batch publico/);
+});
+
+test("daily money command prioritizes verified public candidates before more searching", () => {
+  recordRevenuePublicLeadCandidateBatch({
+    source: "google_maps",
+    area: "Miami",
+    niche: "restaurants",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    batchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Daily Command Cafe|Miami|restaurants|no_website|email|owner@dailycommand.example|https://example.com/daily-command-cafe|owner@dailycommand.example|Public listing has no website and recent owner-managed menu updates.|Needs mobile menu and catering lead capture.|4200|Owner|Owner-operated and visible demand.",
+    ].join("\n"),
+    candidates: [{
+      businessName: "Daily Command Cafe",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: "owner@dailycommand.example",
+      sourceUrl: "https://example.com/daily-command-cafe",
+      publicEvidence: "Public listing has no website and recent owner-managed menu updates.",
+      painPoint: "Needs mobile menu and catering lead capture.",
+      estimatedOfferUsd: 4200,
+      qualificationNotes: "Owner-operated and visible demand.",
+    }],
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(snapshot.dailyMoneyCommand.status, "sprint");
+  assert.match(snapshot.dailyMoneyCommand.primaryAction, /Money Sprint/);
+  assert.equal(snapshot.dailyMoneyCommand.funnel.candidatesReady, 1);
+  assert.equal(snapshot.dailyMoneyCommand.steps.find((step) => step.id === "import")?.status, "ready");
 });
 
 test("builds an always-on lead radar with contact and mockup limits", () => {

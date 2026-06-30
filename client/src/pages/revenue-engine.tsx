@@ -78,6 +78,36 @@ type RevenueSnapshot = {
       approvalQueue: number;
     };
   };
+  dailyMoneyCommand: {
+    status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+    headline: string;
+    primaryAction: string;
+    target: string;
+    funnel: {
+      researchTarget: number;
+      candidatesReady: number;
+      salesPacketsReady: number;
+      manualContactsReady: number;
+      deliveryHandoffsReady: number;
+      buildHandoffsOpen: number;
+      cashCollectedUsd: number;
+    };
+    steps: Array<{
+      id: string;
+      label: string;
+      metric: string;
+      nextAction: string;
+      status: "ready" | "waiting" | "blocked";
+    }>;
+    copyableOperatorBrief: string;
+    safety: {
+      sendsOutreach: false;
+      spendsMoney: false;
+      deploys: false;
+      requiresHumanApproval: string[];
+      blockedActions: string[];
+    };
+  };
   systemReadiness: {
     score: number;
     ready: number;
@@ -1434,6 +1464,10 @@ const money = new Intl.NumberFormat("en-US", {
 
 function statusTone(status: string) {
   if (status === "pass") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (["contact", "collect", "build", "sell", "sprint"].includes(status)) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "search") return "border-sky-500/40 bg-sky-500/10 text-sky-200";
+  if (status === "waiting") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "ready_to_deliver") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "needs_fix") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "block") return "border-red-500/40 bg-red-500/10 text-red-200";
@@ -3653,8 +3687,86 @@ export default function RevenueEnginePage() {
                       </div>
                     )}
                   </CardContent>
-                </Card>
+              </Card>
               </div>
+
+              <Card className="mb-4 border-sky-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">{snapshot?.dailyMoneyCommand.headline || "Comando diario de dinero"}</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.dailyMoneyCommand.primaryAction || "Cargando siguiente accion."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.dailyMoneyCommand.status || "review"), "shrink-0")}>
+                      {snapshot?.dailyMoneyCommand.status || "loading"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-4 xl:grid-cols-[1fr_320px]">
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                      <p className="text-xs uppercase tracking-wide text-sky-200">Target</p>
+                      <p className="mt-2 text-lg font-semibold text-white">{snapshot?.dailyMoneyCommand.target || "Preparando target."}</p>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.dailyMoneyCommand.steps || []).map((step) => (
+                        <div key={step.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{step.label}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{step.metric}</p>
+                            </div>
+                            <Badge variant="outline" className={cn(statusTone(step.status), "shrink-0")}>{step.status}</Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">{step.nextAction}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Funnel hoy</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Research</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.researchTarget ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Candidatos</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.candidatesReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Paquetes</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.salesPacketsReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Contactos</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.manualContactsReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Build PR</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.buildHandoffsOpen ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Cash</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{money.format(snapshot?.dailyMoneyCommand.funnel.cashCollectedUsd ?? 0)}</p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full border-zinc-700 bg-zinc-950"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.copyableOperatorBrief || "")}
+                      data-testid="button-copy-daily-money-command"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy daily command
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
                 <CardHeader>

@@ -658,6 +658,37 @@ type RevenueWebsiteDeliveryHandoffQueue = {
   nextAction: string;
 };
 
+type RevenueDailyMoneyCommand = {
+  status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+  headline: string;
+  primaryAction: string;
+  target: string;
+  funnel: {
+    researchTarget: number;
+    candidatesReady: number;
+    salesPacketsReady: number;
+    manualContactsReady: number;
+    deliveryHandoffsReady: number;
+    buildHandoffsOpen: number;
+    cashCollectedUsd: number;
+  };
+  steps: Array<{
+    id: string;
+    label: string;
+    metric: string;
+    nextAction: string;
+    status: "ready" | "waiting" | "blocked";
+  }>;
+  copyableOperatorBrief: string;
+  safety: {
+    sendsOutreach: false;
+    spendsMoney: false;
+    deploys: false;
+    requiresHumanApproval: string[];
+    blockedActions: string[];
+  };
+};
+
 type RevenueEmailProviderStatus = {
   provider: "resend";
   configured: boolean;
@@ -3488,6 +3519,138 @@ function buildRevenueBusinessScoutQueue(): RevenueBusinessScoutQueue {
   };
 }
 
+function buildRevenueDailyMoneyCommand(input: {
+  businessScoutQueue: RevenueBusinessScoutQueue;
+  publicLeadImportQueue: RevenuePublicLeadImportQueue;
+  websiteSalesPacketQueue: RevenueWebsiteSalesPacketQueue;
+  manualOutreachQueue: RevenueManualOutreachQueue;
+  websiteDeliveryHandoffQueue: RevenueWebsiteDeliveryHandoffQueue;
+  cashCollectedUsd: number;
+  profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+}): RevenueDailyMoneyCommand {
+  const buildHandoffsOpen = revenueDeliveryWorkspaces.filter((workspace) =>
+    (workspace.input.projectType === "website" || workspace.input.projectType === "bundle")
+    && workspace.codexBuildHandoff.status === "needs_pr"
+  ).length;
+  const funnel = {
+    researchTarget: input.businessScoutQueue.dailyResearchTarget,
+    candidatesReady: input.publicLeadImportQueue.readyCount,
+    salesPacketsReady: input.websiteSalesPacketQueue.readyCount,
+    manualContactsReady: input.manualOutreachQueue.readyCount,
+    deliveryHandoffsReady: input.websiteDeliveryHandoffQueue.readyCount,
+    buildHandoffsOpen,
+    cashCollectedUsd: input.cashCollectedUsd,
+  };
+  const status: RevenueDailyMoneyCommand["status"] =
+    input.profitGuard.status === "pause_spend"
+      ? "blocked"
+      : input.websiteDeliveryHandoffQueue.readyCount > 0
+        ? "collect"
+        : buildHandoffsOpen > 0
+          ? "build"
+          : input.manualOutreachQueue.readyCount > 0
+            ? "contact"
+            : input.websiteSalesPacketQueue.readyCount > 0
+              ? "sell"
+              : input.publicLeadImportQueue.readyCount > 0
+                ? "sprint"
+                : "search";
+  const primaryActionByStatus: Record<RevenueDailyMoneyCommand["status"], string> = {
+    blocked: "Pausar gasto y resolver Profit Guard antes de avanzar.",
+    collect: "Convertir leads vendidos en delivery workspace solo con deposito y scope confirmados.",
+    build: "Crear o completar handoff GitHub PR-first para los websites vendidos.",
+    contact: "Contactar manualmente los drafts aprobados y registrar replies/calls/depositos.",
+    sell: "Revisar paquetes de venta con mockup y aprobar contacto manual.",
+    sprint: "Correr Money Sprint con candidatos publicos verificados para crear mockups y drafts.",
+    search: "Buscar negocios publicos hoy y guardar candidatos verificados.",
+  };
+  const target = status === "search"
+    ? `${funnel.researchTarget} negocios publicos investigados`
+    : status === "sprint"
+      ? `${funnel.candidatesReady} candidatos listos para Money Sprint`
+      : status === "sell"
+        ? `${funnel.salesPacketsReady} paquetes listos para vender`
+        : status === "contact"
+          ? `${funnel.manualContactsReady} contactos manuales aprobados`
+          : status === "collect"
+            ? `${funnel.deliveryHandoffsReady} handoffs listos para cerrar/build`
+            : status === "build"
+              ? `${funnel.buildHandoffsOpen} builds esperando PR-first`
+              : "0 gasto hasta resolver bloqueo";
+  const baseSteps: RevenueDailyMoneyCommand["steps"] = [
+    {
+      id: "search",
+      label: "Buscar negocios",
+      metric: `${funnel.researchTarget}/dia target`,
+      nextAction: input.businessScoutQueue.nextAction,
+      status: status === "search" ? "ready" : "waiting",
+    },
+    {
+      id: "import",
+      label: "Importar candidatos",
+      metric: `${funnel.candidatesReady} verificados`,
+      nextAction: input.publicLeadImportQueue.nextAction,
+      status: funnel.candidatesReady > 0 ? "ready" : "waiting",
+    },
+    {
+      id: "sell",
+      label: "Vender paquetes",
+      metric: `${funnel.salesPacketsReady} paquetes`,
+      nextAction: input.websiteSalesPacketQueue.nextAction,
+      status: funnel.salesPacketsReady > 0 || funnel.manualContactsReady > 0 ? "ready" : "waiting",
+    },
+    {
+      id: "collect",
+      label: "Cobrar y construir",
+      metric: `${funnel.deliveryHandoffsReady} delivery / ${funnel.buildHandoffsOpen} PR`,
+      nextAction: input.websiteDeliveryHandoffQueue.nextAction,
+      status: funnel.deliveryHandoffsReady > 0 || funnel.buildHandoffsOpen > 0 ? "ready" : "waiting",
+    },
+  ];
+  const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
+    ? baseSteps.map((step) => ({ ...step, status: "blocked" as const }))
+    : baseSteps;
+  const copyableOperatorBrief = [
+    "Revenue Engine daily money command",
+    "",
+    `Status: ${status}`,
+    `Primary action: ${primaryActionByStatus[status]}`,
+    `Target: ${target}`,
+    "",
+    "Funnel:",
+    `- Research target: ${funnel.researchTarget}`,
+    `- Verified candidates ready: ${funnel.candidatesReady}`,
+    `- Sales packets ready: ${funnel.salesPacketsReady}`,
+    `- Manual contacts ready: ${funnel.manualContactsReady}`,
+    `- Delivery handoffs ready: ${funnel.deliveryHandoffsReady}`,
+    `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
+    `- Cash collected: $${funnel.cashCollectedUsd.toLocaleString("en-US")}`,
+    "",
+    "Rules:",
+    "- Use public research only.",
+    "- Do not auto-send outreach.",
+    "- Do not spend money without Robert approval.",
+    "- Do not deploy or publish client previews until PR, review, App QA, and Robert approval are recorded.",
+  ].join("\n");
+
+  return {
+    status,
+    headline: status === "blocked" ? "Dinero pausado por guardrail" : "Siguiente accion para generar dinero",
+    primaryAction: primaryActionByStatus[status],
+    target,
+    funnel,
+    steps,
+    copyableOperatorBrief,
+    safety: {
+      sendsOutreach: false,
+      spendsMoney: false,
+      deploys: false,
+      requiresHumanApproval: ["contact business", "paid data", "client charge/deposit confirmation", "deploy/publish"],
+      blockedActions: ["auto-send outreach", "buy paid data", "start client build before deposit/scope", "merge without PR", "deploy without Robert approval"],
+    },
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -3617,6 +3780,20 @@ export function getRevenueEngineSnapshot() {
         action: workspace.correctionQueue.find((item) => item.blocksDelivery)?.action || workspace.approvalSummary.requiredBeforeClient[0] || "corregir delivery antes de entregar",
       })),
   ].filter(Boolean);
+  const businessScoutQueue = buildRevenueBusinessScoutQueue();
+  const websiteSalesPacketQueue = buildRevenueWebsiteSalesPacketQueue(8);
+  const manualOutreachQueue = buildRevenueManualOutreachQueue(10);
+  const publicLeadImportQueue = buildRevenuePublicLeadImportQueue(10);
+  const websiteDeliveryHandoffQueue = buildRevenueWebsiteDeliveryHandoffQueue(8);
+  const dailyMoneyCommand = buildRevenueDailyMoneyCommand({
+    businessScoutQueue,
+    publicLeadImportQueue,
+    websiteSalesPacketQueue,
+    manualOutreachQueue,
+    websiteDeliveryHandoffQueue,
+    cashCollectedUsd,
+    profitGuard,
+  });
 
   return {
     metrics: {
@@ -3631,14 +3808,15 @@ export function getRevenueEngineSnapshot() {
     },
     executiveSummary,
     operatorConsole,
+    dailyMoneyCommand,
     systemReadiness,
     launchReadiness,
     agentOperatingContract,
-    businessScoutQueue: buildRevenueBusinessScoutQueue(),
-    websiteSalesPacketQueue: buildRevenueWebsiteSalesPacketQueue(8),
-    manualOutreachQueue: buildRevenueManualOutreachQueue(10),
-    publicLeadImportQueue: buildRevenuePublicLeadImportQueue(10),
-    websiteDeliveryHandoffQueue: buildRevenueWebsiteDeliveryHandoffQueue(8),
+    businessScoutQueue,
+    websiteSalesPacketQueue,
+    manualOutreachQueue,
+    publicLeadImportQueue,
+    websiteDeliveryHandoffQueue,
     profitGuard,
     nextBatchPlan,
     approvalQueueItems,

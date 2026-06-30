@@ -52,6 +52,17 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });
 
+test("Revenue Engine exposes the daily money command panel", () => {
+  const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const serverSource = readFileSync("server/revenue-engine.ts", "utf8");
+
+  assert.match(serverSource, /buildRevenueDailyMoneyCommand/);
+  assert.match(serverSource, /dailyMoneyCommand/);
+  assert.match(uiSource, /button-copy-daily-money-command/);
+  assert.match(uiSource, /dailyMoneyCommand\.primaryAction/);
+  assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
+});
+
 test("Dashboard chat exposes a subscription handoff prompt", () => {
   const source = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
 
