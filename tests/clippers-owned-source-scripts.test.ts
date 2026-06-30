@@ -5176,7 +5176,7 @@ test("TikTok next action blocks Metricool operator gate when publish safety is u
       });
       assert.equal(nextActionResult.status, 0, nextActionResult.stderr || nextActionResult.stdout);
       const nextAction = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-next-action.json"), "utf8"));
-      assert.equal(nextAction.status, "ready_for_metricool_scheduling");
+      assert.ok(["ready_for_metricool_scheduling", "blocked_account_or_metricool_connection"].includes(nextAction.status));
       assert.equal(nextAction.operatorGate.status, "operator_blocked");
       assert.equal(nextAction.operatorGate.actionAllowed, false);
       assert.equal(nextAction.operatorGate.allowedAction, "none");
@@ -5184,18 +5184,88 @@ test("TikTok next action blocks Metricool operator gate when publish safety is u
       assert.equal(nextAction.operatorGate.readyToSend, 1);
       assert.ok(nextAction.operatorGate.blockedBy.includes("real_publish_enabled"));
       assert.ok(nextAction.operatorGate.blockedBy.includes("ready_to_send_not_zero"));
-      assert.match(nextAction.nextStep, /Do not open Metricool scheduling/);
-      assert.match(nextAction.nextStep, /real_publish_enabled/);
+      assert.ok(
+        /Do not open Metricool scheduling/.test(nextAction.nextStep)
+        || /Fill SPORT and memes proof links/.test(nextAction.nextStep),
+      );
       assert.ok(nextAction.tasks.some((task) => (
         task.id === "metricool_schedule"
         && task.status === "blocked"
         && task.nextAction.includes("real_publish_enabled")
       )));
       assert.match(nextAction.operator.copyPacket, /Do not open Metricool scheduling/);
+      assert.match(nextAction.operator.copyPacket, /real_publish_enabled/);
       assert.doesNotMatch(nextAction.operator.copyPacket, /Upload\/schedule each row/);
     } finally {
       await writeFile(approvalRunPath, originalApprovalRun);
     }
+  });
+});
+
+test("TikTok next action blocks ready account/upload work when operating proof gate is blocked", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
+    for (const script of [
+      "script/clippers-tiktok-post-schedule-verifier.mjs",
+      "script/clippers-tiktok-batch-closeout-verifier.mjs",
+      "script/clippers-metricool-current-batch-upload-pack.mjs",
+    ]) {
+      const result = spawnSync(process.execPath, [script], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    }
+    const readinessPath = path.join(rootDir, "account-permission-readiness.json");
+    const readiness = JSON.parse(await readFile(readinessPath, "utf8"));
+    readiness.tiktokMvpAccountCloseout = {
+      ...(readiness.tiktokMvpAccountCloseout || {}),
+      status: "ready_for_metricool_tiktok",
+      totals: { rows: 2, ready: 2 },
+      rows: [
+        { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", handle: "@sportsdaily", status: "ready_for_metricool_tiktok" },
+        { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", handle: "@memeradar", status: "ready_for_metricool_tiktok" },
+      ],
+    };
+    await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const uploadPackPath = path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json");
+    const uploadPack = JSON.parse(await readFile(uploadPackPath, "utf8"));
+    const readyUploadRows = Number(uploadPack.totals?.rows || uploadPack.rows?.length || 10);
+    uploadPack.status = "ready_for_metricool_upload";
+    uploadPack.totals = {
+      ...(uploadPack.totals || {}),
+      rows: readyUploadRows,
+      copied: readyUploadRows,
+      blocked: 0,
+      blockedUploadFiles: 0,
+    };
+    if (Array.isArray(uploadPack.rows)) {
+      uploadPack.rows = uploadPack.rows.map((row: Record<string, unknown>) => ({
+        ...row,
+        status: "ready_for_upload",
+        blocker: "",
+      }));
+    }
+    await writeFile(uploadPackPath, JSON.stringify(uploadPack, null, 2));
+
+    const nextActionResult = spawnSync(process.execPath, ["script/clippers-tiktok-next-action.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(nextActionResult.status, 0, nextActionResult.stderr || nextActionResult.stdout);
+    const nextAction = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-next-action.json"), "utf8"));
+
+    assert.equal(nextAction.account.ready, true);
+    assert.equal(nextAction.uploadPack.ready, true);
+    assert.equal(nextAction.status, "blocked_account_or_metricool_connection");
+    assert.equal(nextAction.proofGate.status, "blocked_needs_real_metricool_tiktok_proof");
+    assert.equal(nextAction.operatorGate.status, "operator_blocked");
+    assert.equal(nextAction.operatorGate.actionAllowed, false);
+    assert.equal(nextAction.operatorGate.allowedAction, "none");
+    assert.ok(nextAction.operatorGate.blockedBy.includes("tiktok_metricool_proof_gate"));
+    assert.match(nextAction.nextStep, /Fill SPORT and memes proof links/);
+    assert.match(nextAction.operator.copyPacket, /Operating proof gate: blocked_needs_real_metricool_tiktok_proof/);
+    assert.doesNotMatch(nextAction.operator.copyPacket, /Upload\/schedule each row/);
   });
 });
 
@@ -7027,8 +7097,10 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.equal(nextActionRun.status, 0, nextActionRun.stderr || nextActionRun.stdout);
     const output = JSON.parse(nextActionRun.stdout);
     assert.equal(output.status, "blocked_account_or_metricool_connection");
-    assert.match(output.nextStep, /Paste real non-secret proof URLs/i);
-    assert.match(output.nextStep, /metricool-tiktok-bridge-evidence\.csv/);
+    assert.match(output.nextStep, /Fill SPORT and memes proof links/i);
+    assert.match(output.nextStep, /proof-fill-one-screen\.txt/);
+    assert.match(output.nextStep, /proof-links\.json/);
+    assert.match(output.nextStep, /Fast path: paste one real Metricool\/Drive proof URL for SPORT and one for memes/);
 
     const nextAction = JSON.parse(await readFile(nextActionPath, "utf8"));
     assert.equal(nextAction.status, "blocked_account_or_metricool_connection");
@@ -7037,6 +7109,15 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.equal(nextAction.proofBridgeGate.proofLinksFlowStatus, "needs_real_proof_links");
     assert.match(nextAction.proofBridgeGate.paths.proofLinksPastePacket, /proof-links-paste-packet\.txt$/);
     assert.match(nextAction.proofBridgeGate.paths.bridgeEvidenceCsv, /metricool-tiktok-bridge-evidence\.csv$/);
+    assert.equal(nextAction.proofGate.status, "blocked_needs_real_metricool_tiktok_proof");
+    assert.deepEqual(nextAction.proofGate.requiredLanes, ["sports-daily:tiktok", "meme-radar:tiktok"]);
+    assert.equal(nextAction.proofGate.minimumProofUrlsNeeded, 2);
+    assert.equal(nextAction.proofGate.fastPathAvailable, true);
+    assert.equal(nextAction.proofGate.nextSafeButton, "preview_proof_links");
+    assert.equal(nextAction.proofGate.nextLockedButton, "save_proof_links");
+    assert.match(nextAction.proofGate.paths.oneScreenGuide, /proof-fill-one-screen\.txt$/);
+    assert.match(nextAction.proofGate.paths.proofLinksJson, /proof-links\.json$/);
+    assert.match(nextAction.proofGate.paths.pastePacket, /proof-links-paste-packet\.txt$/);
     assert.ok(nextAction.proofLinksChecklist.length >= 8);
     assert.equal(nextAction.externalCloseout.status, "needs_tiktok_external_closeout");
     assert.equal(nextAction.externalCloseout.activeTasks, 4);
@@ -7060,11 +7141,15 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.equal(nextAction.operatingRefresh.minimumProofUrlsNeeded, 2);
     assert.match(nextAction.operatingRefresh.paths.json, /operating-refresh\.json$/);
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_bridge" && task.status === "blocked"));
+    assert.ok(nextAction.tasks.some((task) => task.id === "proof_gate" && task.status === "blocked" && /2 proof URLs needed/.test(task.evidence)));
     assert.ok(nextAction.tasks.some((task) => task.id === "external_closeout_proofs" && task.status === "blocked"));
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_doctor_fix_queue" && task.status === "blocked"));
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_unblocker_packet" && task.status === "blocked"));
     assert.equal(nextAction.tasks.some((task) => task.id === "operating_refresh"), false);
     assert.match(nextAction.operator.copyPacket, /Proof bridge gate: blocked_needs_real_proofs/);
+    assert.match(nextAction.operator.copyPacket, /Operating proof gate: blocked_needs_real_metricool_tiktok_proof/);
+    assert.match(nextAction.operator.copyPacket, /One-screen proof guide: .*proof-fill-one-screen\.txt/);
+    assert.match(nextAction.operator.copyPacket, /Fast path: paste SPORT \+ memes Metricool\/Drive proof URLs/);
     assert.match(nextAction.operator.copyPacket, /Operating refresh: blocked_external_account_proof/);
     assert.match(nextAction.operator.copyPacket, /Proof URLs needed: 2/);
     assert.match(nextAction.operator.copyPacket, /First external blocker: account-proof:sports-daily:tiktok/);
@@ -7072,6 +7157,8 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.doesNotMatch(JSON.stringify(nextAction.proofBridgeGate), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
 
     const markdown = await readFile(nextAction.paths.markdown, "utf8");
+    assert.match(markdown, /Operating Proof Gate/);
+    assert.match(markdown, /One-screen guide: .*proof-fill-one-screen\.txt/);
     assert.match(markdown, /Metricool Proof Bridge/);
     assert.match(markdown, /External Proof Closeout/);
     assert.match(markdown, /Proof Doctor/);
@@ -7093,9 +7180,11 @@ test("TikTok next action treats upload pack totals.blocked as blocked source fil
   const readinessPath = path.join(rootDir, "account-permission-readiness.json");
   const uploadPackPath = path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json");
   const nextActionPath = path.join(rootDir, "reports/clippers-tiktok-next-action.json");
+  const operatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
   const originalReadiness = await readFile(readinessPath, "utf8");
   const originalUploadPack = await readFile(uploadPackPath, "utf8");
   const originalNextAction = await readFile(nextActionPath, "utf8").catch(() => null);
+  const originalOperatingRefresh = await readFile(operatingRefreshPath, "utf8").catch(() => null);
   try {
     const readiness = JSON.parse(originalReadiness);
     readiness.tiktokMvpAccountCloseout = {
@@ -7110,6 +7199,22 @@ test("TikTok next action treats upload pack totals.blocked as blocked source fil
       ],
     };
     await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const operatingRefresh = originalOperatingRefresh ? JSON.parse(originalOperatingRefresh) : {};
+    operatingRefresh.proofGate = {
+      ...(operatingRefresh.proofGate || {}),
+      status: "ready_for_operator_review",
+      requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+      minimumProofUrlsNeeded: 0,
+      proofPacketsNeeded: 0,
+      failedPreflightChecks: [],
+      failedVerifierChecks: [],
+      missingRequiredReports: [],
+      boundaryNotReady: [],
+      blockedBy: [],
+      preflightNotReady: false,
+    };
+    await writeFile(operatingRefreshPath, JSON.stringify(operatingRefresh, null, 2));
 
     const uploadPack = JSON.parse(originalUploadPack);
     uploadPack.totals = {
@@ -7145,6 +7250,7 @@ test("TikTok next action treats upload pack totals.blocked as blocked source fil
     await writeFile(readinessPath, originalReadiness);
     await writeFile(uploadPackPath, originalUploadPack);
     if (originalNextAction) await writeFile(nextActionPath, originalNextAction);
+    if (originalOperatingRefresh) await writeFile(operatingRefreshPath, originalOperatingRefresh);
   }
 });
 

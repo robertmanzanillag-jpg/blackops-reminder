@@ -40,6 +40,8 @@ function statusFor(input) {
     && (accountCloseout?.totals?.ready || 0) === (accountCloseout?.totals?.rows || 0)
     && (accountCloseout?.totals?.rows || 0) > 0;
   if (!accountReady) return "blocked_account_or_metricool_connection";
+  const proofGate = proofGateFor(input.operatingRefresh || {});
+  if (!isProofGateReady(proofGate)) return "blocked_account_or_metricool_connection";
   if (input.closeout?.status === "blocked_evidence_fix") return "blocked_evidence_fix";
   if (input.closeout?.status === "ready_to_close_batch") return "ready_for_import_preview";
   if ((input.closeout?.totals?.waitingMetrics || 0) > 0) return "waiting_24h_metrics";
@@ -69,6 +71,15 @@ function nextStepFor(summary) {
     return `Do not open Metricool scheduling for this batch yet. Clear blocked gates first: ${summary.operatorGate.blockedBy.join(", ")}.`;
   }
   if (summary.status === "blocked_account_or_metricool_connection") {
+    if (summary.proofGate?.status && summary.proofGate.status !== "ready_for_operator_review") {
+      return [
+        summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence, preview links, then save only if the preview is clean.",
+        summary.proofGate.paths?.oneScreenGuide ? `One-screen guide: ${summary.proofGate.paths.oneScreenGuide}.` : "",
+        summary.proofGate.paths?.proofLinksJson ? `Proof JSON: ${summary.proofGate.paths.proofLinksJson}.` : "",
+        summary.proofGate.fastPathAvailable ? "Fast path: paste one real Metricool/Drive proof URL for SPORT and one for memes; the app builds explicit proof fields before preview." : "",
+        "Do not use direct social APIs for this TikTok MVP; Metricool proof only needs safe public/non-secret evidence.",
+      ].filter(Boolean).join(" ");
+    }
     if (summary.proofBridgeGate?.nextStep) {
       return [
         summary.proofBridgeGate.nextStep,
@@ -156,6 +167,15 @@ function taskRowsFor(summary) {
       status: summary.proofBridgeGate.blockedLanes > 0 ? "blocked" : "next",
       evidence: `${summary.proofBridgeGate.blockedLanes} blocked lanes; preview ${summary.proofBridgeGate.previewGateStatus || "missing"}`,
       nextAction: summary.proofBridgeGate.nextStep || "Fill and preview real non-secret Metricool bridge proof before scheduling.",
+    });
+  }
+  if (summary.proofGate?.status) {
+    rows.splice(1, 0, {
+      id: "proof_gate",
+      label: "TikTok Metricool proof gate",
+      status: summary.proofGate.status === "ready_for_operator_review" ? "done" : "blocked",
+      evidence: `${summary.proofGate.minimumProofUrlsNeeded} proof URLs needed; ${summary.proofGate.blockedBy.length} blockers`,
+      nextAction: summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence.",
     });
   }
   if ((summary.externalCloseout?.activeTasks || 0) > 0) {
@@ -297,6 +317,47 @@ function operatingRefreshFor(report = {}) {
   };
 }
 
+function proofGateFor(report = {}) {
+  const gate = report.proofGate || {};
+  return {
+    status: gate.status || "missing",
+    requiredLanes: Array.isArray(gate.requiredLanes) ? gate.requiredLanes : [],
+    minimumProofUrlsNeeded: Number(gate.minimumProofUrlsNeeded || 0),
+    proofPacketsNeeded: Number(gate.proofPacketsNeeded || 0),
+    fastPathAvailable: Boolean(gate.fastPathAvailable),
+    nextSafeButton: gate.nextSafeButton || "",
+    nextLockedButton: gate.nextLockedButton || "",
+    failedPreflightChecks: Array.isArray(gate.failedPreflightChecks) ? gate.failedPreflightChecks : [],
+    failedVerifierChecks: Array.isArray(gate.failedVerifierChecks) ? gate.failedVerifierChecks : [],
+    missingRequiredReports: Array.isArray(gate.missingRequiredReports) ? gate.missingRequiredReports : [],
+    boundaryNotReady: Array.isArray(gate.boundaryNotReady) ? gate.boundaryNotReady : [],
+    blockedBy: Array.isArray(gate.blockedBy) ? gate.blockedBy : [],
+    preflightNotReady: gate.preflightNotReady || "",
+    paths: gate.paths || {},
+    guardrails: Array.isArray(gate.guardrails) ? gate.guardrails : [],
+    nextStep: gate.nextStep || report.nextStep || "",
+  };
+}
+
+function isProofGateReady(proofGate = {}) {
+  return proofGate.status === "ready_for_operator_review"
+    && proofGate.requiredLanes.includes("sports-daily:tiktok")
+    && proofGate.requiredLanes.includes("meme-radar:tiktok")
+    && proofGate.minimumProofUrlsNeeded === 0
+    && Array.isArray(proofGate.failedPreflightChecks)
+    && proofGate.failedPreflightChecks.length === 0
+    && Array.isArray(proofGate.failedVerifierChecks)
+    && proofGate.failedVerifierChecks.length === 0
+    && Array.isArray(proofGate.missingRequiredReports)
+    && proofGate.missingRequiredReports.length === 0
+    && Array.isArray(proofGate.boundaryNotReady)
+    && proofGate.boundaryNotReady.length === 0
+    && Array.isArray(proofGate.blockedBy)
+    && proofGate.blockedBy.length === 0
+    && Object.hasOwn(proofGate, "preflightNotReady")
+    && !proofGate.preflightNotReady;
+}
+
 function operatorGateFor(summary) {
   const safetyBlockers = [];
   if (!summary.safety.approvalRequired) safetyBlockers.push("metricool_not_approval_required");
@@ -337,6 +398,7 @@ function operatorGateFor(summary) {
     };
   }
   const blockedBy = [];
+  if (!isProofGateReady(summary.proofGate)) blockedBy.push("tiktok_metricool_proof_gate");
   if (!summary.account.ready) blockedBy.push("account_or_metricool_bridge_evidence");
   if (summary.uploadPack.blockedUploadFiles > 0 || summary.uploadPack.copied < summary.uploadPack.rows) {
     blockedBy.push("upload_pack_or_source_files");
@@ -382,6 +444,10 @@ function operatorPacketFor(summary) {
     `Not started: ${summary.batch.notStarted}`,
     `Ready to import review: ${summary.batch.readyToImport}`,
     summary.proofBridgeGate?.status ? `Proof bridge gate: ${summary.proofBridgeGate.status}` : "",
+    summary.proofGate?.status ? `Operating proof gate: ${summary.proofGate.status}` : "",
+    summary.proofGate?.minimumProofUrlsNeeded ? `Proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}` : "",
+    summary.proofGate?.paths?.oneScreenGuide ? `One-screen proof guide: ${summary.proofGate.paths.oneScreenGuide}` : "",
+    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool/Drive proof URLs in the two input boxes; preview before saving." : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
     summary.operatingRefresh?.status ? `Operating refresh: ${summary.operatingRefresh.status}` : "",
@@ -403,6 +469,22 @@ function operatorPacketFor(summary) {
 }
 
 function renderMarkdown(summary) {
+  const proofGateLines = summary.proofGate?.status && summary.proofGate.status !== "missing" ? [
+    "## Operating Proof Gate",
+    "",
+    `- Status: ${summary.proofGate.status}`,
+    `- Required lanes: ${summary.proofGate.requiredLanes.join(", ") || "missing"}`,
+    `- Minimum proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}`,
+    `- Fast path available: ${summary.proofGate.fastPathAvailable}`,
+    `- Next safe button: ${summary.proofGate.nextSafeButton || "missing"}`,
+    `- Next locked button: ${summary.proofGate.nextLockedButton || "missing"}`,
+    `- Proof JSON: ${summary.proofGate.paths?.proofLinksJson || "missing"}`,
+    `- One-screen guide: ${summary.proofGate.paths?.oneScreenGuide || "missing"}`,
+    `- Paste packet: ${summary.proofGate.paths?.pastePacket || "missing"}`,
+    `- Next step: ${summary.proofGate.nextStep || "missing"}`,
+    ...(summary.proofGate.blockedBy || []).map((blocker) => `- Blocker: ${blocker}`),
+    "",
+  ] : [];
   const proofBridgeLines = summary.proofBridgeGate ? [
     "## Metricool Proof Bridge",
     "",
@@ -505,6 +587,7 @@ function renderMarkdown(summary) {
       `- Next action: ${task.nextAction}`,
       "",
     ].join("\n")),
+    ...proofGateLines,
     ...proofBridgeLines,
     ...externalCloseoutLines,
     ...proofDoctorLines,
@@ -637,6 +720,7 @@ async function main() {
       approvalRunStatus: approvalRun.status || "missing",
     },
     proofBridgeGate: mvpReadinessVerifier.proofBridgeGate || null,
+    proofGate: proofGateFor(operatingRefresh),
     proofLinksChecklist: Array.isArray(externalCloseoutSession.proofLinksFlow?.checklist)
       ? externalCloseoutSession.proofLinksFlow.checklist
       : [],
@@ -660,7 +744,7 @@ async function main() {
       "Only exact https TikTok video URLs plus real 24h metrics can enter import review.",
     ],
   };
-  summary.status = statusFor({ accountReadiness, uploadPack, postSchedule, closeout, goalAudit });
+  summary.status = statusFor({ accountReadiness, uploadPack, postSchedule, closeout, goalAudit, operatingRefresh });
   summary.operatorGate = operatorGateFor(summary);
   summary.nextStep = nextStepFor(summary);
   summary.tasks = taskRowsFor(summary);
