@@ -2080,6 +2080,15 @@ interface ClipperTikTokMvpProofIntakePackSummary {
     handle: string;
     profileUrl: string;
     metricoolBrandName: string;
+    currentStatus?: string;
+    evidenceQuality?: {
+      status: "accepted" | "rejected" | "missing" | string;
+      issues: string[];
+      requiresAccountProofUrl?: boolean;
+      requiresMetricoolProofUrl?: boolean;
+    };
+    blockers?: string[];
+    evidencePath?: string;
   }>;
   guardrails: string[];
   nextStep: string;
@@ -17261,6 +17270,30 @@ export default function ClippersPage() {
                 <p className="break-all">Account template: {tiktokMvpProofIntakePack.paths.accountCsv}</p>
                 <p className="break-all">Bridge template: {tiktokMvpProofIntakePack.paths.bridgeCsv}</p>
                 <p className="mt-1 text-amber-100/80">{tiktokMvpProofIntakePack.nextStep}</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-intake-current-blockers">
+                  {tiktokMvpProofIntakePack.lanes.map((lane) => (
+                    <div key={`${lane.accountId}-${lane.platform}`} className="rounded border border-amber-300/15 bg-black/30 p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-amber-100">{lane.accountName}</p>
+                          <p className="mt-1 break-all text-[10px] text-zinc-500">{lane.profileUrl}</p>
+                        </div>
+                        <Badge className="shrink-0 border border-amber-300/20 bg-amber-300/10 text-[10px] text-amber-100">
+                          {lane.evidenceQuality?.status || lane.currentStatus || "missing"}
+                        </Badge>
+                      </div>
+                      {(lane.evidenceQuality?.issues || []).length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {(lane.evidenceQuality?.issues || []).slice(0, 3).map((issue) => (
+                            <p key={`${lane.accountId}-${issue}`} className="text-[11px] leading-4 text-amber-100/80">{issue}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-[11px] leading-4 text-emerald-100/75">No current blockers.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {tiktokMvpProofDropKit && (
