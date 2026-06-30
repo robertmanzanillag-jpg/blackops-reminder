@@ -189,6 +189,16 @@ function renderApplyGateCsv(summary) {
 function buildOperatorSession(summary) {
   const nextGate = firstBlocked(summary.steps);
   const readyForApply = summary.status === "ready_for_operator_apply_review";
+  const collectionPackets = Array.isArray(summary.proofCollectionPackets)
+    ? summary.proofCollectionPackets
+    : [];
+  const packetLines = collectionPackets.slice(0, 6).flatMap((packet) => [
+    `Proof packet: ${packet.id || packet.field || "proof"}`,
+    `Lane: ${packet.lane || `${packet.accountId || ""}:${packet.platform || ""}`}`,
+    `Field: ${packet.field || "proofUrl"}`,
+    `Rule: ${packet.proofUrlRule || "Use only real public/non-secret HTTPS proof URLs."}`,
+    `Prompt: ${packet.copyPrompt || "Collect real non-secret proof and rerun preview."}`,
+  ]);
   const action = readyForApply
     ? "Human review can run guarded apply only after confirming every proof URL is real and non-secret."
     : nextGate?.nextAction || summary.nextStep;
@@ -212,6 +222,8 @@ function buildOperatorSession(summary) {
       `Next gate: ${nextGate?.id || "none"}`,
       `Action: ${action}`,
       `Apply gate CSV: ${summary.paths.applyGateCsv}`,
+      collectionPackets.length ? `Proof packets needed: ${collectionPackets.length}` : "Proof packets needed: 0",
+      ...packetLines,
       "Guardrails: no auto publish, no direct social APIs, Metricool approval_required, no signed/temporary proof URLs, no applied evidence unless guarded apply is intentionally confirmed.",
     ].join("\n"),
   };
@@ -257,6 +269,7 @@ async function main() {
   const proofDropRun = runJson(["script/clippers-tiktok-mvp-proof-drop-kit.mjs"]);
   const proofUnblockerRun = runJson(["script/clippers-tiktok-mvp-proof-unblocker.mjs"]);
   const proofDrop = await readJson(path.join(reportsDir, "proof-drop-kit.json"), {});
+  const proofHandoff = await readJson(path.join(reportsDir, "proof-handoff.json"), {});
   const quickFill = await readJson(path.join(reportsDir, "proof-quick-fill.json"), {});
   const importPreview = await readJson(path.join(reportsDir, "proof-intake-import.json"), {});
   const closeout = await readJson(closeoutJsonPath, {});
@@ -276,6 +289,7 @@ async function main() {
     steps,
     proofDropRun,
     proofUnblockerRun,
+    proofCollectionPackets: Array.isArray(proofHandoff?.collectionPackets) ? proofHandoff.collectionPackets : [],
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,

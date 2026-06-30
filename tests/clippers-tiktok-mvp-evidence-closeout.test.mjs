@@ -1175,6 +1175,8 @@ test("TikTok MVP closeout wizard consolidates gates without applying evidence", 
   assert.match(source, /renderApplyGateCsv/);
   assert.match(source, /buildOperatorSession/);
   assert.match(source, /TikTok MVP operator session/);
+  assert.match(source, /proofCollectionPackets/);
+  assert.match(source, /Proof packets needed/);
   assert.match(source, /preview_or_save_proof_links/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
@@ -1199,6 +1201,10 @@ test("TikTok MVP closeout wizard writes an apply gate CSV without applying", asy
   assert.equal(wizard.operatorSession.status, "blocked_operator_session");
   assert.equal(wizard.operatorSession.nextGateId, "proof_drop_links");
   assert.match(wizard.operatorSession.copyPacket, /Metricool approval_required/);
+  assert.match(wizard.operatorSession.copyPacket, /Proof packets needed: 4/);
+  assert.match(wizard.operatorSession.copyPacket, /sports-daily-account-ownership/);
+  assert.match(wizard.operatorSession.copyPacket, /metricoolConnectionProofUrl/);
+  assert.match(wizard.operatorSession.copyPacket, /meme-radar:tiktok/);
   assert.doesNotMatch(wizard.operatorSession.copyPacket, /ready_to_send|realPublishEnabled=true|video\.publish/i);
 
   const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/closeout-apply-gate.csv"), "utf8");
