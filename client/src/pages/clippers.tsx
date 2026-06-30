@@ -2430,6 +2430,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
   launchMode: "metricool_approval_required";
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
+  pastePacketText: string;
   gates: Array<{
     id: string;
     status: "pass" | "blocked";
@@ -17357,6 +17358,21 @@ export default function ClippersPage() {
                       <p className="text-cyan-100">Paste proof packet</p>
                       <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes, each with TikTok ownership proof plus Metricool URL.</p>
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setTiktokMvpProofLinksPasteText(tiktokMvpProofHandoff?.pastePacketText || "");
+                        setTiktokMvpProofLinksPastePreview(null);
+                      }}
+                      disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofHandoff?.pastePacketText}
+                      className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                      data-testid="load-clippers-tiktok-mvp-proof-links-paste-packet-button"
+                    >
+                      <FileText className="mr-2 h-3.5 w-3.5" />
+                      Load packet
+                    </Button>
                     <Button
                       type="button"
                       size="sm"

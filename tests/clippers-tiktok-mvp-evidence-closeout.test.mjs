@@ -461,6 +461,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-drop-kit-lanes/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-editor/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-assistant/);
+  assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
+  assert.match(page, /tiktokMvpProofHandoff\?\.pastePacketText/);
   assert.match(page, /parse-clippers-tiktok-mvp-proof-links-paste-button/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-preview/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-textarea/);
@@ -1265,6 +1267,11 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(output.collectionCsvPath, /proof-handoff-collection-packets\.csv$/);
   assert.match(output.pastePacketPath, /proof-links-paste-packet\.txt$/);
   assert.equal(output.proofPacketsNeeded, 4);
+
+  const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff.json"), "utf8"));
+  assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(report.pastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.doesNotMatch(report.pastePacketText, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
 
   const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff-collection-packets.csv"), "utf8");
   assert.match(csv, /sports-daily-account-ownership/);

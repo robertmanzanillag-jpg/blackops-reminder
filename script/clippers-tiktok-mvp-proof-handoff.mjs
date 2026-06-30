@@ -307,6 +307,7 @@ async function main() {
       },
     ],
     collectionPackets,
+    pastePacketText: renderProofLinksPastePacket(),
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
       quickFillIssues: Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0,
