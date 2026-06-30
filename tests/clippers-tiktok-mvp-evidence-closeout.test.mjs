@@ -383,9 +383,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveRoute, /!audit\.readyForProofDrop/);
   assert.match(proofLinksSaveRoute, /proof-links\.json/);
   assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofDropKit/);
+  assert.match(proofLinksSaveRoute, /proof-quick-fill-input\.json/);
+  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofQuickFill/);
+  assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofIntakeImport\(false\)/);
   assert.match(proofLinksSaveRoute, /runClipperTikTokMvpCloseoutWizard/);
   assert.match(proofLinksSaveRoute, /runClipperTikTokMvpProofHandoff/);
   assert.match(proofLinksSaveRoute, /readClipperTikTokMvpProofHandoff/);
+  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpProofIntakeImport/);
+  assert.match(proofLinksSaveRoute, /readClipperTikTokMvpEvidenceCloseout/);
   assert.match(proofLinksSaveRoute, /postProofRefreshRuns/);
   assert.match(proofLinksSaveRoute, /script\/clippers-tiktok-mvp-go-live-packet\.mjs/);
   assert.match(proofLinksSaveRoute, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
@@ -476,6 +481,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
   assert.match(page, /tiktokMvpProofHandoff\?\.pastePacketText/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-handoff"\], data\.tiktokMvpProofHandoff/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-refresh"\], data\.tiktokMvpProofRefresh/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-intake-import"\], data\.tiktokMvpProofIntakeImport/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-doctor"\], data\.tiktokMvpProofDoctor/);
+  assert.match(page, /\["\/api\/clippers\/tiktok-mvp-evidence-closeout"\], data\.tiktokMvpEvidenceCloseout/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-go-live-packet"\], data\.tiktokMvpGoLivePacket/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-readiness-verifier"\], data\.tiktokMvpReadinessVerifier/);
   assert.match(page, /postProofRefreshError/);

@@ -2783,6 +2783,13 @@ export async function registerRoutes(
         `${JSON.stringify(parsed, null, 2)}\n`,
       );
       const proofDropRun = await runClipperTikTokMvpProofDropKit();
+      await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+      await writeNodeFile(
+        "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json",
+        `${JSON.stringify(parsed, null, 2)}\n`,
+      );
+      const quickFillRun = await runClipperTikTokMvpProofQuickFill();
+      const importPreviewRun = await runClipperTikTokMvpProofIntakeImport(false);
       const wizardRun = await runClipperTikTokMvpCloseoutWizard();
       const proofHandoffRun = await runClipperTikTokMvpProofHandoff();
       const postProofRefreshRuns: Record<string, any> = {};
@@ -2808,9 +2815,15 @@ export async function registerRoutes(
         tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff(),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill().catch(() => null),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker().catch(() => null),
+        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh().catch(() => null),
+        tiktokMvpProofIntakeImport: await readClipperTikTokMvpProofIntakeImport().catch(() => null),
+        tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor().catch(() => null),
+        tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
         tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
         tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
         proofDropRun,
+        quickFillRun,
+        importPreviewRun,
         wizardRun,
         proofHandoffRun,
         postProofRefreshRuns,

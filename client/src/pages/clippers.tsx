@@ -11130,6 +11130,10 @@ export default function ClippersPage() {
         tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary | null;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary | null;
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary | null;
+        tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary | null;
+        tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary | null;
+        tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary | null;
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
         postProofRefreshRuns: Record<string, unknown>;
@@ -11147,6 +11151,18 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpProofUnblocker) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
+      }
+      if (data.tiktokMvpProofRefresh) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
+      }
+      if (data.tiktokMvpProofIntakeImport) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-intake-import"], data.tiktokMvpProofIntakeImport);
+      }
+      if (data.tiktokMvpProofDoctor) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-doctor"], data.tiktokMvpProofDoctor);
+      }
+      if (data.tiktokMvpEvidenceCloseout) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
       }
       if (data.tiktokMvpGoLivePacket) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
