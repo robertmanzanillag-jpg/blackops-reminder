@@ -62,7 +62,7 @@ function taskAction(row) {
     return "Add the real non-secret Metricool proof URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
   }
   if (row.lane === "account") {
-    return "Create/verify the TikTok account, then add non-secret proof and update the CSV row.";
+    return "Confirm the TikTok account/profile is real and connected, then add non-secret ownership/security proof and update the CSV row.";
   }
   if (row.lane === "developer_app") {
     return "Open TikTok Developers, submit the public app identifier and callback proof, then update the CSV row.";

@@ -1086,6 +1086,25 @@ interface ClipperTikTokNextActionSummary {
     expectedGate?: string;
     nextButton?: string;
   }>;
+  externalCloseout?: {
+    status: string;
+    activeTasks: number;
+    deferredTasks: number;
+    firstActiveTask: {
+      id: string;
+      lane: string;
+      accountId: string;
+      proofType: string;
+      portalUrl: string;
+      proofPath: string;
+      nextAction: string;
+    } | null;
+    activeTaskIds: string[];
+    deferredTaskIds: string[];
+    proofLinksFlowStatus: string;
+    proofLinksPacket: string;
+    nextStep: string;
+  };
   tasks: Array<{
     id: string;
     label: string;
@@ -20137,6 +20156,37 @@ export default function ClippersPage() {
                           </div>
                         ))}
                       </div>
+                    )}
+                  </div>
+                )}
+                {tiktokNextAction.externalCloseout && tiktokNextAction.externalCloseout.activeTasks > 0 && (
+                  <div
+                    className="mt-3 rounded-md border border-red-300/15 bg-red-950/10 p-3"
+                    data-testid="clippers-tiktok-next-action-external-closeout"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-red-300/25 bg-red-300/10 text-red-100">
+                        external closeout {tiktokNextAction.externalCloseout.status}
+                      </Badge>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.externalCloseout.activeTasks)} active
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.externalCloseout.deferredTasks)} deferred
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-red-50/80">{tiktokNextAction.externalCloseout.nextStep}</p>
+                    {tiktokNextAction.externalCloseout.firstActiveTask && (
+                      <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                        <p>First: {tiktokNextAction.externalCloseout.firstActiveTask.id}</p>
+                        <p>{tiktokNextAction.externalCloseout.firstActiveTask.nextAction}</p>
+                        <p className="break-all">Proof: {tiktokNextAction.externalCloseout.firstActiveTask.proofPath || "missing"}</p>
+                      </div>
+                    )}
+                    {tiktokNextAction.externalCloseout.deferredTaskIds.length > 0 && (
+                      <p className="mt-2 text-[11px] leading-4 text-zinc-500">
+                        Deferred direct API/backlog: {tiktokNextAction.externalCloseout.deferredTaskIds.slice(0, 4).join(", ")}
+                      </p>
                     )}
                   </div>
                 )}

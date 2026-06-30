@@ -151,7 +151,41 @@ function taskRowsFor(summary) {
       nextAction: summary.proofBridgeGate.nextStep || "Fill and preview real non-secret Metricool bridge proof before scheduling.",
     });
   }
+  if ((summary.externalCloseout?.activeTasks || 0) > 0) {
+    rows.splice(2, 0, {
+      id: "external_closeout_proofs",
+      label: "External proof closeout",
+      status: "blocked",
+      evidence: `${summary.externalCloseout.activeTasks} active blockers; ${summary.externalCloseout.deferredTasks} deferred`,
+      nextAction: summary.externalCloseout.nextStep || "Record real non-secret account and Metricool proof before scheduling.",
+    });
+  }
   return rows;
+}
+
+function externalCloseoutFor(session = {}) {
+  const activeTasks = Array.isArray(session.activeTasks) ? session.activeTasks : [];
+  const deferredTasks = Array.isArray(session.deferredTasks) ? session.deferredTasks : [];
+  const firstActiveTask = activeTasks[0] || null;
+  return {
+    status: session.status || "missing",
+    activeTasks: Number(session.totals?.activeTasks ?? activeTasks.length ?? 0),
+    deferredTasks: Number(session.totals?.deferredTasks ?? deferredTasks.length ?? 0),
+    firstActiveTask: firstActiveTask ? {
+      id: firstActiveTask.closeoutId || "",
+      lane: firstActiveTask.lane || "",
+      accountId: firstActiveTask.accountId || "",
+      proofType: firstActiveTask.proofType || "",
+      portalUrl: firstActiveTask.portalUrl || "",
+      proofPath: firstActiveTask.proofPath || "",
+      nextAction: firstActiveTask.nextAction || "",
+    } : null,
+    activeTaskIds: activeTasks.slice(0, 6).map((task) => task.closeoutId || task.id || "").filter(Boolean),
+    deferredTaskIds: deferredTasks.slice(0, 6).map((task) => task.closeoutId || task.id || "").filter(Boolean),
+    proofLinksFlowStatus: session.proofLinksFlow?.status || "missing",
+    proofLinksPacket: session.paths?.proofLinksPastePacket || session.proofLinksFlow?.pastePacketPath || "",
+    nextStep: session.nextStep || firstActiveTask?.nextAction || "",
+  };
 }
 
 function operatorGateFor(summary) {
@@ -239,6 +273,8 @@ function operatorPacketFor(summary) {
     summary.proofBridgeGate?.status ? `Proof bridge gate: ${summary.proofBridgeGate.status}` : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
+    summary.externalCloseout?.status ? `External closeout: ${summary.externalCloseout.status}` : "",
+    summary.externalCloseout?.firstActiveTask?.id ? `First external blocker: ${summary.externalCloseout.firstActiveTask.id}` : "",
     "",
     "Next steps:",
     ...actionLines,
@@ -269,6 +305,19 @@ function renderMarkdown(summary) {
     "### Proof Links Checklist",
     "",
     ...(summary.proofLinksChecklist || []).map((step) => `- ${step.label || step.id}: ${step.nextButton || step.expectedGate || "manual"}`),
+    "",
+  ] : [];
+  const externalCloseoutLines = summary.externalCloseout?.status ? [
+    "## External Proof Closeout",
+    "",
+    `- Status: ${summary.externalCloseout.status}`,
+    `- Active blockers: ${summary.externalCloseout.activeTasks}`,
+    `- Deferred blockers: ${summary.externalCloseout.deferredTasks}`,
+    `- Proof links flow: ${summary.externalCloseout.proofLinksFlowStatus}`,
+    `- First active task: ${summary.externalCloseout.firstActiveTask?.id || "none"}`,
+    `- Next step: ${summary.externalCloseout.nextStep || "missing"}`,
+    ...(summary.externalCloseout.activeTaskIds || []).map((id) => `- Active: ${id}`),
+    ...(summary.externalCloseout.deferredTaskIds || []).map((id) => `- Deferred: ${id}`),
     "",
   ] : [];
   return [
@@ -304,6 +353,7 @@ function renderMarkdown(summary) {
       "",
     ].join("\n")),
     ...proofBridgeLines,
+    ...externalCloseoutLines,
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -425,6 +475,7 @@ async function main() {
     proofLinksChecklist: Array.isArray(externalCloseoutSession.proofLinksFlow?.checklist)
       ? externalCloseoutSession.proofLinksFlow.checklist
       : [],
+    externalCloseout: externalCloseoutFor(externalCloseoutSession),
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",
