@@ -46,10 +46,14 @@ function statusFor(input) {
     && input.closeout?.status === "blocked_not_scheduled") {
     return "ready_for_metricool_scheduling";
   }
-  if ((input.uploadPack?.totals?.rows || 0) <= 0 || (input.uploadPack?.totals?.blockedUploadFiles || 0) > 0) {
+  if ((input.uploadPack?.totals?.rows || 0) <= 0 || blockedUploadFilesFor(input.uploadPack) > 0) {
     return "blocked_upload_pack";
   }
   return "in_progress";
+}
+
+function blockedUploadFilesFor(uploadPack = {}) {
+  return Number(uploadPack.totals?.blockedUploadFiles ?? uploadPack.totals?.blocked ?? 0);
 }
 
 function nextStepFor(summary) {
@@ -384,11 +388,11 @@ async function main() {
       rows: accountCloseout.rows || [],
     },
     uploadPack: {
-      ready: uploadRows > 0 && uploadCopied === uploadRows && (uploadPack.totals?.blockedUploadFiles || 0) === 0,
+      ready: uploadRows > 0 && uploadCopied === uploadRows && blockedUploadFilesFor(uploadPack) === 0,
       status: uploadPack.status || "missing",
       rows: uploadRows,
       copied: uploadCopied,
-      blockedUploadFiles: uploadPack.totals?.blockedUploadFiles || 0,
+      blockedUploadFiles: blockedUploadFilesFor(uploadPack),
       html: uploadPack.paths?.html || "",
     },
     batch: {

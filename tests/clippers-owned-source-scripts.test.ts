@@ -6958,6 +6958,60 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
   }
 });
 
+test("TikTok next action treats upload pack totals.blocked as blocked source files", async () => {
+  const readinessPath = path.join(rootDir, "account-permission-readiness.json");
+  const uploadPackPath = path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json");
+  const nextActionPath = path.join(rootDir, "reports/clippers-tiktok-next-action.json");
+  const originalReadiness = await readFile(readinessPath, "utf8");
+  const originalUploadPack = await readFile(uploadPackPath, "utf8");
+  const originalNextAction = await readFile(nextActionPath, "utf8").catch(() => null);
+  try {
+    const readiness = JSON.parse(originalReadiness);
+    readiness.tiktokMvpAccountCloseout = {
+      status: "ready_for_metricool_tiktok",
+      totals: {
+        rows: 2,
+        ready: 2,
+      },
+      rows: [
+        { accountId: "sports-daily", platform: "tiktok", status: "ready_for_metricool_tiktok" },
+        { accountId: "meme-radar", platform: "tiktok", status: "ready_for_metricool_tiktok" },
+      ],
+    };
+    await writeFile(readinessPath, JSON.stringify(readiness, null, 2));
+
+    const uploadPack = JSON.parse(originalUploadPack);
+    uploadPack.totals = {
+      ...(uploadPack.totals || {}),
+      rows: 10,
+      copied: 0,
+      blocked: 10,
+    };
+    delete uploadPack.totals.blockedUploadFiles;
+    await writeFile(uploadPackPath, JSON.stringify(uploadPack, null, 2));
+
+    const nextActionRun = spawnSync(process.execPath, ["script/clippers-tiktok-next-action.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(nextActionRun.status, 0, nextActionRun.stderr || nextActionRun.stdout);
+    const output = JSON.parse(nextActionRun.stdout);
+    assert.equal(output.status, "blocked_upload_pack");
+    assert.match(output.nextStep, /fix missing local source files/i);
+
+    const nextAction = JSON.parse(await readFile(nextActionPath, "utf8"));
+    assert.equal(nextAction.status, "blocked_upload_pack");
+    assert.equal(nextAction.uploadPack.blockedUploadFiles, 10);
+    assert.equal(nextAction.operatorGate.actionAllowed, false);
+    assert.ok(nextAction.operatorGate.blockedBy.includes("upload_pack_or_source_files"));
+    assert.ok(nextAction.tasks.some((task) => task.id === "upload_pack" && task.status === "blocked"));
+  } finally {
+    await writeFile(readinessPath, originalReadiness);
+    await writeFile(uploadPackPath, originalUploadPack);
+    if (originalNextAction) await writeFile(nextActionPath, originalNextAction);
+  }
+});
+
 test("Metricool MCP preflight confirms configured keys without enabling automatic posting", async () => {
   await withFutureCurrentBatchSchedule(async () => {
   const result = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-metricool-mcp-preflight.ts"], {
