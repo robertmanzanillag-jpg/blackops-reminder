@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T12:48:02.800Z",
+  "generatedAt": "2026-06-30T12:51:20.095Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8889
+    "symbols": 8899
   },
   "directories": {
     ".agents/skills": {
@@ -6680,8 +6680,11 @@
         "activeAccounts",
         "activeBrands",
         "activeMvp",
+        "blockedLanes",
         "bridgeCsvPath",
+        "buildProofBridgeGate",
         "check",
+        "checklist",
         "checks",
         "csvCell",
         "currentBatchId",
@@ -6689,6 +6692,7 @@
         "expectedAccounts",
         "expectedBrands",
         "failed",
+        "flowPrepared",
         "handoffAccounts",
         "handoffPlatforms",
         "header",
@@ -6697,8 +6701,13 @@
         "normalizedActual",
         "normalizedExpected",
         "paths",
+        "previewReady",
+        "previewStatus",
+        "proofBridgeGate",
+        "proofLinksFlow",
         "raw",
         "readJson",
+        "readJsonOptional",
         "readyLanes",
         "renderCsv",
         "renderMarkdown",
@@ -6707,6 +6716,7 @@
         "safetyFailure",
         "sameSet",
         "scheduledDir",
+        "status",
         "summary",
         "targetLanes"
       ],

@@ -13,6 +13,8 @@ const paths = {
   launchControl: path.join(reportsDir, "clippers-tiktok-launch-control.json"),
   goLivePacket: path.join(reportsDir, "clippers-tiktok-mvp-go-live-packet.json"),
   goalAudit: path.join(reportsDir, "clippers-goal-completion-audit.json"),
+  tiktokExternalCloseoutSession: path.join(reportsDir, "clippers-tiktok-external-closeout-session.json"),
+  metricoolBridgePreviewGate: path.join(reportsDir, "tiktok-mvp-proof-intake", "metricool-bridge-preview-gate.json"),
   outJson: path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json"),
   outMarkdown: path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.md"),
   outCsv: path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.csv"),
@@ -24,6 +26,16 @@ const expectedBrands = ["SPORT", "memes"];
 async function readJson(filePath) {
   const raw = await readFile(filePath, "utf8");
   return JSON.parse(raw);
+}
+
+async function readJsonOptional(filePath, fallback = null) {
+  const raw = await readFile(filePath, "utf8").catch(() => null);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 
 function csvCell(value) {
@@ -78,6 +90,17 @@ function renderMarkdown(summary) {
       `- Next: ${row.nextAction}`,
       "",
     ].join("\n")),
+    "## Proof Bridge Gate",
+    "",
+    `- Status: ${summary.proofBridgeGate.status}`,
+    `- Proof links flow: ${summary.proofBridgeGate.proofLinksFlowStatus}`,
+    `- Checklist steps: ${summary.proofBridgeGate.checklistSteps}`,
+    `- Preview gate: ${summary.proofBridgeGate.previewGateStatus}`,
+    `- Preview raw stored: ${summary.proofBridgeGate.previewRawStored ? "yes" : "no"}`,
+    `- Packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket || "missing"}`,
+    `- Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv || "missing"}`,
+    `- Next: ${summary.proofBridgeGate.nextStep}`,
+    "",
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -87,6 +110,45 @@ function renderMarkdown(summary) {
     ...summary.externalWorkRemaining.map((item) => `- ${item}`),
     "",
   ].join("\n");
+}
+
+function buildProofBridgeGate({ accountReadiness, tiktokExternalCloseoutSession, metricoolBridgePreviewGate }) {
+  const proofLinksFlow = tiktokExternalCloseoutSession?.proofLinksFlow || {};
+  const checklist = Array.isArray(proofLinksFlow.checklist) ? proofLinksFlow.checklist : [];
+  const previewStatus = metricoolBridgePreviewGate?.status || "missing";
+  const previewReady = previewStatus === "ready_for_import";
+  const flowPrepared = proofLinksFlow.status === "needs_real_proof_links" || proofLinksFlow.status === "not_needed";
+  const blockedLanes = Math.max(
+    0,
+    Number(accountReadiness.activeMvp?.targetLanes || 0) - Number(accountReadiness.activeMvp?.readyLanes || 0),
+  );
+  const status = blockedLanes > 0
+    ? "blocked_needs_real_proofs"
+    : previewReady
+      ? "preview_gate_ready"
+      : "waiting_preview_gate";
+  return {
+    status,
+    blockedLanes,
+    proofLinksFlowStatus: proofLinksFlow.status || "missing",
+    checklistSteps: checklist.length,
+    checklistReady: flowPrepared && checklist.length >= 8,
+    previewGateStatus: previewStatus,
+    previewRawStored: metricoolBridgePreviewGate?.rawStored === true,
+    previewExpiresAt: metricoolBridgePreviewGate?.expiresAt || "",
+    paths: {
+      proofLinksPastePacket: tiktokExternalCloseoutSession?.paths?.proofLinksPastePacket || proofLinksFlow.pastePacketPath || "",
+      proofLinksFilledDrop: tiktokExternalCloseoutSession?.paths?.proofLinksFilledDrop || proofLinksFlow.filledDropPath || "",
+      proofLinksJsonDrop: tiktokExternalCloseoutSession?.paths?.proofLinksJsonDrop || proofLinksFlow.proofLinksJsonPath || "",
+      bridgeEvidenceCsv: accountReadiness.metricoolMvpEvidence?.bridgeEvidenceCsvPath || "",
+      previewGate: paths.metricoolBridgePreviewGate,
+    },
+    nextStep: blockedLanes > 0
+      ? proofLinksFlow.nextStep || "Fill proof-links with real SPORT/memes TikTok and Metricool proof, then preview/import bridge evidence."
+      : previewReady
+        ? "Import bridge rows before rerunning readiness verifier; Metricool publishing must remain approval_required."
+        : "Preview bridge rows to create a clean, current preview gate before import.",
+  };
 }
 
 function renderCsv(summary) {
@@ -134,6 +196,8 @@ async function main() {
     launchControl,
     goLivePacket,
     goalAudit,
+    tiktokExternalCloseoutSession,
+    metricoolBridgePreviewGate,
   ] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.approvalRun),
@@ -142,6 +206,8 @@ async function main() {
     readJson(paths.launchControl),
     readJson(paths.goLivePacket),
     readJson(paths.goalAudit),
+    readJsonOptional(paths.tiktokExternalCloseoutSession, {}),
+    readJsonOptional(paths.metricoolBridgePreviewGate, {}),
   ]);
 
   const handoffPlatforms = Array.from(new Set((operatorHandoff.batches || []).flatMap((batch) => batch.platforms || []))).sort();
@@ -150,6 +216,7 @@ async function main() {
   const activeBrands = (goLivePacket.operatingMode?.activeMetricoolBrands || []).slice().sort();
   const currentSourceGate = operatorHandoff.operatorConsole?.currentBatchOperatorSession?.sourceGateTotals || {};
   const currentBatchId = operatorHandoff.operatorConsole?.currentBatchId || launchControl.currentBatch?.id || "";
+  const proofBridgeGate = buildProofBridgeGate({ accountReadiness, tiktokExternalCloseoutSession, metricoolBridgePreviewGate });
 
   const checks = [
     check(
@@ -286,8 +353,11 @@ async function main() {
       currentBatchCsv: operatorHandoff.operatorConsole?.paths?.currentBatchCsv || "",
       currentBatchEvidenceCsv: operatorHandoff.operatorConsole?.paths?.currentBatchEvidenceCsv || "",
       masterEvidenceCsv: operatorHandoff.operatorConsole?.paths?.evidenceCsv || "",
+      tiktokExternalCloseoutSession: paths.tiktokExternalCloseoutSession,
+      metricoolBridgePreviewGate: paths.metricoolBridgePreviewGate,
     },
     checks,
+    proofBridgeGate,
     guardrails: [
       "Only SPORT and memes TikTok are active for the MVP.",
       "Instagram, YouTube, streamers, and direct social APIs remain deferred.",

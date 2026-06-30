@@ -6742,6 +6742,9 @@ test("TikTok MVP readiness verifier gates Metricool operator start without fake 
   assert.equal(verifier.active.readyToSend, 0);
   assert.equal(verifier.totals.checks, 8);
   assert.equal(verifier.totals.failed, 0);
+  assert.ok(verifier.proofBridgeGate);
+  assert.match(verifier.proofBridgeGate.paths.previewGate, /metricool-bridge-preview-gate\.json$/);
+  assert.equal(verifier.proofBridgeGate.previewRawStored, false);
   assert.equal(verifier.totals.publishedRowsCounted, 0);
   assert.equal(verifier.totals.currentBatchSourcesReady, 10);
   assert.match(verifier.paths.currentBatchEvidenceCsv, /metricool-batch-01-evidence-import\.csv$/);
@@ -6861,6 +6864,10 @@ test("TikTok MVP readiness verifier prioritizes Metricool bridge proof when lane
 
     const verifier = JSON.parse(await readFile(verifierPath, "utf8"));
     assert.match(verifier.nextStep, /Required fields: public TikTok profile URL/);
+    assert.equal(verifier.proofBridgeGate.status, "blocked_needs_real_proofs");
+    assert.equal(verifier.proofBridgeGate.blockedLanes, 2);
+    assert.match(verifier.proofBridgeGate.paths.bridgeEvidenceCsv, /metricool-tiktok-bridge-evidence\.csv$/);
+    assert.doesNotMatch(JSON.stringify(verifier.proofBridgeGate), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
     assert.ok(verifier.externalWorkRemaining.some((item) => item.includes("metricool-tiktok-bridge-evidence.csv")));
   } finally {
     await writeFile(readinessPath, originalReadiness);
