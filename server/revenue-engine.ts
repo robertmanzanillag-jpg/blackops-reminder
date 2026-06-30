@@ -2772,34 +2772,56 @@ function manualActionForRevenueDraft(draft: RevenueOutreachDraft) {
 
 function contactUrlForRevenueDraft(draft: RevenueOutreachDraft) {
   if (draft.channel === "mailto") return draft.links.mailto;
-  if (draft.channel === "instagram" || draft.channel === "contact_form") return draft.sourceUrl || draft.mockupUrl || draft.links.mailto;
+  if (draft.channel === "instagram" || draft.channel === "contact_form") return draft.sourceUrl || draft.links.mailto;
   return draft.links.gmailCompose;
+}
+
+function manualOutreachBlockedReason(draft: RevenueOutreachDraft) {
+  const failedGate = draft.qaGates.find((gate) => !gate.passed);
+  if (failedGate) return failedGate.fix;
+  if ((draft.channel === "instagram" || draft.channel === "contact_form") && !draft.sourceUrl) {
+    return "Agregar sourceUrl del perfil/formulario publico antes de contacto manual.";
+  }
+  return draft.nextAction;
 }
 
 function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualOutreachQueue {
   const safeLimit = Math.max(0, Math.min(50, Math.floor(dailyContactLimit)));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const sentTodayCount = revenueOutreachDrafts.filter((draft) => draft.delivery.sentAt?.startsWith(todayKey)).length;
+  const remainingContactSlots = Math.max(0, safeLimit - sentTodayCount);
   const unsentDrafts = revenueOutreachDrafts
     .filter((draft) => draft.delivery.sendStatus !== "sent")
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  const readyDrafts = unsentDrafts.filter((draft) => draft.status === "approved" && draft.qaGates.every((gate) => gate.passed));
-  const readyToday = readyDrafts.slice(0, safeLimit);
-  const overflow = readyDrafts.slice(safeLimit);
+  const readyDrafts = unsentDrafts.filter((draft) =>
+    draft.status === "approved"
+    && draft.qaGates.every((gate) => gate.passed)
+    && !((draft.channel === "instagram" || draft.channel === "contact_form") && !draft.sourceUrl)
+  );
+  const readyToday = readyDrafts.slice(0, remainingContactSlots);
+  const overflow = readyDrafts.slice(remainingContactSlots);
   const blockedAll = [
     ...unsentDrafts
-      .filter((draft) => draft.status !== "approved" || draft.qaGates.some((gate) => !gate.passed))
+      .filter((draft) =>
+        draft.status !== "approved"
+        || draft.qaGates.some((gate) => !gate.passed)
+        || ((draft.channel === "instagram" || draft.channel === "contact_form") && !draft.sourceUrl)
+      )
       .map((draft) => ({
         draftId: draft.id,
         businessName: draft.businessName,
         status: draft.status,
-        reason: draft.qaGates.find((gate) => !gate.passed)?.fix || draft.nextAction,
+        reason: manualOutreachBlockedReason(draft),
       })),
     ...overflow.map((draft) => ({
       draftId: draft.id,
       businessName: draft.businessName,
       status: draft.status,
-      reason: `Daily contact limit reached (${safeLimit}); keep for the next batch.`,
+      reason: sentTodayCount >= safeLimit
+        ? `Daily contact limit already used (${sentTodayCount}/${safeLimit}); keep for the next batch.`
+        : `Daily contact limit reached (${safeLimit}); keep for the next batch.`,
     })),
   ];
   const blockedSample = blockedAll.slice(0, 10);
@@ -2826,7 +2848,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
     blocked: blockedSample,
     nextAction:
       readyToday.length > 0
-        ? `Contactar manualmente max ${readyToday.length}/${safeLimit} leads aprobados hoy; registrar respuesta antes de escalar volumen.`
+        ? `Contactar manualmente max ${readyToday.length}/${safeLimit} leads aprobados hoy; ya enviados ${sentTodayCount}.`
         : blockedAll.length > 0
           ? "Aprobar o corregir drafts antes de contactar negocios."
           : "Crear y aprobar drafts desde Money sprint antes de contactar negocios.",
@@ -4275,10 +4297,15 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
   const draft = revenueOutreachDrafts.find((item) => item.id === input.draftId);
   const provider = getRevenueEmailProviderStatus();
   const now = new Date().toISOString();
+  const manualQueue = buildRevenueManualOutreachQueue(10);
+  const insideDailyQueue = Boolean(draft && manualQueue.items.some((item) => item.draftId === draft.id));
+  const canUseEmailProvider = Boolean(draft && ["email", "gmail", "mailto"].includes(draft.channel));
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
     { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "daily_contact_cap", passed: insideDailyQueue, fix: "Este draft no esta en la cola manual de hoy o excede el limite diario de contacto." },
+    { gate: "email_channel", passed: canUseEmailProvider, fix: "Este canal es manual; abre el perfil/formulario desde la cola de Outreach manual hoy." },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },
     { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.every((gate) => gate.passed)), fix: "Resolver gates de QA antes de contactar." },

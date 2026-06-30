@@ -2564,6 +2564,95 @@ export default function RevenueEnginePage() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6 border-emerald-500/20 bg-zinc-950/90">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[240px_1fr_320px]">
+            <div>
+              <div className="flex items-center gap-2">
+                <MessageSquareText className="h-4 w-4 text-emerald-200" />
+                <p className="text-sm font-medium text-white">Outreach manual hoy</p>
+              </div>
+              <Badge variant="outline" className={cn("mt-3", statusTone(snapshot?.manualOutreachQueue.status || "review"))}>
+                {snapshot?.manualOutreachQueue.status || "loading"}
+              </Badge>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-100">
+                  Listos {snapshot?.manualOutreachQueue.readyCount ?? 0}/{snapshot?.manualOutreachQueue.dailyContactLimit ?? 10}
+                </div>
+                <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-100">
+                  Bloqueados {snapshot?.manualOutreachQueue.blockedCount ?? 0}
+                </div>
+                <div className="rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-sky-100">
+                  Overflow {snapshot?.manualOutreachQueue.overflowCount ?? 0}
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                {snapshot?.manualOutreachQueue.nextAction || "Cargando cola de contacto manual."}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Contactar</p>
+              <div className="grid max-h-[260px] gap-2 overflow-auto pr-1 md:grid-cols-2">
+                {(snapshot?.manualOutreachQueue.items || []).length === 0 ? (
+                  <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-400">
+                    Sin drafts aprobados para contacto manual.
+                  </div>
+                ) : (
+                  (snapshot?.manualOutreachQueue.items || []).map((item) => (
+                    <div key={item.draftId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{item.businessName}</p>
+                          <p className="mt-1 truncate text-xs text-zinc-500">{item.subject}</p>
+                        </div>
+                        <Badge variant="outline" className={cn(item.priority === "high" ? statusTone("ready_to_start") : statusTone("draft"), "shrink-0")}>
+                          {item.channel}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">{item.manualAction}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a href={item.contactUrl} target="_blank" rel="noreferrer">
+                          <Button type="button" size="sm" className="h-8 bg-emerald-600 text-white hover:bg-emerald-500">
+                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            Abrir
+                          </Button>
+                        </a>
+                        <a href={item.fallbackUrl}>
+                          <Button type="button" size="sm" variant="outline" className="h-8 border-zinc-700">
+                            <Send className="mr-2 h-3.5 w-3.5" />
+                            Mailto
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">No tocar todavia</p>
+              <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+                {(snapshot?.manualOutreachQueue.blocked || []).length === 0 ? (
+                  <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    Sin drafts bloqueados.
+                  </div>
+                ) : (
+                  (snapshot?.manualOutreachQueue.blocked || []).map((item) => (
+                    <div key={item.draftId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium text-white">{item.businessName}</p>
+                        <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0")}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{item.reason}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="mb-6 grid gap-3 md:grid-cols-4">
           <StatCard
             label="Apps vendidas"
@@ -6011,25 +6100,36 @@ export default function RevenueEnginePage() {
                             type="button"
                             variant="outline"
                             className="border-emerald-700 text-emerald-100"
-                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent"}
+                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent" || !["email", "gmail", "mailto"].includes(outreachDraft.draft.channel)}
                             onClick={() => outreachSendMutation.mutate(outreachDraft.draft.id)}
                             data-testid="button-send-approved-outreach"
                           >
                             {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Enviar aprobado
                           </Button>
-                          <a href={outreachDraft.draft.links.gmailCompose} target="_blank" rel="noreferrer">
-                            <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-gmail">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Gmail
-                            </Button>
-                          </a>
-                          <a href={outreachDraft.draft.links.mailto}>
-                            <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-mailto">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Mail app
-                            </Button>
-                          </a>
+                          {["email", "gmail", "mailto"].includes(outreachDraft.draft.channel) ? (
+                            <>
+                              <a href={outreachDraft.draft.links.gmailCompose} target="_blank" rel="noreferrer">
+                                <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-gmail">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Gmail
+                                </Button>
+                              </a>
+                              <a href={outreachDraft.draft.links.mailto}>
+                                <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-mailto">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Mail app
+                                </Button>
+                              </a>
+                            </>
+                          ) : outreachDraft.draft.sourceUrl ? (
+                            <a href={outreachDraft.draft.sourceUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Abrir canal
+                              </Button>
+                            </a>
+                          ) : null}
                         </div>
                       </CardContent>
                     </Card>
@@ -6118,19 +6218,28 @@ export default function RevenueEnginePage() {
                                 size="sm"
                                 variant="outline"
                                 className="border-emerald-700 text-emerald-100"
-                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent"}
+                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent" || !["email", "gmail", "mailto"].includes(draft.channel)}
                                 onClick={() => outreachSendMutation.mutate(draft.id)}
                                 data-testid={`button-send-draft-${draft.id}`}
                               >
                                 {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                 Enviar
                               </Button>
-                              <a href={draft.links.gmailCompose} target="_blank" rel="noreferrer">
-                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
-                                  <ExternalLink className="mr-2 h-4 w-4" />
-                                  Gmail
-                                </Button>
-                              </a>
+                              {["email", "gmail", "mailto"].includes(draft.channel) ? (
+                                <a href={draft.links.gmailCompose} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Gmail
+                                  </Button>
+                                </a>
+                              ) : draft.sourceUrl ? (
+                                <a href={draft.sourceUrl} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Canal
+                                  </Button>
+                                </a>
+                              ) : null}
                             </div>
                           </div>
                         ))

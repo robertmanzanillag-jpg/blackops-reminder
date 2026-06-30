@@ -99,6 +99,7 @@ test.beforeEach(() => {
   setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
   setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
   setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+  setRevenueOutreachSenderForTests(null);
   resetRevenueLedgerForTests();
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
@@ -948,6 +949,19 @@ test("manual outreach queue uses public source URLs for non-email channels and c
       estimatedInternalMonthlyCostUsd: 54,
     });
   }
+  recordRevenueOutreachDraft({
+    channel: "contact_form",
+    approvalStatus: "approved",
+    recipientEmail: "owner@mockuponly.example",
+    contactName: "Owner",
+    businessName: "Mockup Only Form",
+    mockupUrl: "https://example.com/mockup-only-preview",
+    businessSummary: "Mockup Only Form has a preview but still needs the public contact form URL before manual contact.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
 
   const queue = getRevenueEngineSnapshot().manualOutreachQueue;
   const instagramItem = queue.items.find((item) => item.businessName === "Insta Queue Studio")!;
@@ -957,8 +971,10 @@ test("manual outreach queue uses public source URLs for non-email channels and c
   assert.equal(instagramItem.fallbackUrl.startsWith("mailto:"), true);
   assert.equal(contactFormItem.contactUrl, "https://example.com/form-queue/contact");
   assert.equal(contactFormItem.fallbackUrl.startsWith("mailto:"), true);
-  assert.equal(queue.blockedCount, 12);
+  assert.equal(queue.items.some((item) => item.businessName === "Mockup Only Form"), false);
+  assert.equal(queue.blockedCount, 13);
   assert.equal(queue.blocked.length, 10);
+  assert.equal(queue.blocked.some((item) => item.businessName === "Mockup Only Form" && item.reason.includes("sourceUrl")), true);
 });
 
 test("sales autopilot prepares lead mockup agent QA and draft without sending", () => {
@@ -1399,6 +1415,129 @@ test("blocks outreach send when email provider values are placeholders", async (
   assert.equal(sendResult.provider.missing.includes("RESEND_API_KEY"), true);
   assert.equal(sendResult.provider.missing.includes("REVENUE_ENGINE_FROM_EMAIL"), true);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
+});
+
+test("blocks outreach send when approved draft is outside the daily manual queue", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  for (let index = 1; index <= 11; index += 1) {
+    recordRevenueOutreachDraft({
+      channel: "email",
+      approvalStatus: "approved",
+      recipientEmail: `client${index}@dailycap.example`,
+      contactName: "Client",
+      businessName: `Daily Cap Outreach ${index}`,
+      sourceUrl: `https://example.com/daily-cap-${index}`,
+      businessSummary: `Daily Cap Outreach ${index} has public evidence and a clear need for website conversion and follow-up.`,
+      websitePriceUsd: 3500,
+      automationPriceUsd: 2500,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+      notes: "",
+    });
+  }
+  const overflowDraft = getRevenueEngineSnapshot().manualOutreachQueue.blocked.find((item) =>
+    item.reason.includes("Daily contact limit reached")
+  );
+  assert.ok(overflowDraft);
+  setRevenueOutreachSenderForTests(async () => {
+    throw new Error("sender should not run for overflow draft");
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: overflowDraft.draftId,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "daily_contact_cap" && gate.passed === false), true);
+  assert.equal(sendResult.reason?.includes("limite diario"), true);
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+});
+
+test("enforces daily outreach cap after sequential provider sends", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  for (let index = 1; index <= 11; index += 1) {
+    recordRevenueOutreachDraft({
+      channel: "email",
+      approvalStatus: "approved",
+      recipientEmail: `client${index}@sequentialcap.example`,
+      contactName: "Client",
+      businessName: `Sequential Cap Outreach ${index}`,
+      sourceUrl: `https://example.com/sequential-cap-${index}`,
+      businessSummary: `Sequential Cap Outreach ${index} has public evidence and a clear need for website conversion and follow-up.`,
+      websitePriceUsd: 3500,
+      automationPriceUsd: 2500,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+      notes: "",
+    });
+  }
+
+  let sendCount = 0;
+  setRevenueOutreachSenderForTests(async () => {
+    sendCount += 1;
+    return { id: `email_sequential_${sendCount}` };
+  });
+
+  for (let index = 0; index < 10; index += 1) {
+    const nextDraft = getRevenueEngineSnapshot().manualOutreachQueue.items[0];
+    assert.ok(nextDraft);
+    const sendResult = await sendRevenueOutreachDraft({
+      draftId: nextDraft.draftId,
+      approvalToSend: true,
+    });
+    assert.equal(sendResult.status, "sent");
+  }
+
+  const cappedQueue = getRevenueEngineSnapshot().manualOutreachQueue;
+  assert.equal(sendCount, 10);
+  assert.equal(cappedQueue.readyCount, 0);
+  assert.equal(cappedQueue.blocked.some((item) => item.reason.includes("Daily contact limit already used")), true);
+  const cappedDraft = cappedQueue.blocked.find((item) => item.reason.includes("Daily contact limit already used"));
+  assert.ok(cappedDraft);
+
+  const blockedSend = await sendRevenueOutreachDraft({
+    draftId: cappedDraft.draftId,
+    approvalToSend: true,
+  });
+
+  assert.equal(blockedSend.status, "blocked");
+  assert.equal(blockedSend.gates.some((gate) => gate.gate === "daily_contact_cap" && gate.passed === false), true);
+  assert.equal(sendCount, 10);
+});
+
+test("blocks provider send for manual-only outreach channels", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "contact_form",
+    approvalStatus: "approved",
+    recipientEmail: "owner@manualchannel.example",
+    contactName: "Owner",
+    businessName: "Manual Channel Outreach",
+    sourceUrl: "https://example.com/manual-channel/contact",
+    businessSummary: "Manual Channel Outreach has public form evidence and needs a website conversion follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  setRevenueOutreachSenderForTests(async () => {
+    throw new Error("sender should not run for manual-only channel");
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
+  assert.equal(sendResult.reason?.includes("canal es manual"), true);
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
 });
 
 test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
