@@ -45,7 +45,7 @@ import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
-import { auditClipperTikTokMvpProofLinks, extractClipperTikTokMvpProofLinksPaste, validateClipperTikTokMvpProofLinks } from "./clippers-tiktok-mvp-proof-links";
+import { auditClipperTikTokMvpProofLinks, containsClipperSecretLikeText, extractClipperTikTokMvpProofLinksPaste, validateClipperTikTokMvpProofLinks } from "./clippers-tiktok-mvp-proof-links";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -141,6 +141,174 @@ function publicBaseUrlFromRedirectUri(redirectUri: unknown): string {
 
 function clipperUniqueStrings(values: unknown[]): string[] {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+const clipperMetricoolBridgeEvidenceCsvPath = "clippers_workspace/scheduled/metricool-tiktok-bridge-evidence.csv";
+const clipperMetricoolBridgeRequiredRows = [
+  { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdaily", accountName: "Sports Daily Clips" },
+  { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradar", accountName: "Meme Radar" },
+] as const;
+
+function parseClipperSimpleCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"' && quoted && line[index + 1] === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseClipperSimpleCsv(raw: string) {
+  const lines = raw.split(/\r?\n/).filter((line) => line.trim());
+  const header = parseClipperSimpleCsvLine(lines.shift() || "");
+  return lines.map((line, index) => {
+    const cells = parseClipperSimpleCsvLine(line);
+    return {
+      rowNumber: index + 2,
+      record: Object.fromEntries(header.map((key, cellIndex) => [key, cells[cellIndex] || ""])),
+    };
+  });
+}
+
+function isClipperSafeHttpsUrl(value: unknown): boolean {
+  const text = String(value || "").trim();
+  if (!text || /<|>|placeholder|paste|replace|todo|tbd|example\.com|localhost|127\.0\.0\.1/i.test(text) || containsClipperSecretLikeText(text)) return false;
+  try {
+    const parsed = new URL(text);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+function isClipperTikTokProfileUrl(value: unknown): boolean {
+  if (!isClipperSafeHttpsUrl(value)) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return /(^|\.)tiktok\.com$/i.test(parsed.hostname) && /^\/@[A-Za-z0-9._-]+\/?$/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isClipperMetricoolProofUrl(value: unknown): boolean {
+  if (!isClipperSafeHttpsUrl(value)) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return /(^|\.)metricool\.com$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isClipperBridgeNotesReady(value: unknown): boolean {
+  const text = String(value || "").trim();
+  return text.length >= 20 && !/<|>|placeholder|paste|replace|todo|tbd/i.test(text) && !containsClipperSecretLikeText(text);
+}
+
+async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
+  try {
+    const raw = await readNodeFile(clipperMetricoolBridgeEvidenceCsvPath, "utf8");
+    const parsedRows = parseClipperSimpleCsv(raw);
+    const rows = clipperMetricoolBridgeRequiredRows.map((required) => {
+      const parsed = parsedRows.find((row) => row.record.account_id === required.accountId && row.record.platform === required.platform);
+      const record = parsed?.record || {};
+      const checks = [
+        {
+          field: "profile_url",
+          label: "Public TikTok profile URL",
+          status: record.profile_url === required.profileUrl && isClipperTikTokProfileUrl(record.profile_url) ? "ready" : "missing_or_invalid",
+          required: required.profileUrl,
+        },
+        {
+          field: "proof",
+          label: "Metricool connection proof",
+          status: isClipperMetricoolProofUrl(record.proof) ? "ready" : "missing_or_invalid",
+          required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params",
+        },
+        {
+          field: "notes",
+          label: "Operator notes",
+          status: isClipperBridgeNotesReady(record.notes) ? "ready" : "missing_or_invalid",
+          required: "20+ character non-secret note explaining the Metricool TikTok connection proof",
+        },
+      ];
+      const ready = checks.filter((check) => check.status === "ready").length;
+      return {
+        ...required,
+        rowNumber: parsed?.rowNumber || null,
+        status: ready === checks.length ? "ready" : "needs_review",
+        ready,
+        total: checks.length,
+        checks,
+      };
+    });
+    const readyRows = rows.filter((row) => row.status === "ready").length;
+    const readyFields = rows.reduce((sum, row) => sum + row.ready, 0);
+    const totalFields = rows.reduce((sum, row) => sum + row.total, 0);
+    return {
+      status: readyRows === rows.length ? "ready_for_preview" : "needs_review",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      sourcePath: clipperMetricoolBridgeEvidenceCsvPath,
+      found: true,
+      rows,
+      totals: {
+        rows: rows.length,
+        readyRows,
+        blockedRows: rows.length - readyRows,
+        readyFields,
+        totalFields,
+        missingFields: totalFields - readyFields,
+      },
+      nextButton: readyRows === rows.length ? "preview_bridge_rows" : "edit_bridge_csv",
+      issues: rows.flatMap((row) => row.checks.filter((check) => check.status !== "ready").map((check) => `${row.accountId}:${row.platform}.${check.field}: ${check.required}`)),
+      guardrails: [
+        "Reads the local Metricool bridge CSV only; it does not write evidence.",
+        "Does not record bridge rows, queue Metricool, create calendar rows, schedule, or send posts.",
+        "Metricool remains approval_required and realPublishEnabled remains false.",
+      ],
+      nextStep: readyRows === rows.length
+        ? "Load the CSV into the bridge evidence box, preview rows, then import only after review."
+        : "Edit the local bridge CSV with real public/non-secret Metricool proof URLs and notes.",
+    };
+  } catch (error: any) {
+    return {
+      status: "missing",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      sourcePath: clipperMetricoolBridgeEvidenceCsvPath,
+      found: false,
+      rows: [],
+      totals: { rows: 2, readyRows: 0, blockedRows: 2, readyFields: 0, totalFields: 6, missingFields: 6 },
+      nextButton: "edit_bridge_csv",
+      issues: [error?.message || `Create ${clipperMetricoolBridgeEvidenceCsvPath} with SPORT and memes TikTok Metricool proof rows.`],
+      guardrails: [
+        "Missing status does not create files or write evidence.",
+        "Does not record bridge rows, queue Metricool, create calendar rows, schedule, or send posts.",
+      ],
+      nextStep: `Create ${clipperMetricoolBridgeEvidenceCsvPath} from the Metricool bridge evidence template.`,
+    };
+  }
 }
 
 const clipperTikTokMvpProofLinksDropPastePaths = [
@@ -4735,6 +4903,14 @@ export async function registerRoutes(
       res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to preview Clippers Metricool bridge evidence batch" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-bridge-evidence-csv-status", async (_req, res) => {
+    try {
+      res.json({ metricoolBridgeEvidenceCsvStatus: await buildClipperMetricoolBridgeEvidenceCsvStatus() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to read Clippers Metricool bridge evidence CSV status" });
     }
   });
 

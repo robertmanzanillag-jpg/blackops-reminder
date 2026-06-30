@@ -7241,6 +7241,46 @@ interface ClipperMetricoolBridgeEvidenceBatchResult {
   nextStep: string;
 }
 
+interface ClipperMetricoolBridgeEvidenceCsvStatus {
+  status: "missing" | "needs_review" | "ready_for_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  sourcePath: string;
+  found: boolean;
+  rows: Array<{
+    accountId: string;
+    platform: "tiktok";
+    metricoolBrandName: string;
+    profileUrl: string;
+    accountName: string;
+    rowNumber: number | null;
+    status: "ready" | "needs_review";
+    ready: number;
+    total: number;
+    checks: Array<{
+      field: string;
+      label: string;
+      status: "ready" | "missing_or_invalid";
+      required: string;
+    }>;
+  }>;
+  totals: {
+    rows: number;
+    readyRows: number;
+    blockedRows: number;
+    readyFields: number;
+    totalFields: number;
+    missingFields: number;
+  };
+  nextButton: "edit_bridge_csv" | "preview_bridge_rows";
+  issues: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperPublisherExecutionQueueItem {
   id: string;
   postId: string;
@@ -10317,6 +10357,15 @@ export default function ClippersPage() {
       const data = await response.json();
       if (!response.ok) return null;
       return data.metricool100OperatorHandoff as ClipperMetricool100OperatorHandoffSummary;
+    },
+  });
+  const { data: metricoolBridgeEvidenceCsvStatus } = useQuery<ClipperMetricoolBridgeEvidenceCsvStatus | null>({
+    queryKey: ["/api/clippers/metricool-bridge-evidence-csv-status"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-bridge-evidence-csv-status");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricoolBridgeEvidenceCsvStatus as ClipperMetricoolBridgeEvidenceCsvStatus;
     },
   });
   const { data: tiktokLaunchControl } = useQuery<ClipperTikTokLaunchControlSummary | null>({
@@ -18284,6 +18333,53 @@ export default function ClippersPage() {
             <p className="mt-2 text-xs leading-5 text-amber-100">
               MVP TikTok bloqueado por {tiktokMetricoolBlockedRows.length} lane(s): registra evidencia bridge no secreta para desbloquear scheduling.
             </p>
+          )}
+          {metricoolBridgeEvidenceCsvStatus && (
+            <div className={cn(
+              "mt-3 rounded-md border bg-black/20 p-3 text-xs leading-5",
+              metricoolBridgeEvidenceCsvStatus.status === "ready_for_preview"
+                ? "border-emerald-300/20 text-emerald-100/80"
+                : "border-amber-300/20 text-amber-100"
+            )} data-testid="clippers-metricool-bridge-csv-status">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={cn(
+                  "border text-[10px]",
+                  metricoolBridgeEvidenceCsvStatus.status === "ready_for_preview"
+                    ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                    : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                )}>
+                  bridge csv {metricoolBridgeEvidenceCsvStatus.status}
+                </Badge>
+                <span>{metricoolBridgeEvidenceCsvStatus.totals.readyRows}/{metricoolBridgeEvidenceCsvStatus.totals.rows} rows ready</span>
+                <span>{metricoolBridgeEvidenceCsvStatus.totals.readyFields}/{metricoolBridgeEvidenceCsvStatus.totals.totalFields} fields</span>
+                <span>next {metricoolBridgeEvidenceCsvStatus.nextButton}</span>
+                <span>real publish {metricoolBridgeEvidenceCsvStatus.realPublishEnabled ? "enabled" : "disabled"}</span>
+              </div>
+              <p className="mt-1 break-all">{metricoolBridgeEvidenceCsvStatus.sourcePath}</p>
+              <p className="mt-1">{metricoolBridgeEvidenceCsvStatus.issues[0] || metricoolBridgeEvidenceCsvStatus.nextStep}</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="clippers-metricool-bridge-csv-checklist">
+                {metricoolBridgeEvidenceCsvStatus.rows.map((row) => (
+                  <div key={`${row.accountId}-${row.platform}`} className="rounded border border-white/10 bg-black/20 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate font-medium">{row.accountName}</p>
+                      <Badge className={cn(
+                        "shrink-0 border text-[10px]",
+                        row.status === "ready"
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>{row.ready}/{row.total}</Badge>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {row.checks.map((check) => (
+                        <p key={`${row.accountId}-${check.field}`} className="text-[11px]">
+                          {check.status === "ready" ? "ready" : "needed"}: {check.label}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" data-testid="clippers-metricool-bridge-required-fields">
             {[

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T11:52:01.731Z",
+  "generatedAt": "2026-06-30T11:57:35.638Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -94,8 +94,8 @@
     "filesVisible": 431,
     "filesIndexed": 363,
     "imports": 1368,
-    "routes": 91,
-    "symbols": 8847
+    "routes": 93,
+    "symbols": 8848
   },
   "directories": {
     ".agents/skills": {
@@ -14451,6 +14451,7 @@
         "markdown",
         "memesEvidence",
         "memesEvidencePath",
+        "metricoolBridgeCsvStatusRoute",
         "metricoolQueuePath",
         "operatorButtonHelper",
         "output",
@@ -14525,6 +14526,7 @@
         "/api/clippers/create-tiktok-mvp-proof-links-drop-starter",
         "/api/clippers/import-tiktok-mvp-proof-links-drop",
         "/api/clippers/ingest-tiktok-mvp-proof-links-drop",
+        "/api/clippers/metricool-bridge-evidence-csv-status",
         "/api/clippers/operational-readiness",
         "/api/clippers/parse-tiktok-mvp-proof-links-paste",
         "/api/clippers/prepare-tiktok-mvp-closeout-wizard",
@@ -14538,6 +14540,7 @@
         "/api/clippers/preview-tiktok-mvp-evidence-closeout",
         "/api/clippers/preview-tiktok-mvp-proof-intake-import",
         "/api/clippers/preview-tiktok-mvp-proof-links",
+        "/api/clippers/record-metricool-bridge-evidence-batch",
         "/api/clippers/save-tiktok-mvp-proof-links",
         "/api/clippers/tiktok-mvp-closeout-wizard",
         "/api/clippers/tiktok-mvp-evidence-closeout",
