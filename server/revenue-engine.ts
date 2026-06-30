@@ -368,6 +368,16 @@ export const revenueMoneySprintSchema = z.object({
 
 export type RevenueMoneySprintInput = z.infer<typeof revenueMoneySprintSchema>;
 
+export const revenueMoneySprintFromPublicCandidatesSchema = revenueMoneySprintSchema.omit({
+  seedLeads: true,
+  seedLeadBatchText: true,
+}).extend({
+  candidateIds: z.array(z.string().trim().min(1).max(200)).max(25).optional().default([]),
+  maxCandidates: z.coerce.number().int().min(1).max(25).default(10),
+});
+
+export type RevenueMoneySprintFromPublicCandidatesInput = z.infer<typeof revenueMoneySprintFromPublicCandidatesSchema>;
+
 export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
@@ -652,6 +662,41 @@ type RevenuePublicLeadCandidate = RevenuePublicLeadCandidateInput & {
     sendsOutreach: boolean;
     writesPreviewFiles: boolean;
   };
+};
+
+type RevenuePublicLeadImportQueue = {
+  status: "ready" | "needs_review" | "empty";
+  readyCount: number;
+  blockedCount: number;
+  items: Array<{
+    candidateId: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: RevenueLeadInput["websiteStatus"];
+    contactChannel: RevenueLeadInput["contactChannel"];
+    sourceUrl: string;
+    recipientEmail: string;
+    estimatedOfferUsd: number;
+    grade: ReturnType<typeof qualifyRevenueLead>["grade"];
+    score: number;
+    batchRow: string;
+    nextAction: string;
+  }>;
+  blocked: Array<{
+    candidateId: string;
+    businessName: string;
+    reason: string;
+    nextAction: string;
+  }>;
+  safety: {
+    persistsLeadOnlyAfterSprint: true;
+    sendsOutreach: false;
+    spendsMoney: false;
+    requiresPublicEvidence: true;
+    blockedActions: string[];
+  };
+  nextAction: string;
 };
 
 type RevenueDeliveryWorkspace = {
@@ -3276,6 +3321,7 @@ export function getRevenueEngineSnapshot() {
     launchReadiness,
     agentOperatingContract,
     manualOutreachQueue: buildRevenueManualOutreachQueue(10),
+    publicLeadImportQueue: buildRevenuePublicLeadImportQueue(10),
     websiteDeliveryHandoffQueue: buildRevenueWebsiteDeliveryHandoffQueue(8),
     profitGuard,
     nextBatchPlan,
@@ -3481,6 +3527,190 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
       ? "Paste this candidate row into Batch leads and run Preview batch before Money sprint."
       : `Fix before import: ${blockedReasons.join("; ") || "review candidate"}.`,
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function revenueSeedLeadFromPublicCandidate(candidate: RevenuePublicLeadCandidate): RevenueMoneySprintSeedLeadInput {
+  return {
+    businessName: candidate.businessName,
+    area: candidate.area,
+    niche: candidate.niche,
+    websiteStatus: candidate.websiteStatus,
+    contactChannel: candidate.contactChannel,
+    contactValue: candidate.contactValue,
+    evidence: candidate.evidence,
+    painPoint: candidate.painPoint,
+    estimatedOfferUsd: candidate.estimatedOfferUsd,
+    status: candidate.status,
+    sourceUrl: candidate.sourceUrl,
+    recipientEmail: candidate.recipientEmail,
+    contactName: candidate.contactName,
+    businessSummary: candidate.businessSummary,
+  };
+}
+
+function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQueue {
+  loadRevenuePublicLeadCandidates();
+  loadRevenueLeads();
+
+  const existingLeadKeys = new Set(revenueLeads.map((lead) => normalizeRevenueLeadKey(lead)));
+  const visibleLimit = Math.max(0, Math.min(25, limit));
+  const items: RevenuePublicLeadImportQueue["items"] = [];
+  const blocked: RevenuePublicLeadImportQueue["blocked"] = [];
+
+  for (const candidate of revenuePublicLeadCandidates.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+    const alreadyImported = existingLeadKeys.has(normalizeRevenueLeadKey(candidate));
+    if (candidate.importReady && !alreadyImported) {
+      items.push({
+        candidateId: candidate.id,
+        businessName: candidate.businessName,
+        area: candidate.area,
+        niche: candidate.niche,
+        websiteStatus: candidate.websiteStatus,
+        contactChannel: candidate.contactChannel,
+        sourceUrl: candidate.sourceUrl,
+        recipientEmail: candidate.recipientEmail,
+        estimatedOfferUsd: candidate.estimatedOfferUsd,
+        grade: candidate.qualification.grade,
+        score: candidate.qualification.score,
+        batchRow: candidate.batchRow,
+        nextAction: "Correr Money Sprint desde candidatos verificados para crear lead, mockup y draft sin contactar.",
+      });
+      continue;
+    }
+
+    if (!candidate.importReady) {
+      blocked.push({
+        candidateId: candidate.id,
+        businessName: candidate.businessName,
+        reason: candidate.blockedReasons.join("; ") || "candidate needs review",
+        nextAction: "Verificar fuente publica, contacto y aprobacion antes de importar.",
+      });
+    }
+  }
+
+  return {
+    status: items.length > 0 ? "ready" : blocked.length > 0 ? "needs_review" : "empty",
+    readyCount: items.length,
+    blockedCount: blocked.length,
+    items: items.slice(0, visibleLimit),
+    blocked: blocked.slice(0, visibleLimit),
+    safety: {
+      persistsLeadOnlyAfterSprint: true,
+      sendsOutreach: false,
+      spendsMoney: false,
+      requiresPublicEvidence: true,
+      blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
+    },
+    nextAction:
+      items.length > 0
+        ? "Usar candidatos verificados en Money Sprint para crear mockups y drafts; no envia outreach."
+        : blocked.length > 0
+          ? "Completar verificacion publica y approvalToImport en candidatos bloqueados."
+          : "Guardar candidatos publicos verificados desde el formulario de leads.",
+  };
+}
+
+export function runRevenueMoneySprintFromPublicCandidates(input: RevenueMoneySprintFromPublicCandidatesInput) {
+  loadRevenuePublicLeadCandidates();
+  loadRevenueLeads();
+
+  const parsed = revenueMoneySprintFromPublicCandidatesSchema.parse(input);
+  if (parsed.maxPaidDataSpendUsd > 0) {
+    return {
+      status: "needs_spend_approval" as const,
+      reason: "Public candidate Money Sprint does not run when paid data spend is requested.",
+      importedCandidateIds: [],
+      blockedCandidates: [],
+      sprint: null,
+      safety: {
+        persistsData: false,
+        writesPreviewFiles: false,
+        sendsOutreach: false,
+        spendsMoney: false,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existingLeadKeys = new Set(revenueLeads.map((lead) => normalizeRevenueLeadKey(lead)));
+  const candidateIdFilter = new Set(parsed.candidateIds);
+  const candidates = revenuePublicLeadCandidates
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .filter((candidate) => parsed.candidateIds.length === 0 || candidateIdFilter.has(candidate.id));
+  const blockedCandidates: Array<{ candidateId: string; businessName: string; reason: string }> = [];
+  const selectedSeeds: RevenueMoneySprintSeedLeadInput[] = [];
+  const importedCandidateIds: string[] = [];
+
+  for (const candidate of candidates) {
+    if (selectedSeeds.length >= parsed.maxCandidates) {
+      blockedCandidates.push({ candidateId: candidate.id, businessName: candidate.businessName, reason: "candidate import limit reached" });
+      continue;
+    }
+    if (!candidate.importReady) {
+      blockedCandidates.push({
+        candidateId: candidate.id,
+        businessName: candidate.businessName,
+        reason: candidate.blockedReasons.join("; ") || "candidate needs review",
+      });
+      continue;
+    }
+    const candidateKey = normalizeRevenueLeadKey(candidate);
+    if (existingLeadKeys.has(candidateKey)) {
+      blockedCandidates.push({ candidateId: candidate.id, businessName: candidate.businessName, reason: "lead already imported" });
+      continue;
+    }
+    selectedSeeds.push(revenueSeedLeadFromPublicCandidate(candidate));
+    importedCandidateIds.push(candidate.id);
+    existingLeadKeys.add(candidateKey);
+  }
+
+  if (selectedSeeds.length === 0) {
+    return {
+      status: "blocked" as const,
+      reason: blockedCandidates.length > 0 ? "No verified public candidates are ready for Money Sprint." : "No public lead candidates selected.",
+      importedCandidateIds,
+      blockedCandidates,
+      sprint: null,
+      safety: {
+        persistsData: false,
+        writesPreviewFiles: false,
+        sendsOutreach: false,
+        spendsMoney: false,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const sprint = runRevenueMoneySprint({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: parsed.maxPaidDataSpendUsd,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+    writePreviewFiles: parsed.writePreviewFiles,
+    seedLeads: selectedSeeds,
+    seedLeadBatchText: "",
+  });
+
+  return {
+    status: sprint.status === "needs_spend_approval" ? "needs_spend_approval" as const : "started" as const,
+    reason: "Money Sprint created leads, mockups and draft-only outreach from verified public candidates.",
+    importedCandidateIds,
+    blockedCandidates,
+    sprint,
+    safety: {
+      persistsData: true,
+      writesPreviewFiles: parsed.writePreviewFiles,
+      sendsOutreach: false,
+      spendsMoney: parsed.maxPaidDataSpendUsd > 0,
+    },
+    snapshot: sprint.snapshot,
   };
 }
 

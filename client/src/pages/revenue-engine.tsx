@@ -166,6 +166,40 @@ type RevenueSnapshot = {
       blockedActions: string[];
     };
   };
+  publicLeadImportQueue: {
+    status: "ready" | "needs_review" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    items: Array<{
+      candidateId: string;
+      businessName: string;
+      area: string;
+      niche: string;
+      websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+      contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+      sourceUrl: string;
+      recipientEmail: string;
+      estimatedOfferUsd: number;
+      grade: string;
+      score: number;
+      batchRow: string;
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      candidateId: string;
+      businessName: string;
+      reason: string;
+      nextAction: string;
+    }>;
+    safety: {
+      persistsLeadOnlyAfterSprint: true;
+      sendsOutreach: false;
+      spendsMoney: false;
+      requiresPublicEvidence: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
   websiteDeliveryHandoffQueue: {
     status: "ready" | "needs_context" | "empty";
     readyCount: number;
@@ -877,6 +911,21 @@ type RevenuePublicLeadCandidateResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenuePublicCandidateSprintResult = {
+  status: "started" | "blocked" | "needs_spend_approval";
+  reason: string;
+  importedCandidateIds: string[];
+  blockedCandidates: Array<{ candidateId: string; businessName: string; reason: string }>;
+  sprint: RevenueMoneySprint | null;
+  safety: {
+    persistsData: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+  };
+  snapshot: RevenueSnapshot;
+};
+
 type RevenueMockupTemplatePack = {
   status: "ready" | "needs_spend_approval";
   pack: {
@@ -1579,6 +1628,36 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo correr money sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicCandidateSprintMutation = useMutation<RevenuePublicCandidateSprintResult>({
+    mutationFn: async () => {
+      const candidateIds = (snapshot?.publicLeadImportQueue.items || []).map((item) => item.candidateId);
+      const response = await fetch("/api/revenue-engine/money-sprint/public-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: scoutingArea,
+          niche: scoutingNiche,
+          offerFocus: scoutingOfferFocus,
+          dailyResearchTarget: leadRadarDailyResearchTarget,
+          dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+          dailyMockupLimit: leadRadarMockupLimit,
+          dailyContactLimit: leadRadarContactLimit,
+          maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+          requireRobertApprovalToContact: true,
+          writePreviewFiles: true,
+          candidateIds,
+          maxCandidates: Math.min(candidateIds.length || 1, 25),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr sprint con candidatos publicos");
       return data;
     },
     onSuccess: () => {
@@ -3659,6 +3738,88 @@ export default function RevenueEnginePage() {
                   </CardContent>
                 </Card>
               )}
+
+              <Card className="mb-4 border-zinc-800 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Candidatos verificados</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.publicLeadImportQueue.nextAction || "Cargando candidatos publicos."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.publicLeadImportQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.publicLeadImportQueue.readyCount ?? 0} listos
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(snapshot?.publicLeadImportQueue.items || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin candidatos aprobados para Money Sprint.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {(snapshot?.publicLeadImportQueue.items || []).map((item) => (
+                        <div key={item.candidateId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {item.niche} · {item.area} · Grade {item.grade}/{item.score}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                              verificado
+                            </Badge>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.sourceUrl && (
+                              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Fuente
+                                </Button>
+                              </a>
+                            )}
+                            <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+                              {money.format(item.estimatedOfferUsd)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(snapshot?.publicLeadImportQueue.blocked || []).length > 0 && (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.publicLeadImportQueue.blocked || []).slice(0, 4).map((item) => (
+                        <div key={item.candidateId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                          <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      disabled={publicCandidateSprintMutation.isPending || (snapshot?.publicLeadImportQueue.readyCount || 0) === 0}
+                      onClick={() => publicCandidateSprintMutation.mutate()}
+                      className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      data-testid="button-run-money-sprint-public-candidates"
+                    >
+                      {publicCandidateSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                      Money sprint con candidatos
+                    </Button>
+                    {publicCandidateSprintMutation.data && (
+                      <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                        {publicCandidateSprintMutation.data.reason} {publicCandidateSprintMutation.data.importedCandidateIds.length} importados.
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 xl:grid-cols-[390px_1fr]">
                 <Card className="border-zinc-800 bg-zinc-950/80">

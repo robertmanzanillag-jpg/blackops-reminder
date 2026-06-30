@@ -37,6 +37,7 @@ import {
   recordRevenuePublicLeadCandidate,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
   resetRevenueAgentRunsForTests,
@@ -290,6 +291,8 @@ test("records verified public lead candidates as previewable batch rows without 
   assert.equal(result.candidate.safety.persistsLead, false);
   assert.equal(result.candidate.safety.sendsOutreach, false);
   assert.equal(snapshot.recentPublicLeadCandidates[0].businessName, "Public Scout Cafe");
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 2);
+  assert.equal(snapshot.publicLeadImportQueue.items[0].candidateId, result.candidate.id);
   assert.equal(snapshot.recentLeads.length, 0);
   assert.equal(snapshot.recentOutreach.length, 0);
 });
@@ -319,6 +322,140 @@ test("blocks public lead candidates from import until evidence is verified", () 
   assert.equal(result.importBatchText.split("\n").length, 1);
   assert.match(result.nextAction, /public evidence not verified/);
   assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
+});
+
+test("runs money sprint from verified public candidates without copy paste or outreach send", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Verified Sprint Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@verifiedsprint.example",
+    sourceUrl: "https://example.com/verified-sprint-cafe",
+    recipientEmail: "owner@verifiedsprint.example",
+    evidence: "Google listing has no website, recent menu photos and verified owner email.",
+    painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Verified Sprint Cafe has public evidence of no website and a clear need for menu capture.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  const result = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    candidateIds: [candidate.candidate.id],
+    maxCandidates: 5,
+  });
+
+  assert.equal(result.status, "started");
+  assert.deepEqual(result.importedCandidateIds, [candidate.candidate.id]);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.sprint?.recordedLeads.length, 1);
+  assert.equal(result.sprint?.previews.length, 1);
+  assert.equal(result.sprint?.outreachDrafts.length, 1);
+  assert.equal(result.sprint?.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.snapshot.recentLeads[0].businessName, "Verified Sprint Cafe");
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
+});
+
+test("blocks money sprint from public candidates until candidate is verified and approved", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Unapproved Sprint Salon",
+    area: "Miami",
+    niche: "salon",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@unapprovedsprint.example",
+    sourceUrl: "https://example.com/unapproved-sprint-salon",
+    recipientEmail: "owner@unapprovedsprint.example",
+    evidence: "Public listing has no website and recent salon photos.",
+    painPoint: "Needs booking lead capture.",
+    estimatedOfferUsd: 3200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Unapproved Sprint Salon has public evidence but still needs Robert import approval.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: false,
+  });
+
+  const result = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    candidateIds: [candidate.candidate.id],
+    maxCandidates: 5,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.sprint, null);
+  assert.equal(result.blockedCandidates[0].reason.includes("approvalToImport false"), true);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+});
+
+test("blocks public candidate money sprint when paid data spend is requested", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Paid Spend Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@paidspendcafe.example",
+    sourceUrl: "https://example.com/paid-spend-cafe",
+    recipientEmail: "owner@paidspendcafe.example",
+    evidence: "Public listing has no website, recent menu photos and verified owner email.",
+    painPoint: "Needs online menu.",
+    estimatedOfferUsd: 3600,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Paid Spend Cafe is verified but the sprint request asks for paid data spend.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  const result = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 25,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    candidateIds: [candidate.candidate.id],
+    maxCandidates: 5,
+  });
+
+  assert.equal(result.status, "needs_spend_approval");
+  assert.equal(result.sprint, null);
+  assert.equal(result.safety.persistsData, false);
+  assert.equal(result.snapshot.recentLeads.length, 0);
 });
 
 test("lead radar caps paid data spend and requires approval", () => {
