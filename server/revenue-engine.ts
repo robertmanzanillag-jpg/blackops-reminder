@@ -311,6 +311,31 @@ export const revenueSalesAutopilotSchema = z.object({
 
 export type RevenueSalesAutopilotInput = z.infer<typeof revenueSalesAutopilotSchema>;
 
+export const revenueMoneySprintSeedLeadSchema = revenueLeadSchema.extend({
+  sourceUrl: z.union([z.string().trim().url().max(300), z.literal("")]).optional().default(""),
+  recipientEmail: z.union([z.string().trim().email().max(240), z.literal("")]).optional().default(""),
+  contactName: z.string().trim().max(120).optional().default("Owner"),
+  businessSummary: z.string().trim().max(2000).optional().default(""),
+});
+
+export type RevenueMoneySprintSeedLeadInput = z.infer<typeof revenueMoneySprintSeedLeadSchema>;
+
+export const revenueMoneySprintSchema = z.object({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("med spas"),
+  offerFocus: z.enum(["websites", "automations", "both"]).default("both"),
+  dailyResearchTarget: z.coerce.number().int().min(10).max(500).default(120),
+  dailyQualifiedLeadLimit: z.coerce.number().int().min(5).max(100).default(25),
+  dailyMockupLimit: z.coerce.number().int().min(1).max(25).default(5),
+  dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
+  maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
+  requireRobertApprovalToContact: z.coerce.boolean().default(true),
+  writePreviewFiles: z.coerce.boolean().default(true),
+  seedLeads: z.array(revenueMoneySprintSeedLeadSchema).max(25).optional().default([]),
+});
+
+export type RevenueMoneySprintInput = z.infer<typeof revenueMoneySprintSchema>;
+
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
   targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
@@ -903,10 +928,39 @@ function getRevenueOutreachPath() {
   return revenueOutreachPathOverride || getRevenueEnginePathEnv("REVENUE_ENGINE_OUTREACH_PATH", "outreach.json");
 }
 
+function getRevenueMockupsDir() {
+  const configuredPath = process.env.REVENUE_MOCKUPS_DIR;
+  const rootDir = configuredPath !== undefined && hasRealValue(configuredPath)
+    ? configuredPath
+    : path.join(process.cwd(), "revenue_mockups");
+  const scopeName = revenueUserDataScope ? path.basename(revenueUserDataScope) : "default";
+  return path.join(rootDir, safeRevenueUserId(scopeName), "previews");
+}
+
 function getRevenueEnginePathEnv(envName: string, defaultFileName: string): string {
   const configuredPath = process.env[envName];
   if (configuredPath !== undefined && hasRealValue(configuredPath)) return configuredPath;
+  if (defaultFileName.includes(path.sep) || defaultFileName.includes("/")) return path.join(process.cwd(), defaultFileName);
   return path.join(process.cwd(), "revenue_engine_data", defaultFileName);
+}
+
+function slugifyRevenueValue(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "preview";
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function getRevenueEmailProviderStatus(): RevenueEmailProviderStatus {
@@ -2951,6 +3005,147 @@ export function buildRevenueMockup(input: RevenueMockupInput) {
   };
 }
 
+function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMockup>) {
+  const accentMap: Record<string, string> = {
+    emerald: "#10b981",
+    rose: "#fb7185",
+    sky: "#38bdf8",
+    fuchsia: "#d946ef",
+    amber: "#f59e0b",
+  };
+  const accent = accentMap[mockup.visualSystem.accent] || accentMap.amber;
+  const sections = mockup.sections.map((section) => `
+    <section class="section">
+      <p class="section-id">${escapeHtml(section.id)}</p>
+      <h2>${escapeHtml(section.title)}</h2>
+      <p>${escapeHtml(section.goal)}</p>
+      <ul>${section.blocks.map((block) => `<li>${escapeHtml(block)}</li>`).join("")}</ul>
+    </section>
+  `).join("");
+  const qa = mockup.qa.map((check) => `
+    <li>
+      <strong>${escapeHtml(check.agent)}</strong>
+      <span>${escapeHtml(check.result)}</span>
+      <small>${escapeHtml(check.check)}</small>
+    </li>
+  `).join("");
+  const automations = mockup.automations.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `<title>${escapeHtml(mockup.input.businessName)} Revenue Mockup</title>`,
+    "<style>",
+    ":root{color-scheme:dark;--accent:" + accent + ";font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
+    "*{box-sizing:border-box}body{margin:0;background:#0b0f14;color:#f8fafc}main{min-height:100vh}",
+    ".hero{position:relative;overflow:hidden;min-height:82vh;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:32px;align-items:center;padding:56px clamp(20px,5vw,72px);background:linear-gradient(135deg,#0b0f14 0%,#111827 52%,#172033 100%)}",
+    ".hero:before{content:'';position:absolute;inset:auto -12% -22% 46%;height:72%;background:radial-gradient(circle,var(--accent),transparent 58%);opacity:.18;filter:blur(12px)}",
+    ".eyebrow{color:var(--accent);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.12em}.hero h1{font-size:clamp(40px,7vw,84px);line-height:.93;margin:14px 0 18px;letter-spacing:0}.hero p{max-width:760px;color:#cbd5e1;font-size:clamp(17px,2vw,22px);line-height:1.55}",
+    ".actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.btn{border:1px solid #334155;border-radius:8px;padding:13px 18px;color:#f8fafc;text-decoration:none;font-weight:800}.btn.primary{background:var(--accent);border-color:var(--accent);color:#061018}",
+    ".device{position:relative;border:1px solid #334155;border-radius:24px;background:#101827;box-shadow:0 32px 80px rgba(0,0,0,.38);padding:18px;transform:perspective(1200px) rotateY(-9deg) rotateX(5deg)}.screen{border-radius:18px;background:#f8fafc;color:#0f172a;min-height:430px;padding:24px;display:grid;align-content:space-between}.screen h2{font-size:34px;line-height:1;margin:0}.screen .pill{display:inline-flex;width:max-content;border-radius:999px;background:#e2e8f0;padding:8px 12px;font-size:12px;font-weight:800}.metric-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metric{border:1px solid #cbd5e1;border-radius:10px;padding:12px}.metric strong{display:block;font-size:22px}",
+    ".band{padding:42px clamp(20px,5vw,72px);border-top:1px solid #1e293b}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.section{border:1px solid #263445;border-radius:8px;background:#101827;padding:20px}.section-id{margin:0;color:var(--accent);font-size:12px;font-weight:800;text-transform:uppercase}.section h2{margin:8px 0 10px;font-size:22px}.section p,.section li{color:#cbd5e1;line-height:1.55}.qa{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0;list-style:none}.qa li{border:1px solid #263445;border-radius:8px;padding:14px;background:#101827}.qa strong,.qa span,.qa small{display:block}.qa span{color:var(--accent);font-weight:900}.qa small{color:#cbd5e1;margin-top:6px;line-height:1.45}",
+    ".offer{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}.price{font-size:38px;font-weight:900;color:var(--accent)}.note{color:#94a3b8;font-size:13px;line-height:1.5}",
+    "@media(max-width:860px){.hero{grid-template-columns:1fr;min-height:auto}.device{transform:none}.grid,.qa,.offer{grid-template-columns:1fr}.screen{min-height:340px}.metric-row{grid-template-columns:1fr}}",
+    "</style>",
+    "</head>",
+    "<body>",
+    "<main>",
+    '<section class="hero">',
+    "<div>",
+    `<div class="eyebrow">${escapeHtml(mockup.copy.eyebrow)}</div>`,
+    `<h1>${escapeHtml(mockup.copy.headline)}</h1>`,
+    `<p>${escapeHtml(mockup.copy.subheadline)}</p>`,
+    '<div class="actions">',
+    `<a class="btn primary" href="#capture">${escapeHtml(mockup.copy.primaryCta)}</a>`,
+    `<a class="btn" href="#offer">${escapeHtml(mockup.copy.secondaryCta)}</a>`,
+    "</div>",
+    "</div>",
+    '<div class="device" aria-label="Website preview">',
+    '<div class="screen">',
+    `<span class="pill">${escapeHtml(mockup.offer.packageName)}</span>`,
+    `<h2>${escapeHtml(mockup.input.businessName)}</h2>`,
+    `<p>${escapeHtml(mockup.salesAngle.problem)}</p>`,
+    '<div class="metric-row">',
+    `<div class="metric"><strong>$${mockup.offer.setupUsd.toLocaleString("en-US")}</strong><span>Website</span></div>`,
+    `<div class="metric"><strong>$${mockup.offer.automationUsd.toLocaleString("en-US")}</strong><span>Automation</span></div>`,
+    `<div class="metric"><strong>$${mockup.offer.depositUsd.toLocaleString("en-US")}</strong><span>Deposit</span></div>`,
+    "</div>",
+    "</div>",
+    "</div>",
+    "</section>",
+    `<section class="band"><div class="grid">${sections}</div></section>`,
+    '<section class="band" id="offer">',
+    '<div class="offer">',
+    "<div>",
+    "<h2>Offer ready for owner review</h2>",
+    `<p>${escapeHtml(mockup.salesAngle.pitch)}</p>`,
+    `<p class="note">${escapeHtml(mockup.decision.guardrail)}</p>`,
+    "</div>",
+    `<div class="price">$${mockup.offer.totalUsd.toLocaleString("en-US")}</div>`,
+    "</div>",
+    "</section>",
+    '<section class="band" id="capture">',
+    "<h2>Automation upsell</h2>",
+    `<ul>${automations}</ul>`,
+    "</section>",
+    '<section class="band">',
+    "<h2>QA gates before contact</h2>",
+    `<ul class="qa">${qa}</ul>`,
+    "</section>",
+    "</main>",
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
+export function buildRevenueMockupPreview(input: RevenueMockupInput, options: { writeFile?: boolean } = {}) {
+  const parsed = revenueMockupSchema.parse(input);
+  const mockup = buildRevenueMockup(parsed);
+  const slug = `${slugifyRevenueValue(parsed.businessName)}-${slugifyRevenueValue(parsed.area)}-${Date.now()}`;
+  const previewDir = path.join(getRevenueMockupsDir(), slug);
+  const previewPath = path.join(previewDir, "index.html");
+  const html = renderRevenueMockupPreviewHtml(mockup);
+  const shouldWrite = options.writeFile !== false;
+
+  if (shouldWrite) {
+    fs.mkdirSync(previewDir, { recursive: true });
+    fs.writeFileSync(previewPath, html, "utf8");
+  }
+
+  return {
+    status: mockup.decision.status,
+    slug,
+    previewUrl: `/api/revenue-engine/mockup-previews/${slug}`,
+    fileWritten: shouldWrite,
+    htmlBytes: Buffer.byteLength(html, "utf8"),
+    mockup,
+    guardrails: [
+      "Preview local solamente; no publicar ni enviar sin aprobacion humana.",
+      "No usa claims privados ni datos inventados.",
+      "No requiere hosting pagado antes de deposito.",
+    ],
+    nextAction:
+      mockup.decision.status === "mockup_ready"
+        ? "Revisar preview, crear outreach draft y pedir aprobacion antes de contactar."
+        : "Completar evidencia publica antes de usar el preview en ventas.",
+  };
+}
+
+export function getRevenueMockupPreviewPath(slug: string) {
+  if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
+    throw new Error("Invalid mockup preview slug.");
+  }
+  const root = path.resolve(getRevenueMockupsDir());
+  const previewPath = path.resolve(root, slug, "index.html");
+  if (!previewPath.startsWith(`${root}${path.sep}`)) {
+    throw new Error("Invalid mockup preview path.");
+  }
+  return previewPath;
+}
+
 export function buildRevenueMockupTemplatePack(input: RevenueMockupTemplatePackInput) {
   const monthlyCostCapUsd = 100;
   const dailyAiCostUsd = roundMoney(input.dailyMockupTarget * input.estimatedAiCostPerMockupUsd);
@@ -3515,9 +3710,56 @@ export function recordRevenueAgentRun(input: RevenueAgentRunInput) {
   };
 }
 
+function normalizeRevenueLeadKey(input: Pick<RevenueLeadInput, "businessName" | "area" | "contactValue">) {
+  return [input.businessName, input.area, input.contactValue || ""]
+    .map((item) => item.trim().toLowerCase().replace(/\s+/g, " "))
+    .join("|");
+}
+
+const revenueLeadStatusRank: Record<RevenueLead["status"], number> = {
+  research: 1,
+  qualified: 2,
+  mockup_ready: 3,
+  outreach_ready: 4,
+  contacted: 5,
+  proposal_sent: 6,
+  closed: 7,
+  disqualified: 0,
+};
+
+function strongerRevenueLeadStatus(current: RevenueLead["status"], next: RevenueLead["status"]) {
+  if (next === "disqualified") {
+    return revenueLeadStatusRank[current] <= revenueLeadStatusRank.mockup_ready ? next : current;
+  }
+  return revenueLeadStatusRank[next] > revenueLeadStatusRank[current] ? next : current;
+}
+
 export function recordRevenueLead(input: RevenueLeadInput) {
   loadRevenueLeads();
   const qualification = qualifyRevenueLead(input);
+  const incomingKey = normalizeRevenueLeadKey(input);
+  const existing = revenueLeads.find((lead) => normalizeRevenueLeadKey(lead) === incomingKey);
+
+  if (existing) {
+    const nextStatus = input.status === "research" ? qualification.recommendedStatus : input.status;
+    existing.websiteStatus = input.websiteStatus;
+    existing.contactChannel = input.contactChannel;
+    existing.contactValue = input.contactValue;
+    existing.evidence = input.evidence || existing.evidence;
+    existing.painPoint = input.painPoint || existing.painPoint;
+    existing.estimatedOfferUsd = Math.max(existing.estimatedOfferUsd, input.estimatedOfferUsd);
+    existing.status = strongerRevenueLeadStatus(existing.status, nextStatus);
+    existing.updatedAt = new Date().toISOString();
+    persistRevenueLeads();
+
+    return {
+      lead: existing,
+      qualification,
+      deduped: true,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
   const now = new Date().toISOString();
   const lead: RevenueLead = {
     ...input,
@@ -3533,6 +3775,7 @@ export function recordRevenueLead(input: RevenueLeadInput) {
   return {
     lead,
     qualification,
+    deduped: false,
     snapshot: getRevenueEngineSnapshot(),
   };
 }
@@ -4849,6 +5092,195 @@ export function buildProposalEmail(input: ProposalEmailInput) {
       mailto: `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}`,
       gmailCompose: `https://mail.google.com/mail/?view=cm&fs=1&to=${encodedTo}&su=${encodedSubject}&body=${encodedBody}`,
     },
+  };
+}
+
+function buildRevenueScoutQueue(input: RevenueMoneySprintInput) {
+  const parsed = revenueMoneySprintSchema.parse(input);
+  const niches = parsed.niche
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  const safeNiches = niches.length ? niches : [parsed.niche];
+  const tasks = safeNiches.flatMap((niche) => [
+    {
+      source: "google_search",
+      query: `${niche} ${parsed.area} no website`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${niche} ${parsed.area} no website`)}`,
+      evidenceToCapture: ["business name", "listing/profile URL", "website status", "contact path"],
+    },
+    {
+      source: "google_maps_manual",
+      query: `${niche} ${parsed.area} Google Maps`,
+      url: `https://www.google.com/maps/search/${encodeURIComponent(`${niche} ${parsed.area}`)}`,
+      evidenceToCapture: ["website field", "phone", "reviews recency", "photos/services"],
+    },
+    {
+      source: "instagram_public",
+      query: `${niche} ${parsed.area} Instagram`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${niche} ${parsed.area} site:instagram.com`)}`,
+      evidenceToCapture: ["bio link", "recent posts", "booking/contact signal", "no website signal"],
+    },
+  ]);
+
+  return tasks.slice(0, Math.max(3, Math.min(parsed.dailyResearchTarget, 30))).map((task, index) => ({
+    id: `scout-task-${String(index + 1).padStart(2, "0")}`,
+    ...task,
+    ownerAgent: index % 3 === 0 ? "lead-scout" : index % 3 === 1 ? "business-researcher" : "qa-council",
+    allowedAction: "research_public_evidence_only",
+    blockedActions: ["automated scraping", "contact business", "buy data", "publish preview"],
+  }));
+}
+
+function summarizeSeedLead(seed: RevenueMoneySprintSeedLeadInput) {
+  if (seed.businessSummary.trim().length >= 40) return seed.businessSummary;
+  return [
+    `${seed.businessName} in ${seed.area} is a ${seed.niche} lead.`,
+    seed.evidence || "Public evidence still needs review.",
+    seed.painPoint || "Revenue opportunity needs confirmation.",
+  ].join(" ");
+}
+
+function revenueOutreachChannelFromLead(channel: RevenueLeadInput["contactChannel"]): RevenueOutreachDraftInput["channel"] {
+  if (channel === "email") return "email";
+  if (channel === "instagram") return "instagram";
+  if (channel === "contact_form") return "contact_form";
+  return "gmail";
+}
+
+export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
+  const parsed = revenueMoneySprintSchema.parse(input);
+  const mission = recordRevenueScoutingMission({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    targetLeadCount: parsed.dailyQualifiedLeadLimit,
+    maxPaidDataSpendUsd: parsed.maxPaidDataSpendUsd,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+  const radar = buildRevenueLeadRadar({
+    area: parsed.area,
+    niches: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    runHoursPerDay: 24,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: parsed.maxPaidDataSpendUsd,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+  });
+  const templatePack = buildRevenueMockupTemplatePack({
+    niche: parsed.niche,
+    area: parsed.area,
+    dailyMockupTarget: parsed.dailyMockupLimit,
+    maxCustomMinutesPerMockup: 18,
+    estimatedAiCostPerMockupUsd: 0,
+  });
+  const scoutQueue = buildRevenueScoutQueue(parsed);
+  const recordedLeads: Array<ReturnType<typeof recordRevenueLead>> = [];
+  const previews: Array<ReturnType<typeof buildRevenueMockupPreview>> = [];
+  const outreachDrafts: Array<ReturnType<typeof recordRevenueOutreachDraft>> = [];
+  const blockedSeeds: Array<{ businessName: string; reason: string }> = [];
+
+  for (const seed of parsed.seedLeads) {
+    const leadResult = recordRevenueLead({
+      businessName: seed.businessName,
+      area: seed.area,
+      niche: seed.niche,
+      websiteStatus: seed.websiteStatus,
+      contactChannel: seed.contactChannel,
+      contactValue: seed.contactValue,
+      evidence: seed.evidence,
+      painPoint: seed.painPoint,
+      estimatedOfferUsd: seed.estimatedOfferUsd,
+      status: seed.status,
+    });
+    recordedLeads.push(leadResult);
+
+    const hasSource = seed.sourceUrl.trim().length > 0;
+    const isMockupCandidate = ["A", "B"].includes(leadResult.qualification.grade) && previews.length < parsed.dailyMockupLimit;
+    if (isMockupCandidate) {
+      previews.push(buildRevenueMockupPreview({
+        businessName: seed.businessName,
+        area: seed.area,
+        niche: seed.niche,
+        websiteStatus: seed.websiteStatus,
+        evidence: seed.evidence,
+        painPoint: seed.painPoint,
+        primaryOffer: parsed.offerFocus === "automations" ? "Automation Sprint + Revenue Dashboard" : "Website 3D Premium + Automation Sprint",
+        estimatedOfferUsd: seed.estimatedOfferUsd,
+        includeAutomation: parsed.offerFocus !== "websites",
+      }, { writeFile: parsed.writePreviewFiles }));
+    }
+
+    const hasRecipient = seed.recipientEmail.trim().length > 0;
+    if (hasRecipient && hasSource && leadResult.qualification.missing.length === 0) {
+      outreachDrafts.push(recordRevenueOutreachDraft({
+        leadId: leadResult.lead.id,
+        channel: revenueOutreachChannelFromLead(seed.contactChannel),
+        approvalStatus: "draft",
+        recipientEmail: seed.recipientEmail,
+        contactName: seed.contactName || "Owner",
+        businessName: seed.businessName,
+        sourceUrl: seed.sourceUrl,
+        businessSummary: summarizeSeedLead(seed),
+        websitePriceUsd: parsed.offerFocus === "automations" ? 0 : Math.max(1500, Math.round(seed.estimatedOfferUsd * 0.65)),
+        automationPriceUsd: parsed.offerFocus === "websites" ? 0 : Math.max(750, Math.round(seed.estimatedOfferUsd * 0.35)),
+        monthlyRetainerUsd: 750,
+        estimatedInternalMonthlyCostUsd: 54,
+        notes: "Money sprint draft. No enviar sin aprobacion humana final.",
+      }));
+    } else if (hasRecipient || hasSource || leadResult.qualification.missing.length > 0) {
+      blockedSeeds.push({
+        businessName: seed.businessName,
+        reason: [
+          !hasRecipient && "falta recipientEmail",
+          !hasSource && "falta sourceUrl publico",
+          leadResult.qualification.missing.length > 0 && `resolver lead: ${leadResult.qualification.missing.join(", ")}`,
+        ].filter(Boolean).join("; "),
+      });
+    }
+  }
+
+  const paidSpendBlocked = parsed.maxPaidDataSpendUsd > 0;
+  const canStartSelling = !paidSpendBlocked && (parsed.seedLeads.length === 0 || recordedLeads.some((result) => ["A", "B"].includes(result.qualification.grade)));
+
+  return {
+    status: paidSpendBlocked ? "needs_spend_approval" as const : canStartSelling ? "ready_to_start" as const : "needs_lead_evidence" as const,
+    mode: "free_public_research_first" as const,
+    mission: mission.mission,
+    radar,
+    templatePack,
+    scoutQueue,
+    recordedLeads: recordedLeads.map((result) => ({
+      lead: result.lead,
+      qualification: result.qualification,
+      deduped: result.deduped,
+    })),
+    previews,
+    outreachDrafts: outreachDrafts.map((result) => result.draft),
+    blockedSeeds,
+    operatingLimits: {
+      maxQualifiedLeadsToday: parsed.dailyQualifiedLeadLimit,
+      maxMockupsToday: parsed.dailyMockupLimit,
+      maxContactsToday: parsed.dailyContactLimit,
+      maxPaidDataSpendUsd: Math.min(parsed.maxPaidDataSpendUsd, REVENUE_MONTHLY_COST_CAP_USD),
+      externalContactMode: parsed.requireRobertApprovalToContact ? "draft_until_robert_approves" : "approved_queue_only",
+    },
+    approvalGates: [
+      "No automated scraping or paid data in the starting sprint.",
+      "No outbound email, DM or contact form submission without Robert approval.",
+      "No client delivery before scope, deposit, QA and rollback are clear.",
+      "No paid hosting/tools before cash collected or explicit approval.",
+    ],
+    nextActions:
+      recordedLeads.length === 0
+        ? ["Open scoutQueue tasks, capture public evidence, then rerun with seedLeads.", "Start with 10 leads, create 3-5 previews, contact only approved drafts."]
+        : ["Review generated previews.", "Approve only the best outreach drafts.", "Record replies/calls/deposits in ledger and improvement review."],
+    snapshot: getRevenueEngineSnapshot(),
   };
 }
 

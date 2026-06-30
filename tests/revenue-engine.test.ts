@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -10,6 +11,7 @@ import {
   buildRevenueLaunchReadiness,
   buildRevenueLeadRadar,
   buildRevenueMockup,
+  buildRevenueMockupPreview,
   buildRevenueMockupTemplatePack,
   buildRevenueProjectPlan,
   buildRevenueScoutingMission,
@@ -18,6 +20,7 @@ import {
   createDeliveryWorkspaceFromAutomationOpportunity,
   deliverRevenueDeliveryWorkspace,
   getRevenueEngineSnapshot,
+  getRevenueMockupPreviewPath,
   preflightRevenueExpense,
   recordRevenueAgentRun,
   recordRevenueApprovalDecision,
@@ -32,6 +35,7 @@ import {
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   runRevenueAutomationAgentCommand,
+  runRevenueMoneySprint,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
   resetRevenueAutomationIntakesForTests,
@@ -68,14 +72,17 @@ const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automa
 const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
 const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
 const testDeliveryWorkspacesPath = path.join("/tmp", "revenue-engine-delivery-workspaces-test.json");
+const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
+const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
 
 test.beforeEach(() => {
   delete process.env.RESEND_API_KEY;
   delete process.env.REVENUE_ENGINE_FROM_EMAIL;
   delete process.env.RESEND_FROM_EMAIL;
+  process.env.REVENUE_MOCKUPS_DIR = testMockupsDir;
   setRevenueLedgerPathForTests(testLedgerPath);
   setRevenueLeadsPathForTests(testLeadsPath);
   setRevenueOutreachPathForTests(testOutreachPath);
@@ -118,6 +125,8 @@ test.afterEach(() => {
   else process.env.REVENUE_ENGINE_FROM_EMAIL = originalRevenueEngineFromEmail;
   if (originalResendFromEmail === undefined) delete process.env.RESEND_FROM_EMAIL;
   else process.env.RESEND_FROM_EMAIL = originalResendFromEmail;
+  if (originalRevenueMockupsDir === undefined) delete process.env.REVENUE_MOCKUPS_DIR;
+  else process.env.REVENUE_MOCKUPS_DIR = originalRevenueMockupsDir;
 });
 
 test("caps lead plan spend at the starting monthly budget", () => {
@@ -523,6 +532,120 @@ test("qualifies no-website leads for mockup when evidence and contact exist", ()
   assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1 && stage.valueUsd === 2500), true);
 });
 
+test("deduplicates repeated revenue leads by business area and contact", () => {
+  const first = recordRevenueLead({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@nositecafe",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu and catering leads.",
+    estimatedOfferUsd: 2500,
+    status: "research",
+  });
+  const second = recordRevenueLead({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "weak_website",
+    contactChannel: "instagram",
+    contactValue: "@nositecafe",
+    evidence: "Updated public evidence confirms no booking CTA and only Instagram ordering.",
+    painPoint: "Needs booking, catering capture and follow-up.",
+    estimatedOfferUsd: 3500,
+    status: "research",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(first.deduped, false);
+  assert.equal(second.deduped, true);
+  assert.equal(first.lead.id, second.lead.id);
+  assert.equal(second.lead.estimatedOfferUsd, 3500);
+  assert.equal(snapshot.recentLeads.length, 1);
+  assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1 && stage.valueUsd === 3500), true);
+});
+
+test("deduplicated revenue leads do not regress advanced pipeline status", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Advanced Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@advanced.example",
+    evidence: "Google listing has no website and Instagram bio only points to posts.",
+    painPoint: "Needs online menu, catering capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+  });
+
+  recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@advanced.example",
+    contactName: "Owner",
+    businessName: "Advanced Cafe",
+    sourceUrl: "https://example.com/advanced-cafe",
+    businessSummary: "Advanced Cafe has public evidence of weak/no website and needs online menu, catering capture and follow-up.",
+    websitePriceUsd: 2700,
+    automationPriceUsd: 1500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "Draft created first.",
+  });
+
+  const duplicate = recordRevenueLead({
+    businessName: "Advanced Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "unknown",
+    contactChannel: "email",
+    contactValue: "owner@advanced.example",
+    evidence: "",
+    painPoint: "",
+    estimatedOfferUsd: 1500,
+    status: "research",
+  });
+
+  assert.equal(duplicate.deduped, true);
+  assert.equal(duplicate.lead.status, "outreach_ready");
+  assert.equal(duplicate.lead.estimatedOfferUsd, 4200);
+});
+
+test("deduplicated disqualified update cannot remove proposal leads from pipeline", () => {
+  recordRevenueLead({
+    businessName: "Proposal Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@proposal.example",
+    evidence: "Google listing has no website and catering menu only appears in Instagram posts.",
+    painPoint: "Needs online menu, catering capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "proposal_sent",
+  });
+
+  const duplicate = recordRevenueLead({
+    businessName: "Proposal Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "unknown",
+    contactChannel: "email",
+    contactValue: "owner@proposal.example",
+    evidence: "",
+    painPoint: "",
+    estimatedOfferUsd: 1500,
+    status: "disqualified",
+  });
+
+  assert.equal(duplicate.deduped, true);
+  assert.equal(duplicate.lead.status, "proposal_sent");
+});
+
 test("persists leads across module state reloads", () => {
   recordRevenueLead({
     businessName: "Persisted Lead",
@@ -562,6 +685,31 @@ test("builds a sellable mockup with 3D brief and automation guardrails", () => {
   assert.equal(mockup.visualSystem.threeDSceneBrief.length > 0, true);
   assert.equal(mockup.sections.some((section) => section.id === "automation"), true);
   assert.equal(mockup.qa.some((check) => check.agent === "closer" && check.result === "approval_required"), true);
+});
+
+test("writes a local revenue mockup preview without publishing externally", () => {
+  const preview = buildRevenueMockupPreview({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu, events capture and catering leads.",
+    primaryOffer: "Website 3D Premium + Automation Sprint",
+    estimatedOfferUsd: 3500,
+    includeAutomation: true,
+  });
+
+  assert.equal(preview.status, "mockup_ready");
+  assert.equal(preview.fileWritten, true);
+  assert.match(preview.previewUrl, /^\/api\/revenue-engine\/mockup-previews\//);
+  assert.equal("previewPath" in preview, false);
+  const previewPath = getRevenueMockupPreviewPath(preview.slug);
+  assert.equal(existsSync(previewPath), true);
+  const html = readFileSync(previewPath, "utf8");
+  assert.match(html, /No Site Cafe/);
+  assert.match(html, /QA gates before contact/);
+  assert.equal(preview.guardrails.some((item) => item.includes("No requiere hosting pagado")), true);
 });
 
 test("builds production plan only when commercial and cost gates pass", () => {
@@ -661,6 +809,75 @@ test("sales autopilot prepares lead mockup agent QA and draft without sending", 
   assert.equal(result.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "agent_run" && item.title === "Autopilot Cafe"), true);
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Autopilot Cafe"), true);
+});
+
+test("money sprint creates scout queue previews leads and draft-only outreach", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [
+      {
+        businessName: "Sprint Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@sprintcafe.example",
+        evidence: "Google listing has no website, Instagram bio has no link, menu only appears in posts.",
+        painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 4200,
+        status: "research",
+        sourceUrl: "https://example.com/sprint-cafe-listing",
+        recipientEmail: "owner@sprintcafe.example",
+        contactName: "Owner",
+        businessSummary: "Sprint Cafe has public evidence of no website and needs a stronger online menu, catering capture and follow-up system.",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "ready_to_start");
+  assert.equal(result.scoutQueue.length > 0, true);
+  assert.equal(result.operatingLimits.maxPaidDataSpendUsd, 0);
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].qualification.grade, "A");
+  assert.equal(result.previews.length, 1);
+  assert.equal("previewPath" in result.previews[0], false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), true);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.outreachDrafts[0].status, "draft");
+  assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
+  assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
+});
+
+test("money sprint surfaces paid data approval amount without spending automatically", () => {
+  const result = runRevenueMoneySprint({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeads: [],
+  });
+
+  assert.equal(result.status, "needs_spend_approval");
+  assert.equal(result.operatingLimits.maxPaidDataSpendUsd, 100);
+  assert.equal(result.mission.budgetGate.requiresApprovalToSpend, true);
+  assert.equal(result.previews.length, 0);
+  assert.equal(result.outreachDrafts.length, 0);
 });
 
 test("sales autopilot blocks when internal cost breaks the starting cap", () => {
