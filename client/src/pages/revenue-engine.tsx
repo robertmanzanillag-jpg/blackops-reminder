@@ -137,6 +137,7 @@ type RevenueSnapshot = {
       candidatesReady: number;
       salesPacketsReady: number;
       manualContactsReady: number;
+      websiteClosuresPending: number;
       deliveryHandoffsReady: number;
       buildHandoffsOpen: number;
       cashCollectedUsd: number;
@@ -1039,6 +1040,7 @@ type OutreachOutcomeResult = {
   gates: Array<{ gate: string; passed: boolean; fix: string }>;
   draft: RevenueSnapshot["recentOutreach"][number] | null;
   lead: RevenueSnapshot["recentLeads"][number] | null;
+  websiteOpportunity?: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
   snapshot: RevenueSnapshot;
 };
 
@@ -2398,10 +2400,10 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunityId: opportunity.id,
-          depositPaid: reviewChecks.depositPaid,
+          depositPaid: opportunity.depositPaid,
           scopeApproved: reviewChecks.clientApprovedScope,
-          cashCollectedUsd: reviewChecks.depositPaid ? opportunity.requiredDepositUsd : 0,
-          paymentConfirmation: reviewChecks.depositPaid ? "Robert confirmed deposit in review checks." : "",
+          cashCollectedUsd: opportunity.cashCollectedUsd,
+          paymentConfirmation: opportunity.paymentConfirmation || "Using recorded manual deposit outcome.",
           notes: "Closed from Revenue Engine website opportunity UI.",
         }),
       });
@@ -4268,6 +4270,10 @@ export default function RevenueEnginePage() {
                         <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.manualContactsReady ?? 0}</p>
                       </div>
                       <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Scope</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.websiteClosuresPending ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
                         <p className="text-xs text-zinc-500">Build PR</p>
                         <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.buildHandoffsOpen ?? 0}</p>
                       </div>
@@ -5137,13 +5143,19 @@ export default function RevenueEnginePage() {
                             <Button
                               type="button"
                               size="sm"
-                              disabled={websiteOpportunityCloseMutation.isPending || opportunity.status === "sold" || !reviewChecks.depositPaid || !reviewChecks.clientApprovedScope}
+                              disabled={
+                                websiteOpportunityCloseMutation.isPending
+                                || opportunity.status === "sold"
+                                || !opportunity.depositPaid
+                                || opportunity.cashCollectedUsd < opportunity.requiredDepositUsd
+                                || !reviewChecks.clientApprovedScope
+                              }
                               onClick={() => websiteOpportunityCloseMutation.mutate(opportunity)}
                               className="bg-emerald-600 text-white hover:bg-emerald-500"
                               data-testid={`button-close-website-opportunity-${opportunity.id}`}
                             >
                               {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                              {reviewChecks.depositPaid && reviewChecks.clientApprovedScope ? "Marcar vendida" : "Deposito + scope"}
+                              {opportunity.depositPaid && reviewChecks.clientApprovedScope ? "Marcar vendida" : "Deposito manual + scope"}
                             </Button>
                             {opportunity.mockupUrl && (
                               <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
@@ -7155,13 +7167,13 @@ export default function RevenueEnginePage() {
                       </Button>
                       <Button
                         type="button"
-                        disabled={deliveryWorkspaceMutation.isPending}
+                        disabled={deliveryWorkspaceMutation.isPending || reviewProjectType !== "automation"}
                         onClick={() => deliveryWorkspaceMutation.mutate()}
                         className="w-full bg-sky-600 text-white hover:bg-sky-500"
                         data-testid="button-save-delivery-workspace"
                       >
                         {deliveryWorkspaceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                        Guardar workspace
+                        {reviewProjectType === "automation" ? "Guardar workspace" : "Usar website handoff"}
                       </Button>
                     </form>
                   </CardContent>

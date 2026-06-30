@@ -878,6 +878,7 @@ type RevenueDailyMoneyCommand = {
     candidatesReady: number;
     salesPacketsReady: number;
     manualContactsReady: number;
+    websiteClosuresPending: number;
     deliveryHandoffsReady: number;
     buildHandoffsOpen: number;
     cashCollectedUsd: number;
@@ -3746,6 +3747,75 @@ function findRevenueWebsiteOpportunityByLeadOrDraft(leadId: string, draftId: str
   ) || null;
 }
 
+function syncRevenueWebsiteOpportunityFromDepositOutcome(lead: RevenueLead | null, draft: RevenueOutreachDraft, cashCollectedUsd: number, notes: string) {
+  if (!lead || cashCollectedUsd <= 0) return null;
+  loadRevenueWebsiteOpportunities();
+  const failedBlockingGate = draft.qaGates.find((gate) => !gate.passed && gate.gate !== "approval");
+  const gates = [
+    { gate: "lead_found", passed: true, fix: "Seleccionar un lead existente." },
+    { gate: "draft_found", passed: true, fix: "Crear propuesta/draft conectado al lead." },
+    { gate: "draft_approved", passed: draft.status === "approved", fix: "Aprobar el draft antes de crear oportunidad website." },
+    { gate: "mockup", passed: Boolean(draft.mockupUrl), fix: "Generar o adjuntar mockup preview." },
+    { gate: "public_source", passed: Boolean(draft.sourceUrl), fix: "Adjuntar sourceUrl publico del negocio." },
+    { gate: "draft_qa", passed: !failedBlockingGate, fix: failedBlockingGate?.fix || "Corregir QA del draft." },
+  ];
+  if (gates.some((gate) => !gate.passed)) return null;
+
+  const existing = findRevenueWebsiteOpportunityByLeadOrDraft(lead.id, draft.id);
+  const now = new Date().toISOString();
+  const projectType = existing?.projectType || (draft.automationPriceUsd > 0 ? "bundle" as const : "website" as const);
+  const setupUsd = existing?.setupUsd || (projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd);
+  const requiredDepositUsd = existing?.requiredDepositUsd || Math.round(setupUsd * 0.5);
+  const status = existing?.status === "sold"
+    ? "sold" as const
+    : existing?.scopeApproved
+      ? "scope_approved" as const
+      : "quoted" as const;
+  const opportunity: RevenueWebsiteOpportunity = {
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType,
+    notes: notes || "Manual deposit outcome recorded from outreach.",
+    id: existing?.id || `website-opportunity-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    status,
+    businessName: lead.businessName,
+    sourceLeadId: lead.id,
+    sourceOutreachDraftId: draft.id,
+    mockupUrl: draft.mockupUrl || "",
+    sourceUrl: draft.sourceUrl || "",
+    setupUsd,
+    requiredDepositUsd,
+    cashCollectedUsd: Math.max(existing?.cashCollectedUsd || 0, cashCollectedUsd),
+    monthlyRetainerUsd: existing?.monthlyRetainerUsd || draft.pricing.monthlyRetainerUsd,
+    estimatedInternalCostUsd: existing?.estimatedInternalCostUsd || draft.pricing.estimatedInternalMonthlyCostUsd,
+    depositPaid: true,
+    scopeApproved: existing?.scopeApproved || false,
+    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
+    qaGates: gates,
+    nextAction: status === "sold"
+      ? "Oportunidad vendida; usar handoff de delivery para crear workspace QA-gated."
+      : existing?.scopeApproved
+        ? "Deposito y scope registrados; cerrar oportunidad para habilitar delivery."
+        : "Deposito registrado; falta aprobar scope antes de convertir a delivery.",
+    safety: {
+      sendsOutreach: false,
+      createsWorkspace: false,
+      requiresDepositAndScopeForDelivery: true,
+      blockedActions: ["send outreach", "create delivery workspace before sold", "deploy website", "record sale without deposit/scope"],
+    },
+  };
+
+  if (existing) {
+    revenueWebsiteOpportunities.splice(revenueWebsiteOpportunities.indexOf(existing), 1, opportunity);
+  } else {
+    revenueWebsiteOpportunities.push(opportunity);
+  }
+  persistRevenueWebsiteOpportunities();
+  return opportunity;
+}
+
 export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityInput) {
   loadRevenueLeads();
   loadRevenueOutreach();
@@ -3846,27 +3916,34 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const lead = opportunity ? revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null : null;
   const draft = opportunity ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null : null;
   const requiredDepositUsd = opportunity?.requiredDepositUsd || 0;
+  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const depositOutcomeCoversRequired = recordedDepositCashUsd >= requiredDepositUsd && requiredDepositUsd > 0;
   const paymentConfirmed = parsed.paymentConfirmation.trim().length >= 4 || parsed.notes.toLowerCase().includes("payment") || parsed.notes.toLowerCase().includes("deposit");
   const blockers = [
     !opportunity && "oportunidad no encontrada",
     opportunity?.status === "blocked" && "oportunidad bloqueada",
     !lead && "lead no encontrado",
     !draft && "draft no encontrado",
+    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
+    draft && draft.delivery.outcome === "deposit_collected" && !depositOutcomeCoversRequired && `deposito manual insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
     !parsed.scopeApproved && "scope no aprobado",
     !parsed.depositPaid && "deposito no marcado",
     parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
+    depositOutcomeCoversRequired && parsed.cashCollectedUsd !== recordedDepositCashUsd && `cashCollectedUsd debe coincidir con el deposito manual registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
     !paymentConfirmed && "falta confirmacion de pago/deposito",
   ].filter(Boolean) as string[];
 
   if (!opportunity || blockers.length > 0) {
     if (opportunity) {
       const nextScopeApproved = opportunity.scopeApproved || parsed.scopeApproved;
-      const nextDepositPaid = opportunity.depositPaid || parsed.depositPaid;
+      const nextDepositPaid = opportunity.depositPaid || depositOutcomeCoversRequired;
       opportunity.status = nextScopeApproved ? "scope_approved" : "quoted";
-      opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, parsed.cashCollectedUsd);
+      opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, recordedDepositCashUsd);
       opportunity.depositPaid = nextDepositPaid;
       opportunity.scopeApproved = nextScopeApproved;
-      opportunity.paymentConfirmation = parsed.paymentConfirmation || opportunity.paymentConfirmation;
+      opportunity.paymentConfirmation = depositOutcomeCoversRequired
+        ? parsed.paymentConfirmation || opportunity.paymentConfirmation || "Manual deposit outcome recorded by Robert."
+        : opportunity.paymentConfirmation;
       opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
       opportunity.updatedAt = new Date().toISOString();
       persistRevenueWebsiteOpportunities();
@@ -3883,7 +3960,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
 
   const now = new Date().toISOString();
   opportunity.status = "sold";
-  opportunity.cashCollectedUsd = parsed.cashCollectedUsd;
+  opportunity.cashCollectedUsd = recordedDepositCashUsd;
   opportunity.depositPaid = true;
   opportunity.scopeApproved = true;
   opportunity.paymentConfirmation = parsed.paymentConfirmation || parsed.notes || "deposit confirmed";
@@ -3906,7 +3983,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
     kind: opportunity.projectType === "bundle" ? "bundle_sale" : "website_sale",
     clientName: opportunity.businessName,
     amountUsd: opportunity.setupUsd,
-    cashCollectedUsd: parsed.cashCollectedUsd,
+    cashCollectedUsd: recordedDepositCashUsd,
     estimatedInternalCostUsd: opportunity.estimatedInternalCostUsd,
     notes: [
       ledgerTag,
@@ -4117,11 +4194,62 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
   };
 }
 
+function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
+  if (workspace.input.projectType === "automation") {
+    return { passed: true, blockers: [] as string[] };
+  }
+  const opportunity = workspace.input.sourceOpportunityId
+    ? revenueWebsiteOpportunities.find((item) => item.id === workspace.input.sourceOpportunityId) || null
+    : null;
+  const draft = opportunity
+    ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null
+    : null;
+  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const blockers = [
+    !opportunity && "sourceOpportunityId vendido requerido",
+    opportunity && opportunity.status !== "sold" && "oportunidad website no vendida",
+    opportunity && !opportunity.depositPaid && "deposito no marcado en oportunidad vendida",
+    opportunity && !opportunity.scopeApproved && "scope no aprobado en oportunidad vendida",
+    opportunity && workspace.input.sourceLeadId !== opportunity.sourceLeadId && "sourceLeadId no coincide con oportunidad vendida",
+    opportunity && workspace.input.sourceOutreachDraftId !== opportunity.sourceOutreachDraftId && "sourceOutreachDraftId no coincide con oportunidad vendida",
+    !draft && "draft de venta no encontrado",
+    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en draft",
+    draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito manual insuficiente",
+    opportunity && recordedDepositCashUsd !== opportunity.cashCollectedUsd && "cash de oportunidad no coincide con deposito manual",
+  ].filter(Boolean) as string[];
+  return { passed: blockers.length === 0, blockers };
+}
+
+export function getRevenueWebsiteWorkspaceSaleGate(workspaceId: string) {
+  loadRevenueDeliveryWorkspaces();
+  loadRevenueWebsiteOpportunities();
+  loadRevenueOutreach();
+  const workspace = revenueDeliveryWorkspaces.find((item) => item.id === workspaceId) || null;
+  if (!workspace) {
+    return {
+      status: "not_found" as const,
+      passed: false,
+      blockers: ["workspace no encontrado"],
+      reason: "Workspace no encontrado.",
+    };
+  }
+  const gate = revenueWebsiteWorkspaceSaleGate(workspace);
+  return {
+    status: gate.passed ? "pass" as const : "blocked" as const,
+    passed: gate.passed,
+    blockers: gate.blockers,
+    reason: gate.passed
+      ? "Workspace respaldado por oportunidad vendida y deposito manual."
+      : `Workspace website requiere oportunidad vendida y deposito manual: ${gate.blockers.join("; ")}.`,
+  };
+}
+
 function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHandoffQueue {
   const visibleLimit = Math.max(0, Math.min(25, limit));
   const openWorkspaces = revenueDeliveryWorkspaces
     .filter((workspace) =>
       (workspace.input.projectType === "website" || workspace.input.projectType === "bundle")
+      && revenueWebsiteWorkspaceSaleGate(workspace).passed
       && workspace.input.publicDataVerified
       && workspace.projectPlan.decision.status === "ready_to_build"
       && workspace.codexBuildHandoff.status === "needs_pr"
@@ -4397,6 +4525,7 @@ function buildRevenueDailyMoneyCommand(input: {
   manualOutreachQueue: RevenueManualOutreachQueue;
   websiteDeliveryHandoffQueue: RevenueWebsiteDeliveryHandoffQueue;
   websiteBuildHandoffQueue: RevenueWebsiteBuildHandoffQueue;
+  websiteClosuresPending: number;
   cashCollectedUsd: number;
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
 }): RevenueDailyMoneyCommand {
@@ -4406,6 +4535,7 @@ function buildRevenueDailyMoneyCommand(input: {
     candidatesReady: input.publicLeadImportQueue.readyCount,
     salesPacketsReady: input.websiteSalesPacketQueue.readyCount,
     manualContactsReady: input.manualOutreachQueue.readyCount,
+    websiteClosuresPending: input.websiteClosuresPending,
     deliveryHandoffsReady: input.websiteDeliveryHandoffQueue.readyCount,
     buildHandoffsOpen,
     cashCollectedUsd: input.cashCollectedUsd,
@@ -4413,7 +4543,7 @@ function buildRevenueDailyMoneyCommand(input: {
   const status: RevenueDailyMoneyCommand["status"] =
     input.profitGuard.status === "pause_spend"
       ? "blocked"
-      : input.websiteDeliveryHandoffQueue.readyCount > 0
+      : input.websiteDeliveryHandoffQueue.readyCount > 0 || input.websiteClosuresPending > 0
         ? "collect"
         : buildHandoffsOpen > 0
           ? "build"
@@ -4426,7 +4556,7 @@ function buildRevenueDailyMoneyCommand(input: {
                 : "search";
   const primaryActionByStatus: Record<RevenueDailyMoneyCommand["status"], string> = {
     blocked: "Pausar gasto y resolver Profit Guard antes de avanzar.",
-    collect: "Convertir leads vendidos en delivery workspace solo con deposito y scope confirmados.",
+    collect: "Cerrar deposits/scope y convertir leads vendidos en delivery workspace solo con gates confirmados.",
     build: "Crear o completar handoff GitHub PR-first para los websites vendidos.",
     contact: "Contactar manualmente los drafts aprobados y registrar replies/calls/depositos.",
     sell: "Revisar paquetes de venta con mockup y aprobar contacto manual.",
@@ -4442,7 +4572,7 @@ function buildRevenueDailyMoneyCommand(input: {
         : status === "contact"
           ? `${funnel.manualContactsReady} contactos manuales aprobados`
           : status === "collect"
-            ? `${funnel.deliveryHandoffsReady} handoffs listos para cerrar/build`
+            ? `${funnel.websiteClosuresPending} scope/depositos y ${funnel.deliveryHandoffsReady} handoffs listos`
             : status === "build"
               ? `${funnel.buildHandoffsOpen} builds esperando PR-first`
               : "0 gasto hasta resolver bloqueo";
@@ -4471,9 +4601,13 @@ function buildRevenueDailyMoneyCommand(input: {
     {
       id: "collect",
       label: "Cobrar y construir",
-      metric: `${funnel.deliveryHandoffsReady} delivery / ${funnel.buildHandoffsOpen} PR`,
-      nextAction: funnel.deliveryHandoffsReady > 0 ? input.websiteDeliveryHandoffQueue.nextAction : input.websiteBuildHandoffQueue.nextAction,
-      status: funnel.deliveryHandoffsReady > 0 || funnel.buildHandoffsOpen > 0 ? "ready" : "waiting",
+      metric: `${funnel.websiteClosuresPending} scope / ${funnel.deliveryHandoffsReady} delivery / ${funnel.buildHandoffsOpen} PR`,
+      nextAction: funnel.deliveryHandoffsReady > 0
+        ? input.websiteDeliveryHandoffQueue.nextAction
+        : funnel.websiteClosuresPending > 0
+          ? "Aprobar scope de oportunidades con deposito manual registrado; luego cerrar venta y crear delivery workspace."
+          : input.websiteBuildHandoffQueue.nextAction,
+      status: funnel.websiteClosuresPending > 0 || funnel.deliveryHandoffsReady > 0 || funnel.buildHandoffsOpen > 0 ? "ready" : "waiting",
     },
   ];
   const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
@@ -4491,6 +4625,7 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Verified candidates ready: ${funnel.candidatesReady}`,
     `- Sales packets ready: ${funnel.salesPacketsReady}`,
     `- Manual contacts ready: ${funnel.manualContactsReady}`,
+    `- Website scope/deposit closures pending: ${funnel.websiteClosuresPending}`,
     `- Delivery handoffs ready: ${funnel.deliveryHandoffsReady}`,
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
     `- Cash collected: $${funnel.cashCollectedUsd.toLocaleString("en-US")}`,
@@ -4679,6 +4814,9 @@ export function getRevenueEngineSnapshot() {
   const publicLeadImportQueue = buildRevenuePublicLeadImportQueue(10);
   const websiteDeliveryHandoffQueue = buildRevenueWebsiteDeliveryHandoffQueue(8);
   const websiteBuildHandoffQueue = buildRevenueWebsiteBuildHandoffQueue(5);
+  const websiteClosuresPending = revenueWebsiteOpportunities.filter((opportunity) =>
+    opportunity.status !== "sold" && opportunity.depositPaid && !opportunity.scopeApproved
+  ).length;
   const dailyMoneyCommand = buildRevenueDailyMoneyCommand({
     businessScoutQueue,
     publicLeadImportQueue,
@@ -4686,6 +4824,7 @@ export function getRevenueEngineSnapshot() {
     manualOutreachQueue,
     websiteDeliveryHandoffQueue,
     websiteBuildHandoffQueue,
+    websiteClosuresPending,
     cashCollectedUsd,
     profitGuard,
   });
@@ -6750,6 +6889,7 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
 export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput) {
   loadRevenueOutreach();
   loadRevenueLeads();
+  loadRevenueWebsiteOpportunities();
 
   const parsed = revenueOutreachOutcomeSchema.parse(input);
   const now = new Date().toISOString();
@@ -6815,15 +6955,19 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
   }
 
   persistRevenueOutreach();
+  const websiteOpportunity = parsed.outcome === "deposit_collected"
+    ? syncRevenueWebsiteOpportunityFromDepositOutcome(lead, draft, parsed.cashCollectedUsd, parsed.notes)
+    : null;
 
   return {
     status: "recorded" as const,
     reason: parsed.outcome === "deposit_collected"
-      ? "Deposito registrado como outcome manual; crea delivery workspace para contabilizar venta sin doble conteo."
+      ? "Deposito registrado como outcome manual; aprobar scope y cerrar oportunidad website para contabilizar venta sin doble conteo."
       : "Outcome manual registrado en draft y lead.",
     gates,
     draft,
     lead,
+    websiteOpportunity,
     snapshot: getRevenueEngineSnapshot(),
   };
 }
@@ -7852,6 +7996,8 @@ function validateRevenueReleaseGateEvidence(
 
 export function recordRevenueDeliveryReleaseGate(input: RevenueDeliveryWorkspaceUpdateInput) {
   loadRevenueDeliveryWorkspaces();
+  loadRevenueWebsiteOpportunities();
+  loadRevenueOutreach();
   const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === parsed.workspaceId) || null;
 
@@ -7864,7 +8010,11 @@ export function recordRevenueDeliveryReleaseGate(input: RevenueDeliveryWorkspace
     };
   }
 
-  const blockers = validateRevenueReleaseGateEvidence(workspace, parsed);
+  const saleGate = revenueWebsiteWorkspaceSaleGate(workspace);
+  const blockers = [
+    ...validateRevenueReleaseGateEvidence(workspace, parsed),
+    ...saleGate.blockers,
+  ];
   if (blockers.length > 0) {
     return {
       status: "blocked" as const,
@@ -7903,6 +8053,8 @@ export function deliverRevenueDeliveryWorkspace(
 ) {
   loadRevenueDeliveryWorkspaces();
   loadRevenueAutomationOpportunities();
+  loadRevenueWebsiteOpportunities();
+  loadRevenueOutreach();
   const parsed = revenueDeliveryWorkspaceDeliverSchema.parse(input);
   const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
 
@@ -7918,11 +8070,13 @@ export function deliverRevenueDeliveryWorkspace(
   }
 
   const workspace = revenueDeliveryWorkspaces[workspaceIndex];
+  const saleGate = revenueWebsiteWorkspaceSaleGate(workspace);
   const approvedByTrustedGate = Boolean(options.allowRobertApprovalEvidence && parsed.approvedByRobert);
   const missing = [
     !approvedByTrustedGate && "aprobacion final de Robert desde gate confiable",
     workspace.status !== "ready_to_deliver" && `workspace no esta listo: ${workspace.status}`,
     !workspace.approvalSummary.canLaunch && "launch/handoff bloqueado",
+    ...saleGate.blockers,
     ...workspace.approvalSummary.requiredBeforeClient,
   ].filter(Boolean) as string[];
 

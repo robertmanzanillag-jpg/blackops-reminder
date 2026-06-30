@@ -24,6 +24,7 @@ import {
   getRevenueDeliveryWorkspaceById,
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
+  getRevenueWebsiteWorkspaceSaleGate,
   preflightRevenueExpense,
   previewRevenueMoneySprintSeeds,
   recordRevenueAgentRun,
@@ -177,12 +178,22 @@ function sellWebsiteOpportunityForTest(input: {
   assert.equal(opportunityResult.status, "quoted");
   assert.ok(opportunityResult.opportunity);
 
+  const cashCollectedUsd = input.cashCollectedUsd ?? opportunityResult.opportunity.requiredDepositUsd;
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: input.outreachDraftId,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd,
+    notes: "Robert confirmed deposit for test sale.",
+  });
+  assert.equal(depositOutcome.status, "recorded");
+
   const closeResult = closeRevenueWebsiteOpportunity({
     opportunityId: opportunityResult.opportunity.id,
     depositPaid: true,
     scopeApproved: true,
-    cashCollectedUsd: input.cashCollectedUsd ?? opportunityResult.opportunity.requiredDepositUsd,
-    paymentConfirmation: "Robert confirmed deposit.",
+    cashCollectedUsd,
+    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
   });
   assert.equal(closeResult.status, "sold");
   assert.ok(closeResult.opportunity);
@@ -227,6 +238,41 @@ function createApprovedWebsiteDraftForTest(input: {
 
   assert.equal(draftResult.draft.status, "approved");
   return { lead: leadResult.lead, draft: draftResult.draft };
+}
+
+function createSoldWebsiteWorkspaceForTest(input: {
+  businessName: string;
+  contactEmail: string;
+  sourceUrl: string;
+  mockupSlug: string;
+  projectType?: "website" | "bundle";
+  cashCollectedUsd?: number;
+}) {
+  const { lead, draft } = createApprovedWebsiteDraftForTest(input);
+  const opportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: input.projectType || "website",
+    cashCollectedUsd: input.cashCollectedUsd,
+  });
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunity.id,
+    projectType: input.projectType || "website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: input.cashCollectedUsd ?? opportunity.requiredDepositUsd,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  assert.equal(handoff.status, "created");
+  assert.ok(handoff.workspace);
+  return { lead, draft, opportunity, workspace: handoff.workspace };
 }
 
 test("caps lead plan spend at the starting monthly budget", () => {
@@ -2119,12 +2165,21 @@ test("website delivery handoff queue requires a sold website opportunity", async
   });
   assert.equal(preservedOpportunity.opportunity?.status, "scope_approved");
 
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: readyDraft.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    notes: "Robert confirmed deposit after scope.",
+  });
+  assert.equal(depositOutcome.status, "recorded");
+
   const closeResult = closeRevenueWebsiteOpportunity({
     opportunityId: opportunityResult.opportunity!.id,
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
-    paymentConfirmation: "Robert confirmed deposit.",
+    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
   });
 
   assert.equal(closeResult.status, "sold");
@@ -2134,6 +2189,37 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, readyDraft.draft.id);
   assert.equal(closeResult.snapshot.metrics.appsSold, 1);
+});
+
+test("website opportunity close requires recorded manual deposit outcome", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "No Manual Deposit Cafe",
+    contactEmail: "owner@nomanualdeposit.example",
+    sourceUrl: "https://example.com/no-manual-deposit-cafe",
+    mockupSlug: "no-manual-deposit-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "website",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+
+  const fakeClose = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Robert confirmed deposit.",
+  });
+
+  assert.equal(fakeClose.status, "blocked");
+  assert.match(fakeClose.reason, /deposito manual no registrado/);
+  assert.equal(fakeClose.opportunity?.depositPaid, false);
+  assert.equal(fakeClose.opportunity?.cashCollectedUsd, 0);
+  assert.equal(fakeClose.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(fakeClose.snapshot.recentLedger.length, 0);
+  assert.equal(fakeClose.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
 });
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
@@ -2226,7 +2312,8 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief.includes(handoff.workspace?.id || ""), true);
   assert.equal(handoff.snapshot.dailyMoneyCommand.steps.find((step) => step.id === "collect")?.nextAction.includes(handoff.workspace?.id || ""), true);
   assert.equal(handoff.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
-  assert.equal(handoff.outreachDraft?.delivery.sendStatus, "not_sent");
+  assert.equal(handoff.outreachDraft?.delivery.sendStatus, "sent");
+  assert.equal(handoff.outreachDraft?.delivery.outcome, "deposit_collected");
   assert.equal(handoff.snapshot.recentLeads[0].status, "closed");
   assert.equal(handoff.snapshot.recentDeliveryWorkspaces[0].input.sourceLeadId, lead.id);
   assert.equal(handoff.snapshot.websiteDeliveryHandoffQueue.items.some((item) => item.leadId === lead.id), false);
@@ -2328,6 +2415,38 @@ test("website build queue excludes workspaces without verified public data", () 
   assert.equal(repoSaved.workspace?.projectPlan.decision.status, "blocked");
   assert.equal(repoSaved.snapshot.websiteBuildHandoffQueue.openCount, 0);
   assert.equal(repoSaved.snapshot.dailyMoneyCommand.status === "build", false);
+});
+
+test("website build queue excludes direct workspaces without sold opportunity chain", () => {
+  const directWorkspace = recordRevenueDeliveryWorkspace({
+    workspaceName: "Direct Fake Website",
+    clientName: "Direct Fake Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3000,
+    monthlyRetainerUsd: 500,
+    estimatedInternalCostUsd: 40,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Direct workspace should not be actionable without sold opportunity chain.",
+    repoFullName: "robert/direct-fake-cafe",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  const saleGate = getRevenueWebsiteWorkspaceSaleGate(directWorkspace.workspace.id);
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(directWorkspace.workspace.projectPlan.decision.status, "ready_to_build");
+  assert.equal(directWorkspace.workspace.codexBuildHandoff.status, "needs_pr");
+  assert.equal(saleGate.status, "blocked");
+  assert.equal(saleGate.blockers.includes("sourceOpportunityId vendido requerido"), true);
+  assert.equal(snapshot.websiteBuildHandoffQueue.openCount, 0);
+  assert.equal(snapshot.dailyMoneyCommand.funnel.buildHandoffsOpen, 0);
 });
 
 test("daily money command keeps delivery collection ahead of open website builds", () => {
@@ -2536,12 +2655,20 @@ test("website delivery ledger notes stay bounded before closing state", () => {
   });
   assert.equal(opportunityResult.status, "quoted");
   assert.ok(opportunityResult.opportunity);
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: draft.draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: 1800,
+    notes: "Robert confirmed deposit before long-notes close.",
+  });
+  assert.equal(depositOutcome.status, "recorded");
   const closeResult = closeRevenueWebsiteOpportunity({
     opportunityId: opportunityResult.opportunity.id,
     depositPaid: true,
     scopeApproved: true,
     cashCollectedUsd: 1800,
-    paymentConfirmation: "Robert confirmed deposit.",
+    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
     notes: "x".repeat(1000),
   });
   assert.equal(closeResult.status, "sold");
@@ -2913,31 +3040,19 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
 });
 
 test("trusted release gate persists PR App QA review and deploy approval for website delivery", () => {
-  const created = recordRevenueDeliveryWorkspace({
-    workspaceName: "Trusted release website",
-    clientName: "Trusted Release Cafe",
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Trusted Release Cafe",
+    contactEmail: "owner@trustedrelease.example",
+    sourceUrl: "https://example.com/trusted-release-cafe",
+    mockupSlug: "trusted-release-cafe",
     projectType: "website",
-    packageName: "Website 3D Premium",
-    setupUsd: 4200,
-    monthlyRetainerUsd: 750,
-    estimatedInternalCostUsd: 54,
-    depositPaid: true,
-    scopeApproved: true,
-    publicDataVerified: true,
-    includesAutomation: false,
-    launchTargetDays: 7,
-    clientRequest: "Build approved public website.",
-    repoFullName: "robert/trusted-release-cafe",
-    branchName: "codex/client-trusted-release-cafe-website",
-    githubIssueUrl: "https://github.com/robert/trusted-release-cafe/issues/1",
-    visualQaPassed: true,
-    technicalQaPassed: true,
-    automationQaPassed: true,
-    clientHandoffReady: true,
   });
 
   const releaseGate = recordRevenueDeliveryReleaseGate({
     workspaceId: created.workspace.id,
+    repoFullName: "robert/trusted-release-cafe",
+    branchName: "codex/client-trusted-release-cafe-website",
+    githubIssueUrl: "https://github.com/robert/trusted-release-cafe/issues/1",
     prUrl: "https://github.com/robert/trusted-release-cafe/pull/2",
     secondReviewStatus: "pass",
     secondReviewEvidenceUrl: "https://github.com/robert/trusted-release-cafe/pull/2#pullrequestreview-1",
@@ -2958,6 +3073,48 @@ test("trusted release gate persists PR App QA review and deploy approval for web
   assert.equal(releaseGate.workspace?.codexBuildHandoff.missing.length, 0);
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, true);
   assert.equal(releaseGate.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+});
+
+test("trusted release gate blocks direct website workspace without sold opportunity chain", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Direct release website",
+    clientName: "Direct Release Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    repoFullName: "robert/direct-release-cafe",
+    branchName: "codex/client-direct-release-cafe-website",
+    githubIssueUrl: "https://github.com/robert/direct-release-cafe/issues/1",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    prUrl: "https://github.com/robert/direct-release-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/direct-release-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/direct-release-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/direct-release-cafe/pull/2#issuecomment-approval",
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-direct-release-cafe-website, client Direct Release Cafe.`,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /sourceOpportunityId vendido requerido/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
 });
 
 test("trusted release gate blocks forged or incomplete release evidence", () => {
@@ -3002,30 +3159,18 @@ test("trusted release gate blocks forged or incomplete release evidence", () => 
 });
 
 test("trusted delivery endpoint helper delivers only after trusted release gate approval", () => {
-  const created = recordRevenueDeliveryWorkspace({
-    workspaceName: "Trusted delivered website",
-    clientName: "Trusted Delivered Cafe",
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Trusted Delivered Cafe",
+    contactEmail: "owner@trusteddelivered.example",
+    sourceUrl: "https://example.com/trusted-delivered-cafe",
+    mockupSlug: "trusted-delivered-cafe",
     projectType: "website",
-    packageName: "Website 3D Premium",
-    setupUsd: 4200,
-    monthlyRetainerUsd: 750,
-    estimatedInternalCostUsd: 54,
-    depositPaid: true,
-    scopeApproved: true,
-    publicDataVerified: true,
-    includesAutomation: false,
-    launchTargetDays: 7,
-    clientRequest: "Build approved public website.",
-    repoFullName: "robert/trusted-delivered-cafe",
-    branchName: "codex/client-trusted-delivered-cafe-website",
-    githubIssueUrl: "https://github.com/robert/trusted-delivered-cafe/issues/1",
-    visualQaPassed: true,
-    technicalQaPassed: true,
-    automationQaPassed: true,
-    clientHandoffReady: true,
   });
   const releaseGate = recordRevenueDeliveryReleaseGate({
     workspaceId: created.workspace.id,
+    repoFullName: "robert/trusted-delivered-cafe",
+    branchName: "codex/client-trusted-delivered-cafe-website",
+    githubIssueUrl: "https://github.com/robert/trusted-delivered-cafe/issues/1",
     prUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2",
     secondReviewStatus: "pass",
     secondReviewEvidenceUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2#pullrequestreview-1",
@@ -3052,6 +3197,49 @@ test("trusted delivery endpoint helper delivers only after trusted release gate 
   assert.equal(trustedDelivery.status, "delivered");
   assert.equal(trustedDelivery.handoff?.clientName, "Trusted Delivered Cafe");
   assert.equal(trustedDelivery.workspace?.learningNote.includes("entregado con QA aprobado"), true);
+});
+
+test("trusted delivery blocks direct ready website workspace without sold opportunity chain", () => {
+  const created = recordRevenueDeliveryWorkspace({
+    workspaceName: "Direct delivered website",
+    clientName: "Direct Delivered Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build approved public website.",
+    repoFullName: "robert/direct-delivered-cafe",
+    branchName: "codex/client-direct-delivered-cafe-website",
+    githubIssueUrl: "https://github.com/robert/direct-delivered-cafe/issues/1",
+    prUrl: "https://github.com/robert/direct-delivered-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/direct-delivered-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/direct-delivered-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/direct-delivered-cafe/pull/2#issuecomment-approval",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  assert.equal(created.workspace.status, "ready_to_deliver");
+
+  const trustedDelivery = deliverRevenueDeliveryWorkspaceFromTrustedApproval({
+    workspaceId: created.workspace.id,
+    approvedByRobert: true,
+    notes: "Robert approved final delivery after PR, second review and App QA.",
+  });
+
+  assert.equal(trustedDelivery.status, "blocked");
+  assert.match(trustedDelivery.reason, /sourceOpportunityId vendido requerido/);
 });
 
 test("trusted delivery rejects string false Robert approval", () => {
@@ -3756,9 +3944,15 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
   assert.equal(outcome.lead?.status, "closed");
   assert.equal(outcome.draft?.delivery.outcome, "deposit_collected");
   assert.equal(outcome.draft?.delivery.outcomeCashCollectedUsd, draftResult.draft.pricing.depositUsd);
+  assert.equal(outcome.websiteOpportunity?.depositPaid, true);
+  assert.equal(outcome.websiteOpportunity?.scopeApproved, false);
+  assert.equal(outcome.websiteOpportunity?.cashCollectedUsd, draftResult.draft.pricing.depositUsd);
   assert.equal(outcome.snapshot.metrics.cashCollectedUsd, 0);
   assert.equal(outcome.snapshot.recentLedger.length, 0);
   assert.equal(outcome.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(outcome.snapshot.recentWebsiteOpportunities[0].depositPaid, true);
+  assert.equal(outcome.snapshot.dailyMoneyCommand.status, "collect");
+  assert.equal(outcome.snapshot.dailyMoneyCommand.funnel.websiteClosuresPending, 1);
 
   const opportunityResult = recordRevenueWebsiteOpportunity({
     leadId: leadResult.lead.id,
@@ -3769,8 +3963,8 @@ test("records deposit outreach outcome without double-counting ledger cash", () 
     opportunityId: opportunityResult.opportunity!.id,
     depositPaid: true,
     scopeApproved: true,
-    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
-    paymentConfirmation: "Robert confirmed deposit.",
+    cashCollectedUsd: draftResult.draft.pricing.depositUsd,
+    paymentConfirmation: "Manual deposit outcome recorded by Robert.",
   });
 
   assert.equal(closeResult.status, "sold");

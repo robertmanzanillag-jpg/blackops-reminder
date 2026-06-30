@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T15:13:16.569Z
+Generated: 2026-06-30T15:35:52.521Z
 Repo: `/private/tmp/asistente-pr55-fresh`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 400 | 333 | 1318 | 447 | 7085 |
+| 400 | 333 | 1318 | 447 | 7092 |
 
 ## Entrypoints
 - `client/src/App.tsx`

@@ -60,8 +60,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input\)/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(routeSource, /deliverRevenueDeliveryWorkspaceFromTrustedApproval\(input\)/);
+  assert.match(routeSource, /input\.projectType !== "automation"/);
+  assert.match(routeSource, /website-delivery-workspace/);
   assert.match(routeSource, /getCurrentUserId\(req\)/);
   assert.match(routeSource, /createDeveloperAutopilotHandoffFromRequest/);
+  assert.match(routeSource, /getRevenueWebsiteWorkspaceSaleGate/);
   assert.match(routeSource, /kind: "client_build"/);
   assert.match(routeSource, /repo_mismatch/);
   assert.match(routeSource, /workspace\.input\.publicDataVerified/);
@@ -79,6 +82,8 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /button-create-github-handoff/);
   assert.match(uiSource, /workspace\.input\.publicDataVerified/);
   assert.match(uiSource, /workspace\.projectPlan\.decision\.status !== "ready_to_build"/);
+  assert.match(uiSource, /reviewProjectType !== "automation"/);
+  assert.match(uiSource, /Usar website handoff/);
   assert.match(uiSource, /deliveryWorkspaceReleaseGateMutation/);
   assert.match(uiSource, /button-record-release-gate-/);
   assert.match(uiSource, /input-release-pr-url/);

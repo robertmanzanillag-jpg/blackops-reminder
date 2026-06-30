@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T15:13:16.569Z",
+  "generatedAt": "2026-06-30T15:35:52.521Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -86,7 +86,7 @@
     "filesIndexed": 333,
     "imports": 1318,
     "routes": 447,
-    "symbols": 7085
+    "symbols": 7092
   },
   "directories": {
     ".agents/skills": {
@@ -10278,6 +10278,7 @@
         "runs",
         "safe",
         "safePortalUrl",
+        "saleGate",
         "scan",
         "seenRecurringTitles",
         "shop",
@@ -13142,14 +13143,18 @@
         "candidate",
         "cappedDraft",
         "cappedQueue",
+        "cashCollectedUsd",
         "closeResult",
         "collectOpportunity",
         "commandInput",
         "contactFormItem",
         "converted",
         "createApprovedWebsiteDraftForTest",
+        "createSoldWebsiteWorkspaceForTest",
         "created",
         "delivered",
+        "depositOutcome",
+        "directWorkspace",
         "draft",
         "draftB",
         "draftOne",
@@ -13157,6 +13162,7 @@
         "draftTen",
         "duplicate",
         "duplicateHandoff",
+        "fakeClose",
         "first",
         "handoff",
         "html",
@@ -13210,6 +13216,7 @@
         "retry",
         "review",
         "row",
+        "saleGate",
         "scopedOnlyResult",
         "scopedSnapshot",
         "second",
