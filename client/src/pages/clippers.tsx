@@ -17298,7 +17298,10 @@ export default function ClippersPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => setTiktokMvpProofLinksText(tiktokMvpProofLinks?.raw || "")}
+                        onClick={() => {
+                          setTiktokMvpProofLinksText(tiktokMvpProofLinks?.raw || "");
+                          setTiktokMvpProofLinksPreview(null);
+                        }}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinks?.raw}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
                         data-testid="reset-clippers-tiktok-mvp-proof-links-button"
@@ -17322,7 +17325,7 @@ export default function ClippersPage() {
                         type="button"
                         size="sm"
                         onClick={() => tiktokMvpProofLinksSaveMutation.mutate()}
-                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim()}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksText.trim() || !tiktokMvpProofLinksPreview?.readyForProofDrop}
                         className="h-8 bg-sky-200 text-zinc-950 hover:bg-sky-100"
                         data-testid="save-clippers-tiktok-mvp-proof-links-button"
                       >
@@ -17333,11 +17336,14 @@ export default function ClippersPage() {
                   </div>
                   <Textarea
                     value={tiktokMvpProofLinksText}
-                    onChange={(event) => setTiktokMvpProofLinksText(event.target.value)}
+                    onChange={(event) => {
+                      setTiktokMvpProofLinksText(event.target.value);
+                      setTiktokMvpProofLinksPreview(null);
+                    }}
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
                   />
-                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Do not paste passwords, tokens, cookies, recovery codes, or private keys.</p>
+                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, or private keys.</p>
                   {tiktokMvpProofLinksPreview && (
                     <div className={cn(
                       "mt-2 rounded-md border bg-black/20 p-2",

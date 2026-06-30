@@ -2921,6 +2921,14 @@ export async function registerRoutes(
         res.status(400).json({ error: validationError });
         return;
       }
+      const audit = auditClipperTikTokMvpProofLinks(parsed);
+      if (!audit.readyForProofDrop) {
+        res.status(400).json({
+          error: audit.issues[0] || "proof-links are not ready for proof drop",
+          tiktokMvpProofLinksPreview: audit,
+        });
+        return;
+      }
       await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
       await writeNodeFile(
         "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json",
