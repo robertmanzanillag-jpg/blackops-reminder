@@ -667,6 +667,7 @@ type RevenueManualOutreachQueue = {
     contactUrl: string;
     fallbackUrl: string;
     estimatedSetupUsd: number;
+    depositUsd: number;
     monthlyRetainerUsd: number;
     nextAction: string;
   }>;
@@ -3729,8 +3730,9 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
       contactUrl: contactUrlForRevenueDraft(draft),
       fallbackUrl: draft.links.mailto,
       estimatedSetupUsd: draft.pricing.totalSetupUsd,
+      depositUsd: draft.pricing.depositUsd,
       monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
-      nextAction: "Revisar evidencia, abrir enlace manual y registrar reply/call/deposito despues.",
+      nextAction: "Revisar evidencia, abrir enlace manual y registrar contacted/reply/call/deposito desde esta cola.",
     })),
     blocked: blockedSample,
     nextAction:

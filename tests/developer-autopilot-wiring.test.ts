@@ -182,6 +182,13 @@ test("Revenue Engine exposes manual outreach outcome recording", () => {
   assert.match(uiSource, /button-record-outreach-reply/);
   assert.match(uiSource, /button-record-outreach-call/);
   assert.match(uiSource, /button-record-outreach-deposit/);
+  assert.match(uiSource, /button-record-manual-outreach-contacted-/);
+  assert.match(uiSource, /button-record-manual-outreach-reply-/);
+  assert.match(uiSource, /button-record-manual-outreach-call-/);
+  assert.match(uiSource, /button-record-manual-outreach-deposit-/);
+  assert.match(uiSource, /draftId: item\.draftId/);
+  assert.match(uiSource, /cashCollectedUsd: item\.depositUsd/);
+  assert.match(uiSource, /button-record-manual-outreach-lost-/);
 });
 
 test("Revenue Engine approval decisions require explicit queue target selection", () => {

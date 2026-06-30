@@ -316,6 +316,7 @@ type RevenueSnapshot = {
       contactUrl: string;
       fallbackUrl: string;
       estimatedSetupUsd: number;
+      depositUsd: number;
       monthlyRetainerUsd: number;
       nextAction: string;
     }>;
@@ -3582,6 +3583,92 @@ export default function RevenueEnginePage() {
                             Mailto
                           </Button>
                         </a>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300">
+                          Setup {money.format(item.estimatedSetupUsd)}
+                        </div>
+                        <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-emerald-100">
+                          Deposito {money.format(item.depositUsd)}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-zinc-700"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "contacted",
+                            notes: "Robert registro contacto manual desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-contacted-${item.draftId}`}
+                        >
+                          Contacted
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-sky-700 text-sky-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "reply",
+                            notes: "Robert registro reply manual desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-reply-${item.draftId}`}
+                        >
+                          Reply
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-violet-700 text-violet-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "call_booked",
+                            notes: "Robert registro llamada agendada desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-call-${item.draftId}`}
+                        >
+                          Call
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          disabled={outreachOutcomeMutation.isPending || item.depositUsd <= 0}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "deposit_collected",
+                            cashCollectedUsd: item.depositUsd,
+                            notes: "Robert confirmo deposito manual desde la cola diaria; cerrar oportunidad website con scope antes de delivery.",
+                          })}
+                          data-testid={`button-record-manual-outreach-deposit-${item.draftId}`}
+                        >
+                          Deposit
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-red-900 text-red-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "lost",
+                            notes: "Robert marco el lead como perdido desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-lost-${item.draftId}`}
+                        >
+                          Lost
+                        </Button>
                       </div>
                     </div>
                   ))

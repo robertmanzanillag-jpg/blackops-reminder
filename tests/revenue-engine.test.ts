@@ -2107,7 +2107,8 @@ test("snapshot builds a capped manual outreach queue from approved drafts", () =
   assert.equal(queue.safety.sendsOutreach, false);
   assert.equal(queue.safety.requiresHumanApproval, true);
   assert.equal(queue.items.every((item) => item.contactUrl.includes("mail.google.com")), true);
-  assert.equal(queue.items.every((item) => item.nextAction.includes("registrar reply")), true);
+  assert.equal(queue.items.every((item) => item.depositUsd > 0), true);
+  assert.equal(queue.items.every((item) => item.nextAction.includes("registrar contacted/reply/call/deposito")), true);
   assert.equal(queue.blocked.some((item) => item.businessName === "Needs Approval Cafe" && item.reason.includes("Robert")), true);
   assert.equal(queue.blocked.filter((item) => item.reason.includes("Daily contact limit reached")).length, 2);
 });
